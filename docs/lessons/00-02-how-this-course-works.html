@@ -1,0 +1,2179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>0.2 — How This Course Works · Build a Professional 3D Game Engine</title>
+<meta name="description" content="Why we spend three modules on a renderer we replace in Module 4, what actually transfers, and the promises this course makes to you.">
+<!-- SHARED-CSS:BEGIN -->
+<style>
+/* ---- Design tokens ------------------------------------------------------- */
+:root {
+  color-scheme: light dark;
+
+  /* Page */
+  --bg:            #fdfdfb;
+  --bg-sunken:     #f4f4f0;
+  --bg-raised:     #ffffff;
+  --text:          #1c1c1a;
+  --text-muted:    #5f5f58;
+  --text-faint:    #8a8a80;
+  --rule:          #e2e2db;
+  --rule-strong:   #cfcfc6;
+
+  /* Accent — used for links, active nav, section marks */
+  --accent:        #b4530a;
+  --accent-soft:   #f5e6d8;
+  --accent-text:   #8f4108;
+
+  /* Callouts */
+  --note-bd:       #3a6ea5;   --note-bg:    #eaf2fb;
+  --warn-bd:       #b8860b;   --warn-bg:    #fdf5e2;
+  --verify-bd:     #a03030;   --verify-bg:  #fbecec;
+  --pitfall-bd:    #7a4fa3;   --pitfall-bg: #f4eefb;
+  --ok-bd:         #2f7d4f;   --ok-bg:      #e9f6ee;
+
+  /* Code — always dark, in both page themes */
+  --code-bg:       #1b1d23;
+  --code-bar:      #262932;
+  --code-text:     #dfe3ec;
+  --code-rule:     #363a45;
+
+  /* Syntax tokens */
+  --tok-comment:   #6d7789;
+  --tok-keyword:   #c98fdb;
+  --tok-type:      #6cc5d9;
+  --tok-string:    #a3cf85;
+  --tok-number:    #e8a978;
+  --tok-preproc:   #d9a05b;
+  --tok-func:      #79b6f2;
+  --tok-punct:     #9aa2b1;
+
+  /* Axis colours — COURSE-WIDE CONVENTION. x/y/z = red/green/blue.
+     Never override these in a diagram. See conventions.html. */
+  --axis-x:        #d1344a;
+  --axis-y:        #2f9e4f;
+  --axis-z:        #2b6fd4;
+  --axis-x-soft:   #f7d8dd;
+  --axis-y-soft:   #d8f0e0;
+  --axis-z-soft:   #d7e4fa;
+
+  /* Diagram neutrals */
+  --dia-bg:        #ffffff;
+  --dia-ink:       #33332e;
+  --dia-ink-soft:  #7a7a72;
+  --dia-grid:      #e8e8e2;
+  --dia-fill:      #f0f0ea;
+  --dia-hi:        #b4530a;
+
+  /* Typography */
+  --font-body: "Iowan Old Style", "Palatino Linotype", "Palatino", "Charter",
+               Georgia, Cambria, "Times New Roman", serif;
+  --font-ui:   -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+               "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "SFMono-Regular", "Cascadia Code",
+               "JetBrains Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  --measure: 42rem;          /* ~72 characters at this size — the reading column */
+  --measure-wide: 58rem;     /* diagrams & tables may breathe past the measure  */
+}
+
+/* Dark tokens.
+   Applied in two situations, which is why the block is written twice:
+     1. the OS asks for dark AND the reader has not overridden to light;
+     2. the reader explicitly chose dark via the toggle.
+   CSS has no mixins, so duplication is the price of supporting both an OS
+   default and a manual override. Keep the two blocks byte-identical. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg:          #15161a;
+    --bg-sunken:   #101115;
+    --bg-raised:   #1c1e24;
+    --text:        #e4e4e0;
+    --text-muted:  #a2a49e;
+    --text-faint:  #74766f;
+    --rule:        #2c2e35;
+    --rule-strong: #3d404a;
+
+    --accent:      #f0a06a;
+    --accent-soft: #33251a;
+    --accent-text: #f5b184;
+
+    --note-bd:     #5a8fc8;   --note-bg:    #16202c;
+    --warn-bd:     #c9a132;   --warn-bg:    #262013;
+    --verify-bd:   #d05555;   --verify-bg:  #2a1717;
+    --pitfall-bd:  #a077c8;   --pitfall-bg: #221a2c;
+    --ok-bd:       #4fa877;   --ok-bg:      #14231a;
+
+    --dia-bg:      #1a1c21;
+    --dia-ink:     #d8d8d2;
+    --dia-ink-soft:#8f918a;
+    --dia-grid:    #2b2d33;
+    --dia-fill:    #24262c;
+    --dia-hi:      #f0a06a;
+
+    --axis-x:      #f2647a;
+    --axis-y:      #5cc47e;
+    --axis-z:      #6b9ef0;
+    --axis-x-soft: #3a2027;
+    --axis-y-soft: #1c3325;
+    --axis-z-soft: #1e2a40;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg:          #15161a;
+  --bg-sunken:   #101115;
+  --bg-raised:   #1c1e24;
+  --text:        #e4e4e0;
+  --text-muted:  #a2a49e;
+  --text-faint:  #74766f;
+  --rule:        #2c2e35;
+  --rule-strong: #3d404a;
+
+  --accent:      #f0a06a;
+  --accent-soft: #33251a;
+  --accent-text: #f5b184;
+
+  --note-bd:     #5a8fc8;   --note-bg:    #16202c;
+  --warn-bd:     #c9a132;   --warn-bg:    #262013;
+  --verify-bd:   #d05555;   --verify-bg:  #2a1717;
+  --pitfall-bd:  #a077c8;   --pitfall-bg: #221a2c;
+  --ok-bd:       #4fa877;   --ok-bg:      #14231a;
+
+  --dia-bg:      #1a1c21;
+  --dia-ink:     #d8d8d2;
+  --dia-ink-soft:#8f918a;
+  --dia-grid:    #2b2d33;
+  --dia-fill:    #24262c;
+  --dia-hi:      #f0a06a;
+
+  --axis-x:      #f2647a;
+  --axis-y:      #5cc47e;
+  --axis-z:      #6b9ef0;
+  --axis-x-soft: #3a2027;
+  --axis-y-soft: #1c3325;
+  --axis-z-soft: #1e2a40;
+}
+
+/* ---- Reset & base -------------------------------------------------------- */
+*, *::before, *::after { box-sizing: border-box; }
+
+html {
+  font-size: 18px;
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
+  scroll-padding-top: 2rem;
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  line-height: 1.7;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* The reading column. Everything is centred on --measure; wide elements opt out. */
+.wrap {
+  max-width: var(--measure);
+  margin: 0 auto;
+  padding: 0 1.25rem;
+}
+.bleed {                       /* for diagrams/tables that need more room */
+  max-width: var(--measure-wide);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* ---- Typography ---------------------------------------------------------- */
+h1, h2, h3, h4 {
+  font-family: var(--font-ui);
+  line-height: 1.25;
+  letter-spacing: -0.015em;
+  margin: 0 0 0.6em;
+  scroll-margin-top: 1.5rem;
+}
+h1 { font-size: 2.15rem; font-weight: 700; margin-top: 0.2em; }
+h2 {
+  font-size: 1.5rem; font-weight: 650;
+  margin-top: 2.6em;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--rule);
+}
+h3 { font-size: 1.15rem; font-weight: 650; margin-top: 2em; }
+h4 { font-size: 1rem;    font-weight: 650; margin-top: 1.6em; color: var(--text-muted); }
+
+/* Section numbers rendered as a quiet prefix */
+h2 .num, h3 .num {
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  margin-right: 0.5em;
+  font-weight: 500;
+}
+
+p { margin: 0 0 1.15em; }
+
+a { color: var(--accent-text); text-decoration-color: var(--rule-strong); text-underline-offset: 2px; }
+a:hover { text-decoration-color: currentColor; }
+
+strong { font-weight: 650; }
+em { font-style: italic; }
+
+ul, ol { margin: 0 0 1.15em; padding-left: 1.5em; }
+li { margin-bottom: 0.4em; }
+li > ul, li > ol { margin-top: 0.4em; margin-bottom: 0.5em; }
+
+hr { border: 0; border-top: 1px solid var(--rule); margin: 2.5em 0; }
+
+blockquote {
+  margin: 1.5em 0;
+  padding: 0.1em 0 0.1em 1.2em;
+  border-left: 3px solid var(--rule-strong);
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* Inline code — light chip, distinct from the dark block listings */
+:not(pre) > code {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 0.08em 0.34em;
+  word-break: break-word;
+}
+
+/* ---- Masthead ------------------------------------------------------------ */
+.masthead {
+  background: var(--bg-sunken);
+  border-bottom: 1px solid var(--rule);
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+}
+.masthead-inner {
+  max-width: var(--measure-wide);
+  margin: 0 auto;
+  padding: 0.6rem 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.masthead .course {
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  text-decoration: none;
+}
+.masthead .spacer { flex: 1; }
+.masthead a { color: var(--text-muted); text-decoration: none; }
+.masthead a:hover { color: var(--accent-text); }
+
+.theme-toggle {
+  font: inherit;
+  font-size: 0.78rem;
+  background: var(--bg-raised);
+  color: var(--text-muted);
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  padding: 0.2rem 0.55rem;
+  cursor: pointer;
+}
+.theme-toggle:hover { border-color: var(--rule-strong); color: var(--text); }
+
+/* ---- Lesson nav (top & bottom) ------------------------------------------- */
+.lesson-nav {
+  display: flex;
+  align-items: stretch;
+  gap: 0.6rem;
+  font-family: var(--font-ui);
+  font-size: 0.82rem;
+  margin: 1.5rem auto;
+}
+.lesson-nav a, .lesson-nav span {
+  flex: 1;
+  padding: 0.55rem 0.8rem;
+  border: 1px solid var(--rule);
+  border-radius: 7px;
+  background: var(--bg-raised);
+  text-decoration: none;
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+.lesson-nav a:hover { border-color: var(--accent); }
+.lesson-nav span { opacity: 0.45; }        /* disabled edge (no prev / no next) */
+.lesson-nav .dir {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-faint);
+}
+.lesson-nav .ttl {
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-weight: 550;
+}
+.lesson-nav .next-l { text-align: right; }
+.lesson-nav .idx-l  { flex: 0 0 auto; justify-content: center; text-align: center; }
+@media (max-width: 34rem) {
+  .lesson-nav { flex-wrap: wrap; }
+  .lesson-nav .idx-l { order: 3; flex: 1 0 100%; }
+}
+
+/* ---- Lesson header block ------------------------------------------------- */
+.lesson-head { margin: 2rem 0 0; }
+.eyebrow {
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+  font-weight: 650;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 0.5rem;
+}
+.deck {
+  font-size: 1.12rem;
+  color: var(--text-muted);
+  margin-bottom: 1.5rem;
+}
+.meta {
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  padding: 1rem 1.15rem;
+  margin-bottom: 1.75rem;
+}
+.meta dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 0.4rem 1rem; }
+.meta dt {
+  color: var(--text-faint);
+  text-transform: uppercase;
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  padding-top: 0.28em;
+  white-space: nowrap;
+}
+.meta dd { margin: 0; }
+@media (max-width: 30rem) {
+  .meta dl { grid-template-columns: 1fr; gap: 0.15rem 0; }
+  .meta dd { margin-bottom: 0.6rem; }
+}
+
+/* Objectives — "you will be able to…" */
+.objectives {
+  border: 1px solid var(--accent);
+  background: var(--accent-soft);
+  border-radius: 9px;
+  padding: 1.1rem 1.25rem;
+  margin: 1.75rem 0;
+}
+.objectives h2 {
+  margin: 0 0 0.5rem;
+  border: 0; padding: 0;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--accent-text);
+}
+.objectives ul { margin: 0; padding-left: 1.25em; }
+.objectives li::marker { color: var(--accent); }
+
+/* ---- Table of contents --------------------------------------------------- */
+.toc {
+  font-family: var(--font-ui);
+  font-size: 0.88rem;
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  padding: 1rem 1.25rem;
+  margin: 2rem 0;
+}
+.toc > summary {
+  cursor: pointer;
+  font-weight: 650;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-muted);
+  list-style: none;
+}
+.toc > summary::-webkit-details-marker { display: none; }
+.toc > summary::before { content: "▸ "; color: var(--accent); }
+.toc[open] > summary::before { content: "▾ "; }
+.toc ol { list-style: none; margin: 0.85rem 0 0; padding: 0; counter-reset: toc; }
+.toc ol ol { margin: 0.3rem 0 0.5rem 1.1rem; }
+.toc li { margin: 0.28em 0; counter-increment: toc; }
+.toc a { text-decoration: none; color: var(--text); }
+.toc a:hover { color: var(--accent-text); text-decoration: underline; }
+.toc ol ol a { color: var(--text-muted); font-size: 0.94em; }
+
+/* ---- Callouts ------------------------------------------------------------ */
+.callout {
+  border-left: 3px solid var(--rule-strong);
+  background: var(--bg-sunken);
+  border-radius: 0 8px 8px 0;
+  padding: 0.9rem 1.1rem;
+  margin: 1.6em 0;
+  font-size: 0.95rem;
+}
+.callout > :first-child { margin-top: 0; }
+.callout > :last-child  { margin-bottom: 0; }
+.callout .label {
+  display: block;
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  margin-bottom: 0.35rem;
+}
+.callout.note    { border-color: var(--note-bd);    background: var(--note-bg); }
+.callout.note .label    { color: var(--note-bd); }
+.callout.warn    { border-color: var(--warn-bd);    background: var(--warn-bg); }
+.callout.warn .label    { color: var(--warn-bd); }
+.callout.verify  { border-color: var(--verify-bd);  background: var(--verify-bg); }
+.callout.verify .label  { color: var(--verify-bd); }
+.callout.pitfall { border-color: var(--pitfall-bd); background: var(--pitfall-bg); }
+.callout.pitfall .label { color: var(--pitfall-bd); }
+.callout.ok      { border-color: var(--ok-bd);      background: var(--ok-bg); }
+.callout.ok .label      { color: var(--ok-bd); }
+/* C++ explainers: a C++ feature taught in place, the first time it appears. */
+.callout.cpp     { border-color: var(--accent);     background: var(--accent-soft); }
+.callout.cpp .label     { color: var(--accent-text); }
+
+/* ---- Code listings ------------------------------------------------------- */
+.listing {
+  margin: 1.6em 0;
+  border-radius: 9px;
+  overflow: hidden;
+  border: 1px solid var(--code-rule);
+  background: var(--code-bg);
+}
+.listing figcaption {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: var(--code-bar);
+  border-bottom: 1px solid var(--code-rule);
+  padding: 0.45rem 0.85rem;
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  color: #aeb6c4;
+}
+.listing figcaption .path { font-weight: 600; color: #dfe3ec; }
+.listing figcaption .tag {
+  font-family: var(--font-ui);
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  background: #3a3f4c;
+  color: #c6cdd9;
+}
+.listing figcaption .tag.new      { background: #1f4433; color: #7fd6a5; }
+.listing figcaption .tag.modified { background: #453a1c; color: #e0be74; }
+.listing figcaption .lang { margin-left: auto; opacity: 0.65; }
+
+/* Horizontal scroll — NEVER wrap. Wrapped code lies about its structure. */
+.listing pre {
+  margin: 0;
+  padding: 0.9rem 1rem;
+  overflow-x: auto;
+  background: var(--code-bg);
+}
+.listing pre code {
+  font-family: var(--font-mono);
+  font-size: 0.79rem;
+  line-height: 1.62;
+  color: var(--code-text);
+  white-space: pre;
+  display: block;
+  tab-size: 4;
+}
+.listing pre::-webkit-scrollbar { height: 9px; }
+.listing pre::-webkit-scrollbar-track { background: var(--code-bar); }
+.listing pre::-webkit-scrollbar-thumb { background: #4a5060; border-radius: 5px; }
+.listing pre::-webkit-scrollbar-thumb:hover { background: #5d6478; }
+
+/* Syntax tokens, applied by the tiny highlighter at the foot of the page. */
+.tok-c { color: var(--tok-comment); font-style: italic; }
+.tok-k { color: var(--tok-keyword); }
+.tok-t { color: var(--tok-type); }
+.tok-s { color: var(--tok-string); }
+.tok-n { color: var(--tok-number); }
+.tok-p { color: var(--tok-preproc); }
+.tok-f { color: var(--tok-func); }
+.tok-o { color: var(--tok-punct); }
+
+/* Emphasised line inside a listing (the line this paragraph is about) */
+.listing .hl { background: rgba(180, 130, 60, 0.16); display: inline-block; width: 100%; }
+
+/* Shell transcripts get a lighter treatment than source files */
+.listing.shell figcaption .path::before { content: "$ "; opacity: 0.6; }
+
+/* ---- Figures & diagrams -------------------------------------------------- */
+figure.dia {
+  margin: 2em auto;
+  padding: 0;
+}
+figure.dia svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: var(--dia-bg);
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+}
+figure.dia figcaption,
+figure.tbl figcaption {
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: 0.65rem;
+  line-height: 1.55;
+}
+figure.dia figcaption .fignum,
+figure.tbl figcaption .fignum {
+  font-weight: 700;
+  color: var(--text);
+}
+/* SVG text inherits the theme so diagrams survive dark mode */
+figure.dia svg text { font-family: var(--font-ui); fill: var(--dia-ink); }
+figure.dia svg .lbl-x { fill: var(--axis-x); }
+figure.dia svg .lbl-y { fill: var(--axis-y); }
+figure.dia svg .lbl-z { fill: var(--axis-z); }
+figure.dia svg .ax-x  { stroke: var(--axis-x); }
+figure.dia svg .ax-y  { stroke: var(--axis-y); }
+figure.dia svg .ax-z  { stroke: var(--axis-z); }
+figure.dia svg .ink       { stroke: var(--dia-ink); }
+figure.dia svg .ink-soft  { stroke: var(--dia-ink-soft); }
+figure.dia svg .grid      { stroke: var(--dia-grid); }
+figure.dia svg .fill-soft { fill: var(--dia-fill); }
+figure.dia svg .hi        { stroke: var(--dia-hi); }
+figure.dia svg .mono      { font-family: var(--font-mono); }
+figure.dia svg .sm        { font-size: 11px; }
+figure.dia svg .xs        { font-size: 9.5px; }
+
+/* Text fills for <text> elements.
+   These MUST be classes, not fill="..." attributes: the `figure.dia svg text`
+   rule above is CSS, and CSS always beats an SVG presentation attribute — an
+   inline fill on a <text> is silently ignored. Class selectors outrank the bare
+   element selector, so these win. (Shapes are unaffected; the rule only targets
+   text, so fill="..." still works on rect/path/circle.) */
+figure.dia svg .muted     { fill: var(--dia-ink-soft); }
+figure.dia svg .t-hi      { fill: var(--dia-hi); }
+figure.dia svg .t-ok      { fill: var(--ok-bd); }
+figure.dia svg .t-bad     { fill: var(--verify-bd); }
+/* For labels sitting ON a saturated filled shape, where the theme ink would be
+   unreadable. Fixed white in both themes, because the shape under it is the
+   same saturated colour in both. */
+figure.dia svg .t-inv     { fill: #ffffff; }
+
+/* ---- Tables -------------------------------------------------------------- */
+.tbl-scroll { overflow-x: auto; margin: 1.6em 0; }
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+th, td {
+  text-align: left;
+  padding: 0.5rem 0.7rem;
+  border-bottom: 1px solid var(--rule);
+  vertical-align: top;
+}
+th {
+  font-weight: 650;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--rule-strong);
+  white-space: nowrap;
+}
+tbody tr:hover { background: var(--bg-sunken); }
+td code { font-size: 0.82em; }
+
+/* File-manifest table: path | new/modified | purpose */
+.manifest td:first-child { font-family: var(--font-mono); font-size: 0.78rem; white-space: nowrap; }
+.badge {
+  font-size: 0.62rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.06em; padding: 0.1rem 0.4rem; border-radius: 3px; white-space: nowrap;
+}
+.badge.new { background: var(--ok-bg); color: var(--ok-bd); border: 1px solid var(--ok-bd); }
+.badge.mod { background: var(--warn-bg); color: var(--warn-bd); border: 1px solid var(--warn-bd); }
+/* Curriculum status, used on index.html */
+.badge.done { background: var(--ok-bg); color: var(--ok-bd); border: 1px solid var(--ok-bd); }
+.badge.soon { background: var(--bg-sunken); color: var(--text-faint); border: 1px solid var(--rule-strong); }
+
+/* ---- Math ---------------------------------------------------------------- */
+/* KaTeX renders these when the CDN is reachable. When it is NOT, the raw TeX
+   stays visible — which is why every equation MUST also be stated in prose.
+   Never let an equation be the only carrier of a fact. */
+.eq {
+  margin: 1.4em 0;
+  padding: 0.9rem 1rem;
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  overflow-x: auto;
+  text-align: center;
+}
+.eq-plain {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  margin-top: 0.6rem;
+  padding-top: 0.6rem;
+  border-top: 1px dashed var(--rule-strong);
+  text-align: left;
+}
+.eq-plain::before {
+  content: "in plain text: ";
+  color: var(--text-faint);
+  font-family: var(--font-ui);
+  font-size: 0.72rem;
+}
+
+/* Worked numeric example — every formula gets one */
+.worked {
+  border: 1px solid var(--rule-strong);
+  border-radius: 9px;
+  padding: 1rem 1.2rem;
+  margin: 1.6em 0;
+  background: var(--bg-raised);
+}
+.worked > .label {
+  display: block;
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--accent);
+  margin-bottom: 0.5rem;
+}
+.worked > :last-child { margin-bottom: 0; }
+
+/* ---- Exercises ----------------------------------------------------------- */
+.exercise {
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 9px 9px 0;
+  padding: 1rem 1.2rem;
+  margin: 1.4em 0;
+  background: var(--bg-raised);
+}
+.exercise h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.98rem;
+}
+.exercise h3 .xnum {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--accent);
+  margin-right: 0.5em;
+}
+.difficulty {
+  font-family: var(--font-ui);
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-faint);
+  border: 1px solid var(--rule-strong);
+  border-radius: 3px;
+  padding: 0.05rem 0.35rem;
+  margin-left: 0.4em;
+  vertical-align: 0.15em;
+}
+.exercise details {
+  margin-top: 0.7rem;
+  border-top: 1px solid var(--rule);
+  padding-top: 0.6rem;
+}
+.exercise summary {
+  cursor: pointer;
+  font-family: var(--font-ui);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.exercise summary:hover { color: var(--accent-text); }
+.exercise details[open] summary { margin-bottom: 0.6rem; }
+
+/* ---- Pitfalls (symptom → cause → fix) ------------------------------------ */
+.pitfalls { margin: 1.5em 0; }
+.pitfall-item {
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  margin-bottom: 0.9rem;
+  overflow: hidden;
+}
+.pitfall-item > summary {
+  cursor: pointer;
+  padding: 0.7rem 1rem;
+  background: var(--bg-sunken);
+  font-family: var(--font-ui);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.pitfall-item > summary:hover { color: var(--accent-text); }
+.pitfall-item > summary .sym {
+  font-weight: 400;
+  color: var(--text-muted);
+  font-style: italic;
+}
+.pitfall-body { padding: 0.9rem 1rem; font-size: 0.94rem; }
+.pitfall-body > :first-child { margin-top: 0; }
+.pitfall-body > :last-child  { margin-bottom: 0; }
+.pitfall-body dt {
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+  margin-top: 0.7rem;
+}
+.pitfall-body dd { margin: 0.2rem 0 0; }
+
+/* ---- Recap / next -------------------------------------------------------- */
+.recap {
+  background: var(--ok-bg);
+  border: 1px solid var(--ok-bd);
+  border-radius: 9px;
+  padding: 1.1rem 1.25rem;
+  margin: 1.75rem 0;
+}
+.recap h2 { margin: 0 0 0.6rem; border: 0; padding: 0; font-size: 1.05rem; }
+.recap > :last-child { margin-bottom: 0; }
+
+/* ---- Further reading ----------------------------------------------------- */
+.reading { font-size: 0.92rem; }
+.reading li { margin-bottom: 0.6em; }
+.reading .src {
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+  margin-right: 0.4em;
+}
+
+/* ---- STATE block --------------------------------------------------------- */
+.state {
+  margin: 2.5em 0 1em;
+  border: 1px dashed var(--rule-strong);
+  border-radius: 9px;
+  background: var(--bg-sunken);
+  overflow: hidden;
+}
+.state > summary {
+  cursor: pointer;
+  padding: 0.6rem 1rem;
+  font-family: var(--font-ui);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-muted);
+}
+.state pre {
+  margin: 0;
+  padding: 0.9rem 1rem;
+  overflow-x: auto;
+  border-top: 1px solid var(--rule);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+  white-space: pre;
+}
+
+/* ---- Footer -------------------------------------------------------------- */
+.foot {
+  border-top: 1px solid var(--rule);
+  margin-top: 3rem;
+  padding: 1.5rem 0 3rem;
+  font-family: var(--font-ui);
+  font-size: 0.78rem;
+  color: var(--text-faint);
+}
+.foot a { color: var(--text-muted); }
+
+/* ---- Interactive widgets ------------------------------------------------- */
+.widget {
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  background: var(--bg-raised);
+  padding: 1rem;
+  margin: 2em 0;
+}
+.widget-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+  align-items: center;
+  margin-top: 0.8rem;
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+.widget-controls label { display: flex; align-items: center; gap: 0.4rem; }
+.widget-controls input[type="range"] { accent-color: var(--accent); }
+.widget-readout {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--text);
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 0.1rem 0.4rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Print --------------------------------------------------------------- */
+@media print {
+  .masthead, .lesson-nav, .theme-toggle { display: none; }
+  body { background: #fff; color: #000; font-size: 11pt; }
+  .listing { break-inside: avoid; }
+  figure.dia { break-inside: avoid; }
+  a::after { content: " (" attr(href) ")"; font-size: 0.7em; color: #666; }
+}
+</style>
+<!-- SHARED-CSS:END -->
+<style>
+/* Lesson-local: the pace planner. */
+.pace-out {
+  display: flex; flex-wrap: wrap; gap: 0.6rem; margin: 1rem 0 0.2rem;
+}
+.pace-card {
+  flex: 1 1 8rem; background: var(--bg-sunken); border: 1px solid var(--rule);
+  border-radius: 8px; padding: 0.65rem 0.8rem; font-family: var(--font-ui);
+}
+.pace-card .n { display: block; font-size: 1.3rem; font-weight: 700; letter-spacing: -0.02em; }
+.pace-card .l {
+  display: block; font-size: 0.62rem; text-transform: uppercase;
+  letter-spacing: 0.07em; color: var(--text-faint); margin-top: 0.1rem;
+}
+table.milestones { font-size: 0.78rem; margin-top: 1rem; }
+table.milestones td { padding: 0.32rem 0.6rem; }
+table.milestones td.mn { font-family: var(--font-mono); color: var(--accent); white-space: nowrap; }
+table.milestones td.wk { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--text-muted); }
+table.milestones td.dt { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--text-faint); }
+table.milestones tr.big td { font-weight: 700; }
+/* Stage A / Stage B lanes in the transfer diagram legend */
+.lane-key { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 0.3rem; vertical-align: -1px; }
+</style>
+<link rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css"
+      integrity="sha384-nB0miv6/jRmo5UMMR1wu3Gz6NLsoTkbqJghGIsx//Rlm+ZU03BU6SQNC66uf4l5+"
+      crossorigin="anonymous">
+</head>
+<body>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <a class="course" href="../index.html">Build a Professional 3D Game Engine</a>
+    <span class="spacer"></span>
+    <a href="../index.html">Contents</a>
+    <a href="../conventions.html">Conventions</a>
+    <a href="../math-toolbox.html">Math Toolbox</a>
+    <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Toggle colour theme">Theme</button>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="00-01-what-is-an-engine.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">0.1 — What a Game Engine Actually Is</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="00-03-toolchain.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">0.3 — Setting Up Your Toolchain</span>
+    </a>
+  </nav>
+
+  <!-- ================= 1. HEADER BLOCK ================= -->
+  <div class="lesson-head">
+    <div class="eyebrow">Module 0 — Orientation &amp; Toolchain · Lesson 0.2</div>
+    <h1>How This Course Works</h1>
+    <p class="deck">
+      I am about to ask you to spend roughly a hundred hours building a renderer that no shipping
+      engine has used since 1999, and then replace it. That should bother you. Here is the
+      argument, before I spend your time rather than after.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 2 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd><a href="00-01-what-is-an-engine.html">0.1 — What a Game Engine Actually Is</a></dd>
+
+        <dt>Files</dt>
+        <dd>None — the last lesson without them. Code starts in 0.3.</dd>
+
+        <dt>Milestone</dt>
+        <dd>You agree with the plan, or you can say precisely where you disagree — and you have a realistic date for finishing.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…explain why three modules of CPU rasterizer is the <em>cheapest</em> path to the GPU, not a detour.</li>
+      <li>…say exactly what transfers from Stage A to Stage B — which code survives literally, which becomes understanding, and which is genuinely discarded.</li>
+      <li>…explain what NDC parity buys, and what it costs.</li>
+      <li>…state the six promises this course makes, and recognise when one is broken.</li>
+      <li>…apply the build-vs-buy rule, and say why it is a <em>pedagogical</em> line rather than an engineering one.</li>
+      <li>…plan a realistic pace, and name the date you will finish.</li>
+    </ul>
+  </section>
+
+  <details class="toc" open>
+    <summary>Contents</summary>
+    <ol>
+      <li><a href="#problem">The Problem</a></li>
+      <li><a href="#intuition">Building Intuition</a>
+        <ol>
+          <li><a href="#dissection">The dissection argument</a></li>
+          <li><a href="#two-questions">The question Module 4 will ask you</a></li>
+        </ol>
+      </li>
+      <li><a href="#theory">The Theory</a>
+        <ol>
+          <li><a href="#transfers">What actually transfers</a></li>
+          <li><a href="#hinge">The hinge: NDC parity</a></li>
+          <li><a href="#promises">The six promises</a></li>
+          <li><a href="#spiral">The spiral</a></li>
+          <li><a href="#buildbuy">Build vs buy</a></li>
+          <li><a href="#reading-a-lesson">How to read a lesson</a></li>
+        </ol>
+      </li>
+      <li><a href="#implementation">Implementation: the pace planner</a></li>
+      <li><a href="#listings">Complete Code Listings</a></li>
+      <li><a href="#build">Build &amp; Run</a></li>
+      <li><a href="#pitfalls">Common Pitfalls &amp; Debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; Next</a></li>
+      <li><a href="#reading">Further Reading</a></li>
+    </ol>
+  </details>
+
+  <!-- ================= 2. THE PROBLEM ================= -->
+  <h2 id="problem"><span class="num">1</span>The Problem</h2>
+
+  <p>
+    Here is the plan you did not agree to. Modules 1 through 3 — <strong>132 hours</strong>, a
+    third of the course — build a software rasterizer: a renderer that computes every pixel on
+    the CPU. Then Module 4 opens by putting it aside and starting again on the GPU.
+  </p>
+
+  <p>
+    No 3D game has shipped with a software rasterizer as its primary renderer since roughly
+    <em>Quake II</em>. The technique is, in the commercial sense, dead. And I want a third of
+    your course on it.
+  </p>
+
+  <p>
+    If that does not raise an eyebrow, raise one deliberately. Because here is what happens if I
+    simply assert that it is worth it and move on:
+  </p>
+
+  <div class="callout warn">
+    <span class="label">The failure mode: skimming to "the real stuff"</span>
+    <p>
+      You do not quite believe Module 2 matters. So you read it rather than <em>do</em> it — you
+      follow the derivations with your eyes, you skip the worked examples because the arithmetic
+      looks tedious, and you copy the rasterizer code rather than writing it. You reach Module 4
+      in half the time. You feel efficient.
+    </p>
+    <p>
+      Then SDL_GPU asks you to fill in a <code>SDL_GPUDepthStencilState</code>, and you do not
+      know what <code>compare_op</code> should be, because you never wrote a depth test — you
+      read about one. So you copy a struct from a tutorial. It works. You do not know why.
+    </p>
+    <p>
+      Now every bug is a wall. Not because the GPU is hard, but because you have no model of
+      what it is doing, and a GPU gives you <em>no feedback</em> — no printf, no stack trace,
+      just a black screen with no error. The people who find that stage impossible are, almost
+      without exception, the people who skipped the stage that builds the model.
+    </p>
+  </div>
+
+  <p>
+    So this lesson is not throat-clearing. It is the argument that earns the next hundred hours —
+    and if the argument fails, you should not spend them. <strong>I do not want your trust. I
+    want your agreement</strong>, which is a sturdier thing, because trust evaporates at 2 a.m.
+    in front of a black screen and agreement does not.
+  </p>
+
+  <!-- ================= 3. BUILDING INTUITION ================= -->
+  <h2 id="intuition"><span class="num">2</span>Building Intuition</h2>
+
+  <h3 id="dissection">2.1 The dissection argument</h3>
+
+  <p>
+    Medical students dissect cadavers. Nobody objects that the patient cannot be saved. The
+    dissection is not treatment — it is the hours in which anatomy stops being a diagram in a
+    book and becomes a thing the student's hands know. Afterwards, when they open a living
+    patient, they are not meeting the liver for the first time.
+  </p>
+
+  <p>
+    That is the software rasterizer. Its <em>output</em> — a slow renderer — is worthless. Its
+    <em>process</em> is the only hundred hours in your career when the entire graphics pipeline
+    will be small enough to hold in your head and open enough to step through in a debugger.
+  </p>
+
+  <p>
+    If the analogy feels like special pleading, here is one closer to home. Consider two
+    programmers who both use <code>std::sort</code>:
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th></th><th>Read the docs</th><th>Wrote quicksort once</th></tr></thead>
+      <tbody>
+        <tr><td>Can call <code>sort</code></td><td>Yes</td><td>Yes</td></tr>
+        <tr><td>Knows it is O(n log n)</td><td>Yes</td><td>Yes</td></tr>
+        <tr><td>Knows <em>why</em> it degrades on their data</td><td>No</td><td>Yes</td></tr>
+        <tr><td>Can tell whether sorting is even their bottleneck</td><td>No</td><td>Yes</td></tr>
+        <tr><td>Can pick a better algorithm when it is</td><td>No</td><td>Yes</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    Both can <em>use</em> it. Only one can <strong>reason</strong> about it. The gap does not
+    show up on a good day — it shows up on the day something is wrong, which in graphics is
+    every day.
+  </p>
+
+  <h3 id="two-questions">2.2 The question Module 4 will ask you</h3>
+
+  <p>
+    Let me make this concrete rather than inspirational. In Module 4 you will meet, roughly,
+    this:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">a taste of Module 4 — do not type this yet</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// You will be asked to fill this in. Every field is a question about a thing
+// you either built by hand in Modules 2-3, or are about to cargo-cult.
+SDL_GPUGraphicsPipelineCreateInfo info = {};
+info.rasterizer_state.cull_mode  = SDL_GPU_CULLMODE_BACK;              // 3.4
+info.rasterizer_state.front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE; // 3.4
+info.depth_stencil_state.enable_depth_test  = true;                    // 3.1
+info.depth_stencil_state.enable_depth_write = true;                    // 3.1
+info.depth_stencil_state.compare_op = SDL_GPU_COMPAREOP_LESS;          // 3.1</code></pre>
+  </figure>
+
+  <div class="callout verify">
+    <span class="label">⚠ Verify</span>
+    <p>
+      ⚠ VERIFY: exact field names and nesting of <code>SDL_GPUGraphicsPipelineCreateInfo</code>
+      against <code>SDL3/SDL_gpu.h</code> before Module 4 uses this for real. The enum
+      <em>values</em> above are verified (see <a href="../conventions.html#verified">Conventions
+      §10</a>); the surrounding struct layout is shown here for the shape of the idea, not to be
+      typed. This lesson is illustrating a point, and I would rather flag the uncertainty than
+      have you trust a struct I have not checked.
+    </p>
+  </div>
+
+  <p>
+    Look at the comments. Every line is a lesson number from Module 3. That is not a coincidence
+    I arranged after the fact — it is the design. Six fields, and each is either something your
+    hands have built or something you will paste and pray about.
+  </p>
+
+  <p>
+    <code>compare_op = LESS</code> is the entire z-buffer of lesson 3.1, compressed into one
+    enum. If you wrote that depth test — if you have <em>seen</em> the flicker when the
+    comparison is backwards — then <code>LESS</code> is obvious and <code>GREATER</code> is a
+    tool you know when to reach for (and in Module 8 you will, for reverse-Z). If you did not,
+    it is a magic word.
+  </p>
+
+  <p>
+    That is the whole bet: <strong>Modules 2 and 3 are how those enums become sentences instead
+    of spells.</strong>
+  </p>
+
+  <!-- ================= 4. THE THEORY ================= -->
+  <h2 id="theory"><span class="num">3</span>The Theory</h2>
+
+  <h3 id="transfers">3.1 What actually transfers</h3>
+
+  <p>
+    "It builds understanding" is exactly the kind of hand-waving this course bans. So let us be
+    specific and countable. Everything you write in Modules 1–3 lands in one of three buckets,
+    and Figure 1 sorts them.
+  </p>
+
+  <figure class="dia bleed">
+    <svg viewBox="0 0 660 400" role="img" aria-labelledby="f1-t f1-d">
+      <title id="f1-t">What transfers from the software rasterizer to the GPU renderer</title>
+      <desc id="f1-d">Three lanes. The first, "kept literally", contains the maths library, the
+        OBJ loader, the shading code and the fixed-timestep loop, which survive as source. The
+        second, "becomes understanding", contains the z-buffer, perspective-correct
+        interpolation, clipping and culling, which become GPU state you can now configure
+        knowingly. The third, "genuinely discarded", contains only the rasterizer inner loop —
+        about 400 lines.</desc>
+      <defs>
+        <marker id="t-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+      </defs>
+
+      <text x="16" y="20" class="sm" font-weight="700">Modules 1–3 (CPU)</text>
+      <text x="644" y="20" class="sm" font-weight="700" text-anchor="end">Module 4 onward (GPU)</text>
+
+      <!-- lane 1: kept -->
+      <g>
+        <rect x="16" y="34" width="628" height="104" rx="8" class="fill-soft" stroke="var(--axis-y)" stroke-width="1.8"/>
+        <text x="30" y="54" class="sm t-ok" font-weight="700">KEPT LITERALLY — the same source, still compiling in Module 8</text>
+        <g class="xs mono">
+          <text x="30" y="76">vec2/3/4, mat3/4</text>
+          <text x="30" y="92">the OBJ loader</text>
+          <text x="30" y="108">Lambert / Blinn-Phong shading</text>
+          <text x="30" y="124">the fixed-timestep loop</text>
+        </g>
+        <g class="xs muted">
+          <text x="250" y="76">→ uploaded to shaders unchanged (NDC parity, §3.2)</text>
+          <text x="250" y="92">→ still the loader, now feeding a vertex buffer</text>
+          <text x="250" y="108">→ transliterated to HLSL, nearly line-for-line</text>
+          <text x="250" y="124">→ untouched. It never cared about the renderer.</text>
+        </g>
+        <text x="614" y="54" class="xs t-ok" text-anchor="end" font-weight="700">~60%</text>
+      </g>
+
+      <!-- lane 2: understanding -->
+      <g>
+        <rect x="16" y="150" width="628" height="104" rx="8" class="fill-soft" stroke="var(--axis-z)" stroke-width="1.8"/>
+        <text x="30" y="170" class="sm lbl-z" font-weight="700">BECOMES UNDERSTANDING — the code goes; the model stays and pays</text>
+        <g class="xs mono">
+          <text x="30" y="192">your z-buffer</text>
+          <text x="30" y="208">perspective-correct interp</text>
+          <text x="30" y="224">near-plane clipping</text>
+          <text x="30" y="240">back-face culling</text>
+        </g>
+        <g class="xs muted">
+          <text x="250" y="192">→ depth_stencil_state.compare_op = LESS</text>
+          <text x="250" y="208">→ free in hardware — but you know the artifact</text>
+          <text x="250" y="224">→ done for you — but you know why it must be</text>
+          <text x="250" y="240">→ rasterizer_state.cull_mode = BACK</text>
+        </g>
+        <text x="614" y="170" class="xs lbl-z" text-anchor="end" font-weight="700">~25%</text>
+      </g>
+
+      <!-- lane 3: discarded -->
+      <g>
+        <rect x="16" y="266" width="628" height="66" rx="8" fill="none" stroke="var(--verify-bd)" stroke-width="1.6" stroke-dasharray="6 4"/>
+        <text x="30" y="286" class="sm t-bad" font-weight="700">GENUINELY DISCARDED — and worth every hour</text>
+        <text x="30" y="308" class="xs mono">the rasterizer inner loop</text>
+        <text x="250" y="308" class="xs muted">→ replaced by fixed-function silicon. ~400 lines.</text>
+        <text x="30" y="324" class="xs muted">These are also the lines that teach the most. That is not ironic; it is the point.</text>
+        <text x="614" y="286" class="xs t-bad" text-anchor="end" font-weight="700">~15%</text>
+      </g>
+
+      <line x1="330" y1="344" x2="330" y2="366" class="ink" stroke-width="1.6" marker-end="url(#t-a)"/>
+      <text x="330" y="386" class="sm" text-anchor="middle" font-weight="700">
+        You throw away the implementation. You keep the engineer.
+      </text>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 1.</span> The three buckets. Percentages are rough — they are
+      a shape, not a measurement — but the shape is the point: <strong>most of what you write in
+      Modules 1–3 is still in the engine at the end of Module 8.</strong> The "throwaway"
+      renderer is about 400 lines of ~2,500.
+    </figcaption>
+  </figure>
+
+  <p>
+    Read the top lane again, because it is the part people do not expect. The maths library you
+    write in Module 2 — <code>vec3</code>, <code>mat4</code>, the projection matrix — is not a
+    teaching exercise you discard. <strong>It is the maths library of the finished engine.</strong>
+    It is in the capstone game in Module 8. You will have written every line of it, and it will
+    still be there four hundred hours later.
+  </p>
+
+  <p>
+    So the honest accounting is not "a hundred hours to throw away". It is: <em>most of it you
+    keep as code, a quarter of it you keep as the ability to configure the GPU knowingly, and
+    about four hundred lines — the ones that teach the most — you discard.</em>
+  </p>
+
+  <h3 id="hinge">3.2 The hinge: NDC parity</h3>
+
+  <p>
+    The top lane of Figure 1 is not free. It is bought by one specific engineering decision,
+    made before the first line of code, and it is the highest-leverage choice in this course.
+  </p>
+
+  <div class="callout ok">
+    <span class="label">The decision</span>
+    <p>
+      <strong>Our software rasterizer targets SDL_GPU's exact normalized device coordinates</strong>
+      — +Y up, depth <code>z ∈ [0,1]</code> with 0 at the near plane — even though nothing forces
+      a CPU rasterizer to use any particular convention.
+    </p>
+    <p>
+      Consequence: the projection matrix, the viewport transform, and the depth test that you
+      derive in Module 2 are <em>numerically identical</em> to the ones the GPU needs. Module 4's
+      port becomes <strong>an API change, not a maths change.</strong>
+    </p>
+  </div>
+
+  <p>
+    A CPU rasterizer could use any convention it liked — it is your code, drawing into your
+    buffer. Most tutorials pick OpenGL's <code>z ∈ [-1,1]</code>, because most tutorials teach
+    OpenGL. If we did that, then in Module 4 — at the exact moment you are drowning in a new API
+    with no printf and no stack trace — you would <em>also</em> have to re-derive your projection
+    matrix. Two hard things at once, and no way to tell which one is broken.
+  </p>
+
+  <p>
+    Instead, the maths is already right. When your first GPU triangle appears in the wrong place,
+    you can be certain it is the API, because the matrix is the one that has been working for a
+    hundred hours. <strong>That certainty is the whole gift.</strong> Debugging is the art of
+    shrinking the set of things that might be wrong, and NDC parity halves it before you start.
+  </p>
+
+  <div class="worked">
+    <span class="label">Worked example — the same numbers, both stages</span>
+    <p>
+      Take a point 5 metres in front of the camera, half a metre up:
+      <code>v_view = (0, 0.5, −5)</code>. Camera: 60° vertical field of view, 16:9,
+      <code>n = 0.1</code>, <code>f = 100</code>.
+    </p>
+    <p>
+      From <a href="../conventions.html#flip">Conventions §5</a>: <code>t = 1/tan(30°) = 1.7321</code>,
+      <code>a = 1.7778</code>, so <code>t/a = 0.9743</code>. And
+      <code>R = f/(n−f) = 100/(−99.9) = −1.001001</code>.
+    </p>
+    <p>Push it through the projection matrix:</p>
+    <ul>
+      <li><code>x_clip = 0.9743 · 0 = 0</code></li>
+      <li><code>y_clip = 1.7321 · 0.5 = 0.8660</code></li>
+      <li><code>z_clip = R·(−5) + R·n = 5.005005 − 0.100100 = 4.904905</code></li>
+      <li><code>w_clip = −z_view = 5</code></li>
+    </ul>
+    <p>Divide by <code>w</code>:</p>
+    <ul>
+      <li><code>x_ndc = 0 / 5 = 0</code></li>
+      <li><code>y_ndc = 0.8660 / 5 = 0.1732</code></li>
+      <li><code>z_ndc = 4.904905 / 5 = 0.980981</code></li>
+    </ul>
+    <p>
+      Now the point of the exercise. <strong>In Module 3</strong>, your CPU code computes
+      <code>(0, 0.1732, 0.9810)</code> and your viewport transform turns it into a pixel.
+      <strong>In Module 4</strong>, your HLSL vertex shader returns <code>(0, 0.8660, 4.9049,
+      5)</code> and the GPU divides — landing on <code>(0, 0.1732, 0.9810)</code>. The
+      <em>same three numbers</em>. Same matrix, same arithmetic, different executor.
+    </p>
+    <p>
+      Sanity-check <code>z_ndc = 0.98</code>: the point is 5 m out of a 100 m far plane, yet it
+      is already 98% of the way through the depth range. That is not an error — it is the famous
+      non-linearity of the depth buffer, and it is why depth precision is lavished near the
+      camera and starved far away. We meet it properly in 3.1, and fix it with reverse-Z in
+      Module 8.
+    </p>
+  </div>
+
+  <div class="callout warn">
+    <span class="label">The cost, stated honestly</span>
+    <p>
+      NDC parity is not free. Our projection matrix has a <strong>different third row</strong>
+      from the one in LearnOpenGL, Scratchapixel, and most of what you will find by searching.
+      Ours targets <code>z ∈ [0,1]</code>; theirs targets <code>z ∈ [-1,1]</code>.
+    </p>
+    <p>
+      So when you cross-reference — and you should — the matrix will not match, and for a moment
+      you will think one of us is wrong. Neither is. We flag it every time it comes up, and
+      <a href="../conventions.html#flip">Conventions §5</a> states it permanently. I would rather
+      you meet this in a callout than at midnight.
+    </p>
+  </div>
+
+  <h3 id="promises">3.3 The six promises</h3>
+
+  <p>
+    The pedagogy in <a href="../../CLAUDE.md">the master prompt</a> is binding on me, not
+    advisory. Stated as promises you can hold me to — each with the symptom that means I have
+    broken it:
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>#</th><th>The promise</th><th>You should call it broken when…</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>1</strong></td>
+          <td><strong>Intuition before formalism.</strong> A formula never appears before its meaning. Perspective arrives via similar triangles before any matrix; quaternions via 2D complex numbers before any 4D.</td>
+          <td>…you meet a formula you cannot draw a picture of.</td>
+        </tr>
+        <tr>
+          <td><strong>2</strong></td>
+          <td><strong>Derive, don't decree.</strong> "It just works this way" is banned. Where a derivation is genuinely out of scope, I say so explicitly, give the intuition anyway, and name a reference that finishes it.</td>
+          <td>…a step happens and you cannot say why it is allowed.</td>
+        </tr>
+        <tr>
+          <td><strong>3</strong></td>
+          <td><strong>Just-in-time maths.</strong> There is no maths chapter. Each tool arrives the moment the engine needs it, in the engine's context — and accumulates in the <a href="../math-toolbox.html">Math Toolbox</a>.</td>
+          <td>…you are learning something with no visible use yet.</td>
+        </tr>
+        <tr>
+          <td><strong>4</strong></td>
+          <td><strong>Worked numbers.</strong> Every mathematical idea gets real numbers pushed through by hand — like §<a href="#hinge">3.2</a> above.</td>
+          <td>…a formula appears with no example you can check.</td>
+        </tr>
+        <tr>
+          <td><strong>5</strong></td>
+          <td><strong>Show the failure mode.</strong> You see the artifact <em>before</em> the fix: overdraw chaos before the z-buffer, swimming textures before perspective correction, gimbal lock before quaternions.</td>
+          <td>…a fix arrives for a problem you never witnessed.</td>
+        </tr>
+        <tr>
+          <td><strong>6</strong></td>
+          <td><strong>You could explain every line.</strong> Handholding is not shallowness: every step, always with the why.</td>
+          <td>…you typed something you could not defend.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    Promise 5 deserves a note, because it is the one that looks like showmanship and is not.
+    Showing you the broken picture first costs a page and feels indulgent. It works because a
+    fix for a problem you have never seen is a ritual, while a fix for a bug that just wasted
+    your afternoon is a <em>tool</em>. You remember tools. And when the artifact reappears in
+    five years, in someone else's engine, you will recognise it on sight — which is most of what
+    a senior graphics programmer is.
+  </p>
+
+  <h3 id="spiral">3.4 The spiral</h3>
+
+  <p>
+    You will meet lighting four times and memory four times. That is not repetition or padding —
+    it is the shape of the course, and Figure 2 draws it.
+  </p>
+
+  <figure class="dia bleed">
+    <svg viewBox="0 0 660 300" role="img" aria-labelledby="f2-t f2-d">
+      <title id="f2-t">The spiral: lighting and memory each revisited at increasing depth</title>
+      <desc id="f2-d">Two horizontal tracks. The lighting track runs from Lambert in lesson 3.6,
+        to Blinn-Phong in 3.7, to the BRDF in 6.2, to microfacet theory in 6.3, to Cook-Torrance
+        in 6.4. The memory track runs from new and delete, to RAII, to handles in 5.4, to custom
+        allocators in 8.4. Each step is drawn larger than the last to show increasing depth.</desc>
+      <defs>
+        <marker id="s-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+      </defs>
+
+      <!-- lighting track -->
+      <g transform="translate(0,20)">
+        <text x="16" y="14" class="sm" font-weight="700">Lighting</text>
+        <line x1="90" y1="52" x2="628" y2="52" class="ink-soft" stroke-width="1.3" marker-end="url(#s-a)"/>
+        <g>
+          <circle cx="120" cy="52" r="9"  class="fill-soft" stroke="var(--axis-y)" stroke-width="1.6"/>
+          <circle cx="240" cy="52" r="12" class="fill-soft" stroke="var(--axis-y)" stroke-width="1.6"/>
+          <circle cx="370" cy="52" r="15" class="fill-soft" stroke="var(--axis-y)" stroke-width="1.6"/>
+          <circle cx="490" cy="52" r="18" class="fill-soft" stroke="var(--axis-y)" stroke-width="1.6"/>
+          <circle cx="600" cy="52" r="22" class="fill-soft" stroke="var(--axis-y)" stroke-width="2.2"/>
+        </g>
+        <g class="xs" text-anchor="middle">
+          <text x="120" y="82" font-weight="700">Lambert</text>
+          <text x="240" y="82" font-weight="700">Blinn-Phong</text>
+          <text x="370" y="82" font-weight="700">"it's a BRDF"</text>
+          <text x="490" y="82" font-weight="700">microfacets</text>
+          <text x="600" y="82" font-weight="700">Cook–Torrance</text>
+        </g>
+        <g class="xs mono muted" text-anchor="middle">
+          <text x="120" y="96">3.6</text>
+          <text x="240" y="96">3.7</text>
+          <text x="370" y="96">6.2</text>
+          <text x="490" y="96">6.3</text>
+          <text x="600" y="96">6.4</text>
+        </g>
+      </g>
+
+      <!-- memory track -->
+      <g transform="translate(0,150)">
+        <text x="16" y="14" class="sm" font-weight="700">Memory</text>
+        <line x1="90" y1="52" x2="628" y2="52" class="ink-soft" stroke-width="1.3" marker-end="url(#s-a)"/>
+        <g>
+          <circle cx="150" cy="52" r="9"  class="fill-soft" stroke="var(--axis-z)" stroke-width="1.6"/>
+          <circle cx="300" cy="52" r="13" class="fill-soft" stroke="var(--axis-z)" stroke-width="1.6"/>
+          <circle cx="450" cy="52" r="17" class="fill-soft" stroke="var(--axis-z)" stroke-width="1.6"/>
+          <circle cx="590" cy="52" r="21" class="fill-soft" stroke="var(--axis-z)" stroke-width="2.2"/>
+        </g>
+        <g class="xs" text-anchor="middle">
+          <text x="150" y="84" font-weight="700">new / delete</text>
+          <text x="300" y="84" font-weight="700">RAII</text>
+          <text x="450" y="84" font-weight="700">handles</text>
+          <text x="590" y="84" font-weight="700">arenas &amp; pools</text>
+        </g>
+        <g class="xs mono muted" text-anchor="middle">
+          <text x="150" y="98">M1</text>
+          <text x="300" y="98">M2</text>
+          <text x="450" y="98">5.4</text>
+          <text x="590" y="98">8.4</text>
+        </g>
+      </g>
+
+      <text x="330" y="290" class="sm t-hi" text-anchor="middle" font-weight="700">
+        Each pass is not a repeat — it is the same idea at a depth the previous pass earned.
+      </text>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 2.</span> Two of the course's spirals. The circles grow because
+      each visit goes deeper, not because it covers more ground. You cannot start at the right
+      edge — that is the claim, and §3.4 defends it.
+    </figcaption>
+  </figure>
+
+  <p>
+    The obvious objection: if Cook–Torrance is the correct model, why not teach it in Module 3
+    and skip the wrong ones?
+  </p>
+
+  <p>
+    Because Cook–Torrance answers a question you do not have yet. Handed to a student in Module 3,
+    it is a formula with five Greek letters to copy. Handed to a student who has spent Module 3
+    watching Blinn-Phong's highlight look like <em>plastic no matter what they do</em>, it is an
+    answer — and microfacet theory is the explanation of a frustration they have personally felt.
+  </p>
+
+  <p>
+    Same equation. Different meaning entirely, because of what came before. <strong>Wrong models
+    taught knowingly, in order, are not a waste — they are the questions that make the right
+    model legible.</strong> Every "wrong" step in Figure 2 is labelled as such at the time; we
+    never pretend Blinn-Phong is physically correct.
+  </p>
+
+  <h3 id="buildbuy">3.5 Build vs buy</h3>
+
+  <p>
+    We hand-roll a maths library but import <code>stb_image</code>. We hand-roll an ECS but
+    import Dear ImGui. That looks arbitrary until you see the rule:
+  </p>
+
+  <div class="callout ok">
+    <span class="label">The rule</span>
+    <p>
+      <strong>We build anything whose construction <em>is</em> the lesson. We import anything
+      whose construction is a <em>different</em> course.</strong>
+    </p>
+  </div>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>Thing</th><th>Verdict</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td>Maths library</td><td><strong>Build</strong></td><td>Understanding matrices <em>is</em> the graphics course. GLM would hand you the answer to the exam.</td></tr>
+        <tr><td>ECS</td><td><strong>Build</strong></td><td>Data-oriented design is the architecture course. EnTT would hide the very tradeoff we are studying.</td></tr>
+        <tr><td>OBJ loader</td><td><strong>Build</strong></td><td>Parsing a real format with real edge cases is a skill, and it is small enough to do properly.</td></tr>
+        <tr><td>Collision &amp; rigid bodies</td><td><strong>Build</strong></td><td>The SAT is one genuinely beautiful idea. Jolt would skip it.</td></tr>
+        <tr><td><code>stb_image</code></td><td>Buy</td><td>JPEG decoding is a course in <em>compression</em>. Nothing about it teaches engines.</td></tr>
+        <tr><td><code>stb_truetype</code></td><td>Buy</td><td>Font rasterization is a course in <em>typography</em> and hinting.</td></tr>
+        <tr><td>Dear ImGui</td><td>Buy</td><td>Immediate-mode UI is a course in <em>UI</em>. Tooling and debug only — <strong>never gameplay UI</strong>.</td></tr>
+        <tr><td><code>cgltf</code></td><td>Buy — <em>later</em></td><td>Only <em>after</em> you hand-roll OBJ, so you know exactly what it is doing for you.</td></tr>
+        <tr><td>SDL_shadercross</td><td>Buy</td><td>Writing a shader cross-compiler is a course in <em>compilers</em>. (Honest: it is still 3.0.0-preview. We say so in 4.3.)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    Note the <code>cgltf</code> row: the <em>order</em> carries the pedagogy. Import it first and
+    it is a black box forever. Hand-roll OBJ first and <code>cgltf</code> becomes a library whose
+    job you understand and whose bugs you could diagnose.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">Honest: this is a pedagogical line, not an engineering one</span>
+    <p>
+      If you are shipping a game next year, <strong>use GLM</strong>. Use Jolt. Use EnTT. They
+      are written by specialists, they are tested against cases you have not imagined, and
+      reimplementing them on a deadline is malpractice.
+    </p>
+    <p>
+      Our list is drawn for a course whose product is <em>you</em>, not the engine. Do not carry
+      "we hand-rolled it here" into a professional argument for hand-rolling it there — that is
+      cargo-culting, and it is the exact sin we warned about in
+      <a href="00-01-what-is-an-engine.html#pitfalls">0.1's pitfalls</a>. The value of building
+      your own <code>mat4</code> is that afterwards you can read GLM's.
+    </p>
+  </div>
+
+  <h3 id="reading-a-lesson">3.6 How to read a lesson</h3>
+
+  <p>
+    Every lesson has the same thirteen sections, in the same order. Knowing which ones reward
+    slow reading saves you real time:
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>Section</th><th>How to read it</th></tr></thead>
+      <tbody>
+        <tr><td><strong>The Problem</strong></td><td><strong>Do not skip.</strong> This is the motivation. Skipping it turns the whole lesson into memorisation.</td></tr>
+        <tr><td><strong>Building Intuition</strong></td><td>Slowly. If you cannot picture it, stop — the maths will not rescue you.</td></tr>
+        <tr><td><strong>The Theory</strong></td><td><strong>With a pencil.</strong> See below.</td></tr>
+        <tr><td><strong>Implementation</strong></td><td>Type it, do not paste it. Typing is slow enough to think at.</td></tr>
+        <tr><td><strong>Code Listings</strong></td><td>Reference. Use it to check what you typed.</td></tr>
+        <tr><td><strong>Build &amp; Run</strong></td><td>Actually run it. "It would have worked" is not a checkpoint.</td></tr>
+        <tr><td><strong>Pitfalls</strong></td><td>Skim now; <strong>search it by symptom</strong> when stuck. It is organised symptom → cause → fix for exactly that.</td></tr>
+        <tr><td><strong>Exercises</strong></td><td>At minimum the warm-up. It is where reading becomes knowing.</td></tr>
+        <tr><td><strong>Recap / Reading / STATE</strong></td><td>Recap to self-check. Reading is optional. STATE is machinery — ignore it.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout note">
+    <span class="label">The pencil thing is not a figure of speech</span>
+    <p>
+      Every worked example in this course is designed to be re-done by hand — that is why the
+      numbers are ugly (<code>R = −1.001001</code>) rather than convenient. Ugly numbers cannot
+      be pattern-matched; they have to be computed.
+    </p>
+    <p>
+      Reading a derivation produces the feeling of understanding, which is a different thing from
+      understanding and is almost indistinguishable from it until you are asked to reproduce it.
+      Push the numbers through §<a href="#hinge">3.2</a> yourself. It takes four minutes and it
+      is worth more than re-reading the section three times.
+    </p>
+  </div>
+
+  <!-- ================= 5. IMPLEMENTATION ================= -->
+  <h2 id="implementation"><span class="num">4</span>Implementation: the pace planner</h2>
+
+  <div class="callout warn">
+    <span class="label">The last lesson with no code</span>
+    <p>
+      As in 0.1, there is no C++ here — you still have no compiler. That changes in
+      <a href="00-03-toolchain.html">0.3</a>, and from there every lesson ships files.
+    </p>
+  </div>
+
+  <p>
+    So this lesson's artifact addresses the other thing that decides whether you finish:
+    <strong>a plan you will actually keep.</strong>
+  </p>
+
+  <p>
+    433 hours is a number that means nothing. "Twenty months at five hours a week" means
+    something — you can look at that and know whether it is true. Most people who abandon a
+    project this size do not hit a wall; they quietly discover that the pace they imagined was
+    never real, and drift. So let us find out now.
+  </p>
+
+  <div class="widget" id="pace-widget">
+    <div class="widget-controls" style="margin-top:0;">
+      <label for="hpw" style="flex:1 1 100%;">
+        <strong>Hours per week you will <em>actually</em> spend</strong>
+      </label>
+      <input type="range" id="hpw" min="1" max="40" step="1" value="6" style="flex:1 1 14rem; accent-color: var(--accent);">
+      <span class="widget-readout" id="hpw-out">6 h / week</span>
+    </div>
+
+    <div class="pace-out">
+      <div class="pace-card"><span class="n" id="p-weeks">—</span><span class="l">weeks</span></div>
+      <div class="pace-card"><span class="n" id="p-months">—</span><span class="l">months</span></div>
+      <div class="pace-card"><span class="n" id="p-finish">—</span><span class="l">you finish</span></div>
+      <div class="pace-card"><span class="n" id="p-perday">—</span><span class="l">per day, if daily</span></div>
+    </div>
+
+    <div class="tbl-scroll">
+      <table class="milestones" id="milestones">
+        <thead><tr><th>Module</th><th>What you have when it lands</th><th>Week</th><th>Approx.</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <p>
+    Drag it to the number you believe about yourself on an average week — including the bad ones.
+    Not the number you would like to be true.
+  </p>
+
+  <p>
+    Two things are worth noticing:
+  </p>
+
+  <ul>
+    <li>
+      <strong>The first real milestone is closer than the end.</strong> At six hours a week you
+      have <em>spinning 3D wireframes you wrote every line of</em> in about four months — a
+      quarter of the way in. The course is not four hundred hours of nothing followed by a
+      payoff; it is a chain of things that work.
+    </li>
+    <li>
+      <strong>Consistency beats intensity.</strong> Five hours a week for twenty months
+      finishes. Twenty hours a week for two months, then nothing, does not — and that is the
+      more common failure by a wide margin. This is the same lesson as
+      <a href="00-01-what-is-an-engine.html#realtime">0.1 §2.3</a>, oddly enough: the average is
+      not what matters, the worst stretch is. An engine that averages 10 ms and spikes to 40 is
+      unshippable; a schedule that averages 10 hours and spikes to zero for six weeks is
+      abandoned.
+    </li>
+  </ul>
+
+  <!-- ================= 6. COMPLETE CODE LISTINGS ================= -->
+  <h2 id="listings"><span class="num">5</span>Complete Code Listings</h2>
+
+  <p>
+    <strong>No engine files this lesson</strong> — the second and last time that is true.
+  </p>
+
+  <div class="tbl-scroll">
+    <table class="manifest">
+      <thead><tr><th>Path</th><th>Status</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr>
+          <td colspan="3" style="color:var(--text-faint); font-family:var(--font-ui); font-style:italic;">
+            No files. Next lesson (0.3) installs a compiler and proves it works — your first
+            source file. 0.4 writes the first <code>CMakeLists.txt</code>; 0.5 opens a window.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ================= 7. BUILD & RUN ================= -->
+  <h2 id="build"><span class="num">6</span>Build &amp; Run</h2>
+
+  <p>
+    Nothing to build. The thing to <em>do</em> is decide, and then write the decision down
+    somewhere you will see it — the pace planner's answer is worthless if it evaporates when you
+    close the tab.
+  </p>
+
+  <h3>Expected result</h3>
+
+  <div class="callout ok">
+    <span class="label">Checkpoint — you should be able to say these five things</span>
+    <ol>
+      <li>Modules 2–3 are worth ~132 hours because <strong>~60% of what I write survives as literal source</strong>, ~25% becomes GPU state I can configure knowingly, and only the rasterizer inner loop (~400 lines) is discarded.</li>
+      <li><strong>NDC parity</strong> means my projection matrix is numerically identical in both stages, so Module 4 is an API change, not a maths change — and when the first GPU triangle is wrong, I know it is the API.</li>
+      <li>The cost of that: <strong>my projection matrix will not match LearnOpenGL's third row</strong>, and that is expected.</li>
+      <li>The course spirals deliberately: Lambert → Blinn-Phong → BRDF → microfacets → Cook–Torrance, and the "wrong" steps are the questions that make the right one legible.</li>
+      <li>My pace is <strong>___ hours/week</strong>, so I finish around <strong>___</strong>. Module 2's spinning wireframe lands around <strong>___</strong>.</li>
+    </ol>
+    <p style="margin-bottom:0">
+      If you cannot fill in number 5 with a real date, the plan is not real yet. Go back to
+      §<a href="#implementation">4</a>.
+    </p>
+  </div>
+
+  <!-- ================= 8. PITFALLS ================= -->
+  <h2 id="pitfalls"><span class="num">7</span>Common Pitfalls &amp; Debugging</h2>
+
+  <div class="pitfalls">
+    <details class="pitfall-item">
+      <summary>Reading instead of doing — <span class="sym">"I understood it, but I couldn't write it"</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>You follow every derivation, nod along, and feel good. Then a blank file defeats you — or worse, Module 4 does, months later.</dd>
+          <dt>Cause</dt>
+          <dd>
+            The <em>feeling</em> of understanding is produced by fluency, and reading someone
+            else's clear explanation is maximally fluent. It is almost indistinguishable from
+            understanding, right up until you have to reproduce it. This is the single most
+            common way to fail this course, and it does not feel like failing at the time — it
+            feels like efficiency.
+          </dd>
+          <dt>Fix</dt>
+          <dd>
+            Type the code; do not paste it. Do the worked examples with a pencil. Attempt the
+            warm-up exercise <em>before</em> reading its solution. Each of these deliberately
+            reintroduces friction — the friction is not an obstacle to learning, it is a
+            substantial part of the mechanism.
+          </dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>Skipping to Module 4 — <span class="sym">"the GPU stuff is the real content"</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>Module 4 is a wall. Nothing renders, there is no error message, and you cannot form a hypothesis about why.</dd>
+          <dt>Cause</dt>
+          <dd>
+            You have no model of the pipeline, so you cannot generate candidate explanations —
+            and the GPU volunteers nothing. A CPU bug gives you a stack trace; a GPU bug gives
+            you a black rectangle. Debugging <em>is</em> hypothesis generation, and hypotheses
+            come from a model. Modules 2–3 are where the model is built.
+          </dd>
+          <dt>Fix</dt>
+          <dd>
+            If you are already stuck here: go back and write the software rasterizer. It is
+            faster than flailing — genuinely, measured in days. And RenderDoc (4.9) only helps
+            someone who knows what they are looking at.
+          </dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>Planning the pace you wish you had — <span class="sym">the schedule that quietly dies</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>Twenty hours in week one, twelve in week two, four in week three, zero from week five. The project is not abandoned — it is just never the thing you do today.</dd>
+          <dt>Cause</dt>
+          <dd>The plan was built from your best week rather than your median one. Long projects are decided by the median week, and by whether the bad weeks are survivable.</dd>
+          <dt>Fix</dt>
+          <dd>Halve your first instinct in the planner. A pace you keep for a year beats one you keep for a month, and the planner is honest about how little a sustainable pace costs: even <strong>three hours a week finishes</strong>, it just takes a while.</dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>Taking the build-vs-buy list to work — <span class="sym">"we should write our own physics"</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>You argue in a professional setting that a team should hand-roll something, citing this course.</dd>
+          <dt>Cause</dt>
+          <dd>Confusing a pedagogical constraint with an engineering one. Our list optimises for <em>you learning</em>. A product team optimises for shipping, and those give different answers.</dd>
+          <dt>Fix</dt>
+          <dd>The transferable claim is not "hand-roll physics" — it is "<em>having</em> hand-rolled physics, I can evaluate Jolt, read its docs with comprehension, and debug it when it misbehaves." That is worth a great deal, and it is an argument for your judgement rather than against the library.</dd>
+        </dl>
+      </div>
+    </details>
+  </div>
+
+  <!-- ================= 9. EXERCISES ================= -->
+  <h2 id="exercises"><span class="num">8</span>Exercises</h2>
+
+  <div class="exercise">
+    <h3><span class="xnum">0.2.1</span>Commit to a date<span class="difficulty">warm-up</span></h3>
+    <p>
+      Use the planner. Pick the hours/week you believe about your <em>median</em> week, then
+      halve it and look at the result. Write down two dates: when Module 2's spinning wireframe
+      lands, and when you finish. Put them somewhere you will see them.
+    </p>
+    <details>
+      <summary>Why halve it?</summary>
+      <p>
+        Because your estimate is of a good week, and there are not many of those. If the halved
+        number still finishes — and it does; even three hours a week gets there, in about
+        thirty-three months — then you have a plan robust to real life, rather than one that
+        requires you to be your best self every week for a year and a half.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3><span class="xnum">0.2.2</span>Predict the bucket<span class="difficulty">guided</span></h3>
+    <p>
+      For each item, predict its Figure 1 bucket — <em>kept literally</em>, <em>becomes
+      understanding</em>, or <em>discarded</em> — and say why in one sentence:
+    </p>
+    <ol>
+      <li>Your <code>look_at()</code> function from 2.9.</li>
+      <li>Your bilinear texture filter from 3.9.</li>
+      <li>Your Sutherland–Hodgman near-plane clipper from 3.3.</li>
+      <li>Your fixed-timestep accumulator from 1.4.</li>
+    </ol>
+    <details>
+      <summary>Solution</summary>
+      <p>
+        <strong>1. <code>look_at()</code> — kept literally.</strong> It produces a
+        <code>mat4</code>. The GPU does not care who built the matrix; it is uploaded and used.
+        This code is in the capstone.
+      </p>
+      <p>
+        <strong>2. Bilinear filter — becomes understanding.</strong> The GPU does it in hardware,
+        for free, via <code>SDL_GPUSampler</code>. But you will know why nearest-neighbour
+        sparkles, and — the real payoff — you will know what a sampler <em>is</em> instead of
+        copying its create-info.
+      </p>
+      <p>
+        <strong>3. Clipper — becomes understanding</strong>, mostly. The GPU clips for you. But
+        this is the subtlest one: knowing <em>why</em> clipping cannot be skipped (what happens
+        to a vertex behind the eye) is what lets you diagnose the deranged geometry you get when
+        a projection matrix is subtly wrong. The code goes; the diagnostic power stays.
+      </p>
+      <p>
+        <strong>4. Accumulator — kept literally,</strong> and it is the odd one out: it never
+        cared about the renderer at all. The loop from 1.4 is untouched by Module 4 and still
+        running the physics in Module 7. Renderer-agnostic code is the most durable code in an
+        engine — which is itself the boundary rule from
+        <a href="00-01-what-is-an-engine.html#boundaries">0.1 §3.4</a> paying a dividend.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3><span class="xnum">0.2.3</span>Find the failure modes<span class="difficulty">guided</span></h3>
+    <p>
+      Promise 5 says you see the artifact before the fix. Open the
+      <a href="../index.html">curriculum</a> and find three lessons whose description promises a
+      specific broken picture. For each, predict what the artifact looks like before you read the
+      lesson.
+    </p>
+    <details>
+      <summary>Hint</summary>
+      <p>Look at 3.1, 3.2, and 7.1 — and 6.1, which is subtler because the artifact has been quietly wrong since Module 3 without you noticing.</p>
+    </details>
+    <details>
+      <summary>Solution sketch</summary>
+      <p>
+        <strong>3.1</strong> — without a z-buffer, triangles draw in submission order: far walls
+        punch through near ones, and the picture reshuffles as the camera moves.
+        <strong>3.2</strong> — affine texturing makes textures visibly swim and warp across
+        triangles, most obviously on floors (the classic PlayStation 1 look, which is exactly this
+        artifact). <strong>7.1</strong> — gimbal lock: at 90° pitch, two of your three rotation
+        axes collapse onto each other and a whole degree of freedom vanishes while you watch.
+      </p>
+      <p>
+        <strong>6.1</strong> is the interesting one. There is no dramatic artifact — just
+        lighting that has been subtly, pervasively wrong since Module 3, with midtones too dark
+        and blends muddy. You will not have noticed, because you have nothing to compare against.
+        That is the most instructive kind of bug: the one whose absence you cannot perceive.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3><span class="xnum">0.2.4</span>Argue against me<span class="difficulty">open</span></h3>
+    <p>
+      Build the strongest case that the software rasterizer is a mistake — that the course should
+      go straight to SDL_GPU in Module 1 and spend the recovered 132 hours on advanced rendering
+      instead. Steelman it; do not build a strawman to knock over. Then decide, and name the
+      evidence that would change your mind.
+    </p>
+    <details>
+      <summary>Solution sketch</summary>
+      <p>
+        <strong>The strong case against</strong> — and it is genuinely strong. (a) Nobody ships
+        software rasterizers, so the skill is not directly marketable. (b) 132 hours buys a lot
+        of PBR. (c) Plenty of excellent graphics programmers never wrote one and are fine. (d) You
+        can learn the depth test <em>from</em> the GPU by toggling <code>compare_op</code> and
+        observing — learning-by-experiment on the real thing. (e) Motivation is a real resource,
+        and a GPU triangle in week two is more motivating than a CPU triangle in month two.
+      </p>
+      <p>
+        <strong>The case for</strong> rests on (d) being weaker than it sounds. You can only learn
+        by experiment if you can generate hypotheses and observe outcomes. The GPU gives you a
+        black screen and no error — the observation channel is nearly closed until you can already
+        read a RenderDoc capture, which itself needs the model. Point (c) is true, but those
+        programmers built the model some other way, usually painfully over years. We are buying
+        it in 132 concentrated hours.
+      </p>
+      <p>
+        <strong>My verdict</strong>, and I hold it loosely: for someone with <em>no</em> graphics
+        background, the CPU stage is the cheapest path to the GPU, not a detour. But (e) is a real
+        cost and I will not pretend otherwise — it is why Module 1 gets you pixels on screen in
+        the first few hours and Module 2 ends with spinning 3D, rather than saving everything for
+        a big reveal.
+      </p>
+      <p>
+        <strong>What would change my mind:</strong> a student who already has a solid mental model
+        of the pipeline — say, from a graphics course or shipping shaders — should absolutely skim
+        Modules 2–3 for our conventions and go to Module 4. The argument is for people without the
+        model, not for the technique.
+      </p>
+    </details>
+  </div>
+
+  <!-- ================= 10. RECAP & NEXT ================= -->
+  <h2 id="recap"><span class="num">9</span>Recap &amp; Next</h2>
+
+  <div class="recap">
+    <h2>What you can do now that you could not an hour ago</h2>
+    <ul>
+      <li>
+        <strong>Judge the plan instead of trusting it.</strong> The CPU rasterizer is not a
+        detour: ~60% of it survives as literal source, ~25% becomes GPU state you can configure
+        knowingly, and only ~400 lines are discarded — the ones that teach the most.
+      </li>
+      <li>
+        <strong>Explain NDC parity</strong> — the decision that makes Module 4 an API change
+        rather than a maths change — and name its cost: a projection matrix that will not match
+        the tutorials.
+      </li>
+      <li>
+        <strong>Hold me to six promises</strong>, and recognise the symptom when one breaks.
+      </li>
+      <li>
+        <strong>Apply the build-vs-buy rule</strong> — build what <em>is</em> the lesson, import
+        what is a different course — and know it is pedagogical, not professional advice.
+      </li>
+      <li>
+        <strong>Name the date you finish.</strong>
+      </li>
+    </ul>
+    <p>
+      The sentence worth carrying: <strong>you throw away the implementation and keep the
+      engineer.</strong> Everything in Modules 1–3 is aimed at the moment in Module 4 when a
+      struct field is a sentence rather than a spell.
+    </p>
+    <p>
+      <strong>Next:</strong> <a href="00-03-toolchain.html">0.3 — Setting Up Your Toolchain</a>.
+      Enough orientation. You get a compiler on Windows, Linux, or macOS, you prove it works, and
+      you write the first source file of the engine. The talking stops here.
+    </p>
+  </div>
+
+  <!-- ================= 11. FURTHER READING ================= -->
+  <h2 id="reading"><span class="num">10</span>Further Reading</h2>
+
+  <ul class="reading">
+    <li>
+      <span class="src">Series</span>
+      <strong><a href="https://handmadehero.org/">Handmade Hero</a></strong> — Casey Muratori
+      building a game and engine from scratch, on stream, for years. The most complete existing
+      argument for the from-scratch method. He goes further than we do (no libraries at all); the
+      disagreement is instructive.
+    </li>
+    <li>
+      <span class="src">Site</span>
+      <strong><a href="https://www.scratchapixel.com/">Scratchapixel</a></strong> — the closest
+      thing to this course's approach to maths: derive everything, geometrically, from zero. Our
+      main reference for Modules 2–3. Note their <code>z</code> range differs from ours (§<a href="#hinge">3.2</a>).
+    </li>
+    <li>
+      <span class="src">Site</span>
+      <strong><a href="https://learnopengl.com/">LearnOpenGL</a></strong> — the best free
+      graphics tutorial on the internet, and worth reading even though we do not use OpenGL. Its
+      structure and clarity are a benchmark. Same caveat about the projection matrix.
+    </li>
+    <li>
+      <span class="src">Series</span>
+      <strong><a href="https://fgiesen.wordpress.com/2011/07/09/a-trip-through-the-graphics-pipeline-2011-index/">Fabian Giesen, "A Trip Through the Graphics Pipeline"</a></strong> —
+      what the hardware actually does with your triangles. Dense. Best read <em>after</em> Module
+      3, when you have your own pipeline to compare against — which is precisely the transfer
+      this lesson is arguing for.
+    </li>
+    <li>
+      <span class="src">Book</span>
+      <strong>Jason Gregory, <em>Game Engine Architecture</em></strong> — the reference for the
+      whole course. Chapter 1 pairs with 0.1.
+    </li>
+  </ul>
+
+  <!-- ================= 12. STATE ================= -->
+  <details class="state">
+    <summary>STATE — resume key</summary>
+<pre>course: Build a Professional 3D Game Engine (SDL3 + C++20)
+version: 1.0
+
+conventions:
+  world: right-handed, Y-up, -Z forward
+  clip: left-handed, +Y up, z in [0,1] (SDL_GPU-fixed; projection absorbs the flip)
+  sw-rasterizer: targets SDL_GPU's exact NDC (port = API change, not maths change)
+  matrices: column vectors, v' = M*v, column-major storage
+  winding: CCW = front, cull back (per-pipeline state; set explicitly every time)
+  units: 1 unit = 1 metre; radians internally; linear colour in renderer
+  axis colours: x/y/z = red/green/blue
+  sdl3: FetchContent at a pinned tag; SDL 3.5.0 verified; shadercross is 3.0.0-preview
+  cpp: C++20, no exceptions/RTTI in core, snake_case, -Wall -Wextra//W4 all fixed
+
+curriculum: 94 lessons, ~433 h, 9 modules
+  M0:6  M1:8  M2:12  M3:10  M4:9  M5:10  M6:15  M7:13  M8:11
+
+completed:
+  - 0.1 — What a Game Engine Actually Is
+  - 0.2 — How This Course Works
+
+capabilities:
+  - (no engine code yet; 0.1 and 0.2 are orientation. Toolchain in 0.3,
+     first CMakeLists in 0.4, first window in 0.5)
+
+files:
+  /: CLAUDE.md, README.md, ARCHITECTURE.md, LEARNINGS.md, PROMPT.md, LICENSE, .gitignore
+  docs/: index.html, conventions.html, math-toolbox.html, cpp-style.html
+  docs/lessons/: 00-01-what-is-an-engine.html, 00-02-how-this-course-works.html
+  docs/_template/: lesson-template.html, README.md, apply-shared-css.py
+  memory/: 2026-07-16.md
+
+next: 0.3 — Setting Up Your Toolchain</pre>
+  </details>
+
+  <nav class="lesson-nav" aria-label="Lesson navigation (bottom)">
+    <a class="prev-l" href="00-01-what-is-an-engine.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">0.1 — What a Game Engine Actually Is</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="00-03-toolchain.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">0.3 — Setting Up Your Toolchain</span>
+    </a>
+  </nav>
+
+  <footer class="foot">
+    <p>
+      Build a Professional 3D Game Engine ·
+      <a href="../index.html">Contents</a> ·
+      <a href="../conventions.html">Conventions</a> ·
+      <a href="../math-toolbox.html">Math Toolbox</a> ·
+      <a href="../cpp-style.html">C++ Style</a>
+    </p>
+    <p>MIT licensed. Copyright © 2026 digster.</p>
+  </footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ---- Theme toggle (identical across the course) ---- */
+  var root = document.documentElement;
+  var KEY = "engine-course-theme";
+  try {
+    var saved = localStorage.getItem(KEY);
+    if (saved) { root.setAttribute("data-theme", saved); root.style.colorScheme = saved; }
+  } catch (e) {}
+  var btn = document.getElementById("theme-toggle");
+  if (btn) {
+    btn.addEventListener("click", function () {
+      var cur = root.getAttribute("data-theme");
+      if (!cur) cur = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      var next = cur === "dark" ? "light" : "dark";
+      root.setAttribute("data-theme", next);
+      root.style.colorScheme = next;
+      try { localStorage.setItem(KEY, next); } catch (e) {}
+    });
+  }
+
+  /* ---- C++ highlighting (the Module-4 taste listing) ---- */
+  var CPP_KEYWORDS = ("bool true false const constexpr static void struct class enum namespace "
+    + "return if else for while inline noexcept nullptr").split(" ");
+  var CPP_TYPES = ("int float double char unsigned uint32_t").split(" ");
+  var kw = Object.create(null), ty = Object.create(null);
+  CPP_KEYWORDS.forEach(function (w) { kw[w] = 1; });
+  CPP_TYPES.forEach(function (w) { ty[w] = 1; });
+  function esc(s) { return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+  function span(c, s) { return '<span class="tok-' + c + '">' + esc(s) + "</span>"; }
+  var RE = new RegExp([
+    "(\\/\\*[\\s\\S]*?\\*\\/|\\/\\/[^\\n]*|#[^\\n]*)",
+    '("(?:\\\\.|[^"\\\\])*"|\'(?:\\\\.|[^\'\\\\])*\')',
+    "(\\b\\d[\\w.]*\\b)",
+    "([A-Za-z_]\\w*)(?=\\s*\\()",
+    "([A-Za-z_]\\w*)",
+    "([{}()\\[\\];,.<>+\\-*/%=!&|^~?:]+)"
+  ].join("|"), "g");
+  document.querySelectorAll(".listing pre code.lang-cpp").forEach(function (el) {
+    var src = el.textContent, out = "", last = 0, m;
+    RE.lastIndex = 0;
+    while ((m = RE.exec(src)) !== null) {
+      if (m.index > last) out += esc(src.slice(last, m.index));
+      if (m[1])      out += span(m[1].charAt(0) === "#" ? "p" : "c", m[1]);
+      else if (m[2]) out += span("s", m[2]);
+      else if (m[3]) out += span("n", m[3]);
+      else if (m[4]) out += kw[m[4]] ? span("k", m[4]) : span("f", m[4]);
+      else if (m[5]) out += kw[m[5]] ? span("k", m[5]) : ty[m[5]] ? span("t", m[5]) : esc(m[5]);
+      else if (m[6]) out += span("o", m[6]);
+      last = RE.lastIndex;
+    }
+    el.innerHTML = out + esc(src.slice(last));
+  });
+
+  /* ==================================================================
+     THE PACE PLANNER
+     ------------------------------------------------------------------
+     433 hours is an abstraction. "Seventeen months at six hours a week"
+     is a decision. Cumulative hours come straight from the curriculum
+     on index.html — keep them in sync if the curriculum changes.
+     ================================================================== */
+  var MODULES = [
+    { id: "M0", cum:  18, what: "A window that opens, responds, and closes cleanly" },
+    { id: "M1", cum:  50, what: "A playable Pong, on a correct fixed-timestep loop" },
+    { id: "M2", cum: 104, what: "Spinning 3D wireframes — every line yours", big: true },
+    { id: "M3", cum: 150, what: "A textured, lit, z-buffered scene, all on the CPU", big: true },
+    { id: "M4", cum: 190, what: "That same scene, on the GPU via SDL_GPU" },
+    { id: "M5", cum: 239, what: "A real engine library with a public API and an ECS" },
+    { id: "M6", cum: 313, what: "PBR, shadows, HDR, image-based lighting" },
+    { id: "M7", cum: 376, what: "Animation, physics, 3D audio" },
+    { id: "M8", cum: 433, what: "A shippable engine, an editor, and a finished game", big: true }
+  ];
+  var TOTAL = MODULES[MODULES.length - 1].cum;
+
+  var hpw    = document.getElementById("hpw");
+  var tbody  = document.querySelector("#milestones tbody");
+  if (!hpw) return;
+
+  function addWeeks(weeks) {
+    var d = new Date();
+    d.setDate(d.getDate() + Math.round(weeks * 7));
+    return d.toLocaleDateString(undefined, { month: "short", year: "numeric" });
+  }
+
+  function recompute() {
+    var h = parseFloat(hpw.value);
+    var weeks = TOTAL / h;
+
+    document.getElementById("hpw-out").textContent = h + " h / week";
+    document.getElementById("p-weeks").textContent  = Math.round(weeks);
+    document.getElementById("p-months").textContent = (weeks / 4.345).toFixed(1);
+    document.getElementById("p-finish").textContent = addWeeks(weeks);
+    document.getElementById("p-perday").textContent = (h / 7).toFixed(1) + " h";
+
+    tbody.innerHTML = "";
+    MODULES.forEach(function (m) {
+      var w = m.cum / h;
+      var tr = document.createElement("tr");
+      if (m.big) tr.className = "big";
+      tr.innerHTML =
+        '<td class="mn">' + m.id + "</td>" +
+        "<td>" + m.what + "</td>" +
+        '<td class="wk">wk ' + Math.round(w) + "</td>" +
+        '<td class="dt">' + addWeeks(w) + "</td>";
+      tbody.appendChild(tr);
+    });
+  }
+  hpw.addEventListener("input", recompute);
+  recompute();
+})();
+</script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"
+        integrity="sha384-7zkQWkzuo3B5mTepMUcHkMB5jZaolc2xDwL6VFqjFALcbeS9Ggm/Yr2r3Dy4lfFg"
+        crossorigin="anonymous"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+        integrity="sha384-43gviWU0YVjaDtb/GhzOouOXtZMP/7XUzwPTstBeZFe/+rCMvRwr4yROQP43s0Xk"
+        crossorigin="anonymous"
+        onload="renderMathInElement(document.body, {
+          delimiters: [
+            {left: '\\[', right: '\\]', display: true},
+            {left: '\\(', right: '\\)', display: false}
+          ], throwOnError: false });"></script>
+</body>
+</html>

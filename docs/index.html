@@ -577,6 +577,10 @@ figure.dia svg .muted     { fill: var(--dia-ink-soft); }
 figure.dia svg .t-hi      { fill: var(--dia-hi); }
 figure.dia svg .t-ok      { fill: var(--ok-bd); }
 figure.dia svg .t-bad     { fill: var(--verify-bd); }
+/* For labels sitting ON a saturated filled shape, where the theme ink would be
+   unreadable. Fixed white in both themes, because the shape under it is the
+   same saturated colour in both. */
+figure.dia svg .t-inv     { fill: #ffffff; }
 
 /* ---- Tables -------------------------------------------------------------- */
 .tbl-scroll { overflow-x: auto; margin: 1.6em 0; }
@@ -961,7 +965,7 @@ table.lessons .d { color: var(--text-muted); font-size: 0.95em; line-height: 1.4
     <div class="stat"><span class="n">94</span><span class="l">lessons</span></div>
     <div class="stat"><span class="n">9</span><span class="l">modules</span></div>
     <div class="stat"><span class="n">~433</span><span class="l">hours</span></div>
-    <div class="stat"><span class="n">1</span><span class="l">published</span></div>
+    <div class="stat"><span class="n">2</span><span class="l">published</span></div>
   </div>
 
   <p>
@@ -1180,7 +1184,7 @@ table.lessons .d { color: var(--text-muted); font-size: 0.95em; line-height: 1.4
         <table class="lessons">
           <tbody>
             <tr><td class="id">0.1</td><td><span class="t"><a href="lessons/00-01-what-is-an-engine.html">What a Game Engine Actually Is</a> <span class="badge done">published</span></span><span class="d">An anatomy tour — renderer, simulation, assets, input, audio, tooling — derived from the frame budget rather than listed, with reference to how real engines draw these lines and where they blur.</span></td><td class="hrs">3 h</td></tr>
-            <tr><td class="id">0.2</td><td><span class="t">How This Course Works</span><span class="d">The two-stage plan, the pedagogy, and the promise: derive before decree. Why we start on the CPU and what that buys us later.</span></td><td class="hrs">2 h</td></tr>
+            <tr><td class="id">0.2</td><td><span class="t"><a href="lessons/00-02-how-this-course-works.html">How This Course Works</a> <span class="badge done">published</span></span><span class="d">The argument for spending 132 hours on a renderer we replace in Module 4 — what actually transfers, what NDC parity buys, the six promises, and a pace you will keep.</span></td><td class="hrs">2 h</td></tr>
             <tr><td class="id">0.3</td><td><span class="t">Setting Up Your Toolchain</span><span class="d">Compiler, CMake, and editor on Windows, Linux, and macOS. MSVC, Clang, GCC — all three, from day one.</span></td><td class="hrs">3 h</td></tr>
             <tr><td class="id">0.4</td><td><span class="t">CMake From Zero</span><span class="d">Targets, linking, and properties as a mental model rather than incantations. <code>FetchContent</code> vs vendored submodules — we teach both, then standardize on FetchContent.</span></td><td class="hrs">4 h</td></tr>
             <tr><td class="id">0.5</td><td><span class="t">Your First Window</span><span class="d">SDL3 pulled in by CMake, a window on screen, and a real event loop that closes cleanly. <code>SDL_CreateWindow</code> takes no x/y — the first of many SDL2 habits to unlearn.</span></td><td class="hrs">3 h</td></tr>

@@ -588,6 +588,10 @@ figure.dia svg .muted     { fill: var(--dia-ink-soft); }
 figure.dia svg .t-hi      { fill: var(--dia-hi); }
 figure.dia svg .t-ok      { fill: var(--ok-bd); }
 figure.dia svg .t-bad     { fill: var(--verify-bd); }
+/* For labels sitting ON a saturated filled shape, where the theme ink would be
+   unreadable. Fixed white in both themes, because the shape under it is the
+   same saturated colour in both. */
+figure.dia svg .t-inv     { fill: #ffffff; }
 
 /* ---- Tables -------------------------------------------------------------- */
 .tbl-scroll { overflow-x: auto; margin: 1.6em 0; }
