@@ -1,0 +1,2189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>0.4 — CMake From Zero · Build a Professional 3D Game Engine</title>
+<meta name="description" content="Describe a build once and get it on every platform: CMake's two-phase model, targets and properties, and fetching SDL3 with FetchContent at a pinned tag.">
+<!-- SHARED-CSS:BEGIN -->
+<style>
+/* ---- Design tokens ------------------------------------------------------- */
+:root {
+  color-scheme: light dark;
+
+  /* Page */
+  --bg:            #fdfdfb;
+  --bg-sunken:     #f4f4f0;
+  --bg-raised:     #ffffff;
+  --text:          #1c1c1a;
+  --text-muted:    #5f5f58;
+  --text-faint:    #8a8a80;
+  --rule:          #e2e2db;
+  --rule-strong:   #cfcfc6;
+
+  /* Accent — used for links, active nav, section marks */
+  --accent:        #b4530a;
+  --accent-soft:   #f5e6d8;
+  --accent-text:   #8f4108;
+
+  /* Callouts */
+  --note-bd:       #3a6ea5;   --note-bg:    #eaf2fb;
+  --warn-bd:       #b8860b;   --warn-bg:    #fdf5e2;
+  --verify-bd:     #a03030;   --verify-bg:  #fbecec;
+  --pitfall-bd:    #7a4fa3;   --pitfall-bg: #f4eefb;
+  --ok-bd:         #2f7d4f;   --ok-bg:      #e9f6ee;
+
+  /* Code — always dark, in both page themes */
+  --code-bg:       #1b1d23;
+  --code-bar:      #262932;
+  --code-text:     #dfe3ec;
+  --code-rule:     #363a45;
+
+  /* Syntax tokens */
+  --tok-comment:   #6d7789;
+  --tok-keyword:   #c98fdb;
+  --tok-type:      #6cc5d9;
+  --tok-string:    #a3cf85;
+  --tok-number:    #e8a978;
+  --tok-preproc:   #d9a05b;
+  --tok-func:      #79b6f2;
+  --tok-punct:     #9aa2b1;
+
+  /* Axis colours — COURSE-WIDE CONVENTION. x/y/z = red/green/blue.
+     Never override these in a diagram. See conventions.html. */
+  --axis-x:        #d1344a;
+  --axis-y:        #2f9e4f;
+  --axis-z:        #2b6fd4;
+  --axis-x-soft:   #f7d8dd;
+  --axis-y-soft:   #d8f0e0;
+  --axis-z-soft:   #d7e4fa;
+
+  /* Diagram neutrals */
+  --dia-bg:        #ffffff;
+  --dia-ink:       #33332e;
+  --dia-ink-soft:  #7a7a72;
+  --dia-grid:      #e8e8e2;
+  --dia-fill:      #f0f0ea;
+  --dia-hi:        #b4530a;
+
+  /* Typography */
+  --font-body: "Iowan Old Style", "Palatino Linotype", "Palatino", "Charter",
+               Georgia, Cambria, "Times New Roman", serif;
+  --font-ui:   -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+               "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "SFMono-Regular", "Cascadia Code",
+               "JetBrains Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  --measure: 42rem;          /* ~72 characters at this size — the reading column */
+  --measure-wide: 58rem;     /* diagrams & tables may breathe past the measure  */
+}
+
+/* Dark tokens.
+   Applied in two situations, which is why the block is written twice:
+     1. the OS asks for dark AND the reader has not overridden to light;
+     2. the reader explicitly chose dark via the toggle.
+   CSS has no mixins, so duplication is the price of supporting both an OS
+   default and a manual override. Keep the two blocks byte-identical. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg:          #15161a;
+    --bg-sunken:   #101115;
+    --bg-raised:   #1c1e24;
+    --text:        #e4e4e0;
+    --text-muted:  #a2a49e;
+    --text-faint:  #74766f;
+    --rule:        #2c2e35;
+    --rule-strong: #3d404a;
+
+    --accent:      #f0a06a;
+    --accent-soft: #33251a;
+    --accent-text: #f5b184;
+
+    --note-bd:     #5a8fc8;   --note-bg:    #16202c;
+    --warn-bd:     #c9a132;   --warn-bg:    #262013;
+    --verify-bd:   #d05555;   --verify-bg:  #2a1717;
+    --pitfall-bd:  #a077c8;   --pitfall-bg: #221a2c;
+    --ok-bd:       #4fa877;   --ok-bg:      #14231a;
+
+    --dia-bg:      #1a1c21;
+    --dia-ink:     #d8d8d2;
+    --dia-ink-soft:#8f918a;
+    --dia-grid:    #2b2d33;
+    --dia-fill:    #24262c;
+    --dia-hi:      #f0a06a;
+
+    --axis-x:      #f2647a;
+    --axis-y:      #5cc47e;
+    --axis-z:      #6b9ef0;
+    --axis-x-soft: #3a2027;
+    --axis-y-soft: #1c3325;
+    --axis-z-soft: #1e2a40;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg:          #15161a;
+  --bg-sunken:   #101115;
+  --bg-raised:   #1c1e24;
+  --text:        #e4e4e0;
+  --text-muted:  #a2a49e;
+  --text-faint:  #74766f;
+  --rule:        #2c2e35;
+  --rule-strong: #3d404a;
+
+  --accent:      #f0a06a;
+  --accent-soft: #33251a;
+  --accent-text: #f5b184;
+
+  --note-bd:     #5a8fc8;   --note-bg:    #16202c;
+  --warn-bd:     #c9a132;   --warn-bg:    #262013;
+  --verify-bd:   #d05555;   --verify-bg:  #2a1717;
+  --pitfall-bd:  #a077c8;   --pitfall-bg: #221a2c;
+  --ok-bd:       #4fa877;   --ok-bg:      #14231a;
+
+  --dia-bg:      #1a1c21;
+  --dia-ink:     #d8d8d2;
+  --dia-ink-soft:#8f918a;
+  --dia-grid:    #2b2d33;
+  --dia-fill:    #24262c;
+  --dia-hi:      #f0a06a;
+
+  --axis-x:      #f2647a;
+  --axis-y:      #5cc47e;
+  --axis-z:      #6b9ef0;
+  --axis-x-soft: #3a2027;
+  --axis-y-soft: #1c3325;
+  --axis-z-soft: #1e2a40;
+}
+
+/* ---- Reset & base -------------------------------------------------------- */
+*, *::before, *::after { box-sizing: border-box; }
+
+html {
+  font-size: 18px;
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
+  scroll-padding-top: 2rem;
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  line-height: 1.7;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* The reading column. Everything is centred on --measure; wide elements opt out. */
+.wrap {
+  max-width: var(--measure);
+  margin: 0 auto;
+  padding: 0 1.25rem;
+}
+.bleed {                       /* for diagrams/tables that need more room */
+  max-width: var(--measure-wide);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* ---- Typography ---------------------------------------------------------- */
+h1, h2, h3, h4 {
+  font-family: var(--font-ui);
+  line-height: 1.25;
+  letter-spacing: -0.015em;
+  margin: 0 0 0.6em;
+  scroll-margin-top: 1.5rem;
+}
+h1 { font-size: 2.15rem; font-weight: 700; margin-top: 0.2em; }
+h2 {
+  font-size: 1.5rem; font-weight: 650;
+  margin-top: 2.6em;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--rule);
+}
+h3 { font-size: 1.15rem; font-weight: 650; margin-top: 2em; }
+h4 { font-size: 1rem;    font-weight: 650; margin-top: 1.6em; color: var(--text-muted); }
+
+/* Section numbers rendered as a quiet prefix */
+h2 .num, h3 .num {
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  margin-right: 0.5em;
+  font-weight: 500;
+}
+
+p { margin: 0 0 1.15em; }
+
+a { color: var(--accent-text); text-decoration-color: var(--rule-strong); text-underline-offset: 2px; }
+a:hover { text-decoration-color: currentColor; }
+
+strong { font-weight: 650; }
+em { font-style: italic; }
+
+ul, ol { margin: 0 0 1.15em; padding-left: 1.5em; }
+li { margin-bottom: 0.4em; }
+li > ul, li > ol { margin-top: 0.4em; margin-bottom: 0.5em; }
+
+hr { border: 0; border-top: 1px solid var(--rule); margin: 2.5em 0; }
+
+blockquote {
+  margin: 1.5em 0;
+  padding: 0.1em 0 0.1em 1.2em;
+  border-left: 3px solid var(--rule-strong);
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* Inline code — light chip, distinct from the dark block listings */
+:not(pre) > code {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 0.08em 0.34em;
+  word-break: break-word;
+}
+
+/* ---- Masthead ------------------------------------------------------------ */
+.masthead {
+  background: var(--bg-sunken);
+  border-bottom: 1px solid var(--rule);
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+}
+.masthead-inner {
+  max-width: var(--measure-wide);
+  margin: 0 auto;
+  padding: 0.6rem 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.masthead .course {
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  text-decoration: none;
+}
+.masthead .spacer { flex: 1; }
+.masthead a { color: var(--text-muted); text-decoration: none; }
+.masthead a:hover { color: var(--accent-text); }
+
+.theme-toggle {
+  font: inherit;
+  font-size: 0.78rem;
+  background: var(--bg-raised);
+  color: var(--text-muted);
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  padding: 0.2rem 0.55rem;
+  cursor: pointer;
+}
+.theme-toggle:hover { border-color: var(--rule-strong); color: var(--text); }
+
+/* ---- Lesson nav (top & bottom) ------------------------------------------- */
+.lesson-nav {
+  display: flex;
+  align-items: stretch;
+  gap: 0.6rem;
+  font-family: var(--font-ui);
+  font-size: 0.82rem;
+  margin: 1.5rem auto;
+}
+.lesson-nav a, .lesson-nav span {
+  flex: 1;
+  padding: 0.55rem 0.8rem;
+  border: 1px solid var(--rule);
+  border-radius: 7px;
+  background: var(--bg-raised);
+  text-decoration: none;
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+.lesson-nav a:hover { border-color: var(--accent); }
+.lesson-nav span { opacity: 0.45; }        /* disabled edge (no prev / no next) */
+.lesson-nav .dir {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-faint);
+}
+.lesson-nav .ttl {
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-weight: 550;
+}
+.lesson-nav .next-l { text-align: right; }
+.lesson-nav .idx-l  { flex: 0 0 auto; justify-content: center; text-align: center; }
+@media (max-width: 34rem) {
+  .lesson-nav { flex-wrap: wrap; }
+  .lesson-nav .idx-l { order: 3; flex: 1 0 100%; }
+}
+
+/* ---- Lesson header block ------------------------------------------------- */
+.lesson-head { margin: 2rem 0 0; }
+.eyebrow {
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+  font-weight: 650;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 0.5rem;
+}
+.deck {
+  font-size: 1.12rem;
+  color: var(--text-muted);
+  margin-bottom: 1.5rem;
+}
+.meta {
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  padding: 1rem 1.15rem;
+  margin-bottom: 1.75rem;
+}
+.meta dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 0.4rem 1rem; }
+.meta dt {
+  color: var(--text-faint);
+  text-transform: uppercase;
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  padding-top: 0.28em;
+  white-space: nowrap;
+}
+.meta dd { margin: 0; }
+@media (max-width: 30rem) {
+  .meta dl { grid-template-columns: 1fr; gap: 0.15rem 0; }
+  .meta dd { margin-bottom: 0.6rem; }
+}
+
+/* Objectives — "you will be able to…" */
+.objectives {
+  border: 1px solid var(--accent);
+  background: var(--accent-soft);
+  border-radius: 9px;
+  padding: 1.1rem 1.25rem;
+  margin: 1.75rem 0;
+}
+.objectives h2 {
+  margin: 0 0 0.5rem;
+  border: 0; padding: 0;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--accent-text);
+}
+.objectives ul { margin: 0; padding-left: 1.25em; }
+.objectives li::marker { color: var(--accent); }
+
+/* ---- Table of contents --------------------------------------------------- */
+.toc {
+  font-family: var(--font-ui);
+  font-size: 0.88rem;
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  padding: 1rem 1.25rem;
+  margin: 2rem 0;
+}
+.toc > summary {
+  cursor: pointer;
+  font-weight: 650;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-muted);
+  list-style: none;
+}
+.toc > summary::-webkit-details-marker { display: none; }
+.toc > summary::before { content: "▸ "; color: var(--accent); }
+.toc[open] > summary::before { content: "▾ "; }
+.toc ol { list-style: none; margin: 0.85rem 0 0; padding: 0; counter-reset: toc; }
+.toc ol ol { margin: 0.3rem 0 0.5rem 1.1rem; }
+.toc li { margin: 0.28em 0; counter-increment: toc; }
+.toc a { text-decoration: none; color: var(--text); }
+.toc a:hover { color: var(--accent-text); text-decoration: underline; }
+.toc ol ol a { color: var(--text-muted); font-size: 0.94em; }
+
+/* ---- Callouts ------------------------------------------------------------ */
+.callout {
+  border-left: 3px solid var(--rule-strong);
+  background: var(--bg-sunken);
+  border-radius: 0 8px 8px 0;
+  padding: 0.9rem 1.1rem;
+  margin: 1.6em 0;
+  font-size: 0.95rem;
+}
+.callout > :first-child { margin-top: 0; }
+.callout > :last-child  { margin-bottom: 0; }
+.callout .label {
+  display: block;
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  margin-bottom: 0.35rem;
+}
+.callout.note    { border-color: var(--note-bd);    background: var(--note-bg); }
+.callout.note .label    { color: var(--note-bd); }
+.callout.warn    { border-color: var(--warn-bd);    background: var(--warn-bg); }
+.callout.warn .label    { color: var(--warn-bd); }
+.callout.verify  { border-color: var(--verify-bd);  background: var(--verify-bg); }
+.callout.verify .label  { color: var(--verify-bd); }
+.callout.pitfall { border-color: var(--pitfall-bd); background: var(--pitfall-bg); }
+.callout.pitfall .label { color: var(--pitfall-bd); }
+.callout.ok      { border-color: var(--ok-bd);      background: var(--ok-bg); }
+.callout.ok .label      { color: var(--ok-bd); }
+/* C++ explainers: a C++ feature taught in place, the first time it appears. */
+.callout.cpp     { border-color: var(--accent);     background: var(--accent-soft); }
+.callout.cpp .label     { color: var(--accent-text); }
+
+/* ---- Code listings ------------------------------------------------------- */
+.listing {
+  margin: 1.6em 0;
+  border-radius: 9px;
+  overflow: hidden;
+  border: 1px solid var(--code-rule);
+  background: var(--code-bg);
+}
+.listing figcaption {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: var(--code-bar);
+  border-bottom: 1px solid var(--code-rule);
+  padding: 0.45rem 0.85rem;
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  color: #aeb6c4;
+}
+.listing figcaption .path { font-weight: 600; color: #dfe3ec; }
+.listing figcaption .tag {
+  font-family: var(--font-ui);
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  background: #3a3f4c;
+  color: #c6cdd9;
+}
+.listing figcaption .tag.new      { background: #1f4433; color: #7fd6a5; }
+.listing figcaption .tag.modified { background: #453a1c; color: #e0be74; }
+.listing figcaption .lang { margin-left: auto; opacity: 0.65; }
+
+/* Horizontal scroll — NEVER wrap. Wrapped code lies about its structure. */
+.listing pre {
+  margin: 0;
+  padding: 0.9rem 1rem;
+  overflow-x: auto;
+  background: var(--code-bg);
+}
+.listing pre code {
+  font-family: var(--font-mono);
+  font-size: 0.79rem;
+  line-height: 1.62;
+  color: var(--code-text);
+  white-space: pre;
+  display: block;
+  tab-size: 4;
+}
+.listing pre::-webkit-scrollbar { height: 9px; }
+.listing pre::-webkit-scrollbar-track { background: var(--code-bar); }
+.listing pre::-webkit-scrollbar-thumb { background: #4a5060; border-radius: 5px; }
+.listing pre::-webkit-scrollbar-thumb:hover { background: #5d6478; }
+
+/* Syntax tokens, applied by the tiny highlighter at the foot of the page. */
+.tok-c { color: var(--tok-comment); font-style: italic; }
+.tok-k { color: var(--tok-keyword); }
+.tok-t { color: var(--tok-type); }
+.tok-s { color: var(--tok-string); }
+.tok-n { color: var(--tok-number); }
+.tok-p { color: var(--tok-preproc); }
+.tok-f { color: var(--tok-func); }
+.tok-o { color: var(--tok-punct); }
+
+/* Emphasised line inside a listing (the line this paragraph is about) */
+.listing .hl { background: rgba(180, 130, 60, 0.16); display: inline-block; width: 100%; }
+
+/* Shell transcripts get a lighter treatment than source files */
+.listing.shell figcaption .path::before { content: "$ "; opacity: 0.6; }
+
+/* ---- Figures & diagrams -------------------------------------------------- */
+figure.dia {
+  margin: 2em auto;
+  padding: 0;
+}
+figure.dia svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: var(--dia-bg);
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+}
+figure.dia figcaption,
+figure.tbl figcaption {
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: 0.65rem;
+  line-height: 1.55;
+}
+figure.dia figcaption .fignum,
+figure.tbl figcaption .fignum {
+  font-weight: 700;
+  color: var(--text);
+}
+/* SVG text inherits the theme so diagrams survive dark mode */
+figure.dia svg text { font-family: var(--font-ui); fill: var(--dia-ink); }
+figure.dia svg .lbl-x { fill: var(--axis-x); }
+figure.dia svg .lbl-y { fill: var(--axis-y); }
+figure.dia svg .lbl-z { fill: var(--axis-z); }
+figure.dia svg .ax-x  { stroke: var(--axis-x); }
+figure.dia svg .ax-y  { stroke: var(--axis-y); }
+figure.dia svg .ax-z  { stroke: var(--axis-z); }
+figure.dia svg .ink       { stroke: var(--dia-ink); }
+figure.dia svg .ink-soft  { stroke: var(--dia-ink-soft); }
+figure.dia svg .grid      { stroke: var(--dia-grid); }
+figure.dia svg .fill-soft { fill: var(--dia-fill); }
+figure.dia svg .hi        { stroke: var(--dia-hi); }
+figure.dia svg .mono      { font-family: var(--font-mono); }
+figure.dia svg .sm        { font-size: 11px; }
+figure.dia svg .xs        { font-size: 9.5px; }
+
+/* Text fills for <text> elements.
+   These MUST be classes, not fill="..." attributes: the `figure.dia svg text`
+   rule above is CSS, and CSS always beats an SVG presentation attribute — an
+   inline fill on a <text> is silently ignored. Class selectors outrank the bare
+   element selector, so these win. (Shapes are unaffected; the rule only targets
+   text, so fill="..." still works on rect/path/circle.) */
+figure.dia svg .muted     { fill: var(--dia-ink-soft); }
+figure.dia svg .t-hi      { fill: var(--dia-hi); }
+figure.dia svg .t-ok      { fill: var(--ok-bd); }
+figure.dia svg .t-bad     { fill: var(--verify-bd); }
+/* For labels sitting ON a saturated filled shape, where the theme ink would be
+   unreadable. Fixed white in both themes, because the shape under it is the
+   same saturated colour in both. */
+figure.dia svg .t-inv     { fill: #ffffff; }
+
+/* ---- Tables -------------------------------------------------------------- */
+.tbl-scroll { overflow-x: auto; margin: 1.6em 0; }
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+th, td {
+  text-align: left;
+  padding: 0.5rem 0.7rem;
+  border-bottom: 1px solid var(--rule);
+  vertical-align: top;
+}
+th {
+  font-weight: 650;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--rule-strong);
+  white-space: nowrap;
+}
+tbody tr:hover { background: var(--bg-sunken); }
+td code { font-size: 0.82em; }
+
+/* File-manifest table: path | new/modified | purpose */
+.manifest td:first-child { font-family: var(--font-mono); font-size: 0.78rem; white-space: nowrap; }
+.badge {
+  font-size: 0.62rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.06em; padding: 0.1rem 0.4rem; border-radius: 3px; white-space: nowrap;
+}
+.badge.new { background: var(--ok-bg); color: var(--ok-bd); border: 1px solid var(--ok-bd); }
+.badge.mod { background: var(--warn-bg); color: var(--warn-bd); border: 1px solid var(--warn-bd); }
+/* Curriculum status, used on index.html */
+.badge.done { background: var(--ok-bg); color: var(--ok-bd); border: 1px solid var(--ok-bd); }
+.badge.soon { background: var(--bg-sunken); color: var(--text-faint); border: 1px solid var(--rule-strong); }
+
+/* ---- Math ---------------------------------------------------------------- */
+/* KaTeX renders these when the CDN is reachable. When it is NOT, the raw TeX
+   stays visible — which is why every equation MUST also be stated in prose.
+   Never let an equation be the only carrier of a fact. */
+.eq {
+  margin: 1.4em 0;
+  padding: 0.9rem 1rem;
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  overflow-x: auto;
+  text-align: center;
+}
+.eq-plain {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  margin-top: 0.6rem;
+  padding-top: 0.6rem;
+  border-top: 1px dashed var(--rule-strong);
+  text-align: left;
+}
+.eq-plain::before {
+  content: "in plain text: ";
+  color: var(--text-faint);
+  font-family: var(--font-ui);
+  font-size: 0.72rem;
+}
+
+/* Worked numeric example — every formula gets one */
+.worked {
+  border: 1px solid var(--rule-strong);
+  border-radius: 9px;
+  padding: 1rem 1.2rem;
+  margin: 1.6em 0;
+  background: var(--bg-raised);
+}
+.worked > .label {
+  display: block;
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--accent);
+  margin-bottom: 0.5rem;
+}
+.worked > :last-child { margin-bottom: 0; }
+
+/* ---- Exercises ----------------------------------------------------------- */
+.exercise {
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 9px 9px 0;
+  padding: 1rem 1.2rem;
+  margin: 1.4em 0;
+  background: var(--bg-raised);
+}
+.exercise h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.98rem;
+}
+.exercise h3 .xnum {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--accent);
+  margin-right: 0.5em;
+}
+.difficulty {
+  font-family: var(--font-ui);
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-faint);
+  border: 1px solid var(--rule-strong);
+  border-radius: 3px;
+  padding: 0.05rem 0.35rem;
+  margin-left: 0.4em;
+  vertical-align: 0.15em;
+}
+.exercise details {
+  margin-top: 0.7rem;
+  border-top: 1px solid var(--rule);
+  padding-top: 0.6rem;
+}
+.exercise summary {
+  cursor: pointer;
+  font-family: var(--font-ui);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.exercise summary:hover { color: var(--accent-text); }
+.exercise details[open] summary { margin-bottom: 0.6rem; }
+
+/* ---- Pitfalls (symptom → cause → fix) ------------------------------------ */
+.pitfalls { margin: 1.5em 0; }
+.pitfall-item {
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  margin-bottom: 0.9rem;
+  overflow: hidden;
+}
+.pitfall-item > summary {
+  cursor: pointer;
+  padding: 0.7rem 1rem;
+  background: var(--bg-sunken);
+  font-family: var(--font-ui);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.pitfall-item > summary:hover { color: var(--accent-text); }
+.pitfall-item > summary .sym {
+  font-weight: 400;
+  color: var(--text-muted);
+  font-style: italic;
+}
+.pitfall-body { padding: 0.9rem 1rem; font-size: 0.94rem; }
+.pitfall-body > :first-child { margin-top: 0; }
+.pitfall-body > :last-child  { margin-bottom: 0; }
+.pitfall-body dt {
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+  margin-top: 0.7rem;
+}
+.pitfall-body dd { margin: 0.2rem 0 0; }
+
+/* ---- Recap / next -------------------------------------------------------- */
+.recap {
+  background: var(--ok-bg);
+  border: 1px solid var(--ok-bd);
+  border-radius: 9px;
+  padding: 1.1rem 1.25rem;
+  margin: 1.75rem 0;
+}
+.recap h2 { margin: 0 0 0.6rem; border: 0; padding: 0; font-size: 1.05rem; }
+.recap > :last-child { margin-bottom: 0; }
+
+/* ---- Further reading ----------------------------------------------------- */
+.reading { font-size: 0.92rem; }
+.reading li { margin-bottom: 0.6em; }
+.reading .src {
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+  margin-right: 0.4em;
+}
+
+/* ---- STATE block --------------------------------------------------------- */
+.state {
+  margin: 2.5em 0 1em;
+  border: 1px dashed var(--rule-strong);
+  border-radius: 9px;
+  background: var(--bg-sunken);
+  overflow: hidden;
+}
+.state > summary {
+  cursor: pointer;
+  padding: 0.6rem 1rem;
+  font-family: var(--font-ui);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-muted);
+}
+.state pre {
+  margin: 0;
+  padding: 0.9rem 1rem;
+  overflow-x: auto;
+  border-top: 1px solid var(--rule);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+  white-space: pre;
+}
+
+/* ---- Footer -------------------------------------------------------------- */
+.foot {
+  border-top: 1px solid var(--rule);
+  margin-top: 3rem;
+  padding: 1.5rem 0 3rem;
+  font-family: var(--font-ui);
+  font-size: 0.78rem;
+  color: var(--text-faint);
+}
+.foot a { color: var(--text-muted); }
+
+/* ---- Interactive widgets ------------------------------------------------- */
+.widget {
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  background: var(--bg-raised);
+  padding: 1rem;
+  margin: 2em 0;
+}
+.widget-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+  align-items: center;
+  margin-top: 0.8rem;
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+.widget-controls label { display: flex; align-items: center; gap: 0.4rem; }
+.widget-controls input[type="range"] { accent-color: var(--accent); }
+.widget-readout {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--text);
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 0.1rem 0.4rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Print --------------------------------------------------------------- */
+@media print {
+  .masthead, .lesson-nav, .theme-toggle { display: none; }
+  body { background: #fff; color: #000; font-size: 11pt; }
+  .listing { break-inside: avoid; }
+  figure.dia { break-inside: avoid; }
+  a::after { content: " (" attr(href) ")"; font-size: 0.7em; color: #666; }
+}
+</style>
+<!-- SHARED-CSS:END -->
+</head>
+<body>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <a class="course" href="../index.html">Build a Professional 3D Game Engine</a>
+    <span class="spacer"></span>
+    <a href="../index.html">Contents</a>
+    <a href="../conventions.html">Conventions</a>
+    <a href="../cpp-style.html">C++ Style</a>
+    <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Toggle colour theme">Theme</button>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="00-03-toolchain.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">0.3 — Setting Up Your Toolchain</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="00-05-first-window.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">0.5 — Your First Window</span>
+    </a>
+  </nav>
+
+  <!-- ================= 1. HEADER BLOCK ================= -->
+  <div class="lesson-head">
+    <div class="eyebrow">Module 0 — Orientation &amp; Toolchain · Lesson 0.4</div>
+    <h1>CMake From Zero</h1>
+    <p class="deck">
+      One hand-typed compiler command was fine for one file. It collapses the instant you add a
+      second file, a third compiler, or a library like SDL. CMake lets you describe the build
+      <em>once</em> and get it everywhere — and by the end of this lesson it will fetch, build,
+      and link SDL3 for you.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 4 hours (the first SDL build is a slow one)</dd>
+
+        <dt>Prereqs</dt>
+        <dd><a href="00-03-toolchain.html">0.3 — Setting Up Your Toolchain</a></dd>
+
+        <dt>Files</dt>
+        <dd><code>CMakeLists.txt</code> (new), <code>hello.cpp</code> (modified)</dd>
+
+        <dt>Milestone</dt>
+        <dd>CMake fetches and links SDL3; your program prints the SDL version it built against.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…explain what CMake is — a build-system <em>generator</em> — and why that indirection exists.</li>
+      <li>…describe the two phases of every CMake build, configure and build, and what each produces.</li>
+      <li>…write a <code>CMakeLists.txt</code> that builds an executable with the right C++ standard and warnings.</li>
+      <li>…think in <em>targets and properties</em> rather than global variables — the modern-CMake mental model.</li>
+      <li>…acquire a dependency with <code>FetchContent</code> at a pinned tag, and say why the pin matters.</li>
+      <li>…build the same project on Windows, Linux, and macOS from one description.</li>
+    </ul>
+  </section>
+
+  <details class="toc" open>
+    <summary>Contents</summary>
+    <ol>
+      <li><a href="#problem">The Problem</a></li>
+      <li><a href="#intuition">Building Intuition</a>
+        <ol>
+          <li><a href="#generator">CMake generates builds; it is not a build</a></li>
+          <li><a href="#targets">Targets are the nouns</a></li>
+        </ol>
+      </li>
+      <li><a href="#theory">The Theory</a>
+        <ol>
+          <li><a href="#two-phase">The two phases</a></li>
+          <li><a href="#properties">Properties travel with targets</a></li>
+          <li><a href="#fetchcontent">FetchContent, and the pin</a></li>
+        </ol>
+      </li>
+      <li><a href="#implementation">Implementation: build up the CMakeLists</a>
+        <ol>
+          <li><a href="#impl-basic">Part 1 — build hello.cpp with CMake</a></li>
+          <li><a href="#impl-sdl">Part 2 — fetch and link SDL3</a></li>
+        </ol>
+      </li>
+      <li><a href="#listings">Complete Code Listings</a></li>
+      <li><a href="#build">Build &amp; Run</a></li>
+      <li><a href="#pitfalls">Common Pitfalls &amp; Debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; Next</a></li>
+      <li><a href="#reading">Further Reading</a></li>
+    </ol>
+  </details>
+
+  <!-- ================= 2. THE PROBLEM ================= -->
+  <h2 id="problem"><span class="num">1</span>The Problem</h2>
+
+  <p>
+    In 0.3 you compiled <code>hello.cpp</code> with one command you typed by hand. That worked
+    because the situation was the simplest one possible: one file, no dependencies, one compiler,
+    one platform. Every one of those is about to stop being true.
+  </p>
+
+  <p>
+    The engine will grow to hundreds of source files. It must build with MSVC, GCC, <em>and</em>
+    Clang, on Windows, Linux, <em>and</em> macOS. And it depends on SDL3 — which is itself a large
+    C project with its own build, hundreds of its own source files, and platform-specific pieces
+    that differ on every OS. Managing all of that with hand-typed commands is not merely tedious;
+    it is a full-time job that no one does correctly for long.
+  </p>
+
+  <p>
+    Here is the wall, and you can hit it right now. In 0.4 we extend <code>hello.cpp</code> to ask
+    SDL its version — one <code>#include</code>. Try the 0.3 hand-command on it:
+  </p>
+
+  <figure class="listing shell">
+    <figcaption>
+      <span class="path">the hand-command, the moment a dependency appears</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash">$ clang++ -std=c++20 -Wall -Wextra -o hello hello.cpp
+hello.cpp:11:10: fatal error: 'SDL3/SDL_version.h' file not found
+   11 | #include &lt;SDL3/SDL_version.h&gt;
+      |          ^~~~~~~~~~~~~~~~~~~~
+1 error generated.</code></pre>
+  </figure>
+
+  <p>
+    The compiler cannot find SDL's headers, because <em>you did not tell it where they are</em> —
+    and you could not have, because SDL is not installed anywhere yet. To make this build by hand
+    you would need to: download SDL, build it (correctly, for your platform, with the right
+    options), find where its headers and its compiled library landed, and add
+    <code>-I</code> and <code>-L</code> and <code>-l</code> flags pointing at exactly those places
+    — and then write it all down differently for the next person on the next OS.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">The failure mode: the build that only works on one machine</span>
+    <p>
+      Teams that manage this by hand end up with a build that works on precisely one person's
+      computer, held together by paths hard-coded to their home directory and steps that live only
+      in someone's memory. A new hire loses a day to it. A CI server loses a week. "Works on my
+      machine" is not a joke about carelessness — it is the natural end state of a build with no
+      single, portable description. CMake exists to be that description.
+    </p>
+  </div>
+
+  <!-- ================= 3. BUILDING INTUITION ================= -->
+  <h2 id="intuition"><span class="num">2</span>Building Intuition</h2>
+
+  <h3 id="generator">2.1 CMake generates builds; it is not a build</h3>
+
+  <p>
+    The most common misconception about CMake is that it compiles your code. It does not. CMake
+    never invokes a compiler to build your program. It is a <strong>build-system generator</strong>:
+    it reads your description and writes out the input files for some <em>other</em> build tool —
+    which then does the compiling.
+  </p>
+
+  <p>
+    The analogy that makes this click: CMake is not the cook, and it is not the recipe either. It
+    is a <em>translator who writes the recipe out in the local kitchen's language</em>. You hand
+    it one description of the dish; on a Linux machine it writes instructions for
+    <code>make</code> or <code>ninja</code>; on Windows it writes a Visual Studio solution; on a
+    Mac it can write an Xcode project. Same dish, translated for whatever kitchen it finds. The
+    translation is the whole value: <strong>you describe the build once, in CMake's language, and
+    every platform gets native build files it already knows how to run.</strong>
+  </p>
+
+  <p>
+    That indirection is why CMake feels like a layer of ceremony at first. It is buying you
+    something real, though — the alternative is writing and maintaining a Makefile <em>and</em> a
+    Visual Studio project <em>and</em> an Xcode project by hand, keeping all three in sync forever.
+    Figure 1 shows the shape of what CMake does.
+  </p>
+
+  <figure class="dia bleed">
+    <svg viewBox="0 0 660 320" role="img" aria-labelledby="f1-t f1-d">
+      <title id="f1-t">CMake as a build-system generator: one description, native builds everywhere</title>
+      <desc id="f1-d">CMakeLists.txt plus the host machine feed into CMake's configure-and-generate
+        phase. On Linux it emits Ninja or Make files, on Windows a Visual Studio solution, on macOS
+        an Xcode project or Ninja. Each of those native build tools then compiles the source into
+        an executable. CMake itself never compiles anything.</desc>
+      <defs>
+        <marker id="cm-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+      </defs>
+
+      <!-- inputs -->
+      <rect x="16" y="120" width="120" height="40" rx="6" class="fill-soft" stroke="var(--dia-hi)" stroke-width="1.8"/>
+      <text x="76" y="138" class="xs mono t-hi" text-anchor="middle" font-weight="700">CMakeLists.txt</text>
+      <text x="76" y="152" class="xs muted" text-anchor="middle">the description</text>
+
+      <rect x="16" y="176" width="120" height="34" rx="6" class="fill-soft" stroke="var(--dia-ink-soft)" stroke-width="1.2"/>
+      <text x="76" y="197" class="xs muted" text-anchor="middle">the host machine</text>
+
+      <!-- CMake -->
+      <rect x="196" y="128" width="120" height="72" rx="7" class="fill-soft" stroke="var(--dia-ink)" stroke-width="1.8"/>
+      <text x="256" y="156" class="sm" text-anchor="middle" font-weight="700">CMake</text>
+      <text x="256" y="172" class="xs muted" text-anchor="middle">configure +</text>
+      <text x="256" y="184" class="xs muted" text-anchor="middle">generate</text>
+
+      <line x1="138" y1="150" x2="192" y2="158" class="ink" stroke-width="1.4" marker-end="url(#cm-a)"/>
+      <line x1="138" y1="192" x2="192" y2="176" class="ink" stroke-width="1.4" marker-end="url(#cm-a)"/>
+
+      <!-- native build files -->
+      <g>
+        <rect x="376" y="40"  width="150" height="40" rx="6" class="fill-soft" stroke="var(--axis-y)" stroke-width="1.4"/>
+        <text x="451" y="58" class="xs" text-anchor="middle" font-weight="700">Ninja / Make</text>
+        <text x="451" y="71" class="xs muted" text-anchor="middle">Linux</text>
+
+        <rect x="376" y="144" width="150" height="40" rx="6" class="fill-soft" stroke="var(--axis-z)" stroke-width="1.4"/>
+        <text x="451" y="162" class="xs" text-anchor="middle" font-weight="700">Visual Studio</text>
+        <text x="451" y="175" class="xs muted" text-anchor="middle">Windows</text>
+
+        <rect x="376" y="248" width="150" height="40" rx="6" class="fill-soft" stroke="var(--axis-x)" stroke-width="1.4"/>
+        <text x="451" y="266" class="xs" text-anchor="middle" font-weight="700">Xcode / Ninja</text>
+        <text x="451" y="279" class="xs muted" text-anchor="middle">macOS</text>
+      </g>
+
+      <g class="ink" stroke-width="1.3" marker-end="url(#cm-a)" fill="none">
+        <line x1="318" y1="150" x2="372" y2="70"/>
+        <line x1="318" y1="164" x2="372" y2="164"/>
+        <line x1="318" y1="178" x2="372" y2="258"/>
+      </g>
+
+      <!-- executables -->
+      <g>
+        <rect x="576" y="48"  width="70" height="30" rx="5" class="fill-soft" stroke="var(--dia-ink)" stroke-width="1.3"/>
+        <text x="611" y="67" class="xs mono" text-anchor="middle">engine</text>
+        <rect x="576" y="152" width="70" height="30" rx="5" class="fill-soft" stroke="var(--dia-ink)" stroke-width="1.3"/>
+        <text x="611" y="171" class="xs mono" text-anchor="middle">engine.exe</text>
+        <rect x="576" y="256" width="70" height="30" rx="5" class="fill-soft" stroke="var(--dia-ink)" stroke-width="1.3"/>
+        <text x="611" y="275" class="xs mono" text-anchor="middle">engine</text>
+      </g>
+      <g class="ink-soft" stroke-width="1.2" marker-end="url(#cm-a)" fill="none">
+        <line x1="528" y1="60"  x2="574" y2="62"/>
+        <line x1="528" y1="164" x2="574" y2="166"/>
+        <line x1="528" y1="268" x2="574" y2="270"/>
+      </g>
+      <text x="537" y="120" class="xs muted" text-anchor="middle">native tool compiles</text>
+
+      <text x="330" y="312" class="sm" text-anchor="middle" font-weight="700">
+        CMake writes the recipe; the native tool cooks. CMake compiles nothing itself.
+      </text>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 1.</span> CMake's job. One <code>CMakeLists.txt</code> becomes
+      the right native build on whatever machine runs it. The compiler is invoked by Ninja, Make,
+      Visual Studio, or Xcode — never by CMake directly.
+    </figcaption>
+  </figure>
+
+  <h3 id="targets">2.2 Targets are the nouns</h3>
+
+  <p>
+    Old CMake — the kind you will find in most Stack Overflow answers — was written in terms of
+    <em>global variables</em>: set a flag here, and it silently affects everything, everywhere,
+    forever. That approach does not scale, and it is the source of most CMake horror stories.
+  </p>
+
+  <p>
+    Modern CMake, which is all we will write, is built on one noun: the <strong>target</strong>. A
+    target is a thing you build — an executable, or a library. Everything a target needs to be
+    built — its source files, the standard it compiles to, the warnings it wants, the libraries it
+    links, the headers those libraries expose — is a <em>property of that specific target</em>, not
+    a global setting. You configure targets, and targets carry their configuration with them.
+  </p>
+
+  <p>
+    This matters enormously the moment SDL enters, and it is worth stating the payoff before we
+    get there: when our program's target links SDL's target, it <em>inherits</em> everything SDL
+    says a consumer needs — its include directories, its own dependencies, its platform frameworks
+    — automatically, because that information lives on SDL's target and travels across the link.
+    You never type an <code>-I</code> path for SDL. You just say "my program uses SDL's target",
+    and the properties flow. Hold that thought; §<a href="#properties">3.2</a> makes it concrete.
+  </p>
+
+  <!-- ================= 4. THE THEORY ================= -->
+  <h2 id="theory"><span class="num">3</span>The Theory</h2>
+
+  <h3 id="two-phase">3.1 The two phases</h3>
+
+  <p>
+    Every CMake build has exactly two phases, and knowing which one you are in tells you what any
+    given error means.
+  </p>
+
+  <ol>
+    <li>
+      <strong>Configure (and generate).</strong> CMake reads <code>CMakeLists.txt</code>, inspects
+      your machine (which compilers exist, what they support, where things are), and writes native
+      build files into a build directory. This is when <code>FetchContent</code> downloads SDL,
+      and when a typo in your CMake logic surfaces. You run it with <code>cmake -S . -B build</code>.
+    </li>
+    <li>
+      <strong>Build.</strong> The native tool CMake generated compiles and links your code. This is
+      when a C++ syntax error or a missing symbol surfaces — the four-stage build from
+      <a href="00-03-toolchain.html#stages">0.3 §3.1</a>, now driven by Ninja or Visual Studio
+      instead of your fingers. You run it with <code>cmake --build build</code>.
+    </li>
+  </ol>
+
+  <p>
+    Notice the split: a <em>configure</em> error is about your CMake description or your
+    environment; a <em>build</em> error is about your C++. Same reflex as the compile-versus-link
+    distinction from 0.3 — knowing which phase spoke to you halves the search before you read the
+    message.
+  </p>
+
+  <p>
+    Both commands take a <strong>build directory</strong> (<code>build/</code>), and it is separate
+    from your source on purpose. This is an <strong>out-of-source build</strong>: every generated
+    file, every object file, and the entire fetched-and-built copy of SDL live under
+    <code>build/</code>, touching none of your tracked source. Deleting <code>build/</code> throws
+    away nothing you wrote and forces a clean rebuild — which is why <code>build/</code> is in our
+    <a href="../ARCHITECTURE.md">.gitignore</a> and never committed.
+  </p>
+
+  <h3 id="properties">3.2 Properties travel with targets</h3>
+
+  <p>
+    The keyword that makes target properties flow is the visibility marker on
+    <code>target_link_libraries</code> and its siblings: <code>PRIVATE</code>, <code>PUBLIC</code>,
+    or <code>INTERFACE</code>. It answers "who is this property for — me, my consumers, or both?"
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>Keyword</th><th>Applies to the target itself?</th><th>Applies to things that link it?</th><th>Use for…</th></tr></thead>
+      <tbody>
+        <tr><td><code>PRIVATE</code></td><td>yes</td><td>no</td><td>an implementation detail — our warning flags</td></tr>
+        <tr><td><code>PUBLIC</code></td><td>yes</td><td>yes</td><td>something in your headers a consumer also needs</td></tr>
+        <tr><td><code>INTERFACE</code></td><td>no</td><td>yes</td><td>a header-only library's requirements</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    So when SDL declares its include directories <code>PUBLIC</code>, and we write
+    <code>target_link_libraries(engine_smoketest PRIVATE SDL3::SDL3)</code>, SDL's public
+    properties flow across the link onto our target: our compiler is silently handed SDL's include
+    path, so <code>#include &lt;SDL3/SDL_version.h&gt;</code> just works — no <code>-I</code> from
+    us. Meanwhile our <code>PRIVATE</code> warning flags stay on <em>our</em> target and never
+    touch SDL. That is the entire reason we hold ourselves to <code>-Wall -Wextra</code> without
+    drowning in warnings from SDL's hundreds of C files: the flags are private to the target that
+    wanted them. This is the modern-CMake payoff, and it is worth pausing on, because it is exactly
+    the "third-party is not our code" rule from <a href="../cpp-style.html#warnings">style §9</a>,
+    enforced by the build system.
+  </p>
+
+  <h3 id="fetchcontent">3.3 FetchContent, and the pin</h3>
+
+  <p>
+    <code>FetchContent</code> is CMake's built-in way to bring another CMake project into yours. At
+    configure time it downloads the dependency's source and adds its <code>CMakeLists.txt</code> to
+    your build, so the dependency is built from source alongside your code, and its targets — like
+    <code>SDL3::SDL3</code> — become available to link. No system install, no manual download, no
+    hunting for headers. A fresh clone of your repo builds on any machine with a compiler and
+    CMake, and nothing else. Figure 2 traces the whole flow, including the property inheritance
+    from §<a href="#properties">3.2</a>.
+  </p>
+
+  <figure class="dia bleed">
+    <svg viewBox="0 0 660 300" role="img" aria-labelledby="f2-t f2-d">
+      <title id="f2-t">FetchContent brings SDL into the build, and its properties flow across the link</title>
+      <desc id="f2-d">At configure time, FetchContent clones SDL from GitHub at the pinned tag
+        release-3.4.12 into the build directory under _deps, where it is built and exposes the
+        SDL3::SDL3 target. Our engine_smoketest target, built from hello.cpp, links SDL3::SDL3
+        privately; in return SDL's public include directories and platform frameworks flow back
+        onto our target automatically.</desc>
+      <defs>
+        <marker id="cm2-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+        <marker id="cm2-b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+      </defs>
+
+      <!-- GitHub source -->
+      <rect x="14" y="30" width="150" height="58" rx="7" class="fill-soft" stroke="var(--dia-ink-soft)" stroke-width="1.3"/>
+      <text x="89" y="52" class="xs" text-anchor="middle" font-weight="700">github.com/libsdl-org</text>
+      <text x="89" y="68" class="xs mono muted" text-anchor="middle">@ release-3.4.12</text>
+      <text x="89" y="81" class="xs muted" text-anchor="middle">pinned, immutable</text>
+
+      <!-- configure-time fetch arrow -->
+      <line x1="164" y1="59" x2="238" y2="59" class="ink" stroke-width="1.4" marker-end="url(#cm2-a)"/>
+      <text x="201" y="50" class="xs muted" text-anchor="middle">clone</text>
+      <text x="201" y="76" class="xs muted" text-anchor="middle">(configure</text>
+      <text x="201" y="87" class="xs muted" text-anchor="middle">time)</text>
+
+      <!-- build/_deps box -->
+      <rect x="240" y="24" width="196" height="118" rx="8" fill="none" stroke="var(--dia-ink-soft)" stroke-width="1.2" stroke-dasharray="5 4"/>
+      <text x="338" y="42" class="xs mono muted" text-anchor="middle">build/_deps/sdl3/</text>
+
+      <rect x="262" y="54" width="152" height="34" rx="6" class="fill-soft" stroke="var(--axis-y)" stroke-width="1.4"/>
+      <text x="338" y="75" class="xs" text-anchor="middle" font-weight="700">SDL built from source</text>
+
+      <rect x="262" y="98" width="152" height="32" rx="6" class="fill-soft" stroke="var(--axis-y)" stroke-width="1.6"/>
+      <text x="338" y="118" class="xs mono t-ok" text-anchor="middle" font-weight="700">SDL3::SDL3</text>
+
+      <line x1="338" y1="88" x2="338" y2="96" class="ink-soft" stroke-width="1.2" marker-end="url(#cm2-a)"/>
+
+      <!-- our target -->
+      <rect x="486" y="54" width="160" height="76" rx="8" class="fill-soft" stroke="var(--dia-hi)" stroke-width="1.8"/>
+      <text x="566" y="76" class="xs mono t-hi" text-anchor="middle" font-weight="700">engine_smoketest</text>
+      <text x="566" y="92" class="xs muted" text-anchor="middle">from hello.cpp</text>
+      <text x="566" y="112" class="xs muted" text-anchor="middle">our executable</text>
+
+      <!-- link arrow (our target -> SDL3::SDL3) -->
+      <line x1="486" y1="104" x2="418" y2="114" class="hi" stroke-width="1.7" marker-end="url(#cm2-b)"/>
+      <text x="452" y="134" class="xs t-hi" text-anchor="middle" font-weight="700">PRIVATE link</text>
+
+      <!-- property flow back -->
+      <path d="M414,60 C452,60 452,60 482,66" fill="none" class="ink" stroke-width="1.3" stroke-dasharray="4 3" marker-end="url(#cm2-a)"/>
+      <text x="452" y="52" class="xs muted" text-anchor="middle">include dirs + frameworks flow →</text>
+
+      <!-- caption strip -->
+      <text x="330" y="176" class="sm" text-anchor="middle" font-weight="700">
+        We say "use SDL3::SDL3." Everything SDL needs a consumer to have comes with it.
+      </text>
+
+      <!-- warnings note -->
+      <rect x="120" y="204" width="420" height="66" rx="8" fill="none" stroke="var(--rule-strong)" stroke-width="1"/>
+      <text x="330" y="226" class="xs" text-anchor="middle" font-weight="700">Our PRIVATE warning flags stay on our target only</text>
+      <text x="330" y="244" class="xs muted" text-anchor="middle">-Wall -Wextra applies to hello.cpp — never to SDL's hundreds of C files,</text>
+      <text x="330" y="258" class="xs muted" text-anchor="middle">because PRIVATE means "for me, not for things I link or things that link me."</text>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 2.</span> FetchContent and the property model together. The pinned
+      tag decides <em>which</em> SDL; the link decides that our target inherits SDL's public
+      requirements; and <code>PRIVATE</code> keeps our warnings from ever reaching SDL. One
+      <code>target_link_libraries</code> line does all of it.
+    </figcaption>
+  </figure>
+
+  <p>
+    The one non-negotiable rule is the <strong>pin</strong>. We fetch SDL at an exact release tag,
+    <code>release-3.4.12</code>, never a branch name like <code>main</code>. The reason is
+    reproducibility, and it is worth stating as a principle:
+  </p>
+
+  <div class="callout ok">
+    <span class="label">Pin every dependency to an immutable reference</span>
+    <p>
+      A branch moves. If you fetched <code>main</code>, then your machine and a teammate's machine
+      — cloned a week apart — would silently build <em>different SDL source</em>, and a bug that
+      appears for one of you but not the other becomes impossible to reason about. A tag is
+      immutable: <code>release-3.4.12</code> is the same bytes forever. Pinning turns "it built
+      yesterday" into a guarantee rather than a hope. When you deliberately upgrade, you change the
+      tag in one line, on purpose, and everyone moves together.
+    </p>
+  </div>
+
+  <div class="worked">
+    <span class="label">Worked example — decoding the version integer</span>
+    <p>
+      SDL reports its version as a single <code>int</code>, packed by the macro
+      <code>SDL_VERSIONNUM(major, minor, patch) = major·1000000 + minor·1000 + patch</code>. For
+      the <code>3.4.12</code> we pinned:
+    </p>
+    <ul>
+      <li><code>SDL_VERSIONNUM(3, 4, 12) = 3·1000000 + 4·1000 + 12 = 3000000 + 4000 + 12 = 3004012</code>.</li>
+    </ul>
+    <p>So <code>SDL_GetVersion()</code> returns <code>3004012</code>. The extraction macros unpack it with integer division and remainder:</p>
+    <ul>
+      <li><strong>major</strong> = <code>3004012 / 1000000 = 3</code> &nbsp;(integer division drops the remainder)</li>
+      <li><strong>minor</strong> = <code>(3004012 / 1000) % 1000 = 3004 % 1000 = 4</code></li>
+      <li><strong>micro</strong> = <code>3004012 % 1000 = 12</code></li>
+    </ul>
+    <p>
+      Giving <code>3.4.12</code> — which is exactly what our program prints below. Packing three
+      small numbers into one integer with fixed decimal "slots" is a trick you will see again;
+      it works only because each field is guaranteed under 1000, and SDL enforces that. (This is
+      why the <code>minor</code> extraction needs both the divide <em>and</em> the
+      <code>% 1000</code>: the divide shifts <code>12</code> out, the remainder shifts
+      <code>3</code> out.)
+    </p>
+  </div>
+
+  <!-- ================= 5. IMPLEMENTATION ================= -->
+  <h2 id="implementation"><span class="num">4</span>Implementation: build up the CMakeLists</h2>
+
+  <p>
+    We build the <code>CMakeLists.txt</code> in two parts. First, the minimum that builds
+    <code>hello.cpp</code> exactly as 0.3 left it — proving CMake reproduces your hand-command.
+    Then we add SDL.
+  </p>
+
+  <h3 id="impl-basic">4.1 Part 1 — build hello.cpp with CMake</h3>
+
+  <p>
+    Create <code>CMakeLists.txt</code> next to <code>hello.cpp</code>. Every CMake file opens with
+    two lines: the minimum CMake version it needs, and the project's name. We require
+    <strong>3.24</strong> because it is new enough for the modern behaviour we rely on — and
+    demanding it means an ancient CMake fails loudly and early, rather than misbehaving subtly:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">CMakeLists.txt — the opening</span>
+      <span class="tag new">new</span>
+      <span class="lang" data-lang="cmake">CMake</span>
+    </figcaption>
+    <pre><code class="lang-cmake">cmake_minimum_required(VERSION 3.24)
+
+project(engine LANGUAGES CXX)</code></pre>
+  </figure>
+
+  <p>
+    Next, the C++ standard — set once, for every target in the project. Three settings work
+    together: pick C++20, make it <em>required</em> (an error, not a silent downgrade, if the
+    compiler cannot do it), and turn <em>off</em> compiler extensions so we get portable
+    <code>-std=c++20</code> rather than <code>-std=gnu++20</code>:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">CMakeLists.txt — the standard</span>
+      <span class="tag new">new</span>
+      <span class="lang" data-lang="cmake">CMake</span>
+    </figcaption>
+    <pre><code class="lang-cmake">set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)</code></pre>
+  </figure>
+
+  <div class="callout note">
+    <span class="label">What those three settings actually emit</span>
+    <p>
+      On GCC/Clang they produce <code>-std=c++20</code>; on MSVC, <code>/std:c++20</code> — the
+      exact flags you typed by hand in 0.3, now chosen per-compiler for you. Note they do
+      <em>not</em> add MSVC's <code>/Zc:__cplusplus</code>; we add that ourselves below, because
+      <code>hello.cpp</code>'s guard reads <code>_MSVC_LANG</code> but SDL reads
+      <code>__cplusplus</code> (the trap from <a href="00-03-toolchain.html#standard">0.3 §3.3</a>).
+    </p>
+  </div>
+
+  <p>
+    Finally, declare the executable and, for now, nothing else. <code>add_executable</code> is the
+    line that creates a target: a thing named <code>engine_smoketest</code>, built from
+    <code>hello.cpp</code>:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">CMakeLists.txt — the target (Part 1)</span>
+      <span class="tag new">new</span>
+      <span class="lang" data-lang="cmake">CMake</span>
+    </figcaption>
+    <pre><code class="lang-cmake">add_executable(engine_smoketest hello.cpp)</code></pre>
+  </figure>
+
+  <p>
+    With just those lines — and <code>hello.cpp</code> reverted to its dependency-free 0.3 form —
+    <code>cmake -S . -B build</code> then <code>cmake --build build</code> would produce a working
+    <code>engine_smoketest</code>. That is CMake reproducing your hand-command, portably. Now let us
+    give it the job the hand-command could not do.
+  </p>
+
+  <h3 id="impl-sdl">4.2 Part 2 — fetch and link SDL3</h3>
+
+  <p>
+    Between the standard settings and the executable, we bring in SDL. First, one SDL build option
+    — we only need the library, not SDL's own test helpers, and skipping them shaves real time off
+    a from-source build. SDL reads its options <em>before</em> it is configured, so this must come
+    first:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">CMakeLists.txt — SDL options + fetch</span>
+      <span class="tag new">new</span>
+      <span class="lang" data-lang="cmake">CMake</span>
+    </figcaption>
+    <pre><code class="lang-cmake">include(FetchContent)
+
+# SDL build options must be set BEFORE SDL is configured.
+set(SDL_TEST_LIBRARY OFF)
+
+FetchContent_Declare(
+    SDL3
+    GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
+    GIT_TAG        release-3.4.12   # pinned — never a branch name
+    GIT_SHALLOW    TRUE             # only this tag's snapshot, not all of history
+)
+FetchContent_MakeAvailable(SDL3)</code></pre>
+  </figure>
+
+  <p>
+    <code>FetchContent_Declare</code> describes <em>where</em> the dependency is and which exact
+    commit to take; <code>FetchContent_MakeAvailable</code> is what actually downloads it and folds
+    its build into ours. After that line, SDL's targets exist and we can link them.
+    <code>GIT_SHALLOW TRUE</code> fetches only the pinned tag's snapshot rather than SDL's entire
+    history — faster, and we do not need the history.
+  </p>
+
+  <p>
+    Now link SDL onto our target, and apply our warnings. Both use the target-property model from
+    §<a href="#properties">3.2</a>:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">CMakeLists.txt — link + warnings</span>
+      <span class="tag new">new</span>
+      <span class="lang" data-lang="cmake">CMake</span>
+    </figcaption>
+    <pre><code class="lang-cmake">target_link_libraries(engine_smoketest PRIVATE SDL3::SDL3)
+
+if(MSVC)
+    target_compile_options(engine_smoketest PRIVATE /W4 /Zc:__cplusplus)
+else()
+    target_compile_options(engine_smoketest PRIVATE -Wall -Wextra)
+endif()</code></pre>
+  </figure>
+
+  <p>
+    <code>SDL3::SDL3</code> is the alias SDL exports for "the SDL library, however it was built".
+    Linking it hands our target SDL's headers and platform frameworks automatically — the property
+    flow from §3.2 in action. The warning flags are <code>PRIVATE</code>, so they land on our
+    target and never on SDL's C files. That single word is the difference between a clean build and
+    a wall of warnings you did not write and cannot fix.
+  </p>
+
+  <p>
+    And <code>hello.cpp</code> gains the SDL query it needs — a version print, using the API from
+    §<a href="#fetchcontent">3.3</a>:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">hello.cpp — the SDL version query (added to main)</span>
+      <span class="tag modified">modified</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">    // SDL_GetVersion() is a pure query — no SDL_Init needed — so calling it here
+    // just proves the library linked and loads. Runtime and compile-time versions
+    // can differ with a shared library; printing both makes that visible.
+    const int linked = SDL_GetVersion();
+    std::printf("  SDL linked : %d.%d.%d\n",
+                SDL_VERSIONNUM_MAJOR(linked),
+                SDL_VERSIONNUM_MINOR(linked),
+                SDL_VERSIONNUM_MICRO(linked));
+    std::printf("  SDL headers: %d.%d.%d\n",
+                SDL_MAJOR_VERSION, SDL_MINOR_VERSION, SDL_MICRO_VERSION);</code></pre>
+  </figure>
+
+  <div class="callout verify">
+    <span class="label">⚠ Verify</span>
+    <p>
+      The SDL3 version API used here is verified against
+      <code>SDL3/SDL_version.h</code> at <code>release-3.4.12</code>:
+      <code>int SDL_GetVersion(void)</code> returns the packed integer, and
+      <code>SDL_VERSIONNUM_MAJOR / _MINOR / _MICRO</code> unpack it. The compile-time
+      <code>SDL_MAJOR_VERSION</code> family gives the version of the headers you built against. If
+      you pin a different SDL tag, re-verify against that tag's header — the API is stable across
+      SDL3, but this course does not ask you to take that on faith.
+    </p>
+  </div>
+
+  <!-- ================= 6. COMPLETE CODE LISTINGS ================= -->
+  <h2 id="listings"><span class="num">5</span>Complete Code Listings</h2>
+
+  <div class="tbl-scroll">
+    <table class="manifest">
+      <thead><tr><th>Path</th><th>Status</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>CMakeLists.txt</td>
+          <td><span class="badge new">new</span></td>
+          <td>The build description: C++20, fetch and link SDL3 at a pinned tag, our warnings.</td>
+        </tr>
+        <tr>
+          <td>hello.cpp</td>
+          <td><span class="badge mod">modified</span></td>
+          <td>Now also prints the linked and compiled SDL version, proving the whole build chain.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">CMakeLists.txt</span>
+      <span class="tag new">new</span>
+      <span class="lang" data-lang="cmake">CMake</span>
+    </figcaption>
+    <pre><code class="lang-cmake"># CMakeLists.txt — the engine's build description.
+#
+# This one file tells CMake how to build the project on Windows, Linux, and
+# macOS, with MSVC, GCC, or Clang, and how to acquire SDL3. You describe the
+# build once here; CMake generates the right native build for whatever machine
+# runs it. This is what Lesson 0.4 builds up, line by line.
+
+# 3.24 is our floor: new enough for modern FetchContent behaviour and the
+# target/property model we rely on. Older CMake will refuse to configure, which
+# is what we want — a clear failure, not a subtle one.
+cmake_minimum_required(VERSION 3.24)
+
+project(engine LANGUAGES CXX)
+
+# The C++ standard, set once for every target in the project. STANDARD_REQUIRED
+# makes a compiler that cannot do C++20 an error rather than a silent downgrade;
+# EXTENSIONS OFF asks for -std=c++20, not -std=gnu++20, so we stay portable.
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+# ---- Dependencies ----------------------------------------------------------
+# FetchContent acquires SDL3 at configure time and adds it to our build. We pin
+# an exact release tag: a moving branch would mean a fresh clone could build
+# different source than yours, which is how "works on my machine" is born.
+include(FetchContent)
+
+# SDL build options must be set BEFORE SDL is configured. We only need the
+# library itself, so skip SDL's own test helpers — it shaves real time off a
+# from-source build.
+set(SDL_TEST_LIBRARY OFF)
+
+FetchContent_Declare(
+    SDL3
+    GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
+    GIT_TAG        release-3.4.12   # pinned — never a branch name
+    GIT_SHALLOW    TRUE             # only this tag's snapshot, not all of history
+)
+FetchContent_MakeAvailable(SDL3)
+
+# ---- Our program -----------------------------------------------------------
+add_executable(engine_smoketest hello.cpp)
+
+# Link SDL. SDL3::SDL3 is the alias SDL exports for "the SDL library, however it
+# was built"; linking it also pulls in SDL's headers and platform frameworks
+# transitively, so we never name Cocoa or user32 ourselves.
+target_link_libraries(engine_smoketest PRIVATE SDL3::SDL3)
+
+# Our warning discipline (see cpp-style §9) — applied to OUR target only, never
+# to SDL. Third-party code is compiled with its own flags; holding someone
+# else's library to /W4 just produces noise we cannot act on.
+if(MSVC)
+    target_compile_options(engine_smoketest PRIVATE /W4 /Zc:__cplusplus)
+else()
+    target_compile_options(engine_smoketest PRIVATE -Wall -Wextra)
+endif()</code></pre>
+  </figure>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">hello.cpp</span>
+      <span class="tag modified">modified</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// hello.cpp — the engine's toolchain smoke test.
+//
+// This file has one job: prove the build works before we build anything real.
+// It is NOT engine code — it lives at the repo root, not under src/, and 0.5
+// retires it in favour of the real program. In Lesson 0.3 we compiled it by
+// hand; in 0.4 CMake builds it AND links SDL3, so it now also proves that
+// dependency acquisition, compilation, linking, and running all work end to end.
+
+#include &lt;cstdio&gt;
+#include &lt;version&gt;              // C++20: the standard header of feature-test macros.
+#include &lt;SDL3/SDL_version.h&gt;   // Just the version API. The umbrella &lt;SDL3/SDL.h&gt;
+                                // and SDL's special entry-point handling arrive in
+                                // 0.5, when we actually initialise SDL.
+
+// Which language standard is the compiler ACTUALLY using?
+//
+// The obvious answer, __cplusplus, lies on MSVC: unless you pass
+// /Zc:__cplusplus it always reports 199711L (C++98), no matter your /std flag.
+// MSVC reports the truth in _MSVC_LANG instead. We prefer that where it exists,
+// so this check is honest on every compiler. See Lesson 0.3, pitfall #1.
+#if defined(_MSVC_LANG)
+#  define ENG_CPP_STANDARD _MSVC_LANG
+#else
+#  define ENG_CPP_STANDARD __cplusplus
+#endif
+
+// Fires at COMPILE time — precisely when you want to catch a bad standard flag.
+static_assert(ENG_CPP_STANDARD &gt;= 202002L,
+              "This engine requires C++20. Check your -std / /std flag.");
+
+// A genuine C++20 feature, so the standard is exercised rather than merely
+// asserted. `consteval` did not exist before C++20 and forces compile-time
+// evaluation: if this line compiles, the standard truly took effect.
+consteval int engine_cpp_edition() { return 20; }
+
+int main()
+{
+    std::printf("Engine toolchain: OK\n");
+
+    // The compiler identity lives in predefined macros. Clang also defines
+    // __GNUC__ for compatibility, so it must be checked first.
+#if defined(__clang__)
+    std::printf("  compiler   : Clang %d.%d.%d\n",
+                __clang_major__, __clang_minor__, __clang_patchlevel__);
+#elif defined(__GNUC__)
+    std::printf("  compiler   : GCC %d.%d.%d\n",
+                __GNUC__, __GNUC_MINOR__, __GNUC_PATCHLEVEL__);
+#elif defined(_MSC_VER)
+    std::printf("  compiler   : MSVC _MSC_VER=%d\n", _MSC_VER);
+#else
+    std::printf("  compiler   : unrecognised\n");
+#endif
+
+    std::printf("  standard   : %ld\n", static_cast&lt;long&gt;(ENG_CPP_STANDARD));
+    std::printf("  __cplusplus: %ld\n", static_cast&lt;long&gt;(__cplusplus));
+    std::printf("  consteval  : C++%d ok\n", engine_cpp_edition());
+
+    // SDL_GetVersion() is a pure query — it needs no SDL_Init — so calling it
+    // here just proves the library linked and loads. The RUNTIME (linked) and
+    // COMPILE-TIME (header) versions can differ when SDL is a shared library
+    // updated independently of your build; printing both makes that visible.
+    const int linked = SDL_GetVersion();
+    std::printf("  SDL linked : %d.%d.%d\n",
+                SDL_VERSIONNUM_MAJOR(linked),
+                SDL_VERSIONNUM_MINOR(linked),
+                SDL_VERSIONNUM_MICRO(linked));
+    std::printf("  SDL headers: %d.%d.%d\n",
+                SDL_MAJOR_VERSION, SDL_MINOR_VERSION, SDL_MICRO_VERSION);
+    return 0;
+}</code></pre>
+  </figure>
+
+  <!-- ================= 7. BUILD & RUN ================= -->
+  <h2 id="build"><span class="num">6</span>Build &amp; Run</h2>
+
+  <p>The two-phase incantation is the same on every platform:</p>
+
+  <figure class="listing shell">
+    <figcaption>
+      <span class="path">all platforms</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash"># Phase 1 — configure: reads CMakeLists.txt, fetches SDL, writes build files.
+cmake -S . -B build
+
+# Phase 2 — build: the native tool compiles SDL and our program.
+cmake --build build</code></pre>
+  </figure>
+
+  <p><code>-S .</code> is the source directory (where <code>CMakeLists.txt</code> is);
+     <code>-B build</code> is the build directory to create. Then run it:</p>
+
+  <figure class="listing shell">
+    <figcaption>
+      <span class="path">run</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash"># Linux / macOS
+./build/engine_smoketest
+
+# Windows — multi-config generators put the binary in a config subfolder
+.\build\Debug\engine_smoketest.exe</code></pre>
+  </figure>
+
+  <div class="callout warn">
+    <span class="label">The first configure is slow — that is not a hang</span>
+    <p>
+      The very first <code>cmake -S . -B build</code> downloads SDL and the first
+      <code>cmake --build build</code> compiles it from source — SDL is a large C library, so this
+      takes a few minutes and prints a great many lines. This happens <strong>once</strong>;
+      afterwards SDL is cached under <code>build/_deps/</code> and only your own code rebuilds, in
+      seconds. Do not <kbd>Ctrl-C</kbd> it thinking it has frozen.
+    </p>
+  </div>
+
+  <h3>What you should see</h3>
+
+  <p>
+    After the build finishes, running the program prints the toolchain report from 0.3 plus two
+    new SDL lines:
+  </p>
+
+  <figure class="listing shell">
+    <figcaption>
+      <span class="path">expected output — compiler/version numbers will differ</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash">Engine toolchain: OK
+  compiler   : Clang 21.0.0
+  standard   : 202002
+  __cplusplus: 202002
+  consteval  : C++20 ok
+  SDL linked : 3.4.12
+  SDL headers: 3.4.12</code></pre>
+  </figure>
+
+  <div class="callout ok">
+    <span class="label">Checkpoint</span>
+    <p>
+      Success is the two SDL lines both reading <code>3.4.12</code> — the tag you pinned. That
+      they match is expected here: FetchContent built SDL from the same source your headers came
+      from, so compile-time and runtime versions are identical. They would only diverge if you
+      linked a system-installed SDL of a different version, which we deliberately never do. If you
+      got this far, <strong>CMake fetched, built, and linked a real dependency, and your program
+      ran against it</strong> — the entire build pipeline, working, on your machine.
+    </p>
+  </div>
+
+  <!-- ================= 8. PITFALLS ================= -->
+  <h2 id="pitfalls"><span class="num">7</span>Common Pitfalls &amp; Debugging</h2>
+
+  <div class="pitfalls">
+    <details class="pitfall-item">
+      <summary>CMake refuses to configure — <span class="sym">"CMake 3.24 or higher is required"</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>Configure fails immediately, complaining about the CMake version.</dd>
+          <dt>Cause</dt>
+          <dd>Your CMake is older than our <code>cmake_minimum_required</code> floor. This is the floor working as intended — an old CMake would misbehave in subtle ways, so we reject it up front.</dd>
+          <dt>Fix</dt>
+          <dd>Install a current CMake. Do not lower the <code>cmake_minimum_required</code> line to match an old CMake — that trades a clear failure now for a mysterious one later. On Windows, the Visual Studio installer ships a recent CMake; on macOS, <code>brew install cmake</code>; on Linux, prefer the official CMake over an old distro package if yours is ancient.</dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary><code>SDL3::SDL3</code> not found — <span class="sym">"Target SDL3::SDL3 not found" at link</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>Configure or the link step reports that the target <code>SDL3::SDL3</code> does not exist.</dd>
+          <dt>Cause</dt>
+          <dd>Either <code>FetchContent_MakeAvailable(SDL3)</code> is missing or comes <em>after</em> the <code>target_link_libraries</code> that uses it, or the fetch itself failed (see the next pitfall). SDL's targets only exist after <code>MakeAvailable</code> has run.</dd>
+          <dt>Fix</dt>
+          <dd>Ensure the fetch block runs <em>before</em> you link the target, and that <code>MakeAvailable</code> completed without error. Read the configure output from the top — the real failure is usually earlier than the "target not found" line.</dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>The fetch fails — <span class="sym">git or network errors during configure</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>Configure dies partway with a git clone error, a timeout, or a proxy/SSL complaint.</dd>
+          <dt>Cause</dt>
+          <dd><code>FetchContent</code> runs <code>git clone</code> at configure time, so it needs git installed and network access to GitHub. Corporate proxies, offline machines, and a missing git all break it.</dd>
+          <dt>Fix</dt>
+          <dd>Confirm <code>git --version</code> works and you can reach GitHub. Behind a proxy, configure git's proxy settings. Fully offline, the alternative is a vendored copy of SDL — the submodule approach in the sidebar below — which needs the network only once, when you first add it.</dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>Windows: the exe is not in <code>build/</code> — <span class="sym">"cannot find engine_smoketest.exe"</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>The build succeeds, but the executable is not where you expected on Windows.</dd>
+          <dt>Cause</dt>
+          <dd>Visual Studio is a <em>multi-config</em> generator: it puts binaries in a per-configuration subfolder — <code>build\Debug\</code>, <code>build\Release\</code> — not directly in <code>build\</code>. Single-config generators (Ninja, Make) do put it in <code>build/</code>, which is why Linux/macOS differ.</dd>
+          <dt>Fix</dt>
+          <dd>Run <code>.\build\Debug\engine_smoketest.exe</code>. To choose a configuration explicitly, build with <code>cmake --build build --config Release</code>. We return to Debug-vs-Release properly in the profiling lessons.</dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>Warnings pour out of SDL — <span class="sym">a wall of warnings you did not write</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>The build drowns in warnings from files under <code>build/_deps/sdl3-src/</code>.</dd>
+          <dt>Cause</dt>
+          <dd>You applied warning flags globally (e.g. via <code>CMAKE_CXX_FLAGS</code> or an <code>add_compile_options</code> at the top) instead of <code>PRIVATE</code> on your own target. Global flags hit SDL too.</dd>
+          <dt>Fix</dt>
+          <dd>Use <code>target_compile_options(engine_smoketest PRIVATE ...)</code>, exactly as the listing does. Warnings belong to the target that asked for them. This is the §<a href="#properties">3.2</a> lesson biting back if ignored.</dd>
+        </dl>
+      </div>
+    </details>
+  </div>
+
+  <!-- ================= 9. EXERCISES ================= -->
+  <h2 id="exercises"><span class="num">8</span>Exercises</h2>
+
+  <div class="exercise">
+    <h3><span class="xnum">0.4.1</span>Rebuild is instant<span class="difficulty">warm-up</span></h3>
+    <p>
+      After your first successful build, change one <code>printf</code> string in
+      <code>hello.cpp</code> and run <code>cmake --build build</code> again. Time it. Why is it a
+      hundred times faster than the first build?
+    </p>
+    <details>
+      <summary>Solution</summary>
+      <p>
+        The second build takes a second or two, versus minutes. SDL is already compiled and cached
+        under <code>build/_deps/</code>, and the native build tool tracks dependencies: only
+        <code>hello.cpp</code> changed, so only <code>hello.cpp</code> recompiles and the program
+        re-links. Nothing about SDL is touched. This incremental behaviour is a large part of why
+        we tolerate CMake's up-front ceremony — you pay the full cost once.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3><span class="xnum">0.4.2</span>Change the pin, watch the version<span class="difficulty">guided</span></h3>
+    <p>
+      Change <code>GIT_TAG release-3.4.12</code> to an <em>older</em> SDL release tag — for
+      instance <code>release-3.2.30</code> — then delete <code>build/</code> and configure and
+      build again. What do the two SDL lines print now, and why did you have to delete
+      <code>build/</code>?
+    </p>
+    <details>
+      <summary>Hint</summary>
+      <p>The fetched source is cached. FetchContent will not re-clone a different tag into a build tree that already has the old one.</p>
+    </details>
+    <details>
+      <summary>Solution</summary>
+      <p>
+        Both SDL lines now print <code>3.2.30</code> — you built against, and linked, a different
+        SDL. You had to delete <code>build/</code> because the old SDL source was already cached
+        under <code>build/_deps/</code>, and a plain reconfigure will not swap it out. This is the
+        pin from §<a href="#fetchcontent">3.3</a> made tangible: the tag, and only the tag, decides
+        which SDL you get — and changing it is a deliberate one-line act, not an accident of when
+        you happened to clone.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3><span class="xnum">0.4.3</span>Prove the two phases are separate<span class="difficulty">guided</span></h3>
+    <p>
+      Introduce a deliberate <em>CMake</em> error (misspell <code>add_executable</code> as
+      <code>add_exectuable</code>) and run configure. Then fix it, and introduce a deliberate
+      <em>C++</em> error (delete a semicolon in <code>hello.cpp</code>) and run build. Which phase
+      caught each, and how did the error messages differ?
+    </p>
+    <details>
+      <summary>Solution</summary>
+      <p>
+        The misspelled command fails during <strong>configure</strong> — CMake reports "Unknown
+        CMake command", and no compiler ever ran. The missing semicolon fails during
+        <strong>build</strong> — the compiler reports a syntax error at a line in
+        <code>hello.cpp</code>, exactly as in 0.3, because CMake configured fine and handed the job
+        to the native tool. This is §<a href="#two-phase">3.1</a> made concrete: configure errors
+        are about your build <em>description</em>; build errors are about your <em>code</em>.
+        Knowing which phase failed tells you which file to open.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3><span class="xnum">0.4.4</span>The submodule alternative<span class="difficulty">open</span></h3>
+    <p>
+      The master plan says to teach both dependency-acquisition methods once, then standardize.
+      The other method is a <strong>git submodule</strong>: instead of CMake cloning SDL at
+      configure time, you commit a reference to SDL's repo inside yours
+      (<code>git submodule add</code> under <code>third_party/</code>) and
+      <code>add_subdirectory(third_party/SDL)</code> in CMake. Research both, and write down two
+      concrete advantages of each. Which would you choose for this course, and why?
+    </p>
+    <details>
+      <summary>Solution sketch</summary>
+      <p>
+        <strong>Submodule advantages:</strong> the dependency's source is vendored, so builds work
+        fully offline after the first checkout; and the exact commit is recorded in your git
+        history, auditable alongside your code. <strong>FetchContent advantages:</strong> a fresh
+        clone needs no <code>git submodule update --init</code> ritual — the single most common
+        way submodule projects fail to build for a newcomer — and the dependency is not duplicated
+        into your working tree.
+      </p>
+      <p>
+        <strong>We standardize on FetchContent</strong> for this course, precisely because the
+        "forgot to init the submodule" failure is so common and so confusing for someone new, and
+        because a bare <code>git clone</code> of the repo builds with nothing extra. The tradeoff
+        we accept is the one-time source build and the network requirement — both acceptable, and
+        both mitigated (caching handles the first, the submodule fallback handles the second). If
+        you were shipping in a locked-down offline environment, the submodule's guarantees might
+        tip the balance the other way — which is the honest answer: the choice follows the
+        constraints, as it always does.
+      </p>
+    </details>
+  </div>
+
+  <!-- ================= 10. RECAP & NEXT ================= -->
+  <h2 id="recap"><span class="num">9</span>Recap &amp; Next</h2>
+
+  <div class="recap">
+    <h2>What the engine can do now that it could not before</h2>
+    <ul>
+      <li>
+        <strong>It has a portable build.</strong> One <code>CMakeLists.txt</code> describes the
+        whole thing, and CMake turns it into native builds for Windows, Linux, and macOS.
+      </li>
+      <li>
+        <strong>It acquires its own dependencies.</strong> A bare <code>git clone</code> plus
+        <code>cmake -S . -B build</code> fetches, builds, and links SDL3 — pinned to an exact,
+        reproducible version — with no manual install.
+      </li>
+      <li>
+        <strong>You think in targets.</strong> Standard, warnings, and links are properties of the
+        <code>engine_smoketest</code> target, and SDL's properties flow to it across the link. No
+        global state, no hand-managed include paths.
+      </li>
+    </ul>
+    <p>
+      The idea to carry forward: <strong>CMake generates; the native tool builds.</strong> Two
+      phases, two kinds of error, one portable description. When a build breaks later, the first
+      question is "configure or build?" — and you already know how to tell.
+    </p>
+    <p>
+      <strong>Next:</strong> <a href="00-05-first-window.html">0.5 — Your First Window</a>. SDL is
+      fetched and linking; now we <em>use</em> it. We bring in the full <code>&lt;SDL3/SDL.h&gt;</code>,
+      meet SDL's cross-platform entry point, initialise the library, and open a real window with a
+      real event loop that closes cleanly — the engine's first frame of life. <code>hello.cpp</code>
+      retires; <code>src/main.cpp</code> is born.
+    </p>
+  </div>
+
+  <!-- ================= 11. FURTHER READING ================= -->
+  <h2 id="reading"><span class="num">10</span>Further Reading</h2>
+
+  <ul class="reading">
+    <li>
+      <span class="src">Guide</span>
+      <strong><a href="https://cliutils.gitlab.io/modern-cmake/">An Introduction to Modern CMake</a></strong> —
+      the best free introduction to the target-based style we use. If one link here is worth an
+      afternoon, it is this one.
+    </li>
+    <li>
+      <span class="src">Reference</span>
+      <strong><a href="https://cmake.org/cmake/help/latest/module/FetchContent.html">CMake docs: FetchContent</a></strong> —
+      the authoritative reference for <code>FetchContent_Declare</code> and
+      <code>MakeAvailable</code>, including the <code>GIT_TAG</code> and shallow-clone options.
+    </li>
+    <li>
+      <span class="src">Reference</span>
+      <strong><a href="https://wiki.libsdl.org/SDL3/README/cmake">SDL3 CMake documentation</a></strong> —
+      how SDL expects to be consumed, the <code>SDL3::SDL3</code> target, and the build options
+      like <code>SDL_TEST_LIBRARY</code>.
+    </li>
+    <li>
+      <span class="src">Book</span>
+      <strong>Craig Scott, <em>Professional CMake: A Practical Guide</em></strong> — the
+      comprehensive reference by a CMake co-maintainer. Overkill for now; the book to own if you
+      end up maintaining a real project's build.
+    </li>
+    <li>
+      <span class="src">Reference</span>
+      <strong><a href="https://cmake.org/cmake/help/latest/command/target_link_libraries.html">CMake docs: target_link_libraries</a></strong> —
+      the precise semantics of <code>PRIVATE</code>, <code>PUBLIC</code>, and
+      <code>INTERFACE</code> from §3.2.
+    </li>
+  </ul>
+
+  <!-- ================= 12. STATE ================= -->
+  <details class="state">
+    <summary>STATE — resume key</summary>
+<pre>course: Build a Professional 3D Game Engine (SDL3 + C++20)
+version: 1.0
+
+conventions:
+  world: right-handed, Y-up, -Z forward
+  clip: left-handed, +Y up, z in [0,1] (SDL_GPU-fixed; projection absorbs the flip)
+  sw-rasterizer: targets SDL_GPU's exact NDC (port = API change, not maths change)
+  matrices: column vectors, v' = M*v, column-major storage
+  winding: CCW = front, cull back (per-pipeline state; set explicitly every time)
+  units: 1 unit = 1 metre; radians internally; linear colour in renderer
+  axis colours: x/y/z = red/green/blue
+  sdl3: FetchContent, pinned GIT_TAG release-3.4.12 (latest release; main is 3.5.0 dev);
+        target SDL3::SDL3; SDL_TEST_LIBRARY OFF; shadercross is 3.0.0-preview
+  cpp: C++20, no exceptions/RTTI in core, snake_case, -Wall -Wextra//W4 all fixed
+  build: CMake >= 3.24, out-of-source (build/), 64-bit; two phases (configure, build)
+
+curriculum: 94 lessons, ~433 h, 9 modules
+  M0:6  M1:8  M2:12  M3:10  M4:9  M5:10  M6:15  M7:13  M8:11
+
+completed:
+  - 0.1 — What a Game Engine Actually Is
+  - 0.2 — How This Course Works
+  - 0.3 — Setting Up Your Toolchain
+  - 0.4 — CMake From Zero
+
+capabilities:
+  - a verified C++20 toolchain (MSVC / GCC / Clang), 64-bit
+  - portable CMake build; FetchContent fetches+builds+links SDL3 (release-3.4.12)
+  - engine_smoketest prints toolchain info + SDL linked/header version (both 3.4.12)
+
+files:
+  /: CLAUDE.md, README.md, ARCHITECTURE.md, LEARNINGS.md, PROMPT.md, LICENSE,
+     .gitignore, hello.cpp, CMakeLists.txt
+  docs/: index.html, conventions.html, math-toolbox.html, cpp-style.html
+  docs/lessons/: 00-01-what-is-an-engine.html, 00-02-how-this-course-works.html,
+                 00-03-toolchain.html, 00-04-cmake-from-zero.html
+  docs/_template/: lesson-template.html, README.md, apply-shared-css.py
+  memory/: 2026-07-16.md
+
+next: 0.5 — Your First Window</pre>
+  </details>
+
+  <nav class="lesson-nav" aria-label="Lesson navigation (bottom)">
+    <a class="prev-l" href="00-03-toolchain.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">0.3 — Setting Up Your Toolchain</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="00-05-first-window.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">0.5 — Your First Window</span>
+    </a>
+  </nav>
+
+  <footer class="foot">
+    <p>
+      Build a Professional 3D Game Engine ·
+      <a href="../index.html">Contents</a> ·
+      <a href="../conventions.html">Conventions</a> ·
+      <a href="../math-toolbox.html">Math Toolbox</a> ·
+      <a href="../cpp-style.html">C++ Style</a>
+    </p>
+    <p>MIT licensed. Copyright © 2026 digster.</p>
+  </footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ---- Theme toggle (identical across the course) ---- */
+  var root = document.documentElement;
+  var KEY = "engine-course-theme";
+  try {
+    var saved = localStorage.getItem(KEY);
+    if (saved) { root.setAttribute("data-theme", saved); root.style.colorScheme = saved; }
+  } catch (e) {}
+  var btn = document.getElementById("theme-toggle");
+  if (btn) {
+    btn.addEventListener("click", function () {
+      var cur = root.getAttribute("data-theme");
+      if (!cur) cur = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      var next = cur === "dark" ? "light" : "dark";
+      root.setAttribute("data-theme", next);
+      root.style.colorScheme = next;
+      try { localStorage.setItem(KEY, next); } catch (e) {}
+    });
+  }
+
+  /* ---- Syntax highlighting: C++, CMake, shell ---- */
+  function esc(s) { return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+  function span(c, s) { return '<span class="tok-' + c + '">' + esc(s) + "</span>"; }
+
+  var CPP_KEYWORDS = ("consteval constexpr const static void struct class enum namespace return "
+    + "if else for while inline noexcept nullptr true false int long defined static_assert "
+    + "static_cast").split(" ");
+  var CPP_TYPES = ("bool char double float int long short signed unsigned void size_t").split(" ");
+  var kw = Object.create(null), ty = Object.create(null);
+  CPP_KEYWORDS.forEach(function (w) { kw[w] = 1; });
+  CPP_TYPES.forEach(function (w) { ty[w] = 1; });
+  var CPP_RE = new RegExp([
+    "(\\/\\*[\\s\\S]*?\\*\\/|\\/\\/[^\\n]*|#[^\\n]*)",
+    '("(?:\\\\.|[^"\\\\])*"|\'(?:\\\\.|[^\'\\\\])*\')',
+    "(\\b\\d[\\w.]*\\b)",
+    "([A-Za-z_]\\w*)(?=\\s*\\()",
+    "([A-Za-z_]\\w*)",
+    "([{}()\\[\\];,.<>+\\-*/%=!&|^~?:]+)"
+  ].join("|"), "g");
+  function highlightCpp(src) {
+    var out = "", last = 0, m;
+    CPP_RE.lastIndex = 0;
+    while ((m = CPP_RE.exec(src)) !== null) {
+      if (m.index > last) out += esc(src.slice(last, m.index));
+      if (m[1])      out += span(m[1].charAt(0) === "#" ? "p" : "c", m[1]);
+      else if (m[2]) out += span("s", m[2]);
+      else if (m[3]) out += span("n", m[3]);
+      else if (m[4]) out += kw[m[4]] ? span("k", m[4]) : span("f", m[4]);
+      else if (m[5]) out += kw[m[5]] ? span("k", m[5]) : ty[m[5]] ? span("t", m[5]) : esc(m[5]);
+      else if (m[6]) out += span("o", m[6]);
+      last = CPP_RE.lastIndex;
+    }
+    return out + esc(src.slice(last));
+  }
+
+  // CMake: comments, strings, ${vars}, and command names (word before "(").
+  var CMAKE_RE = /(#[^\n]*)|("(?:\\.|[^"\\])*")|(\$\{[^}]*\})|(^|\n)(\s*)([A-Za-z_]\w*)(?=\s*\()/g;
+  function highlightCmake(src) {
+    var out = "", last = 0, m;
+    CMAKE_RE.lastIndex = 0;
+    while ((m = CMAKE_RE.exec(src)) !== null) {
+      if (m.index > last) out += esc(src.slice(last, m.index));
+      if (m[1])      out += span("c", m[1]);
+      else if (m[2]) out += span("s", m[2]);
+      else if (m[3]) out += span("n", m[3]);
+      else           out += esc(m[4] || "") + esc(m[5] || "") + span("f", m[6]);
+      last = CMAKE_RE.lastIndex;
+    }
+    return out + esc(src.slice(last));
+  }
+
+  var SH_RE = /(#[^\n]*|::[^\n]*)|("(?:\\.|[^"\\])*"|'[^']*')|(^|\n)(\s*)([\w.\/\\-]+)/g;
+  function highlightShell(src) {
+    var out = "", last = 0, m;
+    SH_RE.lastIndex = 0;
+    while ((m = SH_RE.exec(src)) !== null) {
+      if (m.index > last) out += esc(src.slice(last, m.index));
+      if (m[1]) out += span("c", m[1]);
+      else if (m[2]) out += span("s", m[2]);
+      else out += esc(m[3] || "") + esc(m[4] || "") + span("f", m[5]);
+      last = SH_RE.lastIndex;
+    }
+    return out + esc(src.slice(last));
+  }
+
+  var DISPATCH = { "lang-cpp": highlightCpp, "lang-cmake": highlightCmake, "lang-bash": highlightShell };
+  document.querySelectorAll(".listing pre code").forEach(function (el) {
+    for (var cls in DISPATCH) {
+      if (el.classList.contains(cls)) { el.innerHTML = DISPATCH[cls](el.textContent); return; }
+    }
+  });
+})();
+</script>
+</body>
+</html>
