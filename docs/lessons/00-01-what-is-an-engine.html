@@ -1,0 +1,2413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>0.1 — What a Game Engine Actually Is · Build a Professional 3D Game Engine</title>
+<meta name="description" content="An anatomy tour of a game engine, derived from the one constraint that explains all of it: the frame budget.">
+<!-- SHARED-CSS:BEGIN -->
+<style>
+/* ---- Design tokens ------------------------------------------------------- */
+:root {
+  color-scheme: light dark;
+
+  /* Page */
+  --bg:            #fdfdfb;
+  --bg-sunken:     #f4f4f0;
+  --bg-raised:     #ffffff;
+  --text:          #1c1c1a;
+  --text-muted:    #5f5f58;
+  --text-faint:    #8a8a80;
+  --rule:          #e2e2db;
+  --rule-strong:   #cfcfc6;
+
+  /* Accent — used for links, active nav, section marks */
+  --accent:        #b4530a;
+  --accent-soft:   #f5e6d8;
+  --accent-text:   #8f4108;
+
+  /* Callouts */
+  --note-bd:       #3a6ea5;   --note-bg:    #eaf2fb;
+  --warn-bd:       #b8860b;   --warn-bg:    #fdf5e2;
+  --verify-bd:     #a03030;   --verify-bg:  #fbecec;
+  --pitfall-bd:    #7a4fa3;   --pitfall-bg: #f4eefb;
+  --ok-bd:         #2f7d4f;   --ok-bg:      #e9f6ee;
+
+  /* Code — always dark, in both page themes */
+  --code-bg:       #1b1d23;
+  --code-bar:      #262932;
+  --code-text:     #dfe3ec;
+  --code-rule:     #363a45;
+
+  /* Syntax tokens */
+  --tok-comment:   #6d7789;
+  --tok-keyword:   #c98fdb;
+  --tok-type:      #6cc5d9;
+  --tok-string:    #a3cf85;
+  --tok-number:    #e8a978;
+  --tok-preproc:   #d9a05b;
+  --tok-func:      #79b6f2;
+  --tok-punct:     #9aa2b1;
+
+  /* Axis colours — COURSE-WIDE CONVENTION. x/y/z = red/green/blue.
+     Never override these in a diagram. See conventions.html. */
+  --axis-x:        #d1344a;
+  --axis-y:        #2f9e4f;
+  --axis-z:        #2b6fd4;
+  --axis-x-soft:   #f7d8dd;
+  --axis-y-soft:   #d8f0e0;
+  --axis-z-soft:   #d7e4fa;
+
+  /* Diagram neutrals */
+  --dia-bg:        #ffffff;
+  --dia-ink:       #33332e;
+  --dia-ink-soft:  #7a7a72;
+  --dia-grid:      #e8e8e2;
+  --dia-fill:      #f0f0ea;
+  --dia-hi:        #b4530a;
+
+  /* Typography */
+  --font-body: "Iowan Old Style", "Palatino Linotype", "Palatino", "Charter",
+               Georgia, Cambria, "Times New Roman", serif;
+  --font-ui:   -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+               "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "SFMono-Regular", "Cascadia Code",
+               "JetBrains Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  --measure: 42rem;          /* ~72 characters at this size — the reading column */
+  --measure-wide: 58rem;     /* diagrams & tables may breathe past the measure  */
+}
+
+/* Dark tokens.
+   Applied in two situations, which is why the block is written twice:
+     1. the OS asks for dark AND the reader has not overridden to light;
+     2. the reader explicitly chose dark via the toggle.
+   CSS has no mixins, so duplication is the price of supporting both an OS
+   default and a manual override. Keep the two blocks byte-identical. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg:          #15161a;
+    --bg-sunken:   #101115;
+    --bg-raised:   #1c1e24;
+    --text:        #e4e4e0;
+    --text-muted:  #a2a49e;
+    --text-faint:  #74766f;
+    --rule:        #2c2e35;
+    --rule-strong: #3d404a;
+
+    --accent:      #f0a06a;
+    --accent-soft: #33251a;
+    --accent-text: #f5b184;
+
+    --note-bd:     #5a8fc8;   --note-bg:    #16202c;
+    --warn-bd:     #c9a132;   --warn-bg:    #262013;
+    --verify-bd:   #d05555;   --verify-bg:  #2a1717;
+    --pitfall-bd:  #a077c8;   --pitfall-bg: #221a2c;
+    --ok-bd:       #4fa877;   --ok-bg:      #14231a;
+
+    --dia-bg:      #1a1c21;
+    --dia-ink:     #d8d8d2;
+    --dia-ink-soft:#8f918a;
+    --dia-grid:    #2b2d33;
+    --dia-fill:    #24262c;
+    --dia-hi:      #f0a06a;
+
+    --axis-x:      #f2647a;
+    --axis-y:      #5cc47e;
+    --axis-z:      #6b9ef0;
+    --axis-x-soft: #3a2027;
+    --axis-y-soft: #1c3325;
+    --axis-z-soft: #1e2a40;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg:          #15161a;
+  --bg-sunken:   #101115;
+  --bg-raised:   #1c1e24;
+  --text:        #e4e4e0;
+  --text-muted:  #a2a49e;
+  --text-faint:  #74766f;
+  --rule:        #2c2e35;
+  --rule-strong: #3d404a;
+
+  --accent:      #f0a06a;
+  --accent-soft: #33251a;
+  --accent-text: #f5b184;
+
+  --note-bd:     #5a8fc8;   --note-bg:    #16202c;
+  --warn-bd:     #c9a132;   --warn-bg:    #262013;
+  --verify-bd:   #d05555;   --verify-bg:  #2a1717;
+  --pitfall-bd:  #a077c8;   --pitfall-bg: #221a2c;
+  --ok-bd:       #4fa877;   --ok-bg:      #14231a;
+
+  --dia-bg:      #1a1c21;
+  --dia-ink:     #d8d8d2;
+  --dia-ink-soft:#8f918a;
+  --dia-grid:    #2b2d33;
+  --dia-fill:    #24262c;
+  --dia-hi:      #f0a06a;
+
+  --axis-x:      #f2647a;
+  --axis-y:      #5cc47e;
+  --axis-z:      #6b9ef0;
+  --axis-x-soft: #3a2027;
+  --axis-y-soft: #1c3325;
+  --axis-z-soft: #1e2a40;
+}
+
+/* ---- Reset & base -------------------------------------------------------- */
+*, *::before, *::after { box-sizing: border-box; }
+
+html {
+  font-size: 18px;
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
+  scroll-padding-top: 2rem;
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  line-height: 1.7;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* The reading column. Everything is centred on --measure; wide elements opt out. */
+.wrap {
+  max-width: var(--measure);
+  margin: 0 auto;
+  padding: 0 1.25rem;
+}
+.bleed {                       /* for diagrams/tables that need more room */
+  max-width: var(--measure-wide);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* ---- Typography ---------------------------------------------------------- */
+h1, h2, h3, h4 {
+  font-family: var(--font-ui);
+  line-height: 1.25;
+  letter-spacing: -0.015em;
+  margin: 0 0 0.6em;
+  scroll-margin-top: 1.5rem;
+}
+h1 { font-size: 2.15rem; font-weight: 700; margin-top: 0.2em; }
+h2 {
+  font-size: 1.5rem; font-weight: 650;
+  margin-top: 2.6em;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--rule);
+}
+h3 { font-size: 1.15rem; font-weight: 650; margin-top: 2em; }
+h4 { font-size: 1rem;    font-weight: 650; margin-top: 1.6em; color: var(--text-muted); }
+
+/* Section numbers rendered as a quiet prefix */
+h2 .num, h3 .num {
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  margin-right: 0.5em;
+  font-weight: 500;
+}
+
+p { margin: 0 0 1.15em; }
+
+a { color: var(--accent-text); text-decoration-color: var(--rule-strong); text-underline-offset: 2px; }
+a:hover { text-decoration-color: currentColor; }
+
+strong { font-weight: 650; }
+em { font-style: italic; }
+
+ul, ol { margin: 0 0 1.15em; padding-left: 1.5em; }
+li { margin-bottom: 0.4em; }
+li > ul, li > ol { margin-top: 0.4em; margin-bottom: 0.5em; }
+
+hr { border: 0; border-top: 1px solid var(--rule); margin: 2.5em 0; }
+
+blockquote {
+  margin: 1.5em 0;
+  padding: 0.1em 0 0.1em 1.2em;
+  border-left: 3px solid var(--rule-strong);
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* Inline code — light chip, distinct from the dark block listings */
+:not(pre) > code {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 0.08em 0.34em;
+  word-break: break-word;
+}
+
+/* ---- Masthead ------------------------------------------------------------ */
+.masthead {
+  background: var(--bg-sunken);
+  border-bottom: 1px solid var(--rule);
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+}
+.masthead-inner {
+  max-width: var(--measure-wide);
+  margin: 0 auto;
+  padding: 0.6rem 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.masthead .course {
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  text-decoration: none;
+}
+.masthead .spacer { flex: 1; }
+.masthead a { color: var(--text-muted); text-decoration: none; }
+.masthead a:hover { color: var(--accent-text); }
+
+.theme-toggle {
+  font: inherit;
+  font-size: 0.78rem;
+  background: var(--bg-raised);
+  color: var(--text-muted);
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  padding: 0.2rem 0.55rem;
+  cursor: pointer;
+}
+.theme-toggle:hover { border-color: var(--rule-strong); color: var(--text); }
+
+/* ---- Lesson nav (top & bottom) ------------------------------------------- */
+.lesson-nav {
+  display: flex;
+  align-items: stretch;
+  gap: 0.6rem;
+  font-family: var(--font-ui);
+  font-size: 0.82rem;
+  margin: 1.5rem auto;
+}
+.lesson-nav a, .lesson-nav span {
+  flex: 1;
+  padding: 0.55rem 0.8rem;
+  border: 1px solid var(--rule);
+  border-radius: 7px;
+  background: var(--bg-raised);
+  text-decoration: none;
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+.lesson-nav a:hover { border-color: var(--accent); }
+.lesson-nav span { opacity: 0.45; }        /* disabled edge (no prev / no next) */
+.lesson-nav .dir {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-faint);
+}
+.lesson-nav .ttl {
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-weight: 550;
+}
+.lesson-nav .next-l { text-align: right; }
+.lesson-nav .idx-l  { flex: 0 0 auto; justify-content: center; text-align: center; }
+@media (max-width: 34rem) {
+  .lesson-nav { flex-wrap: wrap; }
+  .lesson-nav .idx-l { order: 3; flex: 1 0 100%; }
+}
+
+/* ---- Lesson header block ------------------------------------------------- */
+.lesson-head { margin: 2rem 0 0; }
+.eyebrow {
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+  font-weight: 650;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 0.5rem;
+}
+.deck {
+  font-size: 1.12rem;
+  color: var(--text-muted);
+  margin-bottom: 1.5rem;
+}
+.meta {
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  padding: 1rem 1.15rem;
+  margin-bottom: 1.75rem;
+}
+.meta dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 0.4rem 1rem; }
+.meta dt {
+  color: var(--text-faint);
+  text-transform: uppercase;
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  padding-top: 0.28em;
+  white-space: nowrap;
+}
+.meta dd { margin: 0; }
+@media (max-width: 30rem) {
+  .meta dl { grid-template-columns: 1fr; gap: 0.15rem 0; }
+  .meta dd { margin-bottom: 0.6rem; }
+}
+
+/* Objectives — "you will be able to…" */
+.objectives {
+  border: 1px solid var(--accent);
+  background: var(--accent-soft);
+  border-radius: 9px;
+  padding: 1.1rem 1.25rem;
+  margin: 1.75rem 0;
+}
+.objectives h2 {
+  margin: 0 0 0.5rem;
+  border: 0; padding: 0;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--accent-text);
+}
+.objectives ul { margin: 0; padding-left: 1.25em; }
+.objectives li::marker { color: var(--accent); }
+
+/* ---- Table of contents --------------------------------------------------- */
+.toc {
+  font-family: var(--font-ui);
+  font-size: 0.88rem;
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  padding: 1rem 1.25rem;
+  margin: 2rem 0;
+}
+.toc > summary {
+  cursor: pointer;
+  font-weight: 650;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-muted);
+  list-style: none;
+}
+.toc > summary::-webkit-details-marker { display: none; }
+.toc > summary::before { content: "▸ "; color: var(--accent); }
+.toc[open] > summary::before { content: "▾ "; }
+.toc ol { list-style: none; margin: 0.85rem 0 0; padding: 0; counter-reset: toc; }
+.toc ol ol { margin: 0.3rem 0 0.5rem 1.1rem; }
+.toc li { margin: 0.28em 0; counter-increment: toc; }
+.toc a { text-decoration: none; color: var(--text); }
+.toc a:hover { color: var(--accent-text); text-decoration: underline; }
+.toc ol ol a { color: var(--text-muted); font-size: 0.94em; }
+
+/* ---- Callouts ------------------------------------------------------------ */
+.callout {
+  border-left: 3px solid var(--rule-strong);
+  background: var(--bg-sunken);
+  border-radius: 0 8px 8px 0;
+  padding: 0.9rem 1.1rem;
+  margin: 1.6em 0;
+  font-size: 0.95rem;
+}
+.callout > :first-child { margin-top: 0; }
+.callout > :last-child  { margin-bottom: 0; }
+.callout .label {
+  display: block;
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  margin-bottom: 0.35rem;
+}
+.callout.note    { border-color: var(--note-bd);    background: var(--note-bg); }
+.callout.note .label    { color: var(--note-bd); }
+.callout.warn    { border-color: var(--warn-bd);    background: var(--warn-bg); }
+.callout.warn .label    { color: var(--warn-bd); }
+.callout.verify  { border-color: var(--verify-bd);  background: var(--verify-bg); }
+.callout.verify .label  { color: var(--verify-bd); }
+.callout.pitfall { border-color: var(--pitfall-bd); background: var(--pitfall-bg); }
+.callout.pitfall .label { color: var(--pitfall-bd); }
+.callout.ok      { border-color: var(--ok-bd);      background: var(--ok-bg); }
+.callout.ok .label      { color: var(--ok-bd); }
+/* C++ explainers: a C++ feature taught in place, the first time it appears. */
+.callout.cpp     { border-color: var(--accent);     background: var(--accent-soft); }
+.callout.cpp .label     { color: var(--accent-text); }
+
+/* ---- Code listings ------------------------------------------------------- */
+.listing {
+  margin: 1.6em 0;
+  border-radius: 9px;
+  overflow: hidden;
+  border: 1px solid var(--code-rule);
+  background: var(--code-bg);
+}
+.listing figcaption {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: var(--code-bar);
+  border-bottom: 1px solid var(--code-rule);
+  padding: 0.45rem 0.85rem;
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  color: #aeb6c4;
+}
+.listing figcaption .path { font-weight: 600; color: #dfe3ec; }
+.listing figcaption .tag {
+  font-family: var(--font-ui);
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  background: #3a3f4c;
+  color: #c6cdd9;
+}
+.listing figcaption .tag.new      { background: #1f4433; color: #7fd6a5; }
+.listing figcaption .tag.modified { background: #453a1c; color: #e0be74; }
+.listing figcaption .lang { margin-left: auto; opacity: 0.65; }
+
+/* Horizontal scroll — NEVER wrap. Wrapped code lies about its structure. */
+.listing pre {
+  margin: 0;
+  padding: 0.9rem 1rem;
+  overflow-x: auto;
+  background: var(--code-bg);
+}
+.listing pre code {
+  font-family: var(--font-mono);
+  font-size: 0.79rem;
+  line-height: 1.62;
+  color: var(--code-text);
+  white-space: pre;
+  display: block;
+  tab-size: 4;
+}
+.listing pre::-webkit-scrollbar { height: 9px; }
+.listing pre::-webkit-scrollbar-track { background: var(--code-bar); }
+.listing pre::-webkit-scrollbar-thumb { background: #4a5060; border-radius: 5px; }
+.listing pre::-webkit-scrollbar-thumb:hover { background: #5d6478; }
+
+/* Syntax tokens, applied by the tiny highlighter at the foot of the page. */
+.tok-c { color: var(--tok-comment); font-style: italic; }
+.tok-k { color: var(--tok-keyword); }
+.tok-t { color: var(--tok-type); }
+.tok-s { color: var(--tok-string); }
+.tok-n { color: var(--tok-number); }
+.tok-p { color: var(--tok-preproc); }
+.tok-f { color: var(--tok-func); }
+.tok-o { color: var(--tok-punct); }
+
+/* Emphasised line inside a listing (the line this paragraph is about) */
+.listing .hl { background: rgba(180, 130, 60, 0.16); display: inline-block; width: 100%; }
+
+/* Shell transcripts get a lighter treatment than source files */
+.listing.shell figcaption .path::before { content: "$ "; opacity: 0.6; }
+
+/* ---- Figures & diagrams -------------------------------------------------- */
+figure.dia {
+  margin: 2em auto;
+  padding: 0;
+}
+figure.dia svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: var(--dia-bg);
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+}
+figure.dia figcaption,
+figure.tbl figcaption {
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: 0.65rem;
+  line-height: 1.55;
+}
+figure.dia figcaption .fignum,
+figure.tbl figcaption .fignum {
+  font-weight: 700;
+  color: var(--text);
+}
+/* SVG text inherits the theme so diagrams survive dark mode */
+figure.dia svg text { font-family: var(--font-ui); fill: var(--dia-ink); }
+figure.dia svg .lbl-x { fill: var(--axis-x); }
+figure.dia svg .lbl-y { fill: var(--axis-y); }
+figure.dia svg .lbl-z { fill: var(--axis-z); }
+figure.dia svg .ax-x  { stroke: var(--axis-x); }
+figure.dia svg .ax-y  { stroke: var(--axis-y); }
+figure.dia svg .ax-z  { stroke: var(--axis-z); }
+figure.dia svg .ink       { stroke: var(--dia-ink); }
+figure.dia svg .ink-soft  { stroke: var(--dia-ink-soft); }
+figure.dia svg .grid      { stroke: var(--dia-grid); }
+figure.dia svg .fill-soft { fill: var(--dia-fill); }
+figure.dia svg .hi        { stroke: var(--dia-hi); }
+figure.dia svg .mono      { font-family: var(--font-mono); }
+figure.dia svg .sm        { font-size: 11px; }
+figure.dia svg .xs        { font-size: 9.5px; }
+
+/* Text fills for <text> elements.
+   These MUST be classes, not fill="..." attributes: the `figure.dia svg text`
+   rule above is CSS, and CSS always beats an SVG presentation attribute — an
+   inline fill on a <text> is silently ignored. Class selectors outrank the bare
+   element selector, so these win. (Shapes are unaffected; the rule only targets
+   text, so fill="..." still works on rect/path/circle.) */
+figure.dia svg .muted     { fill: var(--dia-ink-soft); }
+figure.dia svg .t-hi      { fill: var(--dia-hi); }
+figure.dia svg .t-ok      { fill: var(--ok-bd); }
+figure.dia svg .t-bad     { fill: var(--verify-bd); }
+
+/* ---- Tables -------------------------------------------------------------- */
+.tbl-scroll { overflow-x: auto; margin: 1.6em 0; }
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+th, td {
+  text-align: left;
+  padding: 0.5rem 0.7rem;
+  border-bottom: 1px solid var(--rule);
+  vertical-align: top;
+}
+th {
+  font-weight: 650;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--rule-strong);
+  white-space: nowrap;
+}
+tbody tr:hover { background: var(--bg-sunken); }
+td code { font-size: 0.82em; }
+
+/* File-manifest table: path | new/modified | purpose */
+.manifest td:first-child { font-family: var(--font-mono); font-size: 0.78rem; white-space: nowrap; }
+.badge {
+  font-size: 0.62rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.06em; padding: 0.1rem 0.4rem; border-radius: 3px; white-space: nowrap;
+}
+.badge.new { background: var(--ok-bg); color: var(--ok-bd); border: 1px solid var(--ok-bd); }
+.badge.mod { background: var(--warn-bg); color: var(--warn-bd); border: 1px solid var(--warn-bd); }
+/* Curriculum status, used on index.html */
+.badge.done { background: var(--ok-bg); color: var(--ok-bd); border: 1px solid var(--ok-bd); }
+.badge.soon { background: var(--bg-sunken); color: var(--text-faint); border: 1px solid var(--rule-strong); }
+
+/* ---- Math ---------------------------------------------------------------- */
+/* KaTeX renders these when the CDN is reachable. When it is NOT, the raw TeX
+   stays visible — which is why every equation MUST also be stated in prose.
+   Never let an equation be the only carrier of a fact. */
+.eq {
+  margin: 1.4em 0;
+  padding: 0.9rem 1rem;
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  overflow-x: auto;
+  text-align: center;
+}
+.eq-plain {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  margin-top: 0.6rem;
+  padding-top: 0.6rem;
+  border-top: 1px dashed var(--rule-strong);
+  text-align: left;
+}
+.eq-plain::before {
+  content: "in plain text: ";
+  color: var(--text-faint);
+  font-family: var(--font-ui);
+  font-size: 0.72rem;
+}
+
+/* Worked numeric example — every formula gets one */
+.worked {
+  border: 1px solid var(--rule-strong);
+  border-radius: 9px;
+  padding: 1rem 1.2rem;
+  margin: 1.6em 0;
+  background: var(--bg-raised);
+}
+.worked > .label {
+  display: block;
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--accent);
+  margin-bottom: 0.5rem;
+}
+.worked > :last-child { margin-bottom: 0; }
+
+/* ---- Exercises ----------------------------------------------------------- */
+.exercise {
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 9px 9px 0;
+  padding: 1rem 1.2rem;
+  margin: 1.4em 0;
+  background: var(--bg-raised);
+}
+.exercise h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.98rem;
+}
+.exercise h3 .xnum {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--accent);
+  margin-right: 0.5em;
+}
+.difficulty {
+  font-family: var(--font-ui);
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-faint);
+  border: 1px solid var(--rule-strong);
+  border-radius: 3px;
+  padding: 0.05rem 0.35rem;
+  margin-left: 0.4em;
+  vertical-align: 0.15em;
+}
+.exercise details {
+  margin-top: 0.7rem;
+  border-top: 1px solid var(--rule);
+  padding-top: 0.6rem;
+}
+.exercise summary {
+  cursor: pointer;
+  font-family: var(--font-ui);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.exercise summary:hover { color: var(--accent-text); }
+.exercise details[open] summary { margin-bottom: 0.6rem; }
+
+/* ---- Pitfalls (symptom → cause → fix) ------------------------------------ */
+.pitfalls { margin: 1.5em 0; }
+.pitfall-item {
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  margin-bottom: 0.9rem;
+  overflow: hidden;
+}
+.pitfall-item > summary {
+  cursor: pointer;
+  padding: 0.7rem 1rem;
+  background: var(--bg-sunken);
+  font-family: var(--font-ui);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.pitfall-item > summary:hover { color: var(--accent-text); }
+.pitfall-item > summary .sym {
+  font-weight: 400;
+  color: var(--text-muted);
+  font-style: italic;
+}
+.pitfall-body { padding: 0.9rem 1rem; font-size: 0.94rem; }
+.pitfall-body > :first-child { margin-top: 0; }
+.pitfall-body > :last-child  { margin-bottom: 0; }
+.pitfall-body dt {
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+  margin-top: 0.7rem;
+}
+.pitfall-body dd { margin: 0.2rem 0 0; }
+
+/* ---- Recap / next -------------------------------------------------------- */
+.recap {
+  background: var(--ok-bg);
+  border: 1px solid var(--ok-bd);
+  border-radius: 9px;
+  padding: 1.1rem 1.25rem;
+  margin: 1.75rem 0;
+}
+.recap h2 { margin: 0 0 0.6rem; border: 0; padding: 0; font-size: 1.05rem; }
+.recap > :last-child { margin-bottom: 0; }
+
+/* ---- Further reading ----------------------------------------------------- */
+.reading { font-size: 0.92rem; }
+.reading li { margin-bottom: 0.6em; }
+.reading .src {
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+  margin-right: 0.4em;
+}
+
+/* ---- STATE block --------------------------------------------------------- */
+.state {
+  margin: 2.5em 0 1em;
+  border: 1px dashed var(--rule-strong);
+  border-radius: 9px;
+  background: var(--bg-sunken);
+  overflow: hidden;
+}
+.state > summary {
+  cursor: pointer;
+  padding: 0.6rem 1rem;
+  font-family: var(--font-ui);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-muted);
+}
+.state pre {
+  margin: 0;
+  padding: 0.9rem 1rem;
+  overflow-x: auto;
+  border-top: 1px solid var(--rule);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+  white-space: pre;
+}
+
+/* ---- Footer -------------------------------------------------------------- */
+.foot {
+  border-top: 1px solid var(--rule);
+  margin-top: 3rem;
+  padding: 1.5rem 0 3rem;
+  font-family: var(--font-ui);
+  font-size: 0.78rem;
+  color: var(--text-faint);
+}
+.foot a { color: var(--text-muted); }
+
+/* ---- Interactive widgets ------------------------------------------------- */
+.widget {
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  background: var(--bg-raised);
+  padding: 1rem;
+  margin: 2em 0;
+}
+.widget-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+  align-items: center;
+  margin-top: 0.8rem;
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+.widget-controls label { display: flex; align-items: center; gap: 0.4rem; }
+.widget-controls input[type="range"] { accent-color: var(--accent); }
+.widget-readout {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--text);
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 0.1rem 0.4rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Print --------------------------------------------------------------- */
+@media print {
+  .masthead, .lesson-nav, .theme-toggle { display: none; }
+  body { background: #fff; color: #000; font-size: 11pt; }
+  .listing { break-inside: avoid; }
+  figure.dia { break-inside: avoid; }
+  a::after { content: " (" attr(href) ")"; font-size: 0.7em; color: #666; }
+}
+</style>
+<!-- SHARED-CSS:END -->
+<style>
+/* Lesson-local: the frame-budget explorer widget. */
+/* The bar itself must NOT clip, or it eats the budget line's label. The
+   segments still need clipping to keep the rounded corners, so they live in an
+   inner track that clips while the outer box stays open. */
+.budget-bar { position: relative; height: 46px; margin-top: 1.5rem; }
+.budget-track {
+  display: flex; height: 100%; border-radius: 7px; overflow: hidden;
+  background: var(--bg-sunken); border: 1px solid var(--rule);
+}
+.budget-seg {
+  height: 100%; display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-ui); font-size: 0.6rem; font-weight: 700; color: #fff;
+  overflow: hidden; white-space: nowrap; transition: width 0.12s ease-out;
+}
+.budget-line {
+  position: absolute; top: -4px; bottom: -4px; width: 2px;
+  background: var(--text); z-index: 3; pointer-events: none;
+}
+.budget-line::after {
+  content: "budget"; position: absolute; top: -1.05rem; left: 50%;
+  transform: translateX(-50%); font-family: var(--font-ui); font-size: 0.58rem;
+  font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+  color: var(--text); white-space: nowrap;
+}
+.verdict {
+  margin-top: 0.9rem; padding: 0.6rem 0.85rem; border-radius: 7px;
+  font-family: var(--font-ui); font-size: 0.85rem; font-weight: 600;
+}
+.verdict.hit  { background: var(--ok-bg);     color: var(--ok-bd);     border: 1px solid var(--ok-bd); }
+.verdict.miss { background: var(--verify-bg); color: var(--verify-bd); border: 1px solid var(--verify-bd); }
+.sliders { display: grid; grid-template-columns: auto 1fr auto; gap: 0.45rem 0.7rem; align-items: center; margin-top: 1rem; }
+.sliders label { font-family: var(--font-ui); font-size: 0.76rem; color: var(--text-muted); white-space: nowrap; }
+.sliders .sw { width: 10px; height: 10px; border-radius: 2px; display: inline-block; margin-right: 0.35rem; }
+.sliders input[type="range"] { width: 100%; accent-color: var(--accent); }
+.sliders output { font-family: var(--font-mono); font-size: 0.74rem; font-variant-numeric: tabular-nums; color: var(--text); min-width: 3.4rem; text-align: right; }
+</style>
+<link rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css"
+      integrity="sha384-nB0miv6/jRmo5UMMR1wu3Gz6NLsoTkbqJghGIsx//Rlm+ZU03BU6SQNC66uf4l5+"
+      crossorigin="anonymous">
+</head>
+<body>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <a class="course" href="../index.html">Build a Professional 3D Game Engine</a>
+    <span class="spacer"></span>
+    <a href="../index.html">Contents</a>
+    <a href="../conventions.html">Conventions</a>
+    <a href="../math-toolbox.html">Math Toolbox</a>
+    <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Toggle colour theme">Theme</button>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <span class="prev-l">
+      <span class="dir">← Previous</span>
+      <span class="ttl">This is the first lesson</span>
+    </span>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="00-02-how-this-course-works.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">0.2 — How This Course Works</span>
+    </a>
+  </nav>
+
+  <!-- ================= 1. HEADER BLOCK ================= -->
+  <div class="lesson-head">
+    <div class="eyebrow">Module 0 — Orientation &amp; Toolchain · Lesson 0.1</div>
+    <h1>What a Game Engine Actually Is</h1>
+    <p class="deck">
+      You are about to spend four hundred hours building one. Before the first line of code, we
+      settle what the thing <em>is</em> — and we derive its entire anatomy from a single number.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 3 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>None. This is the first lesson.</dd>
+
+        <dt>Files</dt>
+        <dd>None — see §<a href="#listings">6</a> for the honest reason why</dd>
+
+        <dt>Milestone</dt>
+        <dd>You can compute a frame budget, name every subsystem, and <em>defend</em> the boundaries between them.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…explain what separates an engine from a library and from a framework — and why the difference is not pedantry.</li>
+      <li>…compute the frame budget for any refresh rate, and say precisely what happens when you exceed it by 0.1 ms.</li>
+      <li>…name the major subsystems of an engine and say what each one owns.</li>
+      <li>…<strong>derive</strong> those subsystem boundaries rather than memorising them — and defend a boundary when someone challenges it.</li>
+      <li>…look at a real engine's directory tree and predict what is inside each folder.</li>
+    </ul>
+  </section>
+
+  <details class="toc" open>
+    <summary>Contents</summary>
+    <ol>
+      <li><a href="#problem">The Problem</a></li>
+      <li><a href="#intuition">Building Intuition</a>
+        <ol>
+          <li><a href="#not-a-library">An engine is not a library</a></li>
+          <li><a href="#heartbeat">The heartbeat</a></li>
+          <li><a href="#realtime">"Real-time" does not mean "fast"</a></li>
+        </ol>
+      </li>
+      <li><a href="#theory">The Theory</a>
+        <ol>
+          <li><a href="#budget">The frame budget, derived</a></li>
+          <li><a href="#cliff">The vsync cliff</a></li>
+          <li><a href="#anatomy">The anatomy, derived from the loop</a></li>
+          <li><a href="#boundaries">Why the boundaries are where they are</a></li>
+          <li><a href="#real-engines">How real engines draw these lines</a></li>
+        </ol>
+      </li>
+      <li><a href="#implementation">Implementation: the budget explorer</a></li>
+      <li><a href="#listings">Complete Code Listings</a></li>
+      <li><a href="#build">Build &amp; Run</a></li>
+      <li><a href="#pitfalls">Common Pitfalls &amp; Debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; Next</a></li>
+      <li><a href="#reading">Further Reading</a></li>
+    </ol>
+  </details>
+
+  <!-- ================= 2. THE PROBLEM ================= -->
+  <h2 id="problem"><span class="num">1</span>The Problem</h2>
+
+  <p>
+    Ask ten programmers what a game engine is and you will get ten answers, most of them lists.
+    "It's got a renderer, physics, audio, a scene graph, an editor…" That is not a definition;
+    it is an inventory. It tells you what is in the box without telling you what the box is
+    <em>for</em>, and it will not help you make a single decision.
+  </p>
+
+  <p>
+    This matters more than it sounds, because you are about to make roughly four hundred hours
+    of decisions. Here is the failure mode, and it is worth looking at directly, because it is
+    the most common way ambitious engine projects die:
+  </p>
+
+  <div class="callout warn">
+    <span class="label">The failure mode: a pile of features</span>
+    <p>
+      Someone starts with the inventory. They write a renderer. Then a physics library. Then an
+      audio mixer. Each part is competent in isolation. Then they try to make a game with it,
+      and discover the physics wants to run at a different rate than the renderer, the audio
+      stutters whenever a texture loads, and adding a character to the scene means touching
+      six files.
+    </p>
+    <p>
+      Nothing is <em>broken</em>. Every component works. But the parts were designed to be
+      good, not to be good <strong>together, on time, sixty times a second</strong> — and that
+      last clause is the entire discipline. They built the inventory. They did not build the
+      engine.
+    </p>
+  </div>
+
+  <p>
+    So the inventory definition fails a basic test: it makes wrong predictions. It predicts that
+    an engine is a library of game stuff you call when you need it. Let us check that prediction
+    against reality, because the way it fails is the door into everything else.
+  </p>
+
+  <!-- ================= 3. BUILDING INTUITION ================= -->
+  <h2 id="intuition"><span class="num">2</span>Building Intuition</h2>
+
+  <h3 id="not-a-library">2.1 An engine is not a library</h3>
+
+  <p>
+    Think about how you use <code>std::sort</code>. You have data, you decide when to sort it,
+    you call the function, it returns, you carry on. <strong>You own the flow of control.</strong>
+    The library is a tool on a shelf; you take it down when you want it and put it back.
+  </p>
+
+  <p>
+    Now think about how you use a UI toolkit. You do not call it in a loop asking "has anyone
+    clicked yet?" You register a handler and hand over control, and <em>it</em> calls
+    <em>you</em> when something happens. That inversion has a name — <strong>inversion of
+    control</strong> — and it is what separates a framework from a library. The framework owns
+    the flow; your code is a passenger.
+  </p>
+
+  <p>
+    An engine is a framework that went further, in three specific ways. Figure 1 lays the three
+    side by side, because the differences are precisely where the interesting design pressure
+    lives.
+  </p>
+
+  <figure class="dia bleed">
+    <svg viewBox="0 0 660 300" role="img" aria-labelledby="f1-t f1-d">
+      <title id="f1-t">Library versus framework versus engine: who owns the flow of control</title>
+      <desc id="f1-d">Three panels. In the library panel, your code calls into the library and
+        control returns to you. In the framework panel, the framework calls your registered
+        handlers. In the engine panel, a loop runs continuously and calls your code once per
+        frame, under a deadline.</desc>
+      <defs>
+        <marker id="l1-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+        <marker id="l1-h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+      </defs>
+
+      <!-- LIBRARY -->
+      <g transform="translate(16,30)">
+        <text x="90" y="0" class="sm" text-anchor="middle" font-weight="700">LIBRARY</text>
+        <text x="90" y="15" class="xs muted" text-anchor="middle">you own the loop</text>
+
+        <rect x="20" y="32" width="140" height="42" rx="6" class="fill-soft" stroke="var(--dia-ink)" stroke-width="1.6"/>
+        <text x="90" y="58" class="sm" text-anchor="middle" font-weight="650">your code</text>
+
+        <rect x="20" y="140" width="140" height="42" rx="6" class="fill-soft" stroke="var(--dia-ink-soft)" stroke-width="1.4"/>
+        <text x="90" y="166" class="sm muted" text-anchor="middle">std::sort</text>
+
+        <line x1="70" y1="78" x2="70" y2="136" class="ink" stroke-width="1.6" marker-end="url(#l1-a)"/>
+        <line x1="112" y1="136" x2="112" y2="78" class="ink-soft" stroke-width="1.6" stroke-dasharray="4 3" marker-end="url(#l1-a)"/>
+        <text x="62" y="112" class="xs muted" text-anchor="end">call</text>
+        <text x="120" y="112" class="xs muted">return</text>
+
+        <text x="90" y="212" class="xs muted" text-anchor="middle">Control comes back.</text>
+        <text x="90" y="226" class="xs muted" text-anchor="middle">You decide what is next.</text>
+      </g>
+
+      <!-- FRAMEWORK -->
+      <g transform="translate(236,30)">
+        <text x="90" y="0" class="sm" text-anchor="middle" font-weight="700">FRAMEWORK</text>
+        <text x="90" y="15" class="xs muted" text-anchor="middle">it owns the loop</text>
+
+        <rect x="20" y="32" width="140" height="42" rx="6" class="fill-soft" stroke="var(--dia-ink-soft)" stroke-width="1.4"/>
+        <text x="90" y="58" class="sm muted" text-anchor="middle">the framework</text>
+
+        <rect x="20" y="140" width="140" height="42" rx="6" class="fill-soft" stroke="var(--dia-ink)" stroke-width="1.6"/>
+        <text x="90" y="166" class="sm" text-anchor="middle" font-weight="650">your handler</text>
+
+        <line x1="90" y1="78" x2="90" y2="136" class="ink" stroke-width="1.6" marker-end="url(#l1-a)"/>
+        <text x="98" y="112" class="xs muted">calls you</text>
+
+        <text x="90" y="212" class="xs muted" text-anchor="middle">Inversion of control.</text>
+        <text x="90" y="226" class="xs muted" text-anchor="middle">You fill in the blanks.</text>
+      </g>
+
+      <!-- ENGINE -->
+      <g transform="translate(456,30)">
+        <text x="95" y="0" class="sm t-hi" text-anchor="middle" font-weight="700">ENGINE</text>
+        <text x="95" y="15" class="xs muted" text-anchor="middle">it owns the loop, and a clock</text>
+
+        <rect x="18" y="32" width="154" height="42" rx="6" class="fill-soft" stroke="var(--dia-hi)" stroke-width="1.8"/>
+        <text x="95" y="52" class="sm t-hi" text-anchor="middle" font-weight="700">the loop</text>
+        <text x="95" y="66" class="xs muted" text-anchor="middle">runs forever, on a deadline</text>
+
+        <rect x="18" y="140" width="154" height="42" rx="6" class="fill-soft" stroke="var(--dia-ink)" stroke-width="1.6"/>
+        <text x="95" y="166" class="sm" text-anchor="middle" font-weight="650">your game</text>
+
+        <line x1="95" y1="78" x2="95" y2="136" class="hi" stroke-width="1.8" marker-end="url(#l1-h)"/>
+        <text x="103" y="112" class="xs muted">every frame</text>
+
+        <path d="M12,53 C-8,53 -8,161 12,161" fill="none" class="hi" stroke-width="1.6" marker-end="url(#l1-h)"/>
+        <text x="6" y="200" class="xs t-hi" text-anchor="middle" font-weight="700">60×/s</text>
+
+        <text x="95" y="212" class="xs muted" text-anchor="middle">It beats whether or not</text>
+        <text x="95" y="226" class="xs muted" text-anchor="middle">you have anything to say.</text>
+      </g>
+
+      <line x1="222" y1="36" x2="222" y2="256" class="grid" stroke-width="1"/>
+      <line x1="442" y1="36" x2="442" y2="256" class="grid" stroke-width="1"/>
+
+      <text x="330" y="288" class="sm" text-anchor="middle" font-weight="700">
+        The engine is the only one of the three with a deadline.
+      </text>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 1.</span> Who owns the flow of control. A library returns to
+      you; a framework calls you; an engine calls you <em>on a schedule it cannot miss</em>.
+      That last clause is where every architectural decision in this course comes from.
+    </figcaption>
+  </figure>
+
+  <p>
+    Figure 1's rightmost panel is the whole lesson in a picture. Two properties make an engine
+    an engine, and neither appears in the inventory definition:
+  </p>
+
+  <ul>
+    <li>
+      <strong>It has a heartbeat.</strong> A framework is idle until something happens. An
+      engine is never idle — it is producing frames whether or not anything happened, because
+      the display demands a new image sixty times a second regardless of whether the world
+      changed.
+    </li>
+    <li>
+      <strong>It has a deadline.</strong> This is the one that matters, and everything else in
+      this course descends from it.
+    </li>
+  </ul>
+
+  <h3 id="heartbeat">2.2 The heartbeat</h3>
+
+  <p>
+    Here is the mental image worth keeping for the next four hundred hours. A library is a
+    toolbox on the wall. A framework is a factory line, and you fill in the stations. An engine
+    is <strong>a heart</strong>.
+  </p>
+
+  <p>
+    A heart does not beat when convenient. It beats on a schedule, it beats whether you are
+    thinking about it or not, and the interesting failure mode is not "it stopped" — it is
+    "it was <em>late</em>". Your game code is a passenger riding a rhythm it does not control.
+  </p>
+
+  <p>
+    You might be wondering whether this is just a poetic way of saying "there is a while loop
+    in main()". It is not, and the difference shows up the moment you ask what happens when the
+    loop takes too long. Hold that thought for about four paragraphs, because it is the crux.
+  </p>
+
+  <h3 id="realtime">2.3 "Real-time" does not mean "fast"</h3>
+
+  <p>
+    Engines are <strong>real-time</strong> systems, and that word does not mean what most people
+    assume. A real-time system is not one that is <em>fast</em>. It is one that is
+    <strong>on time</strong>.
+  </p>
+
+  <p>
+    Those come apart immediately. Consider two engines rendering the same scene:
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>Engine</th><th>Average frame</th><th>Worst frame</th><th>Feels like</th></tr></thead>
+      <tbody>
+        <tr><td><strong>A</strong></td><td>10 ms</td><td>40 ms</td><td>A stutter you can see. Unshippable.</td></tr>
+        <tr><td><strong>B</strong></td><td>15 ms</td><td>16 ms</td><td>Glass smooth.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    Engine A is <em>50% faster on average</em> and it is the worse engine — not marginally, but
+    categorically. Nobody perceives an average. People perceive the worst frame, because the
+    worst frame is the one that visibly hitches, and one hitch per second is what the player
+    remembers.
+  </p>
+
+  <p>
+    A train that arrives early is not on time. A frame that renders in 2 ms and then 40 ms has
+    not "averaged 21 ms"; it has missed a deadline and dropped a frame, and no amount of
+    subsequent speed repays that. <strong>Late is wrong.</strong> This is why engine programmers
+    talk in <em>frame times</em> and percentiles, and are suspicious of anyone quoting average
+    FPS.
+  </p>
+
+  <div class="callout note">
+    <span class="label">The ninety-percent picture</span>
+    <p>
+      Formally, this is a <em>soft</em> real-time system: missing a deadline degrades quality
+      rather than causing catastrophe. A pacemaker or an anti-lock brake is <em>hard</em>
+      real-time — a missed deadline is a failure, full stop. We get to drop a frame and survive.
+      That distinction lets us make tradeoffs a hard real-time engineer cannot, and we will use
+      that freedom deliberately. The missing ten percent — scheduling theory, deadline analysis —
+      we never need; if you are curious, the term to search is "rate-monotonic scheduling".
+    </p>
+  </div>
+
+  <!-- ================= 4. THE THEORY ================= -->
+  <h2 id="theory"><span class="num">3</span>The Theory</h2>
+
+  <h3 id="budget">3.1 The frame budget, derived</h3>
+
+  <p>
+    So there is a deadline. What <em>is</em> it? This is the one piece of arithmetic in the
+    lesson, and it is worth doing slowly, because the number you get is the number the rest of
+    the course is organised around.
+  </p>
+
+  <p>
+    Your display refreshes at some rate — call it <em>f</em>, measured in hertz, meaning
+    "times per second". A 60 Hz monitor puts up a new image sixty times every second. If sixty
+    images take one second, then the time available for <em>one</em> image is one sixtieth of a
+    second. That is all the derivation is: a rate inverted is a period.
+  </p>
+
+  <div class="eq">
+    <span>\[ T_{\text{frame}} = \frac{1}{f} \text{ seconds} = \frac{1000}{f} \text{ milliseconds} \]</span>
+    <span class="eq-plain">frame_budget_ms = 1000 / refresh_rate_hz</span>
+  </div>
+
+  <p>
+    In words, so this survives a dead CDN and a bad memory: <em>the frame budget in
+    milliseconds is one thousand divided by the refresh rate in hertz.</em> The factor of 1000
+    is only unit conversion — seconds to milliseconds — because milliseconds are the unit an
+    engine programmer thinks in.
+  </p>
+
+  <div class="worked">
+    <span class="label">Worked example — the number that runs your life</span>
+    <p>For a 60 Hz display:</p>
+    <ul>
+      <li><code>T = 1000 / 60 = 16.666… ms</code></li>
+    </ul>
+    <p>
+      So <strong>16.67 milliseconds</strong>. Not 16 — and that rounding is not a nitpick. The
+      difference between 16.67 and 16 is 0.67 ms, which is <code>0.67 / 16.67 = 4.0%</code> of
+      your entire budget. Four percent is an enormous amount of engine performance to throw away
+      by being sloppy with a division.
+    </p>
+    <p>Push a few more rates through the same formula:</p>
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>Refresh rate</th><th>Arithmetic</th><th>Budget</th><th>Where you meet it</th></tr></thead>
+        <tbody>
+          <tr><td>30 Hz</td><td><code>1000 / 30</code></td><td><strong>33.33 ms</strong></td><td>Console cinematics; a fallback target</td></tr>
+          <tr><td>60 Hz</td><td><code>1000 / 60</code></td><td><strong>16.67 ms</strong></td><td>The default assumption. Our target.</td></tr>
+          <tr><td>90 Hz</td><td><code>1000 / 90</code></td><td><strong>11.11 ms</strong></td><td>VR's floor — below it, people feel ill</td></tr>
+          <tr><td>120 Hz</td><td><code>1000 / 120</code></td><td><strong>8.33 ms</strong></td><td>Modern phones; high-refresh displays</td></tr>
+          <tr><td>144 Hz</td><td><code>1000 / 144</code></td><td><strong>6.94 ms</strong></td><td>PC gaming monitors</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      Look at the right-hand column as a whole. Moving from 60 Hz to 144 Hz does not ask you to
+      be "a bit faster" — it cuts your entire budget to <code>6.94 / 16.67 = 42%</code> of what
+      it was. Everything you do must fit in under half the time.
+    </p>
+  </div>
+
+  <p>
+    Now here is the part that turns a number into an architecture. That 16.67 ms is not
+    16.67 ms for <em>your game code</em>. It is 16.67 ms for <strong>everything</strong>:
+    reading input, stepping physics, animating skeletons, culling the scene, recording draw
+    calls, mixing audio, running your gameplay logic, and handing a finished image to the
+    display — <em>plus</em> whatever the operating system decides to do with the CPU while you
+    are not looking.
+  </p>
+
+  <div class="callout ok">
+    <span class="label">The thesis of this entire course</span>
+    <p>
+      Nearly every strange thing you will ever see in an engine's architecture is a consequence
+      of 16.67 ms. Not tradition, not taste — that number.
+    </p>
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>The strange thing</th><th>The reason</th><th>We build it in</th></tr></thead>
+        <tbody>
+          <tr><td>Data-oriented design, not OOP scene trees</td><td>Cache misses cost ~100× a cache hit. At 16.67 ms you cannot afford to chase pointers.</td><td>Module 5.6–5.8</td></tr>
+          <tr><td>No exceptions in the core</td><td>Predictable timing beats convenient error handling when the deadline is hard.</td><td>Module 5.3</td></tr>
+          <tr><td>Fixed timestep, decoupled from rendering</td><td>Physics must be deterministic even when frame time is not.</td><td>Module 1.4</td></tr>
+          <tr><td>Handles instead of pointers</td><td>So memory can be relocated and compacted for locality.</td><td>Module 5.4</td></tr>
+          <tr><td>Custom arena and pool allocators</td><td>A general-purpose <code>malloc</code> has unpredictable latency.</td><td>Module 8.4</td></tr>
+          <tr><td>A job system</td><td>One core cannot make the deadline; eight might.</td><td>Module 8.2</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      Every one of those is an answer to "how do we finish in 16.67 ms, <em>every single
+      time</em>?" You do not have to memorise this table. You have to believe the number is
+      load-bearing — and by Module 5 you will have measured it yourself.
+    </p>
+  </div>
+
+  <h3 id="cliff">3.2 The vsync cliff</h3>
+
+  <p>
+    Here is the payoff to the thought I asked you to hold. What actually happens if a frame
+    takes 17 ms instead of 16.67?
+  </p>
+
+  <p>
+    The intuitive answer — you get 1000/17 ≈ 58.8 FPS, a 2% loss, who cares — is
+    <strong>wrong</strong>, and the way it is wrong is the single most important performance
+    fact in this lesson.
+  </p>
+
+  <p>
+    The display does not accept an image whenever you happen to be ready. It refreshes on its
+    own fixed schedule: at 0 ms, 16.67 ms, 33.33 ms, 50 ms, and so on forever. With vsync on
+    (and it usually is, because without it you get tearing), your finished frame can only be
+    shown <em>at</em> one of those instants. Miss one and you do not lose the overshoot — you
+    lose <strong>the whole remaining period</strong>, waiting for the next one. Figure 2 draws
+    the cliff.
+  </p>
+
+  <figure class="dia bleed">
+    <svg viewBox="0 0 660 270" role="img" aria-labelledby="f2-t f2-d">
+      <title id="f2-t">The vsync cliff: a 17 ms frame delivers 30 FPS, not 58</title>
+      <desc id="f2-d">A timeline with vsync ticks every 16.67 milliseconds. A 16 millisecond
+        frame finishes before the first tick and is displayed at 16.67, achieving 60 frames per
+        second. A 17 millisecond frame misses that tick by 0.33 milliseconds and must wait until
+        33.33, achieving only 30 frames per second.</desc>
+      <defs>
+        <marker id="f2-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+      </defs>
+
+      <!-- vsync ticks: 0 -> x=60, 16.67 -> x=260, 33.33 -> x=460, 50 -> x=660 (12px per ms) -->
+      <g class="ink-soft" stroke-width="1.4" stroke-dasharray="3 3">
+        <line x1="60" y1="34" x2="60" y2="230"/>
+        <line x1="260" y1="34" x2="260" y2="230"/>
+        <line x1="460" y1="34" x2="460" y2="230"/>
+      </g>
+      <g class="xs muted" text-anchor="middle">
+        <text x="60" y="28">vsync 0 ms</text>
+        <text x="260" y="28">vsync 16.67 ms</text>
+        <text x="460" y="28">vsync 33.33 ms</text>
+      </g>
+
+      <!-- GOOD: 16ms -->
+      <g>
+        <rect x="60" y="50" width="192" height="30" rx="4" fill="var(--ok-bd)" opacity="0.85"/>
+        <text x="156" y="70" class="xs" text-anchor="middle" font-weight="700" fill="#fff">work: 16.0 ms</text>
+        <text x="470" y="70" class="xs t-ok" font-weight="700">shown at 16.67 → 60 FPS ✓</text>
+        <text x="256" y="96" class="xs muted" text-anchor="end">0.67 ms to spare</text>
+      </g>
+
+      <!-- BAD: 17ms -->
+      <g>
+        <rect x="60" y="130" width="204" height="30" rx="4" fill="var(--verify-bd)" opacity="0.85"/>
+        <text x="156" y="150" class="xs" text-anchor="middle" font-weight="700" fill="#fff">work: 17.0 ms</text>
+        <rect x="264" y="130" width="196" height="30" rx="4" fill="none"
+              stroke="var(--verify-bd)" stroke-width="1.4" stroke-dasharray="5 4"/>
+        <text x="362" y="150" class="xs t-bad" text-anchor="middle" font-weight="700">STALLED — 16.33 ms wasted</text>
+        <text x="470" y="150" class="xs t-bad" font-weight="700">shown at 33.33 → 30 FPS ✗</text>
+        <text x="268" y="176" class="xs muted">missed by 0.33 ms…</text>
+        <text x="268" y="188" class="xs muted">…and paid 16.33 ms for it</text>
+      </g>
+
+      <!-- axis -->
+      <line x1="60" y1="212" x2="620" y2="212" class="ink-soft" stroke-width="1.2" marker-end="url(#f2-a)"/>
+      <text x="626" y="216" class="xs muted">time</text>
+
+      <text x="60" y="248" class="sm" font-weight="700">0.33 ms over budget cost 50% of the framerate.</text>
+      <text x="60" y="264" class="xs muted">This is a cliff, not a slope — which is why "it's only a millisecond" is never only a millisecond.</text>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 2.</span> The vsync cliff. Overshooting the budget by 2%
+      halves your framerate, because a missed vsync costs the entire remaining period, not the
+      overshoot. Performance here is <strong>quantized</strong>, and that changes how you think
+      about optimization.
+    </figcaption>
+  </figure>
+
+  <div class="worked">
+    <span class="label">Worked example — the arithmetic of the cliff</span>
+    <p>Vsync ticks at 60 Hz land every 16.67 ms: at 0, 16.67, 33.33, 50.00, …</p>
+    <p><strong>Case A — a 16.0 ms frame.</strong></p>
+    <ul>
+      <li>Work finishes at 16.0 ms. The next tick is at 16.67 ms.</li>
+      <li><code>16.0 ≤ 16.67</code>, so we make it. We idle 0.67 ms and are displayed at 16.67.</li>
+      <li>One frame per period → <code>60 FPS</code>.</li>
+    </ul>
+    <p><strong>Case B — a 17.0 ms frame.</strong></p>
+    <ul>
+      <li>Work finishes at 17.0 ms. The 16.67 tick has already gone — <strong>missed by 0.33 ms</strong>.</li>
+      <li>The next tick is 33.33 ms. We wait: <code>33.33 − 17.0 = 16.33 ms</code> of pure stall.</li>
+      <li>One frame every <em>two</em> periods → <code>1000 / 33.33 = 30 FPS</code>.</li>
+    </ul>
+    <p>
+      Being 0.33 ms — <strong>2%</strong> — over budget cost us <strong>half</strong> the
+      framerate. And note the cruelty: the 17 ms frame did 6% <em>more</em> work than the 16 ms
+      one but delivered half as many frames. Work does not convert to framerate linearly. It
+      falls off a cliff.
+    </p>
+    <p>The general rule, which is what the widget below implements:</p>
+    <ul>
+      <li><code>periods_needed = ceil(work / budget)</code></li>
+      <li><code>effective_fps = refresh_rate / periods_needed</code></li>
+    </ul>
+    <p>
+      Check it: <code>ceil(17.0 / 16.67) = ceil(1.02) = 2</code>, so
+      <code>60 / 2 = 30 FPS</code> ✓. And <code>ceil(16.0 / 16.67) = ceil(0.96) = 1</code>, so
+      <code>60 / 1 = 60 FPS</code> ✓. That <code>ceil</code> <em>is</em> the cliff.
+    </p>
+  </div>
+
+  <p>
+    This is why an engine programmer's instinct — "find the millisecond" — is not
+    obsessive-compulsive. Near the budget edge, one millisecond is worth thirty frames per
+    second. Away from the edge it is worth nothing at all. Performance work in a real-time
+    system is not "make everything faster"; it is <strong>get under the line, then stop</strong>.
+  </p>
+
+  <h3 id="anatomy">3.3 The anatomy, derived from the loop</h3>
+
+  <p>
+    Now we can do the anatomy tour properly — not as an inventory, but as a derivation. We are
+    going to ask what the loop <em>must</em> do, and let the subsystems fall out. That way you
+    are not memorising someone's folder structure; you are re-deriving why it has to look
+    roughly like that.
+  </p>
+
+  <p>Once per frame, the engine must answer six questions in order:</p>
+
+  <ol>
+    <li><strong>"What happened?"</strong> The player pressed a key; the window resized; the OS wants attention. Something must talk to the operating system and turn its events into facts our code can use. → <strong>platform + input</strong></li>
+    <li><strong>"What is true now?"</strong> The world moved on. Bodies fell, animations advanced, gameplay rules fired. → <strong>simulation</strong></li>
+    <li><strong>"What can be seen?"</strong> Of the ten thousand things in the world, perhaps two hundred are in front of the camera. Finding them is cheaper than drawing them. → <strong>scene + culling</strong></li>
+    <li><strong>"What does it look like?"</strong> Those two hundred things become triangles, become pixels. → <strong>renderer</strong></li>
+    <li><strong>"Where did the data come from?"</strong> None of the above works without meshes, textures, and sounds in memory. Disk is a million times slower than RAM, so this cannot be done naively mid-frame. → <strong>assets</strong></li>
+    <li><strong>"Why is it broken?"</strong> It will be broken. Constantly. You need to see inside. → <strong>tooling</strong></li>
+  </ol>
+
+  <p>
+    That is the whole anatomy, and every subsystem in Figure 3 is an answer to one of those six
+    questions. There is nothing else in an engine — only refinements of these.
+  </p>
+
+  <figure class="dia bleed">
+    <svg viewBox="0 0 660 400" role="img" aria-labelledby="f3-t f3-d">
+      <title id="f3-t">The anatomy of a game engine, arranged by the frame's data flow</title>
+      <desc id="f3-d">A vertical flow. At the top the operating system feeds the platform and
+        input layer. That feeds simulation, containing physics, animation and gameplay. Simulation
+        feeds the scene and culling layer, which feeds the renderer, which outputs pixels to the
+        display. Assets feed the whole stack from the side, and tooling observes it from the other
+        side. Core services underpin everything.</desc>
+      <defs>
+        <marker id="f3-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+        <marker id="f3-s" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+      </defs>
+
+      <!-- main column -->
+      <g>
+        <rect x="200" y="14" width="230" height="30" rx="5" class="fill-soft" stroke="var(--dia-ink-soft)" stroke-width="1.2" stroke-dasharray="4 3"/>
+        <text x="315" y="34" class="sm muted" text-anchor="middle">operating system · window · devices</text>
+
+        <rect x="200" y="62" width="230" height="38" rx="6" class="fill-soft" stroke="var(--dia-ink)" stroke-width="1.6"/>
+        <text x="315" y="79" class="sm" text-anchor="middle" font-weight="700">platform + input</text>
+        <text x="315" y="93" class="xs muted" text-anchor="middle">"what happened?"</text>
+
+        <rect x="200" y="118" width="230" height="66" rx="6" class="fill-soft" stroke="var(--dia-ink)" stroke-width="1.6"/>
+        <text x="315" y="136" class="sm" text-anchor="middle" font-weight="700">simulation</text>
+        <text x="315" y="150" class="xs muted" text-anchor="middle">"what is true now?"</text>
+        <text x="315" y="170" class="xs mono muted" text-anchor="middle">physics · animation · gameplay · audio</text>
+
+        <rect x="200" y="202" width="230" height="38" rx="6" class="fill-soft" stroke="var(--dia-ink)" stroke-width="1.6"/>
+        <text x="315" y="219" class="sm" text-anchor="middle" font-weight="700">scene + culling</text>
+        <text x="315" y="233" class="xs muted" text-anchor="middle">"what can be seen?"</text>
+
+        <rect x="200" y="258" width="230" height="38" rx="6" class="fill-soft" stroke="var(--dia-hi)" stroke-width="1.8"/>
+        <text x="315" y="275" class="sm t-hi" text-anchor="middle" font-weight="700">renderer</text>
+        <text x="315" y="289" class="xs muted" text-anchor="middle">"what does it look like?"</text>
+
+        <rect x="200" y="314" width="230" height="30" rx="5" class="fill-soft" stroke="var(--dia-ink-soft)" stroke-width="1.2" stroke-dasharray="4 3"/>
+        <text x="315" y="334" class="sm muted" text-anchor="middle">pixels on the display</text>
+
+        <g class="ink" stroke-width="1.6" marker-end="url(#f3-a)" fill="none">
+          <line x1="315" y1="46" x2="315" y2="58"/>
+          <line x1="315" y1="102" x2="315" y2="114"/>
+          <line x1="315" y1="186" x2="315" y2="198"/>
+          <line x1="315" y1="242" x2="315" y2="254"/>
+          <line x1="315" y1="298" x2="315" y2="310"/>
+        </g>
+      </g>
+
+      <!-- assets, left -->
+      <g>
+        <rect x="24" y="140" width="140" height="60" rx="6" class="fill-soft" stroke="var(--axis-y)" stroke-width="1.6"/>
+        <text x="94" y="160" class="sm" text-anchor="middle" font-weight="700">assets</text>
+        <text x="94" y="174" class="xs muted" text-anchor="middle">"where did the</text>
+        <text x="94" y="186" class="xs muted" text-anchor="middle">data come from?"</text>
+        <line x1="166" y1="170" x2="196" y2="160" class="ink-soft" stroke-width="1.4" marker-end="url(#f3-s)"/>
+        <line x1="166" y1="176" x2="196" y2="266" class="ink-soft" stroke-width="1.4" marker-end="url(#f3-s)"/>
+        <text x="94" y="216" class="xs muted" text-anchor="middle">disk is ~10⁶× slower</text>
+        <text x="94" y="228" class="xs muted" text-anchor="middle">than RAM — so this</text>
+        <text x="94" y="240" class="xs muted" text-anchor="middle">cannot block a frame</text>
+      </g>
+
+      <!-- tooling, right -->
+      <g>
+        <rect x="466" y="140" width="140" height="60" rx="6" class="fill-soft" stroke="var(--axis-z)" stroke-width="1.6"/>
+        <text x="536" y="160" class="sm" text-anchor="middle" font-weight="700">tooling</text>
+        <text x="536" y="174" class="xs muted" text-anchor="middle">"why is it</text>
+        <text x="536" y="186" class="xs muted" text-anchor="middle">broken?"</text>
+        <line x1="434" y1="150" x2="464" y2="160" class="ink-soft" stroke-width="1.4" stroke-dasharray="4 3" marker-end="url(#f3-s)"/>
+        <line x1="434" y1="270" x2="464" y2="190" class="ink-soft" stroke-width="1.4" stroke-dasharray="4 3" marker-end="url(#f3-s)"/>
+        <text x="536" y="216" class="xs muted" text-anchor="middle">observes everything,</text>
+        <text x="536" y="228" class="xs muted" text-anchor="middle">owned by nothing —</text>
+        <text x="536" y="240" class="xs muted" text-anchor="middle">and ships separately</text>
+      </g>
+
+      <!-- core -->
+      <rect x="24" y="358" width="582" height="30" rx="5" class="fill-soft" stroke="var(--dia-ink)" stroke-width="1.4"/>
+      <text x="315" y="378" class="sm" text-anchor="middle" font-weight="650">core — memory · time · logging · maths · jobs · handles</text>
+
+      <text x="640" y="200" class="xs muted" text-anchor="end" transform="rotate(-90 640 200)">one frame, top to bottom, in 16.67 ms</text>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 3.</span> The anatomy, arranged by data flow rather than
+      alphabetically. Read it top to bottom and you have read one frame. Everything in the
+      central column happens <em>every</em> frame, inside the budget; assets and tooling sit
+      beside it precisely because they must <em>not</em>.
+    </figcaption>
+  </figure>
+
+  <h3 id="boundaries">3.4 Why the boundaries are where they are</h3>
+
+  <p>
+    Figure 3 draws lines between boxes. Where do those lines come from? This is the question that
+    separates someone who can use an engine from someone who can design one, and the answer is
+    pleasingly simple:
+  </p>
+
+  <div class="callout ok">
+    <span class="label">The rule</span>
+    <p>
+      <strong>A boundary belongs wherever a <em>rate</em> changes or an <em>owner</em> changes.</strong>
+      Not where the vocabulary changes, and not where a textbook's chapter heading changes.
+    </p>
+  </div>
+
+  <p>Test the rule against every line in Figure 3:</p>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>Boundary</th><th>What changes across it</th><th>Consequence</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>simulation ↔ renderer</strong></td>
+          <td><strong>Rate.</strong> Simulation wants a fixed step for determinism; rendering wants to go as fast as the display allows.</td>
+          <td>They cannot share a clock. This forces the fixed-timestep loop, and the interpolation that hides the mismatch. → <a href="../index.html">1.4</a></td>
+        </tr>
+        <tr>
+          <td><strong>assets ↔ everything</strong></td>
+          <td><strong>Rate</strong>, brutally. A frame is ~16 ms; a disk read can be tens of milliseconds — and a texture decode longer.</td>
+          <td>Loading can never be a blocking call inside a frame. Hence handles, async loading, and placeholder assets. → 5.4, 5.5</td>
+        </tr>
+        <tr>
+          <td><strong>platform ↔ core</strong></td>
+          <td><strong>Owner.</strong> Below the line the OS decides; above it, we do.</td>
+          <td>Everything OS-specific gets quarantined in one place, so porting touches one folder. This is why SDL exists.</td>
+        </tr>
+        <tr>
+          <td><strong>tooling ↔ runtime</strong></td>
+          <td><strong>Owner and lifetime.</strong> Tools exist for the developer, at development time.</td>
+          <td>The editor may depend on the engine; the engine may <em>never</em> depend on the editor — or you ship your tools to players. → 5.10, 8.7</td>
+        </tr>
+        <tr>
+          <td><strong>scene ↔ renderer</strong></td>
+          <td><strong>Owner.</strong> The scene owns what <em>exists</em>; the renderer owns how to <em>draw</em>.</td>
+          <td>The most contested line in engine design — see below. Ours is drawn in 5.9 and 6.13.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    Notice what is <em>not</em> a reason for a boundary: "these are different topics." Physics
+    and animation are different topics, yet they sit in the same box in Figure 3 — because they
+    run at the same rate and both mutate the same world state. A line between them would buy
+    nothing and cost a synchronisation point.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">Honest: the boundaries are argued about, constantly</span>
+    <p>
+      I have presented Figure 3 with a confidence it does not fully deserve. Real engine teams
+      fight over these lines, and the fights are not stupid — they are genuine tradeoffs:
+    </p>
+    <ul>
+      <li>
+        <strong>Is animation simulation or rendering?</strong> It looks like rendering (it is
+        visual, and skinning happens on the GPU). It behaves like simulation (it is stateful and
+        time-stepped). We put it in simulation, and we will find the seam in Module 7.6.
+      </li>
+      <li>
+        <strong>Is culling scene or renderer?</strong> Both claim it. It needs the scene's
+        spatial data <em>and</em> the renderer's camera. Many engines end up with a "render
+        scene" layer that exists only to settle this argument.
+      </li>
+      <li>
+        <strong>Is audio simulation?</strong> It is time-stepped and spatial, so yes — but it
+        runs on its <em>own</em> thread at its own rate, so also no. Rate change ⇒ boundary; our
+        own rule pulls it out. → 7.13
+      </li>
+    </ul>
+    <p>
+      When you meet an engine that draws these differently, it is usually not wrong. It has
+      different pressures. What you should demand — of them, and of yourself — is a
+      <em>reason</em>.
+    </p>
+  </div>
+
+  <h3 id="real-engines">3.5 How real engines draw these lines</h3>
+
+  <p>
+    The anatomy is universal; the packaging is not. It is worth knowing the landscape, because
+    you will read these codebases — and by the end of this course you will read them fluently.
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>Engine</th><th>Organising idea</th><th>What it optimises for</th><th>The tradeoff it accepts</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>Unreal</strong></td>
+          <td><code>Actor</code> + <code>Component</code>; a reflection system underpinning everything</td>
+          <td>Enormous teams, artist-driven workflows, an editor as the primary interface</td>
+          <td>Vast surface area; a custom C++ dialect that needs a code generator to build</td>
+        </tr>
+        <tr>
+          <td><strong>Unity</strong></td>
+          <td><code>GameObject</code> + <code>Component</code>; a C# scripting layer</td>
+          <td>Accessibility — the fastest path from idea to something on screen</td>
+          <td>The original object model hit a performance wall; DOTS was bolted on later to escape it</td>
+        </tr>
+        <tr>
+          <td><strong>Godot</strong></td>
+          <td>Everything is a <code>Node</code> in a tree; a scene <em>is</em> a tree</td>
+          <td>Conceptual economy — one idea, applied everywhere</td>
+          <td>The tree is both the data model and the execution model, which strains at scale</td>
+        </tr>
+        <tr>
+          <td><strong>id Tech (Doom 3)</strong></td>
+          <td>Small, sharp, C-flavoured C++; famously readable</td>
+          <td>One thing done superbly on the hardware of its day</td>
+          <td>Not general-purpose; not meant to be</td>
+        </tr>
+        <tr>
+          <td><strong>Ours</strong></td>
+          <td>ECS + handles + a static library with a real public API</td>
+          <td><strong>Comprehensibility.</strong> Every line explicable by you.</td>
+          <td>We will not ship <em>Fortnite</em>. We are not trying to.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    Do not read that table as a ranking. Read the last column. Every engine is a set of
+    tradeoffs made by people who knew things you do not yet know about pressures you have not
+    yet felt. Unity's object model was not a mistake — it was the right call for 2005's problem,
+    and it stopped being right when scale changed. <strong>Architecture is a function of its
+    constraints</strong>, which is precisely why we started with the constraint.
+  </p>
+
+  <div class="callout note">
+    <span class="label">Doom 3 is worth your time, genuinely</span>
+    <p>
+      Fabien Sanglard's code reviews of the id Tech engines are the closest thing our field has
+      to literary criticism, and Doom 3's source is often called the most readable AAA engine
+      code ever released. You do not have to understand it yet. Skim it in Module 5 after the
+      refactor, and again at the end. The distance you have travelled will be legible in how much
+      of it makes sense. Links in §<a href="#reading">10</a>.
+    </p>
+  </div>
+
+  <!-- ================= 5. IMPLEMENTATION ================= -->
+  <h2 id="implementation"><span class="num">4</span>Implementation: the budget explorer</h2>
+
+  <div class="callout warn">
+    <span class="label">Why there is no C++ in this lesson</span>
+    <p>
+      Every other lesson in this course ends with code you compiled and ran. This one cannot,
+      and I would rather say so plainly than pretend otherwise: <strong>you do not have a
+      toolchain yet.</strong> It arrives in <a href="00-03-toolchain.html">0.3</a>, CMake in
+      0.4, and your first window in 0.5. Handing you C++ now would mean handing you code you
+      cannot build — and this course promises that every listing compiles at its point in the
+      sequence.
+    </p>
+    <p>
+      So this lesson's runnable artifact is below, and it runs right here in the page. It is
+      not a toy. The <code>ceil</code> in it is the vsync cliff from §<a href="#cliff">3.2</a>,
+      and the intuition it builds is the one you will spend Modules 3, 6, and 8 acting on.
+    </p>
+  </div>
+
+  <p>
+    Reading §<a href="#cliff">3.2</a> and <em>believing</em> §3.2 are different things. So:
+    drag the sliders. Give each subsystem a slice of the frame and watch what the display
+    actually gives you back.
+  </p>
+
+  <p>
+    Start with the defaults: 15.5 ms of work in a 16.67 ms budget — a typical frame with a
+    little headroom, and the same numbers as exercise <a href="#exercises">0.1.2</a>. Now drag
+    <strong>renderer</strong> upward, one notch at a time, and watch the readout.
+  </p>
+
+  <p>
+    Nothing happens. 7.3, 7.8, 8.2 — still 60 FPS, still green. Then you hit
+    <strong>8.4</strong>, the total reaches 16.70 ms, and the readout does not sag to 59 FPS. It
+    <em>falls to 30</em>. One notch. Half your framerate. That is the cliff, and it is worth
+    feeling once with your hands rather than only reading about.
+  </p>
+
+  <div class="widget" id="budget-widget">
+    <div class="widget-controls" style="margin-top:0; margin-bottom:0.9rem;">
+      <label for="fps-select"><strong>Target display</strong></label>
+      <select id="fps-select" class="widget-readout" style="font-family:var(--font-ui); padding:0.2rem 0.4rem;">
+        <option value="30">30 Hz — 33.33 ms</option>
+        <option value="60" selected>60 Hz — 16.67 ms</option>
+        <option value="90">90 Hz — 11.11 ms (VR)</option>
+        <option value="120">120 Hz — 8.33 ms</option>
+        <option value="144">144 Hz — 6.94 ms</option>
+      </select>
+      <span class="widget-readout" id="budget-out">budget 16.67 ms</span>
+    </div>
+
+    <div class="budget-bar" id="bar" role="img" aria-label="Frame budget usage by subsystem">
+      <div class="budget-track" id="track"></div>
+      <div class="budget-line" id="line"></div>
+    </div>
+
+    <div class="sliders" id="sliders"></div>
+
+    <div class="verdict" id="verdict" role="status" aria-live="polite">…</div>
+  </div>
+
+  <p>
+    Three things are worth noticing while you play, and each one is a lesson you would otherwise
+    have to learn the hard way:
+  </p>
+
+  <ul>
+    <li>
+      <strong>The output is quantized.</strong> Effective FPS jumps 60 → 30 → 20 → 15. There is
+      no 58, no 47. You are always at <code>refresh / n</code> for a whole number <em>n</em>.
+    </li>
+    <li>
+      <strong>Headroom is worth nothing until it is worth everything.</strong> Shaving 2 ms off
+      a frame that already fits buys you exactly zero frames per second. Shaving 0.4 ms off a
+      frame that just misses <em>doubles</em> your framerate. This is why we
+      <a href="../index.html">measure before optimizing</a> (3.10) — untargeted optimization is
+      usually wasted effort.
+    </li>
+    <li>
+      <strong>Switch to 144 Hz</strong> without touching the sliders. The same engine that was
+      comfortable is now missing by a mile. Your architecture is not "fast" or "slow" in the
+      abstract — it is fast enough <em>for a target</em>, and the target is a design input.
+    </li>
+  </ul>
+
+  <!-- ================= 6. COMPLETE CODE LISTINGS ================= -->
+  <h2 id="listings"><span class="num">5</span>Complete Code Listings</h2>
+
+  <p>
+    <strong>No engine files were created or modified this lesson.</strong> That will be true
+    exactly once, and this is the once.
+  </p>
+
+  <div class="tbl-scroll">
+    <table class="manifest">
+      <thead><tr><th>Path</th><th>Status</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr>
+          <td colspan="3" style="color:var(--text-faint); font-family:var(--font-ui); font-style:italic;">
+            No files. The toolchain arrives in 0.3; the first <code>CMakeLists.txt</code> in 0.4;
+            the first <code>main.cpp</code> in 0.5.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    For the curious: the budget explorer above is ~40 lines of vanilla JavaScript living in this
+    page's source — view source and search for <code>budget-widget</code>. It is lesson
+    infrastructure rather than engine code, which is why it is not in the manifest. It is also a
+    fair demonstration of the rule from §<a href="#cliff">3.2</a>, if you want to check my
+    arithmetic against my code.
+  </p>
+
+  <!-- ================= 7. BUILD & RUN ================= -->
+  <h2 id="build"><span class="num">6</span>Build &amp; Run</h2>
+
+  <p>
+    Nothing to build. But there <em>is</em> something to run, and it is more useful than it
+    looks: <strong>find out what your own display actually does.</strong> Every budget number in
+    this course assumes 60 Hz, and if your monitor is 120 Hz or your laptop throttles to 48 Hz
+    on battery, your real budget is not the one in the table.
+  </p>
+
+  <figure class="listing shell">
+    <figcaption>
+      <span class="path">find your refresh rate — Linux</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash"># X11: the current mode is the line marked with a '*'
+xrandr | grep -A1 " connected" | grep '\*'
+
+# Wayland (GNOME):
+gnome-monitor-config list 2>/dev/null || wlr-randr 2>/dev/null</code></pre>
+  </figure>
+
+  <p><strong>Windows:</strong> Settings → System → Display → Advanced display. Read "Refresh rate".</p>
+  <p><strong>macOS:</strong> System Settings → Displays. The refresh rate sits under the resolution list; ProMotion displays report a <em>range</em> (e.g. 47–120 Hz), which is its own fascinating problem.</p>
+
+  <h3>Expected result</h3>
+
+  <p>You should finish this lesson able to state, out loud, without looking anything up:</p>
+
+  <div class="callout ok">
+    <span class="label">Checkpoint — say these four things</span>
+    <ol>
+      <li>My display runs at <strong>___ Hz</strong>, so my frame budget is <strong>___ ms</strong>. <span style="color:var(--text-faint)">(1000 ÷ refresh rate)</span></li>
+      <li>If I exceed that budget by 0.1 ms with vsync on, my framerate <strong>halves</strong> — because a missed vsync costs the whole remaining period, not the overshoot.</li>
+      <li>The six subsystems are <strong>platform/input, simulation, scene/culling, renderer, assets, tooling</strong> — and I can say which question each answers.</li>
+      <li>A boundary belongs where a <strong>rate</strong> or an <strong>owner</strong> changes.</li>
+    </ol>
+    <p style="margin-bottom:0">
+      If any of those four is shaky, the section to reread is linked from the contents above.
+      Number 4 is the one that will still be paying you back in Module 8.
+    </p>
+  </div>
+
+  <!-- ================= 8. PITFALLS ================= -->
+  <h2 id="pitfalls"><span class="num">7</span>Common Pitfalls &amp; Debugging</h2>
+
+  <p>
+    No code yet, so these are pitfalls of <em>thinking</em> — which are the expensive kind,
+    because they take months to show up as symptoms.
+  </p>
+
+  <div class="pitfalls">
+    <details class="pitfall-item">
+      <summary>Quoting average FPS — <span class="sym">"we're getting 90 FPS!" but it feels awful</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>The counter says 90 FPS. The game visibly hitches. Both are true.</dd>
+          <dt>Cause</dt>
+          <dd>
+            FPS is a <em>rate</em>, and averaging a rate hides exactly what you need to see.
+            Nine frames at 8 ms and one at 88 ms average to 16 ms — a reassuring
+            <strong>62 FPS</strong> — while the player watched an 88 ms freeze, over five frames
+            long. Worse, FPS is <em>reciprocal</em>, so equal FPS gaps are wildly unequal amounts
+            of work: dropping 60 → 30 FPS costs <code>33.33 − 16.67 = 16.67 ms</code>, while
+            dropping 300 → 270 FPS — also a 30 FPS loss — costs only
+            <code>3.70 − 3.33 = 0.37 ms</code>. Same headline number,
+            <strong>45× less work</strong>.
+          </dd>
+          <dt>Fix</dt>
+          <dd>
+            Think in <strong>frame times</strong>, in milliseconds, and quote the
+            <strong>99th percentile</strong> — the worst 1 in 100 frames. That is the number the
+            player feels. Our profiling in 3.10 and 8.3 measures times, never averages of rates.
+          </dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>"I'll optimize later" — <span class="sym">the rewrite that eats a year</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>The engine works beautifully with 100 objects. At 10,000 it dies, and no profiler hotspot explains it — the time is smeared evenly across everything.</dd>
+          <dt>Cause</dt>
+          <dd>
+            Smeared cost is the signature of an <em>architectural</em> problem, not a hot loop.
+            Usually it is memory layout: objects scattered across the heap, every access a cache
+            miss. You cannot optimize your way out of that, because there is nothing local to
+            fix — the layout <em>is</em> the problem. This is the wall Unity hit, and DOTS is
+            what it cost them.
+          </dd>
+          <dt>Fix</dt>
+          <dd>
+            Distinguish the two: <em>micro</em>-optimization genuinely can wait — Knuth was
+            right about that. Data layout cannot, because it is load-bearing for everything
+            above it. That is why Module 5 does data-oriented design <em>before</em> Module 6
+            builds the fancy renderer on top. The order is not an accident.
+          </dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>"It's only one millisecond" — <span class="sym">a 2% regression halves the framerate</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>A small, obviously harmless feature lands. Framerate drops from 60 to 30. The feature costs 0.4 ms.</dd>
+          <dt>Cause</dt>
+          <dd>You were at 16.4 ms — under budget, but with only 0.27 ms of headroom. The vsync cliff of §<a href="#cliff">3.2</a> did the rest. The feature is not the bug; the missing headroom is.</dd>
+          <dt>Fix</dt>
+          <dd>
+            Budget for headroom deliberately — many teams target ~80% of the frame (≈13 ms at
+            60 Hz) precisely so a 0.4 ms feature is survivable. And track frame time on every
+            build: a regression is cheap to find the day it lands and brutal to find a month
+            later.
+          </dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>Treating the subsystem list as canonical — <span class="sym">cargo-culted architecture</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>Six folders matching Figure 3, created on day one, most of them empty for months — and a <code>SceneManager</code> that manages nothing.</dd>
+          <dt>Cause</dt>
+          <dd>
+            Mistaking a <em>map</em> for a <em>plan</em>. Figure 3 describes forces that exist in
+            every engine; it does not prescribe your directory tree on day one. Structure created
+            before the pressure that justifies it is structure you will have to unlearn.
+          </dd>
+          <dt>Fix</dt>
+          <dd>
+            Let the boundaries emerge where the rule says they must — at rate and owner changes —
+            and not before. This is exactly why this course keeps a single executable through
+            Module 4 and only splits into <code>engine/</code> + <code>demos/</code> in 5.1,
+            once the seam is real and you can feel it.
+          </dd>
+        </dl>
+      </div>
+    </details>
+  </div>
+
+  <!-- ================= 9. EXERCISES ================= -->
+  <h2 id="exercises"><span class="num">8</span>Exercises</h2>
+
+  <div class="exercise">
+    <h3><span class="xnum">0.1.1</span>Your actual budget<span class="difficulty">warm-up</span></h3>
+    <p>
+      Find your display's refresh rate (§<a href="#build">6</a>) and compute your real frame
+      budget. Then compute the budget for a 165 Hz monitor and for a 47 Hz ProMotion low-power
+      mode. Which is the harsher constraint, and by how much?
+    </p>
+    <details>
+      <summary>Solution</summary>
+      <p>
+        <code>1000 / 165 = 6.06 ms</code> and <code>1000 / 47 = 21.28 ms</code>. The 165 Hz
+        display is harsher by a factor of <code>21.28 / 6.06 ≈ 3.5×</code> — the same engine has
+        three and a half times less time per frame. Worth internalising: a "high refresh rate"
+        feature is not a rendering setting, it is a wholly different performance target that your
+        architecture either meets or does not.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3><span class="xnum">0.1.2</span>Find the cliff by hand<span class="difficulty">guided</span></h3>
+    <p>
+      An engine spends 7.2 ms rendering, 3.1 ms on physics, 2.4 ms on animation, 1.0 ms on
+      audio, and 1.8 ms on gameplay, targeting 60 Hz. Using
+      <code>periods = ceil(work / budget)</code> and
+      <code>effective_fps = refresh / periods</code>:
+    </p>
+    <ol>
+      <li>What is the total, and does it fit?</li>
+      <li>What effective FPS does the player get?</li>
+      <li>A new feature adds 1.5 ms. Now what?</li>
+      <li>Starting from (3), what is the <em>smallest</em> saving that restores 60 FPS?</li>
+    </ol>
+    <details>
+      <summary>Hint</summary>
+      <p>
+        Do part 4 by asking what total the <code>ceil</code> needs in order to come back down to
+        1. Then subtract. The answer is smaller than the feature you added — which is the whole
+        point of the exercise.
+      </p>
+    </details>
+    <details>
+      <summary>Solution</summary>
+      <p>
+        <strong>1.</strong> <code>7.2 + 3.1 + 2.4 + 1.0 + 1.8 = 15.5 ms</code>. Budget is
+        16.67 ms, so it fits — with <code>1.17 ms</code> of headroom.
+      </p>
+      <p>
+        <strong>2.</strong> <code>ceil(15.5 / 16.67) = ceil(0.93) = 1</code> →
+        <code>60 / 1 = 60 FPS</code>. Comfortable.
+      </p>
+      <p>
+        <strong>3.</strong> <code>15.5 + 1.5 = 17.0 ms</code>. Now
+        <code>ceil(17.0 / 16.67) = ceil(1.02) = 2</code> → <code>60 / 2 = 30 FPS</code>. A 1.5 ms
+        feature — <strong>9%</strong> more work — cost <strong>half</strong> the framerate.
+      </p>
+      <p>
+        <strong>4.</strong> We need <code>total ≤ 16.67</code>, so we must save
+        <code>17.0 − 16.67 = 0.33 ms</code>. <strong>One third of a millisecond</strong> —
+        2% of the frame — takes you from 30 FPS back to 60.
+      </p>
+      <p>
+        Sit with the asymmetry in (3) and (4). Adding 1.5 ms cost 30 FPS; removing 0.33 ms buys
+        all 30 back. Near the cliff edge, the exchange rate between milliseconds and frames is
+        insane. Far from it, milliseconds are worthless. Knowing <em>which regime you are in</em>
+        is most of performance work — and it is why 3.10 teaches measurement before technique.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3><span class="xnum">0.1.3</span>Read a real engine's tree<span class="difficulty">open</span></h3>
+    <p>
+      Open the Godot or Doom 3 source tree in your browser (links in
+      §<a href="#reading">10</a>) and look <em>only</em> at the top-level directory names — do
+      not open a single file yet. For each directory, predict which of Figure 3's six questions
+      it answers. Then open two of them and check.
+    </p>
+    <details>
+      <summary>Solution sketch</summary>
+      <p>
+        Godot's <code>servers/</code> is the interesting one, because it will not map cleanly —
+        it holds the rendering and physics <em>servers</em>, an architecture where subsystems are
+        accessed through a command interface rather than called directly. Ask yourself which
+        boundary rule that reflects. (It is a <em>rate/owner</em> split: the servers can run on
+        their own threads, so a hard interface is required. Our rule predicted it.)
+      </p>
+      <p>
+        In Doom 3, <code>idlib/</code> is the "core" row of Figure 3, <code>renderer/</code> is
+        unmistakable, and <code>game/</code> is the passenger from Figure 1's right-hand panel —
+        it even compiles to a separate DLL, which is the boundary made physical. That is the same
+        move we make in 5.1.
+      </p>
+      <p>
+        If a directory does not map onto Figure 3, that is the interesting case, not a failure of
+        the map. Ask what pressure produced it.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3><span class="xnum">0.1.4</span>Defend a boundary<span class="difficulty">open</span></h3>
+    <p>
+      Someone proposes merging the renderer and the scene into one <code>World</code> class:
+      "they always change together anyway, and passing data between them is pure overhead."
+      Write the strongest possible case <em>for</em> the merge, then the strongest case against.
+      Decide — and name the specific evidence that would change your mind.
+    </p>
+    <details>
+      <summary>Solution sketch</summary>
+      <p>
+        <strong>For:</strong> it is genuinely not a strawman. Fewer indirections, no
+        synchronisation, no duplicated transform data, and culling stops being a political
+        argument. Small engines do this and ship. "They change together" is a real signal —
+        it is the classic argument that a boundary is imaginary.
+      </p>
+      <p>
+        <strong>Against:</strong> apply the rule. Does a rate change? Yes — the scene is mutated
+        by the fixed-timestep simulation while the renderer runs at display rate. That alone
+        forces a boundary, because they cannot share a clock without one corrupting the other's
+        view of the world. Does an owner change? Yes — a headless server needs the scene and no
+        renderer at all, which is impossible if they are one class.
+      </p>
+      <p>
+        <strong>Verdict:</strong> keep them separate — but for the <em>rate</em> reason, not the
+        aesthetic one. The evidence that would change my mind: if the engine were
+        single-threaded, render-only, and locked to the simulation rate, the rate difference
+        evaporates and the merge becomes defensible. Constraints decide, not taste.
+      </p>
+      <p>
+        This is what a design interview actually sounds like. "It's best practice" is not an
+        answer; "here is the constraint, and here is what would change my mind" is.
+      </p>
+    </details>
+  </div>
+
+  <!-- ================= 10. RECAP & NEXT ================= -->
+  <h2 id="recap"><span class="num">9</span>Recap &amp; Next</h2>
+
+  <div class="recap">
+    <h2>What you can do now that you could not an hour ago</h2>
+    <ul>
+      <li>
+        <strong>Define an engine without an inventory.</strong> It is a system that turns a fixed
+        budget of time into frames, forever, on a deadline. The parts list is a consequence, not
+        the definition.
+      </li>
+      <li>
+        <strong>Compute a frame budget</strong> — <code>1000 / refresh</code> — and explain the
+        vsync cliff: 2% over costs 50% of the framerate, because performance is quantized.
+      </li>
+      <li>
+        <strong>Derive the anatomy</strong> from the six questions a frame must answer, instead
+        of memorising six folder names.
+      </li>
+      <li>
+        <strong>Place a boundary with a reason:</strong> where a rate changes, or an owner
+        changes. Nowhere else.
+      </li>
+    </ul>
+    <p>
+      The one sentence worth carrying into every remaining lesson: <strong>everything strange
+      about engine architecture is an answer to "how do we finish in 16.67 ms, every single
+      time?"</strong> When Module 5 asks you to give up pointers for handles, or Module 8 asks
+      you to write an allocator, that is the question being answered. You will not have to take
+      it on faith — you will have measured it.
+    </p>
+    <p>
+      <strong>Next:</strong> <a href="00-02-how-this-course-works.html">0.2 — How This Course
+      Works</a>. You know what we are building and why it is shaped as it is. Next: how this
+      course teaches it, why we spend three whole modules writing a renderer we will
+      "throw away" on the CPU, and what that apparent detour buys you when the GPU arrives in
+      Module 4. Then, in 0.3, we finally get you a compiler.
+    </p>
+  </div>
+
+  <!-- ================= 11. FURTHER READING ================= -->
+  <h2 id="reading"><span class="num">10</span>Further Reading</h2>
+
+  <p>None of this is required. All of it is good.</p>
+
+  <ul class="reading">
+    <li>
+      <span class="src">Book</span>
+      <strong>Jason Gregory, <em>Game Engine Architecture</em></strong> — chapters 1 and 14.
+      The definitive survey, written from inside Naughty Dog. Chapter 1 is the long version of
+      this lesson; if you buy one book for this course, buy this one.
+    </li>
+    <li>
+      <span class="src">Source</span>
+      <strong><a href="https://github.com/id-Software/DOOM-3-BFG">id-Software/DOOM-3-BFG</a></strong> —
+      for exercise 0.1.3. Look at the top-level directories only, for now.
+    </li>
+    <li>
+      <span class="src">Essay</span>
+      <strong><a href="https://fabiensanglard.net/doom3/">Fabien Sanglard, "Doom 3 Source Code Review"</a></strong> —
+      the closest our field has to literary criticism. Also his Doom, Quake, and Wolfenstein
+      "black books". Read for pleasure; understanding will come.
+    </li>
+    <li>
+      <span class="src">Source</span>
+      <strong><a href="https://github.com/godotengine/godot">godotengine/godot</a></strong> —
+      a modern, readable, complete engine you can actually browse. Note <code>servers/</code>.
+    </li>
+    <li>
+      <span class="src">Talk</span>
+      <strong>Mike Acton, "Data-Oriented Design and C++" (CppCon 2014)</strong> — abrasive,
+      correct, and the clearest statement of why the frame budget dictates architecture. We
+      earn the right to disagree with parts of it in Module 5.6.
+    </li>
+    <li>
+      <span class="src">Post</span>
+      <strong><a href="https://gafferongames.com/post/fix_your_timestep/">Glenn Fiedler, "Fix Your Timestep!"</a></strong> —
+      the canonical treatment of the loop. Do not read it yet; we derive it from scratch in 1.4
+      and it will mean more afterwards.
+    </li>
+    <li>
+      <span class="src">Reference</span>
+      <strong><a href="https://wiki.libsdl.org/SDL3/FrontPage">SDL3 Wiki</a></strong> —
+      bookmark it now. From 0.5 onward it is the most-visited tab in your browser, and 0.6
+      teaches you to read it properly.
+    </li>
+  </ul>
+
+  <!-- ================= 12. STATE ================= -->
+  <details class="state">
+    <summary>STATE — resume key</summary>
+<pre>course: Build a Professional 3D Game Engine (SDL3 + C++20)
+version: 1.0
+
+conventions:
+  world: right-handed, Y-up, -Z forward
+  clip: left-handed, +Y up, z in [0,1] (SDL_GPU-fixed; projection absorbs the flip)
+  sw-rasterizer: targets SDL_GPU's exact NDC (port = API change, not maths change)
+  matrices: column vectors, v' = M*v, column-major storage
+  winding: CCW = front, cull back (per-pipeline state; set explicitly every time)
+  units: 1 unit = 1 metre; radians internally; linear colour in renderer
+  axis colours: x/y/z = red/green/blue
+  sdl3: FetchContent at a pinned tag; SDL 3.5.0 verified; shadercross is 3.0.0-preview
+  cpp: C++20, no exceptions/RTTI in core, snake_case, -Wall -Wextra//W4 all fixed
+
+curriculum: 94 lessons, ~433 h, 9 modules
+  M0:6  M1:8  M2:12  M3:10  M4:9  M5:10  M6:15  M7:13  M8:11
+
+completed:
+  - 0.1 — What a Game Engine Actually Is
+
+capabilities:
+  - (no engine code yet; toolchain arrives in 0.3, first CMakeLists in 0.4, first window in 0.5)
+
+files:
+  /: CLAUDE.md, README.md, ARCHITECTURE.md, LEARNINGS.md, PROMPT.md, LICENSE, .gitignore
+  docs/: index.html, conventions.html, math-toolbox.html, cpp-style.html
+  docs/lessons/: 00-01-what-is-an-engine.html
+  docs/_template/: lesson-template.html, README.md, apply-shared-css.py
+  memory/: 2026-07-16.md
+
+next: 0.2 — How This Course Works</pre>
+  </details>
+
+  <nav class="lesson-nav" aria-label="Lesson navigation (bottom)">
+    <span class="prev-l">
+      <span class="dir">← Previous</span>
+      <span class="ttl">This is the first lesson</span>
+    </span>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="00-02-how-this-course-works.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">0.2 — How This Course Works</span>
+    </a>
+  </nav>
+
+  <footer class="foot">
+    <p>
+      Build a Professional 3D Game Engine ·
+      <a href="../index.html">Contents</a> ·
+      <a href="../conventions.html">Conventions</a> ·
+      <a href="../math-toolbox.html">Math Toolbox</a> ·
+      <a href="../cpp-style.html">C++ Style</a>
+    </p>
+    <p>MIT licensed. Copyright © 2026 digster.</p>
+  </footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ---- Theme toggle (identical across the course) ---- */
+  var root = document.documentElement;
+  var KEY = "engine-course-theme";
+  try {
+    var saved = localStorage.getItem(KEY);
+    if (saved) { root.setAttribute("data-theme", saved); root.style.colorScheme = saved; }
+  } catch (e) {}
+  var btn = document.getElementById("theme-toggle");
+  if (btn) {
+    btn.addEventListener("click", function () {
+      var cur = root.getAttribute("data-theme");
+      if (!cur) cur = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      var next = cur === "dark" ? "light" : "dark";
+      root.setAttribute("data-theme", next);
+      root.style.colorScheme = next;
+      try { localStorage.setItem(KEY, next); } catch (e) {}
+    });
+  }
+
+  /* ---- Shell highlighting ---- */
+  var SH_RE = /(#[^\n]*)|("(?:\\.|[^"\\])*"|'[^']*')|(^|\n)(\s*)([\w.\/\\-]+)/g;
+  function esc(s) { return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+  function span(c, s) { return '<span class="tok-' + c + '">' + esc(s) + "</span>"; }
+  document.querySelectorAll(".listing pre code.lang-bash").forEach(function (el) {
+    var src = el.textContent, out = "", last = 0, m;
+    SH_RE.lastIndex = 0;
+    while ((m = SH_RE.exec(src)) !== null) {
+      if (m.index > last) out += esc(src.slice(last, m.index));
+      if (m[1]) out += span("c", m[1]);
+      else if (m[2]) out += span("s", m[2]);
+      else out += esc(m[3] || "") + esc(m[4] || "") + span("f", m[5]);
+      last = SH_RE.lastIndex;
+    }
+    el.innerHTML = out + esc(src.slice(last));
+  });
+
+  /* ==================================================================
+     THE FRAME BUDGET EXPLORER
+     ------------------------------------------------------------------
+     The whole point is the ceil() in `recompute` — that single call is
+     the vsync cliff from §3.2. Everything else is presentation.
+     ================================================================== */
+  var SUBSYSTEMS = [
+    { id: "render",   label: "Renderer",  ms: 7.2, colour: "var(--axis-z)" },
+    { id: "physics",  label: "Physics",   ms: 3.1, colour: "var(--axis-y)" },
+    { id: "anim",     label: "Animation", ms: 2.4, colour: "var(--axis-x)" },
+    { id: "audio",    label: "Audio",     ms: 1.0, colour: "var(--pitfall-bd)" },
+    { id: "gameplay", label: "Gameplay",  ms: 1.8, colour: "var(--warn-bd)" }
+  ];
+
+  var sliders  = document.getElementById("sliders");
+  var track    = document.getElementById("track");
+  var line     = document.getElementById("line");
+  var verdict  = document.getElementById("verdict");
+  var fpsSel   = document.getElementById("fps-select");
+  var budgetOut= document.getElementById("budget-out");
+  if (!sliders) return;
+
+  // Build controls + one bar segment per subsystem.
+  SUBSYSTEMS.forEach(function (s) {
+    var lab = document.createElement("label");
+    lab.setAttribute("for", "sl-" + s.id);
+    lab.innerHTML = '<span class="sw" style="background:' + s.colour + '"></span>' + s.label;
+
+    var input = document.createElement("input");
+    input.type = "range"; input.min = "0"; input.max = "20"; input.step = "0.1";
+    input.value = String(s.ms); input.id = "sl-" + s.id;
+
+    var out = document.createElement("output");
+    out.id = "out-" + s.id;
+
+    input.addEventListener("input", function () { s.ms = parseFloat(input.value); recompute(); });
+    sliders.appendChild(lab); sliders.appendChild(input); sliders.appendChild(out);
+
+    s.seg = document.createElement("div");
+    s.seg.className = "budget-seg";
+    s.seg.style.background = s.colour;
+    track.appendChild(s.seg);
+  });
+
+  fpsSel.addEventListener("change", recompute);
+
+  function recompute() {
+    var refresh = parseFloat(fpsSel.value);
+    var budget  = 1000 / refresh;                 // §3.1 — the whole formula
+    var total   = SUBSYSTEMS.reduce(function (a, s) { return a + s.ms; }, 0);
+
+    // §3.2 — the cliff. A frame that misses a vsync waits for the NEXT one,
+    // so cost is quantized to whole budget periods. This ceil() is the lesson.
+    var periods   = Math.max(1, Math.ceil(total / budget));
+    var effective = refresh / periods;
+
+    // Scale so the bar shows either the full budget or the full overrun.
+    var scale = Math.max(total, budget) * 1.04;
+    SUBSYSTEMS.forEach(function (s) {
+      s.seg.style.width = (s.ms / scale * 100) + "%";
+      s.seg.textContent = s.ms >= 1.6 ? s.ms.toFixed(1) : "";
+      document.getElementById("out-" + s.id).textContent = s.ms.toFixed(1) + " ms";
+    });
+
+    line.style.left = (budget / scale * 100) + "%";
+    budgetOut.textContent = "budget " + budget.toFixed(2) + " ms";
+
+    var headroom = budget - total;
+    if (total <= budget) {
+      verdict.className = "verdict hit";
+      verdict.textContent =
+        "✓ " + total.toFixed(2) + " ms of " + budget.toFixed(2) + " ms — fits, with "
+        + headroom.toFixed(2) + " ms to spare. You get the full " + effective + " FPS.";
+    } else {
+      verdict.className = "verdict miss";
+      var wasted = periods * budget - total;
+      verdict.textContent =
+        "✗ " + total.toFixed(2) + " ms of " + budget.toFixed(2) + " ms — over by "
+        + (-headroom).toFixed(2) + " ms. Missing " + (periods - 1)
+        + " vsync" + (periods > 2 ? "s" : "") + " means stalling a further "
+        + wasted.toFixed(2) + " ms, so the player gets " + effective.toFixed(0)
+        + " FPS, not " + refresh + ".";
+    }
+  }
+  recompute();
+})();
+</script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"
+        integrity="sha384-7zkQWkzuo3B5mTepMUcHkMB5jZaolc2xDwL6VFqjFALcbeS9Ggm/Yr2r3Dy4lfFg"
+        crossorigin="anonymous"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+        integrity="sha384-43gviWU0YVjaDtb/GhzOouOXtZMP/7XUzwPTstBeZFe/+rCMvRwr4yROQP43s0Xk"
+        crossorigin="anonymous"
+        onload="renderMathInElement(document.body, {
+          delimiters: [
+            {left: '\\[', right: '\\]', display: true},
+            {left: '\\(', right: '\\)', display: false}
+          ], throwOnError: false });"></script>
+</body>
+</html>
