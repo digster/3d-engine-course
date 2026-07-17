@@ -142,5 +142,3 @@ Objectives all actually covered? Every formula preceded by intuition and followe
 a documented public C++ API; an SDL_GPU-based forward PBR renderer with shadow-mapped lights, HDR, tonemapping, and a post-processing stack; skybox and image-based lighting; an asset pipeline covering images, OBJ, and glTF; a handle-based resource system; a from-scratch ECS runtime with transform hierarchy; skeletal animation; rigid-body collision and response basics; 3D audio; input mapping; ImGui-based tooling and editor (hierarchy, inspector, gizmos); profiling hooks; serialization and a scene format; hot reload for shaders and assets; a job system; cross-platform CMake builds; sample demos; a complete capstone game built solely on the public API; and an HTML documentation site.
 
 ---
-
-**Begin now with your FIRST response, exactly as specified in §9.**
