@@ -1,0 +1,1479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>C++ Style Guide · Build a Professional 3D Game Engine</title>
+<meta name="description" content="The C++20 style guide this engine obeys: naming, headers, include order, ownership, and error handling without exceptions.">
+<!-- SHARED-CSS:BEGIN -->
+<style>
+/* ---- Design tokens ------------------------------------------------------- */
+:root {
+  color-scheme: light dark;
+
+  /* Page */
+  --bg:            #fdfdfb;
+  --bg-sunken:     #f4f4f0;
+  --bg-raised:     #ffffff;
+  --text:          #1c1c1a;
+  --text-muted:    #5f5f58;
+  --text-faint:    #8a8a80;
+  --rule:          #e2e2db;
+  --rule-strong:   #cfcfc6;
+
+  /* Accent — used for links, active nav, section marks */
+  --accent:        #b4530a;
+  --accent-soft:   #f5e6d8;
+  --accent-text:   #8f4108;
+
+  /* Callouts */
+  --note-bd:       #3a6ea5;   --note-bg:    #eaf2fb;
+  --warn-bd:       #b8860b;   --warn-bg:    #fdf5e2;
+  --verify-bd:     #a03030;   --verify-bg:  #fbecec;
+  --pitfall-bd:    #7a4fa3;   --pitfall-bg: #f4eefb;
+  --ok-bd:         #2f7d4f;   --ok-bg:      #e9f6ee;
+
+  /* Code — always dark, in both page themes */
+  --code-bg:       #1b1d23;
+  --code-bar:      #262932;
+  --code-text:     #dfe3ec;
+  --code-rule:     #363a45;
+
+  /* Syntax tokens */
+  --tok-comment:   #6d7789;
+  --tok-keyword:   #c98fdb;
+  --tok-type:      #6cc5d9;
+  --tok-string:    #a3cf85;
+  --tok-number:    #e8a978;
+  --tok-preproc:   #d9a05b;
+  --tok-func:      #79b6f2;
+  --tok-punct:     #9aa2b1;
+
+  /* Axis colours — COURSE-WIDE CONVENTION. x/y/z = red/green/blue.
+     Never override these in a diagram. See conventions.html. */
+  --axis-x:        #d1344a;
+  --axis-y:        #2f9e4f;
+  --axis-z:        #2b6fd4;
+  --axis-x-soft:   #f7d8dd;
+  --axis-y-soft:   #d8f0e0;
+  --axis-z-soft:   #d7e4fa;
+
+  /* Diagram neutrals */
+  --dia-bg:        #ffffff;
+  --dia-ink:       #33332e;
+  --dia-ink-soft:  #7a7a72;
+  --dia-grid:      #e8e8e2;
+  --dia-fill:      #f0f0ea;
+  --dia-hi:        #b4530a;
+
+  /* Typography */
+  --font-body: "Iowan Old Style", "Palatino Linotype", "Palatino", "Charter",
+               Georgia, Cambria, "Times New Roman", serif;
+  --font-ui:   -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+               "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "SFMono-Regular", "Cascadia Code",
+               "JetBrains Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  --measure: 42rem;          /* ~72 characters at this size — the reading column */
+  --measure-wide: 58rem;     /* diagrams & tables may breathe past the measure  */
+}
+
+/* Dark tokens.
+   Applied in two situations, which is why the block is written twice:
+     1. the OS asks for dark AND the reader has not overridden to light;
+     2. the reader explicitly chose dark via the toggle.
+   CSS has no mixins, so duplication is the price of supporting both an OS
+   default and a manual override. Keep the two blocks byte-identical. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg:          #15161a;
+    --bg-sunken:   #101115;
+    --bg-raised:   #1c1e24;
+    --text:        #e4e4e0;
+    --text-muted:  #a2a49e;
+    --text-faint:  #74766f;
+    --rule:        #2c2e35;
+    --rule-strong: #3d404a;
+
+    --accent:      #f0a06a;
+    --accent-soft: #33251a;
+    --accent-text: #f5b184;
+
+    --note-bd:     #5a8fc8;   --note-bg:    #16202c;
+    --warn-bd:     #c9a132;   --warn-bg:    #262013;
+    --verify-bd:   #d05555;   --verify-bg:  #2a1717;
+    --pitfall-bd:  #a077c8;   --pitfall-bg: #221a2c;
+    --ok-bd:       #4fa877;   --ok-bg:      #14231a;
+
+    --dia-bg:      #1a1c21;
+    --dia-ink:     #d8d8d2;
+    --dia-ink-soft:#8f918a;
+    --dia-grid:    #2b2d33;
+    --dia-fill:    #24262c;
+    --dia-hi:      #f0a06a;
+
+    --axis-x:      #f2647a;
+    --axis-y:      #5cc47e;
+    --axis-z:      #6b9ef0;
+    --axis-x-soft: #3a2027;
+    --axis-y-soft: #1c3325;
+    --axis-z-soft: #1e2a40;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg:          #15161a;
+  --bg-sunken:   #101115;
+  --bg-raised:   #1c1e24;
+  --text:        #e4e4e0;
+  --text-muted:  #a2a49e;
+  --text-faint:  #74766f;
+  --rule:        #2c2e35;
+  --rule-strong: #3d404a;
+
+  --accent:      #f0a06a;
+  --accent-soft: #33251a;
+  --accent-text: #f5b184;
+
+  --note-bd:     #5a8fc8;   --note-bg:    #16202c;
+  --warn-bd:     #c9a132;   --warn-bg:    #262013;
+  --verify-bd:   #d05555;   --verify-bg:  #2a1717;
+  --pitfall-bd:  #a077c8;   --pitfall-bg: #221a2c;
+  --ok-bd:       #4fa877;   --ok-bg:      #14231a;
+
+  --dia-bg:      #1a1c21;
+  --dia-ink:     #d8d8d2;
+  --dia-ink-soft:#8f918a;
+  --dia-grid:    #2b2d33;
+  --dia-fill:    #24262c;
+  --dia-hi:      #f0a06a;
+
+  --axis-x:      #f2647a;
+  --axis-y:      #5cc47e;
+  --axis-z:      #6b9ef0;
+  --axis-x-soft: #3a2027;
+  --axis-y-soft: #1c3325;
+  --axis-z-soft: #1e2a40;
+}
+
+/* ---- Reset & base -------------------------------------------------------- */
+*, *::before, *::after { box-sizing: border-box; }
+
+html {
+  font-size: 18px;
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
+  scroll-padding-top: 2rem;
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  line-height: 1.7;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* The reading column. Everything is centred on --measure; wide elements opt out. */
+.wrap {
+  max-width: var(--measure);
+  margin: 0 auto;
+  padding: 0 1.25rem;
+}
+.bleed {                       /* for diagrams/tables that need more room */
+  max-width: var(--measure-wide);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* ---- Typography ---------------------------------------------------------- */
+h1, h2, h3, h4 {
+  font-family: var(--font-ui);
+  line-height: 1.25;
+  letter-spacing: -0.015em;
+  margin: 0 0 0.6em;
+  scroll-margin-top: 1.5rem;
+}
+h1 { font-size: 2.15rem; font-weight: 700; margin-top: 0.2em; }
+h2 {
+  font-size: 1.5rem; font-weight: 650;
+  margin-top: 2.6em;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--rule);
+}
+h3 { font-size: 1.15rem; font-weight: 650; margin-top: 2em; }
+h4 { font-size: 1rem;    font-weight: 650; margin-top: 1.6em; color: var(--text-muted); }
+
+/* Section numbers rendered as a quiet prefix */
+h2 .num, h3 .num {
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  margin-right: 0.5em;
+  font-weight: 500;
+}
+
+p { margin: 0 0 1.15em; }
+
+a { color: var(--accent-text); text-decoration-color: var(--rule-strong); text-underline-offset: 2px; }
+a:hover { text-decoration-color: currentColor; }
+
+strong { font-weight: 650; }
+em { font-style: italic; }
+
+ul, ol { margin: 0 0 1.15em; padding-left: 1.5em; }
+li { margin-bottom: 0.4em; }
+li > ul, li > ol { margin-top: 0.4em; margin-bottom: 0.5em; }
+
+hr { border: 0; border-top: 1px solid var(--rule); margin: 2.5em 0; }
+
+blockquote {
+  margin: 1.5em 0;
+  padding: 0.1em 0 0.1em 1.2em;
+  border-left: 3px solid var(--rule-strong);
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* Inline code — light chip, distinct from the dark block listings */
+:not(pre) > code {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 0.08em 0.34em;
+  word-break: break-word;
+}
+
+/* ---- Masthead ------------------------------------------------------------ */
+.masthead {
+  background: var(--bg-sunken);
+  border-bottom: 1px solid var(--rule);
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+}
+.masthead-inner {
+  max-width: var(--measure-wide);
+  margin: 0 auto;
+  padding: 0.6rem 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.masthead .course {
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  text-decoration: none;
+}
+.masthead .spacer { flex: 1; }
+.masthead a { color: var(--text-muted); text-decoration: none; }
+.masthead a:hover { color: var(--accent-text); }
+
+.theme-toggle {
+  font: inherit;
+  font-size: 0.78rem;
+  background: var(--bg-raised);
+  color: var(--text-muted);
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  padding: 0.2rem 0.55rem;
+  cursor: pointer;
+}
+.theme-toggle:hover { border-color: var(--rule-strong); color: var(--text); }
+
+/* ---- Lesson nav (top & bottom) ------------------------------------------- */
+.lesson-nav {
+  display: flex;
+  align-items: stretch;
+  gap: 0.6rem;
+  font-family: var(--font-ui);
+  font-size: 0.82rem;
+  margin: 1.5rem auto;
+}
+.lesson-nav a, .lesson-nav span {
+  flex: 1;
+  padding: 0.55rem 0.8rem;
+  border: 1px solid var(--rule);
+  border-radius: 7px;
+  background: var(--bg-raised);
+  text-decoration: none;
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+.lesson-nav a:hover { border-color: var(--accent); }
+.lesson-nav span { opacity: 0.45; }        /* disabled edge (no prev / no next) */
+.lesson-nav .dir {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-faint);
+}
+.lesson-nav .ttl {
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-weight: 550;
+}
+.lesson-nav .next-l { text-align: right; }
+.lesson-nav .idx-l  { flex: 0 0 auto; justify-content: center; text-align: center; }
+@media (max-width: 34rem) {
+  .lesson-nav { flex-wrap: wrap; }
+  .lesson-nav .idx-l { order: 3; flex: 1 0 100%; }
+}
+
+/* ---- Lesson header block ------------------------------------------------- */
+.lesson-head { margin: 2rem 0 0; }
+.eyebrow {
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+  font-weight: 650;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 0.5rem;
+}
+.deck {
+  font-size: 1.12rem;
+  color: var(--text-muted);
+  margin-bottom: 1.5rem;
+}
+.meta {
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  padding: 1rem 1.15rem;
+  margin-bottom: 1.75rem;
+}
+.meta dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 0.4rem 1rem; }
+.meta dt {
+  color: var(--text-faint);
+  text-transform: uppercase;
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  padding-top: 0.28em;
+  white-space: nowrap;
+}
+.meta dd { margin: 0; }
+@media (max-width: 30rem) {
+  .meta dl { grid-template-columns: 1fr; gap: 0.15rem 0; }
+  .meta dd { margin-bottom: 0.6rem; }
+}
+
+/* Objectives — "you will be able to…" */
+.objectives {
+  border: 1px solid var(--accent);
+  background: var(--accent-soft);
+  border-radius: 9px;
+  padding: 1.1rem 1.25rem;
+  margin: 1.75rem 0;
+}
+.objectives h2 {
+  margin: 0 0 0.5rem;
+  border: 0; padding: 0;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--accent-text);
+}
+.objectives ul { margin: 0; padding-left: 1.25em; }
+.objectives li::marker { color: var(--accent); }
+
+/* ---- Table of contents --------------------------------------------------- */
+.toc {
+  font-family: var(--font-ui);
+  font-size: 0.88rem;
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  padding: 1rem 1.25rem;
+  margin: 2rem 0;
+}
+.toc > summary {
+  cursor: pointer;
+  font-weight: 650;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-muted);
+  list-style: none;
+}
+.toc > summary::-webkit-details-marker { display: none; }
+.toc > summary::before { content: "▸ "; color: var(--accent); }
+.toc[open] > summary::before { content: "▾ "; }
+.toc ol { list-style: none; margin: 0.85rem 0 0; padding: 0; counter-reset: toc; }
+.toc ol ol { margin: 0.3rem 0 0.5rem 1.1rem; }
+.toc li { margin: 0.28em 0; counter-increment: toc; }
+.toc a { text-decoration: none; color: var(--text); }
+.toc a:hover { color: var(--accent-text); text-decoration: underline; }
+.toc ol ol a { color: var(--text-muted); font-size: 0.94em; }
+
+/* ---- Callouts ------------------------------------------------------------ */
+.callout {
+  border-left: 3px solid var(--rule-strong);
+  background: var(--bg-sunken);
+  border-radius: 0 8px 8px 0;
+  padding: 0.9rem 1.1rem;
+  margin: 1.6em 0;
+  font-size: 0.95rem;
+}
+.callout > :first-child { margin-top: 0; }
+.callout > :last-child  { margin-bottom: 0; }
+.callout .label {
+  display: block;
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  margin-bottom: 0.35rem;
+}
+.callout.note    { border-color: var(--note-bd);    background: var(--note-bg); }
+.callout.note .label    { color: var(--note-bd); }
+.callout.warn    { border-color: var(--warn-bd);    background: var(--warn-bg); }
+.callout.warn .label    { color: var(--warn-bd); }
+.callout.verify  { border-color: var(--verify-bd);  background: var(--verify-bg); }
+.callout.verify .label  { color: var(--verify-bd); }
+.callout.pitfall { border-color: var(--pitfall-bd); background: var(--pitfall-bg); }
+.callout.pitfall .label { color: var(--pitfall-bd); }
+.callout.ok      { border-color: var(--ok-bd);      background: var(--ok-bg); }
+.callout.ok .label      { color: var(--ok-bd); }
+/* C++ explainers: a C++ feature taught in place, the first time it appears. */
+.callout.cpp     { border-color: var(--accent);     background: var(--accent-soft); }
+.callout.cpp .label     { color: var(--accent-text); }
+
+/* ---- Code listings ------------------------------------------------------- */
+.listing {
+  margin: 1.6em 0;
+  border-radius: 9px;
+  overflow: hidden;
+  border: 1px solid var(--code-rule);
+  background: var(--code-bg);
+}
+.listing figcaption {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: var(--code-bar);
+  border-bottom: 1px solid var(--code-rule);
+  padding: 0.45rem 0.85rem;
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  color: #aeb6c4;
+}
+.listing figcaption .path { font-weight: 600; color: #dfe3ec; }
+.listing figcaption .tag {
+  font-family: var(--font-ui);
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  background: #3a3f4c;
+  color: #c6cdd9;
+}
+.listing figcaption .tag.new      { background: #1f4433; color: #7fd6a5; }
+.listing figcaption .tag.modified { background: #453a1c; color: #e0be74; }
+.listing figcaption .lang { margin-left: auto; opacity: 0.65; }
+
+/* Horizontal scroll — NEVER wrap. Wrapped code lies about its structure. */
+.listing pre {
+  margin: 0;
+  padding: 0.9rem 1rem;
+  overflow-x: auto;
+  background: var(--code-bg);
+}
+.listing pre code {
+  font-family: var(--font-mono);
+  font-size: 0.79rem;
+  line-height: 1.62;
+  color: var(--code-text);
+  white-space: pre;
+  display: block;
+  tab-size: 4;
+}
+.listing pre::-webkit-scrollbar { height: 9px; }
+.listing pre::-webkit-scrollbar-track { background: var(--code-bar); }
+.listing pre::-webkit-scrollbar-thumb { background: #4a5060; border-radius: 5px; }
+.listing pre::-webkit-scrollbar-thumb:hover { background: #5d6478; }
+
+/* Syntax tokens, applied by the tiny highlighter at the foot of the page. */
+.tok-c { color: var(--tok-comment); font-style: italic; }
+.tok-k { color: var(--tok-keyword); }
+.tok-t { color: var(--tok-type); }
+.tok-s { color: var(--tok-string); }
+.tok-n { color: var(--tok-number); }
+.tok-p { color: var(--tok-preproc); }
+.tok-f { color: var(--tok-func); }
+.tok-o { color: var(--tok-punct); }
+
+/* Emphasised line inside a listing (the line this paragraph is about) */
+.listing .hl { background: rgba(180, 130, 60, 0.16); display: inline-block; width: 100%; }
+
+/* Shell transcripts get a lighter treatment than source files */
+.listing.shell figcaption .path::before { content: "$ "; opacity: 0.6; }
+
+/* ---- Figures & diagrams -------------------------------------------------- */
+figure.dia {
+  margin: 2em auto;
+  padding: 0;
+}
+figure.dia svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: var(--dia-bg);
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+}
+figure.dia figcaption,
+figure.tbl figcaption {
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: 0.65rem;
+  line-height: 1.55;
+}
+figure.dia figcaption .fignum,
+figure.tbl figcaption .fignum {
+  font-weight: 700;
+  color: var(--text);
+}
+/* SVG text inherits the theme so diagrams survive dark mode */
+figure.dia svg text { font-family: var(--font-ui); fill: var(--dia-ink); }
+figure.dia svg .lbl-x { fill: var(--axis-x); }
+figure.dia svg .lbl-y { fill: var(--axis-y); }
+figure.dia svg .lbl-z { fill: var(--axis-z); }
+figure.dia svg .ax-x  { stroke: var(--axis-x); }
+figure.dia svg .ax-y  { stroke: var(--axis-y); }
+figure.dia svg .ax-z  { stroke: var(--axis-z); }
+figure.dia svg .ink       { stroke: var(--dia-ink); }
+figure.dia svg .ink-soft  { stroke: var(--dia-ink-soft); }
+figure.dia svg .grid      { stroke: var(--dia-grid); }
+figure.dia svg .fill-soft { fill: var(--dia-fill); }
+figure.dia svg .hi        { stroke: var(--dia-hi); }
+figure.dia svg .mono      { font-family: var(--font-mono); }
+figure.dia svg .sm        { font-size: 11px; }
+figure.dia svg .xs        { font-size: 9.5px; }
+
+/* Text fills for <text> elements.
+   These MUST be classes, not fill="..." attributes: the `figure.dia svg text`
+   rule above is CSS, and CSS always beats an SVG presentation attribute — an
+   inline fill on a <text> is silently ignored. Class selectors outrank the bare
+   element selector, so these win. (Shapes are unaffected; the rule only targets
+   text, so fill="..." still works on rect/path/circle.) */
+figure.dia svg .muted     { fill: var(--dia-ink-soft); }
+figure.dia svg .t-hi      { fill: var(--dia-hi); }
+figure.dia svg .t-ok      { fill: var(--ok-bd); }
+figure.dia svg .t-bad     { fill: var(--verify-bd); }
+
+/* ---- Tables -------------------------------------------------------------- */
+.tbl-scroll { overflow-x: auto; margin: 1.6em 0; }
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+th, td {
+  text-align: left;
+  padding: 0.5rem 0.7rem;
+  border-bottom: 1px solid var(--rule);
+  vertical-align: top;
+}
+th {
+  font-weight: 650;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--rule-strong);
+  white-space: nowrap;
+}
+tbody tr:hover { background: var(--bg-sunken); }
+td code { font-size: 0.82em; }
+
+/* File-manifest table: path | new/modified | purpose */
+.manifest td:first-child { font-family: var(--font-mono); font-size: 0.78rem; white-space: nowrap; }
+.badge {
+  font-size: 0.62rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.06em; padding: 0.1rem 0.4rem; border-radius: 3px; white-space: nowrap;
+}
+.badge.new { background: var(--ok-bg); color: var(--ok-bd); border: 1px solid var(--ok-bd); }
+.badge.mod { background: var(--warn-bg); color: var(--warn-bd); border: 1px solid var(--warn-bd); }
+/* Curriculum status, used on index.html */
+.badge.done { background: var(--ok-bg); color: var(--ok-bd); border: 1px solid var(--ok-bd); }
+.badge.soon { background: var(--bg-sunken); color: var(--text-faint); border: 1px solid var(--rule-strong); }
+
+/* ---- Math ---------------------------------------------------------------- */
+/* KaTeX renders these when the CDN is reachable. When it is NOT, the raw TeX
+   stays visible — which is why every equation MUST also be stated in prose.
+   Never let an equation be the only carrier of a fact. */
+.eq {
+  margin: 1.4em 0;
+  padding: 0.9rem 1rem;
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  overflow-x: auto;
+  text-align: center;
+}
+.eq-plain {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  margin-top: 0.6rem;
+  padding-top: 0.6rem;
+  border-top: 1px dashed var(--rule-strong);
+  text-align: left;
+}
+.eq-plain::before {
+  content: "in plain text: ";
+  color: var(--text-faint);
+  font-family: var(--font-ui);
+  font-size: 0.72rem;
+}
+
+/* Worked numeric example — every formula gets one */
+.worked {
+  border: 1px solid var(--rule-strong);
+  border-radius: 9px;
+  padding: 1rem 1.2rem;
+  margin: 1.6em 0;
+  background: var(--bg-raised);
+}
+.worked > .label {
+  display: block;
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--accent);
+  margin-bottom: 0.5rem;
+}
+.worked > :last-child { margin-bottom: 0; }
+
+/* ---- Exercises ----------------------------------------------------------- */
+.exercise {
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 9px 9px 0;
+  padding: 1rem 1.2rem;
+  margin: 1.4em 0;
+  background: var(--bg-raised);
+}
+.exercise h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.98rem;
+}
+.exercise h3 .xnum {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--accent);
+  margin-right: 0.5em;
+}
+.difficulty {
+  font-family: var(--font-ui);
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-faint);
+  border: 1px solid var(--rule-strong);
+  border-radius: 3px;
+  padding: 0.05rem 0.35rem;
+  margin-left: 0.4em;
+  vertical-align: 0.15em;
+}
+.exercise details {
+  margin-top: 0.7rem;
+  border-top: 1px solid var(--rule);
+  padding-top: 0.6rem;
+}
+.exercise summary {
+  cursor: pointer;
+  font-family: var(--font-ui);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.exercise summary:hover { color: var(--accent-text); }
+.exercise details[open] summary { margin-bottom: 0.6rem; }
+
+/* ---- Pitfalls (symptom → cause → fix) ------------------------------------ */
+.pitfalls { margin: 1.5em 0; }
+.pitfall-item {
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  margin-bottom: 0.9rem;
+  overflow: hidden;
+}
+.pitfall-item > summary {
+  cursor: pointer;
+  padding: 0.7rem 1rem;
+  background: var(--bg-sunken);
+  font-family: var(--font-ui);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.pitfall-item > summary:hover { color: var(--accent-text); }
+.pitfall-item > summary .sym {
+  font-weight: 400;
+  color: var(--text-muted);
+  font-style: italic;
+}
+.pitfall-body { padding: 0.9rem 1rem; font-size: 0.94rem; }
+.pitfall-body > :first-child { margin-top: 0; }
+.pitfall-body > :last-child  { margin-bottom: 0; }
+.pitfall-body dt {
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+  margin-top: 0.7rem;
+}
+.pitfall-body dd { margin: 0.2rem 0 0; }
+
+/* ---- Recap / next -------------------------------------------------------- */
+.recap {
+  background: var(--ok-bg);
+  border: 1px solid var(--ok-bd);
+  border-radius: 9px;
+  padding: 1.1rem 1.25rem;
+  margin: 1.75rem 0;
+}
+.recap h2 { margin: 0 0 0.6rem; border: 0; padding: 0; font-size: 1.05rem; }
+.recap > :last-child { margin-bottom: 0; }
+
+/* ---- Further reading ----------------------------------------------------- */
+.reading { font-size: 0.92rem; }
+.reading li { margin-bottom: 0.6em; }
+.reading .src {
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+  margin-right: 0.4em;
+}
+
+/* ---- STATE block --------------------------------------------------------- */
+.state {
+  margin: 2.5em 0 1em;
+  border: 1px dashed var(--rule-strong);
+  border-radius: 9px;
+  background: var(--bg-sunken);
+  overflow: hidden;
+}
+.state > summary {
+  cursor: pointer;
+  padding: 0.6rem 1rem;
+  font-family: var(--font-ui);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-muted);
+}
+.state pre {
+  margin: 0;
+  padding: 0.9rem 1rem;
+  overflow-x: auto;
+  border-top: 1px solid var(--rule);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+  white-space: pre;
+}
+
+/* ---- Footer -------------------------------------------------------------- */
+.foot {
+  border-top: 1px solid var(--rule);
+  margin-top: 3rem;
+  padding: 1.5rem 0 3rem;
+  font-family: var(--font-ui);
+  font-size: 0.78rem;
+  color: var(--text-faint);
+}
+.foot a { color: var(--text-muted); }
+
+/* ---- Interactive widgets ------------------------------------------------- */
+.widget {
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  background: var(--bg-raised);
+  padding: 1rem;
+  margin: 2em 0;
+}
+.widget-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+  align-items: center;
+  margin-top: 0.8rem;
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+.widget-controls label { display: flex; align-items: center; gap: 0.4rem; }
+.widget-controls input[type="range"] { accent-color: var(--accent); }
+.widget-readout {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--text);
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 0.1rem 0.4rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Print --------------------------------------------------------------- */
+@media print {
+  .masthead, .lesson-nav, .theme-toggle { display: none; }
+  body { background: #fff; color: #000; font-size: 11pt; }
+  .listing { break-inside: avoid; }
+  figure.dia { break-inside: avoid; }
+  a::after { content: " (" attr(href) ")"; font-size: 0.7em; color: #666; }
+}
+</style>
+<!-- SHARED-CSS:END -->
+</head>
+<body>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <a class="course" href="index.html">Build a Professional 3D Game Engine</a>
+    <span class="spacer"></span>
+    <a href="index.html">Contents</a>
+    <a href="conventions.html">Conventions</a>
+    <a href="math-toolbox.html">Math Toolbox</a>
+    <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Toggle colour theme">Theme</button>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <nav class="lesson-nav" aria-label="Page navigation (top)">
+    <a class="idx-l" href="index.html" style="flex:1">
+      <span class="dir">← Back</span>
+      <span class="ttl">Course home</span>
+    </a>
+    <a class="next-l" href="conventions.html">
+      <span class="dir">Companion →</span>
+      <span class="ttl">Conventions</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Living reference</div>
+    <h1>C++ Style Guide</h1>
+    <p class="deck">
+      The rules this codebase obeys, and the reasoning behind each. A style guide's job is not
+      to be right in the abstract — it is to be <em>consistent</em>, so that reading the tenth
+      file costs less than reading the first.
+    </p>
+  </div>
+
+  <div class="callout note">
+    <span class="label">The one rule behind all the others</span>
+    <p>
+      <strong>Optimise for the reader.</strong> You will read this code far more often than you
+      write it, and in six months you <em>are</em> the reader — with none of today's context.
+      Where a rule below seems fussy, it is buying clarity at that future moment.
+    </p>
+  </div>
+
+  <details class="toc" open>
+    <summary>Contents</summary>
+    <ol>
+      <li><a href="#language">Language and dialect</a></li>
+      <li><a href="#naming">Naming</a></li>
+      <li><a href="#files">Files, headers, and include order</a></li>
+      <li><a href="#ownership">Ownership and RAII</a></li>
+      <li><a href="#errors">Errors without exceptions</a></li>
+      <li><a href="#const">const-correctness and interfaces</a></li>
+      <li><a href="#comments">Comments that teach</a></li>
+      <li><a href="#format">Formatting</a></li>
+      <li><a href="#warnings">Warnings</a></li>
+    </ol>
+  </details>
+
+  <!-- ===================================================================== -->
+  <h2 id="language"><span class="num">1</span>Language and dialect</h2>
+
+  <div class="tbl-scroll">
+    <table>
+      <tbody>
+        <tr><td><strong>Standard</strong></td><td>C++20, no compiler extensions</td></tr>
+        <tr><td><strong>Compilers</strong></td><td>MSVC, Clang, GCC — all three, all the time</td></tr>
+        <tr><td><strong>Exceptions</strong></td><td><strong>Off</strong> in the engine core (§<a href="#errors">5</a>)</td></tr>
+        <tr><td><strong>RTTI</strong></td><td><strong>Off</strong> in the engine core</td></tr>
+        <tr><td><strong>Warnings</strong></td><td><code>-Wall -Wextra</code> / <code>/W4</code>, all fixed (§<a href="#warnings">9</a>)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    C++20 buys us four things we actually use: <strong>concepts</strong> (readable template
+    constraints instead of SFINAE), <strong><code>std::span</code></strong> (the honest way to
+    pass a non-owning view of a contiguous range), <strong>designated initializers</strong>
+    (which make SDL_GPU's large create-info structs legible), and
+    <strong><code>constexpr</code></strong> reaching far enough to do real work at compile time.
+  </p>
+
+  <p>
+    Modules are <em>not</em> used. The tooling is still uneven across the three compilers we
+    support, and a course that fails to build on someone's machine has failed. Header/source
+    it is — and translation units get taught properly instead of hidden.
+  </p>
+
+  <!-- ===================================================================== -->
+  <h2 id="naming"><span class="num">2</span>Naming</h2>
+
+  <p>
+    We follow the <strong>standard library's</strong> conventions rather than inventing our own.
+    <code>snake_case</code> everywhere for types and functions means our code and
+    <code>std::</code> read as one language, and there is never a moment's thought about which
+    casing a given name wants.
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>Kind</th><th>Style</th><th>Example</th></tr></thead>
+      <tbody>
+        <tr><td>Namespace</td><td><code>lower</code>, short</td><td><code>eng::gfx</code></td></tr>
+        <tr><td>Type</td><td><code>snake_case</code></td><td><code>vertex_buffer</code>, <code>mat4</code></td></tr>
+        <tr><td>Function</td><td><code>snake_case</code>, verb</td><td><code>create_pipeline()</code></td></tr>
+        <tr><td>Variable</td><td><code>snake_case</code></td><td><code>frame_index</code></td></tr>
+        <tr><td>Private data member</td><td><code>snake_case_</code> — trailing underscore</td><td><code>width_</code></td></tr>
+        <tr><td>Public data member</td><td><code>snake_case</code>, no underscore</td><td><code>position</code></td></tr>
+        <tr><td>Constant / <code>constexpr</code></td><td><code>snake_case</code></td><td><code>max_lights</code></td></tr>
+        <tr><td>Enum (scoped only)</td><td>type <code>snake_case</code>, enumerators <code>snake_case</code></td><td><code>cull_mode::back</code></td></tr>
+        <tr><td>Template parameter</td><td><code>PascalCase</code></td><td><code>template &lt;typename T&gt;</code></td></tr>
+        <tr><td>Macro</td><td><code>ENG_SCREAMING</code> — always prefixed</td><td><code>ENG_ASSERT</code></td></tr>
+        <tr><td>File</td><td><code>snake_case.hpp</code> / <code>.cpp</code></td><td><code>vertex_buffer.hpp</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    The <strong>trailing underscore</strong> on private members exists to kill the constructor
+    shadowing problem without <code>this-&gt;</code> noise: <code>width_(width)</code> is
+    unambiguous where <code>width(width)</code> is a coin flip.
+  </p>
+
+  <p>
+    <strong>Macros are always prefixed</strong> <code>ENG_</code>. Macros ignore namespaces —
+    that is their whole nature — so the prefix is the only namespace they get. We use exactly
+    two families: assertions and platform detection.
+  </p>
+
+  <div class="callout cpp">
+    <span class="label">C++ in place — scoped enums</span>
+    <p>
+      Always <code>enum class</code>, never plain <code>enum</code>. A plain enum leaks its
+      enumerators into the surrounding scope and implicitly converts to <code>int</code>, which
+      means <code>cull_mode::back</code> and <code>fill_mode::line</code> could silently compare
+      equal. Scoped enums cost one <code>::</code> and remove an entire category of bug.
+    </p>
+  </div>
+
+  <h3>Names carry units</h3>
+
+  <p>
+    <code>timeout</code> is a bad name; <code>timeout_seconds</code> is a good one. Wherever a
+    number has a unit, the name says so. This is the same discipline as
+    <a href="conventions.html#units">Conventions §8</a>, enforced at the identifier level, and
+    it is nearly free.
+  </p>
+
+  <!-- ===================================================================== -->
+  <h2 id="files"><span class="num">3</span>Files, headers, and include order</h2>
+
+  <ul>
+    <li><code>.hpp</code> for headers, <code>.cpp</code> for sources. Never <code>.h</code> for C++.</li>
+    <li><strong><code>#pragma once</code></strong>, not include guards. Supported by all three compilers, and impossible to typo.</li>
+    <li>One primary type per header, and the file is named after it.</li>
+    <li>A header must be <strong>self-sufficient</strong>: including it first, alone, must compile.</li>
+  </ul>
+
+  <h3>Include order</h3>
+
+  <p>
+    Ordered <strong>most-local to most-global</strong>. The reason is not aesthetic: putting a
+    file's own header first means that if that header forgot an include, <em>its own</em>
+    translation unit fails immediately, rather than silently working because some other header
+    happened to include the missing piece first.
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/vertex_buffer.cpp</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// 1. This file's own header — ALWAYS first, and alone. It proves the header
+//    is self-sufficient. Every other ordering hides that bug.
+#include "gfx/vertex_buffer.hpp"
+
+// 2. Other headers from this project, alphabetically.
+#include "core/assert.hpp"
+#include "core/log.hpp"
+
+// 3. Third-party.
+#include &lt;SDL3/SDL_gpu.h&gt;
+
+// 4. Standard library — last, because it is the most stable and the least
+//    likely to hide anyone's mistake.
+#include &lt;cstdint&gt;
+#include &lt;span&gt;
+#include &lt;vector&gt;</code></pre>
+  </figure>
+
+  <p>
+    Project includes use <code>"quotes"</code> and paths relative to the include root; everything
+    external uses <code>&lt;angles&gt;</code>. So <code>"gfx/vertex_buffer.hpp"</code>, never
+    <code>"../gfx/vertex_buffer.hpp"</code> — relative-to-file paths break the moment a file
+    moves.
+  </p>
+
+  <div class="callout cpp">
+    <span class="label">C++ in place — headers and translation units</span>
+    <p>
+      <code>#include</code> is <em>textual paste</em>, nothing cleverer. Each <code>.cpp</code>
+      plus everything it pastes in becomes one <strong>translation unit</strong>, compiled
+      alone, then joined by the linker. This explains almost every confusing C++ build error you
+      will meet: "undefined reference" means the linker never found a definition; "redefinition"
+      means it found two. Lesson 0.4 makes this concrete.
+    </p>
+  </div>
+
+  <h3>Public vs private headers</h3>
+
+  <p>
+    After the Module 5 refactor the boundary is physical, and enforced by where a file lives:
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>Location</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><code>engine/include/engine/…</code></td><td><strong>Public API.</strong> Demos may include these. Changing one is a breaking change.</td></tr>
+        <tr><td><code>engine/src/…</code></td><td><strong>Private.</strong> Free to change without telling anyone.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    A public header may only include other public headers. If a public header needs a private
+    type, the design is wrong — not the rule.
+  </p>
+
+  <!-- ===================================================================== -->
+  <h2 id="ownership"><span class="num">4</span>Ownership and RAII</h2>
+
+  <p>
+    <strong>Every resource has exactly one owner, and that owner is an object whose destructor
+    releases it.</strong> This is the single most important rule in the guide.
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>Intent</th><th>Use</th><th>Never</th></tr></thead>
+      <tbody>
+        <tr><td>Sole ownership</td><td>a value, or <code>std::unique_ptr&lt;T&gt;</code></td><td>owning raw pointer</td></tr>
+        <tr><td>Shared ownership</td><td><code>std::shared_ptr&lt;T&gt;</code> — <em>rare</em>, and justified in a comment</td><td>as a default</td></tr>
+        <tr><td>Non-owning reference</td><td><code>T&amp;</code>, or <code>T*</code> if nullable</td><td><code>shared_ptr</code> "just in case"</td></tr>
+        <tr><td>Non-owning range</td><td><code>std::span&lt;T&gt;</code></td><td><code>T*</code> + separate <code>count</code></td></tr>
+        <tr><td>Non-owning string</td><td><code>std::string_view</code></td><td><code>const char*</code> + length</td></tr>
+        <tr><td>Engine resource</td><td><strong>a handle</strong> (Module 5)</td><td>pointer into a vector that may reallocate</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    <strong>A raw pointer never owns.</strong> If you see <code>T*</code> in this codebase it
+    means "maybe null, definitely not mine, and it will outlive this use." That single
+    convention makes <code>delete</code> outside a destructor a code smell visible at a glance.
+  </p>
+
+  <div class="callout cpp">
+    <span class="label">C++ in place — RAII</span>
+    <p>
+      <strong>R</strong>esource <strong>A</strong>cquisition <strong>I</strong>s
+      <strong>I</strong>nitialization: tie a resource's lifetime to an object's. Acquire in the
+      constructor, release in the destructor, and the compiler emits the cleanup on <em>every</em>
+      exit path — early return, exception, or the end of the block. It is the reason C++ can be
+      safe without a garbage collector, and it is why we almost never write cleanup code.
+    </p>
+    <p>
+      The corollary is the <strong>rule of zero</strong>: if every member manages itself, your
+      class needs no destructor, no copy constructor, and no assignment operator. Most classes
+      here declare none of the five. The best special member function is the one you did not write.
+    </p>
+  </div>
+
+  <h3>Move semantics</h3>
+
+  <p>
+    Engine resources — GPU buffers, textures, file handles — are <strong>movable but not
+    copyable</strong>. Copying a 200 MB texture because a function took it by value is a bug you
+    should not be <em>able</em> to write, so we delete the copy operations rather than trusting
+    discipline.
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">the house pattern for an owning resource type</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">/// Owns a GPU buffer. Movable, not copyable: copying device memory is never
+/// something you want to happen by accident, so we make it impossible.
+class gpu_buffer
+{
+public:
+    gpu_buffer() = default;
+    ~gpu_buffer();                                       // releases the device buffer
+
+    gpu_buffer(const gpu_buffer&amp;)            = delete;   // no accidental 200 MB copies
+    gpu_buffer&amp; operator=(const gpu_buffer&amp;) = delete;
+
+    gpu_buffer(gpu_buffer&amp;&amp; other) noexcept;            // transfer ownership
+    gpu_buffer&amp; operator=(gpu_buffer&amp;&amp; other) noexcept;
+
+    [[nodiscard]] bool valid() const noexcept { return handle_ != nullptr; }
+
+private:
+    SDL_GPUBuffer* handle_ = nullptr;   // non-owning in type, owning by contract
+    std::uint32_t  size_   = 0;
+};</code></pre>
+  </figure>
+
+  <p>
+    Move operations are <code>noexcept</code>. This is not decoration:
+    <code>std::vector</code> will silently <em>copy</em> your elements when it grows if their
+    move constructor is not <code>noexcept</code>, because it cannot otherwise guarantee the
+    strong exception guarantee. A missing <code>noexcept</code> is a silent performance cliff.
+  </p>
+
+  <!-- ===================================================================== -->
+  <h2 id="errors"><span class="num">5</span>Errors without exceptions</h2>
+
+  <p>
+    The engine core is built with exceptions and RTTI <strong>disabled</strong>. This is a real
+    tradeoff with real costs, and it deserves an honest accounting rather than an assertion that
+    it is obviously correct — because it is not obviously correct.
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>What we gain</th><th>What we give up</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>
+            Predictable control flow — every failure path is visible in the signature.
+            No hidden unwinding on a frame budget. Smaller binaries, no exception tables.
+            Interop with C APIs (all of SDL) that cannot propagate exceptions anyway.
+            The console and embedded platforms where this is often mandatory.
+          </td>
+          <td>
+            <strong>Constructors cannot fail.</strong> That is the big one, and it forces the
+            two-phase <code>create()</code> pattern below — which is genuinely uglier than RAII
+            with a throwing constructor. Errors must be checked by hand, and
+            <code>[[nodiscard]]</code> becomes load-bearing rather than advisory. Some of the
+            standard library becomes off-limits.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    <strong>Honest summary:</strong> for a general-purpose application, exceptions are usually
+    the better default, and plenty of excellent engineers would argue for them here. We disable
+    them because engines live in the world of frame budgets, C interop, and platforms that ban
+    them — and because being explicit about failure is a discipline worth practising while you
+    learn. Module 5.3 makes this argument in full.
+  </p>
+
+  <h3>The rules</h3>
+
+  <ul>
+    <li><strong>Programmer error</strong> → <code>ENG_ASSERT</code>. A precondition violation is a bug; crash loudly and immediately, in debug.</li>
+    <li><strong>Expected runtime failure</strong> (file missing, shader won't compile, device lost) → return a value that says so.</li>
+    <li><strong>Impossible states</strong> → make them unrepresentable in the type, so there is nothing to check.</li>
+  </ul>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">the two-phase construction pattern</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">/// Loads a texture from disk.
+///
+/// Constructors cannot report failure without exceptions, so fallible creation
+/// is a static factory returning an optional. The constructor itself is private
+/// and cannot fail: by the time it runs, everything has already been validated.
+///
+/// @param path  Filesystem path to a PNG or JPEG.
+/// @return      The texture, or nullopt if the file is missing or malformed.
+///              The reason is logged; the caller gets the yes/no.
+[[nodiscard]] static std::optional&lt;texture&gt; create(std::string_view path);</code></pre>
+  </figure>
+
+  <p>
+    <strong><code>[[nodiscard]]</code> goes on every function returning a status or a value
+    whose loss is a bug.</strong> Without exceptions, an ignored return <em>is</em> a swallowed
+    error — so we let the compiler be the reviewer who never gets tired.
+  </p>
+
+  <!-- ===================================================================== -->
+  <h2 id="const"><span class="num">6</span>const-correctness and interfaces</h2>
+
+  <ul>
+    <li><code>const</code> on every member function that does not mutate. Not optional.</li>
+    <li>Parameters: take <strong>by value</strong> for cheap types (<code>int</code>, <code>float</code>, <code>vec3</code>, handles), <strong><code>const&amp;</code></strong> for expensive ones, <strong>by value + <code>std::move</code></strong> when you intend to keep it.</li>
+    <li>Prefer <code>constexpr</code> wherever the compiler will accept it.</li>
+    <li>No output parameters. Return a value, or a struct of values — that is what structured bindings are for.</li>
+  </ul>
+
+  <div class="callout cpp">
+    <span class="label">C++ in place — <code>const&amp;</code> vs by value</span>
+    <p>
+      A <code>vec3</code> is 12 bytes and fits in registers; <code>const vec3&amp;</code> is a
+      pointer the compiler may have to dereference, and can actively <em>hurt</em>. The rule of
+      thumb: pass by value up to roughly two pointers' worth of trivially-copyable data, and
+      <code>const&amp;</code> beyond that. So <code>vec3</code> by value,
+      <code>const mat4&amp;</code> by reference (64 bytes), <code>const std::vector&amp;</code>
+      always by reference.
+    </p>
+  </div>
+
+  <!-- ===================================================================== -->
+  <h2 id="comments"><span class="num">7</span>Comments that teach</h2>
+
+  <p>
+    <strong>Comments explain <em>why</em>, and the non-obvious <em>how</em>. Never the what.</strong>
+    The code already says what it does; if it does not, fix the code rather than annotating it.
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>Banned</th><th>Wanted</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>i++; // increment i</code></td>
+          <td>The constraint, the reason, the thing that bit you</td>
+        </tr>
+        <tr>
+          <td><code>// loop over lights</code></td>
+          <td><code>// Lights are sorted by distance so the shader can early-out.</code></td>
+        </tr>
+        <tr>
+          <td><code>// set the flag</code></td>
+          <td><code>// SDL_GPU zero-inits cull_mode to NONE, so we must be explicit or</code><br><code>// we silently pay for back faces. See conventions.html §7.</code></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    <strong>Every public entity gets a doc comment</strong> using <code>///</code>: what it does,
+    what it costs the caller, what it requires, and what it returns. Preconditions get stated
+    explicitly, because without exceptions the caller <em>is</em> the error handler.
+  </p>
+
+  <p>
+    Comments that explain <em>the course</em> rather than the code belong in the lesson prose,
+    not the source. The one exception: a comment marking a decision the reader would otherwise
+    assume is a mistake — like the duplicated CSS in our lesson template — earns its place,
+    because it prevents someone "fixing" a deliberate choice.
+  </p>
+
+  <!-- ===================================================================== -->
+  <h2 id="format"><span class="num">8</span>Formatting</h2>
+
+  <p>
+    Formatting is not worth arguing about, so we do not: <code>.clang-format</code> decides, and
+    the answer to every formatting question is "run the formatter". The settings below exist
+    only so the file is not a black box.
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <tbody>
+        <tr><td><strong>Indent</strong></td><td>4 spaces, never tabs</td></tr>
+        <tr><td><strong>Line length</strong></td><td>100 columns</td></tr>
+        <tr><td><strong>Braces</strong></td><td>Allman for types and functions; K&amp;R for control flow</td></tr>
+        <tr><td><strong>Braces on <code>if</code></strong></td><td>Always, even for one statement</td></tr>
+        <tr><td><strong>Pointer/reference</strong></td><td>Bound to the type: <code>int* p</code>, <code>const vec3&amp; v</code></td></tr>
+        <tr><td><strong><code>using namespace</code></strong></td><td>Never at file scope in a header. Function scope in a <code>.cpp</code> is fine.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    Braces on every <code>if</code> is the one formatting rule with a bug-prevention argument
+    rather than a taste argument, so it survives the "do not argue about formatting" principle.
+    <code>goto fail;</code> is the famous example, and it cost real people real security.
+  </p>
+
+  <!-- ===================================================================== -->
+  <h2 id="warnings"><span class="num">9</span>Warnings</h2>
+
+  <p>
+    <code>-Wall -Wextra</code> on Clang and GCC, <code>/W4</code> on MSVC. <strong>All warnings
+    are fixed, not suppressed.</strong>
+  </p>
+
+  <p>
+    A warning left standing is a broken window: once one is normal, the next is invisible, and
+    the one that mattered scrolls past unread. The compiler is the most patient reviewer you
+    will ever have, and it works for free.
+  </p>
+
+  <p>
+    We do <em>not</em> set <code>-Werror</code> in normal development builds — it turns an
+    unrelated compiler upgrade into a wall you cannot get past to do today's work. CI turns it
+    on. That way warnings cannot be ignored, but they also cannot block you mid-thought.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">Third-party headers are not our code</span>
+    <p>
+      SDL, ImGui, and stb are included as <strong>system</strong> headers
+      (<code>SYSTEM</code> in CMake's <code>target_include_directories</code>) so their warnings
+      never reach our build. We hold ourselves to <code>/W4</code>; holding
+      <em>other people's libraries</em> to it produces noise we cannot act on — which is exactly
+      the broken window we are trying to avoid.
+    </p>
+  </div>
+
+  <div class="recap">
+    <h2>The guide in nine lines</h2>
+    <ul>
+      <li><strong>C++20</strong>, no extensions, three compilers, all warnings fixed.</li>
+      <li><code>snake_case</code> like the standard library; private members get a trailing underscore.</li>
+      <li><code>.hpp</code> + <code>#pragma once</code>; own header first; headers are self-sufficient.</li>
+      <li><strong>One owner per resource</strong>, and it is an object. Raw pointers never own.</li>
+      <li>Engine resources are <strong>movable, not copyable</strong>; moves are <code>noexcept</code>.</li>
+      <li>No exceptions in core: assert on bugs, return values on expected failures, <code>[[nodiscard]]</code> everywhere it matters.</li>
+      <li><code>const</code> by default; no output parameters.</li>
+      <li>Comments explain <strong>why</strong>. Doc comments on every public entity.</li>
+      <li>The formatter decides formatting. Do not argue with it.</li>
+    </ul>
+    <p>
+      Conventions of direction and range live on the
+      <a href="conventions.html">Conventions</a> page.
+    </p>
+  </div>
+
+  <nav class="lesson-nav" aria-label="Page navigation (bottom)">
+    <a class="idx-l" href="index.html" style="flex:1">
+      <span class="dir">← Back</span>
+      <span class="ttl">Course home</span>
+    </a>
+    <a class="next-l" href="conventions.html">
+      <span class="dir">Companion →</span>
+      <span class="ttl">Conventions</span>
+    </a>
+  </nav>
+
+  <footer class="foot">
+    <p>
+      Build a Professional 3D Game Engine ·
+      <a href="index.html">Contents</a> ·
+      <a href="conventions.html">Conventions</a> ·
+      <a href="math-toolbox.html">Math Toolbox</a> ·
+      <a href="cpp-style.html">C++ Style</a>
+    </p>
+    <p>MIT licensed. Copyright © 2026 digster.</p>
+  </footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var root = document.documentElement;
+  var KEY = "engine-course-theme";
+  try {
+    var saved = localStorage.getItem(KEY);
+    if (saved) { root.setAttribute("data-theme", saved); root.style.colorScheme = saved; }
+  } catch (e) {}
+  var btn = document.getElementById("theme-toggle");
+  if (btn) {
+    btn.addEventListener("click", function () {
+      var cur = root.getAttribute("data-theme");
+      if (!cur) cur = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      var next = cur === "dark" ? "light" : "dark";
+      root.setAttribute("data-theme", next);
+      root.style.colorScheme = next;
+      try { localStorage.setItem(KEY, next); } catch (e) {}
+    });
+  }
+
+  var CPP_KEYWORDS = ("alignas alignof and asm auto break case catch class concept const consteval "
+    + "constexpr constinit const_cast continue co_await co_return co_yield decltype default delete "
+    + "do dynamic_cast else enum explicit export extern false for friend goto if inline mutable "
+    + "namespace new noexcept not nullptr operator or private protected public register "
+    + "reinterpret_cast requires return sizeof static static_assert static_cast struct switch "
+    + "template this thread_local throw true try typedef typeid typename union using virtual "
+    + "volatile while").split(" ");
+  var CPP_TYPES = ("bool char double float int long short signed unsigned void size_t uint8_t "
+    + "uint16_t uint32_t uint64_t int8_t int16_t int32_t int64_t").split(" ");
+  var kw = Object.create(null), ty = Object.create(null);
+  CPP_KEYWORDS.forEach(function (w) { kw[w] = 1; });
+  CPP_TYPES.forEach(function (w) { ty[w] = 1; });
+
+  function esc(s) { return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+  function span(c, s) { return '<span class="tok-' + c + '">' + esc(s) + "</span>"; }
+
+  var RE = new RegExp([
+    "(\\/\\*[\\s\\S]*?\\*\\/|\\/\\/[^\\n]*|#[^\\n]*)",
+    '("(?:\\\\.|[^"\\\\])*"|\'(?:\\\\.|[^\'\\\\])*\')',
+    "(\\b\\d[\\w.]*\\b)",
+    "([A-Za-z_]\\w*)(?=\\s*\\()",
+    "([A-Za-z_]\\w*)",
+    "([{}()\\[\\];,.<>+\\-*/%=!&|^~?:]+)"
+  ].join("|"), "g");
+
+  function highlight(src) {
+    var out = "", last = 0, m;
+    RE.lastIndex = 0;
+    while ((m = RE.exec(src)) !== null) {
+      if (m.index > last) out += esc(src.slice(last, m.index));
+      if (m[1])      out += span(m[1].charAt(0) === "#" ? "p" : "c", m[1]);
+      else if (m[2]) out += span("s", m[2]);
+      else if (m[3]) out += span("n", m[3]);
+      else if (m[4]) out += kw[m[4]] ? span("k", m[4]) : span("f", m[4]);
+      else if (m[5]) out += kw[m[5]] ? span("k", m[5]) : ty[m[5]] ? span("t", m[5]) : esc(m[5]);
+      else if (m[6]) out += span("o", m[6]);
+      last = RE.lastIndex;
+    }
+    return out + esc(src.slice(last));
+  }
+  document.querySelectorAll(".listing pre code.lang-cpp").forEach(function (el) {
+    el.innerHTML = highlight(el.textContent);
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,1804 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Conventions · Build a Professional 3D Game Engine</title>
+<meta name="description" content="The course-wide conventions: handedness, matrix storage, NDC and depth ranges, winding, units, and colour.">
+<!-- SHARED-CSS:BEGIN -->
+<style>
+/* ---- Design tokens ------------------------------------------------------- */
+:root {
+  color-scheme: light dark;
+
+  /* Page */
+  --bg:            #fdfdfb;
+  --bg-sunken:     #f4f4f0;
+  --bg-raised:     #ffffff;
+  --text:          #1c1c1a;
+  --text-muted:    #5f5f58;
+  --text-faint:    #8a8a80;
+  --rule:          #e2e2db;
+  --rule-strong:   #cfcfc6;
+
+  /* Accent — used for links, active nav, section marks */
+  --accent:        #b4530a;
+  --accent-soft:   #f5e6d8;
+  --accent-text:   #8f4108;
+
+  /* Callouts */
+  --note-bd:       #3a6ea5;   --note-bg:    #eaf2fb;
+  --warn-bd:       #b8860b;   --warn-bg:    #fdf5e2;
+  --verify-bd:     #a03030;   --verify-bg:  #fbecec;
+  --pitfall-bd:    #7a4fa3;   --pitfall-bg: #f4eefb;
+  --ok-bd:         #2f7d4f;   --ok-bg:      #e9f6ee;
+
+  /* Code — always dark, in both page themes */
+  --code-bg:       #1b1d23;
+  --code-bar:      #262932;
+  --code-text:     #dfe3ec;
+  --code-rule:     #363a45;
+
+  /* Syntax tokens */
+  --tok-comment:   #6d7789;
+  --tok-keyword:   #c98fdb;
+  --tok-type:      #6cc5d9;
+  --tok-string:    #a3cf85;
+  --tok-number:    #e8a978;
+  --tok-preproc:   #d9a05b;
+  --tok-func:      #79b6f2;
+  --tok-punct:     #9aa2b1;
+
+  /* Axis colours — COURSE-WIDE CONVENTION. x/y/z = red/green/blue.
+     Never override these in a diagram. See conventions.html. */
+  --axis-x:        #d1344a;
+  --axis-y:        #2f9e4f;
+  --axis-z:        #2b6fd4;
+  --axis-x-soft:   #f7d8dd;
+  --axis-y-soft:   #d8f0e0;
+  --axis-z-soft:   #d7e4fa;
+
+  /* Diagram neutrals */
+  --dia-bg:        #ffffff;
+  --dia-ink:       #33332e;
+  --dia-ink-soft:  #7a7a72;
+  --dia-grid:      #e8e8e2;
+  --dia-fill:      #f0f0ea;
+  --dia-hi:        #b4530a;
+
+  /* Typography */
+  --font-body: "Iowan Old Style", "Palatino Linotype", "Palatino", "Charter",
+               Georgia, Cambria, "Times New Roman", serif;
+  --font-ui:   -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+               "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "SFMono-Regular", "Cascadia Code",
+               "JetBrains Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  --measure: 42rem;          /* ~72 characters at this size — the reading column */
+  --measure-wide: 58rem;     /* diagrams & tables may breathe past the measure  */
+}
+
+/* Dark tokens.
+   Applied in two situations, which is why the block is written twice:
+     1. the OS asks for dark AND the reader has not overridden to light;
+     2. the reader explicitly chose dark via the toggle.
+   CSS has no mixins, so duplication is the price of supporting both an OS
+   default and a manual override. Keep the two blocks byte-identical. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg:          #15161a;
+    --bg-sunken:   #101115;
+    --bg-raised:   #1c1e24;
+    --text:        #e4e4e0;
+    --text-muted:  #a2a49e;
+    --text-faint:  #74766f;
+    --rule:        #2c2e35;
+    --rule-strong: #3d404a;
+
+    --accent:      #f0a06a;
+    --accent-soft: #33251a;
+    --accent-text: #f5b184;
+
+    --note-bd:     #5a8fc8;   --note-bg:    #16202c;
+    --warn-bd:     #c9a132;   --warn-bg:    #262013;
+    --verify-bd:   #d05555;   --verify-bg:  #2a1717;
+    --pitfall-bd:  #a077c8;   --pitfall-bg: #221a2c;
+    --ok-bd:       #4fa877;   --ok-bg:      #14231a;
+
+    --dia-bg:      #1a1c21;
+    --dia-ink:     #d8d8d2;
+    --dia-ink-soft:#8f918a;
+    --dia-grid:    #2b2d33;
+    --dia-fill:    #24262c;
+    --dia-hi:      #f0a06a;
+
+    --axis-x:      #f2647a;
+    --axis-y:      #5cc47e;
+    --axis-z:      #6b9ef0;
+    --axis-x-soft: #3a2027;
+    --axis-y-soft: #1c3325;
+    --axis-z-soft: #1e2a40;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg:          #15161a;
+  --bg-sunken:   #101115;
+  --bg-raised:   #1c1e24;
+  --text:        #e4e4e0;
+  --text-muted:  #a2a49e;
+  --text-faint:  #74766f;
+  --rule:        #2c2e35;
+  --rule-strong: #3d404a;
+
+  --accent:      #f0a06a;
+  --accent-soft: #33251a;
+  --accent-text: #f5b184;
+
+  --note-bd:     #5a8fc8;   --note-bg:    #16202c;
+  --warn-bd:     #c9a132;   --warn-bg:    #262013;
+  --verify-bd:   #d05555;   --verify-bg:  #2a1717;
+  --pitfall-bd:  #a077c8;   --pitfall-bg: #221a2c;
+  --ok-bd:       #4fa877;   --ok-bg:      #14231a;
+
+  --dia-bg:      #1a1c21;
+  --dia-ink:     #d8d8d2;
+  --dia-ink-soft:#8f918a;
+  --dia-grid:    #2b2d33;
+  --dia-fill:    #24262c;
+  --dia-hi:      #f0a06a;
+
+  --axis-x:      #f2647a;
+  --axis-y:      #5cc47e;
+  --axis-z:      #6b9ef0;
+  --axis-x-soft: #3a2027;
+  --axis-y-soft: #1c3325;
+  --axis-z-soft: #1e2a40;
+}
+
+/* ---- Reset & base -------------------------------------------------------- */
+*, *::before, *::after { box-sizing: border-box; }
+
+html {
+  font-size: 18px;
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
+  scroll-padding-top: 2rem;
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  line-height: 1.7;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* The reading column. Everything is centred on --measure; wide elements opt out. */
+.wrap {
+  max-width: var(--measure);
+  margin: 0 auto;
+  padding: 0 1.25rem;
+}
+.bleed {                       /* for diagrams/tables that need more room */
+  max-width: var(--measure-wide);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* ---- Typography ---------------------------------------------------------- */
+h1, h2, h3, h4 {
+  font-family: var(--font-ui);
+  line-height: 1.25;
+  letter-spacing: -0.015em;
+  margin: 0 0 0.6em;
+  scroll-margin-top: 1.5rem;
+}
+h1 { font-size: 2.15rem; font-weight: 700; margin-top: 0.2em; }
+h2 {
+  font-size: 1.5rem; font-weight: 650;
+  margin-top: 2.6em;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--rule);
+}
+h3 { font-size: 1.15rem; font-weight: 650; margin-top: 2em; }
+h4 { font-size: 1rem;    font-weight: 650; margin-top: 1.6em; color: var(--text-muted); }
+
+/* Section numbers rendered as a quiet prefix */
+h2 .num, h3 .num {
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  margin-right: 0.5em;
+  font-weight: 500;
+}
+
+p { margin: 0 0 1.15em; }
+
+a { color: var(--accent-text); text-decoration-color: var(--rule-strong); text-underline-offset: 2px; }
+a:hover { text-decoration-color: currentColor; }
+
+strong { font-weight: 650; }
+em { font-style: italic; }
+
+ul, ol { margin: 0 0 1.15em; padding-left: 1.5em; }
+li { margin-bottom: 0.4em; }
+li > ul, li > ol { margin-top: 0.4em; margin-bottom: 0.5em; }
+
+hr { border: 0; border-top: 1px solid var(--rule); margin: 2.5em 0; }
+
+blockquote {
+  margin: 1.5em 0;
+  padding: 0.1em 0 0.1em 1.2em;
+  border-left: 3px solid var(--rule-strong);
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* Inline code — light chip, distinct from the dark block listings */
+:not(pre) > code {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 0.08em 0.34em;
+  word-break: break-word;
+}
+
+/* ---- Masthead ------------------------------------------------------------ */
+.masthead {
+  background: var(--bg-sunken);
+  border-bottom: 1px solid var(--rule);
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+}
+.masthead-inner {
+  max-width: var(--measure-wide);
+  margin: 0 auto;
+  padding: 0.6rem 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.masthead .course {
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  text-decoration: none;
+}
+.masthead .spacer { flex: 1; }
+.masthead a { color: var(--text-muted); text-decoration: none; }
+.masthead a:hover { color: var(--accent-text); }
+
+.theme-toggle {
+  font: inherit;
+  font-size: 0.78rem;
+  background: var(--bg-raised);
+  color: var(--text-muted);
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  padding: 0.2rem 0.55rem;
+  cursor: pointer;
+}
+.theme-toggle:hover { border-color: var(--rule-strong); color: var(--text); }
+
+/* ---- Lesson nav (top & bottom) ------------------------------------------- */
+.lesson-nav {
+  display: flex;
+  align-items: stretch;
+  gap: 0.6rem;
+  font-family: var(--font-ui);
+  font-size: 0.82rem;
+  margin: 1.5rem auto;
+}
+.lesson-nav a, .lesson-nav span {
+  flex: 1;
+  padding: 0.55rem 0.8rem;
+  border: 1px solid var(--rule);
+  border-radius: 7px;
+  background: var(--bg-raised);
+  text-decoration: none;
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+.lesson-nav a:hover { border-color: var(--accent); }
+.lesson-nav span { opacity: 0.45; }        /* disabled edge (no prev / no next) */
+.lesson-nav .dir {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-faint);
+}
+.lesson-nav .ttl {
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-weight: 550;
+}
+.lesson-nav .next-l { text-align: right; }
+.lesson-nav .idx-l  { flex: 0 0 auto; justify-content: center; text-align: center; }
+@media (max-width: 34rem) {
+  .lesson-nav { flex-wrap: wrap; }
+  .lesson-nav .idx-l { order: 3; flex: 1 0 100%; }
+}
+
+/* ---- Lesson header block ------------------------------------------------- */
+.lesson-head { margin: 2rem 0 0; }
+.eyebrow {
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+  font-weight: 650;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 0.5rem;
+}
+.deck {
+  font-size: 1.12rem;
+  color: var(--text-muted);
+  margin-bottom: 1.5rem;
+}
+.meta {
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  padding: 1rem 1.15rem;
+  margin-bottom: 1.75rem;
+}
+.meta dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 0.4rem 1rem; }
+.meta dt {
+  color: var(--text-faint);
+  text-transform: uppercase;
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  padding-top: 0.28em;
+  white-space: nowrap;
+}
+.meta dd { margin: 0; }
+@media (max-width: 30rem) {
+  .meta dl { grid-template-columns: 1fr; gap: 0.15rem 0; }
+  .meta dd { margin-bottom: 0.6rem; }
+}
+
+/* Objectives — "you will be able to…" */
+.objectives {
+  border: 1px solid var(--accent);
+  background: var(--accent-soft);
+  border-radius: 9px;
+  padding: 1.1rem 1.25rem;
+  margin: 1.75rem 0;
+}
+.objectives h2 {
+  margin: 0 0 0.5rem;
+  border: 0; padding: 0;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--accent-text);
+}
+.objectives ul { margin: 0; padding-left: 1.25em; }
+.objectives li::marker { color: var(--accent); }
+
+/* ---- Table of contents --------------------------------------------------- */
+.toc {
+  font-family: var(--font-ui);
+  font-size: 0.88rem;
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  padding: 1rem 1.25rem;
+  margin: 2rem 0;
+}
+.toc > summary {
+  cursor: pointer;
+  font-weight: 650;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-muted);
+  list-style: none;
+}
+.toc > summary::-webkit-details-marker { display: none; }
+.toc > summary::before { content: "▸ "; color: var(--accent); }
+.toc[open] > summary::before { content: "▾ "; }
+.toc ol { list-style: none; margin: 0.85rem 0 0; padding: 0; counter-reset: toc; }
+.toc ol ol { margin: 0.3rem 0 0.5rem 1.1rem; }
+.toc li { margin: 0.28em 0; counter-increment: toc; }
+.toc a { text-decoration: none; color: var(--text); }
+.toc a:hover { color: var(--accent-text); text-decoration: underline; }
+.toc ol ol a { color: var(--text-muted); font-size: 0.94em; }
+
+/* ---- Callouts ------------------------------------------------------------ */
+.callout {
+  border-left: 3px solid var(--rule-strong);
+  background: var(--bg-sunken);
+  border-radius: 0 8px 8px 0;
+  padding: 0.9rem 1.1rem;
+  margin: 1.6em 0;
+  font-size: 0.95rem;
+}
+.callout > :first-child { margin-top: 0; }
+.callout > :last-child  { margin-bottom: 0; }
+.callout .label {
+  display: block;
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  margin-bottom: 0.35rem;
+}
+.callout.note    { border-color: var(--note-bd);    background: var(--note-bg); }
+.callout.note .label    { color: var(--note-bd); }
+.callout.warn    { border-color: var(--warn-bd);    background: var(--warn-bg); }
+.callout.warn .label    { color: var(--warn-bd); }
+.callout.verify  { border-color: var(--verify-bd);  background: var(--verify-bg); }
+.callout.verify .label  { color: var(--verify-bd); }
+.callout.pitfall { border-color: var(--pitfall-bd); background: var(--pitfall-bg); }
+.callout.pitfall .label { color: var(--pitfall-bd); }
+.callout.ok      { border-color: var(--ok-bd);      background: var(--ok-bg); }
+.callout.ok .label      { color: var(--ok-bd); }
+/* C++ explainers: a C++ feature taught in place, the first time it appears. */
+.callout.cpp     { border-color: var(--accent);     background: var(--accent-soft); }
+.callout.cpp .label     { color: var(--accent-text); }
+
+/* ---- Code listings ------------------------------------------------------- */
+.listing {
+  margin: 1.6em 0;
+  border-radius: 9px;
+  overflow: hidden;
+  border: 1px solid var(--code-rule);
+  background: var(--code-bg);
+}
+.listing figcaption {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: var(--code-bar);
+  border-bottom: 1px solid var(--code-rule);
+  padding: 0.45rem 0.85rem;
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  color: #aeb6c4;
+}
+.listing figcaption .path { font-weight: 600; color: #dfe3ec; }
+.listing figcaption .tag {
+  font-family: var(--font-ui);
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  background: #3a3f4c;
+  color: #c6cdd9;
+}
+.listing figcaption .tag.new      { background: #1f4433; color: #7fd6a5; }
+.listing figcaption .tag.modified { background: #453a1c; color: #e0be74; }
+.listing figcaption .lang { margin-left: auto; opacity: 0.65; }
+
+/* Horizontal scroll — NEVER wrap. Wrapped code lies about its structure. */
+.listing pre {
+  margin: 0;
+  padding: 0.9rem 1rem;
+  overflow-x: auto;
+  background: var(--code-bg);
+}
+.listing pre code {
+  font-family: var(--font-mono);
+  font-size: 0.79rem;
+  line-height: 1.62;
+  color: var(--code-text);
+  white-space: pre;
+  display: block;
+  tab-size: 4;
+}
+.listing pre::-webkit-scrollbar { height: 9px; }
+.listing pre::-webkit-scrollbar-track { background: var(--code-bar); }
+.listing pre::-webkit-scrollbar-thumb { background: #4a5060; border-radius: 5px; }
+.listing pre::-webkit-scrollbar-thumb:hover { background: #5d6478; }
+
+/* Syntax tokens, applied by the tiny highlighter at the foot of the page. */
+.tok-c { color: var(--tok-comment); font-style: italic; }
+.tok-k { color: var(--tok-keyword); }
+.tok-t { color: var(--tok-type); }
+.tok-s { color: var(--tok-string); }
+.tok-n { color: var(--tok-number); }
+.tok-p { color: var(--tok-preproc); }
+.tok-f { color: var(--tok-func); }
+.tok-o { color: var(--tok-punct); }
+
+/* Emphasised line inside a listing (the line this paragraph is about) */
+.listing .hl { background: rgba(180, 130, 60, 0.16); display: inline-block; width: 100%; }
+
+/* Shell transcripts get a lighter treatment than source files */
+.listing.shell figcaption .path::before { content: "$ "; opacity: 0.6; }
+
+/* ---- Figures & diagrams -------------------------------------------------- */
+figure.dia {
+  margin: 2em auto;
+  padding: 0;
+}
+figure.dia svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: var(--dia-bg);
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+}
+figure.dia figcaption,
+figure.tbl figcaption {
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: 0.65rem;
+  line-height: 1.55;
+}
+figure.dia figcaption .fignum,
+figure.tbl figcaption .fignum {
+  font-weight: 700;
+  color: var(--text);
+}
+/* SVG text inherits the theme so diagrams survive dark mode */
+figure.dia svg text { font-family: var(--font-ui); fill: var(--dia-ink); }
+figure.dia svg .lbl-x { fill: var(--axis-x); }
+figure.dia svg .lbl-y { fill: var(--axis-y); }
+figure.dia svg .lbl-z { fill: var(--axis-z); }
+figure.dia svg .ax-x  { stroke: var(--axis-x); }
+figure.dia svg .ax-y  { stroke: var(--axis-y); }
+figure.dia svg .ax-z  { stroke: var(--axis-z); }
+figure.dia svg .ink       { stroke: var(--dia-ink); }
+figure.dia svg .ink-soft  { stroke: var(--dia-ink-soft); }
+figure.dia svg .grid      { stroke: var(--dia-grid); }
+figure.dia svg .fill-soft { fill: var(--dia-fill); }
+figure.dia svg .hi        { stroke: var(--dia-hi); }
+figure.dia svg .mono      { font-family: var(--font-mono); }
+figure.dia svg .sm        { font-size: 11px; }
+figure.dia svg .xs        { font-size: 9.5px; }
+
+/* Text fills for <text> elements.
+   These MUST be classes, not fill="..." attributes: the `figure.dia svg text`
+   rule above is CSS, and CSS always beats an SVG presentation attribute — an
+   inline fill on a <text> is silently ignored. Class selectors outrank the bare
+   element selector, so these win. (Shapes are unaffected; the rule only targets
+   text, so fill="..." still works on rect/path/circle.) */
+figure.dia svg .muted     { fill: var(--dia-ink-soft); }
+figure.dia svg .t-hi      { fill: var(--dia-hi); }
+figure.dia svg .t-ok      { fill: var(--ok-bd); }
+figure.dia svg .t-bad     { fill: var(--verify-bd); }
+
+/* ---- Tables -------------------------------------------------------------- */
+.tbl-scroll { overflow-x: auto; margin: 1.6em 0; }
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+th, td {
+  text-align: left;
+  padding: 0.5rem 0.7rem;
+  border-bottom: 1px solid var(--rule);
+  vertical-align: top;
+}
+th {
+  font-weight: 650;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--rule-strong);
+  white-space: nowrap;
+}
+tbody tr:hover { background: var(--bg-sunken); }
+td code { font-size: 0.82em; }
+
+/* File-manifest table: path | new/modified | purpose */
+.manifest td:first-child { font-family: var(--font-mono); font-size: 0.78rem; white-space: nowrap; }
+.badge {
+  font-size: 0.62rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.06em; padding: 0.1rem 0.4rem; border-radius: 3px; white-space: nowrap;
+}
+.badge.new { background: var(--ok-bg); color: var(--ok-bd); border: 1px solid var(--ok-bd); }
+.badge.mod { background: var(--warn-bg); color: var(--warn-bd); border: 1px solid var(--warn-bd); }
+/* Curriculum status, used on index.html */
+.badge.done { background: var(--ok-bg); color: var(--ok-bd); border: 1px solid var(--ok-bd); }
+.badge.soon { background: var(--bg-sunken); color: var(--text-faint); border: 1px solid var(--rule-strong); }
+
+/* ---- Math ---------------------------------------------------------------- */
+/* KaTeX renders these when the CDN is reachable. When it is NOT, the raw TeX
+   stays visible — which is why every equation MUST also be stated in prose.
+   Never let an equation be the only carrier of a fact. */
+.eq {
+  margin: 1.4em 0;
+  padding: 0.9rem 1rem;
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  overflow-x: auto;
+  text-align: center;
+}
+.eq-plain {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  margin-top: 0.6rem;
+  padding-top: 0.6rem;
+  border-top: 1px dashed var(--rule-strong);
+  text-align: left;
+}
+.eq-plain::before {
+  content: "in plain text: ";
+  color: var(--text-faint);
+  font-family: var(--font-ui);
+  font-size: 0.72rem;
+}
+
+/* Worked numeric example — every formula gets one */
+.worked {
+  border: 1px solid var(--rule-strong);
+  border-radius: 9px;
+  padding: 1rem 1.2rem;
+  margin: 1.6em 0;
+  background: var(--bg-raised);
+}
+.worked > .label {
+  display: block;
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--accent);
+  margin-bottom: 0.5rem;
+}
+.worked > :last-child { margin-bottom: 0; }
+
+/* ---- Exercises ----------------------------------------------------------- */
+.exercise {
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 9px 9px 0;
+  padding: 1rem 1.2rem;
+  margin: 1.4em 0;
+  background: var(--bg-raised);
+}
+.exercise h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.98rem;
+}
+.exercise h3 .xnum {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--accent);
+  margin-right: 0.5em;
+}
+.difficulty {
+  font-family: var(--font-ui);
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-faint);
+  border: 1px solid var(--rule-strong);
+  border-radius: 3px;
+  padding: 0.05rem 0.35rem;
+  margin-left: 0.4em;
+  vertical-align: 0.15em;
+}
+.exercise details {
+  margin-top: 0.7rem;
+  border-top: 1px solid var(--rule);
+  padding-top: 0.6rem;
+}
+.exercise summary {
+  cursor: pointer;
+  font-family: var(--font-ui);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.exercise summary:hover { color: var(--accent-text); }
+.exercise details[open] summary { margin-bottom: 0.6rem; }
+
+/* ---- Pitfalls (symptom → cause → fix) ------------------------------------ */
+.pitfalls { margin: 1.5em 0; }
+.pitfall-item {
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  margin-bottom: 0.9rem;
+  overflow: hidden;
+}
+.pitfall-item > summary {
+  cursor: pointer;
+  padding: 0.7rem 1rem;
+  background: var(--bg-sunken);
+  font-family: var(--font-ui);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.pitfall-item > summary:hover { color: var(--accent-text); }
+.pitfall-item > summary .sym {
+  font-weight: 400;
+  color: var(--text-muted);
+  font-style: italic;
+}
+.pitfall-body { padding: 0.9rem 1rem; font-size: 0.94rem; }
+.pitfall-body > :first-child { margin-top: 0; }
+.pitfall-body > :last-child  { margin-bottom: 0; }
+.pitfall-body dt {
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+  margin-top: 0.7rem;
+}
+.pitfall-body dd { margin: 0.2rem 0 0; }
+
+/* ---- Recap / next -------------------------------------------------------- */
+.recap {
+  background: var(--ok-bg);
+  border: 1px solid var(--ok-bd);
+  border-radius: 9px;
+  padding: 1.1rem 1.25rem;
+  margin: 1.75rem 0;
+}
+.recap h2 { margin: 0 0 0.6rem; border: 0; padding: 0; font-size: 1.05rem; }
+.recap > :last-child { margin-bottom: 0; }
+
+/* ---- Further reading ----------------------------------------------------- */
+.reading { font-size: 0.92rem; }
+.reading li { margin-bottom: 0.6em; }
+.reading .src {
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+  margin-right: 0.4em;
+}
+
+/* ---- STATE block --------------------------------------------------------- */
+.state {
+  margin: 2.5em 0 1em;
+  border: 1px dashed var(--rule-strong);
+  border-radius: 9px;
+  background: var(--bg-sunken);
+  overflow: hidden;
+}
+.state > summary {
+  cursor: pointer;
+  padding: 0.6rem 1rem;
+  font-family: var(--font-ui);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-muted);
+}
+.state pre {
+  margin: 0;
+  padding: 0.9rem 1rem;
+  overflow-x: auto;
+  border-top: 1px solid var(--rule);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+  white-space: pre;
+}
+
+/* ---- Footer -------------------------------------------------------------- */
+.foot {
+  border-top: 1px solid var(--rule);
+  margin-top: 3rem;
+  padding: 1.5rem 0 3rem;
+  font-family: var(--font-ui);
+  font-size: 0.78rem;
+  color: var(--text-faint);
+}
+.foot a { color: var(--text-muted); }
+
+/* ---- Interactive widgets ------------------------------------------------- */
+.widget {
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  background: var(--bg-raised);
+  padding: 1rem;
+  margin: 2em 0;
+}
+.widget-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+  align-items: center;
+  margin-top: 0.8rem;
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+.widget-controls label { display: flex; align-items: center; gap: 0.4rem; }
+.widget-controls input[type="range"] { accent-color: var(--accent); }
+.widget-readout {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--text);
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 0.1rem 0.4rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Print --------------------------------------------------------------- */
+@media print {
+  .masthead, .lesson-nav, .theme-toggle { display: none; }
+  body { background: #fff; color: #000; font-size: 11pt; }
+  .listing { break-inside: avoid; }
+  figure.dia { break-inside: avoid; }
+  a::after { content: " (" attr(href) ")"; font-size: 0.7em; color: #666; }
+}
+</style>
+<!-- SHARED-CSS:END -->
+<link rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css"
+      integrity="sha384-nB0miv6/jRmo5UMMR1wu3Gz6NLsoTkbqJghGIsx//Rlm+ZU03BU6SQNC66uf4l5+"
+      crossorigin="anonymous">
+</head>
+<body>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <a class="course" href="index.html">Build a Professional 3D Game Engine</a>
+    <span class="spacer"></span>
+    <a href="index.html">Contents</a>
+    <a href="conventions.html">Conventions</a>
+    <a href="math-toolbox.html">Math Toolbox</a>
+    <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Toggle colour theme">Theme</button>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <nav class="lesson-nav" aria-label="Page navigation (top)">
+    <a class="idx-l" href="index.html" style="flex:1">
+      <span class="dir">← Back</span>
+      <span class="ttl">Course home</span>
+    </a>
+    <a class="next-l" href="math-toolbox.html">
+      <span class="dir">Companion →</span>
+      <span class="ttl">Math Toolbox</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Living reference · Read before Module 2</div>
+    <h1>Conventions</h1>
+    <p class="deck">
+      The handful of arbitrary-but-binding choices this course makes about direction, order,
+      and range. Convention mismatches are the single largest source of silent rendering
+      bugs — a wrong choice does not crash, it just quietly draws the mirror image.
+    </p>
+  </div>
+
+  <div class="callout note">
+    <span class="label">How to use this page</span>
+    <p>
+      Everything here is <em>decided</em>, not discovered — except the parts marked
+      <strong>fixed by SDL_GPU</strong>, which are facts we must obey. Where a choice was
+      genuinely open, this page says why we chose as we did, because a convention you
+      understand is one you can debug.
+    </p>
+  </div>
+
+  <details class="toc" open>
+    <summary>Contents</summary>
+    <ol>
+      <li><a href="#why">Why conventions deserve their own page</a></li>
+      <li><a href="#world">World space: right-handed, Y-up, −Z forward</a></li>
+      <li><a href="#chain">The space chain</a></li>
+      <li><a href="#ndc">Clip space and NDC — fixed by SDL_GPU</a></li>
+      <li><a href="#flip">Where the handedness flip happens</a></li>
+      <li><a href="#matrices">Matrices: column vectors, column-major</a></li>
+      <li><a href="#winding">Winding and culling</a></li>
+      <li><a href="#units">Units and angles</a></li>
+      <li><a href="#colour">Colour and diagram conventions</a></li>
+      <li><a href="#verified">The verified-facts table</a></li>
+    </ol>
+  </details>
+
+  <!-- ===================================================================== -->
+  <h2 id="why"><span class="num">1</span>Why conventions deserve their own page</h2>
+
+  <p>
+    Most graphics bugs announce themselves. You get a crash, a validation error, a black
+    screen. Convention bugs do not. They produce a picture that is <em>almost</em> right —
+    mirrored, upside-down, inside-out, or depth-sorted backwards — and every individual piece
+    of code looks correct in isolation. The bug lives in the disagreement between two files,
+    not inside either one.
+  </p>
+
+  <p>
+    The cure is to decide once, write it down, and never deviate. That is this page. If a
+    lesson ever contradicts it, the lesson is wrong.
+  </p>
+
+  <!-- ===================================================================== -->
+  <h2 id="world"><span class="num">2</span>World space: right-handed, Y-up, −Z forward</h2>
+
+  <p>
+    Point your right hand's index finger along <strong>+x</strong> and your middle finger along
+    <strong>+y</strong>; your thumb now points along <strong>+z</strong>, out of the screen
+    toward you. That is a right-handed system, and it is what this course uses everywhere in
+    model, world, and view space. Figure 1 is the picture to keep in your head.
+  </p>
+
+  <figure class="dia bleed">
+    <svg viewBox="0 0 640 300" role="img" aria-labelledby="f1t f1d">
+      <title id="f1t">World space axes: right-handed, Y-up, −Z forward</title>
+      <desc id="f1d">Three axes from a common origin. X points right in red, Y points up in
+        green, Z points down-left toward the viewer in blue. A dashed line marks −Z, the
+        direction the camera looks.</desc>
+      <defs>
+        <marker id="c-ah-x" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--axis-x)"/></marker>
+        <marker id="c-ah-y" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--axis-y)"/></marker>
+        <marker id="c-ah-z" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--axis-z)"/></marker>
+        <marker id="c-ah-soft" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+      </defs>
+
+      <g class="grid" stroke-width="1">
+        <path d="M40,260 H600 M40,200 H600 M40,140 H600 M40,80 H600"/>
+        <path d="M100,40 V280 M180,40 V280 M260,40 V280 M340,40 V280 M420,40 V280 M500,40 V280"/>
+      </g>
+
+      <line class="ax-x" x1="260" y1="200" x2="470" y2="200" stroke-width="2.5" marker-end="url(#c-ah-x)"/>
+      <line class="ax-y" x1="260" y1="200" x2="260" y2="70"  stroke-width="2.5" marker-end="url(#c-ah-y)"/>
+      <line class="ax-z" x1="260" y1="200" x2="140" y2="268" stroke-width="2.5" marker-end="url(#c-ah-z)"/>
+
+      <line class="ink-soft" x1="260" y1="200" x2="392" y2="126" stroke-width="1.6"
+            stroke-dasharray="5 4" marker-end="url(#c-ah-soft)"/>
+
+      <circle cx="260" cy="200" r="3.5" fill="var(--dia-ink)"/>
+      <text x="266" y="220" class="sm muted">origin</text>
+
+      <text x="480" y="205" class="lbl-x" font-weight="700">+x</text>
+      <text x="480" y="222" class="xs muted">right</text>
+      <text x="248" y="58"  class="lbl-y" font-weight="700">+y</text>
+      <text x="248" y="42"  class="xs muted">up</text>
+      <text x="96"  y="290" class="lbl-z" font-weight="700">+z</text>
+      <text x="124" y="290" class="xs muted">toward the viewer</text>
+
+      <text x="398" y="122" class="xs muted">−z = forward</text>
+      <text x="398" y="136" class="xs muted">(the way the camera looks)</text>
+
+      <g transform="translate(40,42)">
+        <text x="0" y="0"  class="sm" font-weight="700">Right-handed, Y-up</text>
+        <text x="0" y="16" class="xs mono muted">x × y = +z</text>
+      </g>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 1.</span> World space. The cross product
+      <code>x × y</code> yields <code>+z</code> — that identity <em>is</em> the definition of
+      right-handedness, and it is the thing to test against when you are unsure.
+    </figcaption>
+  </figure>
+
+  <div class="worked">
+    <span class="label">Worked example — proving the handedness by cross product</span>
+    <p>
+      The cross product of the first two basis vectors must give the third. With
+      <code>x = (1, 0, 0)</code> and <code>y = (0, 1, 0)</code>:
+    </p>
+    <ul>
+      <li><code>(x × y).x = x.y·y.z − x.z·y.y = 0·0 − 0·1 = 0</code></li>
+      <li><code>(x × y).y = x.z·y.x − x.x·y.z = 0·0 − 1·0 = 0</code></li>
+      <li><code>(x × y).z = x.x·y.y − x.y·y.x = 1·1 − 0·0 = 1</code></li>
+    </ul>
+    <p>
+      So <code>x × y = (0, 0, 1) = +z</code>. Right-handed, confirmed. In a left-handed system
+      the same arithmetic would have to yield <code>−z</code>, which is why you cannot mix the
+      two without noticing — eventually.
+    </p>
+  </div>
+
+  <h3>Why right-handed, when SDL_GPU's clip space is left-handed?</h3>
+
+  <p>
+    This is a fair objection and worth answering directly. Two reasons decided it:
+  </p>
+
+  <ul>
+    <li>
+      <strong>glTF 2.0 is right-handed, Y-up.</strong> Module 6 loads glTF scenes. Matching it
+      means zero axis conversion on import — and axis-conversion code is a permanent tax you pay
+      on every asset, forever.
+    </li>
+    <li>
+      <strong>Every reference this course sends you to is right-handed.</strong> Scratchapixel,
+      <em>Real-Time Rendering</em>, LearnOpenGL. When you read a derivation there and type it
+      here, it should just work.
+    </li>
+  </ul>
+
+  <p>
+    The cost is one sign flip inside the projection matrix — a single line, written once, in
+    §<a href="#flip">5</a>. That is a bargain compared to converting every mesh you ever load.
+  </p>
+
+  <!-- ===================================================================== -->
+  <h2 id="chain"><span class="num">3</span>The space chain</h2>
+
+  <p>
+    A vertex makes six stops between the model file and the pixel. Every renderer in this
+    course — the CPU rasterizer in Modules 2–3 and the SDL_GPU renderer from Module 4 — walks
+    exactly this chain, in this order. Figure 2 names each hop and the matrix responsible.
+  </p>
+
+  <figure class="dia bleed">
+    <svg viewBox="0 0 660 240" role="img" aria-labelledby="f2t f2d">
+      <title id="f2t">The coordinate-space chain</title>
+      <desc id="f2d">Six boxes left to right: model, world, view, clip, NDC, screen. Arrows
+        between them are labelled with the responsible matrix: model, view, projection, then
+        the perspective divide, then the viewport transform.</desc>
+      <defs>
+        <marker id="c-fl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+      </defs>
+
+      <g font-size="11">
+        <!-- boxes -->
+        <g class="fill-soft" stroke="var(--dia-ink-soft)" stroke-width="1">
+          <rect x="14"  y="60" width="86" height="42" rx="6"/>
+          <rect x="140" y="60" width="86" height="42" rx="6"/>
+          <rect x="266" y="60" width="86" height="42" rx="6"/>
+          <rect x="392" y="60" width="86" height="42" rx="6"/>
+          <rect x="518" y="60" width="60" height="42" rx="6"/>
+        </g>
+        <rect x="518" y="140" width="60" height="42" rx="6" class="fill-soft" stroke="var(--dia-hi)" stroke-width="1.6"/>
+
+        <g text-anchor="middle" font-weight="700">
+          <text x="57"  y="86">model</text>
+          <text x="183" y="86">world</text>
+          <text x="309" y="86">view</text>
+          <text x="435" y="86">clip</text>
+          <text x="548" y="86">NDC</text>
+          <text x="548" y="166">screen</text>
+        </g>
+
+        <!-- arrows -->
+        <g class="ink" stroke-width="1.4" marker-end="url(#c-fl)" fill="none">
+          <line x1="102" y1="81" x2="136" y2="81"/>
+          <line x1="228" y1="81" x2="262" y2="81"/>
+          <line x1="354" y1="81" x2="388" y2="81"/>
+          <line x1="480" y1="81" x2="514" y2="81"/>
+          <line x1="548" y1="104" x2="548" y2="136"/>
+        </g>
+
+        <g text-anchor="middle">
+          <text x="119" y="74" class="xs mono muted">M</text>
+          <text x="245" y="74" class="xs mono muted">V</text>
+          <text x="371" y="74" class="xs mono muted">P</text>
+          <text x="497" y="74" class="xs mono muted">÷w</text>
+          <text x="592" y="124" class="xs mono muted" text-anchor="start">viewport</text>
+        </g>
+
+        <g text-anchor="middle" class="xs muted">
+          <text x="119" y="122">place the</text>
+          <text x="119" y="134">object</text>
+          <text x="245" y="122">look from</text>
+          <text x="245" y="134">the camera</text>
+          <text x="371" y="122">apply</text>
+          <text x="371" y="134">perspective</text>
+          <text x="497" y="122">perspective</text>
+          <text x="497" y="134">divide</text>
+        </g>
+
+        <!-- handedness annotation -->
+        <path d="M296,44 H478" class="hi" stroke-width="1.2" stroke-dasharray="4 3" fill="none"/>
+        <text x="296" y="36" class="xs t-hi" font-weight="700">right-handed</text>
+        <text x="478" y="36" class="xs t-hi" font-weight="700" text-anchor="end">left-handed →</text>
+        <text x="387" y="36" class="xs t-hi" text-anchor="middle">P flips it</text>
+
+        <text x="14" y="216" class="xs muted">Everything left of the projection matrix is right-handed, Y-up. Everything right of it is</text>
+        <text x="14" y="230" class="xs muted">left-handed with depth in [0,1]. The projection matrix is the border crossing.</text>
+      </g>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 2.</span> The space chain. Note where handedness changes:
+      inside <strong>P</strong>, and nowhere else. Every lesson that transforms a vertex refers
+      back to this diagram.
+    </figcaption>
+  </figure>
+
+  <p>
+    Written as one expression, with our column-vector convention (§<a href="#matrices">6</a>),
+    a vertex reaches clip space like this:
+  </p>
+
+  <div class="eq">
+    <span>\[ \mathbf{v}_{clip} = P \cdot V \cdot M \cdot \mathbf{v}_{model} \]</span>
+    <span class="eq-plain">v_clip = P * V * M * v_model</span>
+  </div>
+
+  <p>
+    Read it right to left — the model matrix touches the vertex first, the projection matrix
+    last. That right-to-left reading is a direct consequence of using column vectors; if you
+    ever see an engine write <code>v * M * V * P</code>, it uses row vectors, and its matrices
+    are the transposes of ours.
+  </p>
+
+  <!-- ===================================================================== -->
+  <h2 id="ndc"><span class="num">4</span>Clip space and NDC — fixed by SDL_GPU</h2>
+
+  <div class="callout warn">
+    <span class="label">Not our choice</span>
+    <p>
+      Everything in this section is <strong>dictated by SDL_GPU</strong> and verified against
+      the SDL wiki and headers — see §<a href="#verified">10</a>. We do not get a vote. Getting
+      this wrong produces an upside-down or depth-inverted image, silently.
+    </p>
+  </div>
+
+  <p>
+    After the perspective divide, a vertex lands in <strong>normalized device coordinates</strong>.
+    SDL_GPU defines that space precisely, and Figure 3 draws it:
+  </p>
+
+  <ul>
+    <li><strong>x</strong> runs from <code>−1</code> (left) to <code>+1</code> (right).</li>
+    <li><strong>y</strong> runs from <code>−1</code> (<em>bottom</em>) to <code>+1</code> (<em>top</em>) — <strong>+Y is up</strong>.</li>
+    <li><strong>z</strong> runs from <code>0</code> (near plane) to <code>1</code> (far plane).</li>
+  </ul>
+
+  <figure class="dia bleed">
+    <svg viewBox="0 0 660 300" role="img" aria-labelledby="f3t f3d">
+      <title id="f3t">SDL_GPU normalized device coordinates</title>
+      <desc id="f3d">Left: a square showing NDC x and y from minus one to plus one with plus Y
+        upward and the corners labelled. Right: a depth bar showing z from zero at the near
+        plane to one at the far plane.</desc>
+
+      <!-- NDC square -->
+      <g transform="translate(30,30)">
+        <rect x="40" y="20" width="200" height="200" class="fill-soft" stroke="var(--dia-ink)" stroke-width="1.5"/>
+        <line x1="140" y1="20" x2="140" y2="220" class="grid" stroke-width="1"/>
+        <line x1="40" y1="120" x2="240" y2="120" class="grid" stroke-width="1"/>
+
+        <line class="ax-x" x1="140" y1="120" x2="236" y2="120" stroke-width="2"/>
+        <line class="ax-y" x1="140" y1="120" x2="140" y2="24"  stroke-width="2"/>
+        <circle cx="140" cy="120" r="3" fill="var(--dia-ink)"/>
+
+        <text x="242" y="124" class="lbl-x xs" font-weight="700">+x</text>
+        <text x="134" y="16"  class="lbl-y xs" font-weight="700">+y</text>
+
+        <text x="30"  y="16"  class="xs mono muted" text-anchor="middle">(−1, +1)</text>
+        <text x="250" y="16"  class="xs mono muted" text-anchor="middle">(+1, +1)</text>
+        <text x="30"  y="238" class="xs mono muted" text-anchor="middle">(−1, −1)</text>
+        <text x="250" y="238" class="xs mono muted" text-anchor="middle">(+1, −1)</text>
+        <text x="152" y="136" class="xs mono muted">(0, 0)</text>
+
+        <text x="140" y="262" class="sm" text-anchor="middle" font-weight="700">NDC x/y — +Y is UP</text>
+      </g>
+
+      <!-- depth bar -->
+      <g transform="translate(400,30)">
+        <defs>
+          <linearGradient id="depthgrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%"   stop-color="var(--axis-z)" stop-opacity="0.85"/>
+            <stop offset="100%" stop-color="var(--axis-z)" stop-opacity="0.12"/>
+          </linearGradient>
+        </defs>
+        <rect x="60" y="20" width="54" height="200" fill="url(#depthgrad)"
+              stroke="var(--dia-ink)" stroke-width="1.5"/>
+
+        <text x="124" y="26"  class="xs mono">z = 0.0</text>
+        <text x="124" y="40"  class="xs muted">near plane</text>
+        <text x="124" y="220" class="xs mono">z = 1.0</text>
+        <text x="124" y="234" class="xs muted">far plane</text>
+
+        <line x1="40" y1="20" x2="40" y2="220" class="ink" stroke-width="1.2"
+              marker-end="url(#c-fl)"/>
+        <text x="34" y="124" class="xs muted" text-anchor="end" transform="rotate(-90 34 124)">increasing depth</text>
+
+        <text x="87" y="262" class="sm" text-anchor="middle" font-weight="700">NDC z — [0, 1]</text>
+      </g>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 3.</span> SDL_GPU's NDC. <strong>+Y up</strong> and
+      <strong>z ∈ [0,1]</strong>. If you arrive from OpenGL, the depth range is the surprise:
+      OpenGL's default is <code>[−1, 1]</code>, and a projection matrix built for it will squash
+      your whole scene into the near half of the depth buffer.
+    </figcaption>
+  </figure>
+
+  <h3>+Y is up in NDC, but +Y is down in viewport and texture space</h3>
+
+  <p>
+    This looks like a contradiction and is not. They are different spaces with different jobs:
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>Space</th><th>Origin</th><th>+Y direction</th><th>What it addresses</th></tr></thead>
+      <tbody>
+        <tr><td><strong>NDC</strong></td><td>centre</td><td><strong>up</strong></td><td>vertex shader output</td></tr>
+        <tr><td><strong>Viewport</strong></td><td>top-left</td><td><strong>down</strong></td><td>pixels</td></tr>
+        <tr><td><strong>Texture (UV)</strong></td><td>top-left</td><td><strong>down</strong></td><td>texels</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    NDC is the geometric output of your maths. Viewport and UV space are addressing schemes for
+    rectangular grids in memory, and memory rows run top to bottom — hence +Y down. The
+    <strong>viewport transform</strong> is what bridges them, and the Y flip lives there.
+  </p>
+
+  <div class="worked">
+    <span class="label">Worked example — NDC to screen, with real numbers</span>
+    <p>For an <code>800 × 600</code> viewport, the transform is:</p>
+    <ul>
+      <li><code>x_screen = (x_ndc * 0.5 + 0.5) * 800</code></li>
+      <li><code>y_screen = (0.5 − y_ndc * 0.5) * 600</code> &nbsp;← note the minus: this is the flip</li>
+    </ul>
+    <p>Push three points through:</p>
+    <ul>
+      <li>
+        <strong>Centre</strong> <code>(0, 0)</code> →
+        <code>x = (0 + 0.5)·800 = 400</code>, <code>y = (0.5 − 0)·600 = 300</code> →
+        <code>(400, 300)</code>. The middle of the screen. ✓
+      </li>
+      <li>
+        <strong>NDC top-left</strong> <code>(−1, +1)</code> →
+        <code>x = (−0.5 + 0.5)·800 = 0</code>, <code>y = (0.5 − 0.5)·600 = 0</code> →
+        <code>(0, 0)</code>. The top-left pixel. ✓
+      </li>
+      <li>
+        <strong>NDC bottom-right</strong> <code>(+1, −1)</code> →
+        <code>x = (0.5 + 0.5)·800 = 800</code>, <code>y = (0.5 + 0.5)·600 = 600</code> →
+        <code>(800, 600)</code>. The bottom-right corner. ✓
+      </li>
+    </ul>
+    <p>
+      NDC's top (<code>y = +1</code>) maps to screen row <code>0</code>. That is the whole
+      content of "+Y up becomes +Y down", and it costs exactly one sign.
+    </p>
+  </div>
+
+  <div class="callout ok">
+    <span class="label">You do not flip Y in your shaders</span>
+    <p>
+      Vulkan's native NDC has +Y down, unlike D3D12 and Metal. SDL_GPU papers over this: per the
+      SDL wiki, <em>if the backend differs from this convention, SDL converts the coordinate
+      system behind the scenes, so you do not need to perform any coordinate flipping logic in
+      your shaders.</em> Write your shaders once, against the convention above, and let SDL
+      handle the backend. This is one of SDL_GPU's genuinely nice guarantees.
+    </p>
+  </div>
+
+  <!-- ===================================================================== -->
+  <h2 id="flip"><span class="num">5</span>Where the handedness flip happens</h2>
+
+  <p>
+    Our world is right-handed. SDL_GPU's clip space is left-handed. Something must reconcile
+    them, and that something is the <strong>projection matrix</strong> — as Figure 2 marks. This
+    is normal and correct; it is one of the projection matrix's jobs, and hiding it only makes
+    the inevitable "my scene is mirrored" bug harder to diagnose.
+  </p>
+
+  <p>
+    With vertical field of view <code>fovY</code>, aspect ratio <code>a = width/height</code>,
+    and near/far planes <code>n</code> and <code>f</code>, let <code>t = 1/tan(fovY/2)</code> and
+    <code>R = f/(n−f)</code>. Our projection matrix is:
+  </p>
+
+  <div class="eq">
+    <span>\[ P = \begin{bmatrix} t/a & 0 & 0 & 0 \\ 0 & t & 0 & 0 \\ 0 & 0 & R & R\,n \\ 0 & 0 & -1 & 0 \end{bmatrix} \]</span>
+    <span class="eq-plain">row0 = [t/a, 0, 0, 0]; row1 = [0, t, 0, 0]; row2 = [0, 0, R, R*n]; row3 = [0, 0, -1, 0]   where t = 1/tan(fovY/2), R = f/(n-f)</span>
+  </div>
+
+  <p>
+    <strong>The flip is the <code>−1</code> in the bottom row.</strong> It sets
+    <code>w_clip = −z_view</code>. In right-handed view space the camera looks down
+    <code>−z</code>, so anything in front of the camera has a negative <code>z_view</code>, and
+    negating it yields a <em>positive</em> <code>w</code> — which is what the perspective divide
+    requires. Depth then increases with distance, and increasing-depth-into-the-screen is exactly
+    what left-handed means.
+  </p>
+
+  <div class="callout note">
+    <span class="label">Expect this matrix to differ from the tutorials</span>
+    <p>
+      Most online derivations (LearnOpenGL especially) target OpenGL's <code>z ∈ [−1, 1]</code>
+      and produce a different third row. Ours targets <code>z ∈ [0, 1]</code> — the D3D-style
+      matrix — because that is what SDL_GPU requires. The <code>t/a</code> and <code>t</code>
+      terms are identical; only the depth row differs. We derive all of this from similar
+      triangles in Module 2, so it will not be a matrix you take on faith.
+    </p>
+  </div>
+
+  <div class="worked">
+    <span class="label">Worked example — verifying the near and far planes map to 0 and 1</span>
+    <p>
+      Take <code>n = 0.1</code> and <code>f = 100</code>. Then
+      <code>R = f/(n−f) = 100/(0.1−100) = 100/(−99.9) ≈ −1.001001</code>, and
+      <code>R·n ≈ −0.1001001</code>.
+    </p>
+    <p><strong>A point on the near plane</strong> sits at <code>z_view = −0.1</code>:</p>
+    <ul>
+      <li><code>z_clip = R·z_view + R·n = (−1.001001)(−0.1) + (−0.1001001) = 0.1001001 − 0.1001001 = 0</code></li>
+      <li><code>w_clip = −z_view = 0.1</code></li>
+      <li><code>z_ndc = z_clip / w_clip = 0 / 0.1 = 0</code> ✓ — the near plane maps to 0.</li>
+    </ul>
+    <p><strong>A point on the far plane</strong> sits at <code>z_view = −100</code>:</p>
+    <ul>
+      <li><code>z_clip = (−1.001001)(−100) + (−0.1001001) = 100.1001 − 0.1001 = 100.0</code></li>
+      <li><code>w_clip = −z_view = 100</code></li>
+      <li><code>z_ndc = 100 / 100 = 1</code> ✓ — the far plane maps to 1.</li>
+    </ul>
+    <p>
+      Both endpoints land exactly where SDL_GPU expects. Notice <code>w_clip</code> came out
+      <em>positive</em> in both cases despite <code>z_view</code> being negative — that is the
+      <code>−1</code> doing its job.
+    </p>
+  </div>
+
+  <!-- ===================================================================== -->
+  <h2 id="matrices"><span class="num">6</span>Matrices: column vectors, column-major</h2>
+
+  <p>
+    Two independent choices hide behind the word "convention" here, and conflating them causes
+    endless confusion. Keep them separate:
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>Question</th><th>Our answer</th><th>Consequence</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>Notation</strong> — how do we write a transform?</td>
+          <td>Column vectors: <code>v' = M · v</code></td>
+          <td>Compose right-to-left: <code>P·V·M</code></td>
+        </tr>
+        <tr>
+          <td><strong>Storage</strong> — how do the 16 floats sit in memory?</td>
+          <td>Column-major: <code>m[0..3]</code> is column 0</td>
+          <td>Uploads to HLSL unchanged</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    A matrix is <em>where the basis vectors land</em> — that is the mental model this course
+    builds in Module 2, and it is what makes column-major storage natural. Each column of
+    <code>M</code> is the image of one basis vector, so storing column-by-column stores "where
+    x went, where y went, where z went, where the origin went," in that order. Figure 4 shows
+    the bytes.
+  </p>
+
+  <figure class="dia bleed">
+    <svg viewBox="0 0 660 290" role="img" aria-labelledby="f4t f4d">
+      <title id="f4t">mat4 memory layout, column-major</title>
+      <desc id="f4d">A four by four grid of matrix entries beside a linear array of sixteen
+        floats, showing that consecutive memory holds one column at a time, and that the first
+        three columns are the transformed basis vectors while the fourth is the translation.</desc>
+
+      <!-- written form -->
+      <g transform="translate(20,34)">
+        <text x="0" y="0" class="sm" font-weight="700">As written (maths)</text>
+        <g class="mono" font-size="10.5" text-anchor="middle">
+          <rect x="0" y="12" width="46" height="152" class="fill-soft" stroke="var(--axis-x)" stroke-width="1.4"/>
+          <rect x="46" y="12" width="46" height="152" class="fill-soft" stroke="var(--axis-y)" stroke-width="1.4"/>
+          <rect x="92" y="12" width="46" height="152" class="fill-soft" stroke="var(--axis-z)" stroke-width="1.4"/>
+          <rect x="138" y="12" width="52" height="152" class="fill-soft" stroke="var(--dia-hi)" stroke-width="1.4"/>
+
+          <g fill="var(--dia-ink)">
+            <text x="23" y="36">m00</text><text x="69" y="36">m01</text><text x="115" y="36">m02</text><text x="164" y="36">m03</text>
+            <text x="23" y="72">m10</text><text x="69" y="72">m11</text><text x="115" y="72">m12</text><text x="164" y="72">m13</text>
+            <text x="23" y="108">m20</text><text x="69" y="108">m21</text><text x="115" y="108">m22</text><text x="164" y="108">m23</text>
+            <text x="23" y="144">m30</text><text x="69" y="144">m31</text><text x="115" y="144">m32</text><text x="164" y="144">m33</text>
+          </g>
+        </g>
+        <g class="xs" text-anchor="middle">
+          <text x="23"  y="182" class="lbl-x" font-weight="700">x axis</text>
+          <text x="69"  y="182" class="lbl-y" font-weight="700">y axis</text>
+          <text x="115" y="182" class="lbl-z" font-weight="700">z axis</text>
+          <text x="164" y="182" class="t-hi" font-weight="700">position</text>
+        </g>
+        <text x="95" y="200" class="xs muted" text-anchor="middle">each column = where a basis vector lands</text>
+      </g>
+
+      <!-- memory form -->
+      <g transform="translate(250,34)">
+        <text x="0" y="0" class="sm" font-weight="700">In memory (float m[16], column-major)</text>
+        <g font-size="9" class="mono" text-anchor="middle">
+          <!-- col 0 -->
+          <g>
+            <rect x="0" y="14" width="24" height="22" class="fill-soft" stroke="var(--axis-x)" stroke-width="1.2"/>
+            <rect x="24" y="14" width="24" height="22" class="fill-soft" stroke="var(--axis-x)" stroke-width="1.2"/>
+            <rect x="48" y="14" width="24" height="22" class="fill-soft" stroke="var(--axis-x)" stroke-width="1.2"/>
+            <rect x="72" y="14" width="24" height="22" class="fill-soft" stroke="var(--axis-x)" stroke-width="1.2"/>
+            <text x="12" y="29">m00</text><text x="36" y="29">m10</text><text x="60" y="29">m20</text><text x="84" y="29">m30</text>
+          </g>
+          <!-- col 1 -->
+          <g>
+            <rect x="96"  y="14" width="24" height="22" class="fill-soft" stroke="var(--axis-y)" stroke-width="1.2"/>
+            <rect x="120" y="14" width="24" height="22" class="fill-soft" stroke="var(--axis-y)" stroke-width="1.2"/>
+            <rect x="144" y="14" width="24" height="22" class="fill-soft" stroke="var(--axis-y)" stroke-width="1.2"/>
+            <rect x="168" y="14" width="24" height="22" class="fill-soft" stroke="var(--axis-y)" stroke-width="1.2"/>
+            <text x="108" y="29">m01</text><text x="132" y="29">m11</text><text x="156" y="29">m21</text><text x="180" y="29">m31</text>
+          </g>
+          <!-- col 2 -->
+          <g>
+            <rect x="192" y="14" width="24" height="22" class="fill-soft" stroke="var(--axis-z)" stroke-width="1.2"/>
+            <rect x="216" y="14" width="24" height="22" class="fill-soft" stroke="var(--axis-z)" stroke-width="1.2"/>
+            <rect x="240" y="14" width="24" height="22" class="fill-soft" stroke="var(--axis-z)" stroke-width="1.2"/>
+            <rect x="264" y="14" width="24" height="22" class="fill-soft" stroke="var(--axis-z)" stroke-width="1.2"/>
+            <text x="204" y="29">m02</text><text x="228" y="29">m12</text><text x="252" y="29">m22</text><text x="276" y="29">m32</text>
+          </g>
+          <!-- col 3 -->
+          <g>
+            <rect x="288" y="14" width="24" height="22" class="fill-soft" stroke="var(--dia-hi)" stroke-width="1.2"/>
+            <rect x="312" y="14" width="24" height="22" class="fill-soft" stroke="var(--dia-hi)" stroke-width="1.2"/>
+            <rect x="336" y="14" width="24" height="22" class="fill-soft" stroke="var(--dia-hi)" stroke-width="1.2"/>
+            <rect x="360" y="14" width="24" height="22" class="fill-soft" stroke="var(--dia-hi)" stroke-width="1.2"/>
+            <text x="300" y="29">m03</text><text x="324" y="29">m13</text><text x="348" y="29">m23</text><text x="372" y="29">m33</text>
+          </g>
+        </g>
+        <g class="xs mono muted" text-anchor="middle">
+          <text x="12" y="48" class="xs mono muted">0</text><text x="84" y="48" class="xs mono muted">3</text>
+          <text x="108" y="48" class="xs mono muted">4</text><text x="180" y="48" class="xs mono muted">7</text>
+          <text x="204" y="48" class="xs mono muted">8</text><text x="276" y="48" class="xs mono muted">11</text>
+          <text x="300" y="48" class="xs mono muted">12</text><text x="372" y="48" class="xs mono muted">15</text>
+        </g>
+        <g class="xs" text-anchor="middle">
+          <text x="48"  y="66" class="xs lbl-x" font-weight="700">column 0</text>
+          <text x="144" y="66" class="xs lbl-y" font-weight="700">column 1</text>
+          <text x="240" y="66" class="xs lbl-z" font-weight="700">column 2</text>
+          <text x="336" y="66" class="xs t-hi" font-weight="700">column 3</text>
+        </g>
+
+        <text x="0" y="106" class="xs muted">The translation lives at indices 12, 13, 14 — contiguous.</text>
+        <text x="0" y="120" class="xs muted">That is a handy debugging tell: dump m[12..14] and you</text>
+        <text x="0" y="134" class="xs muted">are reading the object's position straight out of memory.</text>
+
+        <text x="0" y="164" class="xs muted">This layout uploads to an HLSL float4x4 with no transpose,</text>
+        <text x="0" y="178" class="xs muted">because column-major is HLSL's default for constant buffers.</text>
+      </g>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 4.</span> A <code>mat4</code> in memory. Consecutive floats form
+      a column, and the first three columns are literally the transformed basis vectors from
+      Figure 1 — which is why they are coloured red, green, and blue here.
+    </figcaption>
+  </figure>
+
+  <div class="callout pitfall">
+    <span class="label">The transpose trap</span>
+    <p>
+      "Column-major" (storage) and "column vectors" (notation) are <em>independent</em>. Because
+      we chose both, the two effects cancel and our in-memory layout matches HLSL's default —
+      no transpose on upload. Choose only one and you need a transpose somewhere. If a matrix
+      ever produces a transformation that looks like the transpose of what you wanted, this is
+      the first place to look.
+    </p>
+  </div>
+
+  <!-- ===================================================================== -->
+  <h2 id="winding"><span class="num">7</span>Winding and culling</h2>
+
+  <p>
+    <strong>Counter-clockwise winding, viewed from the front, means front-facing. We cull back
+    faces.</strong> Everywhere: in the software rasterizer and on every GPU pipeline.
+  </p>
+
+  <figure class="dia bleed">
+    <svg viewBox="0 0 660 250" role="img" aria-labelledby="f5t f5d">
+      <title id="f5t">Triangle winding and facing</title>
+      <desc id="f5d">Two triangles. The left has vertices ordered counter-clockwise and is
+        marked front-facing and kept. The right has vertices ordered clockwise and is marked
+        back-facing and culled.</desc>
+      <defs>
+        <marker id="c-wind" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+      </defs>
+
+      <!-- CCW -->
+      <g transform="translate(60,30)">
+        <path d="M100,20 L20,150 L180,150 Z" class="fill-soft" stroke="var(--ok-bd)" stroke-width="2"/>
+        <path d="M100,20 L20,150" class="ink" stroke-width="1.6" fill="none" marker-end="url(#c-wind)"/>
+        <path d="M20,150 L180,150" class="ink" stroke-width="1.6" fill="none" marker-end="url(#c-wind)"/>
+        <path d="M180,150 L100,20" class="ink" stroke-width="1.6" fill="none" marker-end="url(#c-wind)"/>
+        <g class="mono" font-size="11">
+          <circle cx="100" cy="20" r="3.5" fill="var(--dia-ink)"/><text x="106" y="16" class="mono">v0</text>
+          <circle cx="20" cy="150" r="3.5" fill="var(--dia-ink)"/><text x="0" y="168" class="mono">v1</text>
+          <circle cx="180" cy="150" r="3.5" fill="var(--dia-ink)"/><text x="176" y="168" class="mono">v2</text>
+        </g>
+        <text x="100" y="196" class="sm t-ok" text-anchor="middle" font-weight="700">counter-clockwise → FRONT</text>
+        <text x="100" y="212" class="xs muted" text-anchor="middle">drawn</text>
+      </g>
+
+      <!-- CW -->
+      <g transform="translate(380,30)">
+        <path d="M100,20 L180,150 L20,150 Z" fill="none" stroke="var(--verify-bd)"
+              stroke-width="2" stroke-dasharray="6 4"/>
+        <path d="M100,20 L180,150" class="ink-soft" stroke-width="1.6" fill="none" marker-end="url(#c-wind)"/>
+        <path d="M180,150 L20,150" class="ink-soft" stroke-width="1.6" fill="none" marker-end="url(#c-wind)"/>
+        <path d="M20,150 L100,20" class="ink-soft" stroke-width="1.6" fill="none" marker-end="url(#c-wind)"/>
+        <g class="mono" font-size="11">
+          <circle cx="100" cy="20" r="3.5" fill="var(--dia-ink-soft)"/><text x="106" y="16" class="mono muted">v0</text>
+          <circle cx="180" cy="150" r="3.5" fill="var(--dia-ink-soft)"/><text x="176" y="168" class="mono muted">v1</text>
+          <circle cx="20" cy="150" r="3.5" fill="var(--dia-ink-soft)"/><text x="0" y="168" class="mono muted">v2</text>
+        </g>
+        <text x="100" y="196" class="sm t-bad" text-anchor="middle" font-weight="700">clockwise → BACK</text>
+        <text x="100" y="212" class="xs muted" text-anchor="middle">culled — never rasterised</text>
+      </g>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 5.</span> Winding decides facing. Same three points, same
+      triangle — only the <em>order</em> differs, and that order alone decides whether the
+      triangle is drawn at all.
+    </figcaption>
+  </figure>
+
+  <div class="callout warn">
+    <span class="label">Winding is not an SDL-wide rule — it is per-pipeline state</span>
+    <p>
+      Any claim that "SDL_GPU uses counter-clockwise" is wrong. Winding is a field you set on
+      every graphics pipeline you create, via <code>SDL_GPUFrontFace</code> in
+      <code>SDL_GPURasterizerState</code>. SDL has no opinion; <em>we</em> do.
+    </p>
+    <p>
+      Both relevant enums have their first entry at zero — <code>SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE</code>
+      and <code>SDL_GPU_CULLMODE_NONE</code> — so a zero-initialised rasterizer state means
+      <em>"CCW is front, cull nothing."</em> Forgetting to set <code>cull_mode</code> therefore
+      manifests as <strong>no culling at all</strong>, not as an error. Nothing warns you; you
+      just quietly pay for the back faces. We set both fields explicitly, every time.
+    </p>
+  </div>
+
+  <p>
+    Determining winding is a signed-area computation, and its sign is the same cross product
+    that defined handedness in §<a href="#world">2</a>. We derive this properly in Module 2 when
+    we build the edge-function rasterizer, and reuse it for back-face culling in Module 3 — one
+    idea, paid for once, used twice.
+  </p>
+
+  <!-- ===================================================================== -->
+  <h2 id="units"><span class="num">8</span>Units and angles</h2>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>Quantity</th><th>Unit</th><th>Note</th></tr></thead>
+      <tbody>
+        <tr><td>Distance</td><td><strong>1 unit = 1 metre</strong></td><td>Matches glTF. Physics in Module 7 assumes it; so does attenuation in Module 6.</td></tr>
+        <tr><td>Angles</td><td><strong>radians</strong></td><td>Internally, always. Degrees appear only at UI edges, converted at the boundary.</td></tr>
+        <tr><td>Time</td><td><strong>seconds</strong>, as <code>double</code> for accumulation, <code>float</code> for deltas</td><td>See the fixed-timestep lesson in Module 1.</td></tr>
+        <tr><td>Colour</td><td><strong>linear</strong> in the renderer, sRGB only at the edges</td><td>The gamma lesson in Module 6 makes this rigorous.</td></tr>
+        <tr><td>Mass</td><td><strong>kilograms</strong></td><td>Module 7.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    "1 unit = 1 metre" sounds like bookkeeping until physics arrives. Gravity is
+    <code>−9.81</code> in <em>metres</em> per second squared; if your units are secretly
+    centimetres, everything falls in a way that looks subtly like slow motion, and no single
+    line of code is wrong. Decide the unit once, at the start, and the whole engine agrees.
+  </p>
+
+  <p>
+    Angles in radians is the same discipline. <code>std::sin</code> takes radians; every
+    conversion you skip is a bug you cannot have.
+  </p>
+
+  <!-- ===================================================================== -->
+  <h2 id="colour"><span class="num">9</span>Colour and diagram conventions</h2>
+
+  <p>
+    Every diagram in this course obeys these. They are as binding as the maths, because a reader
+    should be able to identify an axis by colour alone, in any lesson, with no legend.
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>Meaning</th><th>Colour</th><th>Sample</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>x axis</strong></td><td>red</td>
+          <td><svg width="60" height="12" role="img" aria-label="red swatch"><rect width="60" height="12" rx="3" fill="var(--axis-x)"/></svg></td>
+        </tr>
+        <tr>
+          <td><strong>y axis</strong></td><td>green</td>
+          <td><svg width="60" height="12" role="img" aria-label="green swatch"><rect width="60" height="12" rx="3" fill="var(--axis-y)"/></svg></td>
+        </tr>
+        <tr>
+          <td><strong>z axis</strong></td><td>blue</td>
+          <td><svg width="60" height="12" role="img" aria-label="blue swatch"><rect width="60" height="12" rx="3" fill="var(--axis-z)"/></svg></td>
+        </tr>
+        <tr>
+          <td>The thing under discussion</td><td>accent (orange)</td>
+          <td><svg width="60" height="12" role="img" aria-label="accent swatch"><rect width="60" height="12" rx="3" fill="var(--dia-hi)"/></svg></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    This is the same red/green/blue mapping Blender, Unity, and every gizmo you have ever
+    dragged uses. It is not arbitrary — <code>xyz</code> maps to <code>rgb</code> positionally,
+    which is also why normal maps look lavender: a flat normal <code>(0,0,1)</code> encodes to
+    <code>(0.5, 0.5, 1.0)</code>. Module 6 pays that observation off.
+  </p>
+
+  <!-- ===================================================================== -->
+  <h2 id="verified"><span class="num">10</span>The verified-facts table</h2>
+
+  <p>
+    The master prompt forbids guessing API details, so these were checked against the SDL wiki
+    and the SDL3 headers rather than recalled. SDL was at <strong>3.5.0</strong> when this page
+    was written.
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>Fact</th><th>Value</th><th>Source</th></tr></thead>
+      <tbody>
+        <tr><td>NDC extents</td><td>lower-left <code>(−1,−1)</code>, upper-right <code>(1,1)</code> → <strong>+Y up</strong></td><td>SDL3 wiki, CategoryGPU</td></tr>
+        <tr><td>NDC depth</td><td><strong><code>z ∈ [0,1]</code></strong>, 0 = near</td><td>SDL3 wiki, CategoryGPU</td></tr>
+        <tr><td>Viewport</td><td>top-left <code>(0,0)</code> → <code>(w,h)</code>, <strong>+Y down</strong></td><td>SDL3 wiki, CategoryGPU</td></tr>
+        <tr><td>Texture coords</td><td>top-left <code>(0,0)</code> → <code>(1,1)</code>, <strong>+Y down</strong></td><td>SDL3 wiki, CategoryGPU</td></tr>
+        <tr><td>Vulkan Y-flip</td><td>SDL converts behind the scenes; no shader flip</td><td>SDL3 wiki, CategoryGPU</td></tr>
+        <tr><td>Front face</td><td><code>SDL_GPUFrontFace</code> = <code>{COUNTER_CLOCKWISE = 0, CLOCKWISE}</code></td><td><code>SDL3/SDL_gpu.h</code></td></tr>
+        <tr><td>Cull mode</td><td><code>SDL_GPUCullMode</code> = <code>{NONE = 0, FRONT, BACK}</code></td><td><code>SDL3/SDL_gpu.h</code></td></tr>
+        <tr><td>Window creation</td><td><code>SDL_CreateWindow(const char *title, int w, int h, SDL_WindowFlags flags)</code> — <strong>no x/y</strong></td><td><code>SDL3/SDL_video.h</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>How to re-verify any of this yourself</h3>
+
+  <p>
+    Reading SDL's headers is a skill this course teaches in Module 0, and the header is the
+    authority — the wiki lags it. When a detail matters, go to the source:
+  </p>
+
+  <figure class="listing shell">
+    <figcaption>
+      <span class="path">settling a question in five seconds</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash">curl -sL https://raw.githubusercontent.com/libsdl-org/SDL/main/include/SDL3/SDL_gpu.h \
+  | grep -n -A 6 "typedef enum SDL_GPUFrontFace"</code></pre>
+  </figure>
+
+  <div class="callout verify">
+    <span class="label">⚠ Verify</span>
+    <p>
+      When a lesson is not certain of an API detail, it says so inline with a
+      <code>⚠ VERIFY:</code> marker naming the header or wiki page to check, and gives the
+      conceptually correct usage anyway. An honest flag beats a confident fabrication — you are
+      about to type this code in.
+    </p>
+  </div>
+
+  <div class="recap">
+    <h2>The whole page in one table</h2>
+    <div class="tbl-scroll">
+      <table>
+        <tbody>
+          <tr><td><strong>World</strong></td><td>Right-handed, Y-up, −Z forward</td></tr>
+          <tr><td><strong>Clip / NDC</strong></td><td>Left-handed, +Y up, <code>z ∈ [0,1]</code> — fixed by SDL_GPU</td></tr>
+          <tr><td><strong>Handedness flip</strong></td><td>Inside the projection matrix (the <code>−1</code> in the bottom row)</td></tr>
+          <tr><td><strong>Viewport / UV</strong></td><td>Top-left origin, +Y down</td></tr>
+          <tr><td><strong>Matrices</strong></td><td>Column vectors <code>v' = M·v</code>, stored column-major</td></tr>
+          <tr><td><strong>Winding</strong></td><td>CCW = front, cull back — set explicitly on every pipeline</td></tr>
+          <tr><td><strong>Units</strong></td><td>metres, radians, seconds, kilograms; linear colour internally</td></tr>
+          <tr><td><strong>Axis colours</strong></td><td>x/y/z = red/green/blue, always</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      Naming, header layout, and ownership rules live in the
+      <a href="cpp-style.html">C++ Style Guide</a>. The maths itself accumulates in the
+      <a href="math-toolbox.html">Math Toolbox</a>.
+    </p>
+  </div>
+
+  <nav class="lesson-nav" aria-label="Page navigation (bottom)">
+    <a class="idx-l" href="index.html" style="flex:1">
+      <span class="dir">← Back</span>
+      <span class="ttl">Course home</span>
+    </a>
+    <a class="next-l" href="math-toolbox.html">
+      <span class="dir">Companion →</span>
+      <span class="ttl">Math Toolbox</span>
+    </a>
+  </nav>
+
+  <footer class="foot">
+    <p>
+      Build a Professional 3D Game Engine ·
+      <a href="index.html">Contents</a> ·
+      <a href="conventions.html">Conventions</a> ·
+      <a href="math-toolbox.html">Math Toolbox</a> ·
+      <a href="cpp-style.html">C++ Style</a>
+    </p>
+    <p>MIT licensed. Copyright © 2026 digster.</p>
+  </footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var root = document.documentElement;
+  var KEY = "engine-course-theme";
+  try {
+    var saved = localStorage.getItem(KEY);
+    if (saved) { root.setAttribute("data-theme", saved); root.style.colorScheme = saved; }
+  } catch (e) {}
+  var btn = document.getElementById("theme-toggle");
+  if (btn) {
+    btn.addEventListener("click", function () {
+      var cur = root.getAttribute("data-theme");
+      if (!cur) cur = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      var next = cur === "dark" ? "light" : "dark";
+      root.setAttribute("data-theme", next);
+      root.style.colorScheme = next;
+      try { localStorage.setItem(KEY, next); } catch (e) {}
+    });
+  }
+
+  var SH_RE = /(#[^\n]*)|("(?:\\.|[^"\\])*"|'[^']*')|(^|\n)(\s*)([\w.\/\\-]+)/g;
+  function esc(s) { return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+  function span(c, s) { return '<span class="tok-' + c + '">' + esc(s) + "</span>"; }
+  function highlightShell(src) {
+    var out = "", last = 0, m;
+    SH_RE.lastIndex = 0;
+    while ((m = SH_RE.exec(src)) !== null) {
+      if (m.index > last) out += esc(src.slice(last, m.index));
+      if (m[1]) out += span("c", m[1]);
+      else if (m[2]) out += span("s", m[2]);
+      else out += esc(m[3] || "") + esc(m[4] || "") + span("f", m[5]);
+      last = SH_RE.lastIndex;
+    }
+    return out + esc(src.slice(last));
+  }
+  document.querySelectorAll(".listing pre code.lang-bash").forEach(function (el) {
+    el.innerHTML = highlightShell(el.textContent);
+  });
+})();
+</script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"
+        integrity="sha384-7zkQWkzuo3B5mTepMUcHkMB5jZaolc2xDwL6VFqjFALcbeS9Ggm/Yr2r3Dy4lfFg"
+        crossorigin="anonymous"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+        integrity="sha384-43gviWU0YVjaDtb/GhzOouOXtZMP/7XUzwPTstBeZFe/+rCMvRwr4yROQP43s0Xk"
+        crossorigin="anonymous"
+        onload="renderMathInElement(document.body, {
+          delimiters: [
+            {left: '\\[', right: '\\]', display: true},
+            {left: '\\(', right: '\\)', display: false}
+          ], throwOnError: false });"></script>
+</body>
+</html>

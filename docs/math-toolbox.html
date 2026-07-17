@@ -1,0 +1,1325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Math Toolbox · Build a Professional 3D Game Engine</title>
+<meta name="description" content="A cumulative appendix of every mathematical tool the engine uses, added the moment the engine needs it.">
+<!-- SHARED-CSS:BEGIN -->
+<style>
+/* ---- Design tokens ------------------------------------------------------- */
+:root {
+  color-scheme: light dark;
+
+  /* Page */
+  --bg:            #fdfdfb;
+  --bg-sunken:     #f4f4f0;
+  --bg-raised:     #ffffff;
+  --text:          #1c1c1a;
+  --text-muted:    #5f5f58;
+  --text-faint:    #8a8a80;
+  --rule:          #e2e2db;
+  --rule-strong:   #cfcfc6;
+
+  /* Accent — used for links, active nav, section marks */
+  --accent:        #b4530a;
+  --accent-soft:   #f5e6d8;
+  --accent-text:   #8f4108;
+
+  /* Callouts */
+  --note-bd:       #3a6ea5;   --note-bg:    #eaf2fb;
+  --warn-bd:       #b8860b;   --warn-bg:    #fdf5e2;
+  --verify-bd:     #a03030;   --verify-bg:  #fbecec;
+  --pitfall-bd:    #7a4fa3;   --pitfall-bg: #f4eefb;
+  --ok-bd:         #2f7d4f;   --ok-bg:      #e9f6ee;
+
+  /* Code — always dark, in both page themes */
+  --code-bg:       #1b1d23;
+  --code-bar:      #262932;
+  --code-text:     #dfe3ec;
+  --code-rule:     #363a45;
+
+  /* Syntax tokens */
+  --tok-comment:   #6d7789;
+  --tok-keyword:   #c98fdb;
+  --tok-type:      #6cc5d9;
+  --tok-string:    #a3cf85;
+  --tok-number:    #e8a978;
+  --tok-preproc:   #d9a05b;
+  --tok-func:      #79b6f2;
+  --tok-punct:     #9aa2b1;
+
+  /* Axis colours — COURSE-WIDE CONVENTION. x/y/z = red/green/blue.
+     Never override these in a diagram. See conventions.html. */
+  --axis-x:        #d1344a;
+  --axis-y:        #2f9e4f;
+  --axis-z:        #2b6fd4;
+  --axis-x-soft:   #f7d8dd;
+  --axis-y-soft:   #d8f0e0;
+  --axis-z-soft:   #d7e4fa;
+
+  /* Diagram neutrals */
+  --dia-bg:        #ffffff;
+  --dia-ink:       #33332e;
+  --dia-ink-soft:  #7a7a72;
+  --dia-grid:      #e8e8e2;
+  --dia-fill:      #f0f0ea;
+  --dia-hi:        #b4530a;
+
+  /* Typography */
+  --font-body: "Iowan Old Style", "Palatino Linotype", "Palatino", "Charter",
+               Georgia, Cambria, "Times New Roman", serif;
+  --font-ui:   -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+               "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "SFMono-Regular", "Cascadia Code",
+               "JetBrains Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  --measure: 42rem;          /* ~72 characters at this size — the reading column */
+  --measure-wide: 58rem;     /* diagrams & tables may breathe past the measure  */
+}
+
+/* Dark tokens.
+   Applied in two situations, which is why the block is written twice:
+     1. the OS asks for dark AND the reader has not overridden to light;
+     2. the reader explicitly chose dark via the toggle.
+   CSS has no mixins, so duplication is the price of supporting both an OS
+   default and a manual override. Keep the two blocks byte-identical. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg:          #15161a;
+    --bg-sunken:   #101115;
+    --bg-raised:   #1c1e24;
+    --text:        #e4e4e0;
+    --text-muted:  #a2a49e;
+    --text-faint:  #74766f;
+    --rule:        #2c2e35;
+    --rule-strong: #3d404a;
+
+    --accent:      #f0a06a;
+    --accent-soft: #33251a;
+    --accent-text: #f5b184;
+
+    --note-bd:     #5a8fc8;   --note-bg:    #16202c;
+    --warn-bd:     #c9a132;   --warn-bg:    #262013;
+    --verify-bd:   #d05555;   --verify-bg:  #2a1717;
+    --pitfall-bd:  #a077c8;   --pitfall-bg: #221a2c;
+    --ok-bd:       #4fa877;   --ok-bg:      #14231a;
+
+    --dia-bg:      #1a1c21;
+    --dia-ink:     #d8d8d2;
+    --dia-ink-soft:#8f918a;
+    --dia-grid:    #2b2d33;
+    --dia-fill:    #24262c;
+    --dia-hi:      #f0a06a;
+
+    --axis-x:      #f2647a;
+    --axis-y:      #5cc47e;
+    --axis-z:      #6b9ef0;
+    --axis-x-soft: #3a2027;
+    --axis-y-soft: #1c3325;
+    --axis-z-soft: #1e2a40;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg:          #15161a;
+  --bg-sunken:   #101115;
+  --bg-raised:   #1c1e24;
+  --text:        #e4e4e0;
+  --text-muted:  #a2a49e;
+  --text-faint:  #74766f;
+  --rule:        #2c2e35;
+  --rule-strong: #3d404a;
+
+  --accent:      #f0a06a;
+  --accent-soft: #33251a;
+  --accent-text: #f5b184;
+
+  --note-bd:     #5a8fc8;   --note-bg:    #16202c;
+  --warn-bd:     #c9a132;   --warn-bg:    #262013;
+  --verify-bd:   #d05555;   --verify-bg:  #2a1717;
+  --pitfall-bd:  #a077c8;   --pitfall-bg: #221a2c;
+  --ok-bd:       #4fa877;   --ok-bg:      #14231a;
+
+  --dia-bg:      #1a1c21;
+  --dia-ink:     #d8d8d2;
+  --dia-ink-soft:#8f918a;
+  --dia-grid:    #2b2d33;
+  --dia-fill:    #24262c;
+  --dia-hi:      #f0a06a;
+
+  --axis-x:      #f2647a;
+  --axis-y:      #5cc47e;
+  --axis-z:      #6b9ef0;
+  --axis-x-soft: #3a2027;
+  --axis-y-soft: #1c3325;
+  --axis-z-soft: #1e2a40;
+}
+
+/* ---- Reset & base -------------------------------------------------------- */
+*, *::before, *::after { box-sizing: border-box; }
+
+html {
+  font-size: 18px;
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
+  scroll-padding-top: 2rem;
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  line-height: 1.7;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* The reading column. Everything is centred on --measure; wide elements opt out. */
+.wrap {
+  max-width: var(--measure);
+  margin: 0 auto;
+  padding: 0 1.25rem;
+}
+.bleed {                       /* for diagrams/tables that need more room */
+  max-width: var(--measure-wide);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* ---- Typography ---------------------------------------------------------- */
+h1, h2, h3, h4 {
+  font-family: var(--font-ui);
+  line-height: 1.25;
+  letter-spacing: -0.015em;
+  margin: 0 0 0.6em;
+  scroll-margin-top: 1.5rem;
+}
+h1 { font-size: 2.15rem; font-weight: 700; margin-top: 0.2em; }
+h2 {
+  font-size: 1.5rem; font-weight: 650;
+  margin-top: 2.6em;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--rule);
+}
+h3 { font-size: 1.15rem; font-weight: 650; margin-top: 2em; }
+h4 { font-size: 1rem;    font-weight: 650; margin-top: 1.6em; color: var(--text-muted); }
+
+/* Section numbers rendered as a quiet prefix */
+h2 .num, h3 .num {
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  margin-right: 0.5em;
+  font-weight: 500;
+}
+
+p { margin: 0 0 1.15em; }
+
+a { color: var(--accent-text); text-decoration-color: var(--rule-strong); text-underline-offset: 2px; }
+a:hover { text-decoration-color: currentColor; }
+
+strong { font-weight: 650; }
+em { font-style: italic; }
+
+ul, ol { margin: 0 0 1.15em; padding-left: 1.5em; }
+li { margin-bottom: 0.4em; }
+li > ul, li > ol { margin-top: 0.4em; margin-bottom: 0.5em; }
+
+hr { border: 0; border-top: 1px solid var(--rule); margin: 2.5em 0; }
+
+blockquote {
+  margin: 1.5em 0;
+  padding: 0.1em 0 0.1em 1.2em;
+  border-left: 3px solid var(--rule-strong);
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* Inline code — light chip, distinct from the dark block listings */
+:not(pre) > code {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 0.08em 0.34em;
+  word-break: break-word;
+}
+
+/* ---- Masthead ------------------------------------------------------------ */
+.masthead {
+  background: var(--bg-sunken);
+  border-bottom: 1px solid var(--rule);
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+}
+.masthead-inner {
+  max-width: var(--measure-wide);
+  margin: 0 auto;
+  padding: 0.6rem 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.masthead .course {
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  text-decoration: none;
+}
+.masthead .spacer { flex: 1; }
+.masthead a { color: var(--text-muted); text-decoration: none; }
+.masthead a:hover { color: var(--accent-text); }
+
+.theme-toggle {
+  font: inherit;
+  font-size: 0.78rem;
+  background: var(--bg-raised);
+  color: var(--text-muted);
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  padding: 0.2rem 0.55rem;
+  cursor: pointer;
+}
+.theme-toggle:hover { border-color: var(--rule-strong); color: var(--text); }
+
+/* ---- Lesson nav (top & bottom) ------------------------------------------- */
+.lesson-nav {
+  display: flex;
+  align-items: stretch;
+  gap: 0.6rem;
+  font-family: var(--font-ui);
+  font-size: 0.82rem;
+  margin: 1.5rem auto;
+}
+.lesson-nav a, .lesson-nav span {
+  flex: 1;
+  padding: 0.55rem 0.8rem;
+  border: 1px solid var(--rule);
+  border-radius: 7px;
+  background: var(--bg-raised);
+  text-decoration: none;
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+.lesson-nav a:hover { border-color: var(--accent); }
+.lesson-nav span { opacity: 0.45; }        /* disabled edge (no prev / no next) */
+.lesson-nav .dir {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-faint);
+}
+.lesson-nav .ttl {
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-weight: 550;
+}
+.lesson-nav .next-l { text-align: right; }
+.lesson-nav .idx-l  { flex: 0 0 auto; justify-content: center; text-align: center; }
+@media (max-width: 34rem) {
+  .lesson-nav { flex-wrap: wrap; }
+  .lesson-nav .idx-l { order: 3; flex: 1 0 100%; }
+}
+
+/* ---- Lesson header block ------------------------------------------------- */
+.lesson-head { margin: 2rem 0 0; }
+.eyebrow {
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+  font-weight: 650;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 0.5rem;
+}
+.deck {
+  font-size: 1.12rem;
+  color: var(--text-muted);
+  margin-bottom: 1.5rem;
+}
+.meta {
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  padding: 1rem 1.15rem;
+  margin-bottom: 1.75rem;
+}
+.meta dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 0.4rem 1rem; }
+.meta dt {
+  color: var(--text-faint);
+  text-transform: uppercase;
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  padding-top: 0.28em;
+  white-space: nowrap;
+}
+.meta dd { margin: 0; }
+@media (max-width: 30rem) {
+  .meta dl { grid-template-columns: 1fr; gap: 0.15rem 0; }
+  .meta dd { margin-bottom: 0.6rem; }
+}
+
+/* Objectives — "you will be able to…" */
+.objectives {
+  border: 1px solid var(--accent);
+  background: var(--accent-soft);
+  border-radius: 9px;
+  padding: 1.1rem 1.25rem;
+  margin: 1.75rem 0;
+}
+.objectives h2 {
+  margin: 0 0 0.5rem;
+  border: 0; padding: 0;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--accent-text);
+}
+.objectives ul { margin: 0; padding-left: 1.25em; }
+.objectives li::marker { color: var(--accent); }
+
+/* ---- Table of contents --------------------------------------------------- */
+.toc {
+  font-family: var(--font-ui);
+  font-size: 0.88rem;
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  padding: 1rem 1.25rem;
+  margin: 2rem 0;
+}
+.toc > summary {
+  cursor: pointer;
+  font-weight: 650;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-muted);
+  list-style: none;
+}
+.toc > summary::-webkit-details-marker { display: none; }
+.toc > summary::before { content: "▸ "; color: var(--accent); }
+.toc[open] > summary::before { content: "▾ "; }
+.toc ol { list-style: none; margin: 0.85rem 0 0; padding: 0; counter-reset: toc; }
+.toc ol ol { margin: 0.3rem 0 0.5rem 1.1rem; }
+.toc li { margin: 0.28em 0; counter-increment: toc; }
+.toc a { text-decoration: none; color: var(--text); }
+.toc a:hover { color: var(--accent-text); text-decoration: underline; }
+.toc ol ol a { color: var(--text-muted); font-size: 0.94em; }
+
+/* ---- Callouts ------------------------------------------------------------ */
+.callout {
+  border-left: 3px solid var(--rule-strong);
+  background: var(--bg-sunken);
+  border-radius: 0 8px 8px 0;
+  padding: 0.9rem 1.1rem;
+  margin: 1.6em 0;
+  font-size: 0.95rem;
+}
+.callout > :first-child { margin-top: 0; }
+.callout > :last-child  { margin-bottom: 0; }
+.callout .label {
+  display: block;
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  margin-bottom: 0.35rem;
+}
+.callout.note    { border-color: var(--note-bd);    background: var(--note-bg); }
+.callout.note .label    { color: var(--note-bd); }
+.callout.warn    { border-color: var(--warn-bd);    background: var(--warn-bg); }
+.callout.warn .label    { color: var(--warn-bd); }
+.callout.verify  { border-color: var(--verify-bd);  background: var(--verify-bg); }
+.callout.verify .label  { color: var(--verify-bd); }
+.callout.pitfall { border-color: var(--pitfall-bd); background: var(--pitfall-bg); }
+.callout.pitfall .label { color: var(--pitfall-bd); }
+.callout.ok      { border-color: var(--ok-bd);      background: var(--ok-bg); }
+.callout.ok .label      { color: var(--ok-bd); }
+/* C++ explainers: a C++ feature taught in place, the first time it appears. */
+.callout.cpp     { border-color: var(--accent);     background: var(--accent-soft); }
+.callout.cpp .label     { color: var(--accent-text); }
+
+/* ---- Code listings ------------------------------------------------------- */
+.listing {
+  margin: 1.6em 0;
+  border-radius: 9px;
+  overflow: hidden;
+  border: 1px solid var(--code-rule);
+  background: var(--code-bg);
+}
+.listing figcaption {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: var(--code-bar);
+  border-bottom: 1px solid var(--code-rule);
+  padding: 0.45rem 0.85rem;
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  color: #aeb6c4;
+}
+.listing figcaption .path { font-weight: 600; color: #dfe3ec; }
+.listing figcaption .tag {
+  font-family: var(--font-ui);
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  background: #3a3f4c;
+  color: #c6cdd9;
+}
+.listing figcaption .tag.new      { background: #1f4433; color: #7fd6a5; }
+.listing figcaption .tag.modified { background: #453a1c; color: #e0be74; }
+.listing figcaption .lang { margin-left: auto; opacity: 0.65; }
+
+/* Horizontal scroll — NEVER wrap. Wrapped code lies about its structure. */
+.listing pre {
+  margin: 0;
+  padding: 0.9rem 1rem;
+  overflow-x: auto;
+  background: var(--code-bg);
+}
+.listing pre code {
+  font-family: var(--font-mono);
+  font-size: 0.79rem;
+  line-height: 1.62;
+  color: var(--code-text);
+  white-space: pre;
+  display: block;
+  tab-size: 4;
+}
+.listing pre::-webkit-scrollbar { height: 9px; }
+.listing pre::-webkit-scrollbar-track { background: var(--code-bar); }
+.listing pre::-webkit-scrollbar-thumb { background: #4a5060; border-radius: 5px; }
+.listing pre::-webkit-scrollbar-thumb:hover { background: #5d6478; }
+
+/* Syntax tokens, applied by the tiny highlighter at the foot of the page. */
+.tok-c { color: var(--tok-comment); font-style: italic; }
+.tok-k { color: var(--tok-keyword); }
+.tok-t { color: var(--tok-type); }
+.tok-s { color: var(--tok-string); }
+.tok-n { color: var(--tok-number); }
+.tok-p { color: var(--tok-preproc); }
+.tok-f { color: var(--tok-func); }
+.tok-o { color: var(--tok-punct); }
+
+/* Emphasised line inside a listing (the line this paragraph is about) */
+.listing .hl { background: rgba(180, 130, 60, 0.16); display: inline-block; width: 100%; }
+
+/* Shell transcripts get a lighter treatment than source files */
+.listing.shell figcaption .path::before { content: "$ "; opacity: 0.6; }
+
+/* ---- Figures & diagrams -------------------------------------------------- */
+figure.dia {
+  margin: 2em auto;
+  padding: 0;
+}
+figure.dia svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: var(--dia-bg);
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+}
+figure.dia figcaption,
+figure.tbl figcaption {
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: 0.65rem;
+  line-height: 1.55;
+}
+figure.dia figcaption .fignum,
+figure.tbl figcaption .fignum {
+  font-weight: 700;
+  color: var(--text);
+}
+/* SVG text inherits the theme so diagrams survive dark mode */
+figure.dia svg text { font-family: var(--font-ui); fill: var(--dia-ink); }
+figure.dia svg .lbl-x { fill: var(--axis-x); }
+figure.dia svg .lbl-y { fill: var(--axis-y); }
+figure.dia svg .lbl-z { fill: var(--axis-z); }
+figure.dia svg .ax-x  { stroke: var(--axis-x); }
+figure.dia svg .ax-y  { stroke: var(--axis-y); }
+figure.dia svg .ax-z  { stroke: var(--axis-z); }
+figure.dia svg .ink       { stroke: var(--dia-ink); }
+figure.dia svg .ink-soft  { stroke: var(--dia-ink-soft); }
+figure.dia svg .grid      { stroke: var(--dia-grid); }
+figure.dia svg .fill-soft { fill: var(--dia-fill); }
+figure.dia svg .hi        { stroke: var(--dia-hi); }
+figure.dia svg .mono      { font-family: var(--font-mono); }
+figure.dia svg .sm        { font-size: 11px; }
+figure.dia svg .xs        { font-size: 9.5px; }
+
+/* Text fills for <text> elements.
+   These MUST be classes, not fill="..." attributes: the `figure.dia svg text`
+   rule above is CSS, and CSS always beats an SVG presentation attribute — an
+   inline fill on a <text> is silently ignored. Class selectors outrank the bare
+   element selector, so these win. (Shapes are unaffected; the rule only targets
+   text, so fill="..." still works on rect/path/circle.) */
+figure.dia svg .muted     { fill: var(--dia-ink-soft); }
+figure.dia svg .t-hi      { fill: var(--dia-hi); }
+figure.dia svg .t-ok      { fill: var(--ok-bd); }
+figure.dia svg .t-bad     { fill: var(--verify-bd); }
+
+/* ---- Tables -------------------------------------------------------------- */
+.tbl-scroll { overflow-x: auto; margin: 1.6em 0; }
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+th, td {
+  text-align: left;
+  padding: 0.5rem 0.7rem;
+  border-bottom: 1px solid var(--rule);
+  vertical-align: top;
+}
+th {
+  font-weight: 650;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--rule-strong);
+  white-space: nowrap;
+}
+tbody tr:hover { background: var(--bg-sunken); }
+td code { font-size: 0.82em; }
+
+/* File-manifest table: path | new/modified | purpose */
+.manifest td:first-child { font-family: var(--font-mono); font-size: 0.78rem; white-space: nowrap; }
+.badge {
+  font-size: 0.62rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.06em; padding: 0.1rem 0.4rem; border-radius: 3px; white-space: nowrap;
+}
+.badge.new { background: var(--ok-bg); color: var(--ok-bd); border: 1px solid var(--ok-bd); }
+.badge.mod { background: var(--warn-bg); color: var(--warn-bd); border: 1px solid var(--warn-bd); }
+/* Curriculum status, used on index.html */
+.badge.done { background: var(--ok-bg); color: var(--ok-bd); border: 1px solid var(--ok-bd); }
+.badge.soon { background: var(--bg-sunken); color: var(--text-faint); border: 1px solid var(--rule-strong); }
+
+/* ---- Math ---------------------------------------------------------------- */
+/* KaTeX renders these when the CDN is reachable. When it is NOT, the raw TeX
+   stays visible — which is why every equation MUST also be stated in prose.
+   Never let an equation be the only carrier of a fact. */
+.eq {
+  margin: 1.4em 0;
+  padding: 0.9rem 1rem;
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  overflow-x: auto;
+  text-align: center;
+}
+.eq-plain {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  margin-top: 0.6rem;
+  padding-top: 0.6rem;
+  border-top: 1px dashed var(--rule-strong);
+  text-align: left;
+}
+.eq-plain::before {
+  content: "in plain text: ";
+  color: var(--text-faint);
+  font-family: var(--font-ui);
+  font-size: 0.72rem;
+}
+
+/* Worked numeric example — every formula gets one */
+.worked {
+  border: 1px solid var(--rule-strong);
+  border-radius: 9px;
+  padding: 1rem 1.2rem;
+  margin: 1.6em 0;
+  background: var(--bg-raised);
+}
+.worked > .label {
+  display: block;
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--accent);
+  margin-bottom: 0.5rem;
+}
+.worked > :last-child { margin-bottom: 0; }
+
+/* ---- Exercises ----------------------------------------------------------- */
+.exercise {
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 9px 9px 0;
+  padding: 1rem 1.2rem;
+  margin: 1.4em 0;
+  background: var(--bg-raised);
+}
+.exercise h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.98rem;
+}
+.exercise h3 .xnum {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--accent);
+  margin-right: 0.5em;
+}
+.difficulty {
+  font-family: var(--font-ui);
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-faint);
+  border: 1px solid var(--rule-strong);
+  border-radius: 3px;
+  padding: 0.05rem 0.35rem;
+  margin-left: 0.4em;
+  vertical-align: 0.15em;
+}
+.exercise details {
+  margin-top: 0.7rem;
+  border-top: 1px solid var(--rule);
+  padding-top: 0.6rem;
+}
+.exercise summary {
+  cursor: pointer;
+  font-family: var(--font-ui);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.exercise summary:hover { color: var(--accent-text); }
+.exercise details[open] summary { margin-bottom: 0.6rem; }
+
+/* ---- Pitfalls (symptom → cause → fix) ------------------------------------ */
+.pitfalls { margin: 1.5em 0; }
+.pitfall-item {
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  margin-bottom: 0.9rem;
+  overflow: hidden;
+}
+.pitfall-item > summary {
+  cursor: pointer;
+  padding: 0.7rem 1rem;
+  background: var(--bg-sunken);
+  font-family: var(--font-ui);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.pitfall-item > summary:hover { color: var(--accent-text); }
+.pitfall-item > summary .sym {
+  font-weight: 400;
+  color: var(--text-muted);
+  font-style: italic;
+}
+.pitfall-body { padding: 0.9rem 1rem; font-size: 0.94rem; }
+.pitfall-body > :first-child { margin-top: 0; }
+.pitfall-body > :last-child  { margin-bottom: 0; }
+.pitfall-body dt {
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+  margin-top: 0.7rem;
+}
+.pitfall-body dd { margin: 0.2rem 0 0; }
+
+/* ---- Recap / next -------------------------------------------------------- */
+.recap {
+  background: var(--ok-bg);
+  border: 1px solid var(--ok-bd);
+  border-radius: 9px;
+  padding: 1.1rem 1.25rem;
+  margin: 1.75rem 0;
+}
+.recap h2 { margin: 0 0 0.6rem; border: 0; padding: 0; font-size: 1.05rem; }
+.recap > :last-child { margin-bottom: 0; }
+
+/* ---- Further reading ----------------------------------------------------- */
+.reading { font-size: 0.92rem; }
+.reading li { margin-bottom: 0.6em; }
+.reading .src {
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+  margin-right: 0.4em;
+}
+
+/* ---- STATE block --------------------------------------------------------- */
+.state {
+  margin: 2.5em 0 1em;
+  border: 1px dashed var(--rule-strong);
+  border-radius: 9px;
+  background: var(--bg-sunken);
+  overflow: hidden;
+}
+.state > summary {
+  cursor: pointer;
+  padding: 0.6rem 1rem;
+  font-family: var(--font-ui);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-muted);
+}
+.state pre {
+  margin: 0;
+  padding: 0.9rem 1rem;
+  overflow-x: auto;
+  border-top: 1px solid var(--rule);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+  white-space: pre;
+}
+
+/* ---- Footer -------------------------------------------------------------- */
+.foot {
+  border-top: 1px solid var(--rule);
+  margin-top: 3rem;
+  padding: 1.5rem 0 3rem;
+  font-family: var(--font-ui);
+  font-size: 0.78rem;
+  color: var(--text-faint);
+}
+.foot a { color: var(--text-muted); }
+
+/* ---- Interactive widgets ------------------------------------------------- */
+.widget {
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  background: var(--bg-raised);
+  padding: 1rem;
+  margin: 2em 0;
+}
+.widget-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+  align-items: center;
+  margin-top: 0.8rem;
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+.widget-controls label { display: flex; align-items: center; gap: 0.4rem; }
+.widget-controls input[type="range"] { accent-color: var(--accent); }
+.widget-readout {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--text);
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 0.1rem 0.4rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Print --------------------------------------------------------------- */
+@media print {
+  .masthead, .lesson-nav, .theme-toggle { display: none; }
+  body { background: #fff; color: #000; font-size: 11pt; }
+  .listing { break-inside: avoid; }
+  figure.dia { break-inside: avoid; }
+  a::after { content: " (" attr(href) ")"; font-size: 0.7em; color: #666; }
+}
+</style>
+<!-- SHARED-CSS:END -->
+<style>
+/* Math-toolbox-only additions. */
+.tool {
+  border: 1px solid var(--rule); border-radius: 10px;
+  padding: 1rem 1.2rem; margin: 1.2rem 0; background: var(--bg-raised);
+}
+.tool h3 { margin-top: 0; display: flex; align-items: baseline; gap: 0.6rem; flex-wrap: wrap; }
+.tool .from {
+  margin-left: auto; font-family: var(--font-ui); font-size: 0.68rem;
+  font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--text-faint); border: 1px solid var(--rule-strong);
+  border-radius: 3px; padding: 0.1rem 0.4rem; white-space: nowrap;
+}
+.tool > :last-child { margin-bottom: 0; }
+.pending {
+  border: 1px dashed var(--rule-strong); border-radius: 10px;
+  padding: 0.9rem 1.1rem; margin: 1.2rem 0;
+  font-family: var(--font-ui); font-size: 0.85rem; color: var(--text-faint);
+}
+.pending b { color: var(--text-muted); }
+</style>
+<link rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css"
+      integrity="sha384-nB0miv6/jRmo5UMMR1wu3Gz6NLsoTkbqJghGIsx//Rlm+ZU03BU6SQNC66uf4l5+"
+      crossorigin="anonymous">
+</head>
+<body>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <a class="course" href="index.html">Build a Professional 3D Game Engine</a>
+    <span class="spacer"></span>
+    <a href="index.html">Contents</a>
+    <a href="conventions.html">Conventions</a>
+    <a href="cpp-style.html">C++ Style</a>
+    <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Toggle colour theme">Theme</button>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <nav class="lesson-nav" aria-label="Page navigation (top)">
+    <a class="idx-l" href="index.html" style="flex:1">
+      <span class="dir">← Back</span>
+      <span class="ttl">Course home</span>
+    </a>
+    <a class="next-l" href="conventions.html">
+      <span class="dir">Companion →</span>
+      <span class="ttl">Conventions</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Living reference · Grows every module</div>
+    <h1>Math Toolbox</h1>
+    <p class="deck">
+      Every mathematical tool the engine uses, in one place — each added the moment the engine
+      first needs it, never before. This page is a <em>reference</em>, not a syllabus: each entry
+      is the compressed form of an idea that was derived properly in a lesson.
+    </p>
+  </div>
+
+  <div class="callout note">
+    <span class="label">How this page works</span>
+    <p>
+      Entries appear here <strong>after</strong> the lesson that derives them, and each links
+      back to that derivation. If a formula here looks arbitrary, that is the page doing its job
+      badly — follow the link and the geometry will be waiting. Nothing is memorised in this
+      course; things are understood and then <em>recalled</em>, which is what this page is for.
+    </p>
+  </div>
+
+  <details class="toc" open>
+    <summary>Contents</summary>
+    <ol>
+      <li><a href="#notation">Notation and conventions</a></li>
+      <li><a href="#trig">Trigonometry, only what we need</a></li>
+      <li><a href="#vectors">Vectors</a></li>
+      <li><a href="#coming">Coming as the course proceeds</a></li>
+    </ol>
+  </details>
+
+  <!-- ===================================================================== -->
+  <h2 id="notation"><span class="num">1</span>Notation and conventions</h2>
+
+  <p>
+    Consistent symbols, so a formula three modules from now reads the same as one from today.
+    Directional and range conventions live on the <a href="conventions.html">Conventions</a>
+    page; this is purely about notation.
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>Symbol</th><th>Means</th></tr></thead>
+      <tbody>
+        <tr><td><strong>a</strong>, <strong>b</strong>, <strong>v</strong> (bold)</td><td>A vector.</td></tr>
+        <tr><td><em>s</em>, <em>t</em>, <em>θ</em> (italic)</td><td>A scalar.</td></tr>
+        <tr><td><em>M</em>, <em>V</em>, <em>P</em> (italic capital)</td><td>A matrix. <em>M</em> model, <em>V</em> view, <em>P</em> projection.</td></tr>
+        <tr><td><code>‖v‖</code></td><td>Length (magnitude) of <strong>v</strong>.</td></tr>
+        <tr><td><code>v̂</code>, "unit"</td><td>A vector of length 1.</td></tr>
+        <tr><td><code>a · b</code></td><td>Dot product — a <em>scalar</em>.</td></tr>
+        <tr><td><code>a × b</code></td><td>Cross product — a <em>vector</em>.</td></tr>
+        <tr><td><code>v'</code></td><td><strong>v</strong> after a transform.</td></tr>
+        <tr><td><code>v.x</code></td><td>A component, as in code.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    Vectors are <strong>columns</strong>, transforms apply on the left: <code>v' = M · v</code>,
+    composing right-to-left. Angles are always in <strong>radians</strong>.
+  </p>
+
+  <!-- ===================================================================== -->
+  <h2 id="trig"><span class="num">2</span>Trigonometry, only what we need</h2>
+
+  <p>
+    Graphics needs less trigonometry than people fear, and it needs it for one reason:
+    <strong>sine and cosine convert between an angle and a pair of lengths</strong>. That is the
+    whole job. Figure 1 is the only trigonometry picture in this course.
+  </p>
+
+  <figure class="dia bleed">
+    <svg viewBox="0 0 660 260" role="img" aria-labelledby="mt1-t mt1-d">
+      <title id="mt1-t">Sine and cosine on the unit circle</title>
+      <desc id="mt1-d">A unit circle with a radius at angle theta. The horizontal projection of
+        the radius is labelled cosine theta and the vertical projection is labelled sine theta,
+        forming a right triangle with hypotenuse one.</desc>
+      <defs>
+        <marker id="mt-ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+      </defs>
+
+      <g transform="translate(140,130)">
+        <circle cx="0" cy="0" r="95" fill="none" class="ink-soft" stroke-width="1.2"/>
+        <line x1="-110" y1="0" x2="115" y2="0" class="ax-x" stroke-width="1.6"/>
+        <line x1="0" y1="110" x2="0" y2="-115" class="ax-y" stroke-width="1.6"/>
+
+        <!-- theta = 50 degrees; cos50=0.643, sin50=0.766 -->
+        <line x1="0" y1="0" x2="61.1" y2="-72.8" class="hi" stroke-width="2.4" marker-end="url(#mt-ah)"/>
+        <line x1="61.1" y1="0" x2="61.1" y2="-72.8" class="ax-y" stroke-width="1.6" stroke-dasharray="4 3"/>
+        <line x1="0" y1="-72.8" x2="61.1" y2="-72.8" class="ax-x" stroke-width="1.6" stroke-dasharray="4 3"/>
+
+        <path d="M26,0 A26,26 0 0,0 16.7,-19.9" fill="none" class="ink" stroke-width="1.4"/>
+        <text x="32" y="-8" class="sm">θ</text>
+
+        <circle cx="0" cy="0" r="3" fill="var(--dia-ink)"/>
+        <circle cx="61.1" cy="-72.8" r="3.5" fill="var(--dia-hi)"/>
+
+        <text x="24" y="16" class="xs lbl-x">cos θ</text>
+        <text x="66" y="-38" class="xs lbl-y">sin θ</text>
+        <text x="18" y="-48" class="xs t-hi" font-weight="700">1</text>
+        <text x="118" y="-6" class="xs lbl-x" font-weight="700">x</text>
+        <text x="6" y="-112" class="xs lbl-y" font-weight="700">y</text>
+      </g>
+
+      <g transform="translate(300,44)">
+        <text x="0" y="0" class="sm" font-weight="700">The one idea</text>
+        <text x="0" y="20" class="xs muted">A point on the unit circle at angle θ is exactly</text>
+        <text x="0" y="34" class="xs mono">(cos θ, sin θ)</text>
+        <text x="0" y="54" class="xs muted">So cosine is the x-shadow of a unit arrow, and sine</text>
+        <text x="0" y="68" class="xs muted">is its y-shadow. Everything else is bookkeeping.</text>
+
+        <text x="0" y="98" class="sm" font-weight="700">Worth memorising</text>
+        <text x="0" y="118" class="xs mono">sin²θ + cos²θ = 1</text>
+        <text x="0" y="132" class="xs muted">(Pythagoras on the triangle above — the hypotenuse is 1.)</text>
+        <text x="0" y="152" class="xs mono">tan θ = sin θ / cos θ</text>
+        <text x="0" y="166" class="xs muted">= rise over run = slope. This is the one that builds</text>
+        <text x="0" y="180" class="xs muted">the perspective projection in lesson 2.10.</text>
+      </g>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 1.</span> Sine and cosine as the shadows of a unit arrow.
+      Read this picture once properly and you will not need to memorise a single trig identity
+      for the rest of the course.
+    </figcaption>
+  </figure>
+
+  <div class="worked">
+    <span class="label">Worked example — reading the picture</span>
+    <p>
+      At <code>θ = 50°</code> (which is <code>0.873</code> radians — we convert at the boundary
+      and think in radians inside):
+    </p>
+    <ul>
+      <li><code>cos 50° ≈ 0.643</code> — the arrow reaches 0.643 along x.</li>
+      <li><code>sin 50° ≈ 0.766</code> — and 0.766 up y.</li>
+      <li>Check: <code>0.643² + 0.766² = 0.413 + 0.587 = 1.000</code> ✓ — the hypotenuse is 1, as it must be.</li>
+    </ul>
+    <p>
+      That check is the identity <code>sin²θ + cos²θ = 1</code>, which is just Pythagoras. You
+      never have to remember it separately; it falls out of the picture.
+    </p>
+  </div>
+
+  <!-- ===================================================================== -->
+  <h2 id="vectors"><span class="num">3</span>Vectors</h2>
+
+  <div class="tool">
+    <h3>Vector length <span class="from">Lesson 1.7</span></h3>
+    <div class="eq">
+      <span>\[ \|\mathbf{v}\| = \sqrt{v_x^2 + v_y^2 + v_z^2} \]</span>
+      <span class="eq-plain">length(v) = sqrt(v.x*v.x + v.y*v.y + v.z*v.z)</span>
+    </div>
+    <p>
+      <strong>Pythagoras, in as many dimensions as you like.</strong> The length of an arrow is
+      the square root of the sum of its squared components.
+    </p>
+    <p>
+      <strong>In practice:</strong> when comparing distances, compare <em>squared</em> lengths
+      and skip the square root — it is a real cost and the ordering is identical, since
+      <code>sqrt</code> is monotonic. We will use <code>length_squared()</code> constantly.
+    </p>
+  </div>
+
+  <div class="tool">
+    <h3>Normalization <span class="from">Lesson 1.7</span></h3>
+    <div class="eq">
+      <span>\[ \hat{\mathbf{v}} = \frac{\mathbf{v}}{\|\mathbf{v}\|} \]</span>
+      <span class="eq-plain">normalize(v) = v / length(v)</span>
+    </div>
+    <p>
+      Divide an arrow by its own length and you keep the <em>direction</em> and throw away the
+      <em>magnitude</em>. A unit vector answers "which way?" without answering "how far?".
+    </p>
+    <div class="callout warn">
+      <span class="label">The zero-length trap</span>
+      <p>
+        Normalizing a zero vector divides by zero and hands you <code>NaN</code> — which then
+        propagates silently through every subsequent calculation until your whole scene
+        disappears. <code>NaN</code> is contagious and never announces itself. Guard the length,
+        or assert it.
+      </p>
+    </div>
+  </div>
+
+  <div class="tool">
+    <h3>Dot product <span class="from">Lesson 1.7</span></h3>
+    <div class="eq">
+      <span>\[ \mathbf{a} \cdot \mathbf{b} = a_x b_x + a_y b_y + a_z b_z = \|\mathbf{a}\|\,\|\mathbf{b}\|\cos\theta \]</span>
+      <span class="eq-plain">dot(a, b) = a.x*b.x + a.y*b.y + a.z*b.z = length(a) * length(b) * cos(theta)</span>
+    </div>
+    <p>
+      <strong>The dot product is a shadow.</strong> It measures how much of one arrow lies along
+      another. That single sentence carries the whole idea; the two formulae above are the
+      cheap way to compute it and the meaningful way to interpret it, and the fact that they are
+      equal is the useful part.
+    </p>
+    <p>The sign alone answers a question you will ask constantly:</p>
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th><code>a · b</code></th><th>Angle</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><strong>&gt; 0</strong></td><td>&lt; 90°</td><td>Same general direction.</td></tr>
+          <tr><td><strong>= 0</strong></td><td>exactly 90°</td><td>Perpendicular. No shadow at all.</td></tr>
+          <tr><td><strong>&lt; 0</strong></td><td>&gt; 90°</td><td>Opposing directions.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      <strong>Where it earns its keep:</strong> if both vectors are unit length, the dot product
+      <em>is</em> <code>cos θ</code> directly — no division, no <code>acos</code>. That is
+      exactly Lambert's law in Module 3.6 (how lit is this surface?) and back-face culling in
+      3.4 (is this face pointing away?).
+    </p>
+    <div class="worked">
+      <span class="label">Worked example</span>
+      <p>Take <code>a = (3, 4, 0)</code> and <code>b = (1, 0, 0)</code>:</p>
+      <ul>
+        <li><code>a · b = 3·1 + 4·0 + 0·0 = 3</code></li>
+        <li><code>‖a‖ = sqrt(9 + 16) = 5</code>, <code>‖b‖ = 1</code></li>
+        <li><code>cos θ = 3 / (5 · 1) = 0.6</code>, so <code>θ ≈ 53.13°</code></li>
+      </ul>
+      <p>
+        Geometrically: <strong>a</strong>'s shadow on the x-axis is 3 long — which is just its
+        x-component. Dotting with a unit basis vector <em>extracts a coordinate</em>. That is
+        not a coincidence; it is what coordinates are.
+      </p>
+    </div>
+  </div>
+
+  <div class="tool">
+    <h3>Cross product <span class="from">Lesson 3.4</span></h3>
+    <div class="eq">
+      <span>\[ \mathbf{a} \times \mathbf{b} = \begin{pmatrix} a_y b_z - a_z b_y \\ a_z b_x - a_x b_z \\ a_x b_y - a_y b_x \end{pmatrix} \]</span>
+      <span class="eq-plain">cross(a,b) = (a.y*b.z - a.z*b.y,  a.z*b.x - a.x*b.z,  a.x*b.y - a.y*b.x)</span>
+    </div>
+    <p>
+      <strong>The cross product finds the direction nothing else is pointing.</strong> Give it
+      two arrows and it returns one perpendicular to both — which is precisely how you get a
+      surface normal from two edges of a triangle.
+    </p>
+    <p>Two properties do all the work:</p>
+    <ul>
+      <li><strong>Direction:</strong> perpendicular to both inputs, with the side chosen by the right-hand rule. This <em>is</em> our handedness convention — see <a href="conventions.html#world">Conventions §2</a>.</li>
+      <li><strong>Magnitude:</strong> <code>‖a × b‖ = ‖a‖‖b‖ sin θ</code>, which equals the area of the parallelogram they span — hence <em>twice</em> the triangle's area. That is where barycentric coordinates come from in lesson 2.3, and where winding comes from in 3.4.</li>
+    </ul>
+    <p>
+      <strong>It is not commutative:</strong> <code>a × b = −(b × a)</code>. Swapping the
+      arguments flips the result, and that flip is exactly the difference between a front face
+      and a back face.
+    </p>
+    <div class="worked">
+      <span class="label">Worked example — the basis vectors</span>
+      <p>With <code>x = (1,0,0)</code> and <code>y = (0,1,0)</code>:</p>
+      <ul>
+        <li><code>(x × y).x = x.y·y.z − x.z·y.y = 0·0 − 0·1 = 0</code></li>
+        <li><code>(x × y).y = x.z·y.x − x.x·y.z = 0·0 − 1·0 = 0</code></li>
+        <li><code>(x × y).z = x.x·y.y − x.y·y.x = 1·1 − 0·0 = 1</code></li>
+      </ul>
+      <p>
+        So <code>x × y = (0,0,1) = z</code> — right-handed, confirmed. This is the arithmetic
+        behind the whole handedness convention, and it is worth doing once by hand so it is
+        never mysterious again.
+      </p>
+    </div>
+  </div>
+
+  <div class="tool">
+    <h3>Linear interpolation (lerp) <span class="from">Lesson 1.4</span></h3>
+    <div class="eq">
+      <span>\[ \text{lerp}(\mathbf{a}, \mathbf{b}, t) = \mathbf{a} + t(\mathbf{b} - \mathbf{a}) = (1-t)\mathbf{a} + t\mathbf{b} \]</span>
+      <span class="eq-plain">lerp(a, b, t) = a + t*(b - a) = (1-t)*a + t*b</span>
+    </div>
+    <p>
+      <strong>Start at a, walk a fraction <em>t</em> of the way toward b.</strong> At
+      <code>t = 0</code> you are at <strong>a</strong>; at <code>t = 1</code> you are at
+      <strong>b</strong>; at <code>0.5</code> you are exactly between. The most useful three
+      lines of maths in the whole engine.
+    </p>
+    <p>
+      The two forms are algebraically identical but not numerically:
+      <code>a + t(b−a)</code> is one multiply cheaper, while <code>(1−t)a + tb</code> is
+      <em>precisely</em> <strong>b</strong> at <code>t = 1</code> even in floating point. Use
+      the second when landing exactly on the endpoint matters.
+    </p>
+    <p>
+      <strong>Where it earns its keep:</strong> the render interpolation in our fixed-timestep
+      loop (1.4), attribute interpolation across triangles (2.4), bilinear filtering (3.9), and
+      animation blending (7.7). Once you see lerp, you see it everywhere.
+    </p>
+    <div class="worked">
+      <span class="label">Worked example</span>
+      <p>
+        The fixed-timestep loop leaves the accumulator at <code>t = 0.3</code> between two
+        simulation states — a ball at <code>(10, 5)</code> and <code>(20, 5)</code>:
+      </p>
+      <ul>
+        <li><code>x = 10 + 0.3·(20 − 10) = 10 + 3 = 13</code></li>
+        <li><code>y = 5 + 0.3·(5 − 5) = 5</code></li>
+      </ul>
+      <p>
+        We draw the ball at <code>(13, 5)</code> — a position the simulation never actually
+        computed. That is the whole trick behind smooth rendering on a fixed timestep.
+      </p>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <h2 id="coming"><span class="num">4</span>Coming as the course proceeds</h2>
+
+  <p>
+    This page is reissued at every module boundary. Each entry lands here only once its lesson
+    has derived it — listed now so you can see the shape of what is ahead, not so you can learn
+    it early.
+  </p>
+
+  <div class="pending">
+    <b>Module 2 — Matrices and projection.</b> Matrices as basis transforms · matrix
+    multiplication · the inverse and why the view matrix rarely needs a general one ·
+    homogeneous coordinates and <em>w</em> · barycentric coordinates from signed areas ·
+    the look-at derivation · <strong>perspective projection from similar triangles</strong> ·
+    the viewport transform.
+  </div>
+
+  <div class="pending">
+    <b>Module 3 — Depth and light.</b> The 1/w trick for perspective-correct interpolation ·
+    plane equations · Lambert's cosine law · the reflection vector · the halfway vector and
+    Blinn-Phong · bilinear filtering as a double lerp.
+  </div>
+
+  <div class="pending">
+    <b>Module 6 — Physically based rendering.</b> Solid angle and radiometry-lite · the
+    rendering equation, honestly scoped · BRDFs · microfacet distributions (GGX) · the geometry
+    and Fresnel terms · Schlick's approximation · <strong>the sRGB transfer function</strong> ·
+    the TBN basis · tonemapping curves · spherical harmonics for irradiance.
+  </div>
+
+  <div class="pending">
+    <b>Module 7 — Rotation and motion.</b> Euler angles and gimbal lock · axis-angle and
+    Rodrigues' formula · <strong>complex numbers as 2D rotation</strong> · quaternions ·
+    slerp · numerical integration · impulse and restitution · the Separating Axis Theorem.
+  </div>
+
+  <div class="recap">
+    <h2>The through-line</h2>
+    <p>
+      Almost everything above is one of three ideas wearing different clothes: <strong>a
+      shadow</strong> (the dot product), <strong>a perpendicular</strong> (the cross product),
+      and <strong>a weighted average</strong> (lerp). Barycentric coordinates are a weighted
+      average. Bilinear filtering is a weighted average of weighted averages. Lambert is a
+      shadow. Winding is a perpendicular's sign.
+    </p>
+    <p>
+      If a formula later in the course feels alien, ask which of the three it is. It is usually
+      one of them.
+    </p>
+  </div>
+
+  <nav class="lesson-nav" aria-label="Page navigation (bottom)">
+    <a class="idx-l" href="index.html" style="flex:1">
+      <span class="dir">← Back</span>
+      <span class="ttl">Course home</span>
+    </a>
+    <a class="next-l" href="conventions.html">
+      <span class="dir">Companion →</span>
+      <span class="ttl">Conventions</span>
+    </a>
+  </nav>
+
+  <footer class="foot">
+    <p>
+      Build a Professional 3D Game Engine ·
+      <a href="index.html">Contents</a> ·
+      <a href="conventions.html">Conventions</a> ·
+      <a href="math-toolbox.html">Math Toolbox</a> ·
+      <a href="cpp-style.html">C++ Style</a>
+    </p>
+    <p>MIT licensed. Copyright © 2026 digster.</p>
+  </footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var root = document.documentElement;
+  var KEY = "engine-course-theme";
+  try {
+    var saved = localStorage.getItem(KEY);
+    if (saved) { root.setAttribute("data-theme", saved); root.style.colorScheme = saved; }
+  } catch (e) {}
+  var btn = document.getElementById("theme-toggle");
+  if (btn) {
+    btn.addEventListener("click", function () {
+      var cur = root.getAttribute("data-theme");
+      if (!cur) cur = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      var next = cur === "dark" ? "light" : "dark";
+      root.setAttribute("data-theme", next);
+      root.style.colorScheme = next;
+      try { localStorage.setItem(KEY, next); } catch (e) {}
+    });
+  }
+})();
+</script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"
+        integrity="sha384-7zkQWkzuo3B5mTepMUcHkMB5jZaolc2xDwL6VFqjFALcbeS9Ggm/Yr2r3Dy4lfFg"
+        crossorigin="anonymous"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+        integrity="sha384-43gviWU0YVjaDtb/GhzOouOXtZMP/7XUzwPTstBeZFe/+rCMvRwr4yROQP43s0Xk"
+        crossorigin="anonymous"
+        onload="renderMathInElement(document.body, {
+          delimiters: [
+            {left: '\\[', right: '\\]', display: true},
+            {left: '\\(', right: '\\)', display: false}
+          ], throwOnError: false });"></script>
+</body>
+</html>
