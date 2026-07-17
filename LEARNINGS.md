@@ -99,13 +99,37 @@ via CMake, with runtime translation mentioned but not relied upon.
 
 ## SDL3 API signatures that differ from SDL2 muscle memory
 
-Verified against the headers. SDL2 idioms are a constant source of plausible-looking fiction.
+Verified against the headers at **`release-3.4.12`** (the tag we pin — see below). SDL2 idioms are
+a constant source of plausible-looking fiction, and a snippet copied from the wider internet is
+very likely SDL2. The compiler catches most of these, but only if you use the SDL3 form.
 
-| SDL3 | Note |
-|---|---|
-| `SDL_Window *SDL_CreateWindow(const char *title, int w, int h, SDL_WindowFlags flags)` | **No x/y parameters** (`SDL_video.h`). SDL2's `x, y` are gone; use `SDL_SetWindowPosition`. |
+| SDL3 | SDL2 (do NOT use) | Note / source |
+|---|---|---|
+| `SDL_Window *SDL_CreateWindow(const char *title, int w, int h, SDL_WindowFlags flags)` | `SDL_CreateWindow(title, x, y, w, h, flags)` | **No x/y** (`SDL_video.h`). Use `SDL_SetWindowPosition` if needed. |
+| `bool SDL_Init(SDL_InitFlags flags)` | `int SDL_Init(...)` (`==0` was success) | **Returns bool**; test `if (!SDL_Init(...))` (`SDL_init.h`). `SDL_INIT_VIDEO`=0x20, implies EVENTS. |
+| `bool SDL_PollEvent(SDL_Event *event)` | `int SDL_PollEvent(...)` | **Returns bool** (`SDL_events.h`). |
+| `SDL_Renderer *SDL_CreateRenderer(SDL_Window *window, const char *name)` | `SDL_CreateRenderer(win, index, flags)` | `name`=`nullptr` for default backend (`SDL_render.h`). |
+| `event.key.key` (SDL_Keycode), `event.key.scancode`, `.down`, `.repeat` | `event.key.keysym.sym` | **The `keysym` nesting is gone** (`SDL_events.h`, `SDL_KeyboardEvent`). |
+| `#include <SDL3/SDL_main.h>` separately, once, in the `main` file | (SDL2main link) | **`<SDL3/SDL.h>` does NOT include it** — it's "special". Omit → Windows link error on WinMain. Standard sig `int main(int argc, char *argv[])`. |
 
-Extend this table whenever a signature surprises you.
+Other verified constants/functions used so far: `SDLK_ESCAPE`=0x1b (`SDL_keycode.h`);
+`SDL_WINDOW_RESIZABLE`=0x20 (`SDL_video.h`); `SDL_EVENT_QUIT`=0x100, `SDL_EVENT_KEY_DOWN`=0x300
+(`SDL_events.h`); `void SDL_Log(const char *fmt, ...)` (`SDL_log.h`);
+`const char *SDL_GetError(void)` (`SDL_error.h`); `SDL_SetRenderDrawColor/RenderClear/RenderPresent`
+all return bool, `SDL_DestroyRenderer/DestroyWindow/Quit` return void (`SDL_render.h`, `SDL_video.h`).
+
+**Loop model:** we use classic `int main` + our own `while` loop, NOT SDL3's callback model
+(`SDL_MAIN_USE_CALLBACKS` with `SDL_AppInit`/`SDL_AppIterate`/`SDL_AppEvent`/`SDL_AppQuit`), because
+the engine owns its loop (0.1 thesis). The callback model exists and is fine for simple apps; it is
+just the wrong fit here.
+
+**Version pin:** SDL `main` is 3.5.0 but **unreleased**. Latest *release* tag is **`release-3.4.12`**
+(commit f87239e71e42); the 3.2.x line tops out at release-3.2.30. Pin to `release-3.4.12`. CMake
+target to link is **`SDL3::SDL3`** (alias → shared if built, else static); `SDL_TEST_LIBRARY OFF`
+skips SDL's test lib.
+
+Extend this table whenever a signature surprises you. The fastest check:
+`curl -sL https://raw.githubusercontent.com/libsdl-org/SDL/release-3.4.12/include/SDL3/<hdr>.h | grep -n ...`
 
 ---
 

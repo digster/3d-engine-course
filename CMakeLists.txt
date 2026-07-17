@@ -39,18 +39,19 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(SDL3)
 
 # ---- Our program -----------------------------------------------------------
-add_executable(engine_smoketest hello.cpp)
+# The executable is now the real engine, built from src/. hello.cpp is retired.
+add_executable(engine src/main.cpp)
 
 # Link SDL. SDL3::SDL3 is the alias SDL exports for "the SDL library, however it
 # was built"; linking it also pulls in SDL's headers and platform frameworks
 # transitively, so we never name Cocoa or user32 ourselves.
-target_link_libraries(engine_smoketest PRIVATE SDL3::SDL3)
+target_link_libraries(engine PRIVATE SDL3::SDL3)
 
 # Our warning discipline (see cpp-style §9) — applied to OUR target only, never
 # to SDL. Third-party code is compiled with its own flags; holding someone
 # else's library to /W4 just produces noise we cannot act on.
 if(MSVC)
-    target_compile_options(engine_smoketest PRIVATE /W4 /Zc:__cplusplus)
+    target_compile_options(engine PRIVATE /W4 /Zc:__cplusplus)
 else()
-    target_compile_options(engine_smoketest PRIVATE -Wall -Wextra)
+    target_compile_options(engine PRIVATE -Wall -Wextra)
 endif()

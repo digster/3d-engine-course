@@ -1,0 +1,99 @@
+// src/main.cpp — the engine's entry point.
+//
+// This is the first file of the real engine. It replaces the throwaway
+// hello.cpp: it opens a window, runs an event loop that responds to input, and
+// shuts down cleanly. The loop here is deliberately naive — Module 1 replaces it
+// with a proper fixed-timestep loop — but the structure (init, create, loop,
+// destroy) is the skeleton every engine shares.
+
+#include <SDL3/SDL.h>
+#include <SDL3/SDL_main.h>   // Provides the cross-platform entry point. NOTE:
+                             // <SDL3/SDL.h> deliberately does NOT include this,
+                             // so we include it explicitly, exactly once, here.
+
+int main(int argc, char* argv[])
+{
+    // We do not use command-line arguments yet. Marking them silences the
+    // -Wall -Wextra "unused parameter" warning without weakening the signature
+    // SDL's entry point requires.
+    (void)argc;
+    (void)argv;
+
+    // ---- 1. Initialise the SDL subsystems we need --------------------------
+    // SDL3's SDL_Init returns a bool: true on success, false on failure. (This
+    // changed from SDL2, where it returned an int — one of many SDL2 habits to
+    // unlearn.) SDL_INIT_VIDEO also brings up the event subsystem we rely on.
+    if (!SDL_Init(SDL_INIT_VIDEO))
+    {
+        SDL_Log("SDL_Init failed: %s", SDL_GetError());
+        return 1;
+    }
+
+    // ---- 2. Create the window ----------------------------------------------
+    // Note the SDL3 signature: title, width, height, flags — and NO x/y
+    // position (SDL places the window). A null return means failure, and the
+    // reason is always in SDL_GetError().
+    SDL_Window* window = SDL_CreateWindow("Engine", 1280, 720, SDL_WINDOW_RESIZABLE);
+    if (window == nullptr)
+    {
+        SDL_Log("SDL_CreateWindow failed: %s", SDL_GetError());
+        SDL_Quit();
+        return 1;
+    }
+
+    // ---- 3. Create a renderer ----------------------------------------------
+    // For now the renderer exists only so the window shows a defined colour
+    // instead of undefined garbage. Passing nullptr for the name lets SDL pick
+    // the best backend. Module 1 replaces this with our own CPU pixel buffer,
+    // so treat the renderer as scaffolding, not architecture.
+    SDL_Renderer* renderer = SDL_CreateRenderer(window, nullptr);
+    if (renderer == nullptr)
+    {
+        SDL_Log("SDL_CreateRenderer failed: %s", SDL_GetError());
+        SDL_DestroyWindow(window);
+        SDL_Quit();
+        return 1;
+    }
+
+    // ---- 4. The main loop --------------------------------------------------
+    // Naive on purpose: poll every pending event, then draw one frame, forever,
+    // until we are told to stop. Module 1.4 derives the real loop — with a fixed
+    // simulation step and render interpolation — from this starting point.
+    bool running = true;
+    while (running)
+    {
+        // Drain the event queue. SDL_PollEvent returns true while events remain
+        // and fills `event`; it returns false (a SDL3 bool, again) when empty.
+        SDL_Event event;
+        while (SDL_PollEvent(&event))
+        {
+            if (event.type == SDL_EVENT_QUIT)
+            {
+                // The user closed the window (title-bar button, Cmd/Alt+F4, …).
+                running = false;
+            }
+            else if (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_ESCAPE)
+            {
+                // SDL3 keyboard events expose the virtual key in event.key.key.
+                // (SDL2 nested it as event.key.keysym.sym — do not reach for that.)
+                running = false;
+            }
+        }
+
+        // Fill the window with a calm dark slate so we can see it is alive.
+        SDL_SetRenderDrawColor(renderer, 30, 30, 46, 255);
+        SDL_RenderClear(renderer);
+        SDL_RenderPresent(renderer);
+    }
+
+    // ---- 5. Shut down, in reverse order of creation ------------------------
+    // We destroy what we made, newest first, then quit SDL. Doing this by hand
+    // is error-prone and easy to forget on an early-return path (notice we had
+    // to repeat parts of it above). Module 5 wraps each resource in an RAII type
+    // so cleanup becomes automatic — this manual version is here so you feel the
+    // problem RAII solves.
+    SDL_DestroyRenderer(renderer);
+    SDL_DestroyWindow(window);
+    SDL_Quit();
+    return 0;
+}
