@@ -1,0 +1,2215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>0.3 — Setting Up Your Toolchain · Build a Professional 3D Game Engine</title>
+<meta name="description" content="Install a C++20 compiler on Windows, Linux, or macOS, understand the four stages of a build, and compile the engine's first source file by hand.">
+<!-- SHARED-CSS:BEGIN -->
+<style>
+/* ---- Design tokens ------------------------------------------------------- */
+:root {
+  color-scheme: light dark;
+
+  /* Page */
+  --bg:            #fdfdfb;
+  --bg-sunken:     #f4f4f0;
+  --bg-raised:     #ffffff;
+  --text:          #1c1c1a;
+  --text-muted:    #5f5f58;
+  --text-faint:    #8a8a80;
+  --rule:          #e2e2db;
+  --rule-strong:   #cfcfc6;
+
+  /* Accent — used for links, active nav, section marks */
+  --accent:        #b4530a;
+  --accent-soft:   #f5e6d8;
+  --accent-text:   #8f4108;
+
+  /* Callouts */
+  --note-bd:       #3a6ea5;   --note-bg:    #eaf2fb;
+  --warn-bd:       #b8860b;   --warn-bg:    #fdf5e2;
+  --verify-bd:     #a03030;   --verify-bg:  #fbecec;
+  --pitfall-bd:    #7a4fa3;   --pitfall-bg: #f4eefb;
+  --ok-bd:         #2f7d4f;   --ok-bg:      #e9f6ee;
+
+  /* Code — always dark, in both page themes */
+  --code-bg:       #1b1d23;
+  --code-bar:      #262932;
+  --code-text:     #dfe3ec;
+  --code-rule:     #363a45;
+
+  /* Syntax tokens */
+  --tok-comment:   #6d7789;
+  --tok-keyword:   #c98fdb;
+  --tok-type:      #6cc5d9;
+  --tok-string:    #a3cf85;
+  --tok-number:    #e8a978;
+  --tok-preproc:   #d9a05b;
+  --tok-func:      #79b6f2;
+  --tok-punct:     #9aa2b1;
+
+  /* Axis colours — COURSE-WIDE CONVENTION. x/y/z = red/green/blue.
+     Never override these in a diagram. See conventions.html. */
+  --axis-x:        #d1344a;
+  --axis-y:        #2f9e4f;
+  --axis-z:        #2b6fd4;
+  --axis-x-soft:   #f7d8dd;
+  --axis-y-soft:   #d8f0e0;
+  --axis-z-soft:   #d7e4fa;
+
+  /* Diagram neutrals */
+  --dia-bg:        #ffffff;
+  --dia-ink:       #33332e;
+  --dia-ink-soft:  #7a7a72;
+  --dia-grid:      #e8e8e2;
+  --dia-fill:      #f0f0ea;
+  --dia-hi:        #b4530a;
+
+  /* Typography */
+  --font-body: "Iowan Old Style", "Palatino Linotype", "Palatino", "Charter",
+               Georgia, Cambria, "Times New Roman", serif;
+  --font-ui:   -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+               "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "SFMono-Regular", "Cascadia Code",
+               "JetBrains Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  --measure: 42rem;          /* ~72 characters at this size — the reading column */
+  --measure-wide: 58rem;     /* diagrams & tables may breathe past the measure  */
+}
+
+/* Dark tokens.
+   Applied in two situations, which is why the block is written twice:
+     1. the OS asks for dark AND the reader has not overridden to light;
+     2. the reader explicitly chose dark via the toggle.
+   CSS has no mixins, so duplication is the price of supporting both an OS
+   default and a manual override. Keep the two blocks byte-identical. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg:          #15161a;
+    --bg-sunken:   #101115;
+    --bg-raised:   #1c1e24;
+    --text:        #e4e4e0;
+    --text-muted:  #a2a49e;
+    --text-faint:  #74766f;
+    --rule:        #2c2e35;
+    --rule-strong: #3d404a;
+
+    --accent:      #f0a06a;
+    --accent-soft: #33251a;
+    --accent-text: #f5b184;
+
+    --note-bd:     #5a8fc8;   --note-bg:    #16202c;
+    --warn-bd:     #c9a132;   --warn-bg:    #262013;
+    --verify-bd:   #d05555;   --verify-bg:  #2a1717;
+    --pitfall-bd:  #a077c8;   --pitfall-bg: #221a2c;
+    --ok-bd:       #4fa877;   --ok-bg:      #14231a;
+
+    --dia-bg:      #1a1c21;
+    --dia-ink:     #d8d8d2;
+    --dia-ink-soft:#8f918a;
+    --dia-grid:    #2b2d33;
+    --dia-fill:    #24262c;
+    --dia-hi:      #f0a06a;
+
+    --axis-x:      #f2647a;
+    --axis-y:      #5cc47e;
+    --axis-z:      #6b9ef0;
+    --axis-x-soft: #3a2027;
+    --axis-y-soft: #1c3325;
+    --axis-z-soft: #1e2a40;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg:          #15161a;
+  --bg-sunken:   #101115;
+  --bg-raised:   #1c1e24;
+  --text:        #e4e4e0;
+  --text-muted:  #a2a49e;
+  --text-faint:  #74766f;
+  --rule:        #2c2e35;
+  --rule-strong: #3d404a;
+
+  --accent:      #f0a06a;
+  --accent-soft: #33251a;
+  --accent-text: #f5b184;
+
+  --note-bd:     #5a8fc8;   --note-bg:    #16202c;
+  --warn-bd:     #c9a132;   --warn-bg:    #262013;
+  --verify-bd:   #d05555;   --verify-bg:  #2a1717;
+  --pitfall-bd:  #a077c8;   --pitfall-bg: #221a2c;
+  --ok-bd:       #4fa877;   --ok-bg:      #14231a;
+
+  --dia-bg:      #1a1c21;
+  --dia-ink:     #d8d8d2;
+  --dia-ink-soft:#8f918a;
+  --dia-grid:    #2b2d33;
+  --dia-fill:    #24262c;
+  --dia-hi:      #f0a06a;
+
+  --axis-x:      #f2647a;
+  --axis-y:      #5cc47e;
+  --axis-z:      #6b9ef0;
+  --axis-x-soft: #3a2027;
+  --axis-y-soft: #1c3325;
+  --axis-z-soft: #1e2a40;
+}
+
+/* ---- Reset & base -------------------------------------------------------- */
+*, *::before, *::after { box-sizing: border-box; }
+
+html {
+  font-size: 18px;
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
+  scroll-padding-top: 2rem;
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  line-height: 1.7;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* The reading column. Everything is centred on --measure; wide elements opt out. */
+.wrap {
+  max-width: var(--measure);
+  margin: 0 auto;
+  padding: 0 1.25rem;
+}
+.bleed {                       /* for diagrams/tables that need more room */
+  max-width: var(--measure-wide);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* ---- Typography ---------------------------------------------------------- */
+h1, h2, h3, h4 {
+  font-family: var(--font-ui);
+  line-height: 1.25;
+  letter-spacing: -0.015em;
+  margin: 0 0 0.6em;
+  scroll-margin-top: 1.5rem;
+}
+h1 { font-size: 2.15rem; font-weight: 700; margin-top: 0.2em; }
+h2 {
+  font-size: 1.5rem; font-weight: 650;
+  margin-top: 2.6em;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--rule);
+}
+h3 { font-size: 1.15rem; font-weight: 650; margin-top: 2em; }
+h4 { font-size: 1rem;    font-weight: 650; margin-top: 1.6em; color: var(--text-muted); }
+
+/* Section numbers rendered as a quiet prefix */
+h2 .num, h3 .num {
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  margin-right: 0.5em;
+  font-weight: 500;
+}
+
+p { margin: 0 0 1.15em; }
+
+a { color: var(--accent-text); text-decoration-color: var(--rule-strong); text-underline-offset: 2px; }
+a:hover { text-decoration-color: currentColor; }
+
+strong { font-weight: 650; }
+em { font-style: italic; }
+
+ul, ol { margin: 0 0 1.15em; padding-left: 1.5em; }
+li { margin-bottom: 0.4em; }
+li > ul, li > ol { margin-top: 0.4em; margin-bottom: 0.5em; }
+
+hr { border: 0; border-top: 1px solid var(--rule); margin: 2.5em 0; }
+
+blockquote {
+  margin: 1.5em 0;
+  padding: 0.1em 0 0.1em 1.2em;
+  border-left: 3px solid var(--rule-strong);
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* Inline code — light chip, distinct from the dark block listings */
+:not(pre) > code {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 0.08em 0.34em;
+  word-break: break-word;
+}
+
+/* ---- Masthead ------------------------------------------------------------ */
+.masthead {
+  background: var(--bg-sunken);
+  border-bottom: 1px solid var(--rule);
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+}
+.masthead-inner {
+  max-width: var(--measure-wide);
+  margin: 0 auto;
+  padding: 0.6rem 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.masthead .course {
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  text-decoration: none;
+}
+.masthead .spacer { flex: 1; }
+.masthead a { color: var(--text-muted); text-decoration: none; }
+.masthead a:hover { color: var(--accent-text); }
+
+.theme-toggle {
+  font: inherit;
+  font-size: 0.78rem;
+  background: var(--bg-raised);
+  color: var(--text-muted);
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  padding: 0.2rem 0.55rem;
+  cursor: pointer;
+}
+.theme-toggle:hover { border-color: var(--rule-strong); color: var(--text); }
+
+/* ---- Lesson nav (top & bottom) ------------------------------------------- */
+.lesson-nav {
+  display: flex;
+  align-items: stretch;
+  gap: 0.6rem;
+  font-family: var(--font-ui);
+  font-size: 0.82rem;
+  margin: 1.5rem auto;
+}
+.lesson-nav a, .lesson-nav span {
+  flex: 1;
+  padding: 0.55rem 0.8rem;
+  border: 1px solid var(--rule);
+  border-radius: 7px;
+  background: var(--bg-raised);
+  text-decoration: none;
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+.lesson-nav a:hover { border-color: var(--accent); }
+.lesson-nav span { opacity: 0.45; }        /* disabled edge (no prev / no next) */
+.lesson-nav .dir {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-faint);
+}
+.lesson-nav .ttl {
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-weight: 550;
+}
+.lesson-nav .next-l { text-align: right; }
+.lesson-nav .idx-l  { flex: 0 0 auto; justify-content: center; text-align: center; }
+@media (max-width: 34rem) {
+  .lesson-nav { flex-wrap: wrap; }
+  .lesson-nav .idx-l { order: 3; flex: 1 0 100%; }
+}
+
+/* ---- Lesson header block ------------------------------------------------- */
+.lesson-head { margin: 2rem 0 0; }
+.eyebrow {
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+  font-weight: 650;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 0.5rem;
+}
+.deck {
+  font-size: 1.12rem;
+  color: var(--text-muted);
+  margin-bottom: 1.5rem;
+}
+.meta {
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  padding: 1rem 1.15rem;
+  margin-bottom: 1.75rem;
+}
+.meta dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 0.4rem 1rem; }
+.meta dt {
+  color: var(--text-faint);
+  text-transform: uppercase;
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  padding-top: 0.28em;
+  white-space: nowrap;
+}
+.meta dd { margin: 0; }
+@media (max-width: 30rem) {
+  .meta dl { grid-template-columns: 1fr; gap: 0.15rem 0; }
+  .meta dd { margin-bottom: 0.6rem; }
+}
+
+/* Objectives — "you will be able to…" */
+.objectives {
+  border: 1px solid var(--accent);
+  background: var(--accent-soft);
+  border-radius: 9px;
+  padding: 1.1rem 1.25rem;
+  margin: 1.75rem 0;
+}
+.objectives h2 {
+  margin: 0 0 0.5rem;
+  border: 0; padding: 0;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--accent-text);
+}
+.objectives ul { margin: 0; padding-left: 1.25em; }
+.objectives li::marker { color: var(--accent); }
+
+/* ---- Table of contents --------------------------------------------------- */
+.toc {
+  font-family: var(--font-ui);
+  font-size: 0.88rem;
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  padding: 1rem 1.25rem;
+  margin: 2rem 0;
+}
+.toc > summary {
+  cursor: pointer;
+  font-weight: 650;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-muted);
+  list-style: none;
+}
+.toc > summary::-webkit-details-marker { display: none; }
+.toc > summary::before { content: "▸ "; color: var(--accent); }
+.toc[open] > summary::before { content: "▾ "; }
+.toc ol { list-style: none; margin: 0.85rem 0 0; padding: 0; counter-reset: toc; }
+.toc ol ol { margin: 0.3rem 0 0.5rem 1.1rem; }
+.toc li { margin: 0.28em 0; counter-increment: toc; }
+.toc a { text-decoration: none; color: var(--text); }
+.toc a:hover { color: var(--accent-text); text-decoration: underline; }
+.toc ol ol a { color: var(--text-muted); font-size: 0.94em; }
+
+/* ---- Callouts ------------------------------------------------------------ */
+.callout {
+  border-left: 3px solid var(--rule-strong);
+  background: var(--bg-sunken);
+  border-radius: 0 8px 8px 0;
+  padding: 0.9rem 1.1rem;
+  margin: 1.6em 0;
+  font-size: 0.95rem;
+}
+.callout > :first-child { margin-top: 0; }
+.callout > :last-child  { margin-bottom: 0; }
+.callout .label {
+  display: block;
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  margin-bottom: 0.35rem;
+}
+.callout.note    { border-color: var(--note-bd);    background: var(--note-bg); }
+.callout.note .label    { color: var(--note-bd); }
+.callout.warn    { border-color: var(--warn-bd);    background: var(--warn-bg); }
+.callout.warn .label    { color: var(--warn-bd); }
+.callout.verify  { border-color: var(--verify-bd);  background: var(--verify-bg); }
+.callout.verify .label  { color: var(--verify-bd); }
+.callout.pitfall { border-color: var(--pitfall-bd); background: var(--pitfall-bg); }
+.callout.pitfall .label { color: var(--pitfall-bd); }
+.callout.ok      { border-color: var(--ok-bd);      background: var(--ok-bg); }
+.callout.ok .label      { color: var(--ok-bd); }
+/* C++ explainers: a C++ feature taught in place, the first time it appears. */
+.callout.cpp     { border-color: var(--accent);     background: var(--accent-soft); }
+.callout.cpp .label     { color: var(--accent-text); }
+
+/* ---- Code listings ------------------------------------------------------- */
+.listing {
+  margin: 1.6em 0;
+  border-radius: 9px;
+  overflow: hidden;
+  border: 1px solid var(--code-rule);
+  background: var(--code-bg);
+}
+.listing figcaption {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: var(--code-bar);
+  border-bottom: 1px solid var(--code-rule);
+  padding: 0.45rem 0.85rem;
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  color: #aeb6c4;
+}
+.listing figcaption .path { font-weight: 600; color: #dfe3ec; }
+.listing figcaption .tag {
+  font-family: var(--font-ui);
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  background: #3a3f4c;
+  color: #c6cdd9;
+}
+.listing figcaption .tag.new      { background: #1f4433; color: #7fd6a5; }
+.listing figcaption .tag.modified { background: #453a1c; color: #e0be74; }
+.listing figcaption .lang { margin-left: auto; opacity: 0.65; }
+
+/* Horizontal scroll — NEVER wrap. Wrapped code lies about its structure. */
+.listing pre {
+  margin: 0;
+  padding: 0.9rem 1rem;
+  overflow-x: auto;
+  background: var(--code-bg);
+}
+.listing pre code {
+  font-family: var(--font-mono);
+  font-size: 0.79rem;
+  line-height: 1.62;
+  color: var(--code-text);
+  white-space: pre;
+  display: block;
+  tab-size: 4;
+}
+.listing pre::-webkit-scrollbar { height: 9px; }
+.listing pre::-webkit-scrollbar-track { background: var(--code-bar); }
+.listing pre::-webkit-scrollbar-thumb { background: #4a5060; border-radius: 5px; }
+.listing pre::-webkit-scrollbar-thumb:hover { background: #5d6478; }
+
+/* Syntax tokens, applied by the tiny highlighter at the foot of the page. */
+.tok-c { color: var(--tok-comment); font-style: italic; }
+.tok-k { color: var(--tok-keyword); }
+.tok-t { color: var(--tok-type); }
+.tok-s { color: var(--tok-string); }
+.tok-n { color: var(--tok-number); }
+.tok-p { color: var(--tok-preproc); }
+.tok-f { color: var(--tok-func); }
+.tok-o { color: var(--tok-punct); }
+
+/* Emphasised line inside a listing (the line this paragraph is about) */
+.listing .hl { background: rgba(180, 130, 60, 0.16); display: inline-block; width: 100%; }
+
+/* Shell transcripts get a lighter treatment than source files */
+.listing.shell figcaption .path::before { content: "$ "; opacity: 0.6; }
+
+/* ---- Figures & diagrams -------------------------------------------------- */
+figure.dia {
+  margin: 2em auto;
+  padding: 0;
+}
+figure.dia svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: var(--dia-bg);
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+}
+figure.dia figcaption,
+figure.tbl figcaption {
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: 0.65rem;
+  line-height: 1.55;
+}
+figure.dia figcaption .fignum,
+figure.tbl figcaption .fignum {
+  font-weight: 700;
+  color: var(--text);
+}
+/* SVG text inherits the theme so diagrams survive dark mode */
+figure.dia svg text { font-family: var(--font-ui); fill: var(--dia-ink); }
+figure.dia svg .lbl-x { fill: var(--axis-x); }
+figure.dia svg .lbl-y { fill: var(--axis-y); }
+figure.dia svg .lbl-z { fill: var(--axis-z); }
+figure.dia svg .ax-x  { stroke: var(--axis-x); }
+figure.dia svg .ax-y  { stroke: var(--axis-y); }
+figure.dia svg .ax-z  { stroke: var(--axis-z); }
+figure.dia svg .ink       { stroke: var(--dia-ink); }
+figure.dia svg .ink-soft  { stroke: var(--dia-ink-soft); }
+figure.dia svg .grid      { stroke: var(--dia-grid); }
+figure.dia svg .fill-soft { fill: var(--dia-fill); }
+figure.dia svg .hi        { stroke: var(--dia-hi); }
+figure.dia svg .mono      { font-family: var(--font-mono); }
+figure.dia svg .sm        { font-size: 11px; }
+figure.dia svg .xs        { font-size: 9.5px; }
+
+/* Text fills for <text> elements.
+   These MUST be classes, not fill="..." attributes: the `figure.dia svg text`
+   rule above is CSS, and CSS always beats an SVG presentation attribute — an
+   inline fill on a <text> is silently ignored. Class selectors outrank the bare
+   element selector, so these win. (Shapes are unaffected; the rule only targets
+   text, so fill="..." still works on rect/path/circle.) */
+figure.dia svg .muted     { fill: var(--dia-ink-soft); }
+figure.dia svg .t-hi      { fill: var(--dia-hi); }
+figure.dia svg .t-ok      { fill: var(--ok-bd); }
+figure.dia svg .t-bad     { fill: var(--verify-bd); }
+/* For labels sitting ON a saturated filled shape, where the theme ink would be
+   unreadable. Fixed white in both themes, because the shape under it is the
+   same saturated colour in both. */
+figure.dia svg .t-inv     { fill: #ffffff; }
+
+/* ---- Tables -------------------------------------------------------------- */
+.tbl-scroll { overflow-x: auto; margin: 1.6em 0; }
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+th, td {
+  text-align: left;
+  padding: 0.5rem 0.7rem;
+  border-bottom: 1px solid var(--rule);
+  vertical-align: top;
+}
+th {
+  font-weight: 650;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--rule-strong);
+  white-space: nowrap;
+}
+tbody tr:hover { background: var(--bg-sunken); }
+td code { font-size: 0.82em; }
+
+/* File-manifest table: path | new/modified | purpose */
+.manifest td:first-child { font-family: var(--font-mono); font-size: 0.78rem; white-space: nowrap; }
+.badge {
+  font-size: 0.62rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.06em; padding: 0.1rem 0.4rem; border-radius: 3px; white-space: nowrap;
+}
+.badge.new { background: var(--ok-bg); color: var(--ok-bd); border: 1px solid var(--ok-bd); }
+.badge.mod { background: var(--warn-bg); color: var(--warn-bd); border: 1px solid var(--warn-bd); }
+/* Curriculum status, used on index.html */
+.badge.done { background: var(--ok-bg); color: var(--ok-bd); border: 1px solid var(--ok-bd); }
+.badge.soon { background: var(--bg-sunken); color: var(--text-faint); border: 1px solid var(--rule-strong); }
+
+/* ---- Math ---------------------------------------------------------------- */
+/* KaTeX renders these when the CDN is reachable. When it is NOT, the raw TeX
+   stays visible — which is why every equation MUST also be stated in prose.
+   Never let an equation be the only carrier of a fact. */
+.eq {
+  margin: 1.4em 0;
+  padding: 0.9rem 1rem;
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  overflow-x: auto;
+  text-align: center;
+}
+.eq-plain {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  margin-top: 0.6rem;
+  padding-top: 0.6rem;
+  border-top: 1px dashed var(--rule-strong);
+  text-align: left;
+}
+.eq-plain::before {
+  content: "in plain text: ";
+  color: var(--text-faint);
+  font-family: var(--font-ui);
+  font-size: 0.72rem;
+}
+
+/* Worked numeric example — every formula gets one */
+.worked {
+  border: 1px solid var(--rule-strong);
+  border-radius: 9px;
+  padding: 1rem 1.2rem;
+  margin: 1.6em 0;
+  background: var(--bg-raised);
+}
+.worked > .label {
+  display: block;
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--accent);
+  margin-bottom: 0.5rem;
+}
+.worked > :last-child { margin-bottom: 0; }
+
+/* ---- Exercises ----------------------------------------------------------- */
+.exercise {
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 9px 9px 0;
+  padding: 1rem 1.2rem;
+  margin: 1.4em 0;
+  background: var(--bg-raised);
+}
+.exercise h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.98rem;
+}
+.exercise h3 .xnum {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--accent);
+  margin-right: 0.5em;
+}
+.difficulty {
+  font-family: var(--font-ui);
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-faint);
+  border: 1px solid var(--rule-strong);
+  border-radius: 3px;
+  padding: 0.05rem 0.35rem;
+  margin-left: 0.4em;
+  vertical-align: 0.15em;
+}
+.exercise details {
+  margin-top: 0.7rem;
+  border-top: 1px solid var(--rule);
+  padding-top: 0.6rem;
+}
+.exercise summary {
+  cursor: pointer;
+  font-family: var(--font-ui);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.exercise summary:hover { color: var(--accent-text); }
+.exercise details[open] summary { margin-bottom: 0.6rem; }
+
+/* ---- Pitfalls (symptom → cause → fix) ------------------------------------ */
+.pitfalls { margin: 1.5em 0; }
+.pitfall-item {
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  margin-bottom: 0.9rem;
+  overflow: hidden;
+}
+.pitfall-item > summary {
+  cursor: pointer;
+  padding: 0.7rem 1rem;
+  background: var(--bg-sunken);
+  font-family: var(--font-ui);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.pitfall-item > summary:hover { color: var(--accent-text); }
+.pitfall-item > summary .sym {
+  font-weight: 400;
+  color: var(--text-muted);
+  font-style: italic;
+}
+.pitfall-body { padding: 0.9rem 1rem; font-size: 0.94rem; }
+.pitfall-body > :first-child { margin-top: 0; }
+.pitfall-body > :last-child  { margin-bottom: 0; }
+.pitfall-body dt {
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+  margin-top: 0.7rem;
+}
+.pitfall-body dd { margin: 0.2rem 0 0; }
+
+/* ---- Recap / next -------------------------------------------------------- */
+.recap {
+  background: var(--ok-bg);
+  border: 1px solid var(--ok-bd);
+  border-radius: 9px;
+  padding: 1.1rem 1.25rem;
+  margin: 1.75rem 0;
+}
+.recap h2 { margin: 0 0 0.6rem; border: 0; padding: 0; font-size: 1.05rem; }
+.recap > :last-child { margin-bottom: 0; }
+
+/* ---- Further reading ----------------------------------------------------- */
+.reading { font-size: 0.92rem; }
+.reading li { margin-bottom: 0.6em; }
+.reading .src {
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+  margin-right: 0.4em;
+}
+
+/* ---- STATE block --------------------------------------------------------- */
+.state {
+  margin: 2.5em 0 1em;
+  border: 1px dashed var(--rule-strong);
+  border-radius: 9px;
+  background: var(--bg-sunken);
+  overflow: hidden;
+}
+.state > summary {
+  cursor: pointer;
+  padding: 0.6rem 1rem;
+  font-family: var(--font-ui);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-muted);
+}
+.state pre {
+  margin: 0;
+  padding: 0.9rem 1rem;
+  overflow-x: auto;
+  border-top: 1px solid var(--rule);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+  white-space: pre;
+}
+
+/* ---- Footer -------------------------------------------------------------- */
+.foot {
+  border-top: 1px solid var(--rule);
+  margin-top: 3rem;
+  padding: 1.5rem 0 3rem;
+  font-family: var(--font-ui);
+  font-size: 0.78rem;
+  color: var(--text-faint);
+}
+.foot a { color: var(--text-muted); }
+
+/* ---- Interactive widgets ------------------------------------------------- */
+.widget {
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  background: var(--bg-raised);
+  padding: 1rem;
+  margin: 2em 0;
+}
+.widget-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+  align-items: center;
+  margin-top: 0.8rem;
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+.widget-controls label { display: flex; align-items: center; gap: 0.4rem; }
+.widget-controls input[type="range"] { accent-color: var(--accent); }
+.widget-readout {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--text);
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 0.1rem 0.4rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Print --------------------------------------------------------------- */
+@media print {
+  .masthead, .lesson-nav, .theme-toggle { display: none; }
+  body { background: #fff; color: #000; font-size: 11pt; }
+  .listing { break-inside: avoid; }
+  figure.dia { break-inside: avoid; }
+  a::after { content: " (" attr(href) ")"; font-size: 0.7em; color: #666; }
+}
+</style>
+<!-- SHARED-CSS:END -->
+</head>
+<body>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <a class="course" href="../index.html">Build a Professional 3D Game Engine</a>
+    <span class="spacer"></span>
+    <a href="../index.html">Contents</a>
+    <a href="../conventions.html">Conventions</a>
+    <a href="../cpp-style.html">C++ Style</a>
+    <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Toggle colour theme">Theme</button>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="00-02-how-this-course-works.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">0.2 — How This Course Works</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="00-04-cmake-from-zero.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">0.4 — CMake From Zero</span>
+    </a>
+  </nav>
+
+  <!-- ================= 1. HEADER BLOCK ================= -->
+  <div class="lesson-head">
+    <div class="eyebrow">Module 0 — Orientation &amp; Toolchain · Lesson 0.3</div>
+    <h1>Setting Up Your Toolchain</h1>
+    <p class="deck">
+      The talking stops here. You install a C++20 compiler, you learn what a "build" actually
+      is — four programs in a trench coat, not one — and you compile the engine's first source
+      file with your own hands, no CMake in sight.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 3 hours (most of it install and download time)</dd>
+
+        <dt>Prereqs</dt>
+        <dd><a href="00-02-how-this-course-works.html">0.2 — How This Course Works</a></dd>
+
+        <dt>Files</dt>
+        <dd><code>hello.cpp</code> — the first file of the course</dd>
+
+        <dt>Milestone</dt>
+        <dd>A program you wrote, compiled by hand on your OS, printing your compiler's identity and confirming C++20.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…install a working C++20 toolchain on Windows, Linux, or macOS, and verify it from a terminal.</li>
+      <li>…name the four stages a build passes through — preprocess, compile, assemble, link — and say what each consumes and produces.</li>
+      <li>…compile and run a program with a single direct compiler command, with no build system.</li>
+      <li>…read a compiler's predefined macros to identify itself and its language standard.</li>
+      <li>…recognise the invisible misconfigurations — wrong default standard, the MSVC <code>__cplusplus</code> trap, a compiler that is not on your <code>PATH</code> — and fix them.</li>
+    </ul>
+  </section>
+
+  <details class="toc" open>
+    <summary>Contents</summary>
+    <ol>
+      <li><a href="#problem">The Problem</a></li>
+      <li><a href="#intuition">Building Intuition</a>
+        <ol>
+          <li><a href="#not-one-program">A "compiler" is four programs</a></li>
+          <li><a href="#tu">The translation unit</a></li>
+        </ol>
+      </li>
+      <li><a href="#theory">The Theory</a>
+        <ol>
+          <li><a href="#stages">The four stages, in detail</a></li>
+          <li><a href="#macros">Predefined macros: how a program knows who built it</a></li>
+          <li><a href="#standard">What <code>-std=c++20</code> actually selects</a></li>
+        </ol>
+      </li>
+      <li><a href="#implementation">Implementation: install, then compile by hand</a>
+        <ol>
+          <li><a href="#install-win">Windows — MSVC</a></li>
+          <li><a href="#install-linux">Linux — GCC and Clang</a></li>
+          <li><a href="#install-mac">macOS — Clang</a></li>
+          <li><a href="#write-hello">Writing hello.cpp</a></li>
+        </ol>
+      </li>
+      <li><a href="#listings">Complete Code Listings</a></li>
+      <li><a href="#build">Build &amp; Run</a></li>
+      <li><a href="#pitfalls">Common Pitfalls &amp; Debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; Next</a></li>
+      <li><a href="#reading">Further Reading</a></li>
+    </ol>
+  </details>
+
+  <!-- ================= 2. THE PROBLEM ================= -->
+  <h2 id="problem"><span class="num">1</span>The Problem</h2>
+
+  <p>
+    You cannot build an engine without a compiler, and installing one is not the hard part —
+    installing one <em>correctly</em> is. A misconfigured toolchain does not announce itself. It
+    compiles simple programs fine, lulls you into trust, and then fails three weeks from now on a
+    C++20 feature, with an error message that points at your code rather than at the real culprit,
+    which is a flag you never set.
+  </p>
+
+  <p>
+    Here is the failure mode, concretely. This is our <code>hello.cpp</code> — you will write it
+    in a few pages — compiled with the wrong language standard:
+  </p>
+
+  <figure class="listing shell">
+    <figcaption>
+      <span class="path">what a misconfigured standard looks like</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash">$ clang++ -std=c++14 -Wall -Wextra -o hello hello.cpp
+hello.cpp:27:15: error: static assertion failed due to requirement
+      '201402L >= 202002L': This engine requires C++20. Check your -std / /std flag.
+   27 | static_assert(ENG_CPP_STANDARD >= 202002L,
+      |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~
+hello.cpp:33:1: error: unknown type name 'consteval'; did you mean 'constexpr'?
+   33 | consteval int engine_cpp_edition() { return 20; }
+      | ^~~~~~~~~
+# (real Clang output; exact wording, order, and line numbers vary by compiler)</code></pre>
+  </figure>
+
+  <p>
+    Two things are worth noticing about that error, because they are the whole reason this
+    lesson exists.
+  </p>
+
+  <p>
+    First, our <code>static_assert</code> fired <em>on purpose</em> — <code>"This engine requires
+    C++20"</code> — and it fired at <strong>compile time</strong>, the moment the mistake was made,
+    not at runtime after you had built a launcher around a broken binary. That is a design pattern
+    you will use everywhere: make misconfiguration fail loudly and early, close to its cause. We
+    build that check into the very first file, deliberately.
+  </p>
+
+  <p>
+    Second, the other error blames <em>your code</em> — "unknown type name <code>consteval</code>".
+    The code is fine; the compiler is simply not being told to understand C++20. A beginner reads
+    that message and starts editing <code>hello.cpp</code>; an engineer reads it and checks the
+    flags. This lesson is how you become the second kind. (The exact wording and ordering of these
+    two errors vary by compiler — GCC and MSVC phrase them differently — but the two root-cause
+    signals are the same everywhere.)
+  </p>
+
+  <div class="callout ok">
+    <span class="label">The promise from 0.2, coming due</span>
+    <p>
+      Lessons 0.1 and 0.2 shipped no code, and I said 0.3 would. This is the lesson where you
+      get a compiler and produce a running program — proof that the toolchain works before we ask
+      it to build anything that matters. From here on, every lesson ships files.
+    </p>
+  </div>
+
+  <!-- ================= 3. BUILDING INTUITION ================= -->
+  <h2 id="intuition"><span class="num">2</span>Building Intuition</h2>
+
+  <h3 id="not-one-program">2.1 A "compiler" is four programs</h3>
+
+  <p>
+    When you say "compile", you picture one program turning source into an executable. That
+    picture is wrong in a way that matters, because almost every confusing build error you will
+    ever hit lives in the gap between two of the stages the single word hides.
+  </p>
+
+  <p>
+    A build is a small assembly line. Source text goes in one end; a runnable program comes out
+    the other; and in between, <strong>four</strong> distinct tools each do one job and hand the
+    result to the next. Figure 1 is the line.
+  </p>
+
+  <figure class="dia bleed">
+    <svg viewBox="0 0 660 300" role="img" aria-labelledby="f1-t f1-d">
+      <title id="f1-t">The four stages of a C++ build</title>
+      <desc id="f1-d">A horizontal pipeline. hello.cpp enters the preprocessor, which produces a
+        translation unit. That enters the compiler, which produces assembly. That enters the
+        assembler, which produces an object file, hello.o. That plus the C++ standard library
+        enters the linker, which produces the executable, hello. A brace marks the first three
+        stages as "per source file" and the last as "once, over all objects".</desc>
+      <defs>
+        <marker id="tc-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+      </defs>
+
+      <!-- source -->
+      <rect x="12" y="60" width="86" height="40" rx="6" class="fill-soft" stroke="var(--dia-ink)" stroke-width="1.6"/>
+      <text x="55" y="79" class="xs mono" text-anchor="middle" font-weight="700">hello.cpp</text>
+      <text x="55" y="92" class="xs muted" text-anchor="middle">text</text>
+
+      <!-- stages -->
+      <g>
+        <rect x="128" y="56" width="96" height="48" rx="6" class="fill-soft" stroke="var(--dia-ink-soft)" stroke-width="1.3"/>
+        <text x="176" y="76" class="xs" text-anchor="middle" font-weight="700">preprocess</text>
+        <text x="176" y="90" class="xs muted" text-anchor="middle">#include, #define</text>
+
+        <rect x="270" y="56" width="96" height="48" rx="6" class="fill-soft" stroke="var(--dia-ink-soft)" stroke-width="1.3"/>
+        <text x="318" y="76" class="xs" text-anchor="middle" font-weight="700">compile</text>
+        <text x="318" y="90" class="xs muted" text-anchor="middle">C++ → asm</text>
+
+        <rect x="412" y="56" width="96" height="48" rx="6" class="fill-soft" stroke="var(--dia-ink-soft)" stroke-width="1.3"/>
+        <text x="460" y="76" class="xs" text-anchor="middle" font-weight="700">assemble</text>
+        <text x="460" y="90" class="xs muted" text-anchor="middle">asm → machine</text>
+
+        <rect x="554" y="56" width="96" height="48" rx="6" class="fill-soft" stroke="var(--dia-hi)" stroke-width="1.8"/>
+        <text x="602" y="76" class="xs t-hi" text-anchor="middle" font-weight="700">link</text>
+        <text x="602" y="90" class="xs muted" text-anchor="middle">objects → exe</text>
+      </g>
+
+      <g class="ink" stroke-width="1.4" marker-end="url(#tc-a)" fill="none">
+        <line x1="100" y1="80" x2="126" y2="80"/>
+        <line x1="224" y1="80" x2="268" y2="80"/>
+        <line x1="366" y1="80" x2="410" y2="80"/>
+        <line x1="508" y1="80" x2="552" y2="80"/>
+      </g>
+
+      <!-- intermediate labels -->
+      <g class="xs mono muted" text-anchor="middle">
+        <text x="246" y="46">.ii</text>
+        <text x="388" y="46">.s</text>
+        <text x="530" y="46">hello.o</text>
+      </g>
+
+      <!-- library joining at link -->
+      <rect x="512" y="150" width="138" height="36" rx="6" class="fill-soft" stroke="var(--axis-y)" stroke-width="1.4"/>
+      <text x="581" y="166" class="xs" text-anchor="middle" font-weight="700">C++ standard library</text>
+      <text x="581" y="178" class="xs muted" text-anchor="middle">+ C runtime</text>
+      <line x1="602" y1="148" x2="602" y2="106" class="ink-soft" stroke-width="1.3" marker-end="url(#tc-a)"/>
+
+      <!-- output -->
+      <rect x="554" y="212" width="96" height="40" rx="6" class="fill-soft" stroke="var(--dia-hi)" stroke-width="1.8"/>
+      <text x="602" y="231" class="xs mono t-hi" text-anchor="middle" font-weight="700">hello</text>
+      <text x="602" y="244" class="xs muted" text-anchor="middle">runnable</text>
+      <line x1="602" y1="104" x2="602" y2="210" class="hi" stroke-width="1.6" marker-end="url(#tc-a)"/>
+
+      <!-- braces -->
+      <path d="M128,118 V128 H508 V118" fill="none" class="ink-soft" stroke-width="1.2"/>
+      <text x="318" y="142" class="xs muted" text-anchor="middle">once per source file — the "compile" step people mean</text>
+
+      <path d="M554,196 V204" fill="none" class="ink-soft" stroke-width="1.2"/>
+      <text x="602" y="276" class="xs muted" text-anchor="middle">once, over all objects</text>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 1.</span> The four stages. The first three run once
+      <em>per source file</em>; linking happens once, over all the object files at the end. Most
+      "compile" commands quietly run all four — but knowing the seams is how you read the errors,
+      because each stage fails in its own recognisable dialect.
+    </figcaption>
+  </figure>
+
+  <p>
+    Why does the seam matter? Because the two stages either side of it fail in completely
+    different languages:
+  </p>
+
+  <ul>
+    <li>
+      A <strong>compile error</strong> ("unknown type name <code>consteval</code>") comes from the
+      compiler reading one file. It points at a line and a column. It is about <em>syntax and
+      types</em>.
+    </li>
+    <li>
+      A <strong>link error</strong> ("undefined reference to <code>foo()</code>") comes from the
+      linker trying to connect all the pieces. It points at no line at all — just a name it could
+      not find. It is about <em>definitions across files</em>.
+    </li>
+  </ul>
+
+  <p>
+    Beginners treat these as the same kind of problem and flail. Knowing which stage spoke to you
+    tells you where to look before you have read a word of the message. That single distinction
+    saves more debugging time than any tool.
+  </p>
+
+  <h3 id="tu">2.2 The translation unit</h3>
+
+  <p>
+    The preprocessor's output has a name worth knowing, because the whole rest of C++'s build
+    model hangs off it: the <strong>translation unit</strong>.
+  </p>
+
+  <p>
+    The preprocessor is not clever. It does textual substitution: every <code>#include</code> is
+    replaced by the entire contents of the named file, every <code>#define</code> is expanded,
+    every <code>#if</code> is resolved. The result — your file with all its includes pasted
+    bodily in, recursively — is one translation unit, and it is what the compiler actually sees.
+    Your 30-line <code>hello.cpp</code>, after <code>#include &lt;cstdio&gt;</code> and
+    <code>#include &lt;version&gt;</code> expand, becomes thousands of lines. The compiler compiles
+    <em>that</em>.
+  </p>
+
+  <p>
+    Right now we have one source file, so one translation unit, so one object file. That feels
+    trivial. But the engine will grow to hundreds of files, and the moment there are two, the
+    linker's job — stitching separately-compiled units into one program — becomes the source of a
+    whole category of errors. Figure 2 shows where we are heading, so the single-file case reads
+    as the simplest instance of a general picture rather than as the whole story.
+  </p>
+
+  <figure class="dia bleed">
+    <svg viewBox="0 0 660 250" role="img" aria-labelledby="f2-t f2-d">
+      <title id="f2-t">Many translation units, compiled separately, linked once</title>
+      <desc id="f2-d">Three source files each compile independently into their own object file. All
+        three object files, plus libraries, feed into a single linker step that produces one
+        executable. Today we have only the first row; the engine will have hundreds.</desc>
+      <defs>
+        <marker id="tc-b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+      </defs>
+
+      <!-- rows -->
+      <g>
+        <rect x="16" y="24"  width="96" height="30" rx="5" class="fill-soft" stroke="var(--dia-hi)" stroke-width="1.7"/>
+        <text x="64" y="43" class="xs mono t-hi" text-anchor="middle" font-weight="700">hello.cpp</text>
+
+        <rect x="16" y="98"  width="96" height="30" rx="5" class="fill-soft" stroke="var(--dia-ink-soft)" stroke-width="1.2"/>
+        <text x="64" y="117" class="xs mono muted" text-anchor="middle">math.cpp</text>
+
+        <rect x="16" y="150" width="96" height="30" rx="5" class="fill-soft" stroke="var(--dia-ink-soft)" stroke-width="1.2"/>
+        <text x="64" y="169" class="xs mono muted" text-anchor="middle">window.cpp</text>
+      </g>
+
+      <text x="64" y="200" class="xs muted" text-anchor="middle" font-style="italic">…hundreds, eventually</text>
+
+      <!-- compile arrows -->
+      <g class="ink" stroke-width="1.3" marker-end="url(#tc-b)" fill="none">
+        <line x1="114" y1="39"  x2="196" y2="39"/>
+        <line x1="114" y1="113" x2="196" y2="113"/>
+        <line x1="114" y1="165" x2="196" y2="165"/>
+      </g>
+      <text x="155" y="30" class="xs muted" text-anchor="middle">compile</text>
+
+      <!-- objects -->
+      <g>
+        <rect x="198" y="24"  width="86" height="30" rx="5" class="fill-soft" stroke="var(--dia-hi)" stroke-width="1.7"/>
+        <text x="241" y="43" class="xs mono t-hi" text-anchor="middle" font-weight="700">hello.o</text>
+        <rect x="198" y="98"  width="86" height="30" rx="5" class="fill-soft" stroke="var(--dia-ink-soft)" stroke-width="1.2"/>
+        <text x="241" y="117" class="xs mono muted" text-anchor="middle">math.o</text>
+        <rect x="198" y="150" width="86" height="30" rx="5" class="fill-soft" stroke="var(--dia-ink-soft)" stroke-width="1.2"/>
+        <text x="241" y="169" class="xs mono muted" text-anchor="middle">window.o</text>
+      </g>
+
+      <!-- link funnel -->
+      <g class="ink" stroke-width="1.3" marker-end="url(#tc-b)" fill="none">
+        <line x1="286" y1="39"  x2="418" y2="95"/>
+        <line x1="286" y1="113" x2="418" y2="108"/>
+        <line x1="286" y1="165" x2="418" y2="122"/>
+      </g>
+
+      <rect x="420" y="86" width="104" height="48" rx="6" class="fill-soft" stroke="var(--dia-ink)" stroke-width="1.7"/>
+      <text x="472" y="106" class="xs" text-anchor="middle" font-weight="700">linker</text>
+      <text x="472" y="120" class="xs muted" text-anchor="middle">one step</text>
+
+      <line x1="524" y1="110" x2="576" y2="110" class="hi" stroke-width="1.6" marker-end="url(#tc-b)"/>
+      <rect x="578" y="90" width="70" height="40" rx="6" class="fill-soft" stroke="var(--dia-hi)" stroke-width="1.8"/>
+      <text x="613" y="114" class="xs mono t-hi" text-anchor="middle" font-weight="700">engine</text>
+
+      <text x="330" y="230" class="xs muted" text-anchor="middle">Each file is compiled in isolation, knowing nothing of the others. The linker is where they finally meet.</text>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 2.</span> Where this is going. Today only the top row exists, so
+      today's build is the simplest possible instance of this picture: one unit, one object, a
+      trivial link. Understanding it now means the hundred-file version later holds no surprises.
+    </figcaption>
+  </figure>
+
+  <div class="callout cpp">
+    <span class="label">C++ in place — separate compilation</span>
+    <p>
+      This "compile each file alone, link at the end" model is <strong>separate compilation</strong>,
+      and it is why C++ has headers at all. A file being compiled in isolation cannot see the
+      others, so it needs <em>declarations</em> — promises that a function or type exists elsewhere
+      — to compile against. Headers carry those promises; the <code>.cpp</code> files carry the
+      <em>definitions</em>; the linker matches them up. When it cannot find a definition, that is
+      the "undefined reference" link error from §2.1. The <a href="../cpp-style.html#files">style
+      guide's include rules</a> exist to keep this machinery honest, and we lean on it hard from
+      Module 2 on.
+    </p>
+  </div>
+
+  <!-- ================= 4. THE THEORY ================= -->
+  <h2 id="theory"><span class="num">3</span>The Theory</h2>
+
+  <h3 id="stages">3.1 The four stages, in detail</h3>
+
+  <p>
+    You can watch each stage happen. Most of the time you run all four at once, but the compiler
+    will stop after any stage you name, and seeing the intermediate output makes the abstraction
+    concrete. Here is <code>hello.cpp</code> taken apart one stage at a time (the exact flags are
+    Clang/GCC; the <em>idea</em> is identical on MSVC):
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>Stage</th><th>Consumes</th><th>Produces</th><th>Stop after it with</th><th>Fails when…</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>Preprocess</strong></td>
+          <td><code>hello.cpp</code> + all <code>#include</code>d files</td>
+          <td>one translation unit (pure C++, no directives left)</td>
+          <td><code>-E</code></td>
+          <td>a header is missing — <code>fatal error: 'foo.h' file not found</code></td>
+        </tr>
+        <tr>
+          <td><strong>Compile</strong></td>
+          <td>the translation unit</td>
+          <td>assembly text (<code>.s</code>)</td>
+          <td><code>-S</code></td>
+          <td>a syntax or type error — points at a line and column</td>
+        </tr>
+        <tr>
+          <td><strong>Assemble</strong></td>
+          <td>assembly text</td>
+          <td>an object file (<code>.o</code> / <code>.obj</code>) — machine code with holes</td>
+          <td><code>-c</code></td>
+          <td>almost never; you rarely see this stage fail</td>
+        </tr>
+        <tr>
+          <td><strong>Link</strong></td>
+          <td>all object files + libraries</td>
+          <td>the executable</td>
+          <td>(the default — run all four)</td>
+          <td>a name has no definition — <code>undefined reference to …</code>, no line number</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    "Machine code with holes" is the key phrase for the object file. When <code>hello.o</code> is
+    assembled, it contains the machine code for <code>main</code>, but every call to
+    <code>printf</code> is a <em>hole</em> — a note that says "a function named <code>printf</code>
+    goes here, fill it in later". The linker fills the holes by finding <code>printf</code> in the
+    C runtime library. That is, precisely, what linking <em>is</em>: hole-filling across files.
+    An "undefined reference" is a hole the linker could not fill.
+  </p>
+
+  <h3 id="macros">3.2 Predefined macros: how a program knows who built it</h3>
+
+  <p>
+    Every compiler silently <code>#define</code>s a set of macros before it reads your first line,
+    describing itself and its configuration. Our <code>hello.cpp</code> reads a few of them to
+    report its own build. This is not a party trick — it is how real cross-platform code adapts to
+    its compiler, and the engine will use exactly this mechanism to paper over platform
+    differences.
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>Macro</th><th>Defined by</th><th>Tells you</th></tr></thead>
+      <tbody>
+        <tr><td><code>__clang__</code></td><td>Clang (incl. Apple Clang)</td><td>the compiler is Clang</td></tr>
+        <tr><td><code>__GNUC__</code></td><td>GCC — <em>and Clang</em>, for compatibility</td><td>"GCC-compatible". Not "is GCC".</td></tr>
+        <tr><td><code>_MSC_VER</code></td><td>MSVC only</td><td>the compiler is Microsoft's, and its version</td></tr>
+        <tr><td><code>__cplusplus</code></td><td>every conforming compiler</td><td>the C++ standard in use — <em>except on MSVC, see §<a href="#standard">3.3</a></em></td></tr>
+        <tr><td><code>_MSVC_LANG</code></td><td>MSVC only</td><td>the C++ standard MSVC is <em>really</em> using</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout warn">
+    <span class="label">Clang also defines <code>__GNUC__</code> — order matters</span>
+    <p>
+      Because Clang defines <code>__GNUC__</code> for compatibility with GCC-targeting code, a
+      naïve <code>#if defined(__GNUC__)</code> matches Clang too. That is why <code>hello.cpp</code>
+      checks <code>__clang__</code> <em>first</em>: the most specific test wins. Get the order
+      backwards and every Clang build proudly reports itself as GCC. A small bug, but a
+      representative one — predefined macros are full of these overlaps.
+    </p>
+  </div>
+
+  <div class="worked">
+    <span class="label">Worked example — decoding <code>_MSC_VER</code></span>
+    <p>
+      MSVC's version macro is an integer like <code>1939</code>. It reads as an implied
+      <em>major.minor</em> of the compiler toolset: split off the last two digits.
+    </p>
+    <ul>
+      <li><code>1939</code> → major <code>19</code>, minor <code>39</code> → compiler version <strong>19.39</strong>.</li>
+      <li>The bands map to Visual Studio releases: <code>1900</code> = VS 2015, <code>1910–1916</code> = VS 2017, <code>1920–1929</code> = VS 2019, <code>1930–1939…</code> = VS 2022.</li>
+      <li>So <code>1939</code> is a Visual Studio 2022 toolset.</li>
+    </ul>
+    <p>
+      <em>⚠ VERIFY:</em> the exact minor-to-VS-update mapping (e.g. which update ships
+      <code>1939</code> precisely) against Microsoft's
+      <a href="https://learn.microsoft.com/en-us/cpp/preprocessor/predefined-macros">predefined-macros
+      documentation</a> if you need it exactly — the bands above are stable and sufficient for our
+      purposes, but the precise patch mapping changes with each update.
+    </p>
+  </div>
+
+  <h3 id="standard">3.3 What <code>-std=c++20</code> actually selects, and the MSVC trap</h3>
+
+  <p>
+    The <code>__cplusplus</code> macro is an integer naming the standard, encoded as the year and
+    month the standard was finalised. It is worth decoding once, because then the number is never
+    mysterious again:
+  </p>
+
+  <div class="worked">
+    <span class="label">Worked example — decoding <code>__cplusplus</code></span>
+    <ul>
+      <li><code>201103L</code> → <strong>2011</strong>-<strong>03</strong> → C++11 (March 2011).</li>
+      <li><code>201402L</code> → 2014-02 → C++14.</li>
+      <li><code>201703L</code> → 2017-03 → C++17.</li>
+      <li><code>202002L</code> → 2020-02 → <strong>C++20</strong>. This is the value we require.</li>
+    </ul>
+    <p>
+      The trailing <code>L</code> just marks it a <code>long</code> literal. Our
+      <code>static_assert(ENG_CPP_STANDARD &gt;= 202002L)</code> reads directly as "the standard is
+      at least February 2020" — which is exactly "C++20 or newer".
+    </p>
+  </div>
+
+  <p>
+    Now the trap, and it is a genuinely nasty one that costs people hours. <strong>MSVC, by
+    default, reports <code>__cplusplus == 199711L</code></strong> — the value for C++98 — no matter
+    what you pass to <code>/std</code>. It does this for backward compatibility with old code that
+    sniffed the macro. So a correctly-configured C++20 MSVC build will, by default, <em>lie</em>
+    about its standard through the one macro everyone checks.
+  </p>
+
+  <p>There are two independent fixes, and you want both:</p>
+
+  <ul>
+    <li>
+      Pass <strong><code>/Zc:__cplusplus</code></strong>, which tells MSVC to report the honest
+      value. Do this because libraries you do not control — including SDL — check
+      <code>__cplusplus</code>, and they will misbehave if it lies.
+    </li>
+    <li>
+      In your own code, read <strong><code>_MSVC_LANG</code></strong> instead, which always
+      reflects the real <code>/std</code> value. That is exactly what <code>hello.cpp</code>'s
+      <code>ENG_CPP_STANDARD</code> macro does, so our <code>static_assert</code> is honest even if
+      someone forgets the flag.
+    </li>
+  </ul>
+
+  <p>
+    We do both, and <code>hello.cpp</code> <em>prints both numbers</em> so you can see the
+    discrepancy with your own eyes. On MSVC without <code>/Zc:__cplusplus</code>, you would see
+    <code>standard: 202002</code> (from <code>_MSVC_LANG</code>, honest) next to
+    <code>__cplusplus: 199711</code> (the lie). Seeing that gap once fixes the concept permanently.
+  </p>
+
+  <!-- ================= 5. IMPLEMENTATION ================= -->
+  <h2 id="implementation"><span class="num">4</span>Implementation: install, then compile by hand</h2>
+
+  <p>
+    Find your platform below, install, and verify from a terminal <em>before</em> writing any
+    code. We deliberately use no build system yet — just the raw compiler — because
+    <a href="00-04-cmake-from-zero.html">0.4</a> introduces CMake, and CMake is far easier to
+    understand once you have felt what it is automating. You are about to do by hand the thing
+    CMake will do for you.
+  </p>
+
+  <div class="callout note">
+    <span class="label">You need one compiler, not all three</span>
+    <p>
+      Pick the one native to your OS: MSVC on Windows, GCC or Clang on Linux, Clang on macOS. The
+      course supports all three because the <em>engine</em> must build everywhere, but <em>you</em>
+      only need your own. Later lessons give commands for each; today, just get one working.
+    </p>
+  </div>
+
+  <h3 id="install-win">4.1 Windows — MSVC</h3>
+
+  <p>
+    Install <strong>Visual Studio 2022 Community</strong> (free). In the installer, check the
+    <strong>"Desktop development with C++"</strong> workload — this single checkbox pulls in the
+    MSVC compiler (<code>cl.exe</code>), the Windows SDK, a debugger, and even a copy of CMake. If
+    you want no IDE, "Build Tools for Visual Studio 2022" installs the same compiler alone.
+  </p>
+
+  <p>
+    The catch that stops most beginners: <code>cl.exe</code> is <strong>not on your <code>PATH</code></strong>
+    in a normal terminal, and it needs a batch of environment variables set to find its headers
+    and libraries. Microsoft solves this with a preconfigured prompt. From the Start menu, open:
+  </p>
+
+  <figure class="listing shell">
+    <figcaption>
+      <span class="path">use this exact Start-menu entry</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash">x64 Native Tools Command Prompt for VS 2022</code></pre>
+  </figure>
+
+  <p>Verify — this should print a version banner, not "command not found":</p>
+
+  <figure class="listing shell">
+    <figcaption>
+      <span class="path">verify — Windows</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash">cl
+:: Microsoft (R) C/C++ Optimizing Compiler Version 19.39.xxxxx for x64
+:: ...</code></pre>
+  </figure>
+
+  <p>
+    Use the <strong>x64</strong> prompt, not the plain "Developer Command Prompt", so you build
+    64-bit binaries — the only target this course supports.
+  </p>
+
+  <h3 id="install-linux">4.2 Linux — GCC and Clang</h3>
+
+  <p>
+    Install from your distribution's package manager. We need a compiler new enough for C++20:
+    <strong>GCC ≥ 12</strong> or <strong>Clang ≥ 15</strong>. Install a debugger too
+    (<code>gdb</code>); we start using it in 0.6.
+  </p>
+
+  <figure class="listing shell">
+    <figcaption>
+      <span class="path">Debian / Ubuntu</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash">sudo apt update
+sudo apt install build-essential g++ clang gdb
+# build-essential provides gcc, g++, and make; the rest are explicit.</code></pre>
+  </figure>
+
+  <figure class="listing shell">
+    <figcaption>
+      <span class="path">Fedora / Arch</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash"># Fedora
+sudo dnf install gcc-c++ clang gdb
+
+# Arch
+sudo pacman -S base-devel clang gdb</code></pre>
+  </figure>
+
+  <p>Verify (either compiler is fine; check the version is high enough):</p>
+
+  <figure class="listing shell">
+    <figcaption>
+      <span class="path">verify — Linux</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash">g++ --version      # want 12 or newer
+clang++ --version  # want 15 or newer</code></pre>
+  </figure>
+
+  <div class="callout note">
+    <span class="label">SDL3's own build needs a few dev packages</span>
+    <p>
+      When we first fetch SDL3 in Module 0's later lessons, its build will want X11/Wayland
+      development headers. We install those in 0.5, at the moment they are needed — there is no
+      point installing them before SDL exists. Today, the compiler is enough.
+    </p>
+  </div>
+
+  <h3 id="install-mac">4.3 macOS — Clang</h3>
+
+  <p>
+    macOS uses Apple's build of Clang, and you do not need the full Xcode app — just the command
+    line tools:
+  </p>
+
+  <figure class="listing shell">
+    <figcaption>
+      <span class="path">install — macOS</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash">xcode-select --install
+# Installs Apple Clang, the lldb debugger, make, and git. A GUI dialog appears;
+# accept it. This is a few GB and takes a while.</code></pre>
+  </figure>
+
+  <figure class="listing shell">
+    <figcaption>
+      <span class="path">verify — macOS</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash">clang++ --version
+# Apple clang version 15.0.0 (clang-1500.x.x.x)  ← numbers will differ</code></pre>
+  </figure>
+
+  <div class="callout warn">
+    <span class="label">Apple Clang's version number is not upstream Clang's</span>
+    <p>
+      Apple ships its own version numbering. "Apple clang version 15" is <em>not</em> LLVM Clang
+      15 — it is based on some nearby upstream release, but the numbers do not line up, and
+      <code>__clang_major__</code> reports Apple's number. In practice a current Xcode's Clang
+      fully supports the C++20 we use, so this rarely bites — but do not compare an Apple Clang
+      version against a "requires Clang ≥ N" note as though they were the same scale.
+    </p>
+  </div>
+
+  <h3 id="write-hello">4.4 Writing hello.cpp</h3>
+
+  <p>
+    Create a file called <code>hello.cpp</code> at the root of a folder for the project. Build it
+    up in three parts, so every line has a reason before you type it.
+  </p>
+
+  <p>
+    First, the includes and the compile-time guard. We include <code>&lt;version&gt;</code> —
+    C++20's header of feature-test macros — and immediately assert that we are in fact building as
+    C++20, using the honest standard macro:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">hello.cpp — part 1 of 3</span>
+      <span class="tag new">new</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">#include &lt;cstdio&gt;
+#include &lt;version&gt;   // C++20: the standard header of feature-test macros.
+
+// Prefer _MSVC_LANG where it exists, because MSVC's __cplusplus lies by default.
+#if defined(_MSVC_LANG)
+#  define ENG_CPP_STANDARD _MSVC_LANG
+#else
+#  define ENG_CPP_STANDARD __cplusplus
+#endif
+
+static_assert(ENG_CPP_STANDARD &gt;= 202002L,
+              "This engine requires C++20. Check your -std / /std flag.");</code></pre>
+  </figure>
+
+  <p>
+    The <code>static_assert</code> is the whole point of the file, in a sense: it converts a
+    configuration mistake from a mysterious failure later into an unmissable error <em>now</em>,
+    with a message that names the actual cause. That is a pattern, not a one-off — you will see
+    <code>static_assert</code> guarding assumptions throughout the engine.
+  </p>
+
+  <p>
+    Next, a real C++20 feature, so the standard is exercised rather than merely claimed. A
+    <code>consteval</code> function <em>must</em> run at compile time and did not exist before
+    C++20 — so if it compiles, C++20 genuinely took effect, belt-and-braces with the assert:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">hello.cpp — part 2 of 3</span>
+      <span class="tag new">new</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">consteval int engine_cpp_edition() { return 20; }</code></pre>
+  </figure>
+
+  <p>
+    Finally, <code>main</code>, which reports the compiler's identity from its predefined macros
+    and prints both standard numbers so the MSVC gap is visible:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">hello.cpp — part 3 of 3</span>
+      <span class="tag new">new</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">int main()
+{
+    std::printf("Engine toolchain: OK\n");
+
+#if defined(__clang__)                                  // check Clang BEFORE GCC
+    std::printf("  compiler   : Clang %d.%d.%d\n",
+                __clang_major__, __clang_minor__, __clang_patchlevel__);
+#elif defined(__GNUC__)
+    std::printf("  compiler   : GCC %d.%d.%d\n",
+                __GNUC__, __GNUC_MINOR__, __GNUC_PATCHLEVEL__);
+#elif defined(_MSC_VER)
+    std::printf("  compiler   : MSVC _MSC_VER=%d\n", _MSC_VER);
+#else
+    std::printf("  compiler   : unrecognised\n");
+#endif
+
+    std::printf("  standard   : %ld\n", static_cast&lt;long&gt;(ENG_CPP_STANDARD));
+    std::printf("  __cplusplus: %ld\n", static_cast&lt;long&gt;(__cplusplus));
+    std::printf("  consteval  : C++%d ok\n", engine_cpp_edition());
+    return 0;
+}</code></pre>
+  </figure>
+
+  <p>
+    The full file, assembled, is in the listings below. Now compile it.
+  </p>
+
+  <!-- ================= 6. COMPLETE CODE LISTINGS ================= -->
+  <h2 id="listings"><span class="num">5</span>Complete Code Listings</h2>
+
+  <p>The first file of the course, in full.</p>
+
+  <div class="tbl-scroll">
+    <table class="manifest">
+      <thead><tr><th>Path</th><th>Status</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>hello.cpp</td>
+          <td><span class="badge new">new</span></td>
+          <td>Toolchain smoke test. Confirms a C++20 compiler is installed and correctly configured. Not engine code — built by hand now, built by CMake in 0.4, then superseded by the real program in 0.5.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">hello.cpp</span>
+      <span class="tag new">new</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// hello.cpp — the engine's toolchain smoke test.
+//
+// This file has exactly one job: prove that a correctly configured C++20
+// compiler is installed before we try to build anything real. It is NOT engine
+// code — it lives at the repo root, not under src/, and you can delete it once
+// you have watched it run. We compile it BY HAND in this lesson; in Lesson 0.4
+// we build this same file with CMake, so you can see what CMake automates.
+
+#include &lt;cstdio&gt;
+#include &lt;version&gt;   // C++20: the standard header of feature-test macros.
+
+// Which language standard is the compiler ACTUALLY using?
+//
+// The obvious answer, __cplusplus, lies on MSVC: unless you pass
+// /Zc:__cplusplus it always reports 199711L (C++98), no matter your /std flag.
+// MSVC reports the truth in _MSVC_LANG instead. We prefer that where it exists,
+// so this check is honest on every compiler. Pitfall #1 dissects this in full.
+#if defined(_MSVC_LANG)
+#  define ENG_CPP_STANDARD _MSVC_LANG
+#else
+#  define ENG_CPP_STANDARD __cplusplus
+#endif
+
+// This fires at COMPILE time — precisely when you want to discover a bad
+// standard flag, rather than at runtime or, worse, three lessons from now when
+// a C++20 feature mysteriously fails to compile.
+static_assert(ENG_CPP_STANDARD &gt;= 202002L,
+              "This engine requires C++20. Check your -std / /std flag.");
+
+// A genuine C++20 feature, used so the standard is exercised rather than merely
+// asserted. `consteval` did not exist before C++20 and forces compile-time
+// evaluation: if this line compiles, the standard truly took effect.
+consteval int engine_cpp_edition() { return 20; }
+
+int main()
+{
+    std::printf("Engine toolchain: OK\n");
+
+    // The compiler identity lives in predefined macros. In practice exactly one
+    // of these is defined, so the order only matters because Clang also defines
+    // __GNUC__ for compatibility — which is why Clang must be checked first.
+#if defined(__clang__)
+    std::printf("  compiler   : Clang %d.%d.%d\n",
+                __clang_major__, __clang_minor__, __clang_patchlevel__);
+#elif defined(__GNUC__)
+    std::printf("  compiler   : GCC %d.%d.%d\n",
+                __GNUC__, __GNUC_MINOR__, __GNUC_PATCHLEVEL__);
+#elif defined(_MSC_VER)
+    std::printf("  compiler   : MSVC _MSC_VER=%d\n", _MSC_VER);
+#else
+    std::printf("  compiler   : unrecognised\n");
+#endif
+
+    // Print both numbers so the MSVC gotcha is visible, not just guarded against.
+    std::printf("  standard   : %ld\n", static_cast&lt;long&gt;(ENG_CPP_STANDARD));
+    std::printf("  __cplusplus: %ld\n", static_cast&lt;long&gt;(__cplusplus));
+    std::printf("  consteval  : C++%d ok\n", engine_cpp_edition());
+    return 0;
+}</code></pre>
+  </figure>
+
+  <!-- ================= 7. BUILD & RUN ================= -->
+  <h2 id="build"><span class="num">6</span>Build &amp; Run</h2>
+
+  <p>One command per platform. Note the flags — each earns its place, listed below.</p>
+
+  <figure class="listing shell">
+    <figcaption>
+      <span class="path">Linux &amp; macOS (GCC or Clang)</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash"># Pick whichever compiler you installed; the flags are the same.
+clang++ -std=c++20 -Wall -Wextra -o hello hello.cpp
+# or:  g++ -std=c++20 -Wall -Wextra -o hello hello.cpp
+
+./hello</code></pre>
+  </figure>
+
+  <figure class="listing shell">
+    <figcaption>
+      <span class="path">Windows (MSVC, in the x64 Native Tools prompt)</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash">cl /std:c++20 /Zc:__cplusplus /W4 /EHsc hello.cpp
+
+hello.exe</code></pre>
+  </figure>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>Flag</th><th>Does what</th></tr></thead>
+      <tbody>
+        <tr><td><code>-std=c++20</code> / <code>/std:c++20</code></td><td>Selects the C++20 standard. Without it, most compilers default to an older one and <code>consteval</code> fails.</td></tr>
+        <tr><td><code>-Wall -Wextra</code> / <code>/W4</code></td><td>Turns on the warnings we hold ourselves to (<a href="../cpp-style.html#warnings">style §9</a>). On by default from lesson one, so bad habits never form.</td></tr>
+        <tr><td><code>-o hello</code></td><td>Names the output. Omit it and GCC/Clang produce a file literally called <code>a.out</code> — a Unix fossil.</td></tr>
+        <tr><td><code>/Zc:__cplusplus</code></td><td>MSVC only. Makes <code>__cplusplus</code> report the honest value (§<a href="#standard">3.3</a>).</td></tr>
+        <tr><td><code>/EHsc</code></td><td>MSVC only. Standard C++ exception-handling model. Required by parts of the standard library; we revisit the engine's exception policy in Module 5.3.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>What you should see</h3>
+
+  <p>Running <code>./hello</code> prints five lines. On macOS with Apple Clang, for example:</p>
+
+  <figure class="listing shell">
+    <figcaption>
+      <span class="path">expected output — your numbers will differ</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash">Engine toolchain: OK
+  compiler   : Clang 17.0.0
+  standard   : 202002
+  __cplusplus: 202002
+  consteval  : C++20 ok</code></pre>
+  </figure>
+
+  <div class="callout ok">
+    <span class="label">Checkpoint</span>
+    <p>
+      Success is: <strong>it compiled with zero warnings</strong>, it ran, and the
+      <code>standard</code> line reads <code>202002</code> (or higher). The compiler name and
+      version will match whatever you installed. On MSVC, watch the two standard lines: if
+      <code>__cplusplus</code> reads <code>199711</code> while <code>standard</code> reads
+      <code>202002</code>, you forgot <code>/Zc:__cplusplus</code> — harmless for us today because
+      we read <code>_MSVC_LANG</code>, but fix it before SDL arrives.
+    </p>
+  </div>
+
+  <p>
+    Take a second to appreciate what just happened, because it is genuinely the foundation. You
+    wrote source text; four programs turned it into machine code your CPU executed; and it told
+    you, correctly, what built it. Every one of the next ninety-one lessons stands on this working
+    command.
+  </p>
+
+  <!-- ================= 8. PITFALLS ================= -->
+  <h2 id="pitfalls"><span class="num">7</span>Common Pitfalls &amp; Debugging</h2>
+
+  <div class="pitfalls">
+    <details class="pitfall-item">
+      <summary>MSVC reports C++98 with <code>/std:c++20</code> set — <span class="sym">__cplusplus says 199711</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>You passed <code>/std:c++20</code>, but code that checks <code>__cplusplus &gt;= 202002L</code> — yours or a library's — behaves as though it is C++98.</dd>
+          <dt>Cause</dt>
+          <dd>MSVC freezes <code>__cplusplus</code> at <code>199711L</code> by default, for backward compatibility with old macro-sniffing code. The <code>/std</code> flag genuinely works; only the reporting macro is stuck.</dd>
+          <dt>Fix</dt>
+          <dd>Add <code>/Zc:__cplusplus</code> to the compile command. In your own code, prefer <code>_MSVC_LANG</code>, which never lies — which is exactly why <code>hello.cpp</code> uses it. You need both: the flag for libraries, the macro for yourself.</dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary><code>cl</code> or <code>g++</code> is "not recognised" — <span class="sym">command not found</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>The compiler is installed, but the terminal says the command does not exist.</dd>
+          <dt>Cause</dt>
+          <dd>The compiler's folder is not on your <code>PATH</code>. On Windows this is the norm for <code>cl.exe</code> — it is deliberately only available inside the Native Tools prompt, which sets up the environment. On Linux/macOS it usually means the install did not finish, or a new shell has not picked up the change.</dd>
+          <dt>Fix</dt>
+          <dd>Windows: open the <strong>x64 Native Tools Command Prompt for VS 2022</strong> from the Start menu rather than a plain terminal — do not try to fix <code>PATH</code> by hand. Linux/macOS: re-run the install, then open a fresh terminal.</dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary><code>consteval</code> is an "unknown type name" — <span class="sym">error at the consteval line</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>The exact error from §<a href="#problem">1</a>: the compiler does not recognise <code>consteval</code>, and the <code>static_assert</code> fires.</dd>
+          <dt>Cause</dt>
+          <dd>You are not compiling as C++20. Either the <code>-std</code>/<code>/std</code> flag is missing, or your compiler is too old to support it (GCC &lt; 10, Clang &lt; 10 roughly — well below our GCC 12 / Clang 15 floor).</dd>
+          <dt>Fix</dt>
+          <dd>Add the standard flag. If it is already there, check your compiler version against §4 — an old distro can ship a compiler years out of date. Install a newer one.</dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>Every Clang build says "GCC" — <span class="sym">the compiler line is wrong</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>You are on Clang (or Apple Clang), but <code>hello</code> prints <code>compiler : GCC …</code>.</dd>
+          <dt>Cause</dt>
+          <dd>Clang defines <code>__GNUC__</code> for GCC compatibility, so a <code>#if</code> that tests <code>__GNUC__</code> before <code>__clang__</code> matches Clang and mislabels it.</dd>
+          <dt>Fix</dt>
+          <dd>Check <code>__clang__</code> first, as the listing does. The general rule: order predefined-macro checks most-specific first. (If you hit this, you edited the order — put it back.)</dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>Windows: 32-bit build, or a linker complaining about architecture — <span class="sym">weird link errors</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>Things build but link strangely, or later SDL binaries refuse to link with "module machine type conflicts".</dd>
+          <dt>Cause</dt>
+          <dd>You opened the <em>x86</em> or plain "Developer" command prompt, which targets 32-bit. This course is 64-bit only, and mixing 32- and 64-bit objects/libraries fails at link.</dd>
+          <dt>Fix</dt>
+          <dd>Always use the <strong>x64</strong> Native Tools prompt. If unsure, run <code>cl</code> with no arguments — the banner ends in <code>for x64</code> when you are right.</dd>
+        </dl>
+      </div>
+    </details>
+  </div>
+
+  <!-- ================= 9. EXERCISES ================= -->
+  <h2 id="exercises"><span class="num">8</span>Exercises</h2>
+
+  <div class="exercise">
+    <h3><span class="xnum">0.3.1</span>Break it on purpose<span class="difficulty">warm-up</span></h3>
+    <p>
+      Compile <code>hello.cpp</code> with an old standard on purpose —
+      <code>-std=c++14</code> (or <code>/std:c++14</code>) — and read the error. Then fix it. The
+      goal is to <em>recognise</em> this failure instantly when it happens for real, three weeks
+      from now, on a machine you did not configure.
+    </p>
+    <details>
+      <summary>What you should see, and why</summary>
+      <p>
+        Two errors: <code>consteval</code> is unknown (it is a C++20 keyword the older standard
+        does not know), and the <code>static_assert</code> fires with our message. Both point at
+        the same root cause — the wrong standard — from two angles. Restoring
+        <code>-std=c++20</code> clears both at once, which is the tell that they were one problem,
+        not two.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3><span class="xnum">0.3.2</span>Watch the stages happen<span class="difficulty">guided</span></h3>
+    <p>
+      On GCC or Clang, run the build stopping after each stage, and look at what each produces:
+    </p>
+    <ol>
+      <li><code>clang++ -std=c++20 -E hello.cpp | wc -l</code> — how many lines is the translation unit?</li>
+      <li><code>clang++ -std=c++20 -S hello.cpp</code> — open <code>hello.s</code>. That is the assembly.</li>
+      <li><code>clang++ -std=c++20 -c hello.cpp</code> — produces <code>hello.o</code>, the object file with holes.</li>
+    </ol>
+    <p>Why is the preprocessed output so much larger than your 30-line file?</p>
+    <details>
+      <summary>Solution</summary>
+      <p>
+        The translation unit is typically a few hundred to a couple of thousand lines, even though
+        you wrote about thirty. The reason is §<a href="#tu">2.2</a>:
+        <code>#include &lt;cstdio&gt;</code> and <code>#include &lt;version&gt;</code> are replaced
+        by the entire text of those headers — and <em>their</em> includes, recursively. The
+        compiler never sees your 30 lines; it sees the whole expanded unit. This is also why
+        compile times balloon as a project grows: every <code>.cpp</code> re-expands and
+        re-compiles all the headers it pulls in, which is a performance problem we take seriously
+        much later.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3><span class="xnum">0.3.3</span>Provoke a link error<span class="difficulty">guided</span></h3>
+    <p>
+      Add this line above <code>main</code>, then build normally:
+    </p>
+    <pre style="font-family:var(--font-mono);font-size:0.8rem;background:var(--bg-sunken);border:1px solid var(--rule);border-radius:6px;padding:0.6rem 0.8rem;overflow-x:auto;">int missing_function();  // declared, never defined</pre>
+    <p>
+      …and call it from <code>main</code> with <code>missing_function();</code>. Predict which
+      <em>stage</em> fails before you build. Were you right?
+    </p>
+    <details>
+      <summary>Solution</summary>
+      <p>
+        It compiles cleanly — the declaration is a promise the compiler happily accepts — and then
+        <strong>fails at link</strong> with "undefined reference to <code>missing_function()</code>"
+        (Clang/GCC) or "unresolved external symbol" (MSVC), with <em>no line number</em>. That is
+        the signature of a link error from §<a href="#stages">3.1</a>: the compiler believed the
+        promise, the linker went looking for the definition, and there was a hole it could not
+        fill. Recognising "no line number, talks about a symbol" as <em>link</em>, not
+        <em>compile</em>, is a genuinely useful reflex — it tells you to look at what is defined
+        where, not at your syntax.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3><span class="xnum">0.3.4</span>Interrogate your compiler<span class="difficulty">open</span></h3>
+    <p>
+      Compilers can dump every macro they predefine. Run one of these and skim the output —
+      there are hundreds:
+    </p>
+    <pre style="font-family:var(--font-mono);font-size:0.8rem;background:var(--bg-sunken);border:1px solid var(--rule);border-radius:6px;padding:0.6rem 0.8rem;overflow-x:auto;">clang++ -std=c++20 -dM -E -x c++ /dev/null   # Clang / GCC
+cl /std:c++20 /Bv /EP nul                      # MSVC is fiddlier; see docs</pre>
+    <p>
+      Find three macros that describe your <em>platform</em> (OS or CPU) rather than your compiler.
+      What might the engine use them for?
+    </p>
+    <details>
+      <summary>Solution sketch</summary>
+      <p>
+        You will find things like <code>__APPLE__</code>, <code>__linux__</code>,
+        <code>_WIN32</code> (OS), and <code>__x86_64__</code>, <code>__aarch64__</code>,
+        <code>_M_X64</code> (CPU). The engine uses exactly these to compile the right platform
+        code — a Windows-specific window creation path behind <code>#if defined(_WIN32)</code>, say,
+        or a NEON code path behind <code>__aarch64__</code>. This is the mechanism behind the
+        <a href="../ARCHITECTURE.md">platform layer</a>: the OS-specific code is quarantined behind
+        these macros so the rest of the engine never has to think about which system it is on. You
+        have just met, in miniature, how one codebase targets three operating systems.
+      </p>
+    </details>
+  </div>
+
+  <!-- ================= 10. RECAP & NEXT ================= -->
+  <h2 id="recap"><span class="num">9</span>Recap &amp; Next</h2>
+
+  <div class="recap">
+    <h2>What the engine can do now that it could not before</h2>
+    <ul>
+      <li><strong>It builds.</strong> You have a working C++20 toolchain on your OS, verified from a terminal, and a program that proves it.</li>
+      <li>
+        <strong>You can read a build.</strong> The four stages — preprocess, compile, assemble,
+        link — are distinct, and you can tell a compile error from a link error before reading
+        the message, because they speak different dialects.
+      </li>
+      <li>
+        <strong>You have the first file.</strong> <code>hello.cpp</code> exists, compiled by hand,
+        with a compile-time guard that will never let a misconfigured standard slip through
+        silently.
+      </li>
+    </ul>
+    <p>
+      The idea to carry forward: <strong>a build is an assembly line, not a black box.</strong>
+      When something goes wrong later — and it will — the first question is always "which stage
+      spoke to me?"
+    </p>
+    <p>
+      <strong>Next:</strong> <a href="00-04-cmake-from-zero.html">0.4 — CMake From Zero</a>.
+      Typing that compile command by hand is fine for one file; it is unbearable for two hundred,
+      across three operating systems, with SDL3 to fetch and build. CMake is how real projects
+      describe a build once and get it everywhere — and we will build this exact
+      <code>hello.cpp</code> with it first, so you can see precisely what it automates before we
+      point it at anything bigger.
+    </p>
+  </div>
+
+  <!-- ================= 11. FURTHER READING ================= -->
+  <h2 id="reading"><span class="num">10</span>Further Reading</h2>
+
+  <ul class="reading">
+    <li>
+      <span class="src">Reference</span>
+      <strong><a href="https://learn.microsoft.com/en-us/cpp/preprocessor/predefined-macros">MSVC predefined macros</a></strong> —
+      the authoritative list, including the <code>_MSC_VER</code> table and the
+      <code>/Zc:__cplusplus</code> story. Worth a bookmark.
+    </li>
+    <li>
+      <span class="src">Reference</span>
+      <strong><a href="https://gcc.gnu.org/onlinedocs/cpp/Common-Predefined-Macros.html">GCC common predefined macros</a></strong>
+      and <strong><a href="https://sourceforge.net/p/predef/wiki/Home/">the predef project</a></strong> —
+      a cross-compiler catalogue of every identity macro, for when you write platform code in Module 5.
+    </li>
+    <li>
+      <span class="src">Reference</span>
+      <strong><a href="https://en.cppreference.com/w/cpp/feature_test">cppreference: feature-test macros</a></strong> —
+      what <code>&lt;version&gt;</code> gives you: a standard way to ask "does this compiler have
+      that specific C++ feature?"
+    </li>
+    <li>
+      <span class="src">Talk</span>
+      <strong>Matt Godbolt, "The Bits Between the Bits" (and <a href="https://godbolt.org/">Compiler Explorer</a>)</strong> —
+      watch source become assembly, live, in your browser. The single best way to make the
+      "compile" stage of Figure 1 real.
+    </li>
+    <li>
+      <span class="src">Book</span>
+      <strong>John Lakos, <em>Large-Scale C++</em></strong> — the deep treatment of translation
+      units, physical design, and linking. Far beyond today's needs, but it is where the
+      separate-compilation model of §2.2 leads, and it underpins the Module 5 refactor.
+    </li>
+  </ul>
+
+  <!-- ================= 12. STATE ================= -->
+  <details class="state">
+    <summary>STATE — resume key</summary>
+<pre>course: Build a Professional 3D Game Engine (SDL3 + C++20)
+version: 1.0
+
+conventions:
+  world: right-handed, Y-up, -Z forward
+  clip: left-handed, +Y up, z in [0,1] (SDL_GPU-fixed; projection absorbs the flip)
+  sw-rasterizer: targets SDL_GPU's exact NDC (port = API change, not maths change)
+  matrices: column vectors, v' = M*v, column-major storage
+  winding: CCW = front, cull back (per-pipeline state; set explicitly every time)
+  units: 1 unit = 1 metre; radians internally; linear colour in renderer
+  axis colours: x/y/z = red/green/blue
+  sdl3: FetchContent at a pinned tag; SDL 3.5.0 verified; shadercross is 3.0.0-preview
+  cpp: C++20, no exceptions/RTTI in core, snake_case, -Wall -Wextra//W4 all fixed
+  build: direct compiler invocation until 0.4; then CMake >= 3.24, 64-bit only
+
+curriculum: 94 lessons, ~433 h, 9 modules
+  M0:6  M1:8  M2:12  M3:10  M4:9  M5:10  M6:15  M7:13  M8:11
+
+completed:
+  - 0.1 — What a Game Engine Actually Is
+  - 0.2 — How This Course Works
+  - 0.3 — Setting Up Your Toolchain
+
+capabilities:
+  - a verified C++20 toolchain (MSVC / GCC / Clang), 64-bit
+  - hello.cpp compiles and runs by hand on all three platforms; C++20 guarded
+    by static_assert on _MSVC_LANG/__cplusplus
+
+files:
+  /: CLAUDE.md, README.md, ARCHITECTURE.md, LEARNINGS.md, PROMPT.md, LICENSE,
+     .gitignore, hello.cpp
+  docs/: index.html, conventions.html, math-toolbox.html, cpp-style.html
+  docs/lessons/: 00-01-what-is-an-engine.html, 00-02-how-this-course-works.html,
+                 00-03-toolchain.html
+  docs/_template/: lesson-template.html, README.md, apply-shared-css.py
+  memory/: 2026-07-16.md
+
+next: 0.4 — CMake From Zero</pre>
+  </details>
+
+  <nav class="lesson-nav" aria-label="Lesson navigation (bottom)">
+    <a class="prev-l" href="00-02-how-this-course-works.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">0.2 — How This Course Works</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="00-04-cmake-from-zero.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">0.4 — CMake From Zero</span>
+    </a>
+  </nav>
+
+  <footer class="foot">
+    <p>
+      Build a Professional 3D Game Engine ·
+      <a href="../index.html">Contents</a> ·
+      <a href="../conventions.html">Conventions</a> ·
+      <a href="../math-toolbox.html">Math Toolbox</a> ·
+      <a href="../cpp-style.html">C++ Style</a>
+    </p>
+    <p>MIT licensed. Copyright © 2026 digster.</p>
+  </footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ---- Theme toggle (identical across the course) ---- */
+  var root = document.documentElement;
+  var KEY = "engine-course-theme";
+  try {
+    var saved = localStorage.getItem(KEY);
+    if (saved) { root.setAttribute("data-theme", saved); root.style.colorScheme = saved; }
+  } catch (e) {}
+  var btn = document.getElementById("theme-toggle");
+  if (btn) {
+    btn.addEventListener("click", function () {
+      var cur = root.getAttribute("data-theme");
+      if (!cur) cur = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      var next = cur === "dark" ? "light" : "dark";
+      root.setAttribute("data-theme", next);
+      root.style.colorScheme = next;
+      try { localStorage.setItem(KEY, next); } catch (e) {}
+    });
+  }
+
+  /* ---- Syntax highlighting: C++ and shell ---- */
+  var CPP_KEYWORDS = ("consteval constexpr const static void struct class enum namespace return "
+    + "if else for while inline noexcept nullptr true false int long defined static_assert "
+    + "static_cast").split(" ");
+  var CPP_TYPES = ("bool char double float int long short signed unsigned void size_t").split(" ");
+  var kw = Object.create(null), ty = Object.create(null);
+  CPP_KEYWORDS.forEach(function (w) { kw[w] = 1; });
+  CPP_TYPES.forEach(function (w) { ty[w] = 1; });
+  function esc(s) { return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+  function span(c, s) { return '<span class="tok-' + c + '">' + esc(s) + "</span>"; }
+
+  var CPP_RE = new RegExp([
+    "(\\/\\*[\\s\\S]*?\\*\\/|\\/\\/[^\\n]*|#[^\\n]*)",
+    '("(?:\\\\.|[^"\\\\])*"|\'(?:\\\\.|[^\'\\\\])*\')',
+    "(\\b\\d[\\w.]*\\b)",
+    "([A-Za-z_]\\w*)(?=\\s*\\()",
+    "([A-Za-z_]\\w*)",
+    "([{}()\\[\\];,.<>+\\-*/%=!&|^~?:]+)"
+  ].join("|"), "g");
+  function highlightCpp(src) {
+    var out = "", last = 0, m;
+    CPP_RE.lastIndex = 0;
+    while ((m = CPP_RE.exec(src)) !== null) {
+      if (m.index > last) out += esc(src.slice(last, m.index));
+      if (m[1])      out += span(m[1].charAt(0) === "#" ? "p" : "c", m[1]);
+      else if (m[2]) out += span("s", m[2]);
+      else if (m[3]) out += span("n", m[3]);
+      else if (m[4]) out += kw[m[4]] ? span("k", m[4]) : span("f", m[4]);
+      else if (m[5]) out += kw[m[5]] ? span("k", m[5]) : ty[m[5]] ? span("t", m[5]) : esc(m[5]);
+      else if (m[6]) out += span("o", m[6]);
+      last = CPP_RE.lastIndex;
+    }
+    return out + esc(src.slice(last));
+  }
+
+  var SH_RE = /(#[^\n]*|::[^\n]*)|("(?:\\.|[^"\\])*"|'[^']*')|(^|\n)(\s*)([\w.\/\\-]+)/g;
+  function highlightShell(src) {
+    var out = "", last = 0, m;
+    SH_RE.lastIndex = 0;
+    while ((m = SH_RE.exec(src)) !== null) {
+      if (m.index > last) out += esc(src.slice(last, m.index));
+      if (m[1]) out += span("c", m[1]);
+      else if (m[2]) out += span("s", m[2]);
+      else out += esc(m[3] || "") + esc(m[4] || "") + span("f", m[5]);
+      last = SH_RE.lastIndex;
+    }
+    return out + esc(src.slice(last));
+  }
+
+  document.querySelectorAll(".listing pre code.lang-cpp").forEach(function (el) {
+    el.innerHTML = highlightCpp(el.textContent);
+  });
+  document.querySelectorAll(".listing pre code.lang-bash").forEach(function (el) {
+    el.innerHTML = highlightShell(el.textContent);
+  });
+})();
+</script>
+</body>
+</html>
