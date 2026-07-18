@@ -29,6 +29,16 @@ int main(int argc, char* argv[])
         return 1;
     }
 
+    // Log what we actually linked against. This one line is the first thing you
+    // want in a bug report — "it doesn't work" is far more tractable once you
+    // know which SDL the machine is running. It is "instrument the program", the
+    // middle of the three debugging tools from Lesson 0.6.
+    const int sdl_version = SDL_GetVersion();
+    SDL_Log("Engine starting — SDL %d.%d.%d",
+            SDL_VERSIONNUM_MAJOR(sdl_version),
+            SDL_VERSIONNUM_MINOR(sdl_version),
+            SDL_VERSIONNUM_MICRO(sdl_version));
+
     // ---- 2. Create the window ----------------------------------------------
     // Note the SDL3 signature: title, width, height, flags — and NO x/y
     // position (SDL places the window). A null return means failure, and the

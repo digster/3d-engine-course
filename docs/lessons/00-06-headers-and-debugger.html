@@ -1,0 +1,1978 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>0.6 — Reading Headers &amp; the Debugger · Build a Professional 3D Game Engine</title>
+<meta name="description" content="The two skills you use for the next four hundred hours: reading a library's headers as the source of truth, and living in the debugger — breakpoints, stepping, and inspection.">
+<!-- SHARED-CSS:BEGIN -->
+<style>
+/* ---- Design tokens ------------------------------------------------------- */
+:root {
+  color-scheme: light dark;
+
+  /* Page */
+  --bg:            #fdfdfb;
+  --bg-sunken:     #f4f4f0;
+  --bg-raised:     #ffffff;
+  --text:          #1c1c1a;
+  --text-muted:    #5f5f58;
+  --text-faint:    #8a8a80;
+  --rule:          #e2e2db;
+  --rule-strong:   #cfcfc6;
+
+  /* Accent — used for links, active nav, section marks */
+  --accent:        #b4530a;
+  --accent-soft:   #f5e6d8;
+  --accent-text:   #8f4108;
+
+  /* Callouts */
+  --note-bd:       #3a6ea5;   --note-bg:    #eaf2fb;
+  --warn-bd:       #b8860b;   --warn-bg:    #fdf5e2;
+  --verify-bd:     #a03030;   --verify-bg:  #fbecec;
+  --pitfall-bd:    #7a4fa3;   --pitfall-bg: #f4eefb;
+  --ok-bd:         #2f7d4f;   --ok-bg:      #e9f6ee;
+
+  /* Code — always dark, in both page themes */
+  --code-bg:       #1b1d23;
+  --code-bar:      #262932;
+  --code-text:     #dfe3ec;
+  --code-rule:     #363a45;
+
+  /* Syntax tokens */
+  --tok-comment:   #6d7789;
+  --tok-keyword:   #c98fdb;
+  --tok-type:      #6cc5d9;
+  --tok-string:    #a3cf85;
+  --tok-number:    #e8a978;
+  --tok-preproc:   #d9a05b;
+  --tok-func:      #79b6f2;
+  --tok-punct:     #9aa2b1;
+
+  /* Axis colours — COURSE-WIDE CONVENTION. x/y/z = red/green/blue.
+     Never override these in a diagram. See conventions.html. */
+  --axis-x:        #d1344a;
+  --axis-y:        #2f9e4f;
+  --axis-z:        #2b6fd4;
+  --axis-x-soft:   #f7d8dd;
+  --axis-y-soft:   #d8f0e0;
+  --axis-z-soft:   #d7e4fa;
+
+  /* Diagram neutrals */
+  --dia-bg:        #ffffff;
+  --dia-ink:       #33332e;
+  --dia-ink-soft:  #7a7a72;
+  --dia-grid:      #e8e8e2;
+  --dia-fill:      #f0f0ea;
+  --dia-hi:        #b4530a;
+
+  /* Typography */
+  --font-body: "Iowan Old Style", "Palatino Linotype", "Palatino", "Charter",
+               Georgia, Cambria, "Times New Roman", serif;
+  --font-ui:   -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+               "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "SFMono-Regular", "Cascadia Code",
+               "JetBrains Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  --measure: 42rem;          /* ~72 characters at this size — the reading column */
+  --measure-wide: 58rem;     /* diagrams & tables may breathe past the measure  */
+}
+
+/* Dark tokens.
+   Applied in two situations, which is why the block is written twice:
+     1. the OS asks for dark AND the reader has not overridden to light;
+     2. the reader explicitly chose dark via the toggle.
+   CSS has no mixins, so duplication is the price of supporting both an OS
+   default and a manual override. Keep the two blocks byte-identical. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg:          #15161a;
+    --bg-sunken:   #101115;
+    --bg-raised:   #1c1e24;
+    --text:        #e4e4e0;
+    --text-muted:  #a2a49e;
+    --text-faint:  #74766f;
+    --rule:        #2c2e35;
+    --rule-strong: #3d404a;
+
+    --accent:      #f0a06a;
+    --accent-soft: #33251a;
+    --accent-text: #f5b184;
+
+    --note-bd:     #5a8fc8;   --note-bg:    #16202c;
+    --warn-bd:     #c9a132;   --warn-bg:    #262013;
+    --verify-bd:   #d05555;   --verify-bg:  #2a1717;
+    --pitfall-bd:  #a077c8;   --pitfall-bg: #221a2c;
+    --ok-bd:       #4fa877;   --ok-bg:      #14231a;
+
+    --dia-bg:      #1a1c21;
+    --dia-ink:     #d8d8d2;
+    --dia-ink-soft:#8f918a;
+    --dia-grid:    #2b2d33;
+    --dia-fill:    #24262c;
+    --dia-hi:      #f0a06a;
+
+    --axis-x:      #f2647a;
+    --axis-y:      #5cc47e;
+    --axis-z:      #6b9ef0;
+    --axis-x-soft: #3a2027;
+    --axis-y-soft: #1c3325;
+    --axis-z-soft: #1e2a40;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg:          #15161a;
+  --bg-sunken:   #101115;
+  --bg-raised:   #1c1e24;
+  --text:        #e4e4e0;
+  --text-muted:  #a2a49e;
+  --text-faint:  #74766f;
+  --rule:        #2c2e35;
+  --rule-strong: #3d404a;
+
+  --accent:      #f0a06a;
+  --accent-soft: #33251a;
+  --accent-text: #f5b184;
+
+  --note-bd:     #5a8fc8;   --note-bg:    #16202c;
+  --warn-bd:     #c9a132;   --warn-bg:    #262013;
+  --verify-bd:   #d05555;   --verify-bg:  #2a1717;
+  --pitfall-bd:  #a077c8;   --pitfall-bg: #221a2c;
+  --ok-bd:       #4fa877;   --ok-bg:      #14231a;
+
+  --dia-bg:      #1a1c21;
+  --dia-ink:     #d8d8d2;
+  --dia-ink-soft:#8f918a;
+  --dia-grid:    #2b2d33;
+  --dia-fill:    #24262c;
+  --dia-hi:      #f0a06a;
+
+  --axis-x:      #f2647a;
+  --axis-y:      #5cc47e;
+  --axis-z:      #6b9ef0;
+  --axis-x-soft: #3a2027;
+  --axis-y-soft: #1c3325;
+  --axis-z-soft: #1e2a40;
+}
+
+/* ---- Reset & base -------------------------------------------------------- */
+*, *::before, *::after { box-sizing: border-box; }
+
+html {
+  font-size: 18px;
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
+  scroll-padding-top: 2rem;
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  line-height: 1.7;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* The reading column. Everything is centred on --measure; wide elements opt out. */
+.wrap {
+  max-width: var(--measure);
+  margin: 0 auto;
+  padding: 0 1.25rem;
+}
+.bleed {                       /* for diagrams/tables that need more room */
+  max-width: var(--measure-wide);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* ---- Typography ---------------------------------------------------------- */
+h1, h2, h3, h4 {
+  font-family: var(--font-ui);
+  line-height: 1.25;
+  letter-spacing: -0.015em;
+  margin: 0 0 0.6em;
+  scroll-margin-top: 1.5rem;
+}
+h1 { font-size: 2.15rem; font-weight: 700; margin-top: 0.2em; }
+h2 {
+  font-size: 1.5rem; font-weight: 650;
+  margin-top: 2.6em;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--rule);
+}
+h3 { font-size: 1.15rem; font-weight: 650; margin-top: 2em; }
+h4 { font-size: 1rem;    font-weight: 650; margin-top: 1.6em; color: var(--text-muted); }
+
+/* Section numbers rendered as a quiet prefix */
+h2 .num, h3 .num {
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  margin-right: 0.5em;
+  font-weight: 500;
+}
+
+p { margin: 0 0 1.15em; }
+
+a { color: var(--accent-text); text-decoration-color: var(--rule-strong); text-underline-offset: 2px; }
+a:hover { text-decoration-color: currentColor; }
+
+strong { font-weight: 650; }
+em { font-style: italic; }
+
+ul, ol { margin: 0 0 1.15em; padding-left: 1.5em; }
+li { margin-bottom: 0.4em; }
+li > ul, li > ol { margin-top: 0.4em; margin-bottom: 0.5em; }
+
+hr { border: 0; border-top: 1px solid var(--rule); margin: 2.5em 0; }
+
+blockquote {
+  margin: 1.5em 0;
+  padding: 0.1em 0 0.1em 1.2em;
+  border-left: 3px solid var(--rule-strong);
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* Inline code — light chip, distinct from the dark block listings */
+:not(pre) > code {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 0.08em 0.34em;
+  word-break: break-word;
+}
+
+/* ---- Masthead ------------------------------------------------------------ */
+.masthead {
+  background: var(--bg-sunken);
+  border-bottom: 1px solid var(--rule);
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+}
+.masthead-inner {
+  max-width: var(--measure-wide);
+  margin: 0 auto;
+  padding: 0.6rem 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.masthead .course {
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  text-decoration: none;
+}
+.masthead .spacer { flex: 1; }
+.masthead a { color: var(--text-muted); text-decoration: none; }
+.masthead a:hover { color: var(--accent-text); }
+
+.theme-toggle {
+  font: inherit;
+  font-size: 0.78rem;
+  background: var(--bg-raised);
+  color: var(--text-muted);
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  padding: 0.2rem 0.55rem;
+  cursor: pointer;
+}
+.theme-toggle:hover { border-color: var(--rule-strong); color: var(--text); }
+
+/* ---- Lesson nav (top & bottom) ------------------------------------------- */
+.lesson-nav {
+  display: flex;
+  align-items: stretch;
+  gap: 0.6rem;
+  font-family: var(--font-ui);
+  font-size: 0.82rem;
+  margin: 1.5rem auto;
+}
+.lesson-nav a, .lesson-nav span {
+  flex: 1;
+  padding: 0.55rem 0.8rem;
+  border: 1px solid var(--rule);
+  border-radius: 7px;
+  background: var(--bg-raised);
+  text-decoration: none;
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+.lesson-nav a:hover { border-color: var(--accent); }
+.lesson-nav span { opacity: 0.45; }        /* disabled edge (no prev / no next) */
+.lesson-nav .dir {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-faint);
+}
+.lesson-nav .ttl {
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-weight: 550;
+}
+.lesson-nav .next-l { text-align: right; }
+.lesson-nav .idx-l  { flex: 0 0 auto; justify-content: center; text-align: center; }
+@media (max-width: 34rem) {
+  .lesson-nav { flex-wrap: wrap; }
+  .lesson-nav .idx-l { order: 3; flex: 1 0 100%; }
+}
+
+/* ---- Lesson header block ------------------------------------------------- */
+.lesson-head { margin: 2rem 0 0; }
+.eyebrow {
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+  font-weight: 650;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 0.5rem;
+}
+.deck {
+  font-size: 1.12rem;
+  color: var(--text-muted);
+  margin-bottom: 1.5rem;
+}
+.meta {
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  padding: 1rem 1.15rem;
+  margin-bottom: 1.75rem;
+}
+.meta dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 0.4rem 1rem; }
+.meta dt {
+  color: var(--text-faint);
+  text-transform: uppercase;
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  padding-top: 0.28em;
+  white-space: nowrap;
+}
+.meta dd { margin: 0; }
+@media (max-width: 30rem) {
+  .meta dl { grid-template-columns: 1fr; gap: 0.15rem 0; }
+  .meta dd { margin-bottom: 0.6rem; }
+}
+
+/* Objectives — "you will be able to…" */
+.objectives {
+  border: 1px solid var(--accent);
+  background: var(--accent-soft);
+  border-radius: 9px;
+  padding: 1.1rem 1.25rem;
+  margin: 1.75rem 0;
+}
+.objectives h2 {
+  margin: 0 0 0.5rem;
+  border: 0; padding: 0;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--accent-text);
+}
+.objectives ul { margin: 0; padding-left: 1.25em; }
+.objectives li::marker { color: var(--accent); }
+
+/* ---- Table of contents --------------------------------------------------- */
+.toc {
+  font-family: var(--font-ui);
+  font-size: 0.88rem;
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  padding: 1rem 1.25rem;
+  margin: 2rem 0;
+}
+.toc > summary {
+  cursor: pointer;
+  font-weight: 650;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-muted);
+  list-style: none;
+}
+.toc > summary::-webkit-details-marker { display: none; }
+.toc > summary::before { content: "▸ "; color: var(--accent); }
+.toc[open] > summary::before { content: "▾ "; }
+.toc ol { list-style: none; margin: 0.85rem 0 0; padding: 0; counter-reset: toc; }
+.toc ol ol { margin: 0.3rem 0 0.5rem 1.1rem; }
+.toc li { margin: 0.28em 0; counter-increment: toc; }
+.toc a { text-decoration: none; color: var(--text); }
+.toc a:hover { color: var(--accent-text); text-decoration: underline; }
+.toc ol ol a { color: var(--text-muted); font-size: 0.94em; }
+
+/* ---- Callouts ------------------------------------------------------------ */
+.callout {
+  border-left: 3px solid var(--rule-strong);
+  background: var(--bg-sunken);
+  border-radius: 0 8px 8px 0;
+  padding: 0.9rem 1.1rem;
+  margin: 1.6em 0;
+  font-size: 0.95rem;
+}
+.callout > :first-child { margin-top: 0; }
+.callout > :last-child  { margin-bottom: 0; }
+.callout .label {
+  display: block;
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  margin-bottom: 0.35rem;
+}
+.callout.note    { border-color: var(--note-bd);    background: var(--note-bg); }
+.callout.note .label    { color: var(--note-bd); }
+.callout.warn    { border-color: var(--warn-bd);    background: var(--warn-bg); }
+.callout.warn .label    { color: var(--warn-bd); }
+.callout.verify  { border-color: var(--verify-bd);  background: var(--verify-bg); }
+.callout.verify .label  { color: var(--verify-bd); }
+.callout.pitfall { border-color: var(--pitfall-bd); background: var(--pitfall-bg); }
+.callout.pitfall .label { color: var(--pitfall-bd); }
+.callout.ok      { border-color: var(--ok-bd);      background: var(--ok-bg); }
+.callout.ok .label      { color: var(--ok-bd); }
+/* C++ explainers: a C++ feature taught in place, the first time it appears. */
+.callout.cpp     { border-color: var(--accent);     background: var(--accent-soft); }
+.callout.cpp .label     { color: var(--accent-text); }
+
+/* ---- Code listings ------------------------------------------------------- */
+.listing {
+  margin: 1.6em 0;
+  border-radius: 9px;
+  overflow: hidden;
+  border: 1px solid var(--code-rule);
+  background: var(--code-bg);
+}
+.listing figcaption {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: var(--code-bar);
+  border-bottom: 1px solid var(--code-rule);
+  padding: 0.45rem 0.85rem;
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  color: #aeb6c4;
+}
+.listing figcaption .path { font-weight: 600; color: #dfe3ec; }
+.listing figcaption .tag {
+  font-family: var(--font-ui);
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  background: #3a3f4c;
+  color: #c6cdd9;
+}
+.listing figcaption .tag.new      { background: #1f4433; color: #7fd6a5; }
+.listing figcaption .tag.modified { background: #453a1c; color: #e0be74; }
+.listing figcaption .lang { margin-left: auto; opacity: 0.65; }
+
+/* Horizontal scroll — NEVER wrap. Wrapped code lies about its structure. */
+.listing pre {
+  margin: 0;
+  padding: 0.9rem 1rem;
+  overflow-x: auto;
+  background: var(--code-bg);
+}
+.listing pre code {
+  font-family: var(--font-mono);
+  font-size: 0.79rem;
+  line-height: 1.62;
+  color: var(--code-text);
+  white-space: pre;
+  display: block;
+  tab-size: 4;
+}
+.listing pre::-webkit-scrollbar { height: 9px; }
+.listing pre::-webkit-scrollbar-track { background: var(--code-bar); }
+.listing pre::-webkit-scrollbar-thumb { background: #4a5060; border-radius: 5px; }
+.listing pre::-webkit-scrollbar-thumb:hover { background: #5d6478; }
+
+/* Syntax tokens, applied by the tiny highlighter at the foot of the page. */
+.tok-c { color: var(--tok-comment); font-style: italic; }
+.tok-k { color: var(--tok-keyword); }
+.tok-t { color: var(--tok-type); }
+.tok-s { color: var(--tok-string); }
+.tok-n { color: var(--tok-number); }
+.tok-p { color: var(--tok-preproc); }
+.tok-f { color: var(--tok-func); }
+.tok-o { color: var(--tok-punct); }
+
+/* Emphasised line inside a listing (the line this paragraph is about) */
+.listing .hl { background: rgba(180, 130, 60, 0.16); display: inline-block; width: 100%; }
+
+/* Shell transcripts get a lighter treatment than source files */
+.listing.shell figcaption .path::before { content: "$ "; opacity: 0.6; }
+
+/* ---- Figures & diagrams -------------------------------------------------- */
+figure.dia {
+  margin: 2em auto;
+  padding: 0;
+}
+figure.dia svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: var(--dia-bg);
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+}
+figure.dia figcaption,
+figure.tbl figcaption {
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: 0.65rem;
+  line-height: 1.55;
+}
+figure.dia figcaption .fignum,
+figure.tbl figcaption .fignum {
+  font-weight: 700;
+  color: var(--text);
+}
+/* SVG text inherits the theme so diagrams survive dark mode */
+figure.dia svg text { font-family: var(--font-ui); fill: var(--dia-ink); }
+figure.dia svg .lbl-x { fill: var(--axis-x); }
+figure.dia svg .lbl-y { fill: var(--axis-y); }
+figure.dia svg .lbl-z { fill: var(--axis-z); }
+figure.dia svg .ax-x  { stroke: var(--axis-x); }
+figure.dia svg .ax-y  { stroke: var(--axis-y); }
+figure.dia svg .ax-z  { stroke: var(--axis-z); }
+figure.dia svg .ink       { stroke: var(--dia-ink); }
+figure.dia svg .ink-soft  { stroke: var(--dia-ink-soft); }
+figure.dia svg .grid      { stroke: var(--dia-grid); }
+figure.dia svg .fill-soft { fill: var(--dia-fill); }
+figure.dia svg .hi        { stroke: var(--dia-hi); }
+figure.dia svg .mono      { font-family: var(--font-mono); }
+figure.dia svg .sm        { font-size: 11px; }
+figure.dia svg .xs        { font-size: 9.5px; }
+
+/* Text fills for <text> elements.
+   These MUST be classes, not fill="..." attributes: the `figure.dia svg text`
+   rule above is CSS, and CSS always beats an SVG presentation attribute — an
+   inline fill on a <text> is silently ignored. Class selectors outrank the bare
+   element selector, so these win. (Shapes are unaffected; the rule only targets
+   text, so fill="..." still works on rect/path/circle.) */
+figure.dia svg .muted     { fill: var(--dia-ink-soft); }
+figure.dia svg .t-hi      { fill: var(--dia-hi); }
+figure.dia svg .t-ok      { fill: var(--ok-bd); }
+figure.dia svg .t-bad     { fill: var(--verify-bd); }
+/* For labels sitting ON a saturated filled shape, where the theme ink would be
+   unreadable. Fixed white in both themes, because the shape under it is the
+   same saturated colour in both. */
+figure.dia svg .t-inv     { fill: #ffffff; }
+
+/* ---- Tables -------------------------------------------------------------- */
+.tbl-scroll { overflow-x: auto; margin: 1.6em 0; }
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+th, td {
+  text-align: left;
+  padding: 0.5rem 0.7rem;
+  border-bottom: 1px solid var(--rule);
+  vertical-align: top;
+}
+th {
+  font-weight: 650;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--rule-strong);
+  white-space: nowrap;
+}
+tbody tr:hover { background: var(--bg-sunken); }
+td code { font-size: 0.82em; }
+
+/* File-manifest table: path | new/modified | purpose */
+.manifest td:first-child { font-family: var(--font-mono); font-size: 0.78rem; white-space: nowrap; }
+.badge {
+  font-size: 0.62rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.06em; padding: 0.1rem 0.4rem; border-radius: 3px; white-space: nowrap;
+}
+.badge.new { background: var(--ok-bg); color: var(--ok-bd); border: 1px solid var(--ok-bd); }
+.badge.mod { background: var(--warn-bg); color: var(--warn-bd); border: 1px solid var(--warn-bd); }
+/* Curriculum status, used on index.html */
+.badge.done { background: var(--ok-bg); color: var(--ok-bd); border: 1px solid var(--ok-bd); }
+.badge.soon { background: var(--bg-sunken); color: var(--text-faint); border: 1px solid var(--rule-strong); }
+
+/* ---- Math ---------------------------------------------------------------- */
+/* KaTeX renders these when the CDN is reachable. When it is NOT, the raw TeX
+   stays visible — which is why every equation MUST also be stated in prose.
+   Never let an equation be the only carrier of a fact. */
+.eq {
+  margin: 1.4em 0;
+  padding: 0.9rem 1rem;
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  overflow-x: auto;
+  text-align: center;
+}
+.eq-plain {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  margin-top: 0.6rem;
+  padding-top: 0.6rem;
+  border-top: 1px dashed var(--rule-strong);
+  text-align: left;
+}
+.eq-plain::before {
+  content: "in plain text: ";
+  color: var(--text-faint);
+  font-family: var(--font-ui);
+  font-size: 0.72rem;
+}
+
+/* Worked numeric example — every formula gets one */
+.worked {
+  border: 1px solid var(--rule-strong);
+  border-radius: 9px;
+  padding: 1rem 1.2rem;
+  margin: 1.6em 0;
+  background: var(--bg-raised);
+}
+.worked > .label {
+  display: block;
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--accent);
+  margin-bottom: 0.5rem;
+}
+.worked > :last-child { margin-bottom: 0; }
+
+/* ---- Exercises ----------------------------------------------------------- */
+.exercise {
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 9px 9px 0;
+  padding: 1rem 1.2rem;
+  margin: 1.4em 0;
+  background: var(--bg-raised);
+}
+.exercise h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.98rem;
+}
+.exercise h3 .xnum {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--accent);
+  margin-right: 0.5em;
+}
+.difficulty {
+  font-family: var(--font-ui);
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-faint);
+  border: 1px solid var(--rule-strong);
+  border-radius: 3px;
+  padding: 0.05rem 0.35rem;
+  margin-left: 0.4em;
+  vertical-align: 0.15em;
+}
+.exercise details {
+  margin-top: 0.7rem;
+  border-top: 1px solid var(--rule);
+  padding-top: 0.6rem;
+}
+.exercise summary {
+  cursor: pointer;
+  font-family: var(--font-ui);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.exercise summary:hover { color: var(--accent-text); }
+.exercise details[open] summary { margin-bottom: 0.6rem; }
+
+/* ---- Pitfalls (symptom → cause → fix) ------------------------------------ */
+.pitfalls { margin: 1.5em 0; }
+.pitfall-item {
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  margin-bottom: 0.9rem;
+  overflow: hidden;
+}
+.pitfall-item > summary {
+  cursor: pointer;
+  padding: 0.7rem 1rem;
+  background: var(--bg-sunken);
+  font-family: var(--font-ui);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.pitfall-item > summary:hover { color: var(--accent-text); }
+.pitfall-item > summary .sym {
+  font-weight: 400;
+  color: var(--text-muted);
+  font-style: italic;
+}
+.pitfall-body { padding: 0.9rem 1rem; font-size: 0.94rem; }
+.pitfall-body > :first-child { margin-top: 0; }
+.pitfall-body > :last-child  { margin-bottom: 0; }
+.pitfall-body dt {
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+  margin-top: 0.7rem;
+}
+.pitfall-body dd { margin: 0.2rem 0 0; }
+
+/* ---- Recap / next -------------------------------------------------------- */
+.recap {
+  background: var(--ok-bg);
+  border: 1px solid var(--ok-bd);
+  border-radius: 9px;
+  padding: 1.1rem 1.25rem;
+  margin: 1.75rem 0;
+}
+.recap h2 { margin: 0 0 0.6rem; border: 0; padding: 0; font-size: 1.05rem; }
+.recap > :last-child { margin-bottom: 0; }
+
+/* ---- Further reading ----------------------------------------------------- */
+.reading { font-size: 0.92rem; }
+.reading li { margin-bottom: 0.6em; }
+.reading .src {
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+  margin-right: 0.4em;
+}
+
+/* ---- STATE block --------------------------------------------------------- */
+.state {
+  margin: 2.5em 0 1em;
+  border: 1px dashed var(--rule-strong);
+  border-radius: 9px;
+  background: var(--bg-sunken);
+  overflow: hidden;
+}
+.state > summary {
+  cursor: pointer;
+  padding: 0.6rem 1rem;
+  font-family: var(--font-ui);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-muted);
+}
+.state pre {
+  margin: 0;
+  padding: 0.9rem 1rem;
+  overflow-x: auto;
+  border-top: 1px solid var(--rule);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+  white-space: pre;
+}
+
+/* ---- Footer -------------------------------------------------------------- */
+.foot {
+  border-top: 1px solid var(--rule);
+  margin-top: 3rem;
+  padding: 1.5rem 0 3rem;
+  font-family: var(--font-ui);
+  font-size: 0.78rem;
+  color: var(--text-faint);
+}
+.foot a { color: var(--text-muted); }
+
+/* ---- Interactive widgets ------------------------------------------------- */
+.widget {
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  background: var(--bg-raised);
+  padding: 1rem;
+  margin: 2em 0;
+}
+.widget-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+  align-items: center;
+  margin-top: 0.8rem;
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+.widget-controls label { display: flex; align-items: center; gap: 0.4rem; }
+.widget-controls input[type="range"] { accent-color: var(--accent); }
+.widget-readout {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--text);
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 0.1rem 0.4rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Print --------------------------------------------------------------- */
+@media print {
+  .masthead, .lesson-nav, .theme-toggle { display: none; }
+  body { background: #fff; color: #000; font-size: 11pt; }
+  .listing { break-inside: avoid; }
+  figure.dia { break-inside: avoid; }
+  a::after { content: " (" attr(href) ")"; font-size: 0.7em; color: #666; }
+}
+</style>
+<!-- SHARED-CSS:END -->
+</head>
+<body>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <a class="course" href="../index.html">Build a Professional 3D Game Engine</a>
+    <span class="spacer"></span>
+    <a href="../index.html">Contents</a>
+    <a href="../conventions.html">Conventions</a>
+    <a href="../cpp-style.html">C++ Style</a>
+    <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Toggle colour theme">Theme</button>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="00-05-first-window.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">0.5 — Your First Window</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="01-01-events-properly.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">1.1 — Events, Properly</span>
+    </a>
+  </nav>
+
+  <!-- ================= 1. HEADER BLOCK ================= -->
+  <div class="lesson-head">
+    <div class="eyebrow">Module 0 — Orientation &amp; Toolchain · Lesson 0.6 · <em>module finale</em></div>
+    <h1>Reading Headers &amp; the Debugger</h1>
+    <p class="deck">
+      Two skills you will use in nearly every lesson from here on: reading a library's headers as
+      the one true answer to "what does this really do?", and living inside a debugger so that a
+      misbehaving program becomes a thing you <em>inspect</em>, not a thing you guess at.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 3 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd><a href="00-05-first-window.html">0.5 — Your First Window</a></dd>
+
+        <dt>Files</dt>
+        <dd><code>src/main.cpp</code> (modified — a startup log line)</dd>
+
+        <dt>Milestone</dt>
+        <dd>You can find and read any SDL function's real signature in the header, and hunt a runtime bug with breakpoints instead of guesswork.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…find any SDL symbol's real declaration in the headers, and read it past the macro noise.</li>
+      <li>…choose between the three tools of visibility — compiler warnings, logging, and the debugger — and say when each wins.</li>
+      <li>…set breakpoints, step through code, and inspect variables in lldb, gdb, or Visual Studio.</li>
+      <li>…hunt a runtime bug by <em>observation</em> — narrowing down where reality diverges from intent — instead of changing code at random.</li>
+      <li>…instrument the engine with a startup log line, and know why that one line saves bug-report hours.</li>
+    </ul>
+  </section>
+
+  <details class="toc" open>
+    <summary>Contents</summary>
+    <ol>
+      <li><a href="#problem">The Problem</a></li>
+      <li><a href="#intuition">Building Intuition</a>
+        <ol>
+          <li><a href="#two-truths">Two questions, two sources of truth</a></li>
+          <li><a href="#three-tools">Three tools of visibility</a></li>
+        </ol>
+      </li>
+      <li><a href="#theory">The Theory</a>
+        <ol>
+          <li><a href="#reading-headers">Reading a header</a></li>
+          <li><a href="#logging">Instrumenting with logs</a></li>
+          <li><a href="#debugger-vocab">The debugger's vocabulary</a></li>
+        </ol>
+      </li>
+      <li><a href="#implementation">Implementation: instrument, then hunt a bug</a>
+        <ol>
+          <li><a href="#impl-log">Part A — a startup log line</a></li>
+          <li><a href="#impl-debug">Part B — hunting the flash-and-close bug</a></li>
+        </ol>
+      </li>
+      <li><a href="#listings">Complete Code Listings</a></li>
+      <li><a href="#build">Build &amp; Run</a></li>
+      <li><a href="#pitfalls">Common Pitfalls &amp; Debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; Next</a></li>
+      <li><a href="#reading">Further Reading</a></li>
+    </ol>
+  </details>
+
+  <!-- ================= 2. THE PROBLEM ================= -->
+  <h2 id="problem"><span class="num">1</span>The Problem</h2>
+
+  <p>
+    Over the last two lessons, two words kept recurring: <strong>verify</strong> and
+    <strong>bug</strong>. We said "verify this signature against the header" more than once, and
+    0.5 ended with a pitfall about a window that flashes and closes. Both point at skills we have
+    used without naming, and this lesson — the last of Module 0 — names them, because you will lean
+    on them constantly.
+  </p>
+
+  <p>
+    The first is knowing what an API <em>actually</em> is. You have already seen that a plausible
+    snippet from the internet is often SDL2 and will not compile, and that a wiki page can lag the
+    real code. There is exactly one authority on what a function does: its declaration in the
+    header. Reading that fluently is a skill, not a chore.
+  </p>
+
+  <p>
+    The second is knowing what your <em>running program</em> actually does — which is rarely what
+    you think it does when there is a bug. Here is the failure mode this lesson exists to kill:
+  </p>
+
+  <div class="callout warn">
+    <span class="label">The failure mode: debugging by voodoo</span>
+    <p>
+      The window flashes and closes. You do not know why, so you start <em>changing things</em>:
+      move a line, add a <code>SDL_Delay</code>, reorder the loop, comment something out, rebuild,
+      try again. Eventually it works — or seems to — and you move on without ever knowing what was
+      wrong.
+    </p>
+    <p>
+      This is debugging by voodoo, and it is slow, it teaches you nothing, and worst of all it
+      often "fixes" the symptom by coincidence while the real bug hides, waiting to reappear. The
+      alternative is not cleverness — it is <em>observation</em>. A debugger lets you stop the
+      program mid-flight and simply <strong>look</strong> at what is true: which line is running,
+      what each variable holds, how you got here. Bugs do not survive being looked at directly. The
+      whole skill is learning to look.
+    </p>
+  </div>
+
+  <!-- ================= 3. BUILDING INTUITION ================= -->
+  <h2 id="intuition"><span class="num">2</span>Building Intuition</h2>
+
+  <h3 id="two-truths">2.1 Two questions, two sources of truth</h3>
+
+  <p>
+    Almost every moment of confusion in systems programming is one of two questions, and each has a
+    single authoritative answer:
+  </p>
+
+  <ul>
+    <li>
+      <strong>"What is this API supposed to do?"</strong> — answered by the <strong>header</strong>.
+      The header is the contract: the exact types, the exact parameters, the exact return. Not the
+      tutorial, not your memory, not the wiki (which is prose <em>about</em> the contract, and can
+      drift). When they disagree, the header wins, because the header is what the compiler reads.
+    </li>
+    <li>
+      <strong>"What is my program actually doing?"</strong> — answered by the
+      <strong>debugger</strong>. The debugger is an X-ray: it shows the live state of the running
+      program, which is the ground truth that your mental model is only a guess at. When your model
+      and the debugger disagree, your model is wrong — that gap <em>is</em> the bug.
+    </li>
+  </ul>
+
+  <p>
+    Beginners answer both questions by guessing and rebuilding. Professionals answer them by
+    <em>reading</em> — the header for the contract, the debugger for the behaviour. The rebuild-and-pray
+    loop is not a faster version of this; it is a different, worse activity that happens to involve
+    the same keyboard.
+  </p>
+
+  <h3 id="three-tools">2.2 Three tools of visibility</h3>
+
+  <p>
+    "Look at what the program is doing" is not one tool but three, and they trade power against
+    convenience. You will use all three, often on the same bug, and knowing which to reach for is
+    half the skill. Figure 1 is the ladder.
+  </p>
+
+  <figure class="dia bleed">
+    <svg viewBox="0 0 660 300" role="img" aria-labelledby="f1-t f1-d">
+      <title id="f1-t">The three tools of visibility, from cheapest to most powerful</title>
+      <desc id="f1-d">Three rungs. The compiler and its warnings catch mistakes before the program
+        runs, for free, but see only what is statically knowable. Logging prints values as the
+        program runs, is simple and works everywhere including remote machines, but you must decide
+        in advance what to print. The interactive debugger can pause anywhere and inspect anything,
+        the most powerful, but is interactive and local. Power increases down the rungs;
+        convenience and reach decrease.</desc>
+      <defs>
+        <marker id="d1-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+      </defs>
+
+      <!-- rung 1 -->
+      <rect x="60" y="30" width="470" height="60" rx="8" class="fill-soft" stroke="var(--axis-y)" stroke-width="1.6"/>
+      <text x="80" y="52" class="sm t-ok" font-weight="700">1 · Compiler &amp; warnings</text>
+      <text x="80" y="70" class="xs muted">Catches mistakes BEFORE the program runs, for free. Sees only what is</text>
+      <text x="80" y="83" class="xs muted">statically knowable — but that is a surprising amount. Always on (-Wall -Wextra).</text>
+
+      <!-- rung 2 -->
+      <rect x="60" y="110" width="470" height="60" rx="8" class="fill-soft" stroke="var(--dia-hi)" stroke-width="1.6"/>
+      <text x="80" y="132" class="sm t-hi" font-weight="700">2 · Logging (SDL_Log)</text>
+      <text x="80" y="150" class="xs muted">Prints values AS the program runs. Dead simple, and works everywhere —</text>
+      <text x="80" y="163" class="xs muted">a customer's PC, CI, a remote server. But you must decide what to print in advance.</text>
+
+      <!-- rung 3 -->
+      <rect x="60" y="190" width="470" height="60" rx="8" class="fill-soft" stroke="var(--axis-z)" stroke-width="1.6"/>
+      <text x="80" y="212" class="sm lbl-z" font-weight="700">3 · Interactive debugger</text>
+      <text x="80" y="230" class="xs muted">Pause ANYWHERE, inspect ANYTHING, change nothing. The most powerful —</text>
+      <text x="80" y="243" class="xs muted">but interactive and local: you must be at the machine, driving it.</text>
+
+      <!-- power axis -->
+      <line x1="560" y1="34" x2="560" y2="246" class="ink" stroke-width="1.4" marker-end="url(#d1-a)"/>
+      <text x="576" y="140" class="xs muted" transform="rotate(90 576 140)" text-anchor="middle">more power · less reach →</text>
+
+      <text x="295" y="280" class="sm" text-anchor="middle" font-weight="700">
+        Start at the top and go down only as far as the bug forces you.
+      </text>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 1.</span> The three tools. They are complementary, not rivals: the
+      compiler catches the typos, a log line confirms a value cheaply, and the debugger is where you
+      go when you need to stop time and look around. This lesson touches all three; the deliverable
+      is a rung-2 log line, and the walkthrough is a rung-3 hunt.
+    </figcaption>
+  </figure>
+
+  <!-- ================= 4. THE THEORY ================= -->
+  <h2 id="theory"><span class="num">3</span>The Theory</h2>
+
+  <h3 id="reading-headers">3.1 Reading a header</h3>
+
+  <p>
+    There are three good ways to find a symbol's real declaration, in rough order of speed:
+  </p>
+
+  <ol>
+    <li>
+      <strong>Grep the fetched source.</strong> FetchContent already put SDL's headers under
+      <code>build/_deps/sdl3-src/include/</code>, so they are on your disk. Grepping them is
+      instant and always matches the exact version you build against.
+    </li>
+    <li>
+      <strong>Grep the source on GitHub</strong> at your pinned tag, with <code>curl</code>. Useful
+      before you have a build, or to check a different version.
+    </li>
+    <li>
+      <strong>Read the wiki.</strong> The <a href="https://wiki.libsdl.org/SDL3/">SDL3 wiki</a> is
+      the prose companion — good for understanding <em>why</em> and seeing examples, but it is
+      generated <em>from</em> the headers and can lag them, so the header is the tiebreaker.
+    </li>
+  </ol>
+
+  <figure class="listing shell">
+    <figcaption>
+      <span class="path">find any SDL declaration — two ways</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash"># 1. From the fetched source on disk (fastest, exact version):
+grep -rn "SDL_CreateWindow" build/_deps/sdl3-src/include/SDL3/
+
+# 2. From GitHub at the tag you pinned, without a checkout:
+curl -sL https://raw.githubusercontent.com/libsdl-org/SDL/release-3.4.12/include/SDL3/SDL_video.h \
+  | grep -n "SDL_CreateWindow"</code></pre>
+  </figure>
+
+  <p>
+    Either way, you get back a line that looks noisier than it is. Here is
+    <code>SDL_Init</code>'s declaration, exactly as it appears in the header — and how to read
+    past the macros to the signature underneath:
+  </p>
+
+  <div class="worked">
+    <span class="label">Worked example — decoding a C declaration</span>
+    <p>The header says:</p>
+    <pre style="font-family:var(--font-mono);font-size:0.8rem;background:var(--bg-sunken);border:1px solid var(--rule);border-radius:6px;padding:0.6rem 0.8rem;overflow-x:auto;">extern SDL_DECLSPEC bool SDLCALL SDL_Init(SDL_InitFlags flags);</pre>
+    <p>Strip the two macros that are pure platform plumbing and carry no meaning for you:</p>
+    <ul>
+      <li><code>extern</code> — "defined elsewhere" (in the SDL library). Every function declaration in a header is <code>extern</code>; ignore it.</li>
+      <li><code>SDL_DECLSPEC</code> — an export/visibility macro (it becomes <code>__declspec(dllexport)</code> on Windows, nothing elsewhere). It controls how the symbol crosses a DLL boundary. Ignore it.</li>
+      <li><code>SDLCALL</code> — the calling convention (which registers arguments go in). It matters to the linker, never to you. Ignore it.</li>
+    </ul>
+    <p>What is left is the signature you actually care about:</p>
+    <pre style="font-family:var(--font-mono);font-size:0.8rem;background:var(--bg-sunken);border:1px solid var(--rule);border-radius:6px;padding:0.6rem 0.8rem;overflow-x:auto;">bool SDL_Init(SDL_InitFlags flags);</pre>
+    <p>
+      <strong>Returns <code>bool</code></strong> — so <code>if (!SDL_Init(...))</code> is the right
+      test — and <strong>takes one <code>SDL_InitFlags</code></strong>. That is the whole contract.
+      Once you learn to mentally delete <code>SDL_DECLSPEC</code> and <code>SDLCALL</code> on sight,
+      every SDL declaration reads as cleanly as a textbook signature. (Other libraries have their
+      own versions of these two macros — <code>GLAPI</code>, <code>VKAPI_CALL</code>, and so on —
+      and the same "delete the plumbing" move works on all of them.)
+    </p>
+  </div>
+
+  <h3 id="logging">3.2 Instrumenting with logs</h3>
+
+  <p>
+    The middle rung of Figure 1 is logging, and its virtue is reach: a log line runs on
+    <em>every</em> machine your program runs on, including the ones you will never touch — a
+    player's PC, a CI runner, a server. The debugger cannot go there; a log line already is there.
+  </p>
+
+  <p>
+    We use <code>SDL_Log</code> rather than <code>printf</code> for one concrete reason: on some
+    platforms (Windows GUI apps, Android) plain <code>stdout</code> goes nowhere visible, and
+    <code>SDL_Log</code> routes to wherever that platform actually shows logs. It is
+    <code>printf</code>-style — a format string and arguments — so it costs nothing to learn.
+  </p>
+
+  <p>
+    The single most valuable log line in any program is the one that prints, at startup, <em>what
+    you are running</em>: versions, build configuration, key paths. When a bug report says "it
+    doesn't work", the first thing you want is to know which build and which library versions the
+    reporter had — and a startup line hands it to you for free. That is exactly the line we add to
+    the engine this lesson.
+  </p>
+
+  <div class="callout note">
+    <span class="label">Logging is not shameful, and it is not a substitute</span>
+    <p>
+      There is a snobbery that says "real programmers use the debugger, only beginners printf".
+      Ignore it. Logging and debugging answer different questions: logging is for
+      <em>always-on, everywhere</em> facts and for bugs you cannot reproduce locally; the debugger
+      is for <em>interactive, deep</em> investigation of a bug you can reproduce. The best engineers
+      use both fluently and never sneer at either. What <em>is</em> a mistake is leaving noisy
+      debug prints scattered through the code after the bug is fixed — a startup line earns its
+      place; <code>printf("here 5")</code> does not.
+    </p>
+  </div>
+
+  <h3 id="debugger-vocab">3.3 The debugger's vocabulary</h3>
+
+  <p>
+    A debugger runs your program under its control, able to pause it (a <strong>breakpoint</strong>),
+    resume it (<strong>continue</strong>), advance it one line at a time (<strong>step</strong>), and
+    read its state (<strong>inspect</strong>) at any pause. The three big debuggers —
+    <strong>lldb</strong> (macOS/Clang), <strong>gdb</strong> (Linux/GCC), and
+    <strong>Visual Studio</strong>'s (Windows/MSVC) — differ only in spelling. Learn the concepts
+    once; the table translates them.
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>What you want</th><th>lldb (macOS)</th><th>gdb (Linux)</th><th>Visual Studio</th></tr></thead>
+      <tbody>
+        <tr><td>Break at a line</td><td><code>b main.cpp:73</code></td><td><code>b main.cpp:73</code></td><td>click the gutter · F9</td></tr>
+        <tr><td>Start running</td><td><code>run</code> / <code>r</code></td><td><code>run</code> / <code>r</code></td><td>F5</td></tr>
+        <tr><td>Continue to next break</td><td><code>continue</code> / <code>c</code></td><td><code>c</code></td><td>F5</td></tr>
+        <tr><td>Step <em>over</em> a line</td><td><code>next</code> / <code>n</code></td><td><code>n</code></td><td>F10</td></tr>
+        <tr><td>Step <em>into</em> a call</td><td><code>step</code> / <code>s</code></td><td><code>s</code></td><td>F11</td></tr>
+        <tr><td>Step <em>out</em> of a function</td><td><code>finish</code></td><td><code>finish</code></td><td>Shift+F11</td></tr>
+        <tr><td>Inspect a variable</td><td><code>frame variable x</code> / <code>p x</code></td><td><code>p x</code></td><td>hover · Locals / Watch</td></tr>
+        <tr><td>Show the call stack</td><td><code>bt</code></td><td><code>bt</code></td><td>Call Stack window</td></tr>
+        <tr><td>Break <em>only if</em> a condition</td><td><code>b main.cpp:82 -c 'cond'</code></td><td><code>b main.cpp:82 if cond</code></td><td>right-click the breakpoint → Conditions</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    The distinction between step <em>over</em> and step <em>into</em> is the one beginners miss:
+    <strong>over</strong> runs a called function to completion and stops on the next line here;
+    <strong>into</strong> descends inside that function to debug it line by line. Step over
+    <code>SDL_CreateWindow</code> — you do not want to debug SDL's insides; step into
+    <em>your own</em> helper when the bug might live there. And the <strong>backtrace</strong> —
+    the chain of who-called-whom that led to the current line — is how you answer "how did I even
+    get here?", the question behind most crashes.
+  </p>
+
+  <!-- ================= 5. IMPLEMENTATION ================= -->
+  <h2 id="implementation"><span class="num">4</span>Implementation: instrument, then hunt a bug</h2>
+
+  <h3 id="impl-log">4.1 Part A — a startup log line</h3>
+
+  <p>
+    First, rung 2: give the engine a voice. Right after <code>SDL_Init</code> succeeds, we log the
+    SDL version we linked against — the query from <a href="00-04-cmake-from-zero.html">0.4</a>,
+    now in its permanent home:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/main.cpp — the startup log (added after SDL_Init)</span>
+      <span class="tag modified">modified</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">    const int sdl_version = SDL_GetVersion();
+    SDL_Log("Engine starting — SDL %d.%d.%d",
+            SDL_VERSIONNUM_MAJOR(sdl_version),
+            SDL_VERSIONNUM_MINOR(sdl_version),
+            SDL_VERSIONNUM_MICRO(sdl_version));</code></pre>
+  </figure>
+
+  <p>
+    One line of output, every run. It looks trivial, and it is the kind of triviality that pays for
+    itself the first time someone's window fails to open and this line reveals they are somehow
+    running SDL 3.2 from a stale system install. Instrumentation is cheap; ignorance at debugging
+    time is not.
+  </p>
+
+  <h3 id="impl-debug">4.2 Part B — hunting the flash-and-close bug</h3>
+
+  <p>
+    Now rung 3, on a real bug. Reintroduce the flash-and-close bug from
+    <a href="00-05-first-window.html#exercises">0.5.4</a>: change line 72 so the loop flag starts
+    wrong.
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/main.cpp — a deliberate bug, to hunt (revert after!)</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">    bool running = false;   // BUG: should be true. The window will flash and close.</code></pre>
+  </figure>
+
+  <p>
+    Build with debug symbols — <code>-g</code>, which CMake adds when you configure a
+    <strong>Debug</strong> build — so the debugger can map machine code back to your source lines:
+  </p>
+
+  <figure class="listing shell">
+    <figcaption>
+      <span class="path">configure a debuggable build</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash">cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+cmake --build build</code></pre>
+  </figure>
+
+  <p>
+    Now the hunt. We have a hypothesis to test — "the loop is not running" — so we place a
+    breakpoint <em>inside</em> the loop and see whether it is ever reached. On macOS with lldb (gdb
+    and Visual Studio do the same thing; see the §<a href="#debugger-vocab">3.3</a> table):
+  </p>
+
+  <figure class="listing shell">
+    <figcaption>
+      <span class="path">lldb — is the loop body ever reached?</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash">$ lldb ./build/engine
+(lldb) breakpoint set --file main.cpp --line 95     # inside the loop (SDL_RenderClear)
+Breakpoint 1: where = engine`main + 488 at main.cpp:95:25, address = 0x...
+(lldb) run
+Engine starting — SDL 3.4.12
+Process 92843 launched: '.../build/engine' (arm64)
+Process 92843 exited with status = 0 (0x00000000)    # ← it exited WITHOUT stopping</code></pre>
+  </figure>
+
+  <p>
+    That is the whole clue, and it is decisive: the program ran to completion and
+    <strong>the breakpoint never fired</strong>. The loop body at line 95 was never executed. So
+    the loop must be skipped entirely — which means its condition was false the very first time it
+    was tested. Now we know <em>where</em> to look. Break on the loop condition and inspect it:
+  </p>
+
+  <figure class="listing shell">
+    <figcaption>
+      <span class="path">lldb — inspect the loop condition</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash">(lldb) breakpoint set --file main.cpp --line 73     # the `while (running)`
+Breakpoint 2: where = engine`main + 356 at main.cpp:73:5, address = 0x...
+(lldb) run
+Process 92873 stopped
+* thread #1, queue = 'com.apple.main-thread', stop reason = breakpoint 2.1
+    frame #0: ... engine`main(argc=1, argv=...) at main.cpp:73:5
+-> 73      while (running)
+(lldb) frame variable running
+(bool) running = false                              # ← there it is</code></pre>
+  </figure>
+
+  <p>
+    <code>running</code> is <code>false</code> before the loop has run once. Open line 72, and the
+    bug is staring at you: <code>bool running = false;</code>. Change it back to <code>true</code>,
+    rebuild, and the window stays. <strong>We did not change a single line on a hunch.</strong> We
+    formed a hypothesis, tested it with a breakpoint, read the answer off the program itself, and
+    fixed the one thing that was actually wrong. Figure 2 is that hunt as a flow — and it is the
+    shape of every good debugging session.
+  </p>
+
+  <figure class="dia bleed">
+    <svg viewBox="0 0 660 280" role="img" aria-labelledby="f2-t f2-d">
+      <title id="f2-t">A debugging session as a decision flow</title>
+      <desc id="f2-d">Start with the symptom: the window flashes and closes. Form a hypothesis: the
+        loop is not running. Test it by breaking inside the loop and running. The breakpoint never
+        fires, confirming the loop body never executes. Narrow: break on the loop condition and
+        inspect the flag. It is false. Root cause found: the flag was initialised false. Fix, and
+        verify.</desc>
+      <defs>
+        <marker id="d2-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+      </defs>
+      <g font-size="11">
+        <rect x="20" y="20" width="150" height="44" rx="7" class="fill-soft" stroke="var(--verify-bd)" stroke-width="1.5"/>
+        <text x="95" y="39" class="xs t-bad" text-anchor="middle" font-weight="700">Symptom</text>
+        <text x="95" y="54" class="xs muted" text-anchor="middle">window flashes, closes</text>
+
+        <rect x="20" y="98" width="150" height="44" rx="7" class="fill-soft" stroke="var(--dia-ink)" stroke-width="1.4"/>
+        <text x="95" y="117" class="xs" text-anchor="middle" font-weight="700">Hypothesis</text>
+        <text x="95" y="132" class="xs muted" text-anchor="middle">"the loop isn't running"</text>
+
+        <rect x="255" y="98" width="160" height="44" rx="7" class="fill-soft" stroke="var(--dia-hi)" stroke-width="1.5"/>
+        <text x="335" y="117" class="xs t-hi" text-anchor="middle" font-weight="700">Test: break in the loop</text>
+        <text x="335" y="132" class="xs muted" text-anchor="middle">breakpoint never fires</text>
+
+        <rect x="255" y="178" width="160" height="44" rx="7" class="fill-soft" stroke="var(--dia-hi)" stroke-width="1.5"/>
+        <text x="335" y="197" class="xs t-hi" text-anchor="middle" font-weight="700">Narrow: break on `while`</text>
+        <text x="335" y="212" class="xs mono muted" text-anchor="middle">running = false</text>
+
+        <rect x="490" y="178" width="150" height="44" rx="7" class="fill-soft" stroke="var(--ok-bd)" stroke-width="1.6"/>
+        <text x="565" y="197" class="xs t-ok" text-anchor="middle" font-weight="700">Root cause</text>
+        <text x="565" y="212" class="xs muted" text-anchor="middle">init'd false → fix → verify</text>
+
+        <g class="ink" stroke-width="1.4" marker-end="url(#d2-a)" fill="none">
+          <line x1="95" y1="64" x2="95" y2="96"/>
+          <line x1="170" y1="120" x2="253" y2="120"/>
+          <line x1="335" y1="142" x2="335" y2="176"/>
+          <line x1="415" y1="200" x2="488" y2="200"/>
+        </g>
+        <text x="212" y="112" class="xs muted" text-anchor="middle">observe</text>
+        <text x="352" y="164" class="xs muted" text-anchor="middle">observe</text>
+      </g>
+      <text x="330" y="262" class="sm" text-anchor="middle" font-weight="700">
+        Each step is an observation, not a change. The bug is cornered, then fixed once.
+      </text>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 2.</span> The hunt. Symptom → hypothesis → test by observation →
+      narrow → root cause. No code changed until the very end, and then only the one line that was
+      wrong. This is the opposite of debugging by voodoo.
+    </figcaption>
+  </figure>
+
+  <div class="callout ok">
+    <span class="label">Do not forget to revert</span>
+    <p>
+      That <code>bool running = false;</code> was a bug we introduced to hunt. Put it back to
+      <code>true</code> — the committed engine has the correct line plus the new startup log, and
+      nothing else. (This is also a nudge toward version control: <code>git diff</code> would show
+      you exactly the one-character bug, and <code>git stash</code> or <code>git checkout</code>
+      would undo an experiment instantly. We lean on git properly from Module 5.)
+    </p>
+  </div>
+
+  <!-- ================= 6. COMPLETE CODE LISTINGS ================= -->
+  <h2 id="listings"><span class="num">5</span>Complete Code Listings</h2>
+
+  <div class="tbl-scroll">
+    <table class="manifest">
+      <thead><tr><th>Path</th><th>Status</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td>src/main.cpp</td><td><span class="badge mod">modified</span></td><td>Adds a startup log line reporting the linked SDL version. The rest is unchanged from 0.5.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/main.cpp</span>
+      <span class="tag modified">modified</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// src/main.cpp — the engine's entry point.
+//
+// This is the first file of the real engine. It replaces the throwaway
+// hello.cpp: it opens a window, runs an event loop that responds to input, and
+// shuts down cleanly. The loop here is deliberately naive — Module 1 replaces it
+// with a proper fixed-timestep loop — but the structure (init, create, loop,
+// destroy) is the skeleton every engine shares.
+
+#include &lt;SDL3/SDL.h&gt;
+#include &lt;SDL3/SDL_main.h&gt;   // Provides the cross-platform entry point. NOTE:
+                             // &lt;SDL3/SDL.h&gt; deliberately does NOT include this,
+                             // so we include it explicitly, exactly once, here.
+
+int main(int argc, char* argv[])
+{
+    // We do not use command-line arguments yet. Marking them silences the
+    // -Wall -Wextra "unused parameter" warning without weakening the signature
+    // SDL's entry point requires.
+    (void)argc;
+    (void)argv;
+
+    // ---- 1. Initialise the SDL subsystems we need --------------------------
+    // SDL3's SDL_Init returns a bool: true on success, false on failure. (This
+    // changed from SDL2, where it returned an int — one of many SDL2 habits to
+    // unlearn.) SDL_INIT_VIDEO also brings up the event subsystem we rely on.
+    if (!SDL_Init(SDL_INIT_VIDEO))
+    {
+        SDL_Log("SDL_Init failed: %s", SDL_GetError());
+        return 1;
+    }
+
+    // Log what we actually linked against. This one line is the first thing you
+    // want in a bug report — "it doesn't work" is far more tractable once you
+    // know which SDL the machine is running. It is "instrument the program", the
+    // middle of the three debugging tools from Lesson 0.6.
+    const int sdl_version = SDL_GetVersion();
+    SDL_Log("Engine starting — SDL %d.%d.%d",
+            SDL_VERSIONNUM_MAJOR(sdl_version),
+            SDL_VERSIONNUM_MINOR(sdl_version),
+            SDL_VERSIONNUM_MICRO(sdl_version));
+
+    // ---- 2. Create the window ----------------------------------------------
+    // Note the SDL3 signature: title, width, height, flags — and NO x/y
+    // position (SDL places the window). A null return means failure, and the
+    // reason is always in SDL_GetError().
+    SDL_Window* window = SDL_CreateWindow("Engine", 1280, 720, SDL_WINDOW_RESIZABLE);
+    if (window == nullptr)
+    {
+        SDL_Log("SDL_CreateWindow failed: %s", SDL_GetError());
+        SDL_Quit();
+        return 1;
+    }
+
+    // ---- 3. Create a renderer ----------------------------------------------
+    // For now the renderer exists only so the window shows a defined colour
+    // instead of undefined garbage. Passing nullptr for the name lets SDL pick
+    // the best backend. Module 1 replaces this with our own CPU pixel buffer,
+    // so treat the renderer as scaffolding, not architecture.
+    SDL_Renderer* renderer = SDL_CreateRenderer(window, nullptr);
+    if (renderer == nullptr)
+    {
+        SDL_Log("SDL_CreateRenderer failed: %s", SDL_GetError());
+        SDL_DestroyWindow(window);
+        SDL_Quit();
+        return 1;
+    }
+
+    // ---- 4. The main loop --------------------------------------------------
+    // Naive on purpose: poll every pending event, then draw one frame, forever,
+    // until we are told to stop. Module 1.4 derives the real loop — with a fixed
+    // simulation step and render interpolation — from this starting point.
+    bool running = true;
+    while (running)
+    {
+        // Drain the event queue. SDL_PollEvent returns true while events remain
+        // and fills `event`; it returns false (a SDL3 bool, again) when empty.
+        SDL_Event event;
+        while (SDL_PollEvent(&amp;event))
+        {
+            if (event.type == SDL_EVENT_QUIT)
+            {
+                // The user closed the window (title-bar button, Cmd/Alt+F4, …).
+                running = false;
+            }
+            else if (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_ESCAPE)
+            {
+                // SDL3 keyboard events expose the virtual key in event.key.key.
+                // (SDL2 nested it as event.key.keysym.sym — do not reach for that.)
+                running = false;
+            }
+        }
+
+        // Fill the window with a calm dark slate so we can see it is alive.
+        SDL_SetRenderDrawColor(renderer, 30, 30, 46, 255);
+        SDL_RenderClear(renderer);
+        SDL_RenderPresent(renderer);
+    }
+
+    // ---- 5. Shut down, in reverse order of creation ------------------------
+    // We destroy what we made, newest first, then quit SDL. Doing this by hand
+    // is error-prone and easy to forget on an early-return path (notice we had
+    // to repeat parts of it above). Module 5 wraps each resource in an RAII type
+    // so cleanup becomes automatic — this manual version is here so you feel the
+    // problem RAII solves.
+    SDL_DestroyRenderer(renderer);
+    SDL_DestroyWindow(window);
+    SDL_Quit();
+    return 0;
+}</code></pre>
+  </figure>
+
+  <!-- ================= 7. BUILD & RUN ================= -->
+  <h2 id="build"><span class="num">6</span>Build &amp; Run</h2>
+
+  <p>Build as usual, and run — you now get a line of output before the window appears:</p>
+
+  <figure class="listing shell">
+    <figcaption>
+      <span class="path">build, run, and read the log</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash">cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+cmake --build build
+./build/engine
+# → Engine starting — SDL 3.4.12
+#   (then the window opens; Esc or the close button ends it cleanly)</code></pre>
+  </figure>
+
+  <div class="callout ok">
+    <span class="label">Checkpoint — verified before publishing</span>
+    <p>
+      This exact <code>src/main.cpp</code> was built in a Debug configuration and run: it prints
+      <code>Engine starting — SDL 3.4.12</code> at startup (your version string matching the tag
+      you pinned) and then behaves exactly as in 0.5. The debugger walkthrough above was checked
+      against the real program: with the deliberate bug, a breakpoint inside the loop truly never
+      fires and the program exits immediately, and a breakpoint on the <code>while</code> shows
+      <code>running = false</code>. If your log line prints and the debugger stops where you expect,
+      you have both skills working.
+    </p>
+  </div>
+
+  <!-- ================= 8. PITFALLS ================= -->
+  <h2 id="pitfalls"><span class="num">7</span>Common Pitfalls &amp; Debugging</h2>
+
+  <div class="pitfalls">
+    <details class="pitfall-item">
+      <summary>Breakpoints do nothing / "no debug symbols" — <span class="sym">the debugger can't stop</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>Breakpoints are greyed out, ignored, or the debugger says it has no line information.</dd>
+          <dt>Cause</dt>
+          <dd>You built without debug symbols. A default or Release build strips the mapping from machine code back to your source lines, so the debugger has nothing to attach a breakpoint to.</dd>
+          <dt>Fix</dt>
+          <dd>Configure a Debug build: <code>cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug</code> (single-config generators) or build with <code>cmake --build build --config Debug</code> (Visual Studio). Debug adds <code>-g</code> and turns optimization off, which is what makes stepping sane.</dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>A variable shows <code>&lt;optimized out&gt;</code> — <span class="sym">can't inspect a value</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>Inspecting a variable in the debugger reports <code>&lt;optimized out&gt;</code> or a nonsense value, and stepping jumps around unpredictably.</dd>
+          <dt>Cause</dt>
+          <dd>You are debugging an optimized build. The optimizer reorders and eliminates code, so "this line" and "this variable" may not exist as written. This is the "works in Debug, weird in Release" family.</dd>
+          <dt>Fix</dt>
+          <dd>Debug the Debug build. If a bug <em>only</em> appears in Release, it is usually undefined behaviour that the optimizer exposed — a topic we take seriously with sanitizers later. For now, keep the debugger on the un-optimized build.</dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>The header you read doesn't match your build — <span class="sym">the signature is subtly different</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>A function's signature in the docs or a header you found online does not match what compiles.</dd>
+          <dt>Cause</dt>
+          <dd>You read a different SDL version's header than you build against — the wiki's latest, or <code>main</code> instead of your pinned <code>release-3.4.12</code>. APIs evolve between versions.</dd>
+          <dt>Fix</dt>
+          <dd>Read the header at <em>your</em> pinned tag — grep <code>build/_deps/sdl3-src/include/</code>, which is exactly what you build against, or use the <code>release-3.4.12</code> URL. The version on disk is the one that counts.</dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>Drowning in <code>SDL_DECLSPEC</code> and <code>SDLCALL</code> — <span class="sym">the declaration looks alien</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>Header declarations look impenetrable, full of upper-case words you do not recognise.</dd>
+          <dt>Cause</dt>
+          <dd>Export and calling-convention macros (<code>SDL_DECLSPEC</code>, <code>SDLCALL</code>, and their equivalents in every C library) sit between the return type and the name, and they carry no meaning for a caller.</dd>
+          <dt>Fix</dt>
+          <dd>Mentally delete them, as in §<a href="#reading-headers">3.1</a>. What remains — return type, name, parameters — is the whole contract. This is a reading habit that becomes automatic within a week.</dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>Print-debugging that never leaves — <span class="sym">the code is littered with logs</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>Weeks later the source is full of <code>SDL_Log("here")</code>, <code>SDL_Log("5")</code>, and commented-out prints.</dd>
+          <dt>Cause</dt>
+          <dd>Print-debugging left in place. Logging is a fine <em>tool</em>, but temporary probes are temporary; leaving them turns real logs into noise and the code into a mess.</dd>
+          <dt>Fix</dt>
+          <dd>Delete probe prints once the bug is found — <code>git diff</code> makes them easy to spot. Keep only logs that earn their place, like the startup version line. When you find yourself adding and removing prints repeatedly, that is the signal to switch to the debugger instead.</dd>
+        </dl>
+      </div>
+    </details>
+  </div>
+
+  <!-- ================= 9. EXERCISES ================= -->
+  <h2 id="exercises"><span class="num">8</span>Exercises</h2>
+
+  <div class="exercise">
+    <h3><span class="xnum">0.6.1</span>Decode a declaration<span class="difficulty">warm-up</span></h3>
+    <p>
+      Grep the SDL headers for <code>SDL_CreateRenderer</code> and read its full declaration. Strip
+      the macros and write out the plain signature: what does it return, and what are its
+      parameters? Then do the same for <code>SDL_GetError</code>.
+    </p>
+    <details>
+      <summary>Solution</summary>
+      <p>
+        <code>SDL_Renderer *SDL_CreateRenderer(SDL_Window *window, const char *name)</code> — returns
+        a pointer to a renderer (null on failure), taking the window to attach to and a backend name
+        (<code>nullptr</code> for the default). <code>const char *SDL_GetError(void)</code> — returns
+        a read-only C string, takes nothing. The <code>const</code> on the return is the library
+        telling you: do not modify or free this string, it is SDL's. Reading that <code>const</code>
+        correctly is exactly the fluency this lesson builds.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3><span class="xnum">0.6.2</span>A conditional breakpoint<span class="difficulty">guided</span></h3>
+    <p>
+      With the engine running under the debugger, set a breakpoint on the key-handling line that
+      fires <em>only</em> when a key-down event arrives — not on every event. Then press a few keys
+      and confirm it stops only for key presses. Why is a conditional breakpoint better here than a
+      plain one?
+    </p>
+    <details>
+      <summary>Hint</summary>
+      <p>
+        In lldb: <code>breakpoint set --file main.cpp --line &lt;line&gt; --condition
+        'event.type == SDL_EVENT_KEY_DOWN'</code>. In gdb:
+        <code>break main.cpp:&lt;line&gt; if event.type == SDL_EVENT_KEY_DOWN</code>.
+      </p>
+    </details>
+    <details>
+      <summary>Solution sketch</summary>
+      <p>
+        A plain breakpoint inside the event loop would stop on <em>every</em> event — mouse motion
+        fires dozens per second — and you would spend all your time hitting "continue". The
+        condition makes the debugger do the filtering, stopping only when the event is the one you
+        care about. Conditional breakpoints are how you find a needle in a busy loop without
+        drowning, and the loop of an engine is the busiest place there is.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3><span class="xnum">0.6.3</span>Read the call stack<span class="difficulty">guided</span></h3>
+    <p>
+      Set a breakpoint inside the event loop, run, and when it stops, print the backtrace
+      (<code>bt</code>). What does it show, and what would it show if the breakpoint were instead
+      inside a helper function called from the loop?
+    </p>
+    <details>
+      <summary>Solution sketch</summary>
+      <p>
+        Here the backtrace is short — essentially <code>main</code> at the current line, sitting on
+        top of SDL's platform entry-point frames from <code>SDL_main.h</code> (a nice glimpse of the
+        machinery from 0.5). If you were stopped inside a helper, the backtrace would show the whole
+        chain: helper ← its caller ← … ← <code>main</code>. That chain is how you answer "how did I
+        get here?" — indispensable when a function is called from many places and only one of them
+        misbehaves. It is the first tool you reach for on a crash.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3><span class="xnum">0.6.4</span>Find it in the header, then confirm it live<span class="difficulty">open</span></h3>
+    <p>
+      Exercise 0.5.2 asked you to log a window's new size on resize, using
+      <code>event.window.data1</code>/<code>data2</code>. Now do it properly: <em>first</em> grep
+      the header to confirm those field names and types for your pinned SDL, <em>then</em> add the
+      log, <em>then</em> set a breakpoint on it and inspect <code>event.window</code> in the
+      debugger as you drag the window. Three tools, one small feature.
+    </p>
+    <details>
+      <summary>Solution sketch</summary>
+      <p>
+        Grepping <code>build/_deps/sdl3-src/include/SDL3/SDL_events.h</code> for
+        <code>SDL_WindowEvent</code> shows the struct, with <code>Sint32 data1</code> and
+        <code>data2</code> holding the new width and height for a resize. The log confirms it at
+        runtime; the debugger lets you pause on a single resize and inspect the whole
+        <code>event.window</code> struct — <code>windowID</code>, <code>type</code>, and the data
+        fields — in one place. This is the loop you will run thousands of times over the course:
+        <em>header for the contract, log for the always-on signal, debugger for the deep look.</em>
+        You now have all three.
+      </p>
+    </details>
+  </div>
+
+  <!-- ================= 10. RECAP & NEXT ================= -->
+  <h2 id="recap"><span class="num">9</span>Recap &amp; Next</h2>
+
+  <div class="recap">
+    <h2>What you can do now — and Module 0 is complete</h2>
+    <ul>
+      <li>
+        <strong>You read headers as the source of truth.</strong> You can find any SDL declaration
+        (grep the fetched source, or curl the pinned tag) and strip the macro plumbing to the real
+        signature.
+      </li>
+      <li>
+        <strong>You have three tools of visibility</strong> — compiler, logging, debugger — and know
+        which to reach for.
+      </li>
+      <li>
+        <strong>You hunt bugs by observation.</strong> Symptom → hypothesis → test with a breakpoint
+        → inspect → root cause. No more voodoo.
+      </li>
+      <li>
+        <strong>The engine has a voice</strong> — a startup log line — and you know why that one
+        line matters.
+      </li>
+    </ul>
+    <p>
+      The idea to carry forward: <strong>when you are unsure, look — don't guess.</strong> The
+      header tells you what the API is; the debugger tells you what your program does. Between them,
+      almost nothing stays mysterious for long.
+    </p>
+    <p>
+      <strong>That completes Module 0.</strong> You have a verified cross-platform toolchain, a
+      portable CMake build that fetches SDL3, a window with a clean event loop, and the two
+      investigative skills to debug all of it. The scaffolding is done — everything from here builds
+      the engine proper.
+    </p>
+    <p>
+      <strong>Next:</strong> <a href="01-01-events-properly.html">1.1 — Events, Properly</a>, the
+      start of <strong>Module 1 — The Loop, the Pixel, and Time</strong>. We took the event loop on
+      faith in 0.5 — "drain the queue, handle a couple of types." Now we do it properly: every event
+      category SDL delivers, the difference between an event and a state, and an input layer that
+      answers both "is the key down?" and "was it just pressed?" — the questions gameplay actually
+      asks.
+    </p>
+  </div>
+
+  <!-- ================= 11. FURTHER READING ================= -->
+  <h2 id="reading"><span class="num">10</span>Further Reading</h2>
+
+  <ul class="reading">
+    <li>
+      <span class="src">Reference</span>
+      <strong><a href="https://lldb.llvm.org/use/tutorial.html">The LLDB Tutorial</a></strong> and
+      <strong><a href="https://sourceware.org/gdb/current/onlinedocs/gdb.html/">the GDB manual</a></strong> —
+      the authoritative command references. You need only a dozen commands; these have the rest for
+      when you do.
+    </li>
+    <li>
+      <span class="src">Reference</span>
+      <strong><a href="https://learn.microsoft.com/en-us/visualstudio/debugger/">Visual Studio debugger docs</a></strong> —
+      if you are on Windows, its graphical debugger is genuinely excellent; this is the guided tour.
+    </li>
+    <li>
+      <span class="src">Tool</span>
+      <strong><a href="https://godbolt.org/">Compiler Explorer (godbolt)</a></strong> — paste a
+      snippet and see the assembly and the errors from many compilers at once. The fastest way to
+      answer "does this even compile, and what does it become?"
+    </li>
+    <li>
+      <span class="src">SDL3 wiki</span>
+      <strong><a href="https://wiki.libsdl.org/SDL3/SDL_Log">SDL_Log</a></strong> and the
+      <strong><a href="https://wiki.libsdl.org/SDL3/CategoryLog">logging category</a></strong> —
+      log priorities and categories, for when one startup line grows into a real logging strategy
+      (which we build in Module 5).
+    </li>
+    <li>
+      <span class="src">Essay</span>
+      <strong>“Rubber duck debugging”</strong> and the observation-first mindset — the discipline of
+      explaining the bug aloud, step by step, until the wrong assumption reveals itself. The
+      debugger is the tool; this is the habit.
+    </li>
+  </ul>
+
+  <!-- ================= 12. STATE ================= -->
+  <details class="state">
+    <summary>STATE — resume key</summary>
+<pre>course: Build a Professional 3D Game Engine (SDL3 + C++20)
+version: 1.0
+
+conventions:
+  world: right-handed, Y-up, -Z forward
+  clip: left-handed, +Y up, z in [0,1] (SDL_GPU-fixed; projection absorbs the flip)
+  sw-rasterizer: targets SDL_GPU's exact NDC (port = API change, not maths change)
+  matrices: column vectors, v' = M*v, column-major storage
+  winding: CCW = front, cull back (per-pipeline state; set explicitly every time)
+  units: 1 unit = 1 metre; radians internally; linear colour in renderer
+  axis colours: x/y/z = red/green/blue
+  sdl3: FetchContent, pinned release-3.4.12; target SDL3::SDL3; SDL_TEST_LIBRARY OFF
+  sdl3-api: bool SDL_Init/PollEvent; SDL_CreateWindow(title,w,h,flags) no x/y;
+            SDL_CreateRenderer(window,name); event.key.key; <SDL3/SDL_main.h> separate
+  cpp: C++20, no exceptions/RTTI in core, snake_case, -Wall -Wextra//W4 all fixed
+  build: CMake >= 3.24, out-of-source (build/), 64-bit; Debug = -DCMAKE_BUILD_TYPE=Debug
+  debug: read headers via grep build/_deps or curl @tag; lldb/gdb/VS; observe, don't guess
+
+curriculum: 94 lessons, ~433 h, 9 modules
+  M0:6  M1:8  M2:12  M3:10  M4:9  M5:10  M6:15  M7:13  M8:11
+
+completed:
+  - 0.1 What a Game Engine Actually Is · 0.2 How This Course Works
+  - 0.3 Setting Up Your Toolchain · 0.4 CMake From Zero
+  - 0.5 Your First Window · 0.6 Reading Headers & the Debugger
+  --> MODULE 0 COMPLETE <--
+
+capabilities:
+  - verified C++20 toolchain (MSVC/GCC/Clang), portable CMake build, FetchContent SDL3
+  - engine app: window + event loop (quit + Esc), clean shutdown, startup version log
+  - skills: reading SDL headers as source of truth; lldb/gdb/VS debugging
+
+files:
+  /: CLAUDE.md, README.md, ARCHITECTURE.md, LEARNINGS.md, PROMPT.md, LICENSE,
+     .gitignore, CMakeLists.txt, STATE.md
+  src/: main.cpp
+  docs/: index.html, conventions.html, math-toolbox.html, cpp-style.html
+  docs/lessons/: 00-01..00-06 (.html)
+  docs/_template/: lesson-template.html, README.md, apply-shared-css.py
+  memory/: 2026-07-16.md
+
+next: 1.1 — Events, Properly  (Module 1 — The Loop, the Pixel, and Time)</pre>
+  </details>
+
+  <nav class="lesson-nav" aria-label="Lesson navigation (bottom)">
+    <a class="prev-l" href="00-05-first-window.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">0.5 — Your First Window</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="01-01-events-properly.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">1.1 — Events, Properly</span>
+    </a>
+  </nav>
+
+  <footer class="foot">
+    <p>
+      Build a Professional 3D Game Engine ·
+      <a href="../index.html">Contents</a> ·
+      <a href="../conventions.html">Conventions</a> ·
+      <a href="../math-toolbox.html">Math Toolbox</a> ·
+      <a href="../cpp-style.html">C++ Style</a>
+    </p>
+    <p>MIT licensed. Copyright © 2026 digster.</p>
+  </footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ---- Theme toggle (identical across the course) ---- */
+  var root = document.documentElement;
+  var KEY = "engine-course-theme";
+  try {
+    var saved = localStorage.getItem(KEY);
+    if (saved) { root.setAttribute("data-theme", saved); root.style.colorScheme = saved; }
+  } catch (e) {}
+  var btn = document.getElementById("theme-toggle");
+  if (btn) {
+    btn.addEventListener("click", function () {
+      var cur = root.getAttribute("data-theme");
+      if (!cur) cur = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      var next = cur === "dark" ? "light" : "dark";
+      root.setAttribute("data-theme", next);
+      root.style.colorScheme = next;
+      try { localStorage.setItem(KEY, next); } catch (e) {}
+    });
+  }
+
+  /* ---- Syntax highlighting: C++ and shell ---- */
+  function esc(s) { return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+  function span(c, s) { return '<span class="tok-' + c + '">' + esc(s) + "</span>"; }
+
+  var CPP_KEYWORDS = ("consteval constexpr const static void struct class enum namespace return "
+    + "if else for while inline noexcept nullptr true false int long defined static_assert "
+    + "static_cast bool char").split(" ");
+  var CPP_TYPES = ("bool char double float int long short signed unsigned void size_t Uint8 Uint32 "
+    + "Uint64 Sint32").split(" ");
+  var kw = Object.create(null), ty = Object.create(null);
+  CPP_KEYWORDS.forEach(function (w) { kw[w] = 1; });
+  CPP_TYPES.forEach(function (w) { ty[w] = 1; });
+  var CPP_RE = new RegExp([
+    "(\\/\\*[\\s\\S]*?\\*\\/|\\/\\/[^\\n]*|#[^\\n]*)",
+    '("(?:\\\\.|[^"\\\\])*"|\'(?:\\\\.|[^\'\\\\])*\')',
+    "(\\b\\d[\\w.]*\\b)",
+    "([A-Za-z_]\\w*)(?=\\s*\\()",
+    "([A-Za-z_]\\w*)",
+    "([{}()\\[\\];,.<>+\\-*/%=!&|^~?:]+)"
+  ].join("|"), "g");
+  function highlightCpp(src) {
+    var out = "", last = 0, m;
+    CPP_RE.lastIndex = 0;
+    while ((m = CPP_RE.exec(src)) !== null) {
+      if (m.index > last) out += esc(src.slice(last, m.index));
+      if (m[1])      out += span(m[1].charAt(0) === "#" ? "p" : "c", m[1]);
+      else if (m[2]) out += span("s", m[2]);
+      else if (m[3]) out += span("n", m[3]);
+      else if (m[4]) out += kw[m[4]] ? span("k", m[4]) : span("f", m[4]);
+      else if (m[5]) out += kw[m[5]] ? span("k", m[5]) : ty[m[5]] ? span("t", m[5]) : esc(m[5]);
+      else if (m[6]) out += span("o", m[6]);
+      last = CPP_RE.lastIndex;
+    }
+    return out + esc(src.slice(last));
+  }
+
+  var SH_RE = /(#[^\n]*)|("(?:\\.|[^"\\])*"|'[^']*')|(^|\n)(\s*)([\w.\/\\-]+)/g;
+  function highlightShell(src) {
+    var out = "", last = 0, m;
+    SH_RE.lastIndex = 0;
+    while ((m = SH_RE.exec(src)) !== null) {
+      if (m.index > last) out += esc(src.slice(last, m.index));
+      if (m[1]) out += span("c", m[1]);
+      else if (m[2]) out += span("s", m[2]);
+      else out += esc(m[3] || "") + esc(m[4] || "") + span("f", m[5]);
+      last = SH_RE.lastIndex;
+    }
+    return out + esc(src.slice(last));
+  }
+
+  var DISPATCH = { "lang-cpp": highlightCpp, "lang-bash": highlightShell };
+  document.querySelectorAll(".listing pre code").forEach(function (el) {
+    for (var cls in DISPATCH) {
+      if (el.classList.contains(cls)) { el.innerHTML = DISPATCH[cls](el.textContent); return; }
+    }
+  });
+})();
+</script>
+</body>
+</html>
