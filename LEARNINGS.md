@@ -285,6 +285,53 @@ order, revealed the 10.9× gap. When a benchmark says a well-founded effect is a
 measurement before believing the result — and always measure at `-O2`, since the ratio was 3× larger
 there than in a Debug build.
 
+### Colour: sRGB encoding (Lesson 1.6) — all numbers computed twice
+
+Stored channel values are **sRGB-encoded**, not quantities of light. Every figure below was derived
+in Python and then reproduced by the C++ implementation, so the lesson and the engine agree.
+
+| Fact | Value |
+|---|---|
+| What the stored value **128** emits | **21.6%** of white's light |
+| What stores as **half the light** | **188** (which decodes to 0.5029) |
+| Red ⊕ green at `t = 0.5`, naive | `(128, 128, 0)` — a dark olive |
+| …the same mix in linear light | `(188, 188, 0)` — a bright yellow |
+| Fade table (light → correct store, naive store, what naive emits) | 75% → 225 / 191 / 52.1% · 50% → 188 / 128 / 21.6% · **25% → 137 / 64 / 5.1%** · 10% → 89 / 26 / 1.0% |
+| Code budget | Evenly spaced light puts **26** of 256 codes in the darkest 10%; sRGB puts **90**. Evenly spaced wastes **128** on the brightest half; sRGB spends **68**. |
+
+**Use the exact piecewise transform, not `pow(x, 2.2)`.** Threshold `0.04045`, slope `12.92`, offset
+`0.055`, exponent `2.4`. The linear toe near black exists because the pure power curve has infinite
+slope at the origin. "Close" is how a pipeline accumulates an error nobody can later locate.
+
+**The encode/decode round trip is lossless for all 256 values** — verified, zero failures. Storing a
+colour, decoding it and re-encoding it unchanged costs nothing, which is what makes per-operation
+conversion tolerable as a stopgap.
+
+**Tabulate decode, not encode.** Decode has exactly 256 possible inputs, so the whole function fits
+in a kilobyte and replaces a `pow` with a load. Encode's input is a continuous float and cannot be
+tabulated. The asymmetry is structural, not a matter of which deserves optimising.
+
+**ALPHA IS COVERAGE, NOT LIGHT.** Never put it through the transfer function. `mix_linear` converts
+three channels and leaves the fourth alone. Getting this wrong makes 50% alpha behave like ~20%, and
+because nothing composites yet, the bug can wait months before surfacing as "transparency looks
+wrong" in a system nobody would connect to a colour function.
+
+**Safe on stored values:** copying, comparing, picking a colour by eye. **Wrong:** mixing,
+cross-fading, alpha blending, averaging, downscaling/mipmapping, adding light from two sources,
+anti-aliased edges. The rule is exact — anything that *combines* two colours arithmetically is
+wrong; anything that merely *moves* them is fine.
+
+**We are not linear yet, and the lesson says so.** Converting per operation is slow and lossy. A
+real pipeline decodes once at the inputs and encodes once at the output, which requires a
+float/half framebuffer (8-bit *linear* bands visibly — that is what the code-budget row above
+means), headroom above 1.0 for values brighter than white, and a tonemap step to bring it back.
+Module 6.
+
+**The diagnostic fingerprints,** worth memorising: red and blue swapped with green fine = channel
+order, never gamma. Muddy cross-fades, fades that fall off a cliff, darkening mipmaps and fringed
+anti-aliased text = gamma. Washed-out milky output = the conversion applied twice or in the wrong
+direction.
+
 **Loop model:** we use classic `int main` + our own `while` loop, NOT SDL3's callback model
 (`SDL_MAIN_USE_CALLBACKS` with `SDL_AppInit`/`SDL_AppIterate`/`SDL_AppEvent`/`SDL_AppQuit`), because
 the engine owns its loop (0.1 thesis). The callback model exists and is fine for simple apps; it is
@@ -419,6 +466,25 @@ unreachable.
 **Check a widget's initial state against the prose.** 1.5's widget must open showing
 `(3, 2) → 2 × 8 + 3 = 19` because that is the worked example in the surrounding text. Verified
 explicitly after a fresh load, since interacting with it during testing leaves it elsewhere.
+
+**A perceptual demo needs device-pixel accuracy, and needs saying so.** 1.6's gamma test relies on
+alternating one-pixel black and white lines optically averaging to 50% light in the viewer's eye.
+Built with `repeating-linear-gradient` and **hard stops** — the two colour stops must sit at the
+same position (`#000 1px, #fff 1px`), or the browser interpolates between them and the stripes blur
+into a solid grey, silently destroying the test. Verify the stops programmatically; a screenshot at
+device scale confirms the rest. The page also has to tell the reader it needs 100% zoom, because any
+scaling resamples the pattern.
+
+**Colours that are the subject must not follow the theme.** 1.6's swatches are literal
+`fill="rgb(188,188,0)"` values, deliberately outside the `--dia-*` token system, because the whole
+figure is a claim about those exact numbers. Checked that they stay literal in both themes — the
+usual "never hard-code colours in diagrams" rule has this one principled exception, and it is worth
+flagging in the source so nobody "fixes" it later.
+
+**Watch the working directory when a session mixes `cd` and scripts.** A `cd docs && python3 -m
+http.server` left the shell in `docs/`, and the next repo-root-relative script failed with a
+confusing `FileNotFoundError`. Prefer absolute paths, or `cd` back explicitly, in any command that
+follows a directory change.
 
 ## Testing engine code that talks to SDL
 

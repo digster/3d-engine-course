@@ -1,0 +1,3280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>1.6 — Colour, and an Honest Teaser of sRGB · Build a Professional 3D Game Engine</title>
+<meta name="description" content="Why the stored value 128 emits only 21.6% of white's light, why half the light is stored as 188, and why mixing colours by averaging their stored numbers is wrong in a way you can see.">
+<!-- SHARED-CSS:BEGIN -->
+<style>
+/* ---- Design tokens ------------------------------------------------------- */
+:root {
+  color-scheme: light dark;
+
+  /* Page */
+  --bg:            #fdfdfb;
+  --bg-sunken:     #f4f4f0;
+  --bg-raised:     #ffffff;
+  --text:          #1c1c1a;
+  --text-muted:    #5f5f58;
+  --text-faint:    #8a8a80;
+  --rule:          #e2e2db;
+  --rule-strong:   #cfcfc6;
+
+  /* Accent — used for links, active nav, section marks */
+  --accent:        #b4530a;
+  --accent-soft:   #f5e6d8;
+  --accent-text:   #8f4108;
+
+  /* Callouts */
+  --note-bd:       #3a6ea5;   --note-bg:    #eaf2fb;
+  --warn-bd:       #b8860b;   --warn-bg:    #fdf5e2;
+  --verify-bd:     #a03030;   --verify-bg:  #fbecec;
+  --pitfall-bd:    #7a4fa3;   --pitfall-bg: #f4eefb;
+  --ok-bd:         #2f7d4f;   --ok-bg:      #e9f6ee;
+
+  /* Code — always dark, in both page themes */
+  --code-bg:       #1b1d23;
+  --code-bar:      #262932;
+  --code-text:     #dfe3ec;
+  --code-rule:     #363a45;
+
+  /* Syntax tokens */
+  --tok-comment:   #6d7789;
+  --tok-keyword:   #c98fdb;
+  --tok-type:      #6cc5d9;
+  --tok-string:    #a3cf85;
+  --tok-number:    #e8a978;
+  --tok-preproc:   #d9a05b;
+  --tok-func:      #79b6f2;
+  --tok-punct:     #9aa2b1;
+
+  /* Axis colours — COURSE-WIDE CONVENTION. x/y/z = red/green/blue.
+     Never override these in a diagram. See conventions.html. */
+  --axis-x:        #d1344a;
+  --axis-y:        #2f9e4f;
+  --axis-z:        #2b6fd4;
+  --axis-x-soft:   #f7d8dd;
+  --axis-y-soft:   #d8f0e0;
+  --axis-z-soft:   #d7e4fa;
+
+  /* Diagram neutrals */
+  --dia-bg:        #ffffff;
+  --dia-ink:       #33332e;
+  --dia-ink-soft:  #7a7a72;
+  --dia-grid:      #e8e8e2;
+  --dia-fill:      #f0f0ea;
+  --dia-hi:        #b4530a;
+
+  /* Typography */
+  --font-body: "Iowan Old Style", "Palatino Linotype", "Palatino", "Charter",
+               Georgia, Cambria, "Times New Roman", serif;
+  --font-ui:   -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+               "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "SFMono-Regular", "Cascadia Code",
+               "JetBrains Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  --measure: 42rem;          /* ~72 characters at this size — the reading column */
+  --measure-wide: 58rem;     /* diagrams & tables may breathe past the measure  */
+}
+
+/* Dark tokens.
+   Applied in two situations, which is why the block is written twice:
+     1. the OS asks for dark AND the reader has not overridden to light;
+     2. the reader explicitly chose dark via the toggle.
+   CSS has no mixins, so duplication is the price of supporting both an OS
+   default and a manual override. Keep the two blocks byte-identical. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg:          #15161a;
+    --bg-sunken:   #101115;
+    --bg-raised:   #1c1e24;
+    --text:        #e4e4e0;
+    --text-muted:  #a2a49e;
+    --text-faint:  #74766f;
+    --rule:        #2c2e35;
+    --rule-strong: #3d404a;
+
+    --accent:      #f0a06a;
+    --accent-soft: #33251a;
+    --accent-text: #f5b184;
+
+    --note-bd:     #5a8fc8;   --note-bg:    #16202c;
+    --warn-bd:     #c9a132;   --warn-bg:    #262013;
+    --verify-bd:   #d05555;   --verify-bg:  #2a1717;
+    --pitfall-bd:  #a077c8;   --pitfall-bg: #221a2c;
+    --ok-bd:       #4fa877;   --ok-bg:      #14231a;
+
+    --dia-bg:      #1a1c21;
+    --dia-ink:     #d8d8d2;
+    --dia-ink-soft:#8f918a;
+    --dia-grid:    #2b2d33;
+    --dia-fill:    #24262c;
+    --dia-hi:      #f0a06a;
+
+    --axis-x:      #f2647a;
+    --axis-y:      #5cc47e;
+    --axis-z:      #6b9ef0;
+    --axis-x-soft: #3a2027;
+    --axis-y-soft: #1c3325;
+    --axis-z-soft: #1e2a40;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg:          #15161a;
+  --bg-sunken:   #101115;
+  --bg-raised:   #1c1e24;
+  --text:        #e4e4e0;
+  --text-muted:  #a2a49e;
+  --text-faint:  #74766f;
+  --rule:        #2c2e35;
+  --rule-strong: #3d404a;
+
+  --accent:      #f0a06a;
+  --accent-soft: #33251a;
+  --accent-text: #f5b184;
+
+  --note-bd:     #5a8fc8;   --note-bg:    #16202c;
+  --warn-bd:     #c9a132;   --warn-bg:    #262013;
+  --verify-bd:   #d05555;   --verify-bg:  #2a1717;
+  --pitfall-bd:  #a077c8;   --pitfall-bg: #221a2c;
+  --ok-bd:       #4fa877;   --ok-bg:      #14231a;
+
+  --dia-bg:      #1a1c21;
+  --dia-ink:     #d8d8d2;
+  --dia-ink-soft:#8f918a;
+  --dia-grid:    #2b2d33;
+  --dia-fill:    #24262c;
+  --dia-hi:      #f0a06a;
+
+  --axis-x:      #f2647a;
+  --axis-y:      #5cc47e;
+  --axis-z:      #6b9ef0;
+  --axis-x-soft: #3a2027;
+  --axis-y-soft: #1c3325;
+  --axis-z-soft: #1e2a40;
+}
+
+/* ---- Reset & base -------------------------------------------------------- */
+*, *::before, *::after { box-sizing: border-box; }
+
+html {
+  font-size: 18px;
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
+  scroll-padding-top: 2rem;
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  line-height: 1.7;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* The reading column. Everything is centred on --measure; wide elements opt out. */
+.wrap {
+  max-width: var(--measure);
+  margin: 0 auto;
+  padding: 0 1.25rem;
+}
+.bleed {                       /* for diagrams/tables that need more room */
+  max-width: var(--measure-wide);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* ---- Typography ---------------------------------------------------------- */
+h1, h2, h3, h4 {
+  font-family: var(--font-ui);
+  line-height: 1.25;
+  letter-spacing: -0.015em;
+  margin: 0 0 0.6em;
+  scroll-margin-top: 1.5rem;
+}
+h1 { font-size: 2.15rem; font-weight: 700; margin-top: 0.2em; }
+h2 {
+  font-size: 1.5rem; font-weight: 650;
+  margin-top: 2.6em;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--rule);
+}
+h3 { font-size: 1.15rem; font-weight: 650; margin-top: 2em; }
+h4 { font-size: 1rem;    font-weight: 650; margin-top: 1.6em; color: var(--text-muted); }
+
+/* Section numbers rendered as a quiet prefix */
+h2 .num, h3 .num {
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  margin-right: 0.5em;
+  font-weight: 500;
+}
+
+p { margin: 0 0 1.15em; }
+
+a { color: var(--accent-text); text-decoration-color: var(--rule-strong); text-underline-offset: 2px; }
+a:hover { text-decoration-color: currentColor; }
+
+strong { font-weight: 650; }
+em { font-style: italic; }
+
+ul, ol { margin: 0 0 1.15em; padding-left: 1.5em; }
+li { margin-bottom: 0.4em; }
+li > ul, li > ol { margin-top: 0.4em; margin-bottom: 0.5em; }
+
+hr { border: 0; border-top: 1px solid var(--rule); margin: 2.5em 0; }
+
+blockquote {
+  margin: 1.5em 0;
+  padding: 0.1em 0 0.1em 1.2em;
+  border-left: 3px solid var(--rule-strong);
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* Inline code — light chip, distinct from the dark block listings */
+:not(pre) > code {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 0.08em 0.34em;
+  word-break: break-word;
+}
+
+/* ---- Masthead ------------------------------------------------------------ */
+.masthead {
+  background: var(--bg-sunken);
+  border-bottom: 1px solid var(--rule);
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+}
+.masthead-inner {
+  max-width: var(--measure-wide);
+  margin: 0 auto;
+  padding: 0.6rem 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.masthead .course {
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  text-decoration: none;
+}
+.masthead .spacer { flex: 1; }
+.masthead a { color: var(--text-muted); text-decoration: none; }
+.masthead a:hover { color: var(--accent-text); }
+
+.theme-toggle {
+  font: inherit;
+  font-size: 0.78rem;
+  background: var(--bg-raised);
+  color: var(--text-muted);
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  padding: 0.2rem 0.55rem;
+  cursor: pointer;
+}
+.theme-toggle:hover { border-color: var(--rule-strong); color: var(--text); }
+
+/* ---- Lesson nav (top & bottom) ------------------------------------------- */
+.lesson-nav {
+  display: flex;
+  align-items: stretch;
+  gap: 0.6rem;
+  font-family: var(--font-ui);
+  font-size: 0.82rem;
+  margin: 1.5rem auto;
+}
+.lesson-nav a, .lesson-nav span {
+  flex: 1;
+  padding: 0.55rem 0.8rem;
+  border: 1px solid var(--rule);
+  border-radius: 7px;
+  background: var(--bg-raised);
+  text-decoration: none;
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+.lesson-nav a:hover { border-color: var(--accent); }
+.lesson-nav span { opacity: 0.45; }        /* disabled edge (no prev / no next) */
+.lesson-nav .dir {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-faint);
+}
+.lesson-nav .ttl {
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-weight: 550;
+}
+.lesson-nav .next-l { text-align: right; }
+.lesson-nav .idx-l  { flex: 0 0 auto; justify-content: center; text-align: center; }
+@media (max-width: 34rem) {
+  .lesson-nav { flex-wrap: wrap; }
+  .lesson-nav .idx-l { order: 3; flex: 1 0 100%; }
+}
+
+/* ---- Lesson header block ------------------------------------------------- */
+.lesson-head { margin: 2rem 0 0; }
+.eyebrow {
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+  font-weight: 650;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 0.5rem;
+}
+.deck {
+  font-size: 1.12rem;
+  color: var(--text-muted);
+  margin-bottom: 1.5rem;
+}
+.meta {
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  padding: 1rem 1.15rem;
+  margin-bottom: 1.75rem;
+}
+.meta dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 0.4rem 1rem; }
+.meta dt {
+  color: var(--text-faint);
+  text-transform: uppercase;
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  padding-top: 0.28em;
+  white-space: nowrap;
+}
+.meta dd { margin: 0; }
+@media (max-width: 30rem) {
+  .meta dl { grid-template-columns: 1fr; gap: 0.15rem 0; }
+  .meta dd { margin-bottom: 0.6rem; }
+}
+
+/* Objectives — "you will be able to…" */
+.objectives {
+  border: 1px solid var(--accent);
+  background: var(--accent-soft);
+  border-radius: 9px;
+  padding: 1.1rem 1.25rem;
+  margin: 1.75rem 0;
+}
+.objectives h2 {
+  margin: 0 0 0.5rem;
+  border: 0; padding: 0;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--accent-text);
+}
+.objectives ul { margin: 0; padding-left: 1.25em; }
+.objectives li::marker { color: var(--accent); }
+
+/* ---- Table of contents --------------------------------------------------- */
+.toc {
+  font-family: var(--font-ui);
+  font-size: 0.88rem;
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  padding: 1rem 1.25rem;
+  margin: 2rem 0;
+}
+.toc > summary {
+  cursor: pointer;
+  font-weight: 650;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-muted);
+  list-style: none;
+}
+.toc > summary::-webkit-details-marker { display: none; }
+.toc > summary::before { content: "▸ "; color: var(--accent); }
+.toc[open] > summary::before { content: "▾ "; }
+.toc ol { list-style: none; margin: 0.85rem 0 0; padding: 0; counter-reset: toc; }
+.toc ol ol { margin: 0.3rem 0 0.5rem 1.1rem; }
+.toc li { margin: 0.28em 0; counter-increment: toc; }
+.toc a { text-decoration: none; color: var(--text); }
+.toc a:hover { color: var(--accent-text); text-decoration: underline; }
+.toc ol ol a { color: var(--text-muted); font-size: 0.94em; }
+
+/* ---- Callouts ------------------------------------------------------------ */
+.callout {
+  border-left: 3px solid var(--rule-strong);
+  background: var(--bg-sunken);
+  border-radius: 0 8px 8px 0;
+  padding: 0.9rem 1.1rem;
+  margin: 1.6em 0;
+  font-size: 0.95rem;
+}
+.callout > :first-child { margin-top: 0; }
+.callout > :last-child  { margin-bottom: 0; }
+.callout .label {
+  display: block;
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  margin-bottom: 0.35rem;
+}
+.callout.note    { border-color: var(--note-bd);    background: var(--note-bg); }
+.callout.note .label    { color: var(--note-bd); }
+.callout.warn    { border-color: var(--warn-bd);    background: var(--warn-bg); }
+.callout.warn .label    { color: var(--warn-bd); }
+.callout.verify  { border-color: var(--verify-bd);  background: var(--verify-bg); }
+.callout.verify .label  { color: var(--verify-bd); }
+.callout.pitfall { border-color: var(--pitfall-bd); background: var(--pitfall-bg); }
+.callout.pitfall .label { color: var(--pitfall-bd); }
+.callout.ok      { border-color: var(--ok-bd);      background: var(--ok-bg); }
+.callout.ok .label      { color: var(--ok-bd); }
+/* C++ explainers: a C++ feature taught in place, the first time it appears. */
+.callout.cpp     { border-color: var(--accent);     background: var(--accent-soft); }
+.callout.cpp .label     { color: var(--accent-text); }
+
+/* ---- Code listings ------------------------------------------------------- */
+.listing {
+  margin: 1.6em 0;
+  border-radius: 9px;
+  overflow: hidden;
+  border: 1px solid var(--code-rule);
+  background: var(--code-bg);
+}
+.listing figcaption {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: var(--code-bar);
+  border-bottom: 1px solid var(--code-rule);
+  padding: 0.45rem 0.85rem;
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  color: #aeb6c4;
+}
+.listing figcaption .path { font-weight: 600; color: #dfe3ec; }
+.listing figcaption .tag {
+  font-family: var(--font-ui);
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  background: #3a3f4c;
+  color: #c6cdd9;
+}
+.listing figcaption .tag.new      { background: #1f4433; color: #7fd6a5; }
+.listing figcaption .tag.modified { background: #453a1c; color: #e0be74; }
+.listing figcaption .lang { margin-left: auto; opacity: 0.65; }
+
+/* Horizontal scroll — NEVER wrap. Wrapped code lies about its structure. */
+.listing pre {
+  margin: 0;
+  padding: 0.9rem 1rem;
+  overflow-x: auto;
+  background: var(--code-bg);
+}
+.listing pre code {
+  font-family: var(--font-mono);
+  font-size: 0.79rem;
+  line-height: 1.62;
+  color: var(--code-text);
+  white-space: pre;
+  display: block;
+  tab-size: 4;
+}
+.listing pre::-webkit-scrollbar { height: 9px; }
+.listing pre::-webkit-scrollbar-track { background: var(--code-bar); }
+.listing pre::-webkit-scrollbar-thumb { background: #4a5060; border-radius: 5px; }
+.listing pre::-webkit-scrollbar-thumb:hover { background: #5d6478; }
+
+/* Syntax tokens, applied by the tiny highlighter at the foot of the page. */
+.tok-c { color: var(--tok-comment); font-style: italic; }
+.tok-k { color: var(--tok-keyword); }
+.tok-t { color: var(--tok-type); }
+.tok-s { color: var(--tok-string); }
+.tok-n { color: var(--tok-number); }
+.tok-p { color: var(--tok-preproc); }
+.tok-f { color: var(--tok-func); }
+.tok-o { color: var(--tok-punct); }
+
+/* Emphasised line inside a listing (the line this paragraph is about) */
+.listing .hl { background: rgba(180, 130, 60, 0.16); display: inline-block; width: 100%; }
+
+/* Shell transcripts get a lighter treatment than source files */
+.listing.shell figcaption .path::before { content: "$ "; opacity: 0.6; }
+
+/* ---- Figures & diagrams -------------------------------------------------- */
+figure.dia {
+  margin: 2em auto;
+  padding: 0;
+}
+figure.dia svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: var(--dia-bg);
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+}
+figure.dia figcaption,
+figure.tbl figcaption {
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: 0.65rem;
+  line-height: 1.55;
+}
+figure.dia figcaption .fignum,
+figure.tbl figcaption .fignum {
+  font-weight: 700;
+  color: var(--text);
+}
+/* SVG text inherits the theme so diagrams survive dark mode */
+figure.dia svg text { font-family: var(--font-ui); fill: var(--dia-ink); }
+figure.dia svg .lbl-x { fill: var(--axis-x); }
+figure.dia svg .lbl-y { fill: var(--axis-y); }
+figure.dia svg .lbl-z { fill: var(--axis-z); }
+figure.dia svg .ax-x  { stroke: var(--axis-x); }
+figure.dia svg .ax-y  { stroke: var(--axis-y); }
+figure.dia svg .ax-z  { stroke: var(--axis-z); }
+figure.dia svg .ink       { stroke: var(--dia-ink); }
+figure.dia svg .ink-soft  { stroke: var(--dia-ink-soft); }
+figure.dia svg .grid      { stroke: var(--dia-grid); }
+figure.dia svg .fill-soft { fill: var(--dia-fill); }
+figure.dia svg .hi        { stroke: var(--dia-hi); }
+figure.dia svg .mono      { font-family: var(--font-mono); }
+figure.dia svg .sm        { font-size: 11px; }
+figure.dia svg .xs        { font-size: 9.5px; }
+
+/* Text fills for <text> elements.
+   These MUST be classes, not fill="..." attributes: the `figure.dia svg text`
+   rule above is CSS, and CSS always beats an SVG presentation attribute — an
+   inline fill on a <text> is silently ignored. Class selectors outrank the bare
+   element selector, so these win. (Shapes are unaffected; the rule only targets
+   text, so fill="..." still works on rect/path/circle.) */
+figure.dia svg .muted     { fill: var(--dia-ink-soft); }
+figure.dia svg .t-hi      { fill: var(--dia-hi); }
+figure.dia svg .t-ok      { fill: var(--ok-bd); }
+figure.dia svg .t-bad     { fill: var(--verify-bd); }
+/* For labels sitting ON a saturated filled shape, where the theme ink would be
+   unreadable. Fixed white in both themes, because the shape under it is the
+   same saturated colour in both. */
+figure.dia svg .t-inv     { fill: #ffffff; }
+
+/* ---- Tables -------------------------------------------------------------- */
+.tbl-scroll { overflow-x: auto; margin: 1.6em 0; }
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+th, td {
+  text-align: left;
+  padding: 0.5rem 0.7rem;
+  border-bottom: 1px solid var(--rule);
+  vertical-align: top;
+}
+th {
+  font-weight: 650;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--rule-strong);
+  white-space: nowrap;
+}
+tbody tr:hover { background: var(--bg-sunken); }
+td code { font-size: 0.82em; }
+
+/* File-manifest table: path | new/modified | purpose */
+.manifest td:first-child { font-family: var(--font-mono); font-size: 0.78rem; white-space: nowrap; }
+.badge {
+  font-size: 0.62rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.06em; padding: 0.1rem 0.4rem; border-radius: 3px; white-space: nowrap;
+}
+.badge.new { background: var(--ok-bg); color: var(--ok-bd); border: 1px solid var(--ok-bd); }
+.badge.mod { background: var(--warn-bg); color: var(--warn-bd); border: 1px solid var(--warn-bd); }
+/* Curriculum status, used on index.html */
+.badge.done { background: var(--ok-bg); color: var(--ok-bd); border: 1px solid var(--ok-bd); }
+.badge.soon { background: var(--bg-sunken); color: var(--text-faint); border: 1px solid var(--rule-strong); }
+
+/* ---- Math ---------------------------------------------------------------- */
+/* KaTeX renders these when the CDN is reachable. When it is NOT, the raw TeX
+   stays visible — which is why every equation MUST also be stated in prose.
+   Never let an equation be the only carrier of a fact. */
+.eq {
+  margin: 1.4em 0;
+  padding: 0.9rem 1rem;
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  overflow-x: auto;
+  text-align: center;
+}
+.eq-plain {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  margin-top: 0.6rem;
+  padding-top: 0.6rem;
+  border-top: 1px dashed var(--rule-strong);
+  text-align: left;
+}
+.eq-plain::before {
+  content: "in plain text: ";
+  color: var(--text-faint);
+  font-family: var(--font-ui);
+  font-size: 0.72rem;
+}
+
+/* Worked numeric example — every formula gets one */
+.worked {
+  border: 1px solid var(--rule-strong);
+  border-radius: 9px;
+  padding: 1rem 1.2rem;
+  margin: 1.6em 0;
+  background: var(--bg-raised);
+}
+.worked > .label {
+  display: block;
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--accent);
+  margin-bottom: 0.5rem;
+}
+.worked > :last-child { margin-bottom: 0; }
+
+/* ---- Exercises ----------------------------------------------------------- */
+.exercise {
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 9px 9px 0;
+  padding: 1rem 1.2rem;
+  margin: 1.4em 0;
+  background: var(--bg-raised);
+}
+.exercise h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.98rem;
+}
+.exercise h3 .xnum {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--accent);
+  margin-right: 0.5em;
+}
+.difficulty {
+  font-family: var(--font-ui);
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-faint);
+  border: 1px solid var(--rule-strong);
+  border-radius: 3px;
+  padding: 0.05rem 0.35rem;
+  margin-left: 0.4em;
+  vertical-align: 0.15em;
+}
+.exercise details {
+  margin-top: 0.7rem;
+  border-top: 1px solid var(--rule);
+  padding-top: 0.6rem;
+}
+.exercise summary {
+  cursor: pointer;
+  font-family: var(--font-ui);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.exercise summary:hover { color: var(--accent-text); }
+.exercise details[open] summary { margin-bottom: 0.6rem; }
+
+/* ---- Pitfalls (symptom → cause → fix) ------------------------------------ */
+.pitfalls { margin: 1.5em 0; }
+.pitfall-item {
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  margin-bottom: 0.9rem;
+  overflow: hidden;
+}
+.pitfall-item > summary {
+  cursor: pointer;
+  padding: 0.7rem 1rem;
+  background: var(--bg-sunken);
+  font-family: var(--font-ui);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.pitfall-item > summary:hover { color: var(--accent-text); }
+.pitfall-item > summary .sym {
+  font-weight: 400;
+  color: var(--text-muted);
+  font-style: italic;
+}
+.pitfall-body { padding: 0.9rem 1rem; font-size: 0.94rem; }
+.pitfall-body > :first-child { margin-top: 0; }
+.pitfall-body > :last-child  { margin-bottom: 0; }
+.pitfall-body dt {
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+  margin-top: 0.7rem;
+}
+.pitfall-body dd { margin: 0.2rem 0 0; }
+
+/* ---- Recap / next -------------------------------------------------------- */
+.recap {
+  background: var(--ok-bg);
+  border: 1px solid var(--ok-bd);
+  border-radius: 9px;
+  padding: 1.1rem 1.25rem;
+  margin: 1.75rem 0;
+}
+.recap h2 { margin: 0 0 0.6rem; border: 0; padding: 0; font-size: 1.05rem; }
+.recap > :last-child { margin-bottom: 0; }
+
+/* ---- Further reading ----------------------------------------------------- */
+.reading { font-size: 0.92rem; }
+.reading li { margin-bottom: 0.6em; }
+.reading .src {
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+  margin-right: 0.4em;
+}
+
+/* ---- STATE block --------------------------------------------------------- */
+.state {
+  margin: 2.5em 0 1em;
+  border: 1px dashed var(--rule-strong);
+  border-radius: 9px;
+  background: var(--bg-sunken);
+  overflow: hidden;
+}
+.state > summary {
+  cursor: pointer;
+  padding: 0.6rem 1rem;
+  font-family: var(--font-ui);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-muted);
+}
+.state pre {
+  margin: 0;
+  padding: 0.9rem 1rem;
+  overflow-x: auto;
+  border-top: 1px solid var(--rule);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+  white-space: pre;
+}
+
+/* ---- Footer -------------------------------------------------------------- */
+.foot {
+  border-top: 1px solid var(--rule);
+  margin-top: 3rem;
+  padding: 1.5rem 0 3rem;
+  font-family: var(--font-ui);
+  font-size: 0.78rem;
+  color: var(--text-faint);
+}
+.foot a { color: var(--text-muted); }
+
+/* ---- Interactive widgets ------------------------------------------------- */
+.widget {
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  background: var(--bg-raised);
+  padding: 1rem;
+  margin: 2em 0;
+}
+.widget-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+  align-items: center;
+  margin-top: 0.8rem;
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+.widget-controls label { display: flex; align-items: center; gap: 0.4rem; }
+.widget-controls input[type="range"] { accent-color: var(--accent); }
+.widget-readout {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--text);
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 0.1rem 0.4rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Print --------------------------------------------------------------- */
+@media print {
+  .masthead, .lesson-nav, .theme-toggle { display: none; }
+  body { background: #fff; color: #000; font-size: 11pt; }
+  .listing { break-inside: avoid; }
+  figure.dia { break-inside: avoid; }
+  a::after { content: " (" attr(href) ")"; font-size: 0.7em; color: #666; }
+}
+</style>
+<!-- SHARED-CSS:END -->
+</head>
+<body>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <a class="course" href="../index.html">Build a Professional 3D Game Engine</a>
+    <span class="spacer"></span>
+    <a href="../index.html">Contents</a>
+    <a href="../conventions.html">Conventions</a>
+    <a href="../cpp-style.html">C++ Style</a>
+    <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Toggle colour theme">Theme</button>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="01-05-framebuffer.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">1.5 — The Framebuffer: Your First Owned Pixels</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="01-07-vectors-2d.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">1.7 — 2D Vectors, Geometrically</span>
+    </a>
+  </nav>
+
+  <!-- ================= 1. HEADER BLOCK ================= -->
+  <div class="lesson-head">
+    <div class="eyebrow">Module 1 — The Loop, the Pixel, and Time · Lesson 1.6</div>
+    <h1>Colour, and an Honest Teaser of sRGB</h1>
+    <p class="deck">
+      We have been treating a pixel's 32 bits as four numbers between 0 and 255, and moving them
+      around without asking what they mean. Copying bits never asks. But the moment we
+      <em>combine</em> two colours — mixing, fading, averaging, or later adding up light from several
+      lamps — the question becomes unavoidable, and the intuitive answer is wrong by a factor of more
+      than two. This lesson shows you exactly how wrong, and is honest about the fact that we are not
+      going to fix it yet.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 4 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd><a href="01-05-framebuffer.html">1.5 — The Framebuffer</a></dd>
+
+        <dt>Files</dt>
+        <dd><code>src/gfx/colour.hpp</code> (new), <code>src/gfx/colour.cpp</code> (new), <code>src/gfx/framebuffer.hpp</code> (modified), <code>src/main.cpp</code> (modified), <code>CMakeLists.txt</code> (modified)</dd>
+
+        <dt>Milestone</dt>
+        <dd>A comparison board where the same two colour ramps are mixed twice — once the way everyone writes it first, once correctly — with the difference impossible to miss.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…explain what the number 128 in a colour channel actually means, and why it is not half of 255.</li>
+      <li>…state why the encoding exists at all, in terms of how many distinct steps the eye can see.</li>
+      <li>…identify the operations that are wrong when performed on stored values — mixing, fading, averaging, downscaling, lighting — and the ones that are fine.</li>
+      <li>…convert between encoded and linear values using the exact standard transform, and say why a lookup table is the right implementation in one direction and not the other.</li>
+      <li>…explain why alpha must <em>not</em> go through that transform.</li>
+      <li>…describe what a fully linear pipeline would require, and why it is Module 6's job rather than today's.</li>
+    </ul>
+  </section>
+
+  <details class="toc" open>
+    <summary>Contents</summary>
+    <ol>
+      <li><a href="#problem">The Problem</a></li>
+      <li><a href="#intuition">Building Intuition</a>
+        <ol>
+          <li><a href="#candles">Counting candles</a></li>
+          <li><a href="#why">Why anyone did this on purpose</a></li>
+        </ol>
+      </li>
+      <li><a href="#theory">The Theory</a>
+        <ol>
+          <li><a href="#curve">The transfer function</a></li>
+          <li><a href="#checker">The proof you can perform yourself</a></li>
+          <li><a href="#wrong">What this breaks</a></li>
+          <li><a href="#alpha">Why alpha is different</a></li>
+          <li><a href="#notyet">What we are not fixing today</a></li>
+        </ol>
+      </li>
+      <li><a href="#implementation">Implementation: the colour module</a></li>
+      <li><a href="#listings">Complete Code Listings</a></li>
+      <li><a href="#build">Build &amp; Run</a></li>
+      <li><a href="#pitfalls">Common Pitfalls &amp; Debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; Next</a></li>
+      <li><a href="#reading">Further Reading</a></li>
+    </ol>
+  </details>
+
+  <!-- ================= 2. THE PROBLEM ================= -->
+  <h2 id="problem"><span class="num">1</span>The Problem</h2>
+
+  <p>
+    Exercise 1.5.5 asked you to fade the ball's trail, and warned that doing the arithmetic directly
+    on the stored 0–255 values would come out too dark. Here is that claim made concrete. Mix pure
+    red with pure green, half and half, the obvious way:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">the obvious way to mix two colours</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// red is (255, 0, 0); green is (0, 255, 0); halfway is…
+r = (255 + 0) / 2 = 128
+g = (0 + 255) / 2 = 128
+b = (0 + 0)   / 2 = 0        // -> (128, 128, 0)</code></pre>
+  </figure>
+
+  <p>
+    Nothing about that is arithmetically wrong. Figure 1 shows the result, next to what the answer
+    should be:
+  </p>
+
+  <figure class="dia bleed">
+    <svg viewBox="0 0 660 200" role="img" aria-labelledby="f1-t f1-d">
+      <title id="f1-t">Red and green mixed halfway, computed two ways</title>
+      <desc id="f1-d">Two swatches sit between a red square and a green square. Averaging the stored
+        numbers gives 128, 128, 0 — a dark olive. Averaging the light those numbers represent gives
+        188, 188, 0 — a bright yellow. The dark olive emits only 21.6 per cent of red's light and 21.6
+        per cent of green's, when half of each was asked for.</desc>
+
+      <rect x="30" y="40" width="90" height="90" rx="6" fill="rgb(255,0,0)"/>
+      <text x="75" y="150" class="xs muted" text-anchor="middle">red</text>
+      <text x="75" y="164" class="xs mono muted" text-anchor="middle">255, 0, 0</text>
+
+      <rect x="540" y="40" width="90" height="90" rx="6" fill="rgb(0,255,0)"/>
+      <text x="585" y="150" class="xs muted" text-anchor="middle">green</text>
+      <text x="585" y="164" class="xs mono muted" text-anchor="middle">0, 255, 0</text>
+
+      <rect x="180" y="40" width="140" height="90" rx="6" fill="rgb(128,128,0)"/>
+      <text x="250" y="150" class="xs t-bad" text-anchor="middle" font-weight="700">averaging the numbers</text>
+      <text x="250" y="164" class="xs mono muted" text-anchor="middle">128, 128, 0</text>
+      <text x="250" y="180" class="xs muted" text-anchor="middle">emits 21.6% of each</text>
+
+      <rect x="350" y="40" width="140" height="90" rx="6" fill="rgb(188,188,0)"/>
+      <text x="420" y="150" class="xs t-ok" text-anchor="middle" font-weight="700">averaging the light</text>
+      <text x="420" y="164" class="xs mono muted" text-anchor="middle">188, 188, 0</text>
+      <text x="420" y="180" class="xs muted" text-anchor="middle">emits 50.3% of each</text>
+
+      <text x="330" y="26" class="sm" text-anchor="middle" font-weight="700">"halfway between red and green"</text>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 1.</span> Both swatches claim to be the midpoint. The left one is
+      the arithmetic mean of the stored numbers; the right one is the arithmetic mean of the
+      <em>light</em>. They are not close, and the left one is what almost every first attempt at
+      blending, fading, or image scaling produces.
+    </figcaption>
+  </figure>
+
+  <p>
+    The muddy one is what you get by averaging the stored numbers. If your monitor is reasonably
+    calibrated, it should look noticeably darker and browner than a genuine half-and-half mix.
+  </p>
+
+  <p>
+    So one of two things is true: either "halfway" does not mean what we think, or the numbers do not
+    mean what we think. It is the second one — and the reason is a transformation applied to
+    essentially every image, colour value and display on earth, which nobody mentions because it
+    normally works invisibly.
+  </p>
+
+  <!-- ================= 3. BUILDING INTUITION ================= -->
+  <h2 id="intuition"><span class="num">2</span>Building Intuition</h2>
+
+  <h3 id="candles">2.1 Counting candles</h3>
+
+  <p>
+    Imagine a room lit by 100 candles, and call that "white" — the brightest the room gets. Now:
+    how many candles are lit when a pixel reads 128?
+  </p>
+
+  <p>
+    The instinctive answer is 50, and it is wrong. The answer is about <strong>22</strong>.
+  </p>
+
+  <p>
+    The stored value is not a count of candles. It is a position on a dial, and the dial is not
+    evenly spaced. Turning the dial from 0 to halfway does not light half the candles; it lights
+    about a fifth of them. The dial's markings are crowded together at the dark end and spread far
+    apart at the bright end.
+  </p>
+
+  <p>
+    That is the entire lesson. Everything below is <em>why</em> the dial is shaped that way, exactly
+    how it is shaped, and which of our operations the shape breaks.
+  </p>
+
+  <h3 id="why">2.2 Why anyone did this on purpose</h3>
+
+  <p>
+    It is tempting to file this under historical accident — CRT phosphors had a power-law response,
+    the encoding compensated, we are stuck with it. That is true and it is not the interesting part,
+    because even with no CRT in the story we would invent something very similar. The reason is your
+    eye.
+  </p>
+
+  <p>
+    Human vision responds to <em>ratios</em>, not differences. Take a room with 1 candle and add
+    another: the change is enormous, unmissable. Take a room with 100 candles and add one: nobody
+    notices. The same absolute increase — one candle — is dramatic at the bottom and invisible at the
+    top.
+  </p>
+
+  <p>
+    Now suppose we had 256 evenly spaced steps of actual light, so each step is 1/255 of white. Down
+    at the dark end, step 1 is <em>double</em> the light of step 0 — a visible jump. Up at the bright
+    end, step 255 is 1.004× step 254 — utterly imperceptible. We would have spent most of our 256
+    precious values on distinctions nobody can see, while the darks, where the eye is most sensitive,
+    would visibly band into stripes.
+  </p>
+
+
+  <figure class="dia bleed">
+    <svg viewBox="0 0 660 250" role="img" aria-labelledby="f2-t f2-d">
+      <title id="f2-t">Where the 256 available codes land on a scale of actual light</title>
+      <desc id="f2-d">Two number lines running from no light to full light. With evenly spaced
+        codes the tick marks are uniform, so only 26 of the 256 land in the darkest tenth of the
+        range where the eye is most sensitive, and 128 are spent on the brightest half where it can
+        barely tell them apart. With sRGB encoding the ticks bunch heavily towards the dark end: 90
+        codes fall in the darkest tenth and only 68 in the brightest half.</desc>
+
+      <text x="14" y="24" class="sm t-bad" font-weight="700">✗ If the 256 codes were evenly spaced in light</text>
+      <line x1="70" y1="84" x2="590" y2="84" class="ink-soft" stroke-width="1.2"/>
+      <g class="ink" stroke-width="1">
+        <line x1="70.0" y1="62" x2="70.0" y2="84"/>
+        <line x1="78.2" y1="62" x2="78.2" y2="84"/>
+        <line x1="86.3" y1="62" x2="86.3" y2="84"/>
+        <line x1="94.5" y1="62" x2="94.5" y2="84"/>
+        <line x1="102.6" y1="62" x2="102.6" y2="84"/>
+        <line x1="110.8" y1="62" x2="110.8" y2="84"/>
+        <line x1="118.9" y1="62" x2="118.9" y2="84"/>
+        <line x1="127.1" y1="62" x2="127.1" y2="84"/>
+        <line x1="135.3" y1="62" x2="135.3" y2="84"/>
+        <line x1="143.4" y1="62" x2="143.4" y2="84"/>
+        <line x1="151.6" y1="62" x2="151.6" y2="84"/>
+        <line x1="159.7" y1="62" x2="159.7" y2="84"/>
+        <line x1="167.9" y1="62" x2="167.9" y2="84"/>
+        <line x1="176.0" y1="62" x2="176.0" y2="84"/>
+        <line x1="184.2" y1="62" x2="184.2" y2="84"/>
+        <line x1="192.4" y1="62" x2="192.4" y2="84"/>
+        <line x1="200.5" y1="62" x2="200.5" y2="84"/>
+        <line x1="208.7" y1="62" x2="208.7" y2="84"/>
+        <line x1="216.8" y1="62" x2="216.8" y2="84"/>
+        <line x1="225.0" y1="62" x2="225.0" y2="84"/>
+        <line x1="233.1" y1="62" x2="233.1" y2="84"/>
+        <line x1="241.3" y1="62" x2="241.3" y2="84"/>
+        <line x1="249.5" y1="62" x2="249.5" y2="84"/>
+        <line x1="257.6" y1="62" x2="257.6" y2="84"/>
+        <line x1="265.8" y1="62" x2="265.8" y2="84"/>
+        <line x1="273.9" y1="62" x2="273.9" y2="84"/>
+        <line x1="282.1" y1="62" x2="282.1" y2="84"/>
+        <line x1="290.2" y1="62" x2="290.2" y2="84"/>
+        <line x1="298.4" y1="62" x2="298.4" y2="84"/>
+        <line x1="306.5" y1="62" x2="306.5" y2="84"/>
+        <line x1="314.7" y1="62" x2="314.7" y2="84"/>
+        <line x1="322.9" y1="62" x2="322.9" y2="84"/>
+        <line x1="331.0" y1="62" x2="331.0" y2="84"/>
+        <line x1="339.2" y1="62" x2="339.2" y2="84"/>
+        <line x1="347.3" y1="62" x2="347.3" y2="84"/>
+        <line x1="355.5" y1="62" x2="355.5" y2="84"/>
+        <line x1="363.6" y1="62" x2="363.6" y2="84"/>
+        <line x1="371.8" y1="62" x2="371.8" y2="84"/>
+        <line x1="380.0" y1="62" x2="380.0" y2="84"/>
+        <line x1="388.1" y1="62" x2="388.1" y2="84"/>
+        <line x1="396.3" y1="62" x2="396.3" y2="84"/>
+        <line x1="404.4" y1="62" x2="404.4" y2="84"/>
+        <line x1="412.6" y1="62" x2="412.6" y2="84"/>
+        <line x1="420.7" y1="62" x2="420.7" y2="84"/>
+        <line x1="428.9" y1="62" x2="428.9" y2="84"/>
+        <line x1="437.1" y1="62" x2="437.1" y2="84"/>
+        <line x1="445.2" y1="62" x2="445.2" y2="84"/>
+        <line x1="453.4" y1="62" x2="453.4" y2="84"/>
+        <line x1="461.5" y1="62" x2="461.5" y2="84"/>
+        <line x1="469.7" y1="62" x2="469.7" y2="84"/>
+        <line x1="477.8" y1="62" x2="477.8" y2="84"/>
+        <line x1="486.0" y1="62" x2="486.0" y2="84"/>
+        <line x1="494.2" y1="62" x2="494.2" y2="84"/>
+        <line x1="502.3" y1="62" x2="502.3" y2="84"/>
+        <line x1="510.5" y1="62" x2="510.5" y2="84"/>
+        <line x1="518.6" y1="62" x2="518.6" y2="84"/>
+        <line x1="526.8" y1="62" x2="526.8" y2="84"/>
+        <line x1="534.9" y1="62" x2="534.9" y2="84"/>
+        <line x1="543.1" y1="62" x2="543.1" y2="84"/>
+        <line x1="551.3" y1="62" x2="551.3" y2="84"/>
+        <line x1="559.4" y1="62" x2="559.4" y2="84"/>
+        <line x1="567.6" y1="62" x2="567.6" y2="84"/>
+        <line x1="575.7" y1="62" x2="575.7" y2="84"/>
+        <line x1="583.9" y1="62" x2="583.9" y2="84"/>
+      </g>
+      <text x="70" y="104" class="xs muted">no light</text>
+      <text x="590" y="104" class="xs muted" text-anchor="end">full light</text>
+      <text x="70" y="122" class="xs t-bad">only <tspan font-weight="700">26</tspan> codes in the darkest 10% — where banding shows</text>
+      <text x="590" y="122" class="xs t-bad" text-anchor="end"><tspan font-weight="700">128</tspan> wasted up here</text>
+
+      <text x="14" y="146" class="sm t-ok" font-weight="700">✓ sRGB encoding — codes spent where the eye can see them</text>
+      <line x1="70" y1="172" x2="590" y2="172" class="ink-soft" stroke-width="1.2"/>
+      <g class="ink" stroke-width="1">
+        <line x1="70.0" y1="150" x2="70.0" y2="172"/>
+        <line x1="70.6" y1="150" x2="70.6" y2="172"/>
+        <line x1="71.3" y1="150" x2="71.3" y2="172"/>
+        <line x1="71.9" y1="150" x2="71.9" y2="172"/>
+        <line x1="72.7" y1="150" x2="72.7" y2="172"/>
+        <line x1="73.6" y1="150" x2="73.6" y2="172"/>
+        <line x1="74.7" y1="150" x2="74.7" y2="172"/>
+        <line x1="76.0" y1="150" x2="76.0" y2="172"/>
+        <line x1="77.5" y1="150" x2="77.5" y2="172"/>
+        <line x1="79.2" y1="150" x2="79.2" y2="172"/>
+        <line x1="81.0" y1="150" x2="81.0" y2="172"/>
+        <line x1="83.1" y1="150" x2="83.1" y2="172"/>
+        <line x1="85.4" y1="150" x2="85.4" y2="172"/>
+        <line x1="87.9" y1="150" x2="87.9" y2="172"/>
+        <line x1="90.6" y1="150" x2="90.6" y2="172"/>
+        <line x1="93.5" y1="150" x2="93.5" y2="172"/>
+        <line x1="96.7" y1="150" x2="96.7" y2="172"/>
+        <line x1="100.1" y1="150" x2="100.1" y2="172"/>
+        <line x1="103.7" y1="150" x2="103.7" y2="172"/>
+        <line x1="107.6" y1="150" x2="107.6" y2="172"/>
+        <line x1="111.7" y1="150" x2="111.7" y2="172"/>
+        <line x1="116.1" y1="150" x2="116.1" y2="172"/>
+        <line x1="120.7" y1="150" x2="120.7" y2="172"/>
+        <line x1="125.7" y1="150" x2="125.7" y2="172"/>
+        <line x1="130.8" y1="150" x2="130.8" y2="172"/>
+        <line x1="136.3" y1="150" x2="136.3" y2="172"/>
+        <line x1="142.0" y1="150" x2="142.0" y2="172"/>
+        <line x1="148.0" y1="150" x2="148.0" y2="172"/>
+        <line x1="154.3" y1="150" x2="154.3" y2="172"/>
+        <line x1="160.8" y1="150" x2="160.8" y2="172"/>
+        <line x1="167.7" y1="150" x2="167.7" y2="172"/>
+        <line x1="174.8" y1="150" x2="174.8" y2="172"/>
+        <line x1="182.2" y1="150" x2="182.2" y2="172"/>
+        <line x1="190.0" y1="150" x2="190.0" y2="172"/>
+        <line x1="198.0" y1="150" x2="198.0" y2="172"/>
+        <line x1="206.4" y1="150" x2="206.4" y2="172"/>
+        <line x1="215.0" y1="150" x2="215.0" y2="172"/>
+        <line x1="224.0" y1="150" x2="224.0" y2="172"/>
+        <line x1="233.3" y1="150" x2="233.3" y2="172"/>
+        <line x1="242.9" y1="150" x2="242.9" y2="172"/>
+        <line x1="252.8" y1="150" x2="252.8" y2="172"/>
+        <line x1="263.0" y1="150" x2="263.0" y2="172"/>
+        <line x1="273.6" y1="150" x2="273.6" y2="172"/>
+        <line x1="284.5" y1="150" x2="284.5" y2="172"/>
+        <line x1="295.8" y1="150" x2="295.8" y2="172"/>
+        <line x1="307.3" y1="150" x2="307.3" y2="172"/>
+        <line x1="319.2" y1="150" x2="319.2" y2="172"/>
+        <line x1="331.5" y1="150" x2="331.5" y2="172"/>
+        <line x1="344.1" y1="150" x2="344.1" y2="172"/>
+        <line x1="357.0" y1="150" x2="357.0" y2="172"/>
+        <line x1="370.3" y1="150" x2="370.3" y2="172"/>
+        <line x1="384.0" y1="150" x2="384.0" y2="172"/>
+        <line x1="398.0" y1="150" x2="398.0" y2="172"/>
+        <line x1="412.4" y1="150" x2="412.4" y2="172"/>
+        <line x1="427.1" y1="150" x2="427.1" y2="172"/>
+        <line x1="442.2" y1="150" x2="442.2" y2="172"/>
+        <line x1="457.6" y1="150" x2="457.6" y2="172"/>
+        <line x1="473.4" y1="150" x2="473.4" y2="172"/>
+        <line x1="489.6" y1="150" x2="489.6" y2="172"/>
+        <line x1="506.2" y1="150" x2="506.2" y2="172"/>
+        <line x1="523.1" y1="150" x2="523.1" y2="172"/>
+        <line x1="540.4" y1="150" x2="540.4" y2="172"/>
+        <line x1="558.1" y1="150" x2="558.1" y2="172"/>
+        <line x1="576.2" y1="150" x2="576.2" y2="172"/>
+      </g>
+      <text x="70" y="192" class="xs muted">no light</text>
+      <text x="590" y="192" class="xs muted" text-anchor="end">full light</text>
+      <text x="70" y="210" class="xs t-ok"><tspan font-weight="700">90</tspan> codes in the darkest 10%</text>
+      <text x="590" y="210" class="xs t-ok" text-anchor="end">only <tspan font-weight="700">68</tspan> in the brightest half</text>
+
+      <text x="330" y="238" class="xs muted" text-anchor="middle">every fourth code shown, so each tick above stands for four</text>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 2.</span> The same 256 values, distributed two ways along a scale of
+      real light. sRGB crowds them towards black because that is where a fixed increase in light is a
+      large <em>ratio</em>, and therefore visible. The bunching is not a defect to be corrected — it
+      is the entire point of the encoding, and it is also precisely why arithmetic on these values
+      does not behave.
+    </figcaption>
+  </figure>
+
+  <p>
+    So the encoding redistributes them, as Figure 2 shows. It spends many values on the dark range
+    and few on the bright range, matching where the eye can actually tell things apart. Eight bits of encoded sRGB looks
+    smooth; eight bits of evenly spaced light does not. It is a compression scheme for a channel with
+    exactly 256 slots, and it is a good one.
+  </p>
+
+  <div class="callout note">
+    <span class="label">The cost of that good decision</span>
+    <p style="margin-bottom:0">
+      Storage is not arithmetic. The encoding is excellent for <em>keeping</em> a colour in eight
+      bits and useless for <em>calculating</em> with one, because the numbers are no longer
+      proportional to the thing they describe. Adding two encoded values does not add two lights, and
+      averaging them does not average two lights. Every graphics bug in this lesson comes from doing
+      arithmetic in the storage format — and every fix is the same: decode, compute, re-encode.
+    </p>
+  </div>
+
+  <!-- ================= 4. THE THEORY ================= -->
+  <h2 id="theory"><span class="num">3</span>The Theory</h2>
+
+  <h3 id="curve">3.1 The transfer function</h3>
+
+  <p>
+    The curve relating stored values to light is standardised, and the standard is called
+    <strong>sRGB</strong>. It is very nearly a power law with exponent 2.2, but the exact definition
+    is piecewise: a short straight segment near black, then the curve.
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/colour.cpp — encoded to light</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">float srgb_to_linear(float encoded)
+{
+    if (encoded &lt;= 0.04045f)
+    {
+        return encoded / 12.92f;
+    }
+    return std::pow((encoded + 0.055f) / 1.055f, 2.4f);
+}</code></pre>
+  </figure>
+
+  <p>
+    The straight segment near zero exists because the pure power curve has infinite slope at the
+    origin, which makes the darkest few values behave badly — both numerically and when quantised to
+    eight bits. The constants are chosen so the two pieces meet smoothly. They are not roundable to
+    "gamma 2.2": using <code>pow(x, 2.2)</code> as a shortcut is close, and close is exactly how a
+    pipeline accumulates an error that nobody can later locate.
+  </p>
+
+  <p>
+    Figure 3 plots that function against the assumption everyone starts with — that a stored value
+    and the light it produces are proportional.
+  </p>
+
+  <figure class="dia bleed">
+    <svg viewBox="0 0 660 300" role="img" aria-labelledby="f3-t f3-d">
+      <title id="f3-t">The sRGB curve: stored value against the light it produces</title>
+      <desc id="f3-d">A graph with the stored value along the horizontal axis and emitted light up
+        the vertical. The straight dashed diagonal is the naive assumption that the two are
+        proportional. The actual sRGB curve sags well below it: at the stored value 128, halfway
+        along the horizontal axis, the curve is at 0.216 rather than 0.5. To reach half the light you
+        must store 188, far to the right of the midpoint.</desc>
+
+      <g class="grid" stroke-width="1">
+        <line x1="70" y1="50" x2="550" y2="50"/>
+        <line x1="70" y1="100" x2="550" y2="100"/>
+        <line x1="70" y1="150" x2="550" y2="150"/>
+        <line x1="70" y1="200" x2="550" y2="200"/>
+        <line x1="70" y1="250" x2="550" y2="250"/>
+      </g>
+      <line x1="70" y1="50" x2="70" y2="250" class="ink-soft" stroke-width="1.2"/>
+      <line x1="70" y1="250" x2="550" y2="250" class="ink-soft" stroke-width="1.2"/>
+
+      <g class="xs muted">
+        <text x="62" y="254" text-anchor="end">0</text>
+        <text x="62" y="204" text-anchor="end">0.2</text>
+        <text x="62" y="154" text-anchor="end">0.5</text>
+        <text x="62" y="54" text-anchor="end">1.0</text>
+        <text x="70" y="270" text-anchor="middle">0</text>
+        <text x="310" y="270" text-anchor="middle">128</text>
+        <text x="550" y="270" text-anchor="middle">255</text>
+        <text x="310" y="288" text-anchor="middle">stored value</text>
+      </g>
+      <text x="24" y="150" class="xs muted" transform="rotate(-90 24 150)" text-anchor="middle">light emitted</text>
+
+      <!-- naive assumption -->
+      <line x1="70" y1="250" x2="550" y2="50" stroke="var(--verify-bd)" stroke-width="1.8" stroke-dasharray="5 4"/>
+      <text x="404" y="104" class="xs t-bad" font-weight="700">what we assumed</text>
+
+      <!-- the real curve -->
+      <polyline fill="none" stroke="var(--ok-bd)" stroke-width="2.4"
+        points="70.0,250.0 78.0,249.7 86.0,249.5 94.0,249.2 102.0,248.9 110.0,248.5 118.0,248.0 126.0,247.4 134.0,246.8 142.0,246.1 150.0,245.3 158.0,244.4 166.0,243.4 174.0,242.3 182.0,241.1 190.0,239.8 198.0,238.4 206.0,236.9 214.0,235.4 222.0,233.6 230.0,231.8 238.0,229.9 246.0,227.9 254.0,225.7 262.0,223.4 270.0,221.0 278.0,218.5 286.0,215.9 294.0,213.1 302.0,210.2 310.0,207.2 318.0,204.0 326.0,200.8 334.0,197.3 342.0,193.8 350.0,190.1 358.0,186.3 366.0,182.3 374.0,178.2 382.0,174.0 390.0,169.6 398.0,165.1 406.0,160.4 414.0,155.6 422.0,150.6 430.0,145.5 438.0,140.2 446.0,134.8 454.0,129.2 462.0,123.5 470.0,117.6 478.0,111.6 486.0,105.4 494.0,99.0 502.0,92.5 510.0,85.8 518.0,79.0 526.0,72.0 534.0,64.8 542.0,57.5 550.0,50.0"/>
+      <text x="470" y="212" class="xs t-ok" font-weight="700">what actually happens</text>
+
+      <!-- 128 marker -->
+      <line x1="310" y1="250" x2="310" y2="207" class="ink" stroke-width="1.2" stroke-dasharray="3 3"/>
+      <line x1="70" y1="207" x2="310" y2="207" class="ink" stroke-width="1.2" stroke-dasharray="3 3"/>
+      <circle cx="310" cy="207" r="4" fill="var(--ok-bd)"/>
+      <text x="318" y="200" class="xs" font-weight="700">128 → 21.6%</text>
+
+      <!-- 188 marker -->
+      <line x1="424" y1="250" x2="424" y2="150" class="hi" stroke-width="1.2" stroke-dasharray="3 3"/>
+      <line x1="70" y1="150" x2="424" y2="150" class="hi" stroke-width="1.2" stroke-dasharray="3 3"/>
+      <circle cx="424" cy="150" r="4" fill="var(--dia-hi)"/>
+      <text x="432" y="143" class="xs t-hi" font-weight="700">188 → 50%</text>
+      <text x="424" y="264" class="xs t-hi" text-anchor="middle" font-weight="700">188</text>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 3.</span> The gap between the dashed line and the curve is the whole
+      problem. Every piece of code that treats a stored value as an amount of light is assuming the
+      dashed line — and at the midpoint, where most blending happens, the two disagree by more than a
+      factor of two.
+    </figcaption>
+  </figure>
+
+  <div class="worked">
+    <span class="label">Worked example — the two numbers to remember</span>
+    <p><strong>What does 128 emit?</strong> The value is above the linear toe, so take the curve:</p>
+    <ul>
+      <li><code>128 / 255 = 0.50196</code> encoded</li>
+      <li><code>(0.50196 + 0.055) / 1.055 = 0.52792</code></li>
+      <li><code>0.52792 ^ 2.4 = 0.2159</code></li>
+    </ul>
+    <p>So mid-grey emits <strong>21.6%</strong> of white's light. Now the reverse — what stores half?</p>
+    <ul>
+      <li><code>0.5 ^ (1/2.4) = 0.74915</code></li>
+      <li><code>1.055 × 0.74915 − 0.055 = 0.73536</code></li>
+      <li><code>0.73536 × 255 = 187.5</code>, so <strong>188</strong></li>
+    </ul>
+    <p style="margin-bottom:0">
+      <strong>128 emits 21.6%; half the light is stored as 188.</strong> Both numbers are printed by
+      the demo at startup, computed by the same code that draws the ramps — so if your build disagrees
+      with this paragraph, one of us has a bug.
+    </p>
+  </div>
+
+  <h3 id="checker">3.2 The proof you can perform yourself</h3>
+
+  <p>
+    You do not have to take the number on faith. There is a classic test that uses your own eye as
+    the measuring instrument, and it works because of one physical fact: when two colours are too
+    small to resolve individually, the light from them <em>adds</em>. Your eye performs an honest
+    linear average, whatever the numbers say.
+  </p>
+
+  <p>
+    So: make a pattern of alternating pure black and pure white pixels. Half the area emits 0% and
+    half emits 100%, so from far enough away it must look like exactly 50% light. Now put patches of
+    solid grey next to it. Whichever patch matches is, by definition, the stored value for half the
+    light.
+  </p>
+
+  <div class="widget" id="gamma-widget">
+    <div id="gamma-row" style="display:flex; align-items:stretch; gap:0; height:150px; border-radius:8px; overflow:hidden;">
+      <div id="gamma-checker" style="flex:2; min-width:120px;"></div>
+      <div style="flex:1; background:rgb(128,128,128); position:relative;">
+        <span style="position:absolute; bottom:6px; left:0; right:0; text-align:center; font-family:var(--font-mono); font-size:0.72rem; color:#000;">128</span>
+      </div>
+      <div style="flex:1; background:rgb(188,188,188); position:relative;">
+        <span style="position:absolute; bottom:6px; left:0; right:0; text-align:center; font-family:var(--font-mono); font-size:0.72rem; color:#000;">188</span>
+      </div>
+    </div>
+    <div class="widget-controls">
+      <span>Step back from the screen, or squint, until the stripes blur together.</span>
+      <button type="button" id="gamma-zoom"
+              style="font-family:var(--font-ui); font-size:0.75rem; padding:0.2rem 0.6rem;
+                     border-radius:4px; border:1px solid var(--rule-strong);
+                     background:var(--bg-sunken); color:var(--text-muted); cursor:pointer;">show the stripes magnified</button>
+    </div>
+    <p style="margin:0.7rem 0 0; font-size:0.82rem; color:var(--text-muted)">
+      The left block is alternating black and white lines — physically 50% light. One of the two grey
+      patches will merge with it and the other will look obviously darker. On a correctly behaving
+      display, <strong>188 is the one that matches</strong>, and 128 reads as much darker than the
+      stripes. <em>Requires 100% browser zoom to work properly</em> — scaling resamples the stripes
+      and destroys the test.
+    </p>
+  </div>
+
+  <div class="callout warn">
+    <span class="label">If the test does not work for you</span>
+    <p style="margin-bottom:0">
+      A few things can defeat it, and all of them are worth knowing about. Browser zoom other than
+      100% resamples the stripe pattern into grey and the comparison becomes meaningless. Some
+      displays apply their own processing. And on a genuinely mis-calibrated monitor the matching
+      patch may sit somewhere between the two. The <em>direction</em> is the robust part: 128 should
+      look clearly darker than the stripes, never brighter. If it looks brighter, something in your
+      display chain is applying a curve of its own.
+    </p>
+  </div>
+
+  <h3 id="wrong">3.3 What this breaks</h3>
+
+  <p>
+    Not everything. It is worth being precise, because "gamma" gets blamed for a great deal that has
+    nothing to do with it.
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>Operation</th><th>Safe on stored values?</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td>Copying, moving, storing a pixel</td><td><strong>Yes</strong></td><td>No arithmetic happens. The bits are opaque and stay opaque.</td></tr>
+        <tr><td>Comparing two pixels for equality</td><td><strong>Yes</strong></td><td>The encoding is a bijection — equal encoded values mean equal light.</td></tr>
+        <tr><td>Choosing a colour by eye and using it</td><td><strong>Yes</strong></td><td>You picked it in the same space it is stored in.</td></tr>
+        <tr><td>Mixing / cross-fading two colours</td><td><strong>No</strong></td><td>The midpoint of the numbers is not the midpoint of the light — Figure 1.</td></tr>
+        <tr><td>Fading to black, alpha blending</td><td><strong>No</strong></td><td>Same reason; the result is systematically too dark.</td></tr>
+        <tr><td>Scaling an image down, mipmapping</td><td><strong>No</strong></td><td>Averaging neighbouring pixels is mixing. Downscaled images darken.</td></tr>
+        <tr><td>Adding light from two lamps</td><td><strong>No</strong></td><td>Light adds linearly. Encoded values do not. This is Module 3 onwards.</td></tr>
+        <tr><td>Anti-aliased edges</td><td><strong>No</strong></td><td>An edge pixel is a coverage-weighted mix — hence dark fringes on light text.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    The pattern is exact: <strong>anything that combines two colours arithmetically is wrong on
+    stored values; anything that merely moves them around is fine.</strong> Our engine has been doing
+    only the second kind, which is why nothing has looked wrong yet — and the ball's fading trail in
+    Exercise 1.5.5 was the first thing to cross the line.
+  </p>
+
+  <div class="worked">
+    <span class="label">Worked example — how wrong a fade gets</span>
+    <p>
+      Fading white down to black. The left column is what you want; the middle is what the naive
+      calculation stores; the right is what that value actually emits:
+    </p>
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>Light wanted</th><th>Correct stored value</th><th>Naive stored value</th><th>Light the naive value emits</th></tr></thead>
+        <tbody>
+          <tr><td>75%</td><td>225</td><td>191</td><td>52.1%</td></tr>
+          <tr><td>50%</td><td>188</td><td>128</td><td>21.6%</td></tr>
+          <tr><td>25%</td><td>137</td><td>64</td><td><strong>5.1%</strong></td></tr>
+          <tr><td>10%</td><td>89</td><td>26</td><td><strong>1.0%</strong></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="margin-bottom:0">
+      Look at the bottom row: asking for 10% of the light and getting 1% is a factor of ten. This is
+      why naive fades appear to fall off a cliff into black rather than easing out, and why a
+      naively-faded trail vanishes long before it should. The error is worst exactly where fades
+      spend most of their time.
+    </p>
+  </div>
+
+  <h3 id="alpha">3.4 Why alpha is different</h3>
+
+  <p>
+    A pixel has four channels and only three of them are light. It is a common and subtle mistake to
+    run all four through the transfer function.
+  </p>
+
+  <p>
+    Red, green and blue describe <em>how much light</em>, so they are encoded. Alpha describes
+    <em>how much of the pixel is covered</em> — a geometric fraction, an area. An alpha of 0.5 means
+    half the pixel is occupied by the thing being drawn. That is already a linear quantity: half the
+    area is half the area regardless of how bright anything is. There is no perceptual curve to undo
+    because there was never one applied.
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/colour.cpp — three channels converted, one not</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">Uint32 mix_linear(Uint32 a, Uint32 b, float t)
+{
+    return pack_argb(mix_channel_linear(red_of(a), red_of(b), t),
+                     mix_channel_linear(green_of(a), green_of(b), t),
+                     mix_channel_linear(blue_of(a), blue_of(b), t),
+                     mix_channel_encoded(alpha_of(a), alpha_of(b), t));
+}</code></pre>
+  </figure>
+
+  <p>
+    The fourth argument is the odd one out on purpose, and the comment above it in the source says
+    why. Putting alpha through a light transform is a category error — it would make half-covered
+    pixels report as roughly one-fifth covered, and the resulting edges would be wrong in a way that
+    looks like a blending bug rather than a units bug.
+  </p>
+
+  <h3 id="notyet">3.5 What we are not fixing today</h3>
+
+  <p>
+    Here is the honest part. We now have correct mixing functions, and the demo uses them. That is
+    not the same as having a correct renderer, and it would be misleading to let you think otherwise.
+  </p>
+
+  <p>
+    A properly linear pipeline decodes <em>once</em>, on the way in, does all its work in linear
+    light, and encodes <em>once</em>, on the way out. Ours decodes and re-encodes around every
+    individual operation, which is both slower and lossier — each round trip quantises back to 256
+    steps, so a chain of blends erodes precision that a linear pipeline would have kept.
+  </p>
+
+  <p>
+    Doing it properly requires three things we do not have:
+  </p>
+
+  <ul>
+    <li><strong>A framebuffer that can hold linear values.</strong> Eight bits of <em>linear</em>
+      light is precisely the banding disaster §<a href="#why">2.2</a> described. Linear pipelines use
+      16-bit floats or more per channel, which is a different framebuffer than the one we built.</li>
+    <li><strong>Somewhere to put values above 1.0.</strong> Add two lights and you can exceed white.
+      That is not an error — it is what a bright highlight <em>is</em> — and an eight-bit buffer has
+      nowhere to put it, so it clips and the information is gone.</li>
+    <li><strong>A tonemapping step.</strong> Given a buffer that can exceed 1.0, something must map
+      that range back down to what a display can show. That is a rendering decision with real
+      artistic weight, not a conversion.</li>
+  </ul>
+
+  <p>
+    Those three together are the <strong>HDR pipeline</strong>, and they are a Module 6 lesson with
+    the whole of PBR standing behind them. Building it now, on a renderer that cannot yet draw a
+    triangle, would be assembling the plumbing before the house.
+  </p>
+
+  <div class="callout ok">
+    <span class="label">What you get for knowing this now, six modules early</span>
+    <p style="margin-bottom:0">
+      Three things. You will recognise the symptom — dark fringes, muddy blends, fades that fall off
+      a cliff — instead of chasing it as a blending bug. You will know that Module 3's Lambert
+      shading is computing light, and that its numbers therefore belong in linear space. And when
+      Module 6 introduces the HDR pipeline, it will read as the solution to a problem you have
+      already watched happen, rather than as ceremony imposed by a standard.
+    </p>
+  </div>
+
+  <!-- ================= 5. IMPLEMENTATION ================= -->
+  <h2 id="implementation"><span class="num">4</span>Implementation: the colour module</h2>
+
+  <p>
+    A new file, and a small move.
+  </p>
+
+  <h3>4.1 Where pack_argb lives now</h3>
+
+  <p>
+    <code>pack_argb</code> was declared in <code>framebuffer.hpp</code> in Lesson 1.5, for the honest
+    reason that there was nowhere else to put it. Now there is. It moves to
+    <code>colour.hpp</code> along with the channel accessors, and <code>framebuffer.hpp</code>
+    includes that instead:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/framebuffer.hpp — the new include (excerpt)</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">#include "gfx/colour.hpp"   // pack_argb and friends: what a pixel's bits mean</code></pre>
+  </figure>
+
+  <p>
+    The dependency runs the right way: a framebuffer is a container of colours, so it may know what a
+    colour is; a colour has no business knowing it lives in a framebuffer. Getting that direction
+    backwards is how headers end up mutually dependent, and it is worth fixing while the fix costs
+    one line. Physical dependency structure gets a full lesson in Module 5's refactor.
+  </p>
+
+  <h3>4.2 A lookup table in one direction only</h3>
+
+  <p>
+    Decoding takes an eight-bit value, so there are exactly 256 possible inputs and the whole
+    function fits in a kilobyte:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/colour.cpp — the table (excerpt)</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">const std::array&lt;float, 256&gt; k_to_linear = [] {
+    std::array&lt;float, 256&gt; table{};
+    for (int i = 0; i &lt; 256; ++i)
+    {
+        table[static_cast&lt;std::size_t&gt;(i)] = srgb_to_linear(static_cast&lt;float&gt;(i) / 255.0f);
+    }
+    return table;
+}();</code></pre>
+  </figure>
+
+  <p>
+    That replaces a <code>pow</code> — tens of cycles — with a load, which matters when it happens
+    three times per pixel. Encoding gets no such table, because its input is a continuous float with
+    no finite set of possible values. The asymmetry is worth noticing: it is not that one direction
+    deserves optimising more, it is that only one direction <em>can</em> be tabulated.
+  </p>
+
+  <div class="callout cpp">
+    <span class="label">C++ in place — initialising a <code>const</code> table with a lambda</span>
+    <p>
+      The <code>[] { … }()</code> is a lambda defined and immediately called. Its return value
+      initialises the array, which lets the array be <code>const</code> — and that matters more than
+      it looks.
+    </p>
+    <p>
+      The alternative is a mutable array plus an <code>init_colour_tables()</code> that somebody must
+      remember to call before the first use. That design has a failure mode: forget the call, or make
+      it after something already read the table, and you get a table of zeros — meaning every colour
+      decodes to black, silently, with no crash to point at the cause. Initialising at the point of
+      declaration makes the uninitialised state unreachable rather than merely unlikely.
+    </p>
+    <p style="margin-bottom:0">
+      One thing to be careful of: this is a namespace-scope object, so it is constructed before
+      <code>main</code> runs, and the order of such constructions <em>across</em> translation units is
+      unspecified. It is safe here because the lambda calls only a free function in the same file,
+      never another global object. When that stops being true — and in a large engine it does — the
+      standard fix is a function-local <code>static</code>, which is initialised on first use instead.
+      Module 5 revisits this properly when the engine acquires real subsystems with startup order.
+    </p>
+  </div>
+
+  <h3>4.3 The demo as a controlled experiment</h3>
+
+  <p>
+    The comparison board draws each ramp twice. The two versions must differ in exactly one thing, so
+    the drawing function takes the mixing rule as a parameter:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/main.cpp — one function, two rules (excerpt)</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">void draw_ramp(engine::framebuffer&amp; fb, int y, Uint32 from, Uint32 to,
+               Uint32 (*mix)(Uint32, Uint32, float))
+{
+    for (int i = 0; i &lt; k_strip_w; ++i)
+    {
+        const float t = static_cast&lt;float&gt;(i) / static_cast&lt;float&gt;(k_strip_w - 1);
+        fb.fill_rect(k_strip_x + i, y, 1, k_strip_h, mix(from, to, t));
+    }
+}</code></pre>
+  </figure>
+
+  <p>
+    <code>Uint32 (*mix)(Uint32, Uint32, float)</code> is a pointer to a function taking two colours
+    and a fraction. Passing <code>engine::mix_encoded</code> or <code>engine::mix_linear</code>
+    selects the rule, and everything else about the two strips — position, size, endpoints, loop —
+    is provably identical because it is literally the same code. That is worth the slightly hairy
+    declaration: a comparison where the two sides went through different code paths would be a
+    comparison of two code paths, not of two rules.
+  </p>
+
+  <p>
+    The pairs are drawn touching, with no gap:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/main.cpp — the board (excerpt)</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">draw_ramp(fb, k_pair_a_y, k_black, k_white, engine::mix_encoded);
+draw_ramp(fb, k_pair_a_y + k_strip_h, k_black, k_white, engine::mix_linear);
+
+draw_ramp(fb, k_pair_b_y, k_red, k_green, engine::mix_encoded);
+draw_ramp(fb, k_pair_b_y + k_strip_h, k_red, k_green, engine::mix_linear);</code></pre>
+  </figure>
+
+  <p>
+    Touching, because the eye is far better at judging a boundary than at remembering a colour across
+    a gap. Two swatches side by side with a seam between them can be compared instantly; the same two
+    swatches an inch apart cannot.
+  </p>
+
+  <p>
+    And the ball's trail — Exercise 1.5.5, now built — fades using whichever rule <kbd>M</kbd>
+    selects, so the same question appears in motion as well as in a static strip.
+  </p>
+
+  <div class="callout note">
+    <span class="label">The clear is back</span>
+    <p style="margin-bottom:0">
+      Lesson 1.5 removed <code>fb.clear()</code> because the gradient covered every pixel, and warned
+      that the moment a background stopped covering the frame the previous frame would smear. That
+      moment is now: the comparison board leaves plenty of background visible, so the clear returns.
+      A small thing, but it is the predicted consequence arriving exactly one lesson later, which is
+      the best evidence that the reasoning was right rather than decorative.
+    </p>
+  </div>
+
+  <!-- ================= 6. COMPLETE CODE LISTINGS ================= -->
+  <h2 id="listings"><span class="num">5</span>Complete Code Listings</h2>
+
+  <div class="tbl-scroll">
+    <table class="manifest">
+      <thead><tr><th>Path</th><th>Status</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td>src/gfx/colour.hpp</td><td><span class="badge new">new</span></td><td>Packing and channel access, the sRGB transfer functions, and the two mixing rules.</td></tr>
+        <tr><td>src/gfx/colour.cpp</td><td><span class="badge new">new</span></td><td>The exact piecewise transform, the 256-entry decode table, and gamma-correct mixing.</td></tr>
+        <tr><td>src/gfx/framebuffer.hpp</td><td><span class="badge mod">modified</span></td><td><code>pack_argb</code> moves out to <code>colour.hpp</code>, which this now includes.</td></tr>
+        <tr><td>src/main.cpp</td><td><span class="badge mod">modified</span></td><td>The demo becomes the comparison board, plus a trail whose fade rule is switchable.</td></tr>
+        <tr><td>CMakeLists.txt</td><td><span class="badge mod">modified</span></td><td>Sixth translation unit.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/colour.hpp</span>
+      <span class="tag new">new</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// src/gfx/colour.hpp — what the numbers in a pixel actually mean.
+//
+// Lesson 1.5 treated a pixel as 32 bits and got away with it, because copying
+// bits around never asks what they represent. The moment we *combine* two
+// colours — mixing, fading, averaging, or later adding up light from several
+// sources — the question becomes unavoidable, and the intuitive answer is wrong.
+
+#pragma once
+
+#include &lt;SDL3/SDL.h&gt;
+
+namespace engine {
+
+// ---- Packing and unpacking --------------------------------------------------
+// ARGB8888: alpha in the most significant byte, blue in the least. See Lesson
+// 1.5 §3.3 for why this layout, and why we only ever touch pixels as Uint32.
+
+/// Pack 8-bit components into one 32-bit pixel: 0xAARRGGBB.
+[[nodiscard]] constexpr Uint32 pack_argb(Uint8 r, Uint8 g, Uint8 b, Uint8 a = 255)
+{
+    return (static_cast&lt;Uint32&gt;(a) &lt;&lt; 24)
+         | (static_cast&lt;Uint32&gt;(r) &lt;&lt; 16)
+         | (static_cast&lt;Uint32&gt;(g) &lt;&lt; 8)
+         | static_cast&lt;Uint32&gt;(b);
+}
+
+[[nodiscard]] constexpr Uint8 alpha_of(Uint32 c) { return static_cast&lt;Uint8&gt;((c &gt;&gt; 24) &amp; 0xFFu); }
+[[nodiscard]] constexpr Uint8 red_of(Uint32 c)   { return static_cast&lt;Uint8&gt;((c &gt;&gt; 16) &amp; 0xFFu); }
+[[nodiscard]] constexpr Uint8 green_of(Uint32 c) { return static_cast&lt;Uint8&gt;((c &gt;&gt; 8) &amp; 0xFFu); }
+[[nodiscard]] constexpr Uint8 blue_of(Uint32 c)  { return static_cast&lt;Uint8&gt;(c &amp; 0xFFu); }
+
+// ---- The sRGB transfer functions --------------------------------------------
+//
+// A stored channel value is NOT a measure of light. It is a measure of light
+// that has been put through a curve, so that the 256 available steps are spent
+// where the eye can tell them apart — which is overwhelmingly at the dark end.
+//
+// The consequence, in one number: the stored value 128 emits about 21.6% of
+// white's light, not 50%. Half the light is stored as 188.
+//
+// These two functions are the exact standard transform and its inverse. They are
+// piecewise: a short linear segment near black, then a power curve. The linear
+// toe exists because the power curve's slope goes to infinity at zero, which
+// would make the darkest few values impossible to represent sensibly.
+
+/// Encoded sRGB [0,1] -&gt; linear light [0,1].
+[[nodiscard]] float srgb_to_linear(float encoded);
+
+/// Linear light [0,1] -&gt; encoded sRGB [0,1].
+[[nodiscard]] float linear_to_srgb(float linear);
+
+/// Encoded 8-bit channel -&gt; linear light, via a 256-entry lookup table.
+///
+/// There are only 256 possible inputs, so the entire function fits in a kilobyte
+/// of floats computed once. That turns a `pow` — tens of cycles — into a load,
+/// which matters when it is called three times per pixel. The reverse direction
+/// gets no such table, because its input is a continuous float.
+[[nodiscard]] float srgb_to_linear_u8(Uint8 encoded);
+
+/// Linear light -&gt; encoded 8-bit channel, clamped and rounded.
+[[nodiscard]] Uint8 linear_to_srgb_u8(float linear);
+
+// ---- Mixing -----------------------------------------------------------------
+
+/// Mix two colours by interpolating their **stored values** directly.
+///
+/// This is what everyone writes first, and it is what almost every naive
+/// blending, fading and image-scaling routine does. It is wrong in a specific,
+/// visible way: mixing red and green half-and-half gives a dark olive rather
+/// than a bright yellow, because averaging the encoded numbers does not average
+/// the light. Kept here — and used in the demo — so the error can be seen next
+/// to the correct version rather than described.
+[[nodiscard]] Uint32 mix_encoded(Uint32 a, Uint32 b, float t);
+
+/// Mix two colours by interpolating the **light** they represent.
+///
+/// Decode both to linear, interpolate, re-encode. This is what "half way between
+/// these two colours" physically means, and it is what a renderer must do
+/// whenever it is modelling light rather than choosing an artistic ramp.
+///
+/// Note that alpha is interpolated in its stored form, without conversion: alpha
+/// is a coverage fraction, not a quantity of light, and putting it through a
+/// transfer function meant for light would be a category error.
+[[nodiscard]] Uint32 mix_linear(Uint32 a, Uint32 b, float t);
+
+} // namespace engine</code></pre>
+  </figure>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/colour.cpp</span>
+      <span class="tag new">new</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// src/gfx/colour.cpp — the sRGB transfer functions and gamma-correct mixing.
+
+#include "gfx/colour.hpp"
+
+#include &lt;algorithm&gt;
+#include &lt;array&gt;
+#include &lt;cmath&gt;
+
+namespace engine {
+
+float srgb_to_linear(float encoded)
+{
+    // The standard's exact piecewise definition. The threshold and the 12.92
+    // slope are chosen so the two pieces meet smoothly; they are not roundable
+    // to "gamma 2.2", which is why we spell them out rather than using pow(x,
+    // 2.2) as a shortcut. The shortcut is close, and close is how a pipeline
+    // accumulates error nobody can later locate.
+    if (encoded &lt;= 0.04045f)
+    {
+        return encoded / 12.92f;
+    }
+    return std::pow((encoded + 0.055f) / 1.055f, 2.4f);
+}
+
+float linear_to_srgb(float linear)
+{
+    if (linear &lt;= 0.0031308f)
+    {
+        return linear * 12.92f;
+    }
+    return 1.055f * std::pow(linear, 1.0f / 2.4f) - 0.055f;
+}
+
+namespace {
+
+/// Decoding table for all 256 possible encoded values, built once at startup.
+///
+/// Initialised by an immediately-invoked lambda so the table can be `const`:
+/// the alternative — a mutable array plus an `init()` somebody has to remember
+/// to call — is a category of bug this design simply does not have.
+const std::array&lt;float, 256&gt; k_to_linear = [] {
+    std::array&lt;float, 256&gt; table{};
+    for (int i = 0; i &lt; 256; ++i)
+    {
+        table[static_cast&lt;std::size_t&gt;(i)] = srgb_to_linear(static_cast&lt;float&gt;(i) / 255.0f);
+    }
+    return table;
+}();
+
+/// Interpolate one channel's stored values directly — the naive path.
+[[nodiscard]] Uint8 mix_channel_encoded(Uint8 x, Uint8 y, float t)
+{
+    const float a = static_cast&lt;float&gt;(x);
+    const float b = static_cast&lt;float&gt;(y);
+    return static_cast&lt;Uint8&gt;(std::clamp(a + (b - a) * t, 0.0f, 255.0f) + 0.5f);
+}
+
+/// Interpolate one channel's *light*, then re-encode — the correct path.
+[[nodiscard]] Uint8 mix_channel_linear(Uint8 x, Uint8 y, float t)
+{
+    const float a = srgb_to_linear_u8(x);
+    const float b = srgb_to_linear_u8(y);
+    return linear_to_srgb_u8(a + (b - a) * t);
+}
+
+} // namespace
+
+float srgb_to_linear_u8(Uint8 encoded)
+{
+    return k_to_linear[encoded];
+}
+
+Uint8 linear_to_srgb_u8(float linear)
+{
+    // Clamp before encoding. Light values arriving from a calculation can
+    // legitimately exceed 1.0 — that is what "brighter than white" means, and
+    // Module 6's HDR pipeline treats it as signal rather than error. Here there
+    // is nowhere to put it, so it saturates.
+    const float encoded = linear_to_srgb(std::clamp(linear, 0.0f, 1.0f));
+
+    // + 0.5 rounds to nearest rather than truncating. Truncation costs half a
+    // level on every channel of every pixel, which is a visible darkening once
+    // it compounds through a few passes.
+    return static_cast&lt;Uint8&gt;(encoded * 255.0f + 0.5f);
+}
+
+Uint32 mix_encoded(Uint32 a, Uint32 b, float t)
+{
+    return pack_argb(mix_channel_encoded(red_of(a), red_of(b), t),
+                     mix_channel_encoded(green_of(a), green_of(b), t),
+                     mix_channel_encoded(blue_of(a), blue_of(b), t),
+                     mix_channel_encoded(alpha_of(a), alpha_of(b), t));
+}
+
+Uint32 mix_linear(Uint32 a, Uint32 b, float t)
+{
+    // Colour channels go through the transfer function; alpha does not. Alpha
+    // measures how much of a surface is covered, which is already a linear
+    // quantity — see the header.
+    return pack_argb(mix_channel_linear(red_of(a), red_of(b), t),
+                     mix_channel_linear(green_of(a), green_of(b), t),
+                     mix_channel_linear(blue_of(a), blue_of(b), t),
+                     mix_channel_encoded(alpha_of(a), alpha_of(b), t));
+}
+
+} // namespace engine</code></pre>
+  </figure>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/framebuffer.hpp</span>
+      <span class="tag modified">modified</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// src/gfx/framebuffer.hpp — a block of memory that is an image.
+//
+// The first pixels the engine owns. Everything drawn from here to the end of
+// Module 3 lands in one of these, one pixel at a time, by code we wrote.
+
+#pragma once
+
+#include "gfx/colour.hpp"   // pack_argb and friends: what a pixel's bits mean
+
+#include &lt;SDL3/SDL.h&gt;
+
+#include &lt;cstddef&gt;
+#include &lt;vector&gt;
+
+namespace engine {
+
+/// A CPU-side image: `width × height` 32-bit pixels, tightly packed, row-major.
+///
+/// "Row-major" is the whole idea, and it is worth stating as a formula because
+/// every drawing routine in the next two modules is built on it:
+///
+///     index = y * width + x
+///
+/// Memory is one-dimensional. The two-dimensionality of an image is a
+/// *convention* about how to read that line of memory — we agree to treat the
+/// first `width` pixels as the top row, the next `width` as the row below it,
+/// and so on. Nothing in the hardware enforces it, which is precisely why an
+/// x-coordinate that strays past `width` does not produce an error: it produces
+/// a pixel on the *next row down*, and a rectangle drawn off the right edge
+/// reappears, shredded, on the left. See Lesson 1.5 §3.2.
+class framebuffer
+{
+public:
+    /// Allocates `width * height` pixels, zero-initialised (transparent black).
+    /// Dimensions below 1 are clamped: a zero-sized buffer would make every
+    /// index calculation degenerate rather than fail.
+    framebuffer(int width, int height);
+
+    // ---- Drawing ------------------------------------------------------------
+
+    /// Set every pixel to one colour.
+    void clear(Uint32 colour);
+
+    /// Set one pixel. **Bounds-checked**: coordinates outside the buffer are
+    /// silently ignored rather than corrupting a neighbouring row.
+    ///
+    /// This is the safe default, and it costs two comparisons and a multiply per
+    /// pixel. Code that fills large areas should hoist that work out of its
+    /// inner loop with row() instead.
+    void put_pixel(int x, int y, Uint32 colour);
+
+    /// Read one pixel. Returns 0 for out-of-bounds coordinates.
+    [[nodiscard]] Uint32 pixel_at(int x, int y) const;
+
+    /// Fill an axis-aligned rectangle, clipped to the buffer.
+    ///
+    /// Note what this does *not* do: call put_pixel in a loop. The rectangle is
+    /// clipped once, up front, and then each row is filled as a contiguous run.
+    /// Clipping once instead of per-pixel is the difference between two
+    /// comparisons and two-comparisons-times-the-area.
+    void fill_rect(int x, int y, int w, int h, Uint32 colour);
+
+    // ---- Access -------------------------------------------------------------
+
+    [[nodiscard]] int width() const { return width_; }
+    [[nodiscard]] int height() const { return height_; }
+
+    /// Bytes per row. For this tightly-packed buffer it is always
+    /// `width * 4`, but the concept is separate from the width for a reason:
+    /// the GPU texture we upload into may have a *different* pitch, with padding
+    /// at the end of each row. Lesson 1.5 §4.3.
+    [[nodiscard]] int pitch() const { return width_ * static_cast&lt;int&gt;(sizeof(Uint32)); }
+
+    /// Pointer to the first pixel. For uploads and tests.
+    [[nodiscard]] const Uint32* data() const { return pixels_.data(); }
+
+    /// Pointer to the first pixel of row `y`.
+    ///
+    /// This is the deliberate escape hatch: a tight inner loop that has already
+    /// established its own bounds can write through this pointer and skip
+    /// put_pixel's per-pixel check and index multiply entirely. The row index
+    /// itself is still validated, so the worst a caller can do is scribble within
+    /// one row rather than anywhere in the process.
+    ///
+    /// Safe by default, fast when you ask — the pattern every part of this
+    /// engine's drawing API will follow.
+    [[nodiscard]] Uint32* row(int y);
+    [[nodiscard]] const Uint32* row(int y) const;
+
+private:
+    [[nodiscard]] bool in_bounds(int x, int y) const
+    {
+        return x &gt;= 0 &amp;&amp; y &gt;= 0 &amp;&amp; x &lt; width_ &amp;&amp; y &lt; height_;
+    }
+
+    [[nodiscard]] std::size_t index(int x, int y) const
+    {
+        return static_cast&lt;std::size_t&gt;(y) * static_cast&lt;std::size_t&gt;(width_)
+             + static_cast&lt;std::size_t&gt;(x);
+    }
+
+    // std::vector owns the allocation, so the buffer frees itself when the
+    // framebuffer goes out of scope — no matching delete to forget, on any exit
+    // path. That is RAII, and it is why the engine core will keep reaching for
+    // owning containers rather than new/delete. Module 5 makes the principle
+    // explicit; here it is simply the obvious choice.
+    std::vector&lt;Uint32&gt; pixels_;
+    int width_;
+    int height_;
+};
+
+} // namespace engine</code></pre>
+  </figure>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/main.cpp</span>
+      <span class="tag modified">modified</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// src/main.cpp — the engine's entry point.
+//
+// The loop is the one settled in Lesson 1.4 and does not change again:
+//
+//     drain events -&gt; tick clock -&gt; update input -&gt; N fixed steps -&gt; render
+//
+// Rendering means writing pixels into memory we own (Lesson 1.5), then handing
+// that block to the GPU as a texture.
+//
+// What changed in 1.6 is what those pixel values *mean*. The demo is now a
+// comparison board: two colour ramps, each drawn twice — once by interpolating
+// the stored numbers, once by interpolating the light those numbers stand for.
+// The two versions touch, so the seam between them is where the difference is
+// most obvious. It is not subtle, and it is why Module 6 rebuilds the renderer
+// around linear light.
+
+#include "core/clock.hpp"
+#include "core/fixed_step.hpp"
+#include "core/input.hpp"
+#include "gfx/colour.hpp"
+#include "gfx/framebuffer.hpp"
+
+#include &lt;SDL3/SDL.h&gt;
+#include &lt;SDL3/SDL_main.h&gt;   // Provides the cross-platform entry point. NOTE:
+                             // &lt;SDL3/SDL.h&gt; deliberately does NOT include this,
+                             // so we include it explicitly, exactly once, here.
+
+#include &lt;array&gt;
+#include &lt;cstring&gt;
+
+namespace {
+
+// ---- The framebuffer's size ------------------------------------------------
+// 320x180 scaled 4x to a 1280x720 window, so one written pixel is a visible 4x4
+// block. See Lesson 1.5.
+constexpr int k_fb_width = 320;
+constexpr int k_fb_height = 180;
+
+// ---- The comparison board ---------------------------------------------------
+constexpr int k_strip_x = 10;
+constexpr int k_strip_w = 300;
+constexpr int k_strip_h = 18;
+
+constexpr int k_pair_a_y = 22;   // black -&gt; white
+constexpr int k_pair_b_y = 78;   // red   -&gt; green
+
+// ---- The bouncing ball, kept from Lesson 1.4 --------------------------------
+// It stays because the loop underneath is still running and should look like it,
+// and because its fading trail is the same gamma question in motion.
+constexpr float k_gravity = 300.0f;
+constexpr float k_ball_size = 6.0f;
+constexpr float k_ball_start_y = 126.0f;
+constexpr float k_floor_y = 172.0f;
+
+constexpr Uint32 k_throttle_ms = 50;
+
+/// Trail positions, one per simulation step.
+constexpr std::size_t k_trail_length = 90;
+
+struct sim_state
+{
+    float ball_y = k_ball_start_y;
+    float ball_vy = 0.0f;
+};
+
+void step_simulation(sim_state&amp; s, float h)
+{
+    s.ball_y += s.ball_vy * h;
+    s.ball_vy += k_gravity * h;
+
+    if (s.ball_y + k_ball_size &gt; k_floor_y)
+    {
+        s.ball_y = k_floor_y - k_ball_size;
+        s.ball_vy = -s.ball_vy;
+    }
+}
+
+[[nodiscard]] float lerp(float a, float b, float t)
+{
+    return a + (b - a) * t;
+}
+
+/// Draw one horizontal ramp between two colours, using the given mix function.
+///
+/// The signature is the point: `mix` is a pointer to either engine::mix_encoded
+/// or engine::mix_linear, so the two strips of a pair differ in exactly one
+/// thing — which function computed each column — and in nothing else.
+void draw_ramp(engine::framebuffer&amp; fb, int y, Uint32 from, Uint32 to,
+               Uint32 (*mix)(Uint32, Uint32, float))
+{
+    for (int i = 0; i &lt; k_strip_w; ++i)
+    {
+        const float t = static_cast&lt;float&gt;(i) / static_cast&lt;float&gt;(k_strip_w - 1);
+        fb.fill_rect(k_strip_x + i, y, 1, k_strip_h, mix(from, to, t));
+    }
+}
+
+/// Copy the framebuffer into a streaming texture, one row at a time.
+///
+/// Row by row because the pitch SDL returns is the GPU's, not ours: drivers pad
+/// rows for alignment. Lesson 1.5 §4.3.
+[[nodiscard]] bool upload(SDL_Texture* texture, const engine::framebuffer&amp; fb)
+{
+    void* dst_pixels = nullptr;
+    int dst_pitch = 0;
+
+    if (!SDL_LockTexture(texture, nullptr, &amp;dst_pixels, &amp;dst_pitch))
+    {
+        return false;
+    }
+
+    Uint8* const dst = static_cast&lt;Uint8*&gt;(dst_pixels);
+    const int row_bytes = fb.pitch();
+
+    for (int y = 0; y &lt; fb.height(); ++y)
+    {
+        std::memcpy(dst + static_cast&lt;std::size_t&gt;(y) * static_cast&lt;std::size_t&gt;(dst_pitch),
+                    fb.row(y),
+                    static_cast&lt;std::size_t&gt;(row_bytes));
+    }
+
+    SDL_UnlockTexture(texture);
+    return true;
+}
+
+} // namespace
+
+int main(int argc, char* argv[])
+{
+    (void)argc;
+    (void)argv;
+
+    // ---- 1. Initialise ------------------------------------------------------
+    if (!SDL_Init(SDL_INIT_VIDEO))
+    {
+        SDL_Log("SDL_Init failed: %s", SDL_GetError());
+        return 1;
+    }
+
+    const int sdl_version = SDL_GetVersion();
+    SDL_Log("Engine starting — SDL %d.%d.%d",
+            SDL_VERSIONNUM_MAJOR(sdl_version),
+            SDL_VERSIONNUM_MINOR(sdl_version),
+            SDL_VERSIONNUM_MICRO(sdl_version));
+
+    // ---- 2. Window and renderer --------------------------------------------
+    SDL_Window* window = SDL_CreateWindow("Engine", 1280, 720, SDL_WINDOW_RESIZABLE);
+    if (window == nullptr)
+    {
+        SDL_Log("SDL_CreateWindow failed: %s", SDL_GetError());
+        SDL_Quit();
+        return 1;
+    }
+
+    SDL_Renderer* renderer = SDL_CreateRenderer(window, nullptr);
+    if (renderer == nullptr)
+    {
+        SDL_Log("SDL_CreateRenderer failed: %s", SDL_GetError());
+        SDL_DestroyWindow(window);
+        SDL_Quit();
+        return 1;
+    }
+
+    int vsync = SDL_RENDERER_VSYNC_DISABLED;
+    SDL_SetRenderVSync(renderer, vsync);
+
+    // ---- 3. The framebuffer, and the texture that shows it -----------------
+    engine::framebuffer fb(k_fb_width, k_fb_height);
+
+    SDL_Texture* screen_texture = SDL_CreateTexture(renderer,
+                                                    SDL_PIXELFORMAT_ARGB8888,
+                                                    SDL_TEXTUREACCESS_STREAMING,
+                                                    k_fb_width, k_fb_height);
+    if (screen_texture == nullptr)
+    {
+        SDL_Log("SDL_CreateTexture failed: %s", SDL_GetError());
+        SDL_DestroyRenderer(renderer);
+        SDL_DestroyWindow(window);
+        SDL_Quit();
+        return 1;
+    }
+
+    SDL_SetTextureScaleMode(screen_texture, SDL_SCALEMODE_NEAREST);
+
+    // ---- 4. Subsystems and demo state --------------------------------------
+    engine::clock clk;
+    engine::input in;
+    engine::fixed_step stepper(60.0f);
+
+    sim_state previous;
+    sim_state current;
+
+    std::array&lt;int, k_trail_length&gt; trail_y{};
+    std::size_t trail_head = 0;
+    std::size_t trail_count = 0;
+
+    // Which rule the ball's trail fades with. Both paths read the same data, so
+    // pressing M swaps the arithmetic and nothing else.
+    bool trail_linear = true;
+
+    const Uint32 k_bg = engine::pack_argb(14, 14, 22);
+    const Uint32 k_black = engine::pack_argb(0, 0, 0);
+    const Uint32 k_white = engine::pack_argb(255, 255, 255);
+    const Uint32 k_red = engine::pack_argb(255, 0, 0);
+    const Uint32 k_green = engine::pack_argb(0, 255, 0);
+    const Uint32 k_ball_colour = engine::pack_argb(126, 162, 236);
+    const Uint32 k_floor_colour = engine::pack_argb(90, 90, 110);
+
+    SDL_Log("Controls: [M] trail mix · [1-4] sim rate · [V] vsync · [T] throttle · [R] reset · [Esc] quit");
+    SDL_Log("The stored value 128 emits %.1f%% of white's light; half the light is stored as %d",
+            static_cast&lt;double&gt;(engine::srgb_to_linear_u8(128)) * 100.0,
+            static_cast&lt;int&gt;(engine::linear_to_srgb_u8(0.5f)));
+
+    // ---- 5. The loop --------------------------------------------------------
+    bool running = true;
+    while (running)
+    {
+        SDL_Event event;
+        while (SDL_PollEvent(&amp;event))
+        {
+            in.feed_event(event);
+
+            switch (event.type)
+            {
+            case SDL_EVENT_QUIT:
+                SDL_Log("Quit requested");
+                running = false;
+                break;
+
+            case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
+                SDL_Log("Window %u close requested", static_cast&lt;unsigned&gt;(event.window.windowID));
+                running = false;
+                break;
+
+            default:
+                break;
+            }
+        }
+
+        clk.tick();
+        in.update();
+
+        // --- 5a. Controls ----------------------------------------------------
+        if (in.key_pressed(SDL_SCANCODE_ESCAPE)) { running = false; }
+        if (in.key_pressed(SDL_SCANCODE_M)) { trail_linear = !trail_linear; }
+
+        if (in.key_pressed(SDL_SCANCODE_1)) { stepper.set_rate(10.0f); }
+        if (in.key_pressed(SDL_SCANCODE_2)) { stepper.set_rate(30.0f); }
+        if (in.key_pressed(SDL_SCANCODE_3)) { stepper.set_rate(60.0f); }
+        if (in.key_pressed(SDL_SCANCODE_4)) { stepper.set_rate(120.0f); }
+
+        if (in.key_pressed(SDL_SCANCODE_V))
+        {
+            vsync = (vsync == SDL_RENDERER_VSYNC_DISABLED) ? 1 : SDL_RENDERER_VSYNC_DISABLED;
+            if (!SDL_SetRenderVSync(renderer, vsync))
+            {
+                SDL_Log("SDL_SetRenderVSync(%d) failed: %s", vsync, SDL_GetError());
+            }
+        }
+
+        if (in.key_pressed(SDL_SCANCODE_R))
+        {
+            previous = sim_state{};
+            current = sim_state{};
+            trail_head = 0;
+            trail_count = 0;
+        }
+
+        // --- 5b. Simulate ----------------------------------------------------
+        stepper.begin_frame(clk.dt());
+        while (stepper.next_step())
+        {
+            previous = current;
+            step_simulation(current, stepper.h());
+
+            trail_y[trail_head] = static_cast&lt;int&gt;(current.ball_y);
+            trail_head = (trail_head + 1) % k_trail_length;
+            if (trail_count &lt; k_trail_length) { ++trail_count; }
+        }
+
+        const float alpha = stepper.alpha();
+
+        // --- 5c. Draw ---------------------------------------------------------
+        // The background no longer covers every pixel, so the clear is back —
+        // exactly the situation Lesson 1.5 warned about when it removed one.
+        fb.clear(k_bg);
+
+        // The comparison board. Each pair has the naive mix on top and the
+        // correct one directly beneath it, touching, so the eye can compare them
+        // without having to travel.
+        draw_ramp(fb, k_pair_a_y, k_black, k_white, engine::mix_encoded);
+        draw_ramp(fb, k_pair_a_y + k_strip_h, k_black, k_white, engine::mix_linear);
+
+        draw_ramp(fb, k_pair_b_y, k_red, k_green, engine::mix_encoded);
+        draw_ramp(fb, k_pair_b_y + k_strip_h, k_red, k_green, engine::mix_linear);
+
+        fb.fill_rect(0, static_cast&lt;int&gt;(k_floor_y), k_fb_width, 1, k_floor_colour);
+
+        // The trail, fading from the ball's colour back to the background. The
+        // newest dot is at full strength, the oldest at none; whether that fade
+        // is computed on stored numbers or on light is what M switches.
+        const int trail_x = k_fb_width / 2;
+        for (std::size_t k = 0; k &lt; trail_count; ++k)
+        {
+            const std::size_t idx = (trail_head + k_trail_length - 1 - k) % k_trail_length;
+            const float age = (trail_count &gt; 1)
+                ? static_cast&lt;float&gt;(k) / static_cast&lt;float&gt;(trail_count - 1)
+                : 0.0f;
+            const float strength = 1.0f - age;
+
+            const Uint32 dot = trail_linear
+                ? engine::mix_linear(k_bg, k_ball_colour, strength)
+                : engine::mix_encoded(k_bg, k_ball_colour, strength);
+
+            fb.put_pixel(trail_x - 8, trail_y[idx], dot);
+            fb.put_pixel(trail_x + 8, trail_y[idx], dot);
+        }
+
+        fb.fill_rect(trail_x - static_cast&lt;int&gt;(k_ball_size) / 2,
+                     static_cast&lt;int&gt;(lerp(previous.ball_y, current.ball_y, alpha)),
+                     static_cast&lt;int&gt;(k_ball_size), static_cast&lt;int&gt;(k_ball_size), k_ball_colour);
+
+        // --- 5d. Present ------------------------------------------------------
+        if (!upload(screen_texture, fb))
+        {
+            SDL_Log("SDL_LockTexture failed: %s", SDL_GetError());
+        }
+
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+        SDL_RenderClear(renderer);
+        SDL_RenderTexture(renderer, screen_texture, nullptr, nullptr);
+
+        // Labels, drawn over our framebuffer because we still have no font of our
+        // own (Module 6). At 2x text scale over a 4x framebuffer scale, a text
+        // coordinate is exactly twice a framebuffer coordinate.
+        SDL_SetRenderScale(renderer, 2.0f, 2.0f);
+        SDL_SetRenderDrawColor(renderer, 225, 225, 215, 255);
+        SDL_RenderDebugTextFormat(renderer, 6.0f, 6.0f,
+                                  "fps %7.1f   sim %3.0f Hz   the value 128 emits %.1f%% of white's light",
+                                  static_cast&lt;double&gt;(clk.fps()),
+                                  static_cast&lt;double&gt;(stepper.rate_hz()),
+                                  static_cast&lt;double&gt;(engine::srgb_to_linear_u8(128)) * 100.0);
+        SDL_RenderDebugText(renderer, 6.0f, 30.0f,
+                            "black to white   upper: mixed as stored numbers   lower: mixed as light");
+        SDL_RenderDebugText(renderer, 6.0f, 126.0f,
+                            "red to green     upper: mixed as stored numbers   lower: mixed as light");
+        SDL_RenderDebugTextFormat(renderer, 6.0f, 236.0f,
+                                  "trail fade: %-18s [M] switch   [1-4] sim rate   [Esc] quit",
+                                  trail_linear ? "mixed as light" : "mixed as numbers");
+        SDL_SetRenderScale(renderer, 1.0f, 1.0f);
+
+        SDL_RenderPresent(renderer);
+
+        if (in.key_down(SDL_SCANCODE_T))
+        {
+            SDL_Delay(k_throttle_ms);
+        }
+    }
+
+    // ---- 6. Shut down, in reverse order of creation -------------------------
+    SDL_DestroyTexture(screen_texture);
+    SDL_DestroyRenderer(renderer);
+    SDL_DestroyWindow(window);
+    SDL_Quit();
+    return 0;
+}</code></pre>
+  </figure>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">CMakeLists.txt</span>
+      <span class="tag modified">modified</span>
+      <span class="lang" data-lang="cmake">CMake</span>
+    </figcaption>
+    <pre><code class="lang-cmake"># CMakeLists.txt — the engine's build description.
+#
+# This one file tells CMake how to build the project on Windows, Linux, and
+# macOS, with MSVC, GCC, or Clang, and how to acquire SDL3. You describe the
+# build once here; CMake generates the right native build for whatever machine
+# runs it. This is what Lesson 0.4 builds up, line by line.
+
+# 3.24 is our floor: new enough for modern FetchContent behaviour and the
+# target/property model we rely on. Older CMake will refuse to configure, which
+# is what we want — a clear failure, not a subtle one.
+cmake_minimum_required(VERSION 3.24)
+
+project(engine LANGUAGES CXX)
+
+# The C++ standard, set once for every target in the project. STANDARD_REQUIRED
+# makes a compiler that cannot do C++20 an error rather than a silent downgrade;
+# EXTENSIONS OFF asks for -std=c++20, not -std=gnu++20, so we stay portable.
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+# ---- Dependencies ----------------------------------------------------------
+# FetchContent acquires SDL3 at configure time and adds it to our build. We pin
+# an exact release tag: a moving branch would mean a fresh clone could build
+# different source than yours, which is how "works on my machine" is born.
+include(FetchContent)
+
+# SDL build options must be set BEFORE SDL is configured. We only need the
+# library itself, so skip SDL's own test helpers — it shaves real time off a
+# from-source build.
+set(SDL_TEST_LIBRARY OFF)
+
+FetchContent_Declare(
+    SDL3
+    GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
+    GIT_TAG        release-3.4.12   # pinned — never a branch name
+    GIT_SHALLOW    TRUE             # only this tag's snapshot, not all of history
+)
+FetchContent_MakeAvailable(SDL3)
+
+# ---- Our program -----------------------------------------------------------
+# Every source file is listed by hand. CMake can glob them for you, and you
+# should not let it: a glob is evaluated at configure time, so adding a file
+# leaves the build silently ignoring it until someone reconfigures. An explicit
+# list is one extra line per file and never lies.
+add_executable(engine
+    src/main.cpp
+    src/core/clock.cpp
+    src/core/fixed_step.cpp
+    src/core/input.cpp
+    src/gfx/colour.cpp
+    src/gfx/framebuffer.cpp
+)
+
+# Make `src/` a root for our own includes, so a file says
+#     #include "core/input.hpp"
+# from anywhere in the tree — the same spelling regardless of which directory
+# the including file lives in. Relative paths like "../core/input.hpp" break the
+# moment a file moves; a stable include root does not. PRIVATE because nothing
+# links against us: this is a leaf executable, and the setting stops here.
+target_include_directories(engine PRIVATE src)
+
+# Link SDL. SDL3::SDL3 is the alias SDL exports for "the SDL library, however it
+# was built"; linking it also pulls in SDL's headers and platform frameworks
+# transitively, so we never name Cocoa or user32 ourselves.
+target_link_libraries(engine PRIVATE SDL3::SDL3)
+
+# Our warning discipline (see cpp-style §9) — applied to OUR target only, never
+# to SDL. Third-party code is compiled with its own flags; holding someone
+# else's library to /W4 just produces noise we cannot act on.
+if(MSVC)
+    target_compile_options(engine PRIVATE /W4 /Zc:__cplusplus)
+else()
+    target_compile_options(engine PRIVATE -Wall -Wextra)
+endif()</code></pre>
+  </figure>
+
+  <p>
+    <code>src/gfx/framebuffer.cpp</code> and the three <code>src/core/</code> subsystems are unchanged
+    from Lessons 1.2–1.5.
+  </p>
+
+  <!-- ================= 7. BUILD & RUN ================= -->
+  <h2 id="build"><span class="num">6</span>Build &amp; Run</h2>
+
+  <figure class="listing shell">
+    <figcaption>
+      <span class="path">Linux and macOS</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash">cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+cmake --build build
+./build/engine</code></pre>
+  </figure>
+
+  <figure class="listing shell">
+    <figcaption>
+      <span class="path">Windows (MSVC)</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash">cmake -S . -B build
+cmake --build build --config Debug
+.\build\Debug\engine.exe</code></pre>
+  </figure>
+
+  <h3>What you should see</h3>
+
+  <p>
+    The console states the lesson's two numbers, computed by the same code that draws the ramps:
+  </p>
+
+  <figure class="listing shell">
+    <figcaption>
+      <span class="path">expected output</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash">Engine starting — SDL 3.4.12
+Controls: [M] trail mix · [1-4] sim rate · [V] vsync · [T] throttle · [R] reset · [Esc] quit
+The stored value 128 emits 21.6% of white's light; half the light is stored as 188</code></pre>
+  </figure>
+
+  <p>And in the window, four ramps in two touching pairs:</p>
+
+  <ol>
+    <li>
+      <strong>Look at the black-to-white pair first.</strong> The upper strip — mixed as stored
+      numbers — reaches mid-grey at the halfway point. The lower one is visibly <em>lighter</em>
+      through the middle, because it reaches half the <em>light</em> there instead. Neither is
+      "prettier"; they answer different questions, and the lower one answers the one a renderer asks.
+    </li>
+    <li>
+      <strong>Now the red-to-green pair.</strong> This is the one that should make you wince. The
+      upper strip passes through a dark, muddy olive; the lower passes through a clean bright yellow.
+      Cover the labels and ask which one looks like a mix of red and green light.
+    </li>
+    <li>
+      <strong>Watch the seam,</strong> not the strips. The two halves of each pair touch, and the
+      discontinuity along that line is the size of the error at every point in the ramp
+      simultaneously.
+    </li>
+    <li>
+      <strong>Press <kbd>M</kbd>.</strong> The ball's trail switches between the two fade rules. The
+      naive fade dies away much sooner — the dots reach the background long before they should,
+      which is §<a href="#wrong">3.3</a>'s table happening in motion.
+    </li>
+    <li>
+      <strong>Press <kbd>1</kbd>.</strong> Everything from Lesson 1.4 is still running underneath.
+    </li>
+  </ol>
+
+  <div class="callout ok">
+    <span class="label">Checkpoint — verified before publishing</span>
+    <p>
+      Built warning-clean at <code>-Wall -Wextra</code> with Apple Clang against SDL 3.4.12; runs and
+      shuts down cleanly. The colour module was driven through a 24-assertion harness confirming
+      every number this lesson quotes:
+    </p>
+    <ul>
+      <li><code>srgb_to_linear_u8(128) = 0.2159</code> and <code>linear_to_srgb_u8(0.5) = 188</code>,
+        with 188 decoding back to 0.5029.</li>
+      <li>The transform is <strong>strictly increasing across all 256 values</strong>, and the round
+        trip encode(decode(v)) returns <code>v</code> for <strong>every one of the 256</strong> —
+        zero failures. That losslessness is worth knowing: it means storing a colour, decoding it,
+        and re-encoding it unchanged costs nothing.</li>
+      <li>Endpoints exact: 0 → 0.0, 255 → 1.0, and back.</li>
+      <li>Out-of-range light saturates rather than wrapping: <code>2.5 → 255</code>,
+        <code>−1.0 → 0</code>.</li>
+      <li>The lookup table agrees with the exact function to within 1e-7 across all 256 entries.</li>
+      <li>Red mixed with green at <code>t = 0.5</code> gives exactly <code>(128, 128, 0)</code>
+        naively and <code>(188, 188, 0)</code> linearly, with blue 0 in both; both rules agree
+        exactly at <code>t = 0</code> and <code>t = 1</code>.</li>
+      <li><strong>Alpha is not converted</strong> by either rule — both give 128 when mixing
+        transparent with opaque halfway.</li>
+      <li>The fade table of §<a href="#wrong">3.3</a> reproduced exactly: 225, 188, 137, 89.</li>
+      <li>The checkerboard identity: encoding the average of black's and white's light gives
+        <strong>188</strong>, which is why §<a href="#checker">3.2</a>'s test works.</li>
+    </ul>
+    <p style="margin-bottom:0">
+      All of these were independently computed in Python first and then reproduced by the C++, which
+      is why the lesson and the engine agree to the digit.
+    </p>
+  </div>
+
+  <!-- ================= 8. PITFALLS ================= -->
+  <h2 id="pitfalls"><span class="num">7</span>Common Pitfalls &amp; Debugging</h2>
+
+  <div class="pitfalls">
+    <details class="pitfall-item">
+      <summary>Cross-fades pass through mud — <span class="sym">two bright colours blend through something dark</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>Fading red to green goes through brown; blue to yellow goes through grey. The endpoints look right and the middle looks wrong.</dd>
+          <dt>Cause</dt>
+          <dd>Interpolating stored values. The midpoint of the numbers emits 21.6% of each channel, not 50% (§<a href="#curve">3.1</a>).</dd>
+          <dt>Fix</dt>
+          <dd>Decode, interpolate, re-encode — <code>mix_linear</code>. If a whole pipeline is doing this, converting per-operation is a stopgap; the real answer is to work in linear throughout (§<a href="#notyet">3.5</a>).</dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>Fades fall off a cliff — <span class="sym">a smooth fade-out vanishes early</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>An object fading out looks fine for the first half, then disappears abruptly. Fading in looks like it starts late.</dd>
+          <dt>Cause</dt>
+          <dd>The same error, and it is worst where fades spend most of their time. Asking for 10% brightness and storing 26 emits 1% — a factor of ten (§<a href="#wrong">3.3</a>).</dd>
+          <dt>Fix</dt>
+          <dd>Fade in linear light. Press <kbd>M</kbd> in the demo to see both, and note it is the <em>tail</em> of the fade that differs most.</dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>Downscaled images get darker — <span class="sym">thumbnails and mipmaps lose brightness</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>An image shrunk to half size is noticeably darker than the original, and each further mip level is darker still. Most visible on fine bright detail against dark backgrounds — starfields, hair, foliage.</dd>
+          <dt>Cause</dt>
+          <dd>Downscaling averages neighbouring pixels, which is mixing, which is wrong on stored values. Averaging black and white gives 128, which emits 21.6% rather than the correct 50%.</dd>
+          <dt>Fix</dt>
+          <dd>Decode to linear, average, re-encode. This is why serious image tools have a "gamma-correct resampling" option and why it is not the default in older ones. Our mipmap generation in Module 6 does it correctly, and the lesson there points back here.</dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>Anti-aliased text has dark fringes — <span class="sym">light text on dark looks thin and grubby</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>White text on a black background looks thinner and dirtier than it should, with grey haloes. Dark text on white usually looks acceptable, which makes the problem easy to dismiss.</dd>
+          <dt>Cause</dt>
+          <dd>An anti-aliased edge pixel is a coverage-weighted mix of the glyph and the background — mixing again. The asymmetry between light-on-dark and dark-on-light is the curve's shape showing through.</dd>
+          <dt>Fix</dt>
+          <dd>Blend the coverage in linear light. Note the distinction from §<a href="#alpha">3.4</a>: the coverage <em>value</em> is linear and must not be converted, but the two colours it is blending between must be.</dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>Everything is washed out — <span class="sym">the fix made it worse</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>After "adding gamma correction", the whole image looks pale, milky, and low-contrast.</dd>
+          <dt>Cause</dt>
+          <dd>A conversion applied twice, or in the wrong direction — decoding something that was already linear, or writing linear values into a buffer the display will decode again. It is the same curve applied one time too many.</dd>
+          <dt>Fix</dt>
+          <dd>Track, for every buffer and every texture, whether its contents are encoded or linear, and write it down. Most gamma bugs are not misunderstandings of the maths but lost track of which space a value is already in. Module 6 makes this an explicit property of every texture rather than a thing you remember.</dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>Alpha behaves strangely after converting — <span class="sym">edges too transparent, blends off</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>Semi-transparent objects are too see-through, and 50% alpha behaves like roughly 20%.</dd>
+          <dt>Cause</dt>
+          <dd>Alpha was run through the transfer function along with the colour channels. 128 became 0.216 rather than 0.502 (§<a href="#alpha">3.4</a>).</dd>
+          <dt>Fix</dt>
+          <dd>Convert three channels, not four. Alpha is coverage — a fraction of area, already linear, never encoded.</dd>
+        </dl>
+      </div>
+    </details>
+  </div>
+
+  <!-- ================= 9. EXERCISES ================= -->
+  <h2 id="exercises"><span class="num">8</span>Exercises</h2>
+
+  <div class="exercise">
+    <h3><span class="xnum">1.6.1</span>Find your display's midpoint<span class="difficulty">warm-up</span></h3>
+    <p>
+      Draw a black-and-white one-pixel checkerboard into the framebuffer, and beside it a row of
+      solid patches from 120 to 200 in steps of 10. Step back and find which patch merges with the
+      checkerboard. How close is it to 188?
+    </p>
+    <details>
+      <summary>Hint</summary>
+      <p>
+        Our framebuffer is scaled 4× to the window, so a one-pixel checkerboard becomes 4×4 blocks —
+        step back further, or temporarily set <code>k_fb_width</code>/<code>k_fb_height</code> to
+        1280×720 so one framebuffer pixel is one screen pixel.
+      </p>
+    </details>
+    <details>
+      <summary>Solution</summary>
+      <p>
+        On a well-behaved display the match lands at 188, give or take one patch. A match at a
+        markedly lower value means your display is applying a steeper curve than sRGB — common on
+        monitors in a "vivid" or "game" picture mode, which is worth knowing before you spend an
+        evening tuning a scene's lighting on one.
+      </p>
+      <p style="margin-bottom:0">
+        The exercise has a second point. You just built a measuring instrument out of two rectangles
+        and your own visual system, and it measures a property of the whole display chain that no
+        amount of reading the source could tell you. Keep the habit.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3><span class="xnum">1.6.2</span>Break the alpha rule<span class="difficulty">warm-up</span></h3>
+    <p>
+      In <code>mix_linear</code>, change the alpha argument from <code>mix_channel_encoded</code> to
+      <code>mix_channel_linear</code> — that is, convert all four channels. Predict what happens
+      before you build. Then check with the test harness.
+    </p>
+    <details>
+      <summary>Solution</summary>
+      <p>
+        A half-and-half mix of transparent and opaque now yields alpha 188 rather than 128 — the
+        blend is <em>more</em> opaque than asked for, because the encode step brightens a value that
+        was never dimmed. (Conversely, an implementation that decoded alpha would produce 55.)
+      </p>
+      <p style="margin-bottom:0">
+        The demo may barely change, because our framebuffer ignores alpha — nothing composites yet.
+        That is the interesting part: the bug is invisible today and would appear, months later, as
+        "transparency looks wrong" in a system nobody would connect to a colour function. It is worth
+        seeing how quietly a units error can wait.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3><span class="xnum">1.6.3</span>Measure the round trip's cost<span class="difficulty">guided</span></h3>
+    <p>
+      Time <code>mix_encoded</code> against <code>mix_linear</code> over a few million calls at
+      <code>-O2</code>. Then try replacing the lookup table with a direct call to
+      <code>srgb_to_linear</code> and measure again. What does the table actually buy?
+    </p>
+    <details>
+      <summary>Hint</summary>
+      <p>
+        Remember Lesson 1.5's benchmarking trap: make sure the results are consumed so nothing is
+        optimised away, take a median of several runs, and change one thing at a time.
+      </p>
+    </details>
+    <details>
+      <summary>Solution sketch</summary>
+      <p>
+        <code>mix_linear</code> is several times slower than <code>mix_encoded</code> — it does three
+        table lookups, three interpolations, and three <code>pow</code> calls on the way out. Removing
+        the table makes it worse still, since the decode side becomes three more <code>pow</code>s.
+      </p>
+      <p style="margin-bottom:0">
+        The conclusion is not "linear is expensive". It is that <em>converting per operation</em> is
+        expensive, which is precisely the argument for a pipeline that decodes once at the start and
+        encodes once at the end (§<a href="#notyet">3.5</a>). You have just measured the reason
+        Module 6 is built the way it is.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3><span class="xnum">1.6.4</span>Downscale an image, twice<span class="difficulty">guided</span></h3>
+    <p>
+      Fill the framebuffer with a fine pattern of alternating pure black and pure white pixels. Now
+      average each 2×2 block down to a quarter-size image — once on stored values, once in linear
+      light — and draw both. What value does each produce, and which is correct?
+    </p>
+    <details>
+      <summary>Solution</summary>
+      <p>
+        Each 2×2 block holds two black and two white pixels. Averaging stored values gives 128;
+        averaging light gives 0.5, which encodes to 188. The correct result is 188, for exactly the
+        reason §<a href="#checker">3.2</a>'s test works — half the area emitting full light is half
+        the light.
+      </p>
+      <p style="margin-bottom:0">
+        Compare your two downscaled images against the original pattern viewed from a distance. The
+        linear one matches; the naive one is conspicuously darker. Repeat the downscale three or four
+        times and the naive version marches steadily towards black, which is exactly what a mipmap
+        chain built the naive way does — and why distant foliage in older games fades to dark mush.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3><span class="xnum">1.6.5</span>Design the linear framebuffer<span class="difficulty">open</span></h3>
+    <p>
+      Sketch what <code>framebuffer</code> would look like if it stored linear light instead of
+      encoded sRGB. What type would a pixel be? What happens at <code>put_pixel</code>, at
+      <code>fill_rect</code>, and at upload time? What breaks that currently works? Do not build it —
+      Module 6 does — but write down the interface and the costs.
+    </p>
+    <details>
+      <summary>Hint</summary>
+      <p>
+        Start from the constraint that eight bits of linear light bands visibly in the darks
+        (§<a href="#why">2.2</a>), and that light values can legitimately exceed 1.0.
+      </p>
+    </details>
+    <details>
+      <summary>Solution sketch</summary>
+      <p>
+        A pixel becomes four floats, or four 16-bit halfs — so the buffer is two to four times
+        larger, and 320×180 goes from 225 KB to 450 KB or 900 KB. Full-screen clears and fills cost
+        proportionally more memory bandwidth, which Lesson 1.5's measurements say is what dominates.
+      </p>
+      <p>
+        <code>put_pixel</code> and <code>fill_rect</code> get simpler, not harder: no conversion,
+        because everything is already linear. All the complexity moves to the edges. Upload gains a
+        conversion pass over every pixel — decode is gone, but encode now happens once per pixel per
+        frame — and that pass is also where tonemapping belongs, since it is the moment values above
+        1.0 must be brought into a range the display can show.
+      </p>
+      <p style="margin-bottom:0">
+        What breaks: every colour constant in the codebase. <code>pack_argb(126, 162, 236)</code>
+        means an encoded colour, and in a linear buffer it would be far too bright. You would need a
+        distinct type — <code>colour_srgb</code> versus <code>colour_linear</code> — so the compiler
+        catches the mixing rather than your eyes. That type distinction is the single most valuable
+        thing to take from this exercise, and it is what Module 6 builds.
+      </p>
+    </details>
+  </div>
+
+  <!-- ================= 10. RECAP ================= -->
+  <h2 id="recap"><span class="num">9</span>Recap &amp; Next</h2>
+
+  <div class="recap">
+    <h2>What the engine can do now that it could not before</h2>
+    <ul>
+      <li>
+        <strong>It knows what its numbers mean.</strong> A stored channel value is a position on a
+        perceptually spaced dial, not a quantity of light — and the engine can convert between the
+        two exactly, in both directions.
+      </li>
+      <li>
+        <strong>It can mix colours correctly,</strong> and can demonstrate the difference against the
+        naive version side by side, in a static ramp and in motion.
+      </li>
+      <li>
+        <strong>It treats alpha as what it is:</strong> a coverage fraction, already linear, never put
+        through a light transform.
+      </li>
+      <li>
+        <strong>It has a proper home for colour</strong> — <code>gfx/colour.hpp</code>, with the
+        dependency running from framebuffer to colour and not the other way.
+      </li>
+      <li>
+        <strong>You can predict a whole family of bugs on sight:</strong> muddy cross-fades, fades
+        that die early, darkening mipmaps, fringed text. All one cause.
+      </li>
+    </ul>
+    <p>
+      The idea to carry forward: <strong>the storage format is not the arithmetic format.</strong>
+      sRGB is an excellent way to keep a colour in eight bits and a bad way to calculate with one, and
+      the fix is always the same shape — decode, compute, re-encode. Module 6's HDR pipeline is that
+      sentence applied to an entire renderer instead of a single mix.
+    </p>
+    <p>
+      <strong>Next:</strong> <a href="01-07-vectors-2d.html">1.7 — 2D Vectors, Geometrically</a>.
+      We have been writing <code>x</code> and <code>y</code> as separate floats and paying for it —
+      Exercise 1.2.3's diagonal movement was 41% too fast for want of a way to say "this direction,
+      one unit long". Vectors arrive as arrows before they arrive as components, the dot product
+      arrives as a shadow before it arrives as a formula, and the engine gets the first piece of the
+      maths library everything after Module 2 is built on.
+    </p>
+  </div>
+
+  <!-- ================= 11. FURTHER READING ================= -->
+  <h2 id="reading"><span class="num">10</span>Further Reading</h2>
+
+  <ul class="reading">
+    <li>
+      <span class="src">Article</span>
+      <strong><a href="https://blog.johnnovak.net/2016/09/21/what-every-coder-should-know-about-gamma/">John Novak, "What every coder should know about gamma"</a></strong> —
+      the best single treatment of this subject anywhere, with side-by-side images for every claim.
+      If you read one thing from this list, read this.
+    </li>
+    <li>
+      <span class="src">Reference</span>
+      <strong><a href="https://www.w3.org/Graphics/Color/srgb">The sRGB specification</a></strong> —
+      where the constants 0.04045, 12.92, 0.055 and 2.4 come from. Short, and worth seeing once so
+      they stop looking arbitrary.
+    </li>
+    <li>
+      <span class="src">Video</span>
+      <strong><a href="https://www.youtube.com/watch?v=LKnqECcg6Gw">Minute Physics, "Computer Color is Broken"</a></strong> —
+      four minutes, and the clearest demonstration of the blending problem in motion. Good to watch
+      before re-reading §<a href="#wrong">3.3</a>.
+    </li>
+    <li>
+      <span class="src">Book chapter</span>
+      <strong><a href="https://developer.nvidia.com/gpugems/gpugems3/part-iv-image-effects/chapter-24-importance-being-linear">GPU Gems 3, "The Importance of Being Linear"</a></strong> —
+      the graphics-programmer's version, showing what a full linear pipeline changes about lighting.
+      This is the shape of what Module 6 builds.
+    </li>
+    <li>
+      <span class="src">Reference</span>
+      <strong><a href="https://en.wikipedia.org/wiki/Weber%E2%80%93Fechner_law">The Weber–Fechner law</a></strong> —
+      the perceptual principle behind §<a href="#why">2.2</a>: response proportional to ratio rather
+      than difference. It governs hearing and mass perception too, which is why decibels are
+      logarithmic for the same reason sRGB is curved.
+    </li>
+  </ul>
+
+  <!-- ================= 12. STATE ================= -->
+  <details class="state">
+    <summary>STATE — resume key</summary>
+<pre>course: Build a Professional 3D Game Engine (SDL3 + C++20)
+version: 1.0
+
+conventions:
+  world: right-handed, Y-up, -Z forward
+  clip: left-handed, +Y up, z in [0,1] (SDL_GPU-fixed; projection absorbs the flip)
+  sw-rasterizer: targets SDL_GPU's exact NDC (Module 4 port = API change, not maths change)
+  matrices: column vectors, v' = M*v, column-major storage
+  winding: CCW = front, cull back (per-pipeline state; set explicitly every time)
+  units: 1 unit = 1 metre; radians internally; linear colour in renderer
+  axis colours: x/y/z = red/green/blue
+  sdl3: FetchContent, pinned release-3.4.12; target SDL3::SDL3; SDL_TEST_LIBRARY OFF
+  sdl3-api: bool SDL_Init/PollEvent; SDL_CreateWindow(title,w,h,flags) no x/y;
+            SDL_CreateRenderer(window,name); event.key.key; &lt;SDL3/SDL_main.h&gt; separate
+  sdl3-input: const bool *SDL_GetKeyboardState(int*) — bool, NOT SDL2's Uint8;
+            SDL_SCANCODE_COUNT = 512; wheel is event-only; SDL_PollEvent pumps;
+            focus loss -&gt; SDL_ResetKeyboard() sends key-UP events
+  sdl3-time: SDL_GetTicksNS() is monotonic; SDL_Delay waits AT LEAST the requested time;
+            SDL_SetRenderVSync; SDL_RenderDebugText/Format = 8x8 ASCII font
+  sdl3-pixels: SDL_TEXTUREACCESS_STREAMING + SDL_LockTexture (WRITE-ONLY, prior contents
+            UNDEFINED, returned pitch MAY EXCEED width*4 -&gt; copy ROW BY ROW).
+            SDL_RenderTexture(r,tex,NULL,NULL): NULL dst = whole target, so a small
+            framebuffer scales to the window and resize needs no code.
+            SDL_SetTextureScaleMode(..., SDL_SCALEMODE_NEAREST).
+            FORMAT NAMES: "8888" = packed native-endian integer, MSB first
+            (ARGB8888 = 0xAARRGGBB); "32" = byte order in memory. On little-endian they
+            are REVERSED: RGBA32 == ABGR8888, BGRA32 == ARGB8888 (header-verified).
+  framebuffer: row-major, index = y*width + x. An x past width lands on the NEXT ROW
+            (candy-striping); a stray y leaves the buffer (UB). put_pixel is
+            bounds-checked; row(y) is the documented fast path; fill_rect CLIPS ONCE.
+            MEASURED (M4 Pro): put_pixel vs row pointer 5.1x (-O0) / 14.8x (-O2);
+            rows-outer vs columns-outer 10.9x @320x180 -&gt; 48.8x @4K.
+            BENCHMARK TRAP: measuring both loop orders THROUGH put_pixel gave 1.00x —
+            its overhead swamped the effect. Differ in ONLY what is under test; use -O2.
+  colour: stored channel values are sRGB-ENCODED, not light. VERIFIED NUMBERS:
+            128 emits 21.6% of white's light; half the light is stored as 188;
+            fades: 75%->225, 50%->188, 25%->137, 10%->89 (naive 64 for 25% emits 5.1%).
+            red+green mixed at t=0.5: naive (128,128,0) dark olive, linear (188,188,0)
+            bright yellow. Encode/decode round trip is LOSSLESS for all 256 values.
+            Exact piecewise transform (0.04045 / 12.92 / 0.055 / 2.4) — NOT pow(x,2.2).
+            256-entry LUT for decode only (encode's input is a continuous float).
+            ALPHA IS COVERAGE, NOT LIGHT — never put it through the transfer function.
+            SAFE on stored values: copy, compare, pick. WRONG: mix, fade, average,
+            downscale/mipmap, add light, anti-alias edges.
+            NOT YET FIXED: we convert per-operation, which is slow and lossy. A real
+            linear pipeline needs a float/half framebuffer, headroom above 1.0, and a
+            tonemap step = Module 6's HDR work.
+  time-model: absolute time = Uint64 ns; dt() clamped 0.25 s; fps() display only
+  loop: THE loop, settled as of 1.4 and not changing again:
+            drain -&gt; clk.tick() -&gt; in.update() -&gt; stepper.begin_frame(clk.dt())
+            -&gt; while (stepper.next_step()) { previous = current; simulate(current, h); }
+            -&gt; alpha = stepper.alpha() -&gt; draw into framebuffer -&gt; upload -&gt; present
+  fixed-step: h = 1/60 default; invariant 0 &lt;= accumulator &lt; h so alpha in [0,1);
+            previous = current INSIDE the loop; simulate() gets h, never clk.dt();
+            interpolation renders at exactly T - h; spiral guarded by dt clamp + step cap;
+            never interpolate across a teleport
+  input-model: poll levels, DERIVE edges; COPY SDL's array, never alias;
+            scancodes for positions, keycodes for symbols
+  shaders: HLSL -&gt; SDL_shadercross (3.0.0-preview) -&gt; SPIR-V/DXIL/MSL  [Module 4+]
+  cpp: C++20, no exceptions/RTTI in core, snake_case, private members trailing _,
+       .hpp + #pragma once, [[nodiscard]], anonymous namespace for TU-local helpers,
+       never `using namespace` at file scope, -Wall -Wextra//W4 all fixed.
+       Owning containers (std::vector) over new/delete. SDL handles still manually
+       managed in main.cpp on purpose; Module 5 wraps them.
+       Header dependency direction: framebuffer -&gt; colour, never the reverse.
+  build: CMake >= 3.24, out-of-source (build/); sources listed explicitly (never GLOB);
+         target_include_directories(engine PRIVATE src)
+  docs-tooling: shared &lt;style&gt; AND trailing &lt;script&gt; propagated by
+         docs/_template/apply-shared.py — never by hand. Marker regions
+         SHARED-CSS:BEGIN/END and SHARED-SCRIPT:BEGIN/END; widget JS goes OUTSIDE them.
+         Run `apply-shared.py --check` before committing docs/.
+
+curriculum: 94 lessons, ~433 h, 9 modules
+  M0:6  M1:8  M2:12  M3:10  M4:9  M5:10  M6:15  M7:13  M8:11
+
+completed:
+  - MODULE 0 COMPLETE (0.1 … 0.6)
+  - 1.1 Events, Properly
+  - 1.2 Input: State vs Events
+  - 1.3 Frames, Delta Time, and Why Naive Loops Lie
+  - 1.4 The Fixed Timestep with Interpolation, Derived
+  - 1.5 The Framebuffer: Your First Owned Pixels
+  - 1.6 Colour, and an Honest Teaser of sRGB
+
+capabilities:
+  - portable CMake build, six translation units; FetchContent SDL3 (release-3.4.12)
+  - window + event dispatch; input, clock and fixed_step subsystems
+  - THE loop: fixed-timestep simulation with render interpolation, spiral-guarded
+  - framebuffer subsystem: 320x180 ARGB8888 CPU buffer, streaming-texture presentation
+  - colour subsystem (src/gfx/colour): pack/unpack, exact sRGB transfer functions with a
+    256-entry decode LUT, and mix_encoded vs mix_linear
+  - demo: a comparison board (black-white and red-green ramps mixed both ways, drawn
+    touching) plus a bouncing ball whose trail fade rule switches with [M]
+  - known-and-deliberate: conversion happens per-operation, not once at the pipeline
+    edges (Module 6); the debug-text overlay is still SDL's
+
+files:
+  /: CLAUDE.md, README.md, ARCHITECTURE.md, LEARNINGS.md, PROMPT.md, LICENSE,
+     .gitignore, CMakeLists.txt, STATE.md
+  src/: main.cpp
+  src/core/: input.hpp, input.cpp, clock.hpp, clock.cpp, fixed_step.hpp, fixed_step.cpp
+  src/gfx/: colour.hpp, colour.cpp, framebuffer.hpp, framebuffer.cpp
+  docs/: index.html, conventions.html, math-toolbox.html, cpp-style.html
+  docs/lessons/: 00-01..00-06, 01-01-events-properly.html,
+                 01-02-input-state-vs-events.html, 01-03-delta-time.html,
+                 01-04-fixed-timestep.html, 01-05-framebuffer.html, 01-06-colour.html
+  docs/_template/: lesson-template.html, README.md, apply-shared.py
+  memory/: 2026-07-16.md, 2026-07-18.md
+
+next: 1.7 — 2D Vectors, Geometrically</pre>
+  </details>
+
+  <nav class="lesson-nav" aria-label="Lesson navigation (bottom)">
+    <a class="prev-l" href="01-05-framebuffer.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">1.5 — The Framebuffer: Your First Owned Pixels</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="01-07-vectors-2d.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">1.7 — 2D Vectors, Geometrically</span>
+    </a>
+  </nav>
+
+  <footer class="foot">
+    <p>
+      Build a Professional 3D Game Engine ·
+      <a href="../index.html">Contents</a> ·
+      <a href="../conventions.html">Conventions</a> ·
+      <a href="../math-toolbox.html">Math Toolbox</a> ·
+      <a href="../cpp-style.html">C++ Style</a>
+    </p>
+    <p>MIT licensed. Copyright © 2026 digster.</p>
+  </footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  // The checkerboard test. Built from real device pixels: a repeating linear
+  // gradient with hard stops gives exact one-pixel stripes without an image, and
+  // without any resampling of our own.
+  var checker = document.getElementById("gamma-checker");
+  if (!checker) { return; }
+
+  var stripes =
+      "repeating-linear-gradient(0deg, #000 0px, #000 1px, #fff 1px, #fff 2px)";
+  var magnified =
+      "repeating-linear-gradient(0deg, #000 0px, #000 6px, #fff 6px, #fff 12px)";
+  checker.style.background = stripes;
+
+  var btn = document.getElementById("gamma-zoom");
+  var zoomed = false;
+  btn.addEventListener("click", function () {
+    zoomed = !zoomed;
+    checker.style.background = zoomed ? magnified : stripes;
+    btn.textContent = zoomed ? "back to one-pixel stripes" : "show the stripes magnified";
+  });
+})();
+</script>
+
+<!-- SHARED-SCRIPT:BEGIN -->
+<script>
+(function () {
+  "use strict";
+
+  /* ---- Theme toggle: OS default, with a manual override in localStorage ---- */
+  var root = document.documentElement;
+  var KEY = "engine-course-theme";
+  try {
+    var saved = localStorage.getItem(KEY);
+    if (saved) { root.setAttribute("data-theme", saved); root.style.colorScheme = saved; }
+  } catch (e) { /* private mode — fall back to the OS preference */ }
+
+  var btn = document.getElementById("theme-toggle");
+  if (btn) {
+    btn.addEventListener("click", function () {
+      var cur = root.getAttribute("data-theme");
+      if (!cur) {
+        cur = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      }
+      var next = cur === "dark" ? "light" : "dark";
+      root.setAttribute("data-theme", next);
+      root.style.colorScheme = next;
+      try { localStorage.setItem(KEY, next); } catch (e) {}
+    });
+  }
+
+  /* ---- Syntax highlighting -------------------------------------------------
+     A deliberately small tokeniser for C++/HLSL, CMake, and shell. It reads
+     textContent and rebuilds escaped HTML, so it can never execute page content
+     or mangle a listing — worst case a token is mis-coloured.
+
+     Why not highlight.js from a CDN? Because a lesson must render from a bare
+     filesystem with no network, and colour is not worth a dependency that can
+     be absent. This is ~60 lines and always there.
+
+     Keyword vs type matters: `kw` is consulted before `ty`, so a word listed in
+     both lands in .tok-k. Fundamental types (bool, char, int, …) belong in
+     CPP_TYPES only — putting them in CPP_KEYWORDS would silently recolour every
+     declaration in the course.
+     -------------------------------------------------------------------------- */
+  var CPP_KEYWORDS = ("alignas alignof and asm auto break case catch class concept const consteval "
+    + "constexpr constinit const_cast continue co_await co_return co_yield decltype default defined "
+    + "delete do dynamic_cast else enum explicit export extern false final for friend goto if inline "
+    + "mutable namespace new noexcept not nullptr operator or override private protected public "
+    + "register reinterpret_cast requires return sizeof static static_assert static_cast struct "
+    + "switch template this thread_local throw true try typedef typeid typename union using virtual "
+    + "volatile while cbuffer register_space numthreads in out inout").split(" ");
+
+  var CPP_TYPES = ("bool char char8_t char16_t char32_t double float int long short signed unsigned "
+    + "void wchar_t size_t uint8_t uint16_t uint32_t uint64_t int8_t int16_t int32_t int64_t "
+    + "Uint8 Uint16 Uint32 Uint64 Sint8 Sint16 Sint32 Sint64 "
+    + "float2 float3 float4 float4x4 float3x3 half int2 int3 int4 uint uint2 uint3 uint4 matrix "
+    + "Texture2D TextureCube SamplerState StructuredBuffer").split(" ");
+
+  var kw = Object.create(null), ty = Object.create(null);
+  CPP_KEYWORDS.forEach(function (w) { kw[w] = 1; });
+  CPP_TYPES.forEach(function (w) { ty[w] = 1; });
+
+  function esc(s) {
+    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+  function span(cls, s) { return '<span class="tok-' + cls + '">' + esc(s) + "</span>"; }
+
+  // One regex, alternation ordered so longer/greedier forms win.
+  var RE = new RegExp([
+    "(\\/\\*[\\s\\S]*?\\*\\/|\\/\\/[^\\n]*|#[^\\n]*)",       // 1 comment / preprocessor
+    '("(?:\\\\.|[^"\\\\])*"|\'(?:\\\\.|[^\'\\\\])*\')',      // 2 string / char
+    "(\\b\\d[\\w.]*\\b)",                                     // 3 number
+    "([A-Za-z_]\\w*)(?=\\s*\\()",                             // 4 call site
+    "([A-Za-z_]\\w*)",                                        // 5 identifier
+    "([{}()\\[\\];,.<>+\\-*/%=!&|^~?:]+)"                     // 6 punctuation
+  ].join("|"), "g");
+
+  function highlightCLike(src) {
+    var out = "", last = 0, m;
+    RE.lastIndex = 0;
+    while ((m = RE.exec(src)) !== null) {
+      if (m.index > last) out += esc(src.slice(last, m.index));
+      if (m[1])      out += span(m[1].charAt(0) === "#" ? "p" : "c", m[1]);
+      else if (m[2]) out += span("s", m[2]);
+      else if (m[3]) out += span("n", m[3]);
+      else if (m[4]) out += kw[m[4]] ? span("k", m[4]) : span("f", m[4]);
+      else if (m[5]) out += kw[m[5]] ? span("k", m[5])
+                          : ty[m[5]] ? span("t", m[5])
+                          : esc(m[5]);
+      else if (m[6]) out += span("o", m[6]);
+      last = RE.lastIndex;
+    }
+    out += esc(src.slice(last));
+    return out;
+  }
+
+  // Shell: `#` comments anywhere, plus Windows-batch `::` comments — but only at
+  // the start of a line, because `::` is also a namespace separator and a CMake
+  // target separator (`SDL3::SDL3`), which do appear mid-line in shell listings.
+  var SH_RE = /(^|\n)(\s*)(::[^\n]*)|(#[^\n]*)|("(?:\\.|[^"\\])*"|'[^']*')|(^|\n)(\s*)([\w.\/\\-]+)/g;
+  function highlightShell(src) {
+    var out = "", last = 0, m;
+    SH_RE.lastIndex = 0;
+    while ((m = SH_RE.exec(src)) !== null) {
+      if (m.index > last) out += esc(src.slice(last, m.index));
+      if (m[3])      out += esc(m[1] || "") + esc(m[2] || "") + span("c", m[3]);
+      else if (m[4]) out += span("c", m[4]);
+      else if (m[5]) out += span("s", m[5]);
+      else           out += esc(m[6] || "") + esc(m[7] || "") + span("f", m[8]);
+      last = SH_RE.lastIndex;
+    }
+    out += esc(src.slice(last));
+    return out;
+  }
+
+  // CMake: comments, strings, ${vars}, and command names (word before "(").
+  var CMAKE_RE = /(#[^\n]*)|("(?:\\.|[^"\\])*")|(\$\{[^}]*\})|(^|\n)(\s*)([A-Za-z_]\w*)(?=\s*\()/g;
+  function highlightCMake(src) {
+    var out = "", last = 0, m;
+    CMAKE_RE.lastIndex = 0;
+    while ((m = CMAKE_RE.exec(src)) !== null) {
+      if (m.index > last) out += esc(src.slice(last, m.index));
+      if (m[1])      out += span("c", m[1]);
+      else if (m[2]) out += span("s", m[2]);
+      else if (m[3]) out += span("n", m[3]);
+      else           out += esc(m[4] || "") + esc(m[5] || "") + span("f", m[6]);
+      last = CMAKE_RE.lastIndex;
+    }
+    out += esc(src.slice(last));
+    return out;
+  }
+
+  var DISPATCH = {
+    "lang-cpp": highlightCLike, "lang-hlsl": highlightCLike, "lang-c": highlightCLike,
+    "lang-bash": highlightShell, "lang-sh": highlightShell,
+    "lang-cmake": highlightCMake
+  };
+  document.querySelectorAll(".listing pre code").forEach(function (el) {
+    for (var cls in DISPATCH) {
+      if (el.classList.contains(cls)) {
+        el.innerHTML = DISPATCH[cls](el.textContent);
+        return;
+      }
+    }
+  });
+})();
+</script>
+<!-- SHARED-SCRIPT:END -->
+</body>
+</html>

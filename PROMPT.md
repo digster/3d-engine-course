@@ -160,3 +160,24 @@ interactive 2-D-to-1-D index widget.
 | Pixel format | `ARGB8888`, built with shifts, never byte writes | Keeps us in the packed-integer view, so the format matches on big-endian too and endianness stays out of the engine until Module 6's image loader. |
 | API shape | `put_pixel` bounds-checked, `row(y)` the documented fast path | Safe-only forces slow code; fast-only forces every caller to be perfect. Measured the gap (5–15×) rather than asserting it. |
 | Performance claims | All measured, and one corrected | A first benchmark showed row/column order made no difference; the cause was measuring through `put_pixel`, whose overhead hid the 10.9× cache effect. Written up as a pitfall and an exercise. |
+
+---
+
+## 2026-07-18 — Lesson 1.6
+
+> next
+
+**Response:** Lesson 1.6 — Colour, and an Honest Teaser of sRGB. The `gfx::colour` module
+(exact sRGB transfer functions, a 256-entry decode LUT, `mix_encoded` vs `mix_linear`),
+`pack_argb` relocated from `framebuffer.hpp`, the demo rebuilt as a comparison board, and
+the lesson page with three SVG diagrams and an interactive display-calibration test.
+
+**Decisions made in this session:**
+
+| Decision | Choice | Rationale |
+|---|---|---|
+| Scope | Correct mixing functions, but **not** a linear pipeline | §3.5 says so explicitly. A real linear renderer needs a float framebuffer, headroom above 1.0 and tonemapping — Module 6. Implying the problem was solved would be worse than leaving it open. |
+| `pack_argb`'s home | Moved to `colour.hpp`; framebuffer includes colour | The dependency belongs that way round. It was in the wrong file for the honest reason that 1.5 had nowhere else to put it. |
+| Demo construction | One `draw_ramp` taking the mix rule as a function pointer | The two sides of a comparison must differ in exactly one thing, or you are comparing code paths rather than rules. |
+| Alpha | Never converted, in either mixing rule | Alpha is coverage — a fraction of area, already linear. Converting it makes 50% behave like 20%, and the bug can hide for months because nothing composites yet. |
+| Numbers | Every figure derived in Python, then reproduced by a 24-assertion C++ harness | The engine prints the two headline numbers at startup, so a build disagreeing with the prose is a real signal rather than a rounding difference. |

@@ -4,14 +4,20 @@
 //
 //     drain events -> tick clock -> update input -> N fixed steps -> render
 //
-// What changed in 1.5 is the last word. Rendering no longer means asking SDL to
-// draw shapes; it means writing pixels into memory we own, then handing that
-// block to the GPU as a texture. Everything visible below — the gradient, the
-// boxes, the ball, the trail — is bytes this program wrote by hand.
+// Rendering means writing pixels into memory we own (Lesson 1.5), then handing
+// that block to the GPU as a texture.
+//
+// What changed in 1.6 is what those pixel values *mean*. The demo is now a
+// comparison board: two colour ramps, each drawn twice — once by interpolating
+// the stored numbers, once by interpolating the light those numbers stand for.
+// The two versions touch, so the seam between them is where the difference is
+// most obvious. It is not subtle, and it is why Module 6 rebuilds the renderer
+// around linear light.
 
 #include "core/clock.hpp"
 #include "core/fixed_step.hpp"
 #include "core/input.hpp"
+#include "gfx/colour.hpp"
 #include "gfx/framebuffer.hpp"
 
 #include <SDL3/SDL.h>
@@ -25,50 +31,40 @@
 namespace {
 
 // ---- The framebuffer's size ------------------------------------------------
-// Deliberately small. At 320x180 the window's 1280x720 is exactly 4x, so every
-// pixel we write becomes a visible 4x4 block — which is the point of a lesson
-// about individual pixels. It is also a real technique: rendering at a fixed
-// internal resolution and scaling to the window is how a great many games ship,
-// and it means a window resize needs no code at all.
+// 320x180 scaled 4x to a 1280x720 window, so one written pixel is a visible 4x4
+// block. See Lesson 1.5.
 constexpr int k_fb_width = 320;
 constexpr int k_fb_height = 180;
 
-// ---- Demo constants, now in framebuffer pixels ------------------------------
-constexpr float k_pixels_per_second = 90.0f;
-constexpr float k_box_size = 10.0f;
-constexpr float k_track_var_y = 24.0f;
-constexpr float k_track_raw_y = 40.0f;
-constexpr float k_track_lerp_y = 56.0f;
+// ---- The comparison board ---------------------------------------------------
+constexpr int k_strip_x = 10;
+constexpr int k_strip_w = 300;
+constexpr int k_strip_h = 18;
 
+constexpr int k_pair_a_y = 22;   // black -> white
+constexpr int k_pair_b_y = 78;   // red   -> green
+
+// ---- The bouncing ball, kept from Lesson 1.4 --------------------------------
+// It stays because the loop underneath is still running and should look like it,
+// and because its fading trail is the same gamma question in motion.
 constexpr float k_gravity = 300.0f;
 constexpr float k_ball_size = 6.0f;
-constexpr float k_ball_start_y = 84.0f;
-constexpr float k_floor_y = 168.0f;
+constexpr float k_ball_start_y = 126.0f;
+constexpr float k_floor_y = 172.0f;
 
 constexpr Uint32 k_throttle_ms = 50;
 
-/// How many past ball positions to draw as a trail. One entry per simulation
-/// step, so the spacing between dots is literally the fixed timestep made
-/// visible — closer together at 120 Hz, further apart at 10 Hz.
-constexpr std::size_t k_trail_length = 150;
+/// Trail positions, one per simulation step.
+constexpr std::size_t k_trail_length = 90;
 
-/// Everything the simulation owns (Lesson 1.4). Two of these exist so the
-/// renderer can interpolate between them.
 struct sim_state
 {
-    float box_x = 0.0f;
-    float box_dir = 1.0f;
     float ball_y = k_ball_start_y;
     float ball_vy = 0.0f;
 };
 
 void step_simulation(sim_state& s, float h)
 {
-    s.box_x += k_pixels_per_second * s.box_dir * h;
-    const float max_x = static_cast<float>(k_fb_width) - k_box_size;
-    if (s.box_x > max_x) { s.box_x = max_x; s.box_dir = -1.0f; }
-    if (s.box_x < 0.0f)  { s.box_x = 0.0f;  s.box_dir =  1.0f; }
-
     s.ball_y += s.ball_vy * h;
     s.ball_vy += k_gravity * h;
 
@@ -84,60 +80,30 @@ void step_simulation(sim_state& s, float h)
     return a + (b - a) * t;
 }
 
-// ---- The two ways to fill the background -----------------------------------
-// Both produce the identical image. The difference is entirely in how the
-// pixels are addressed, which is the measurement Lesson 1.5 §3.5 is about.
-
-/// The safe way: one bounds-checked call per pixel.
-void draw_gradient_safe(engine::framebuffer& fb)
-{
-    for (int y = 0; y < fb.height(); ++y)
-    {
-        for (int x = 0; x < fb.width(); ++x)
-        {
-            const Uint8 r = static_cast<Uint8>(x >> 2);
-            const Uint8 g = static_cast<Uint8>(y >> 2);
-            fb.put_pixel(x, y, engine::pack_argb(r, g, 60));
-        }
-    }
-}
-
-/// The fast way: fetch the row pointer once, then walk it.
+/// Draw one horizontal ramp between two colours, using the given mix function.
 ///
-/// Same arithmetic, same output. What disappears is per-pixel work that the
-/// loop already knows the answer to — the bounds check (x and y are loop
-/// counters bounded by the buffer's own size) and the `y * width` multiply
-/// (constant for the whole row).
-void draw_gradient_fast(engine::framebuffer& fb)
+/// The signature is the point: `mix` is a pointer to either engine::mix_encoded
+/// or engine::mix_linear, so the two strips of a pair differ in exactly one
+/// thing — which function computed each column — and in nothing else.
+void draw_ramp(engine::framebuffer& fb, int y, Uint32 from, Uint32 to,
+               Uint32 (*mix)(Uint32, Uint32, float))
 {
-    for (int y = 0; y < fb.height(); ++y)
+    for (int i = 0; i < k_strip_w; ++i)
     {
-        Uint32* const line = fb.row(y);
-        const Uint8 g = static_cast<Uint8>(y >> 2);
-        for (int x = 0; x < fb.width(); ++x)
-        {
-            const Uint8 r = static_cast<Uint8>(x >> 2);
-            line[x] = engine::pack_argb(r, g, 60);
-        }
+        const float t = static_cast<float>(i) / static_cast<float>(k_strip_w - 1);
+        fb.fill_rect(k_strip_x + i, y, 1, k_strip_h, mix(from, to, t));
     }
 }
 
 /// Copy the framebuffer into a streaming texture, one row at a time.
 ///
-/// Row by row, rather than one memcpy of the whole thing, because the pitch SDL
-/// hands back is the GPU's, not ours: drivers routinely align each row to 64 or
-/// 256 bytes, leaving padding at the end that is not part of the image. Assume
-/// the pitches match and the picture shears diagonally on exactly the machines
-/// where they do not. Lesson 1.5 §4.3.
+/// Row by row because the pitch SDL returns is the GPU's, not ours: drivers pad
+/// rows for alignment. Lesson 1.5 §4.3.
 [[nodiscard]] bool upload(SDL_Texture* texture, const engine::framebuffer& fb)
 {
     void* dst_pixels = nullptr;
     int dst_pitch = 0;
 
-    // Locking a streaming texture gives write-only access to driver memory whose
-    // previous contents are undefined — SDL's header is explicit that if you
-    // need to keep the image, you keep it yourself. We do: `fb` is the master
-    // copy and this is only ever a one-way push.
     if (!SDL_LockTexture(texture, nullptr, &dst_pixels, &dst_pitch))
     {
         return false;
@@ -201,10 +167,6 @@ int main(int argc, char* argv[])
     // ---- 3. The framebuffer, and the texture that shows it -----------------
     engine::framebuffer fb(k_fb_width, k_fb_height);
 
-    // SDL_PIXELFORMAT_ARGB8888 matches pack_argb exactly: a 32-bit integer with
-    // alpha in the most significant bits. STREAMING because we rewrite the whole
-    // thing every frame and want to lock it rather than pay for an upload path
-    // meant for images that rarely change.
     SDL_Texture* screen_texture = SDL_CreateTexture(renderer,
                                                     SDL_PIXELFORMAT_ARGB8888,
                                                     SDL_TEXTUREACCESS_STREAMING,
@@ -218,9 +180,6 @@ int main(int argc, char* argv[])
         return 1;
     }
 
-    // Nearest-neighbour, so a 4x upscale produces crisp 4x4 blocks rather than a
-    // blurred interpolation of them. For a lesson about individual pixels,
-    // anything else would hide the subject.
     SDL_SetTextureScaleMode(screen_texture, SDL_SCALEMODE_NEAREST);
 
     // ---- 4. Subsystems and demo state --------------------------------------
@@ -231,26 +190,26 @@ int main(int argc, char* argv[])
     sim_state previous;
     sim_state current;
 
-    float var_box_x = 0.0f;
-    float var_box_dir = 1.0f;
-
-    // The ball's recent positions, as a ring buffer. Written once per simulation
-    // step, so the trail records the simulation's path rather than the renderer's.
     std::array<int, k_trail_length> trail_y{};
     std::size_t trail_head = 0;
     std::size_t trail_count = 0;
 
-    bool fast_gradient = true;
-    Uint64 gradient_ns = 0;      // smoothed, for the readout
+    // Which rule the ball's trail fades with. Both paths read the same data, so
+    // pressing M swaps the arithmetic and nothing else.
+    bool trail_linear = true;
 
-    const Uint32 k_var_colour = engine::pack_argb(236, 122, 92);
-    const Uint32 k_raw_colour = engine::pack_argb(226, 196, 110);
-    const Uint32 k_lerp_colour = engine::pack_argb(122, 196, 152);
+    const Uint32 k_bg = engine::pack_argb(14, 14, 22);
+    const Uint32 k_black = engine::pack_argb(0, 0, 0);
+    const Uint32 k_white = engine::pack_argb(255, 255, 255);
+    const Uint32 k_red = engine::pack_argb(255, 0, 0);
+    const Uint32 k_green = engine::pack_argb(0, 255, 0);
     const Uint32 k_ball_colour = engine::pack_argb(126, 162, 236);
-    const Uint32 k_trail_colour = engine::pack_argb(70, 90, 130);
     const Uint32 k_floor_colour = engine::pack_argb(90, 90, 110);
 
-    SDL_Log("Controls: [G] gradient path · [1-4] sim rate · [V] vsync · [T] throttle · [R] reset · [Esc] quit");
+    SDL_Log("Controls: [M] trail mix · [1-4] sim rate · [V] vsync · [T] throttle · [R] reset · [Esc] quit");
+    SDL_Log("The stored value 128 emits %.1f%% of white's light; half the light is stored as %d",
+            static_cast<double>(engine::srgb_to_linear_u8(128)) * 100.0,
+            static_cast<int>(engine::linear_to_srgb_u8(0.5f)));
 
     // ---- 5. The loop --------------------------------------------------------
     bool running = true;
@@ -274,9 +233,6 @@ int main(int argc, char* argv[])
                 break;
 
             default:
-                // Window resizes need no handling at all now: the framebuffer is
-                // a fixed size and SDL stretches it over whatever the window
-                // currently is.
                 break;
             }
         }
@@ -286,7 +242,7 @@ int main(int argc, char* argv[])
 
         // --- 5a. Controls ----------------------------------------------------
         if (in.key_pressed(SDL_SCANCODE_ESCAPE)) { running = false; }
-        if (in.key_pressed(SDL_SCANCODE_G)) { fast_gradient = !fast_gradient; }
+        if (in.key_pressed(SDL_SCANCODE_M)) { trail_linear = !trail_linear; }
 
         if (in.key_pressed(SDL_SCANCODE_1)) { stepper.set_rate(10.0f); }
         if (in.key_pressed(SDL_SCANCODE_2)) { stepper.set_rate(30.0f); }
@@ -306,8 +262,6 @@ int main(int argc, char* argv[])
         {
             previous = sim_state{};
             current = sim_state{};
-            var_box_x = 0.0f;
-            var_box_dir = 1.0f;
             trail_head = 0;
             trail_count = 0;
         }
@@ -326,54 +280,41 @@ int main(int argc, char* argv[])
 
         const float alpha = stepper.alpha();
 
-        var_box_x += k_pixels_per_second * var_box_dir * clk.dt();
-        const float var_max_x = static_cast<float>(k_fb_width) - k_box_size;
-        if (var_box_x > var_max_x) { var_box_x = var_max_x; var_box_dir = -1.0f; }
-        if (var_box_x < 0.0f)      { var_box_x = 0.0f;      var_box_dir =  1.0f; }
+        // --- 5c. Draw ---------------------------------------------------------
+        // The background no longer covers every pixel, so the clear is back —
+        // exactly the situation Lesson 1.5 warned about when it removed one.
+        fb.clear(k_bg);
 
-        // --- 5c. Draw, one pixel at a time -----------------------------------
-        // Note what is missing: there is no fb.clear() call. The gradient writes
-        // every pixel in the buffer, so clearing first would be writing 57,600
-        // pixels twice. Skipping a redundant clear is a real optimisation, not a
-        // trick — and the moment a background stops covering the whole frame,
-        // clear() has to come back or the previous frame shows through as
-        // smearing. Module 2's rasterizer will need it for exactly that reason.
-        //
-        // The background gradient, timed. Both paths write the same image; only
-        // the addressing differs.
-        const Uint64 gradient_start = SDL_GetTicksNS();
-        if (fast_gradient) { draw_gradient_fast(fb); }
-        else               { draw_gradient_safe(fb); }
-        const Uint64 gradient_end = SDL_GetTicksNS();
+        // The comparison board. Each pair has the naive mix on top and the
+        // correct one directly beneath it, touching, so the eye can compare them
+        // without having to travel.
+        draw_ramp(fb, k_pair_a_y, k_black, k_white, engine::mix_encoded);
+        draw_ramp(fb, k_pair_a_y + k_strip_h, k_black, k_white, engine::mix_linear);
 
-        // A rolling average, because a single frame's measurement is noise.
-        const Uint64 sample = gradient_end - gradient_start;
-        gradient_ns = (gradient_ns * 15 + sample) / 16;
+        draw_ramp(fb, k_pair_b_y, k_red, k_green, engine::mix_encoded);
+        draw_ramp(fb, k_pair_b_y + k_strip_h, k_red, k_green, engine::mix_linear);
 
-        // The floor line the ball bounces on: a one-pixel-tall rectangle.
         fb.fill_rect(0, static_cast<int>(k_floor_y), k_fb_width, 1, k_floor_colour);
-        fb.fill_rect(0, static_cast<int>(k_ball_start_y), k_fb_width, 1, k_floor_colour);
 
-        // The trail: individual pixels, one per simulation step. This is
-        // put_pixel earning its keep — scattered single points, where clipping
-        // once would buy nothing.
+        // The trail, fading from the ball's colour back to the background. The
+        // newest dot is at full strength, the oldest at none; whether that fade
+        // is computed on stored numbers or on light is what M switches.
         const int trail_x = k_fb_width / 2;
-        for (std::size_t i = 0; i < trail_count; ++i)
+        for (std::size_t k = 0; k < trail_count; ++k)
         {
-            fb.put_pixel(trail_x - 6, trail_y[i], k_trail_colour);
-            fb.put_pixel(trail_x + 6, trail_y[i], k_trail_colour);
+            const std::size_t idx = (trail_head + k_trail_length - 1 - k) % k_trail_length;
+            const float age = (trail_count > 1)
+                ? static_cast<float>(k) / static_cast<float>(trail_count - 1)
+                : 0.0f;
+            const float strength = 1.0f - age;
+
+            const Uint32 dot = trail_linear
+                ? engine::mix_linear(k_bg, k_ball_colour, strength)
+                : engine::mix_encoded(k_bg, k_ball_colour, strength);
+
+            fb.put_pixel(trail_x - 8, trail_y[idx], dot);
+            fb.put_pixel(trail_x + 8, trail_y[idx], dot);
         }
-
-        // The three timing boxes from Lesson 1.4, now drawn by us.
-        fb.fill_rect(static_cast<int>(var_box_x), static_cast<int>(k_track_var_y),
-                     static_cast<int>(k_box_size), static_cast<int>(k_box_size), k_var_colour);
-
-        fb.fill_rect(static_cast<int>(current.box_x), static_cast<int>(k_track_raw_y),
-                     static_cast<int>(k_box_size), static_cast<int>(k_box_size), k_raw_colour);
-
-        fb.fill_rect(static_cast<int>(lerp(previous.box_x, current.box_x, alpha)),
-                     static_cast<int>(k_track_lerp_y),
-                     static_cast<int>(k_box_size), static_cast<int>(k_box_size), k_lerp_colour);
 
         fb.fill_rect(trail_x - static_cast<int>(k_ball_size) / 2,
                      static_cast<int>(lerp(previous.ball_y, current.ball_y, alpha)),
@@ -387,30 +328,25 @@ int main(int argc, char* argv[])
 
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
         SDL_RenderClear(renderer);
-
-        // NULL destination rectangle means "the entire rendering target", so our
-        // 320x180 image is stretched over the whole window at whatever size it
-        // currently is.
         SDL_RenderTexture(renderer, screen_texture, nullptr, nullptr);
 
-        // The readout is still drawn by SDL, *over* our framebuffer, because we
-        // have no font of our own yet. Module 6 fixes that; until then this is
-        // the one thing on screen we did not draw ourselves.
+        // Labels, drawn over our framebuffer because we still have no font of our
+        // own (Module 6). At 2x text scale over a 4x framebuffer scale, a text
+        // coordinate is exactly twice a framebuffer coordinate.
         SDL_SetRenderScale(renderer, 2.0f, 2.0f);
         SDL_SetRenderDrawColor(renderer, 225, 225, 215, 255);
         SDL_RenderDebugTextFormat(renderer, 6.0f, 6.0f,
-                                  "fps %7.1f   sim %3.0f Hz   alpha %.2f   framebuffer %dx%d",
+                                  "fps %7.1f   sim %3.0f Hz   the value 128 emits %.1f%% of white's light",
                                   static_cast<double>(clk.fps()),
                                   static_cast<double>(stepper.rate_hz()),
-                                  static_cast<double>(alpha),
-                                  fb.width(), fb.height());
-        SDL_RenderDebugTextFormat(renderer, 6.0f, 18.0f,
-                                  "gradient: %-13s %6.3f ms for %d pixels   [G] to switch",
-                                  fast_gradient ? "row pointer" : "put_pixel",
-                                  static_cast<double>(gradient_ns) / 1000000.0,
-                                  fb.width() * fb.height());
-        SDL_RenderDebugText(renderer, 6.0f, 34.0f,
-                            "[1-4] sim rate   [V] vsync   [T] throttle   [R] reset   [Esc] quit");
+                                  static_cast<double>(engine::srgb_to_linear_u8(128)) * 100.0);
+        SDL_RenderDebugText(renderer, 6.0f, 30.0f,
+                            "black to white   upper: mixed as stored numbers   lower: mixed as light");
+        SDL_RenderDebugText(renderer, 6.0f, 126.0f,
+                            "red to green     upper: mixed as stored numbers   lower: mixed as light");
+        SDL_RenderDebugTextFormat(renderer, 6.0f, 236.0f,
+                                  "trail fade: %-18s [M] switch   [1-4] sim rate   [Esc] quit",
+                                  trail_linear ? "mixed as light" : "mixed as numbers");
         SDL_SetRenderScale(renderer, 1.0f, 1.0f);
 
         SDL_RenderPresent(renderer);

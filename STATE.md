@@ -7,7 +7,7 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-07-18 (after Lesson 1.5 — Module 1: 5 of 8)
+updated: 2026-07-18 (after Lesson 1.6 — Module 1: 6 of 8)
 
 conventions:
   world: right-handed, Y-up, -Z forward
@@ -112,6 +112,25 @@ conventions:
             BENCHMARK TRAP: measuring both loop orders THROUGH put_pixel gave 1.00x —
             its overhead swamped the effect. Make the paths differ ONLY in what is under
             test, and measure at -O2.
+  colour: stored channel values are sRGB-ENCODED, not light. VERIFIED BOTH IN PYTHON
+            AND IN THE C++: 128 emits 21.6% of white's light; half the light is stored
+            as 188; fades 75%->225, 50%->188, 25%->137, 10%->89 (naive 64 for 25% emits
+            only 5.1%). Red+green at t=0.5: naive (128,128,0) dark olive vs linear
+            (188,188,0) bright yellow. Encode/decode round trip is LOSSLESS for all 256.
+            Code budget: evenly spaced light puts 26 of 256 codes in the darkest 10%,
+            sRGB puts 90; evenly spaced wastes 128 on the brightest half, sRGB 68.
+            Use the EXACT piecewise transform (0.04045 / 12.92 / 0.055 / 2.4), never
+            pow(x,2.2). Tabulate DECODE only (256 inputs); encode's input is continuous.
+            ALPHA IS COVERAGE, NOT LIGHT — never transfer-function it. mix_linear
+            converts three channels and leaves the fourth.
+            SAFE on stored values: copy, compare, pick. WRONG: mix, fade, average,
+            downscale/mipmap, add light, anti-alias edges.
+            NOT YET LINEAR: we convert per-operation (slow + lossy). A real pipeline
+            decodes once in, encodes once out, and needs a float/half framebuffer,
+            headroom above 1.0, and tonemapping = Module 6.
+            Fingerprints: red/blue swapped + green fine = channel order, NOT gamma;
+            muddy fades / early-dying fades / darkening mipmaps / fringed text = gamma;
+            washed-out milky = the conversion applied twice or backwards.
   shaders: HLSL -> SDL_shadercross (3.0.0-preview) -> SPIR-V/DXIL/MSL  [Module 4+]
   cpp: C++20, no exceptions/RTTI in core, snake_case, private members trailing _,
        .hpp + #pragma once, [[nodiscard]], -Wall -Wextra // /W4, all warnings fixed
@@ -154,10 +173,11 @@ completed:
   - 1.3  Frames, Delta Time, and Why Naive Loops Lie
   - 1.4  The Fixed Timestep with Interpolation, Derived
   - 1.5  The Framebuffer: Your First Owned Pixels
+  - 1.6  Colour, and an Honest Teaser of sRGB
 
 capabilities:
   - verified C++20 toolchain (MSVC / GCC / Clang), 64-bit
-  - portable CMake build, now five translation units; FetchContent SDL3 (release-3.4.12)
+  - portable CMake build, now six translation units; FetchContent SDL3 (release-3.4.12)
   - engine app: 1280x720 window, complete switch-based event dispatch (quit,
     window-close, window-resize), clean shutdown, startup version log
   - input subsystem (src/core/input): keyboard levels + edges addressed by scancode,
@@ -178,10 +198,15 @@ capabilities:
   - demo now drawn ENTIRELY into our own pixels: gradient background (two addressing
     paths, timed on screen via [G]), 1.4's three timing boxes and ball, and a pixel trail
     with one dot per simulation step
+  - colour subsystem (src/gfx/colour): pack/unpack, exact sRGB transfer functions with a
+    256-entry decode LUT, mix_encoded vs mix_linear
+  - demo: a comparison board — black-white and red-green ramps mixed both ways, drawn
+    TOUCHING so the seam shows the error — plus the bouncing ball, whose trail fade rule
+    switches with [M]
   - known-and-deliberate: explicit Euler still gains energy — but identically everywhere,
     at a rate set by h, which is ours to choose (Module 7 fixes the integrator);
-    colour is still raw numbers (1.6); the debug-text overlay is the only thing on
-    screen SDL still draws for us (Module 6 gives us real text)
+    colour converts per-operation rather than at the pipeline edges (Module 6);
+    the debug-text overlay is the only thing on screen SDL still draws for us
   - skills: reading SDL headers as source of truth; debugging with lldb/gdb/VS
 
 decisions:
@@ -195,18 +220,18 @@ files:
   src/: main.cpp
   src/core/: input.hpp, input.cpp, clock.hpp, clock.cpp,
             fixed_step.hpp, fixed_step.cpp
-  src/gfx/: framebuffer.hpp, framebuffer.cpp
+  src/gfx/: colour.hpp, colour.cpp, framebuffer.hpp, framebuffer.cpp
   docs/: index.html, conventions.html, math-toolbox.html, cpp-style.html
   docs/lessons/: 00-01-what-is-an-engine.html, 00-02-how-this-course-works.html,
                  00-03-toolchain.html, 00-04-cmake-from-zero.html,
                  00-05-first-window.html, 00-06-headers-and-debugger.html,
                  01-01-events-properly.html, 01-02-input-state-vs-events.html,
                  01-03-delta-time.html, 01-04-fixed-timestep.html,
-                 01-05-framebuffer.html
+                 01-05-framebuffer.html, 01-06-colour.html
   docs/_template/: lesson-template.html, README.md, apply-shared.py
   memory/: 2026-07-16.md, 2026-07-18.md
   (retired: hello.cpp)
 
-next: 1.6 — Colour, and an Honest Teaser of sRGB
-      (planned filename: docs/lessons/01-06-colour.html — 1.5 already links to it)
+next: 1.7 — 2D Vectors, Geometrically
+      (planned filename: docs/lessons/01-07-vectors-2d.html — 1.6 already links to it)
 ```

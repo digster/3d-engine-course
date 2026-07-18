@@ -5,33 +5,14 @@
 
 #pragma once
 
+#include "gfx/colour.hpp"   // pack_argb and friends: what a pixel's bits mean
+
 #include <SDL3/SDL.h>
 
 #include <cstddef>
 #include <vector>
 
 namespace engine {
-
-/// Pack 8-bit colour components into one 32-bit pixel, alpha in the most
-/// significant byte: 0xAARRGGBB.
-///
-/// This layout is not arbitrary — it is exactly what SDL calls
-/// `SDL_PIXELFORMAT_ARGB8888`. SDL's "8888" names describe a value packed into
-/// a native-endianness 32-bit integer, with the leftmost component in the most
-/// significant bits. So as long as we only ever touch these pixels as `Uint32`,
-/// this matches byte-for-byte on both little- and big-endian machines, and we
-/// never have to think about endianness at all. (Look at the individual bytes
-/// instead and the order flips underneath you — see Lesson 1.5 §3.3.)
-///
-/// Colour is treated as a bag of bits here on purpose. What those bits actually
-/// mean — why 128 is not half as bright as 255 — is Lesson 1.6.
-[[nodiscard]] constexpr Uint32 pack_argb(Uint8 r, Uint8 g, Uint8 b, Uint8 a = 255)
-{
-    return (static_cast<Uint32>(a) << 24)
-         | (static_cast<Uint32>(r) << 16)
-         | (static_cast<Uint32>(g) << 8)
-         | static_cast<Uint32>(b);
-}
 
 /// A CPU-side image: `width × height` 32-bit pixels, tightly packed, row-major.
 ///

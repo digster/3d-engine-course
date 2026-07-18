@@ -61,6 +61,8 @@ inventing one — but without paying framework ceremony before it buys anything.
 │   │   └── fixed_step.cpp
 │   ├── math/               # vec2/3/4, mat3/4, quaternion — hand-rolled, no GLM
 │   ├── gfx/                # framebuffer, software rasterizer → later SDL_GPU renderer
+│   │   ├── colour.hpp      # pack/unpack, sRGB transfer functions   [EXISTS from 1.6]
+│   │   ├── colour.cpp
 │   │   ├── framebuffer.hpp # CPU pixel buffer, ARGB8888, row-major   [EXISTS from 1.5]
 │   │   └── framebuffer.cpp
 │   └── platform/           # window + event pumping (Module 5; see the note below)
@@ -160,6 +162,27 @@ Four structural points:
 The API is deliberately two-tier: `put_pixel` is safe and checked, `row(y)` is the documented fast
 path for inner loops that have already established their bounds (measured at 5–15× depending on
 optimisation level). That split is the shape the drawing API keeps as the rasterizer grows.
+
+**Colour, as of Lesson 1.6.** Stored channel values are **sRGB-encoded**, not measures of light:
+the value 128 emits 21.6% of white's light, and half the light is stored as 188. `gfx/colour`
+carries the exact piecewise transform in both directions, with a 256-entry decode LUT (the encode
+direction cannot be tabulated — its input is a continuous float).
+
+Three rules follow, and they are load-bearing for everything after Module 3:
+
+- **Arithmetic on stored values is wrong.** Copying, comparing and picking colours are safe;
+  mixing, fading, averaging, downscaling, anti-aliasing and adding light are not. The fix is always
+  decode → compute → re-encode.
+- **Alpha is exempt.** It is a coverage fraction, already linear, and must never go through the
+  transfer function. `mix_linear` converts three channels and not the fourth, deliberately.
+- **The dependency runs framebuffer → colour**, never the reverse. A framebuffer is a container of
+  colours and may know what one is; a colour has no business knowing where it is stored.
+
+We convert **per operation**, which is both slower and lossier than a real pipeline — each round
+trip requantises to 256 steps. A properly linear renderer decodes once on the way in and encodes
+once on the way out, which needs a float or half-float framebuffer, headroom above 1.0, and a
+tonemapping step. That is Module 6's HDR work, and 1.6 states the debt explicitly rather than
+implying the problem is solved.
 
 ### 2.2 After the Module 5 refactor: engine / demos / tools
 

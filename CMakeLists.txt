@@ -48,6 +48,7 @@ add_executable(engine
     src/core/clock.cpp
     src/core/fixed_step.cpp
     src/core/input.cpp
+    src/gfx/colour.cpp
     src/gfx/framebuffer.cpp
 )
 
