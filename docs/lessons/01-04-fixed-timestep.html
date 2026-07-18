@@ -1,0 +1,3395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>1.4 — The Fixed Timestep with Interpolation, Derived · Build a Professional 3D Game Engine</title>
+<meta name="description" content="Deriving the accumulator loop from the problem up: fixed simulation steps, the leftover fraction, why rendering the raw state judders, how interpolation turns a varying lag into a constant one, and how to defuse the spiral of death.">
+<!-- SHARED-CSS:BEGIN -->
+<style>
+/* ---- Design tokens ------------------------------------------------------- */
+:root {
+  color-scheme: light dark;
+
+  /* Page */
+  --bg:            #fdfdfb;
+  --bg-sunken:     #f4f4f0;
+  --bg-raised:     #ffffff;
+  --text:          #1c1c1a;
+  --text-muted:    #5f5f58;
+  --text-faint:    #8a8a80;
+  --rule:          #e2e2db;
+  --rule-strong:   #cfcfc6;
+
+  /* Accent — used for links, active nav, section marks */
+  --accent:        #b4530a;
+  --accent-soft:   #f5e6d8;
+  --accent-text:   #8f4108;
+
+  /* Callouts */
+  --note-bd:       #3a6ea5;   --note-bg:    #eaf2fb;
+  --warn-bd:       #b8860b;   --warn-bg:    #fdf5e2;
+  --verify-bd:     #a03030;   --verify-bg:  #fbecec;
+  --pitfall-bd:    #7a4fa3;   --pitfall-bg: #f4eefb;
+  --ok-bd:         #2f7d4f;   --ok-bg:      #e9f6ee;
+
+  /* Code — always dark, in both page themes */
+  --code-bg:       #1b1d23;
+  --code-bar:      #262932;
+  --code-text:     #dfe3ec;
+  --code-rule:     #363a45;
+
+  /* Syntax tokens */
+  --tok-comment:   #6d7789;
+  --tok-keyword:   #c98fdb;
+  --tok-type:      #6cc5d9;
+  --tok-string:    #a3cf85;
+  --tok-number:    #e8a978;
+  --tok-preproc:   #d9a05b;
+  --tok-func:      #79b6f2;
+  --tok-punct:     #9aa2b1;
+
+  /* Axis colours — COURSE-WIDE CONVENTION. x/y/z = red/green/blue.
+     Never override these in a diagram. See conventions.html. */
+  --axis-x:        #d1344a;
+  --axis-y:        #2f9e4f;
+  --axis-z:        #2b6fd4;
+  --axis-x-soft:   #f7d8dd;
+  --axis-y-soft:   #d8f0e0;
+  --axis-z-soft:   #d7e4fa;
+
+  /* Diagram neutrals */
+  --dia-bg:        #ffffff;
+  --dia-ink:       #33332e;
+  --dia-ink-soft:  #7a7a72;
+  --dia-grid:      #e8e8e2;
+  --dia-fill:      #f0f0ea;
+  --dia-hi:        #b4530a;
+
+  /* Typography */
+  --font-body: "Iowan Old Style", "Palatino Linotype", "Palatino", "Charter",
+               Georgia, Cambria, "Times New Roman", serif;
+  --font-ui:   -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+               "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "SFMono-Regular", "Cascadia Code",
+               "JetBrains Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  --measure: 42rem;          /* ~72 characters at this size — the reading column */
+  --measure-wide: 58rem;     /* diagrams & tables may breathe past the measure  */
+}
+
+/* Dark tokens.
+   Applied in two situations, which is why the block is written twice:
+     1. the OS asks for dark AND the reader has not overridden to light;
+     2. the reader explicitly chose dark via the toggle.
+   CSS has no mixins, so duplication is the price of supporting both an OS
+   default and a manual override. Keep the two blocks byte-identical. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg:          #15161a;
+    --bg-sunken:   #101115;
+    --bg-raised:   #1c1e24;
+    --text:        #e4e4e0;
+    --text-muted:  #a2a49e;
+    --text-faint:  #74766f;
+    --rule:        #2c2e35;
+    --rule-strong: #3d404a;
+
+    --accent:      #f0a06a;
+    --accent-soft: #33251a;
+    --accent-text: #f5b184;
+
+    --note-bd:     #5a8fc8;   --note-bg:    #16202c;
+    --warn-bd:     #c9a132;   --warn-bg:    #262013;
+    --verify-bd:   #d05555;   --verify-bg:  #2a1717;
+    --pitfall-bd:  #a077c8;   --pitfall-bg: #221a2c;
+    --ok-bd:       #4fa877;   --ok-bg:      #14231a;
+
+    --dia-bg:      #1a1c21;
+    --dia-ink:     #d8d8d2;
+    --dia-ink-soft:#8f918a;
+    --dia-grid:    #2b2d33;
+    --dia-fill:    #24262c;
+    --dia-hi:      #f0a06a;
+
+    --axis-x:      #f2647a;
+    --axis-y:      #5cc47e;
+    --axis-z:      #6b9ef0;
+    --axis-x-soft: #3a2027;
+    --axis-y-soft: #1c3325;
+    --axis-z-soft: #1e2a40;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg:          #15161a;
+  --bg-sunken:   #101115;
+  --bg-raised:   #1c1e24;
+  --text:        #e4e4e0;
+  --text-muted:  #a2a49e;
+  --text-faint:  #74766f;
+  --rule:        #2c2e35;
+  --rule-strong: #3d404a;
+
+  --accent:      #f0a06a;
+  --accent-soft: #33251a;
+  --accent-text: #f5b184;
+
+  --note-bd:     #5a8fc8;   --note-bg:    #16202c;
+  --warn-bd:     #c9a132;   --warn-bg:    #262013;
+  --verify-bd:   #d05555;   --verify-bg:  #2a1717;
+  --pitfall-bd:  #a077c8;   --pitfall-bg: #221a2c;
+  --ok-bd:       #4fa877;   --ok-bg:      #14231a;
+
+  --dia-bg:      #1a1c21;
+  --dia-ink:     #d8d8d2;
+  --dia-ink-soft:#8f918a;
+  --dia-grid:    #2b2d33;
+  --dia-fill:    #24262c;
+  --dia-hi:      #f0a06a;
+
+  --axis-x:      #f2647a;
+  --axis-y:      #5cc47e;
+  --axis-z:      #6b9ef0;
+  --axis-x-soft: #3a2027;
+  --axis-y-soft: #1c3325;
+  --axis-z-soft: #1e2a40;
+}
+
+/* ---- Reset & base -------------------------------------------------------- */
+*, *::before, *::after { box-sizing: border-box; }
+
+html {
+  font-size: 18px;
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
+  scroll-padding-top: 2rem;
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  line-height: 1.7;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* The reading column. Everything is centred on --measure; wide elements opt out. */
+.wrap {
+  max-width: var(--measure);
+  margin: 0 auto;
+  padding: 0 1.25rem;
+}
+.bleed {                       /* for diagrams/tables that need more room */
+  max-width: var(--measure-wide);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* ---- Typography ---------------------------------------------------------- */
+h1, h2, h3, h4 {
+  font-family: var(--font-ui);
+  line-height: 1.25;
+  letter-spacing: -0.015em;
+  margin: 0 0 0.6em;
+  scroll-margin-top: 1.5rem;
+}
+h1 { font-size: 2.15rem; font-weight: 700; margin-top: 0.2em; }
+h2 {
+  font-size: 1.5rem; font-weight: 650;
+  margin-top: 2.6em;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--rule);
+}
+h3 { font-size: 1.15rem; font-weight: 650; margin-top: 2em; }
+h4 { font-size: 1rem;    font-weight: 650; margin-top: 1.6em; color: var(--text-muted); }
+
+/* Section numbers rendered as a quiet prefix */
+h2 .num, h3 .num {
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  margin-right: 0.5em;
+  font-weight: 500;
+}
+
+p { margin: 0 0 1.15em; }
+
+a { color: var(--accent-text); text-decoration-color: var(--rule-strong); text-underline-offset: 2px; }
+a:hover { text-decoration-color: currentColor; }
+
+strong { font-weight: 650; }
+em { font-style: italic; }
+
+ul, ol { margin: 0 0 1.15em; padding-left: 1.5em; }
+li { margin-bottom: 0.4em; }
+li > ul, li > ol { margin-top: 0.4em; margin-bottom: 0.5em; }
+
+hr { border: 0; border-top: 1px solid var(--rule); margin: 2.5em 0; }
+
+blockquote {
+  margin: 1.5em 0;
+  padding: 0.1em 0 0.1em 1.2em;
+  border-left: 3px solid var(--rule-strong);
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* Inline code — light chip, distinct from the dark block listings */
+:not(pre) > code {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 0.08em 0.34em;
+  word-break: break-word;
+}
+
+/* ---- Masthead ------------------------------------------------------------ */
+.masthead {
+  background: var(--bg-sunken);
+  border-bottom: 1px solid var(--rule);
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+}
+.masthead-inner {
+  max-width: var(--measure-wide);
+  margin: 0 auto;
+  padding: 0.6rem 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.masthead .course {
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  text-decoration: none;
+}
+.masthead .spacer { flex: 1; }
+.masthead a { color: var(--text-muted); text-decoration: none; }
+.masthead a:hover { color: var(--accent-text); }
+
+.theme-toggle {
+  font: inherit;
+  font-size: 0.78rem;
+  background: var(--bg-raised);
+  color: var(--text-muted);
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  padding: 0.2rem 0.55rem;
+  cursor: pointer;
+}
+.theme-toggle:hover { border-color: var(--rule-strong); color: var(--text); }
+
+/* ---- Lesson nav (top & bottom) ------------------------------------------- */
+.lesson-nav {
+  display: flex;
+  align-items: stretch;
+  gap: 0.6rem;
+  font-family: var(--font-ui);
+  font-size: 0.82rem;
+  margin: 1.5rem auto;
+}
+.lesson-nav a, .lesson-nav span {
+  flex: 1;
+  padding: 0.55rem 0.8rem;
+  border: 1px solid var(--rule);
+  border-radius: 7px;
+  background: var(--bg-raised);
+  text-decoration: none;
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+.lesson-nav a:hover { border-color: var(--accent); }
+.lesson-nav span { opacity: 0.45; }        /* disabled edge (no prev / no next) */
+.lesson-nav .dir {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-faint);
+}
+.lesson-nav .ttl {
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-weight: 550;
+}
+.lesson-nav .next-l { text-align: right; }
+.lesson-nav .idx-l  { flex: 0 0 auto; justify-content: center; text-align: center; }
+@media (max-width: 34rem) {
+  .lesson-nav { flex-wrap: wrap; }
+  .lesson-nav .idx-l { order: 3; flex: 1 0 100%; }
+}
+
+/* ---- Lesson header block ------------------------------------------------- */
+.lesson-head { margin: 2rem 0 0; }
+.eyebrow {
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+  font-weight: 650;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 0.5rem;
+}
+.deck {
+  font-size: 1.12rem;
+  color: var(--text-muted);
+  margin-bottom: 1.5rem;
+}
+.meta {
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  padding: 1rem 1.15rem;
+  margin-bottom: 1.75rem;
+}
+.meta dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 0.4rem 1rem; }
+.meta dt {
+  color: var(--text-faint);
+  text-transform: uppercase;
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  padding-top: 0.28em;
+  white-space: nowrap;
+}
+.meta dd { margin: 0; }
+@media (max-width: 30rem) {
+  .meta dl { grid-template-columns: 1fr; gap: 0.15rem 0; }
+  .meta dd { margin-bottom: 0.6rem; }
+}
+
+/* Objectives — "you will be able to…" */
+.objectives {
+  border: 1px solid var(--accent);
+  background: var(--accent-soft);
+  border-radius: 9px;
+  padding: 1.1rem 1.25rem;
+  margin: 1.75rem 0;
+}
+.objectives h2 {
+  margin: 0 0 0.5rem;
+  border: 0; padding: 0;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--accent-text);
+}
+.objectives ul { margin: 0; padding-left: 1.25em; }
+.objectives li::marker { color: var(--accent); }
+
+/* ---- Table of contents --------------------------------------------------- */
+.toc {
+  font-family: var(--font-ui);
+  font-size: 0.88rem;
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  padding: 1rem 1.25rem;
+  margin: 2rem 0;
+}
+.toc > summary {
+  cursor: pointer;
+  font-weight: 650;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-muted);
+  list-style: none;
+}
+.toc > summary::-webkit-details-marker { display: none; }
+.toc > summary::before { content: "▸ "; color: var(--accent); }
+.toc[open] > summary::before { content: "▾ "; }
+.toc ol { list-style: none; margin: 0.85rem 0 0; padding: 0; counter-reset: toc; }
+.toc ol ol { margin: 0.3rem 0 0.5rem 1.1rem; }
+.toc li { margin: 0.28em 0; counter-increment: toc; }
+.toc a { text-decoration: none; color: var(--text); }
+.toc a:hover { color: var(--accent-text); text-decoration: underline; }
+.toc ol ol a { color: var(--text-muted); font-size: 0.94em; }
+
+/* ---- Callouts ------------------------------------------------------------ */
+.callout {
+  border-left: 3px solid var(--rule-strong);
+  background: var(--bg-sunken);
+  border-radius: 0 8px 8px 0;
+  padding: 0.9rem 1.1rem;
+  margin: 1.6em 0;
+  font-size: 0.95rem;
+}
+.callout > :first-child { margin-top: 0; }
+.callout > :last-child  { margin-bottom: 0; }
+.callout .label {
+  display: block;
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  margin-bottom: 0.35rem;
+}
+.callout.note    { border-color: var(--note-bd);    background: var(--note-bg); }
+.callout.note .label    { color: var(--note-bd); }
+.callout.warn    { border-color: var(--warn-bd);    background: var(--warn-bg); }
+.callout.warn .label    { color: var(--warn-bd); }
+.callout.verify  { border-color: var(--verify-bd);  background: var(--verify-bg); }
+.callout.verify .label  { color: var(--verify-bd); }
+.callout.pitfall { border-color: var(--pitfall-bd); background: var(--pitfall-bg); }
+.callout.pitfall .label { color: var(--pitfall-bd); }
+.callout.ok      { border-color: var(--ok-bd);      background: var(--ok-bg); }
+.callout.ok .label      { color: var(--ok-bd); }
+/* C++ explainers: a C++ feature taught in place, the first time it appears. */
+.callout.cpp     { border-color: var(--accent);     background: var(--accent-soft); }
+.callout.cpp .label     { color: var(--accent-text); }
+
+/* ---- Code listings ------------------------------------------------------- */
+.listing {
+  margin: 1.6em 0;
+  border-radius: 9px;
+  overflow: hidden;
+  border: 1px solid var(--code-rule);
+  background: var(--code-bg);
+}
+.listing figcaption {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: var(--code-bar);
+  border-bottom: 1px solid var(--code-rule);
+  padding: 0.45rem 0.85rem;
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  color: #aeb6c4;
+}
+.listing figcaption .path { font-weight: 600; color: #dfe3ec; }
+.listing figcaption .tag {
+  font-family: var(--font-ui);
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  background: #3a3f4c;
+  color: #c6cdd9;
+}
+.listing figcaption .tag.new      { background: #1f4433; color: #7fd6a5; }
+.listing figcaption .tag.modified { background: #453a1c; color: #e0be74; }
+.listing figcaption .lang { margin-left: auto; opacity: 0.65; }
+
+/* Horizontal scroll — NEVER wrap. Wrapped code lies about its structure. */
+.listing pre {
+  margin: 0;
+  padding: 0.9rem 1rem;
+  overflow-x: auto;
+  background: var(--code-bg);
+}
+.listing pre code {
+  font-family: var(--font-mono);
+  font-size: 0.79rem;
+  line-height: 1.62;
+  color: var(--code-text);
+  white-space: pre;
+  display: block;
+  tab-size: 4;
+}
+.listing pre::-webkit-scrollbar { height: 9px; }
+.listing pre::-webkit-scrollbar-track { background: var(--code-bar); }
+.listing pre::-webkit-scrollbar-thumb { background: #4a5060; border-radius: 5px; }
+.listing pre::-webkit-scrollbar-thumb:hover { background: #5d6478; }
+
+/* Syntax tokens, applied by the tiny highlighter at the foot of the page. */
+.tok-c { color: var(--tok-comment); font-style: italic; }
+.tok-k { color: var(--tok-keyword); }
+.tok-t { color: var(--tok-type); }
+.tok-s { color: var(--tok-string); }
+.tok-n { color: var(--tok-number); }
+.tok-p { color: var(--tok-preproc); }
+.tok-f { color: var(--tok-func); }
+.tok-o { color: var(--tok-punct); }
+
+/* Emphasised line inside a listing (the line this paragraph is about) */
+.listing .hl { background: rgba(180, 130, 60, 0.16); display: inline-block; width: 100%; }
+
+/* Shell transcripts get a lighter treatment than source files */
+.listing.shell figcaption .path::before { content: "$ "; opacity: 0.6; }
+
+/* ---- Figures & diagrams -------------------------------------------------- */
+figure.dia {
+  margin: 2em auto;
+  padding: 0;
+}
+figure.dia svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: var(--dia-bg);
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+}
+figure.dia figcaption,
+figure.tbl figcaption {
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: 0.65rem;
+  line-height: 1.55;
+}
+figure.dia figcaption .fignum,
+figure.tbl figcaption .fignum {
+  font-weight: 700;
+  color: var(--text);
+}
+/* SVG text inherits the theme so diagrams survive dark mode */
+figure.dia svg text { font-family: var(--font-ui); fill: var(--dia-ink); }
+figure.dia svg .lbl-x { fill: var(--axis-x); }
+figure.dia svg .lbl-y { fill: var(--axis-y); }
+figure.dia svg .lbl-z { fill: var(--axis-z); }
+figure.dia svg .ax-x  { stroke: var(--axis-x); }
+figure.dia svg .ax-y  { stroke: var(--axis-y); }
+figure.dia svg .ax-z  { stroke: var(--axis-z); }
+figure.dia svg .ink       { stroke: var(--dia-ink); }
+figure.dia svg .ink-soft  { stroke: var(--dia-ink-soft); }
+figure.dia svg .grid      { stroke: var(--dia-grid); }
+figure.dia svg .fill-soft { fill: var(--dia-fill); }
+figure.dia svg .hi        { stroke: var(--dia-hi); }
+figure.dia svg .mono      { font-family: var(--font-mono); }
+figure.dia svg .sm        { font-size: 11px; }
+figure.dia svg .xs        { font-size: 9.5px; }
+
+/* Text fills for <text> elements.
+   These MUST be classes, not fill="..." attributes: the `figure.dia svg text`
+   rule above is CSS, and CSS always beats an SVG presentation attribute — an
+   inline fill on a <text> is silently ignored. Class selectors outrank the bare
+   element selector, so these win. (Shapes are unaffected; the rule only targets
+   text, so fill="..." still works on rect/path/circle.) */
+figure.dia svg .muted     { fill: var(--dia-ink-soft); }
+figure.dia svg .t-hi      { fill: var(--dia-hi); }
+figure.dia svg .t-ok      { fill: var(--ok-bd); }
+figure.dia svg .t-bad     { fill: var(--verify-bd); }
+/* For labels sitting ON a saturated filled shape, where the theme ink would be
+   unreadable. Fixed white in both themes, because the shape under it is the
+   same saturated colour in both. */
+figure.dia svg .t-inv     { fill: #ffffff; }
+
+/* ---- Tables -------------------------------------------------------------- */
+.tbl-scroll { overflow-x: auto; margin: 1.6em 0; }
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+th, td {
+  text-align: left;
+  padding: 0.5rem 0.7rem;
+  border-bottom: 1px solid var(--rule);
+  vertical-align: top;
+}
+th {
+  font-weight: 650;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--rule-strong);
+  white-space: nowrap;
+}
+tbody tr:hover { background: var(--bg-sunken); }
+td code { font-size: 0.82em; }
+
+/* File-manifest table: path | new/modified | purpose */
+.manifest td:first-child { font-family: var(--font-mono); font-size: 0.78rem; white-space: nowrap; }
+.badge {
+  font-size: 0.62rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.06em; padding: 0.1rem 0.4rem; border-radius: 3px; white-space: nowrap;
+}
+.badge.new { background: var(--ok-bg); color: var(--ok-bd); border: 1px solid var(--ok-bd); }
+.badge.mod { background: var(--warn-bg); color: var(--warn-bd); border: 1px solid var(--warn-bd); }
+/* Curriculum status, used on index.html */
+.badge.done { background: var(--ok-bg); color: var(--ok-bd); border: 1px solid var(--ok-bd); }
+.badge.soon { background: var(--bg-sunken); color: var(--text-faint); border: 1px solid var(--rule-strong); }
+
+/* ---- Math ---------------------------------------------------------------- */
+/* KaTeX renders these when the CDN is reachable. When it is NOT, the raw TeX
+   stays visible — which is why every equation MUST also be stated in prose.
+   Never let an equation be the only carrier of a fact. */
+.eq {
+  margin: 1.4em 0;
+  padding: 0.9rem 1rem;
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  overflow-x: auto;
+  text-align: center;
+}
+.eq-plain {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  margin-top: 0.6rem;
+  padding-top: 0.6rem;
+  border-top: 1px dashed var(--rule-strong);
+  text-align: left;
+}
+.eq-plain::before {
+  content: "in plain text: ";
+  color: var(--text-faint);
+  font-family: var(--font-ui);
+  font-size: 0.72rem;
+}
+
+/* Worked numeric example — every formula gets one */
+.worked {
+  border: 1px solid var(--rule-strong);
+  border-radius: 9px;
+  padding: 1rem 1.2rem;
+  margin: 1.6em 0;
+  background: var(--bg-raised);
+}
+.worked > .label {
+  display: block;
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--accent);
+  margin-bottom: 0.5rem;
+}
+.worked > :last-child { margin-bottom: 0; }
+
+/* ---- Exercises ----------------------------------------------------------- */
+.exercise {
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 9px 9px 0;
+  padding: 1rem 1.2rem;
+  margin: 1.4em 0;
+  background: var(--bg-raised);
+}
+.exercise h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.98rem;
+}
+.exercise h3 .xnum {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--accent);
+  margin-right: 0.5em;
+}
+.difficulty {
+  font-family: var(--font-ui);
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-faint);
+  border: 1px solid var(--rule-strong);
+  border-radius: 3px;
+  padding: 0.05rem 0.35rem;
+  margin-left: 0.4em;
+  vertical-align: 0.15em;
+}
+.exercise details {
+  margin-top: 0.7rem;
+  border-top: 1px solid var(--rule);
+  padding-top: 0.6rem;
+}
+.exercise summary {
+  cursor: pointer;
+  font-family: var(--font-ui);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.exercise summary:hover { color: var(--accent-text); }
+.exercise details[open] summary { margin-bottom: 0.6rem; }
+
+/* ---- Pitfalls (symptom → cause → fix) ------------------------------------ */
+.pitfalls { margin: 1.5em 0; }
+.pitfall-item {
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  margin-bottom: 0.9rem;
+  overflow: hidden;
+}
+.pitfall-item > summary {
+  cursor: pointer;
+  padding: 0.7rem 1rem;
+  background: var(--bg-sunken);
+  font-family: var(--font-ui);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.pitfall-item > summary:hover { color: var(--accent-text); }
+.pitfall-item > summary .sym {
+  font-weight: 400;
+  color: var(--text-muted);
+  font-style: italic;
+}
+.pitfall-body { padding: 0.9rem 1rem; font-size: 0.94rem; }
+.pitfall-body > :first-child { margin-top: 0; }
+.pitfall-body > :last-child  { margin-bottom: 0; }
+.pitfall-body dt {
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+  margin-top: 0.7rem;
+}
+.pitfall-body dd { margin: 0.2rem 0 0; }
+
+/* ---- Recap / next -------------------------------------------------------- */
+.recap {
+  background: var(--ok-bg);
+  border: 1px solid var(--ok-bd);
+  border-radius: 9px;
+  padding: 1.1rem 1.25rem;
+  margin: 1.75rem 0;
+}
+.recap h2 { margin: 0 0 0.6rem; border: 0; padding: 0; font-size: 1.05rem; }
+.recap > :last-child { margin-bottom: 0; }
+
+/* ---- Further reading ----------------------------------------------------- */
+.reading { font-size: 0.92rem; }
+.reading li { margin-bottom: 0.6em; }
+.reading .src {
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+  margin-right: 0.4em;
+}
+
+/* ---- STATE block --------------------------------------------------------- */
+.state {
+  margin: 2.5em 0 1em;
+  border: 1px dashed var(--rule-strong);
+  border-radius: 9px;
+  background: var(--bg-sunken);
+  overflow: hidden;
+}
+.state > summary {
+  cursor: pointer;
+  padding: 0.6rem 1rem;
+  font-family: var(--font-ui);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-muted);
+}
+.state pre {
+  margin: 0;
+  padding: 0.9rem 1rem;
+  overflow-x: auto;
+  border-top: 1px solid var(--rule);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+  white-space: pre;
+}
+
+/* ---- Footer -------------------------------------------------------------- */
+.foot {
+  border-top: 1px solid var(--rule);
+  margin-top: 3rem;
+  padding: 1.5rem 0 3rem;
+  font-family: var(--font-ui);
+  font-size: 0.78rem;
+  color: var(--text-faint);
+}
+.foot a { color: var(--text-muted); }
+
+/* ---- Interactive widgets ------------------------------------------------- */
+.widget {
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  background: var(--bg-raised);
+  padding: 1rem;
+  margin: 2em 0;
+}
+.widget-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+  align-items: center;
+  margin-top: 0.8rem;
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+.widget-controls label { display: flex; align-items: center; gap: 0.4rem; }
+.widget-controls input[type="range"] { accent-color: var(--accent); }
+.widget-readout {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--text);
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 0.1rem 0.4rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Print --------------------------------------------------------------- */
+@media print {
+  .masthead, .lesson-nav, .theme-toggle { display: none; }
+  body { background: #fff; color: #000; font-size: 11pt; }
+  .listing { break-inside: avoid; }
+  figure.dia { break-inside: avoid; }
+  a::after { content: " (" attr(href) ")"; font-size: 0.7em; color: #666; }
+}
+</style>
+<!-- SHARED-CSS:END -->
+</head>
+<body>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <a class="course" href="../index.html">Build a Professional 3D Game Engine</a>
+    <span class="spacer"></span>
+    <a href="../index.html">Contents</a>
+    <a href="../conventions.html">Conventions</a>
+    <a href="../cpp-style.html">C++ Style</a>
+    <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Toggle colour theme">Theme</button>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="01-03-delta-time.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">1.3 — Frames, Delta Time, and Why Naive Loops Lie</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="01-05-framebuffer.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">1.5 — The Framebuffer: Your First Owned Pixels</span>
+    </a>
+  </nav>
+
+  <!-- ================= 1. HEADER BLOCK ================= -->
+  <div class="lesson-head">
+    <div class="eyebrow">Module 1 — The Loop, the Pixel, and Time · Lesson 1.4</div>
+    <h1>The Fixed Timestep with Interpolation, Derived</h1>
+    <p class="deck">
+      Lesson 1.3 ended with a ball that gains energy from nowhere, at a rate decided by your
+      monitor. The cure is to stop letting the hardware choose how far the simulation advances —
+      which sounds obvious and turns out to need four separate ideas, each one fixing what the
+      previous one broke. We derive all four, in order, and end with the loop this engine keeps for
+      the rest of the course.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 5 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd><a href="01-03-delta-time.html">1.3 — Frames, Delta Time</a>, <a href="01-02-input-state-vs-events.html">1.2 — Input: State vs Events</a></dd>
+
+        <dt>Files</dt>
+        <dd><code>src/core/fixed_step.hpp</code> (new), <code>src/core/fixed_step.cpp</code> (new), <code>src/main.cpp</code> (modified), <code>CMakeLists.txt</code> (modified)</dd>
+
+        <dt>Milestone</dt>
+        <dd>Three boxes moving at one speed by three different rules — and a ball that bounces to exactly the same height whether you run at 2000 fps or 20.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…explain why simulating with a constant step but no accumulator makes the game run at the wrong <em>speed</em>.</li>
+      <li>…derive the accumulator loop, and state its invariant precisely.</li>
+      <li>…show numerically why rendering the raw simulation state judders, even though the simulation is perfectly correct.</li>
+      <li>…derive <code>alpha</code>, and prove that interpolation converts an <em>oscillating</em> render lag into a <em>constant</em> one of exactly one step.</li>
+      <li>…recognise the spiral of death from its arithmetic, and implement the guard that defuses it — while being honest about what the guard costs.</li>
+      <li>…choose a simulation rate deliberately, and say what determinism a fixed timestep does and does not buy you.</li>
+      <li>…name the two situations in which interpolating between states is wrong, and what to do instead.</li>
+    </ul>
+  </section>
+
+  <details class="toc" open>
+    <summary>Contents</summary>
+    <ol>
+      <li><a href="#problem">The Problem</a></li>
+      <li><a href="#intuition">Building Intuition</a>
+        <ol>
+          <li><a href="#projector">The projector and the actors</a></li>
+          <li><a href="#coins">Paying a debt in fixed coins</a></li>
+        </ol>
+      </li>
+      <li><a href="#theory">The Theory</a>
+        <ol>
+          <li><a href="#attempt-one">Attempt one: just use a constant</a></li>
+          <li><a href="#accumulator">Attempt two: the accumulator</a></li>
+          <li><a href="#judder">The leftover, and the judder it causes</a></li>
+          <li><a href="#interpolation">Interpolation: rendering between two states</a></li>
+          <li><a href="#spiral">The spiral of death, and the guard</a></li>
+          <li><a href="#choosing">Choosing h — and what determinism really buys</a></li>
+        </ol>
+      </li>
+      <li><a href="#implementation">Implementation: the accumulator, and two states</a></li>
+      <li><a href="#listings">Complete Code Listings</a></li>
+      <li><a href="#build">Build &amp; Run</a></li>
+      <li><a href="#pitfalls">Common Pitfalls &amp; Debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; Next</a></li>
+      <li><a href="#reading">Further Reading</a></li>
+    </ol>
+  </details>
+
+  <!-- ================= 2. THE PROBLEM ================= -->
+  <h2 id="problem"><span class="num">1</span>The Problem</h2>
+
+  <p>
+    We finished 1.3 with a precise diagnosis. Scaling movement by <code>dt</code> is
+    <em>exact</em> for constant velocity, and only <strong>first-order</strong> for anything that
+    accelerates — the error is <code>½·g·T·h</code>, proportional to the step. Since the step is
+    the frame time, the frame rate is an input to the physics.
+  </p>
+
+  <p>
+    The demo made that concrete: a perfectly elastic ball, whose energy therefore cannot change,
+    climbing higher after every bounce at a rate that depended entirely on the frame rate.
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>Frame rate</th><th>Apex height after each bounce (px from the top; it was dropped from 260)</th></tr></thead>
+      <tbody>
+        <tr><td>2000 fps</td><td>259, 258, 257 — barely drifting</td></tr>
+        <tr><td>60 fps</td><td>236, 204, 171 — visibly climbing</td></tr>
+        <tr><td>20 fps</td><td>188, 83, <strong>−34</strong> — off the top of the window on the third bounce</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    Three different games. And notice what is <em>not</em> wrong here: the collision code is fine,
+    the gravity constant is fine, the arithmetic is fine. The defect is structural. We asked "how
+    long did the last frame take?" and used the answer to decide how far the world should move,
+    and those two quantities have nothing to do with one another. One is a property of the physics
+    we designed. The other is a property of the machine, the driver, the thermal state of the
+    laptop, and whether a browser is open.
+  </p>
+
+  <p>
+    So this lesson removes the frame rate from the simulation entirely. The simulation will advance
+    in steps of a size <em>we</em> choose, identical on every machine, and rendering will happen
+    whenever the machine is ready — separately, and at whatever rate it likes.
+  </p>
+
+  <p>
+    That is the whole idea, and stated like that it sounds like a five-line change. It is not,
+    because each of the obvious implementations breaks something new: the first runs the game at
+    the wrong speed, the second stutters visibly, and the third can lock your application solid.
+    We will meet all three, in that order, and the loop we end with is the one that survives.
+  </p>
+
+  <!-- ================= 3. BUILDING INTUITION ================= -->
+  <h2 id="intuition"><span class="num">2</span>Building Intuition</h2>
+
+  <h3 id="projector">2.1 The projector and the actors</h3>
+
+  <p>
+    A film camera exposes 24 frames every second. That rate is a property of the camera, chosen by
+    people, and it has nothing to do with how fast the actors moved. The actors' motion is
+    continuous and real; the camera samples it 24 times a second. If you later transfer the film
+    to a projector that runs at 25, the actors do not start acting differently — you are simply
+    sampling the same performance at a different rate.
+  </p>
+
+  <p>
+    That separation is exactly what we want. The simulation is the performance: it evolves by rules
+    we wrote, on a schedule we control. Rendering is the camera: it samples whatever the simulation
+    currently looks like, as often as the hardware allows. Right now our engine has them fused —
+    it is as if the actors could only move when the shutter clicked, so a faster camera made
+    everyone move faster.
+  </p>
+
+  <p>
+    Once separated, two questions appear that did not exist before, and the rest of the lesson is
+    those two questions:
+  </p>
+
+  <ul>
+    <li><strong>How many simulation steps should a given frame run?</strong> Real time does not
+      arrive in neat 16.67 ms parcels, so the answer is usually "not a whole number".</li>
+    <li><strong>What exactly do we draw,</strong> given that the moment we are drawing almost never
+      coincides with a completed simulation step?</li>
+  </ul>
+
+  <h3 id="coins">2.2 Paying a debt in fixed coins</h3>
+
+  <p>
+    Here is the picture to keep for the first question. Every frame, real time hands you some
+    money — 16.4 ms, then 9.2 ms, then 41 ms, whatever the machine managed. The simulation only
+    accepts payment in coins of one fixed denomination: 16.67 ms each.
+  </p>
+
+  <p>
+    So you keep a purse. Each frame you add what you were given, then hand over as many whole coins
+    as the purse can cover — sometimes none, sometimes one, occasionally three. What is left over
+    is smaller than a coin, so it stays in the purse and counts towards next frame.
+  </p>
+
+  <p>
+    Two things fall straight out of that picture, and both matter enormously:
+  </p>
+
+  <ul>
+    <li><strong>No time is ever lost.</strong> The leftover is carried, not discarded, so over any
+      stretch the simulation advances by the real elapsed time, to within one coin.</li>
+    <li><strong>There is always a leftover.</strong> It is what remains after taking out whole
+      coins, so it lives strictly between zero and one coin — never more, never negative.</li>
+  </ul>
+
+  <p>
+    That leftover is the answer to the second question too, though it takes §<a href="#judder">3.3</a>
+    to see why. It measures how far <em>past</em> the last completed step the current moment is —
+    and if you know you are 40% of the way from one step to the next, you know how to draw the
+    in-between.
+  </p>
+
+  <!-- ================= 4. THE THEORY ================= -->
+  <h2 id="theory"><span class="num">3</span>The Theory</h2>
+
+  <h3 id="attempt-one">3.1 Attempt one: just use a constant</h3>
+
+  <p>
+    The most direct reading of "the simulation should not depend on the frame rate" is to stop
+    passing <code>dt</code> in:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">attempt one — and it is wrong in an interesting way</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">constexpr float h = 1.0f / 60.0f;
+
+while (running)
+{
+    handle_events();
+    simulate(h);        // always the same step, never the frame time
+    render();
+}</code></pre>
+  </figure>
+
+  <p>
+    The physics is now genuinely machine-independent: every step is identical, so the ball's
+    trajectory is identical everywhere. We have solved the problem in the title of
+    §<a href="#problem">1</a>.
+  </p>
+
+  <p>
+    And the game is now unplayable, because it runs at the wrong <em>speed</em>. Each frame advances
+    the world by 1/60 of a second regardless of how much time actually passed, so the simulation's
+    clock runs at (frame rate ÷ 60) times real time.
+  </p>
+
+  <div class="worked">
+    <span class="label">Worked example — the simulation's clock versus the wall clock</span>
+    <p>After ten seconds of real time, with <code>h = 1/60 s</code>:</p>
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>Frame rate</th><th>Frames in 10 s</th><th>Simulated time</th><th>Result</th></tr></thead>
+        <tbody>
+          <tr><td>30 fps</td><td>300</td><td><code>300 × 1/60 = 5.0 s</code></td><td>Half speed — slow motion</td></tr>
+          <tr><td>60 fps</td><td>600</td><td><code>600 × 1/60 = 10.0 s</code></td><td>Correct, by coincidence</td></tr>
+          <tr><td>144 fps</td><td>1440</td><td><code>1440 × 1/60 = 24.0 s</code></td><td>2.4× too fast</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="margin-bottom:0">
+      This is the <em>same</em> 4.8× spread between 30 and 144 fps that Lesson 1.3 opened with. We
+      have not fixed the bug; we have moved it from "different physics" to "different speed", which
+      is arguably worse because it affects everything uniformly and obviously.
+    </p>
+  </div>
+
+  <figure class="dia bleed">
+    <svg viewBox="0 0 690 250" role="img" aria-labelledby="f1-t f1-d">
+      <title id="f1-t">Simulated time against real time when every frame advances a constant step</title>
+      <desc id="f1-d">Three lines plot simulated time against ten seconds of real time. The 60 fps
+        line follows the diagonal exactly. The 30 fps line rises at half the rate, reaching only
+        five simulated seconds. The 144 fps line rises 2.4 times too steeply, reaching twenty-four
+        simulated seconds and leaving the top of the chart. Only the machine that happens to match
+        the step rate keeps correct time.</desc>
+
+      <g class="grid" stroke-width="1">
+        <line x1="70" y1="40" x2="600" y2="40"/>
+        <line x1="70" y1="85" x2="600" y2="85"/>
+        <line x1="70" y1="130" x2="600" y2="130"/>
+        <line x1="70" y1="175" x2="600" y2="175"/>
+        <line x1="70" y1="200" x2="600" y2="200"/>
+      </g>
+      <g class="xs muted">
+        <text x="62" y="204" text-anchor="end">0</text>
+        <text x="62" y="179" text-anchor="end">5 s</text>
+        <text x="62" y="134" text-anchor="end">10 s</text>
+        <text x="62" y="44" text-anchor="end">20 s</text>
+      </g>
+      <text x="22" y="120" class="xs muted" transform="rotate(-90 22 120)" text-anchor="middle">simulated time</text>
+      <text x="335" y="232" class="xs muted" text-anchor="middle">real time (0 → 10 s)</text>
+
+      <!-- real = sim reference (60fps) -->
+      <line x1="70" y1="200" x2="600" y2="130" stroke="var(--ok-bd)" stroke-width="2.4"/>
+      <!-- 30 fps: half -->
+      <line x1="70" y1="200" x2="600" y2="165" stroke="var(--verify-bd)" stroke-width="2.2"/>
+      <!-- 144 fps: 2.4x -->
+      <line x1="70" y1="200" x2="365" y2="30" stroke="var(--verify-bd)" stroke-width="2.2"/>
+
+      <text x="606" y="128" class="xs t-ok" font-weight="700">60 fps</text>
+      <text x="606" y="142" class="xs muted">exactly right</text>
+      <text x="606" y="163" class="xs t-bad" font-weight="700">30 fps</text>
+      <text x="606" y="177" class="xs muted">half speed</text>
+      <text x="372" y="38" class="xs t-bad" font-weight="700">144 fps</text>
+      <text x="372" y="52" class="xs muted">2.4× too fast</text>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 1.</span> A constant step with no accumulator. The physics is now
+      identical everywhere — it just happens at the wrong rate everywhere except the one machine
+      whose frame rate matches the step. Keeping simulated time and real time in step is the job
+      §<a href="#accumulator">3.2</a> exists to do.
+    </figcaption>
+  </figure>
+
+  <p>
+    So we need both properties at once: <strong>every step the same size</strong> (for identical
+    physics) <em>and</em> <strong>simulated time tracking real time</strong> (for correct speed).
+    The only free variable left is the <em>number</em> of steps per frame.
+  </p>
+
+  <h3 id="accumulator">3.2 Attempt two: the accumulator</h3>
+
+  <p>
+    Which is §<a href="#coins">2.2</a>'s purse. Bank the elapsed real time; spend it in whole steps;
+    carry the change.
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">the accumulator loop</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">constexpr float h = 1.0f / 60.0f;
+float accumulator = 0.0f;
+
+while (running)
+{
+    handle_events();
+
+    accumulator += frame_time();     // bank the real elapsed time
+
+    while (accumulator &gt;= h)         // spend it in whole steps
+    {
+        simulate(h);
+        accumulator -= h;            // and never, ever forget this subtraction
+    }
+
+    render();                        // the leftover is still in `accumulator`
+}</code></pre>
+  </figure>
+
+  <p>
+    Read the inner loop carefully, because it is doing something people find surprising the first
+    time: <strong>a frame may run zero steps, or one, or several.</strong> A machine rendering
+    faster than the simulation rate will frequently have nothing to simulate at all — it renders
+    the same state twice, which is correct. A machine that stalled will run several steps to catch
+    up.
+  </p>
+
+  <p>
+    Two properties are worth stating precisely, because everything later depends on them.
+  </p>
+
+  <p>
+    <strong>The invariant.</strong> After the inner loop finishes, <code>0 ≤ accumulator &lt; h</code>.
+    The loop condition guarantees it: it runs for as long as a whole step is affordable, so it can
+    only exit when one is not. The accumulator is therefore <em>bounded</em> — which, incidentally,
+    is why it may safely be a <code>float</code>, even though Lesson 1.3 insisted that absolute time
+    must be a <code>Uint64</code>. That rule was about quantities that grow without limit. This one
+    is emptied every frame by construction.
+  </p>
+
+  <p>
+    <strong>No time is lost or invented.</strong> Every unit of real time added to the accumulator
+    either becomes a simulation step or stays banked for the next frame. So simulated time tracks
+    real time to within one step, permanently — the property Figure 1 shows attempt one lacking.
+  </p>
+
+  <figure class="dia bleed">
+    <svg viewBox="0 0 660 275" role="img" aria-labelledby="f2-t f2-d">
+      <title id="f2-t">Real time banked in an accumulator and spent as whole simulation steps</title>
+      <desc id="f2-d">Four frames of uneven real duration are added to an accumulator. The first
+        frame banks 10 milliseconds, which is less than one 16.67 millisecond step, so no step runs
+        and all of it carries over. The second banks 9 more, reaching 19, enough for one step, and
+        2.3 carries over. The third banks 41, reaching 43.3, enough for two steps, and 10 carries
+        over. Each frame the leftover is strictly less than one step.</desc>
+
+      <g class="xs muted">
+        <text x="14" y="26">each frame: bank the real time, spend whole steps of h = 16.67 ms, carry the change</text>
+      </g>
+
+      <!-- headers -->
+      <g class="xs" font-weight="700">
+        <text x="60" y="56" text-anchor="middle">frame 1</text>
+        <text x="205" y="56" text-anchor="middle">frame 2</text>
+        <text x="350" y="56" text-anchor="middle">frame 3</text>
+        <text x="495" y="56" text-anchor="middle">frame 4</text>
+      </g>
+      <g class="xs muted">
+        <text x="60" y="70" text-anchor="middle">+10.0 ms</text>
+        <text x="205" y="70" text-anchor="middle">+9.0 ms</text>
+        <text x="350" y="70" text-anchor="middle">+41.0 ms</text>
+        <text x="495" y="70" text-anchor="middle">+16.0 ms</text>
+      </g>
+
+      <!-- purse bars: height proportional to accumulator content before spending -->
+      <g>
+        <rect x="26" y="88" width="68" height="26" rx="4" class="fill-soft" stroke="var(--dia-ink-soft)" stroke-width="1"/>
+        <rect x="26" y="88" width="15.1" height="26" rx="4" fill="var(--dia-hi)" opacity="0.8"/>
+        <rect x="171" y="88" width="68" height="26" rx="4" class="fill-soft" stroke="var(--dia-ink-soft)" stroke-width="1"/>
+        <rect x="171" y="88" width="28.7" height="26" rx="4" fill="var(--dia-hi)" opacity="0.8"/>
+        <rect x="316" y="88" width="68" height="26" rx="4" class="fill-soft" stroke="var(--dia-ink-soft)" stroke-width="1"/>
+        <rect x="316" y="88" width="65.4" height="26" rx="4" fill="var(--dia-hi)" opacity="0.8"/>
+        <rect x="461" y="88" width="68" height="26" rx="4" class="fill-soft" stroke="var(--dia-ink-soft)" stroke-width="1"/>
+        <rect x="461" y="88" width="39.3" height="26" rx="4" fill="var(--dia-hi)" opacity="0.8"/>
+        <line x1="51.2" y1="84" x2="51.2" y2="118" stroke="var(--ok-bd)" stroke-width="1.6" stroke-dasharray="3 2"/>
+        <line x1="196.2" y1="84" x2="196.2" y2="118" stroke="var(--ok-bd)" stroke-width="1.6" stroke-dasharray="3 2"/>
+        <line x1="341.2" y1="84" x2="341.2" y2="118" stroke="var(--ok-bd)" stroke-width="1.6" stroke-dasharray="3 2"/>
+        <line x1="486.2" y1="84" x2="486.2" y2="118" stroke="var(--ok-bd)" stroke-width="1.6" stroke-dasharray="3 2"/>
+      </g>
+      <g class="xs" font-weight="700">
+        <text x="60" y="132" text-anchor="middle" class="t-hi">10.0 ms</text>
+        <text x="205" y="132" text-anchor="middle" class="t-hi">19.0 ms</text>
+        <text x="350" y="132" text-anchor="middle" class="t-hi">43.3 ms</text>
+        <text x="495" y="132" text-anchor="middle" class="t-hi">26.0 ms</text>
+      </g>
+      <text x="656" y="106" class="xs muted" text-anchor="end">in the purse</text>
+      <text x="656" y="120" class="xs t-ok" text-anchor="end">dashes = one step</text>
+
+      <!-- steps spent -->
+      <g class="xs" font-weight="700">
+        <text x="60" y="158" text-anchor="middle" class="muted">0 steps</text>
+        <text x="205" y="158" text-anchor="middle" class="t-ok">1 step</text>
+        <text x="350" y="158" text-anchor="middle" class="t-ok">2 steps</text>
+        <text x="495" y="158" text-anchor="middle" class="t-ok">1 step</text>
+      </g>
+      <g>
+        <rect x="186" y="168" width="38" height="16" rx="3" fill="var(--ok-bd)"/>
+        <rect x="312" y="168" width="38" height="16" rx="3" fill="var(--ok-bd)"/>
+        <rect x="352" y="168" width="38" height="16" rx="3" fill="var(--ok-bd)"/>
+        <rect x="476" y="168" width="38" height="16" rx="3" fill="var(--ok-bd)"/>
+      </g>
+      <text x="656" y="180" class="xs muted" text-anchor="end">spent</text>
+
+      <!-- leftover -->
+      <line x1="20" y1="200" x2="600" y2="200" class="grid" stroke-width="1"/>
+      <g class="xs" font-weight="700">
+        <text x="60" y="222" text-anchor="middle" class="t-hi">10.0</text>
+        <text x="205" y="222" text-anchor="middle" class="t-hi">2.3</text>
+        <text x="350" y="222" text-anchor="middle" class="t-hi">10.0</text>
+        <text x="495" y="222" text-anchor="middle" class="t-hi">9.3</text>
+      </g>
+      <text x="656" y="222" class="xs muted" text-anchor="end">carried (= alpha × h)</text>
+      <text x="20" y="248" class="xs muted">every leftover is strictly less than one step — that is the loop's invariant, and it is what makes alpha meaningful</text>
+      <text x="20" y="266" class="xs t-hi" font-weight="700">alpha = leftover / h  →  0.60 · 0.14 · 0.60 · 0.56</text>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 2.</span> Uneven real time in, whole steps out, and a leftover that
+      is always smaller than one step. Frame 1 runs no steps at all and frame 3 runs two — both are
+      normal, and a loop that assumed "one step per frame" would be attempt one again.
+    </figcaption>
+  </figure>
+
+  <p>
+    The physics is now identical on every machine <em>and</em> runs at the right speed. If we stopped
+    here we would have most of what people mean by "fixed timestep", and the engine would be
+    measurably better than it was an hour ago.
+  </p>
+
+  <p>
+    And it would visibly stutter.
+  </p>
+
+  <h3 id="judder">3.3 The leftover, and the judder it causes</h3>
+
+  <p>
+    Here is the part most treatments skate over, so we will do it with numbers.
+  </p>
+
+  <p>
+    <code>render()</code> draws the simulation's current state. That state is the result of the last
+    completed step — which happened at some moment in the <em>past</em>, because the leftover in the
+    accumulator is precisely the time that has elapsed since. So every frame is drawn stale, by an
+    amount equal to the accumulator.
+  </p>
+
+  <p>
+    Staleness by itself is not the problem. A constant delay is imperceptible: everything is
+    uniformly 8 ms behind and nobody can tell. <strong>The problem is that the staleness
+    varies</strong> — between zero and one full step — and it varies in a pattern that has nothing
+    to do with the object's real motion.
+  </p>
+
+  <div class="worked">
+    <span class="label">Worked example — a 60 Hz simulation rendered at 100 fps</span>
+    <p>
+      <code>h = 16.667 ms</code>, frames arriving every <code>10 ms</code>. Following the
+      accumulator frame by frame:
+    </p>
+    <div class="tbl-scroll">
+      <table>
+        <thead>
+          <tr><th>Frame</th><th>Real time</th><th>Banked</th><th>Steps</th><th>Leftover</th><th>Simulated to</th><th>Render is stale by</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>1</td><td>10 ms</td><td>10.00</td><td>0</td><td>10.00</td><td>0.00 ms</td><td><strong>10.00 ms</strong></td></tr>
+          <tr><td>2</td><td>20 ms</td><td>20.00</td><td>1</td><td>3.33</td><td>16.67 ms</td><td><strong>3.33 ms</strong></td></tr>
+          <tr><td>3</td><td>30 ms</td><td>13.33</td><td>0</td><td>13.33</td><td>16.67 ms</td><td><strong>13.33 ms</strong></td></tr>
+          <tr><td>4</td><td>40 ms</td><td>23.33</td><td>1</td><td>6.67</td><td>33.33 ms</td><td><strong>6.67 ms</strong></td></tr>
+          <tr><td>5</td><td>50 ms</td><td>16.67</td><td>1</td><td>0.00</td><td>50.00 ms</td><td><strong>0.00 ms</strong></td></tr>
+          <tr><td>6</td><td>60 ms</td><td>10.00</td><td>0</td><td>10.00</td><td>50.00 ms</td><td><strong>10.00 ms</strong></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      The step pattern is <code>0, 1, 0, 1, 1</code> and then repeats — 3 steps every 5 frames, which
+      is right, since <code>5 × 10 ms = 50 ms = 3 × 16.67 ms</code>. Over twelve frames you get
+      seven steps.
+    </p>
+    <p style="margin-bottom:0">
+      Now read the last column as an animation. A box moving at a constant 360 px/s is drawn
+      3.6 px behind, then 1.2, then 4.8, then 2.4, then 0, then 3.6 again. Its <em>true</em> velocity
+      is perfectly constant; its <em>drawn</em> velocity lurches between zero and double, five times
+      a second. That is the judder, and it is not a bug in the simulation — the simulation is exactly
+      right. It is a sampling artifact, introduced entirely by drawing a stale state without
+      accounting for how stale it is.
+    </p>
+  </div>
+
+  <figure class="dia bleed">
+    <svg viewBox="0 0 660 330" role="img" aria-labelledby="f3-t f3-d">
+      <title id="f3-t">Drawn position and render lag over ten frames of a 60 Hz simulation at 100 fps</title>
+      <desc id="f3-d">The upper chart plots a box's true position as a straight rising line against
+        the position actually drawn, which follows a staircase: on frames where no simulation step
+        ran, the drawn position does not change at all, then it jumps by a full step. The lower
+        chart plots how stale each drawn frame is. Without interpolation the staleness sawtooths
+        between zero and 13.3 milliseconds, repeating every five frames; with interpolation it is a
+        flat line at exactly one step, 16.67 milliseconds, on every frame.</desc>
+
+      <!-- ===== upper: position ===== -->
+      <text x="14" y="24" class="sm t-bad" font-weight="700">✗ What gets drawn, without interpolation</text>
+      <line x1="60" y1="132" x2="600" y2="132" class="grid" stroke-width="1"/>
+      <line x1="60" y1="36" x2="60" y2="132" class="grid" stroke-width="1"/>
+      <text x="30" y="88" class="xs muted" transform="rotate(-90 30 88)" text-anchor="middle">position</text>
+
+      <line x1="60" y1="128" x2="600" y2="40" stroke="var(--ok-bd)" stroke-width="2"/>
+      <path d="M60,128.0 L114.0,128.0 L168.0,128.0 L168.0,113.3 L222.0,113.3 L222.0,113.3 L276.0,113.3 L276.0,98.7 L330.0,98.7 L330.0,84.0 L384.0,84.0 L384.0,84.0 L438.0,84.0 L438.0,69.3 L492.0,69.3 L492.0,69.3 L546.0,69.3 L546.0,54.7 L600.0,54.7 L600.0,40.0"
+            fill="none" stroke="var(--verify-bd)" stroke-width="1.8"/>
+      <g fill="var(--verify-bd)">
+        <circle cx="114.0" cy="128.0" r="3.2"/><circle cx="168.0" cy="113.3" r="3.2"/>
+        <circle cx="222.0" cy="113.3" r="3.2"/><circle cx="276.0" cy="98.7" r="3.2"/>
+        <circle cx="330.0" cy="84.0" r="3.2"/><circle cx="384.0" cy="84.0" r="3.2"/>
+        <circle cx="438.0" cy="69.3" r="3.2"/><circle cx="492.0" cy="69.3" r="3.2"/>
+        <circle cx="546.0" cy="54.7" r="3.2"/><circle cx="600.0" cy="40.0" r="3.2"/>
+      </g>
+      <text x="608" y="44" class="xs t-ok" font-weight="700">true</text>
+      <text x="608" y="58" class="xs t-bad" font-weight="700">drawn</text>
+      <text x="196" y="150" class="xs t-bad">two frames at the same position…</text>
+      <text x="430" y="150" class="xs t-bad">…then a double-sized jump. That is the judder.</text>
+
+      <!-- ===== lower: how stale each frame is ===== -->
+      <text x="14" y="192" class="sm" font-weight="700">How stale the drawn frame is</text>
+      <line x1="60" y1="292" x2="600" y2="292" class="ink-soft" stroke-width="1.2"/>
+      <line x1="60" y1="205" x2="60" y2="292" class="grid" stroke-width="1"/>
+      <text x="52" y="296" text-anchor="end" class="xs muted">0</text>
+      <text x="52" y="224" text-anchor="end" class="xs muted">h</text>
+
+      <line x1="60" y1="220" x2="600" y2="220" stroke="var(--dia-hi)" stroke-width="2.2"/>
+      <g fill="var(--dia-hi)">
+        <circle cx="114.0" cy="220" r="3.2"/><circle cx="168.0" cy="220" r="3.2"/>
+        <circle cx="222.0" cy="220" r="3.2"/><circle cx="276.0" cy="220" r="3.2"/>
+        <circle cx="330.0" cy="220" r="3.2"/><circle cx="384.0" cy="220" r="3.2"/>
+        <circle cx="438.0" cy="220" r="3.2"/><circle cx="492.0" cy="220" r="3.2"/>
+        <circle cx="546.0" cy="220" r="3.2"/><circle cx="600.0" cy="220" r="3.2"/>
+      </g>
+      <text x="608" y="216" class="xs t-hi" font-weight="700">with</text>
+      <text x="608" y="228" class="xs t-hi" font-weight="700">lerp</text>
+
+      <polyline fill="none" stroke="var(--verify-bd)" stroke-width="1.8"
+        points="114.0,248.8 168.0,277.6 222.0,234.4 276.0,263.2 330.0,292.0 384.0,248.8 438.0,277.6 492.0,234.4 546.0,263.2 600.0,292.0"/>
+      <g fill="var(--verify-bd)">
+        <circle cx="114.0" cy="248.8" r="3.2"/><circle cx="168.0" cy="277.6" r="3.2"/>
+        <circle cx="222.0" cy="234.4" r="3.2"/><circle cx="276.0" cy="263.2" r="3.2"/>
+        <circle cx="330.0" cy="292.0" r="3.2"/><circle cx="384.0" cy="248.8" r="3.2"/>
+        <circle cx="438.0" cy="277.6" r="3.2"/><circle cx="492.0" cy="234.4" r="3.2"/>
+        <circle cx="546.0" cy="263.2" r="3.2"/><circle cx="600.0" cy="292.0" r="3.2"/>
+      </g>
+      <text x="608" y="286" class="xs t-bad" font-weight="700">raw</text>
+
+      <text x="60" y="316" class="xs t-bad">raw: sawtooths 0 → 13.3 ms, repeating every five frames</text>
+      <text x="600" y="316" class="xs t-hi" text-anchor="end" font-weight="700">interpolated: exactly h, every single frame</text>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 3.</span> Both charts describe a perfectly correct simulation —
+      the difference is entirely in what gets drawn. Above, the drawn position stalls for a frame
+      and then jumps double; below is why. The raw lag sawtooths, and it is the <em>variation</em>
+      the eye reads as stutter, not the lag itself. Interpolation does not reduce the lag — on
+      average it increases it — it makes it constant, and the numbers plotted are exactly the last
+      column of the worked example above.
+    </figcaption>
+  </figure>
+
+  <p>
+    Notice the trap this sets. The judder appears <em>the moment you adopt a fixed timestep</em>, so
+    it is easy to conclude the fixed timestep was a mistake and go back. It was not — the fix is one
+    more idea, and it is the reason this technique is always described as "fixed timestep
+    <em>with interpolation</em>" rather than just "fixed timestep".
+  </p>
+
+  <h3 id="interpolation">3.4 Interpolation: rendering between two states</h3>
+
+  <p>
+    We know exactly how stale the render is: it is the accumulator. We know how long a step is: it
+    is <code>h</code>. So we know the render's position <em>between</em> two simulation steps as a
+    fraction:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">the interpolation factor</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">const float alpha = accumulator / h;    // guaranteed to be in [0, 1) by the invariant</code></pre>
+  </figure>
+
+  <p>
+    An <code>alpha</code> of 0 means a step has just completed. An <code>alpha</code> of 0.75 means
+    three quarters of the way from the last completed step towards the next one. And if we keep the
+    state from <em>before</em> the last step as well as after it, we can draw the position in
+    between by simple linear interpolation:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">rendering between two states</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">while (accumulator &gt;= h)
+{
+    previous = current;          // remember where we were…
+    simulate(current, h);        // …before advancing
+    accumulator -= h;
+}
+
+const float alpha = accumulator / h;
+render(lerp(previous, current, alpha));</code></pre>
+  </figure>
+
+  <p>
+    Now the claim that makes the whole technique work, and it is worth proving rather than asserting.
+  </p>
+
+  <div class="worked">
+    <span class="label">Worked example — interpolation turns a varying lag into a constant one</span>
+    <p>Write <code>T</code> for real elapsed time and <code>S</code> for simulated time. By the accumulator's construction:</p>
+    <ul>
+      <li><code>T = S + accumulator</code> — real time is simulated time plus what is still banked.</li>
+      <li><code>previous</code> is the state at time <code>S − h</code>; <code>current</code> is at <code>S</code>.</li>
+      <li>Interpolating by <code>alpha</code> draws the state at
+        <code>(S − h) + alpha·h = S − h + accumulator</code>.</li>
+      <li>Substituting <code>S + accumulator = T</code>, the drawn moment is exactly
+        <strong><code>T − h</code></strong>.</li>
+    </ul>
+    <p>
+      The accumulator cancels. Whatever it happens to be — 0.1 ms or 16 ms — the render depicts the
+      world exactly one fixed step behind real time. Not approximately: exactly, every frame.
+      Confirming it against §<a href="#judder">3.3</a>'s table:
+    </p>
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>Frame</th><th>Stale by, raw</th><th>Stale by, interpolated</th></tr></thead>
+        <tbody>
+          <tr><td>2</td><td>3.33 ms</td><td>16.67 ms</td></tr>
+          <tr><td>3</td><td>13.33 ms</td><td>16.67 ms</td></tr>
+          <tr><td>4</td><td>6.67 ms</td><td>16.67 ms</td></tr>
+          <tr><td>5</td><td>0.00 ms</td><td>16.67 ms</td></tr>
+          <tr><td>6</td><td>10.00 ms</td><td>16.67 ms</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="margin-bottom:0">
+      We have traded a lag that <em>swings between 0 and 16.67 ms</em> for one that is
+      <em>always 16.67 ms</em>. On average the interpolated version is further behind — and it looks
+      dramatically better, because human vision is exquisitely sensitive to changes in velocity and
+      almost blind to a constant delay. <strong>Smoothness is consistency, not immediacy.</strong>
+    </p>
+  </div>
+
+  <p>
+    Drag the slider below through the frame rates. Watch the red dots leave the true line by
+    different amounts at different frame rates — and watch the interpolated dots stay on their
+    parallel line no matter what you do.
+  </p>
+
+  <div class="widget" id="interp-widget">
+    <svg id="interp-svg" viewBox="0 0 620 250" role="img" aria-label="Interactive: drawn position with and without interpolation, at an adjustable render frame rate">
+      <g stroke="var(--rule)" stroke-width="1">
+        <line x1="55" y1="30" x2="590" y2="30"/>
+        <line x1="55" y1="230" x2="590" y2="230"/>
+        <line x1="55" y1="30" x2="55" y2="230"/>
+      </g>
+      <line id="interp-true" x1="55" y1="230" x2="590" y2="30" stroke="var(--ok-bd)" stroke-width="2"/>
+      <line id="interp-shift" stroke="var(--dia-hi)" stroke-width="1.6" stroke-dasharray="4 3" opacity="0.85"/>
+      <g id="interp-raw" fill="var(--verify-bd)"></g>
+      <g id="interp-lerp" fill="var(--dia-hi)"></g>
+      <g style="font-size:9.5px; fill:var(--text-faint); font-family:var(--font-ui)">
+        <text x="55" y="245">t = 0</text>
+        <text x="590" y="245" text-anchor="end">t = 200 ms</text>
+        <text x="60" y="26">position</text>
+      </g>
+    </svg>
+    <div class="widget-controls">
+      <label for="interp-fps">render fps
+        <input type="range" id="interp-fps" min="15" max="200" value="100" step="1">
+      </label>
+      <span class="widget-readout" id="interp-fps-out">100 fps</span>
+      <span class="widget-readout" id="interp-raw-out">raw lag: 0.0–16.7 ms</span>
+      <span class="widget-readout" id="interp-lerp-out">lerp lag: 16.7 ms flat</span>
+    </div>
+    <p style="margin:0.7rem 0 0; font-size:0.82rem; color:var(--text-muted)">
+      Green is the true position of a box at constant speed. <span style="color:var(--verify-bd)">Red</span>
+      is what gets drawn without interpolation — uneven spacing is judder.
+      <span style="color:var(--dia-hi)">Amber</span> is with interpolation: evenly spaced, on the
+      dashed line one step below the truth. Simulation is fixed at 60 Hz throughout.
+    </p>
+  </div>
+
+  <div class="callout note">
+    <span class="label">Why not extrapolate instead, and render at <code>T</code> exactly?</span>
+    <p style="margin-bottom:0">
+      You can: let <code>alpha</code> exceed 1 and project past <code>current</code>, removing the
+      one-step lag. The catch is that extrapolation guesses at a future that has not been simulated,
+      and it guesses wrong at every discontinuity — a collision, a direction change, a button press.
+      The object visibly overshoots and snaps back, and rubber-banding is far more objectionable than
+      a steady 16 ms delay. Interpolation only ever draws between two states that <em>actually
+      happened</em>, so it can never be wrong about anything. Competitive games sometimes accept
+      extrapolation's artifacts to claw back latency; we do not, and if you ever want to, do it as a
+      deliberate decision rather than by forgetting to clamp <code>alpha</code>.
+    </p>
+  </div>
+
+  <h3 id="spiral">3.5 The spiral of death, and the guard</h3>
+
+  <p>
+    One flaw remains, and it is the one that takes down applications rather than merely making them
+    ugly. Look again at the inner loop:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">the loop that can never finish</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">while (accumulator &gt;= h)
+{
+    previous = current;
+    simulate(current, h);
+    accumulator -= h;
+}</code></pre>
+  </figure>
+
+  <p>
+    Simulating a step takes real time. If simulating <code>h</code> seconds of game costs more than
+    <code>h</code> seconds of reality, then every step you run adds more to next frame's debt than
+    it removes from this one.
+  </p>
+
+  <div class="worked">
+    <span class="label">Worked example — the runaway</span>
+    <p>
+      A 60 Hz simulation, so each step represents <code>16.67 ms</code> of game time. Suppose the
+      scene has grown heavy and one step costs <code>20 ms</code> of real time to compute:
+    </p>
+    <ul>
+      <li>Each step <em>simulates</em> 16.67 ms but <em>consumes</em> 20 ms.</li>
+      <li>Net: the engine falls <code>20 − 16.67 = 3.33 ms</code> further behind per step.</li>
+      <li>Falling behind means more steps owed next frame, which consumes more real time, which
+        means falling further behind.</li>
+    </ul>
+    <p style="margin-bottom:0">
+      Frame time grows without bound; the window stops responding while the CPU works flat out. The
+      condition is simply
+      <code>cost per step ÷ time simulated per step &gt; 1</code> — here <code>20 / 16.67 = 1.20</code>.
+      At exactly 1.0 the engine is on a knife edge; below it, any backlog is eventually paid off.
+      This is the <strong>spiral of death</strong>.
+    </p>
+  </div>
+
+  <figure class="dia bleed">
+    <svg viewBox="0 0 660 240" role="img" aria-labelledby="f4-t f4-d">
+      <title id="f4-t">Accumulator backlog over successive frames, unguarded and guarded</title>
+      <desc id="f4-d">Without a guard the accumulator's backlog grows every frame without limit, and
+        the number of steps demanded per frame grows with it, so the application locks up. With a
+        step cap the backlog is discarded once the cap is reached, so the work per frame stays
+        bounded and the application keeps responding while running in slow motion.</desc>
+
+      <defs>
+        <marker id="s4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--verify-bd)"/></marker>
+      </defs>
+
+      <text x="14" y="24" class="sm t-bad" font-weight="700">✗ Unguarded</text>
+      <line x1="70" y1="120" x2="300" y2="120" class="ink-soft" stroke-width="1.2"/>
+      <line x1="70" y1="120" x2="70" y2="38" class="ink-soft" stroke-width="1.2"/>
+      <path d="M70,118 L108,110 L146,92 L184,64 L222,40" fill="none" stroke="var(--verify-bd)" stroke-width="2.2" marker-end="url(#s4)"/>
+      <g class="xs muted">
+        <text x="88" y="134" text-anchor="middle">f1</text>
+        <text x="126" y="134" text-anchor="middle">f2</text>
+        <text x="164" y="134" text-anchor="middle">f3</text>
+        <text x="202" y="134" text-anchor="middle">f4</text>
+      </g>
+      <text x="40" y="80" class="xs muted" transform="rotate(-90 40 80)" text-anchor="middle">backlog</text>
+      <text x="234" y="60" class="xs t-bad" font-weight="700">1 → 2 → 4 → 7 steps…</text>
+      <text x="234" y="74" class="xs muted">no upper bound</text>
+      <text x="70" y="164" class="xs t-bad" font-weight="700">the window stops responding</text>
+      <text x="70" y="180" class="xs muted">while the CPU runs flat out — it is not</text>
+      <text x="70" y="194" class="xs muted">hung, it is doing unbounded work</text>
+
+      <line x1="330" y1="20" x2="330" y2="220" class="grid" stroke-width="1" stroke-dasharray="4 4"/>
+
+      <text x="358" y="24" class="sm t-ok" font-weight="700">✓ Guarded: max 8 steps per frame</text>
+      <line x1="404" y1="120" x2="634" y2="120" class="ink-soft" stroke-width="1.2"/>
+      <line x1="404" y1="120" x2="404" y2="38" class="ink-soft" stroke-width="1.2"/>
+      <line x1="404" y1="64" x2="634" y2="64" stroke="var(--ok-bd)" stroke-width="1.4" stroke-dasharray="4 3"/>
+      <text x="630" y="58" class="xs t-ok" text-anchor="end" font-weight="700">the cap</text>
+      <path d="M404,118 L442,110 L480,92 L518,64 L556,64 L594,64" fill="none" stroke="var(--ok-bd)" stroke-width="2.2"/>
+      <g class="xs muted">
+        <text x="422" y="134" text-anchor="middle">f1</text>
+        <text x="460" y="134" text-anchor="middle">f2</text>
+        <text x="498" y="134" text-anchor="middle">f3</text>
+        <text x="536" y="134" text-anchor="middle">f4</text>
+        <text x="574" y="134" text-anchor="middle">f5</text>
+      </g>
+      <text x="404" y="164" class="xs t-ok" font-weight="700">work per frame stays bounded</text>
+      <text x="404" y="180" class="xs muted">the excess backlog is discarded, so the game</text>
+      <text x="404" y="194" class="xs muted">runs in slow motion and stays responsive</text>
+      <text x="404" y="214" class="xs t-bad" font-weight="700">— and that discarded time is gone for good</text>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 4.</span> The guard does not make the machine faster. It converts
+      an unbounded failure into a bounded one: instead of locking up, the simulation permanently
+      falls behind the wall clock. That is a loss, chosen deliberately, and worth reporting rather
+      than hiding.
+    </figcaption>
+  </figure>
+
+  <p>
+    There are two places to intervene, and we already have one of them.
+  </p>
+
+  <p>
+    <strong>Clamping <code>dt</code> before it enters the accumulator</strong> is the defence Lesson
+    1.3 built without naming it. <code>clock::dt()</code> caps a frame at 0.25 s, so at
+    <code>h = 1/60</code> no single frame can ever ask for more than
+    <code>0.25 / 0.0167 = 15</code> steps. That alone bounds the work per frame, and it is why the
+    clamp existed before we needed it.
+  </p>
+
+  <p>
+    <strong>Capping the steps per frame</strong> is the second, and it protects against the case the
+    clamp cannot: a machine that is simply too slow, frame after frame, where each individual
+    <code>dt</code> is small and legitimate but the backlog still grows. Past the cap we discard the
+    outstanding time. The simulation then falls behind real time permanently — the game runs in slow
+    motion — which is a genuine loss, not a repair. Our implementation records exactly how much time
+    was thrown away, because a silent slow-motion mode is a support ticket nobody can diagnose.
+  </p>
+
+  <h3 id="choosing">3.6 Choosing h — and what determinism really buys</h3>
+
+  <p>
+    The step size is now a design decision rather than an accident, so it deserves one.
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>Rate</th><th>Step</th><th>Character</th></tr></thead>
+      <tbody>
+        <tr><td>30 Hz</td><td>33.3 ms</td><td>Cheap. Visible integration error; fast objects tunnel; input can sit for a third of a frame. Common on consoles for gameplay logic, with physics run separately.</td></tr>
+        <tr><td><strong>60 Hz</strong></td><td>16.7 ms</td><td>The default, and ours. Matches the commonest refresh rate, so <code>alpha</code> is usually near 0 or 1 and the interpolation lag is one frame on the majority of machines.</td></tr>
+        <tr><td>120 Hz</td><td>8.3 ms</td><td>Noticeably better physics — remember the error is proportional to <code>h</code> — for double the simulation cost. A good choice for physics-heavy games.</td></tr>
+        <tr><td>240+ Hz</td><td>≤4.2 ms</td><td>Diminishing returns for most gameplay, and the spiral gets much easier to trigger because each step buys so little time.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    Notice the connection back to 1.3: explicit Euler's error is <code>½·g·T·h</code>, and
+    <code>h</code> is now a number in our source code. We have not made the integrator accurate — we
+    have made its inaccuracy <em>a constant we control</em> instead of a property of the player's
+    hardware. The demo shows exactly this: at 10 Hz the ball still flies out of the window, but it
+    does so identically on every machine. Fixing the integrator itself is Module 7's work.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">What a fixed timestep does and does not guarantee</span>
+    <p>
+      "Fixed timestep gives you determinism" is true in a narrower sense than it sounds, and the
+      difference matters if you ever attempt replays or lockstep multiplayer.
+    </p>
+    <p>
+      <strong>What you get:</strong> the same binary, on the same machine, fed the same sequence of
+      inputs at the same simulation steps, produces bit-identical results — regardless of frame
+      rate, background load, or how long you spent at a breakpoint. That is a real and valuable
+      property. It makes a bug reproducible, and it is what makes an input-log replay possible at all.
+    </p>
+    <p style="margin-bottom:0">
+      <strong>What you do not get:</strong> identical results across different machines, compilers,
+      or optimisation levels. Floating-point results can differ through fused multiply-add
+      contraction, x87 80-bit intermediates, different <code>libm</code> implementations of
+      <code>sin</code>/<code>cos</code>, and vectorisation changing the order of a summation. A fixed
+      timestep is <em>necessary</em> for cross-machine determinism and nowhere near
+      <em>sufficient</em>; games that need it use fixed-point arithmetic or a tightly constrained
+      floating-point subset. Do not promise lockstep on the strength of this lesson alone.
+    </p>
+  </div>
+
+  <!-- ================= 5. IMPLEMENTATION ================= -->
+  <h2 id="implementation"><span class="num">4</span>Implementation: the accumulator, and two states</h2>
+
+  <p>
+    Two pieces: a type that owns the accumulator, and a change in how the demo stores its state.
+  </p>
+
+  <h3>4.1 Why the accumulator gets its own type</h3>
+
+  <p>
+    The loop from §<a href="#accumulator">3.2</a> is four lines. Making it a class is not ceremony;
+    it is because those four lines have an invariant that one careless edit destroys:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/core/fixed_step.cpp — the step, and the guard (excerpt)</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">bool fixed_step::next_step()
+{
+    if (accumulator_ &lt; h_)
+    {
+        return false;
+    }
+
+    if (steps_ &gt;= max_steps_)
+    {
+        while (accumulator_ &gt;= h_)
+        {
+            accumulator_ -= h_;
+            dropped_ += h_;
+        }
+        return false;
+    }
+
+    accumulator_ -= h_;
+    ++steps_;
+    ++total_steps_;
+    return true;
+}</code></pre>
+  </figure>
+
+  <p>
+    Forget <code>accumulator_ -= h_</code> in a hand-written loop and the condition never becomes
+    false: the application hangs inside a single frame, with no crash and no output. Putting the
+    subtraction inside the type that owns the accumulator means no call site can skip it. The
+    invariant "after the loop, <code>0 ≤ accumulator &lt; h</code>" then holds by construction,
+    and <code>alpha()</code> can rely on it.
+  </p>
+
+  <p>
+    The guard clause deserves its shape too. On hitting the cap it does not simply stop — it
+    <em>drains</em> the remaining whole steps into <code>dropped_</code>. If it just returned, the
+    accumulator would stay above <code>h</code>, <code>alpha</code> would exceed 1, and the renderer
+    would silently start extrapolating at exactly the moment the machine is already struggling.
+  </p>
+
+  <p>
+    Two smaller decisions are worth naming. <code>clamp_rate</code> refuses a rate that would give a
+    zero or negative step, because a zero step is not a slow simulation — it is a loop whose
+    condition can never go false. Written as <code>if (!(rate_hz &gt;= k_min_rate))</code> rather
+    than <code>if (rate_hz &lt; k_min_rate)</code>, it also catches <code>NaN</code>, since every
+    comparison against <code>NaN</code> is false. And <code>alpha()</code> clamps its result to 1:
+    the invariant makes that unreachable in normal use, but a value above 1 turns a lerp into
+    extrapolation without any error, and one comparison removes the possibility.
+  </p>
+
+  <h3>4.2 Two states, and what they cost</h3>
+
+  <p>
+    Interpolation needs the state as it was one step ago as well as now. That has a real
+    architectural consequence: <strong>everything the renderer draws must exist twice.</strong>
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/main.cpp — the simulation's state (excerpt)</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">struct sim_state
+{
+    float box_x = 0.0f;
+    float box_dir = 1.0f;
+    float ball_y = k_ball_start_y;
+    float ball_vy = 0.0f;
+};
+
+sim_state previous;
+sim_state current;</code></pre>
+  </figure>
+
+  <p>
+    Until now the demo's state was a handful of loose local variables. It cannot stay that way:
+    "the previous value of everything" is only expressible if "everything" is a thing with a name.
+    This is the first time the course has been pushed towards grouping state by an external
+    requirement rather than by taste, and it is a small preview of Module 5, where the same pressure
+    — applied to thousands of entities instead of two floats — produces the ECS.
+  </p>
+
+  <div class="callout cpp">
+    <span class="label">C++ in place — value semantics, and why <code>previous = current</code> is enough</span>
+    <p>
+      Assigning one <code>struct</code> to another performs a <em>member-wise copy</em>: the compiler
+      generates an assignment operator that copies each member in turn. After
+      <code>previous = current;</code> the two are independent objects that merely happen to hold
+      equal values — changing one cannot affect the other.
+    </p>
+    <p>
+      That is the same distinction Lesson 1.2 drew when we refused to store SDL's keyboard pointer,
+      and it is doing the same work here. If <code>previous</code> and <code>current</code> were
+      pointers or references to one object, <code>lerp(previous, current, alpha)</code> would
+      interpolate between a value and itself, returning that value for every <code>alpha</code> —
+      and you would have written all of §<a href="#interpolation">3.4</a> for nothing, with no error
+      message to show for it.
+    </p>
+    <p style="margin-bottom:0">
+      Two conveniences come along for free. The <code>= 0.0f</code> in the struct are
+      <em>default member initialisers</em>, so <code>sim_state current;</code> is fully initialised
+      with no constructor to write — no uninitialised float can reach the simulation. And
+      <code>current = sim_state{};</code> resets every field to those defaults in one line, which is
+      exactly what the demo's reset key does.
+    </p>
+  </div>
+
+  <h3>4.3 The loop, in final form</h3>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/main.cpp — the frame (excerpt)</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">clk.tick();
+in.update();
+
+stepper.begin_frame(clk.dt());
+while (stepper.next_step())
+{
+    previous = current;
+    step_simulation(current, stepper.h(), window_w);
+}
+
+const float alpha = stepper.alpha();
+
+render(lerp(previous.box_x, current.box_x, alpha));</code></pre>
+  </figure>
+
+  <p>
+    Three details in that fragment are load-bearing.
+  </p>
+
+  <p>
+    <strong><code>previous = current</code> lives inside the loop, not before it.</strong> A frame
+    may take several steps; <code>previous</code> must end up holding the second-newest state, not
+    the state from the start of the frame. Hoisting it out is a real bug that only appears when the
+    frame rate drops below the simulation rate — so it works perfectly on the developer's machine
+    and stutters on everyone else's.
+  </p>
+
+  <p>
+    <strong><code>step_simulation</code> receives <code>stepper.h()</code>, never
+    <code>clk.dt()</code>.</strong> The simulation has no way to find out how long the frame took,
+    which is the entire point of the exercise expressed as a function signature.
+  </p>
+
+  <p>
+    <strong>Rate changes happen before <code>begin_frame</code>.</strong> <code>set_rate</code>
+    deliberately keeps whatever is in the accumulator — that is real time the simulation still owes,
+    and discarding it would make every rate change a small silent time skip — so the new step size
+    must be settled before the stepping starts.
+  </p>
+
+  <h3>4.4 A demo you can see all three behaviours in</h3>
+
+  <p>
+    Three boxes, one speed, three rules — plus the ball from 1.3, now on the fixed step:
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>Box</th><th>Rule</th><th>What it demonstrates</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Coral</strong></td><td>Variable <code>dt</code> (Lesson 1.3)</td><td>Perfectly smooth — and a different simulation on every machine, every run.</td></tr>
+        <tr><td><strong>Amber</strong></td><td>Fixed step, drawn raw</td><td>Identical everywhere, and it judders (§<a href="#judder">3.3</a>).</td></tr>
+        <tr><td><strong>Sage</strong></td><td>Fixed step, interpolated</td><td>Identical everywhere <em>and</em> smooth. The goal.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    The box bounces off the window edges rather than wrapping around, and that is a deliberate
+    choice with a lesson in it. Wrapping is a <em>teleport</em>: the position jumps from one edge to
+    the other in a single step, and interpolating across that jump would draw the box sliding
+    smoothly backwards across the entire screen over one frame. Interpolation assumes the two states
+    it is given are a short continuous motion apart. Bouncing keeps position continuous; wrapping
+    does not. Exercise <a href="#exercises">1.4.4</a> asks you to try it and watch.
+  </p>
+
+  <p>
+    The readout exposes the mechanism, because an accumulator you cannot see is an accumulator you
+    cannot debug:
+  </p>
+
+  <figure class="listing shell">
+    <figcaption>
+      <span class="path">the second readout line</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash">sim    60 Hz  h 16.67 ms   steps 1   alpha 0.42   sim 12.4 s   behind  16.7 ms</code></pre>
+  </figure>
+
+  <p>
+    <code>steps</code> flickering between 0, 1 and 2 is the accumulator doing its job.
+    <code>alpha</code> sweeping through [0,1) is the leftover. And <code>behind</code> — real elapsed
+    time minus simulated time — should sit near one step and stay there. If it climbs, the step cap
+    is firing and the simulation is losing ground permanently, which is the one failure in this
+    lesson that no amount of interpolation will hide.
+  </p>
+
+  <!-- ================= 6. COMPLETE CODE LISTINGS ================= -->
+  <h2 id="listings"><span class="num">5</span>Complete Code Listings</h2>
+
+  <div class="tbl-scroll">
+    <table class="manifest">
+      <thead><tr><th>Path</th><th>Status</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td>src/core/fixed_step.hpp</td><td><span class="badge new">new</span></td><td>The accumulator's interface: <code>begin_frame</code>, <code>next_step</code>, <code>h</code>, <code>alpha</code>, and the drop reporting.</td></tr>
+        <tr><td>src/core/fixed_step.cpp</td><td><span class="badge new">new</span></td><td>The step arithmetic, the spiral guard, and the rate clamp.</td></tr>
+        <tr><td>src/main.cpp</td><td><span class="badge mod">modified</span></td><td>The loop gains the step arc and two simulation states; the demo becomes the three-box comparison.</td></tr>
+        <tr><td>CMakeLists.txt</td><td><span class="badge mod">modified</span></td><td>Fourth translation unit added.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/core/fixed_step.hpp</span>
+      <span class="tag new">new</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// src/core/fixed_step.hpp — the simulation's own clock.
+//
+// Lesson 1.3 established that the frame rate must not decide how far the
+// simulation advances. This is the thing that separates them: it takes real
+// elapsed time in, and hands out simulation steps of a fixed, chosen size.
+
+#pragma once
+
+#include &lt;SDL3/SDL.h&gt;
+
+namespace engine {
+
+/// An accumulator that converts variable real time into fixed simulation steps.
+///
+/// The whole idea in three lines of usage:
+///
+///     stepper.begin_frame(clk.dt());
+///     while (stepper.next_step()) { previous = current; simulate(current, stepper.h()); }
+///     render(lerp(previous, current, stepper.alpha()));
+///
+/// Real time goes into an accumulator. Whole steps of `h` seconds are taken out
+/// of it for as long as there is a whole step's worth left. Whatever remains is
+/// less than one step, is carried into the next frame, and — expressed as a
+/// fraction in `alpha()` — is what the renderer uses to interpolate.
+///
+/// Why this is a class rather than four lines in the loop: the accumulator has an
+/// invariant (after the step loop, `0 &lt;= accumulator &lt; h`) that is maintained by
+/// exactly one subtraction. Written inline, that subtraction is one `continue`
+/// away from being skipped, and the failure mode is an infinite loop inside a
+/// frame. Making the type own it means the invariant cannot be violated from
+/// outside.
+class fixed_step
+{
+public:
+    /// @param rate_hz Simulation steps per second. 60 is the usual choice; see
+    ///        the lesson for the tradeoff against 30 and 120.
+    /// @param max_steps_per_frame The spiral-of-death guard. If one frame ever
+    ///        needs more steps than this, the excess is discarded rather than
+    ///        simulated — the game falls behind real time instead of locking up.
+    explicit fixed_step(float rate_hz = 60.0f, int max_steps_per_frame = 8);
+
+    /// Add one frame's real elapsed time. Call once per frame, before stepping.
+    /// Pass the **clamped** dt: an unclamped 40-second frame after a breakpoint
+    /// would ask for 2400 steps and immediately trip the guard below.
+    void begin_frame(float dt_seconds);
+
+    /// Take one step out of the accumulator. Returns false when less than a whole
+    /// step remains, or when this frame's step cap has been reached.
+    [[nodiscard]] bool next_step();
+
+    /// The fixed step size, in seconds. This is the `dt` simulation must use —
+    /// never the frame's real duration.
+    [[nodiscard]] float h() const { return h_; }
+
+    [[nodiscard]] float rate_hz() const { return 1.0f / h_; }
+
+    /// How far the renderer sits between the previous step and the current one,
+    /// in [0, 1]. Feed this to a lerp between the two most recent states.
+    [[nodiscard]] float alpha() const;
+
+    [[nodiscard]] int steps_this_frame() const { return steps_; }
+
+    /// Total steps ever taken. Multiply by h() for the simulation's own clock,
+    /// which is the number to compare against real elapsed time when looking for
+    /// drift.
+    [[nodiscard]] Uint64 total_steps() const { return total_steps_; }
+
+    /// Seconds thrown away by the step cap this frame. Non-zero means the machine
+    /// could not keep up and the simulation has permanently fallen that far
+    /// behind real time. Worth surfacing: it is silent otherwise.
+    [[nodiscard]] float dropped_seconds() const { return dropped_; }
+
+    /// Change the simulation rate. Whatever is already in the accumulator is real
+    /// time that is still owed, so it carries over and is simply diced differently
+    /// from here on. Call it before begin_frame(), not in the middle of stepping.
+    void set_rate(float rate_hz);
+
+private:
+    float h_;
+    int max_steps_;
+
+    // The accumulator is bounded — the step loop drains it below h_ every frame —
+    // so unlike absolute time in `clock`, a float is entirely safe here. The rule
+    // from Lesson 1.3 is about quantities that grow without bound, and this is
+    // deliberately not one of them.
+    float accumulator_ = 0.0f;
+
+    int steps_ = 0;
+    Uint64 total_steps_ = 0;
+    float dropped_ = 0.0f;
+};
+
+} // namespace engine</code></pre>
+  </figure>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/core/fixed_step.cpp</span>
+      <span class="tag new">new</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// src/core/fixed_step.cpp — implementation of the fixed-timestep accumulator.
+
+#include "core/fixed_step.hpp"
+
+namespace engine {
+
+namespace {
+
+/// Guard against a rate that would produce a zero or negative step. A step of
+/// zero is not a slow simulation, it is an infinite loop: the accumulator would
+/// never drop below h, so next_step() would never return false.
+[[nodiscard]] float clamp_rate(float rate_hz)
+{
+    constexpr float k_min_rate = 1.0f;
+    constexpr float k_max_rate = 1000.0f;
+    if (!(rate_hz &gt;= k_min_rate)) { return k_min_rate; }   // also catches NaN
+    if (rate_hz &gt; k_max_rate) { return k_max_rate; }
+    return rate_hz;
+}
+
+} // namespace
+
+fixed_step::fixed_step(float rate_hz, int max_steps_per_frame)
+    : h_(1.0f / clamp_rate(rate_hz))
+    , max_steps_(max_steps_per_frame &gt; 0 ? max_steps_per_frame : 1)
+{
+}
+
+void fixed_step::begin_frame(float dt_seconds)
+{
+    accumulator_ += dt_seconds;
+    steps_ = 0;
+    dropped_ = 0.0f;
+}
+
+bool fixed_step::next_step()
+{
+    // Not enough real time banked for a whole step. Whatever is left stays in the
+    // accumulator and becomes this frame's alpha.
+    if (accumulator_ &lt; h_)
+    {
+        return false;
+    }
+
+    // The spiral-of-death guard.
+    //
+    // If simulating one step costs more real time than the step represents, then
+    // every frame ends further behind than it started: more steps owed, more time
+    // spent, more steps owed. Frame times grow without bound and the application
+    // locks solid while appearing to do useful work.
+    //
+    // The fix is to refuse. Past the cap we discard the outstanding time instead
+    // of simulating it, which means the simulation permanently falls behind the
+    // wall clock — the game goes into slow motion rather than freezing. That is a
+    // real loss, not a repair, so we record how much was thrown away and let the
+    // caller decide whether to complain about it.
+    if (steps_ &gt;= max_steps_)
+    {
+        while (accumulator_ &gt;= h_)
+        {
+            accumulator_ -= h_;
+            dropped_ += h_;
+        }
+        return false;
+    }
+
+    accumulator_ -= h_;
+    ++steps_;
+    ++total_steps_;
+    return true;
+}
+
+float fixed_step::alpha() const
+{
+    const float a = accumulator_ / h_;
+
+    // After the step loop the invariant guarantees a &lt; 1. Reading alpha() *before*
+    // the loop — or immediately after set_rate() shortened the step — can exceed
+    // it, and handing a value above 1 to a lerp silently turns interpolation into
+    // extrapolation: objects overshoot their true position and snap back. Clamping
+    // costs one comparison and removes the possibility.
+    return (a &gt; 1.0f) ? 1.0f : a;
+}
+
+void fixed_step::set_rate(float rate_hz)
+{
+    // Deliberately does not touch the accumulator. What it holds is real elapsed
+    // time that the simulation still owes; changing the step size changes how that
+    // debt is divided up, not whether it exists. Discarding it here would make
+    // every rate change a small, silent time skip.
+    h_ = 1.0f / clamp_rate(rate_hz);
+}
+
+} // namespace engine</code></pre>
+  </figure>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/main.cpp</span>
+      <span class="tag modified">modified</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// src/main.cpp — the engine's entry point.
+//
+// The loop is now the one the engine keeps. Its shape:
+//
+//     drain events -&gt; tick clock -&gt; update input -&gt; step simulation N times -&gt; render
+//
+// The simulation advances in fixed steps of a size we chose, as many as the
+// elapsed real time pays for; rendering happens once, afterwards, at whatever
+// rate the machine manages. The leftover fraction of a step becomes `alpha`,
+// which the renderer uses to interpolate between the last two simulation states.
+//
+// The demo exists to make all of that visible: three boxes moving at the same
+// speed by three different rules, and a ball whose bounce height no longer
+// depends on your monitor.
+
+#include "core/clock.hpp"
+#include "core/fixed_step.hpp"
+#include "core/input.hpp"
+
+#include &lt;SDL3/SDL.h&gt;
+#include &lt;SDL3/SDL_main.h&gt;   // Provides the cross-platform entry point. NOTE:
+                             // &lt;SDL3/SDL.h&gt; deliberately does NOT include this,
+                             // so we include it explicitly, exactly once, here.
+
+namespace {
+
+// ---- Demo constants --------------------------------------------------------
+
+/// Every box moves at this speed. Expressed per second, per Lesson 1.3.
+constexpr float k_pixels_per_second = 360.0f;
+
+constexpr float k_box_size = 40.0f;
+constexpr float k_track_var_y = 120.0f;   // variable dt
+constexpr float k_track_raw_y = 190.0f;   // fixed step, no interpolation
+constexpr float k_track_lerp_y = 260.0f;  // fixed step, interpolated
+
+constexpr float k_gravity = 1200.0f;
+constexpr float k_ball_size = 24.0f;
+constexpr float k_ball_start_y = 380.0f;
+constexpr float k_floor_y = 640.0f;
+
+constexpr Uint32 k_throttle_ms = 50;      // ~20 fps while held
+
+struct rgb { Uint8 r, g, b; };
+
+constexpr rgb k_var   = {236, 122,  92};  // coral      — variable dt
+constexpr rgb k_raw   = {226, 196, 110};  // amber      — fixed step, raw
+constexpr rgb k_lerp  = {122, 196, 152};  // sage       — fixed step, interpolated
+constexpr rgb k_ball  = {126, 162, 236};  // cornflower — the ball
+constexpr rgb k_guide = { 90,  90, 110};
+
+/// Everything the simulation owns.
+///
+/// Grouping it in one struct is what makes interpolation possible: the renderer
+/// needs the state as it was one step ago *and* as it is now, so the loop keeps
+/// two of these and copies one over the other. That is the real architectural
+/// cost of interpolation — every renderable quantity has to exist twice — and it
+/// is the reason this struct exists instead of a handful of loose floats.
+struct sim_state
+{
+    float box_x = 0.0f;
+    float box_dir = 1.0f;
+    float ball_y = k_ball_start_y;
+    float ball_vy = 0.0f;
+};
+
+/// Advance the simulation by exactly one fixed step.
+///
+/// Note the parameter: `h`, the step size, never the frame's real duration. This
+/// function has no way to know how long the last frame took, and that is the
+/// entire point — it cannot be affected by the machine's speed.
+void step_simulation(sim_state&amp; s, float h, int window_w)
+{
+    // A box bouncing between the window edges. Bouncing rather than wrapping is
+    // deliberate: a wrap is a teleport, and interpolating across a teleport draws
+    // the object sliding backwards across the whole screen. See the lesson's
+    // pitfalls — position must be continuous for a lerp to mean anything.
+    s.box_x += k_pixels_per_second * s.box_dir * h;
+    const float max_x = static_cast&lt;float&gt;(window_w) - k_box_size;
+    if (s.box_x &gt; max_x) { s.box_x = max_x; s.box_dir = -1.0f; }
+    if (s.box_x &lt; 0.0f)  { s.box_x = 0.0f;  s.box_dir =  1.0f; }
+
+    // The same explicit Euler integration as Lesson 1.3, and still first-order:
+    // it will still add energy the bounce cannot account for. What has changed is
+    // that `h` is now a constant we chose, so the error is identical on every
+    // machine. Consistent, not correct — Module 7 makes it correct.
+    s.ball_y += s.ball_vy * h;
+    s.ball_vy += k_gravity * h;
+
+    if (s.ball_y + k_ball_size &gt; k_floor_y)
+    {
+        s.ball_y = k_floor_y - k_ball_size;
+        s.ball_vy = -s.ball_vy;
+    }
+}
+
+/// Linear interpolation. Module 2 builds the real math library; one line of it
+/// early is better than reaching for the whole thing before we need it.
+[[nodiscard]] float lerp(float a, float b, float t)
+{
+    return a + (b - a) * t;
+}
+
+} // namespace
+
+int main(int argc, char* argv[])
+{
+    (void)argc;
+    (void)argv;
+
+    // ---- 1. Initialise ------------------------------------------------------
+    if (!SDL_Init(SDL_INIT_VIDEO))
+    {
+        SDL_Log("SDL_Init failed: %s", SDL_GetError());
+        return 1;
+    }
+
+    const int sdl_version = SDL_GetVersion();
+    SDL_Log("Engine starting — SDL %d.%d.%d",
+            SDL_VERSIONNUM_MAJOR(sdl_version),
+            SDL_VERSIONNUM_MINOR(sdl_version),
+            SDL_VERSIONNUM_MICRO(sdl_version));
+
+    // ---- 2. Window and renderer --------------------------------------------
+    int window_w = 1280;
+    int window_h = 720;
+
+    SDL_Window* window = SDL_CreateWindow("Engine", window_w, window_h, SDL_WINDOW_RESIZABLE);
+    if (window == nullptr)
+    {
+        SDL_Log("SDL_CreateWindow failed: %s", SDL_GetError());
+        SDL_Quit();
+        return 1;
+    }
+
+    SDL_Renderer* renderer = SDL_CreateRenderer(window, nullptr);
+    if (renderer == nullptr)
+    {
+        SDL_Log("SDL_CreateRenderer failed: %s", SDL_GetError());
+        SDL_DestroyWindow(window);
+        SDL_Quit();
+        return 1;
+    }
+
+    // Vsync off by default: with it on, only one frame rate is available and the
+    // relationship between frame rate and simulation rate cannot be explored.
+    int vsync = SDL_RENDERER_VSYNC_DISABLED;
+    SDL_SetRenderVSync(renderer, vsync);
+
+    // ---- 3. Subsystems and demo state --------------------------------------
+    engine::clock clk;
+    engine::input in;
+    engine::fixed_step stepper(60.0f);
+
+    // The two simulation states interpolation needs. `current` is the newest
+    // completed step; `previous` is the one before it.
+    sim_state previous;
+    sim_state current;
+
+    // The Lesson 1.3 comparison box, still integrated with the raw frame delta.
+    float var_box_x = 0.0f;
+    float var_box_dir = 1.0f;
+
+    SDL_Log("Controls: [1-4] sim rate 10/30/60/120 Hz · [V] vsync · [T] hold to throttle · [R] reset · [Esc] quit");
+
+    // ---- 4. The loop --------------------------------------------------------
+    bool running = true;
+    while (running)
+    {
+        // --- 4a. Drain events (this also pumps SDL's input state) -----------
+        SDL_Event event;
+        while (SDL_PollEvent(&amp;event))
+        {
+            in.feed_event(event);
+
+            switch (event.type)
+            {
+            case SDL_EVENT_QUIT:
+                SDL_Log("Quit requested");
+                running = false;
+                break;
+
+            case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
+                SDL_Log("Window %u close requested", static_cast&lt;unsigned&gt;(event.window.windowID));
+                running = false;
+                break;
+
+            case SDL_EVENT_WINDOW_RESIZED:
+                window_w = event.window.data1;
+                window_h = event.window.data2;
+                break;
+
+            default:
+                break;
+            }
+        }
+
+        // --- 4b. Measure the frame, publish input ---------------------------
+        clk.tick();
+        in.update();
+
+        // --- 4c. Controls ----------------------------------------------------
+        if (in.key_pressed(SDL_SCANCODE_ESCAPE)) { running = false; }
+
+        // Rate changes happen here, before begin_frame, so the accumulator is
+        // never re-diced in the middle of a step loop.
+        if (in.key_pressed(SDL_SCANCODE_1)) { stepper.set_rate(10.0f); }
+        if (in.key_pressed(SDL_SCANCODE_2)) { stepper.set_rate(30.0f); }
+        if (in.key_pressed(SDL_SCANCODE_3)) { stepper.set_rate(60.0f); }
+        if (in.key_pressed(SDL_SCANCODE_4)) { stepper.set_rate(120.0f); }
+
+        if (in.key_pressed(SDL_SCANCODE_V))
+        {
+            vsync = (vsync == SDL_RENDERER_VSYNC_DISABLED) ? 1 : SDL_RENDERER_VSYNC_DISABLED;
+            if (!SDL_SetRenderVSync(renderer, vsync))
+            {
+                SDL_Log("SDL_SetRenderVSync(%d) failed: %s", vsync, SDL_GetError());
+            }
+        }
+
+        if (in.key_pressed(SDL_SCANCODE_R))
+        {
+            previous = sim_state{};
+            current = sim_state{};
+            var_box_x = 0.0f;
+            var_box_dir = 1.0f;
+        }
+
+        // --- 4d. Simulate: zero or more fixed steps -------------------------
+        // The clamped dt goes in, whole steps come out. Note that `previous` is
+        // updated inside the loop, not outside it: it must end up holding the
+        // second-newest state, and a frame may take several steps or none.
+        stepper.begin_frame(clk.dt());
+        while (stepper.next_step())
+        {
+            previous = current;
+            step_simulation(current, stepper.h(), window_w);
+        }
+
+        const float alpha = stepper.alpha();
+
+        if (stepper.dropped_seconds() &gt; 0.0f)
+        {
+            SDL_Log("Step cap hit: discarded %.1f ms of simulation time",
+                    static_cast&lt;double&gt;(stepper.dropped_seconds()) * 1000.0);
+        }
+
+        // The comparison box, still stepped by the raw frame delta. It is smooth,
+        // because it moves exactly as far as the elapsed time says — and it is
+        // non-deterministic for precisely the same reason.
+        var_box_x += k_pixels_per_second * var_box_dir * clk.dt();
+        const float var_max_x = static_cast&lt;float&gt;(window_w) - k_box_size;
+        if (var_box_x &gt; var_max_x) { var_box_x = var_max_x; var_box_dir = -1.0f; }
+        if (var_box_x &lt; 0.0f)      { var_box_x = 0.0f;      var_box_dir =  1.0f; }
+
+        // --- 4e. Render ------------------------------------------------------
+        SDL_SetRenderDrawColor(renderer, 30, 30, 46, 255);
+        SDL_RenderClear(renderer);
+
+        SDL_SetRenderDrawColor(renderer, k_guide.r, k_guide.g, k_guide.b, 255);
+        SDL_RenderLine(renderer, 0.0f, k_floor_y, static_cast&lt;float&gt;(window_w), k_floor_y);
+        SDL_RenderLine(renderer, 0.0f, k_ball_start_y, static_cast&lt;float&gt;(window_w), k_ball_start_y);
+
+        // Coral: variable dt.
+        const SDL_FRect box_var{var_box_x, k_track_var_y, k_box_size, k_box_size};
+        SDL_SetRenderDrawColor(renderer, k_var.r, k_var.g, k_var.b, 255);
+        SDL_RenderFillRect(renderer, &amp;box_var);
+
+        // Amber: the fixed-step state, drawn exactly as simulated. Correct, and
+        // it judders — the simulation's position is up to one step stale, by a
+        // varying amount, and the eye reads that variation as stutter.
+        const SDL_FRect box_raw{current.box_x, k_track_raw_y, k_box_size, k_box_size};
+        SDL_SetRenderDrawColor(renderer, k_raw.r, k_raw.g, k_raw.b, 255);
+        SDL_RenderFillRect(renderer, &amp;box_raw);
+
+        // Sage: the same state, interpolated. Drawn one whole step behind real
+        // time — but *consistently* one step behind, and consistent lateness is
+        // invisible while varying lateness is not.
+        const SDL_FRect box_lerp{lerp(previous.box_x, current.box_x, alpha),
+                                 k_track_lerp_y, k_box_size, k_box_size};
+        SDL_SetRenderDrawColor(renderer, k_lerp.r, k_lerp.g, k_lerp.b, 255);
+        SDL_RenderFillRect(renderer, &amp;box_lerp);
+
+        const SDL_FRect ball{static_cast&lt;float&gt;(window_w) * 0.5f - k_ball_size * 0.5f,
+                             lerp(previous.ball_y, current.ball_y, alpha),
+                             k_ball_size, k_ball_size};
+        SDL_SetRenderDrawColor(renderer, k_ball.r, k_ball.g, k_ball.b, 255);
+        SDL_RenderFillRect(renderer, &amp;ball);
+
+        // The readout. `behind` is real elapsed time minus simulated time: it
+        // should hover around one step and stay there. A number that climbs means
+        // the step cap is firing and the simulation is losing ground.
+        const double sim_seconds = static_cast&lt;double&gt;(stepper.total_steps())
+                                 * static_cast&lt;double&gt;(stepper.h());
+        SDL_SetRenderScale(renderer, 2.0f, 2.0f);
+        SDL_SetRenderDrawColor(renderer, 220, 220, 210, 255);
+        SDL_RenderDebugTextFormat(renderer, 8.0f, 8.0f,
+                                  "fps %7.1f   raw dt %6.2f ms%s   frame %llu",
+                                  static_cast&lt;double&gt;(clk.fps()),
+                                  static_cast&lt;double&gt;(clk.raw_dt()) * 1000.0,
+                                  clk.was_clamped() ? " CLAMPED" : "",
+                                  static_cast&lt;unsigned long long&gt;(clk.frame_count()));
+        SDL_RenderDebugTextFormat(renderer, 8.0f, 20.0f,
+                                  "sim %5.0f Hz  h %5.2f ms   steps %d   alpha %.2f   sim %.1f s   behind %5.1f ms",
+                                  static_cast&lt;double&gt;(stepper.rate_hz()),
+                                  static_cast&lt;double&gt;(stepper.h()) * 1000.0,
+                                  stepper.steps_this_frame(),
+                                  static_cast&lt;double&gt;(alpha),
+                                  sim_seconds,
+                                  (clk.elapsed() - sim_seconds) * 1000.0);
+        SDL_RenderDebugText(renderer, 8.0f, 36.0f,
+                            "[1-4] sim rate 10/30/60/120   [V] vsync   [T] throttle   [R] reset   [Esc] quit");
+        SDL_RenderDebugText(renderer, 8.0f, 52.0f, "coral  variable dt        - smooth, but a different sim on every machine");
+        SDL_RenderDebugText(renderer, 8.0f, 64.0f, "amber  fixed step, raw    - identical everywhere, and it judders");
+        SDL_RenderDebugText(renderer, 8.0f, 76.0f, "sage   fixed step + lerp  - identical everywhere, and smooth");
+        SDL_SetRenderScale(renderer, 1.0f, 1.0f);
+
+        SDL_RenderPresent(renderer);
+
+        // --- 4f. The throttle ------------------------------------------------
+        if (in.key_down(SDL_SCANCODE_T))
+        {
+            SDL_Delay(k_throttle_ms);
+        }
+    }
+
+    // ---- 5. Shut down, in reverse order of creation -------------------------
+    SDL_DestroyRenderer(renderer);
+    SDL_DestroyWindow(window);
+    SDL_Quit();
+    return 0;
+}</code></pre>
+  </figure>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">CMakeLists.txt</span>
+      <span class="tag modified">modified</span>
+      <span class="lang" data-lang="cmake">CMake</span>
+    </figcaption>
+    <pre><code class="lang-cmake"># CMakeLists.txt — the engine's build description.
+#
+# This one file tells CMake how to build the project on Windows, Linux, and
+# macOS, with MSVC, GCC, or Clang, and how to acquire SDL3. You describe the
+# build once here; CMake generates the right native build for whatever machine
+# runs it. This is what Lesson 0.4 builds up, line by line.
+
+# 3.24 is our floor: new enough for modern FetchContent behaviour and the
+# target/property model we rely on. Older CMake will refuse to configure, which
+# is what we want — a clear failure, not a subtle one.
+cmake_minimum_required(VERSION 3.24)
+
+project(engine LANGUAGES CXX)
+
+# The C++ standard, set once for every target in the project. STANDARD_REQUIRED
+# makes a compiler that cannot do C++20 an error rather than a silent downgrade;
+# EXTENSIONS OFF asks for -std=c++20, not -std=gnu++20, so we stay portable.
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+# ---- Dependencies ----------------------------------------------------------
+# FetchContent acquires SDL3 at configure time and adds it to our build. We pin
+# an exact release tag: a moving branch would mean a fresh clone could build
+# different source than yours, which is how "works on my machine" is born.
+include(FetchContent)
+
+# SDL build options must be set BEFORE SDL is configured. We only need the
+# library itself, so skip SDL's own test helpers — it shaves real time off a
+# from-source build.
+set(SDL_TEST_LIBRARY OFF)
+
+FetchContent_Declare(
+    SDL3
+    GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
+    GIT_TAG        release-3.4.12   # pinned — never a branch name
+    GIT_SHALLOW    TRUE             # only this tag's snapshot, not all of history
+)
+FetchContent_MakeAvailable(SDL3)
+
+# ---- Our program -----------------------------------------------------------
+# Every source file is listed by hand. CMake can glob them for you, and you
+# should not let it: a glob is evaluated at configure time, so adding a file
+# leaves the build silently ignoring it until someone reconfigures. An explicit
+# list is one extra line per file and never lies.
+add_executable(engine
+    src/main.cpp
+    src/core/clock.cpp
+    src/core/fixed_step.cpp
+    src/core/input.cpp
+)
+
+# Make `src/` a root for our own includes, so a file says
+#     #include "core/input.hpp"
+# from anywhere in the tree — the same spelling regardless of which directory
+# the including file lives in. Relative paths like "../core/input.hpp" break the
+# moment a file moves; a stable include root does not. PRIVATE because nothing
+# links against us: this is a leaf executable, and the setting stops here.
+target_include_directories(engine PRIVATE src)
+
+# Link SDL. SDL3::SDL3 is the alias SDL exports for "the SDL library, however it
+# was built"; linking it also pulls in SDL's headers and platform frameworks
+# transitively, so we never name Cocoa or user32 ourselves.
+target_link_libraries(engine PRIVATE SDL3::SDL3)
+
+# Our warning discipline (see cpp-style §9) — applied to OUR target only, never
+# to SDL. Third-party code is compiled with its own flags; holding someone
+# else's library to /W4 just produces noise we cannot act on.
+if(MSVC)
+    target_compile_options(engine PRIVATE /W4 /Zc:__cplusplus)
+else()
+    target_compile_options(engine PRIVATE -Wall -Wextra)
+endif()</code></pre>
+  </figure>
+
+  <p>
+    <code>src/core/clock.{hpp,cpp}</code> and <code>src/core/input.{hpp,cpp}</code> are unchanged
+    from Lessons 1.3 and 1.2 and are not reproduced here.
+  </p>
+
+  <!-- ================= 7. BUILD & RUN ================= -->
+  <h2 id="build"><span class="num">6</span>Build &amp; Run</h2>
+
+  <figure class="listing shell">
+    <figcaption>
+      <span class="path">Linux and macOS</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash">cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+cmake --build build
+./build/engine</code></pre>
+  </figure>
+
+  <figure class="listing shell">
+    <figcaption>
+      <span class="path">Windows (MSVC)</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash">cmake -S . -B build
+cmake --build build --config Debug
+.\build\Debug\engine.exe</code></pre>
+  </figure>
+
+  <h3>What you should see</h3>
+
+  <p>
+    Three boxes tracking left and right, a ball bouncing between two guide lines, and a readout.
+    Work through these in order — the whole lesson is visible in about ninety seconds:
+  </p>
+
+  <ol>
+    <li>
+      <strong>Press 3 for a 60 Hz simulation, then V to enable vsync.</strong> All three boxes look
+      about the same, because at 60 fps rendering a 60 Hz simulation almost every frame runs exactly
+      one step. This is the configuration in which the bug is invisible — which is precisely why
+      developers ship it.
+    </li>
+    <li>
+      <strong>Press 1 for 10 Hz.</strong> Now the amber box lurches — it jumps once every six
+      frames and sits still in between — while the sage box glides at a constant, even speed. Same
+      simulation, same numbers, same frames. The only difference is <code>alpha</code>.
+      That is §<a href="#judder">3.3</a> and §<a href="#interpolation">3.4</a>, side by side.
+    </li>
+    <li>
+      <strong>Watch <code>alpha</code> in the readout while you do it.</strong> At 10 Hz it sweeps
+      smoothly from 0 to 1 and resets, six times a second, with <code>steps</code> reading 0 for
+      five frames and 1 for the sixth.
+    </li>
+    <li>
+      <strong>Now the payoff: press 3, then hold T.</strong> The frame rate collapses to about 20,
+      and the ball keeps bouncing to <em>exactly</em> the same heights it did at thousands of frames
+      per second. In Lesson 1.3 the same key threw it out of the window in three bounces. The frame
+      rate is no longer an input to the physics.
+    </li>
+    <li>
+      <strong>Press 1 and watch the ball instead.</strong> At a 10 Hz step it escapes the window
+      again — because the integration error is proportional to <code>h</code>, and <code>h</code> is
+      now large. The difference is that this is <em>our</em> choice, identical for every player,
+      rather than a property of their hardware.
+    </li>
+  </ol>
+
+  <div class="callout ok">
+    <span class="label">Checkpoint — verified before publishing</span>
+    <p>
+      Built warning-clean at <code>-Wall -Wextra</code> with Apple Clang against SDL 3.4.12; runs and
+      shuts down cleanly. <code>fixed_step</code> was then driven through a test harness covering
+      fifteen assertions, including:
+    </p>
+    <ul>
+      <li>A 60 Hz simulation fed 10 ms frames consumes <strong>7 steps over 12 frames</strong>, in an
+        uneven pattern — §<a href="#judder">3.3</a>'s table, reproduced by the real code.</li>
+      <li><code>alpha</code> stayed within <code>[0, 1)</code> across <strong>700 frames of
+        deliberately irregular durations</strong> including zero-length ones.</li>
+      <li>After 6 s of simulated running, simulated time trailed real time by less than one step.</li>
+      <li>A worst-case 0.25 s frame (the clock's clamp ceiling) capped at 8 steps, reported
+        <strong>116.67 ms discarded</strong> — exactly seven steps' worth — and still produced a
+        valid <code>alpha</code>.</li>
+      <li>One hundred consecutive one-second frames — a machine hopelessly behind — still ran
+        exactly 8 steps each, terminating every time.</li>
+      <li><code>set_rate</code> preserved banked time across a rate change, and rates of <code>0</code>
+        and <code>NaN</code> were clamped to a finite step rather than producing an unterminating loop.</li>
+    </ul>
+    <p style="margin-bottom:0">
+      The ball's frame-rate independence was modelled before it was coded: at a 60 Hz step, apex
+      heights are <strong>236, 204, 171, 137</strong> at render rates of 2000, 240, 60 <em>and</em>
+      20 fps — identical to the digit. Changing the <em>simulation</em> rate does change them
+      (10 Hz: 56, −196; 240 Hz: 253, 245, 238), which is the integrator error of
+      §<a href="#choosing">3.6</a>, now under our control.
+    </p>
+  </div>
+
+  <!-- ================= 8. PITFALLS ================= -->
+  <h2 id="pitfalls"><span class="num">7</span>Common Pitfalls &amp; Debugging</h2>
+
+  <div class="pitfalls">
+    <details class="pitfall-item">
+      <summary>The window freezes solid under load, CPU pinned — <span class="sym">not a hang; unbounded work</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>Under a heavy scene the application stops responding entirely. It is not deadlocked — a profiler shows it working hard — and it never recovers.</dd>
+          <dt>Cause</dt>
+          <dd>The spiral of death (§<a href="#spiral">3.5</a>): each step costs more real time than it simulates, so the backlog grows every frame and the inner loop runs longer each time round.</dd>
+          <dt>Fix</dt>
+          <dd>Both guards. Clamp <code>dt</code> before it enters the accumulator (<code>clock</code> does this at 0.25 s) <em>and</em> cap the steps per frame. Then surface the dropped time — an engine silently in slow motion is much harder to diagnose than one that says so.</dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>Motion stutters after switching to a fixed timestep — <span class="sym">it looked better before</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>Objects that moved smoothly with variable <code>dt</code> now advance in visible jerks, worst when the frame rate is not a multiple of the simulation rate.</dd>
+          <dt>Cause</dt>
+          <dd>You are rendering the raw simulation state. It is stale by the accumulator's contents, which varies from 0 to <code>h</code> every frame, and varying lateness reads as stutter (§<a href="#judder">3.3</a>).</dd>
+          <dt>Fix</dt>
+          <dd>Interpolate: keep the previous state and draw <code>lerp(previous, current, alpha)</code>. Do not conclude the fixed timestep was a mistake — this stutter is the expected intermediate state, and it is why the technique's full name includes "with interpolation".</dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>Interpolation seems to do nothing — <span class="sym">the code is right and it still judders</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd><code>lerp(previous, current, alpha)</code> is called correctly, <code>alpha</code> looks sensible in the debugger, and the motion is unchanged.</dd>
+          <dt>Cause</dt>
+          <dd><code>previous</code> and <code>current</code> are the same object — aliased through a pointer or reference, or <code>previous</code> assigned <em>after</em> the step instead of before. <code>lerp(x, x, alpha)</code> returns <code>x</code> for every <code>alpha</code>, silently.</dd>
+          <dt>Fix</dt>
+          <dd>Two distinct <code>struct</code> values, copied with <code>previous = current;</code> immediately <em>before</em> the step. To confirm the diagnosis, print both — if they are never different, that is the bug in one line.</dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>Teleporting objects slide across the screen — <span class="sym">respawns and portals animate</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>An object that should jump instantly — a respawn, a portal, a screen wrap, a camera cut — glides smoothly from its old position to its new one over one frame.</dd>
+          <dt>Cause</dt>
+          <dd>Interpolation assumes the two states are a short continuous motion apart. A teleport violates that, so the lerp faithfully draws the intervening positions, which never existed.</dd>
+          <dt>Fix</dt>
+          <dd>Snap <code>previous</code> to <code>current</code> whenever a discontinuity happens, so there is nothing to interpolate. Production engines carry an explicit "teleported this step" flag on transforms for exactly this. Notice this is a positive argument for bouncing rather than wrapping in the demo.</dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>A frame hangs forever with no crash — <span class="sym">one frame never ends</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>The application locks up in the first frame, or immediately after a settings change. Breaking in the debugger lands you inside the step loop, every time.</dd>
+          <dt>Cause</dt>
+          <dd>Either the accumulator subtraction was skipped or omitted, or <code>h</code> is zero or negative — from a rate of 0, a division by an uninitialised variable, or a <code>NaN</code> that made every comparison false. The loop condition can then never become false.</dd>
+          <dt>Fix</dt>
+          <dd>Keep the subtraction inside the type that owns the accumulator, and validate the rate on the way in — writing the check as <code>if (!(rate &gt;= min))</code> so that <code>NaN</code> is caught too.</dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>Physics is stable at high frame rates and wrong at low ones — <span class="sym">the fixed step did not fix it</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>After adopting a fixed timestep, results still differ between machines — or the simulation behaves differently when a scene is heavy.</dd>
+          <dt>Cause</dt>
+          <dd>Something is still being fed the frame's real duration instead of <code>h</code>. The usual culprits are effects, camera smoothing, animation, or a system added later by someone who reached for the nearest available <code>dt</code>.</dd>
+          <dt>Fix</dt>
+          <dd>Give the simulation's entry point a signature that takes <code>h</code> and nothing else, so the frame duration is not in scope. If the step cap is also firing, the simulation is genuinely falling behind — that shows up as the <code>behind</code> figure climbing, not as a physics bug.</dd>
+        </dl>
+      </div>
+    </details>
+  </div>
+
+  <!-- ================= 9. EXERCISES ================= -->
+  <h2 id="exercises"><span class="num">8</span>Exercises</h2>
+
+  <div class="exercise">
+    <h3><span class="xnum">1.4.1</span>Make the judder unmistakable<span class="difficulty">warm-up</span></h3>
+    <p>
+      Enable vsync, set the simulation to 10 Hz, and watch the amber and sage boxes for thirty
+      seconds. Count how many rendered frames pass between amber's jumps. Predict the number first,
+      from your refresh rate and the simulation rate.
+    </p>
+    <details>
+      <summary>Solution</summary>
+      <p>
+        At 60 fps rendering a 10 Hz simulation, one step is taken every sixth frame, so amber holds
+        still for five frames and then jumps six frames' worth of distance at once. Sage covers the
+        same ground at a constant rate, because <code>alpha</code> sweeps 0 → 1 across those six
+        frames and the lerp fills in the positions between. Both boxes are at the identical
+        simulated position at every step boundary — they arrive together, and only the journey
+        differs.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3><span class="xnum">1.4.2</span>Break it on purpose<span class="difficulty">warm-up</span></h3>
+    <p>
+      Move <code>previous = current;</code> from inside the step loop to just before it. Rebuild and
+      run at 60 Hz simulation with vsync on — it will look perfect. Now hold T. What happens, and
+      why did the bug hide until then?
+    </p>
+    <details>
+      <summary>Solution</summary>
+      <p>
+        With at most one step per frame the two placements are identical, so the bug is invisible in
+        the common case. Under the throttle a frame runs several steps, and <code>previous</code>
+        now holds the state from the <em>start of the frame</em> rather than one step back — so it
+        is several steps behind <code>current</code> and the lerp interpolates across a gap far
+        larger than <code>alpha</code> assumes. The sage box lags and rubber-bands.
+      </p>
+      <p style="margin-bottom:0">
+        The lesson is about the failure's shape, not the fix: it is invisible on a fast machine and
+        only appears on slow ones or under load. That is the signature of an entire family of
+        timestep bugs, and it is why the throttle key is worth keeping in the demo permanently.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3><span class="xnum">1.4.3</span>Measure the spiral<span class="difficulty">guided</span></h3>
+    <p>
+      Add an artificial cost to <code>step_simulation</code> — <code>SDL_Delay(20)</code> at 60 Hz —
+      so each step costs more real time than it simulates. Watch <code>steps</code>,
+      <code>behind</code>, and the dropped-time log. Then remove the step cap (raise it to 10000) and
+      watch what happens instead. Have a way to kill the process ready.
+    </p>
+    <details>
+      <summary>Hint</summary>
+      <p>
+        <code>20 / 16.67 = 1.2</code>, so the engine should fall about 3.3 ms further behind per
+        step. With the cap in place the loss is bounded and reported; without it, it is not.
+      </p>
+    </details>
+    <details>
+      <summary>Solution</summary>
+      <p>
+        With the cap: <code>steps</code> pins at 8, the dropped-time log fires every frame, and
+        <code>behind</code> climbs steadily — the simulation is in permanent slow motion, but the
+        window still responds and you can quit normally. Without the cap: frame time grows every
+        frame, the window stops responding within seconds, and only the process manager gets you out.
+      </p>
+      <p style="margin-bottom:0">
+        Both are failures. The difference is that one of them lets the player quit, tells you what
+        happened in the log, and would let a real game drop quality settings and recover — the guard
+        does not save the frame, it preserves your ability to respond to losing it.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3><span class="xnum">1.4.4</span>Interpolate across a teleport<span class="difficulty">guided</span></h3>
+    <p>
+      Change the box from bouncing to wrapping: when <code>box_x</code> passes the right edge, set it
+      to <code>-k_box_size</code> instead of reversing. Run at 10 Hz. What does the sage box do that
+      the amber box does not, and what is the general fix?
+    </p>
+    <details>
+      <summary>Solution</summary>
+      <p>
+        Amber vanishes at the right edge and reappears at the left, which is correct. Sage slides
+        rapidly <em>backwards</em> across the whole window, because <code>previous</code> is at the
+        right edge, <code>current</code> is at the left, and the lerp dutifully draws the positions
+        in between — positions the simulation never occupied. At 10 Hz the slide takes a tenth of a
+        second and is impossible to miss.
+      </p>
+      <p style="margin-bottom:0">
+        The general fix is to tell the renderer that no interpolation is meaningful this step, by
+        setting <code>previous = current</code> at the moment of the teleport. Every engine that
+        interpolates carries some version of this flag; in Unity it is
+        <code>Rigidbody.position</code> versus <code>MovePosition</code>, and the same trap catches
+        people there for the same reason.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3><span class="xnum">1.4.5</span>Prove the determinism you actually have<span class="difficulty">open</span></h3>
+    <p>
+      Record a run: log the simulation state every 60 steps to a file, along with the total step
+      count. Run twice — once uncapped, once with the throttle held for part of the run — and diff
+      the logs. They should be identical. Then find something that <em>does</em> break it.
+    </p>
+    <details>
+      <summary>Hint</summary>
+      <p>
+        The demo has no input affecting the simulation, so two runs are only comparable if you do not
+        press the rate keys. To break determinism deliberately, feed anything frame-dependent into
+        the simulation: <code>clk.dt()</code>, the frame counter, or the wall clock.
+      </p>
+    </details>
+    <details>
+      <summary>Solution sketch</summary>
+      <p>
+        The logs match exactly, including under the throttle, because the simulation only ever sees
+        <code>h</code>. That is a genuinely useful property: a bug that reproduces at step 4211
+        reproduces at step 4211 every time, whatever the frame rate — which is what makes an
+        input-log replay viable at all.
+      </p>
+      <p>
+        Then break it. Pass <code>clk.dt()</code> into <code>step_simulation</code> alongside
+        <code>h</code> and use it for anything at all, and the two runs diverge immediately. A subtler
+        version: make the *number* of something depend on the frame rate — spawn a particle per
+        frame rather than per step — and watch the two runs stay identical in physics but differ in
+        content.
+      </p>
+      <p style="margin-bottom:0">
+        Worth doing afterwards: re-read §<a href="#choosing">3.6</a>'s warning and convince yourself
+        the logs would <em>not</em> necessarily match on a different machine or compiler. What you
+        have demonstrated is same-binary determinism, which is real and valuable and is not lockstep.
+      </p>
+    </details>
+  </div>
+
+  <!-- ================= 10. RECAP ================= -->
+  <h2 id="recap"><span class="num">9</span>Recap &amp; Next</h2>
+
+  <div class="recap">
+    <h2>What the engine can do now that it could not before</h2>
+    <ul>
+      <li>
+        <strong>Its simulation is independent of the hardware.</strong> Steps are a fixed size we
+        chose; the frame rate cannot reach the physics. The ball bounces to the same heights at
+        2000 fps and at 20.
+      </li>
+      <li>
+        <strong>Simulated time tracks real time,</strong> to within one step, at any frame rate —
+        the property attempt one lacked and the accumulator restored.
+      </li>
+      <li>
+        <strong>It renders smoothly anyway,</strong> by interpolating between the last two states.
+        A lag that swung from 0 to <code>h</code> is now exactly <code>h</code>, every frame, and
+        constant lateness is invisible.
+      </li>
+      <li>
+        <strong>It cannot spiral.</strong> Two bounds — the clamp on <code>dt</code> and the cap on
+        steps — turn an unbounded failure into a bounded, reported one.
+      </li>
+      <li>
+        <strong>It is deterministic in the sense you can actually rely on,</strong> and you know
+        precisely which sense that is.
+      </li>
+    </ul>
+    <p>
+      The idea to carry forward: <strong>simulation time and render time are different clocks, and
+      <code>alpha</code> is the bridge between them.</strong> Everything in this lesson follows from
+      taking that separation seriously — including the judder, which is what you get when you
+      separate them and then forget to build the bridge.
+    </p>
+    <p>
+      This is the loop the engine keeps. Systems will be added inside it for the next eighty
+      lessons — a renderer, an ECS, physics, animation, audio — but its shape does not change again.
+    </p>
+    <p>
+      <strong>Next:</strong> <a href="01-05-framebuffer.html">1.5 — The Framebuffer: Your First Owned
+      Pixels</a>. Time is solved; now we take over drawing. So far every pixel has been SDL's doing.
+      We allocate a block of memory, decide what every byte in it means, hand it to the GPU through
+      a streaming texture, and write <code>putpixel</code> — the first of our own. From there
+      everything on screen for the next two modules is code you wrote.
+    </p>
+  </div>
+
+  <!-- ================= 11. FURTHER READING ================= -->
+  <h2 id="reading"><span class="num">10</span>Further Reading</h2>
+
+  <ul class="reading">
+    <li>
+      <span class="src">Gaffer on Games</span>
+      <strong><a href="https://gafferongames.com/post/fix_your_timestep/">Fix Your Timestep!</a></strong> —
+      Glenn Fiedler's article, the origin of the phrase "spiral of death" and the canonical
+      presentation of this loop. Read it now that you have derived the thing: the value is in seeing
+      the same four ideas arrive in the same order, from someone who had to discover them.
+    </li>
+    <li>
+      <span class="src">Article</span>
+      <strong><a href="https://gameprogrammingpatterns.com/game-loop.html">Robert Nystrom, "Game Loop"</a></strong>
+      from <em>Game Programming Patterns</em> — the same problem framed as a design pattern, with the
+      intermediate variants laid out side by side. Free online, and a good second angle on
+      §<a href="#attempt-one">3.1</a> through §<a href="#interpolation">3.4</a>.
+    </li>
+    <li>
+      <span class="src">Book</span>
+      <strong>Jason Gregory, <em>Game Engine Architecture</em></strong> — the game loop and time
+      chapter, which goes on to the things we have not needed yet: pausing, time scaling,
+      single-stepping, and multiple independent clocks for gameplay, effects and the debug camera.
+    </li>
+    <li>
+      <span class="src">Article</span>
+      <strong><a href="https://gafferongames.com/post/deterministic_lockstep/">Deterministic Lockstep</a></strong> —
+      the follow-up that takes §<a href="#choosing">3.6</a>'s warning seriously, and shows what
+      cross-machine determinism actually costs once you want it.
+    </li>
+    <li>
+      <span class="src">Reference</span>
+      <strong><a href="https://randomascii.wordpress.com/2013/07/16/floating-point-determinism/">Bruce Dawson, "Floating-Point Determinism"</a></strong> —
+      why the same source can give different float results on different machines: FMA contraction,
+      x87 intermediates, and library differences. The rigorous version of the warning in
+      §<a href="#choosing">3.6</a>.
+    </li>
+  </ul>
+
+  <!-- ================= 12. STATE ================= -->
+  <details class="state">
+    <summary>STATE — resume key</summary>
+<pre>course: Build a Professional 3D Game Engine (SDL3 + C++20)
+version: 1.0
+
+conventions:
+  world: right-handed, Y-up, -Z forward
+  clip: left-handed, +Y up, z in [0,1] (SDL_GPU-fixed; projection absorbs the flip)
+  sw-rasterizer: targets SDL_GPU's exact NDC (Module 4 port = API change, not maths change)
+  matrices: column vectors, v' = M*v, column-major storage
+  winding: CCW = front, cull back (per-pipeline state; set explicitly every time)
+  units: 1 unit = 1 metre; radians internally; linear colour in renderer
+  axis colours: x/y/z = red/green/blue
+  sdl3: FetchContent, pinned release-3.4.12; target SDL3::SDL3; SDL_TEST_LIBRARY OFF
+  sdl3-api: bool SDL_Init/PollEvent; SDL_CreateWindow(title,w,h,flags) no x/y;
+            SDL_CreateRenderer(window,name); event.key.key; &lt;SDL3/SDL_main.h&gt; separate
+  sdl3-input: const bool *SDL_GetKeyboardState(int*) — bool, NOT SDL2's Uint8;
+            SDL_SCANCODE_COUNT = 512; SDL_GetMouseState returns flags + float x,y;
+            wheel is event-only, SDL_MOUSEWHEEL_FLIPPED means negate;
+            SDL_PollEvent pumps; focus loss -&gt; SDL_ResetKeyboard() sends key-UP events
+  sdl3-time: SDL_GetTicksNS() is monotonic (traced to CLOCK_MONOTONIC_RAW /
+            mach_absolute_time / QueryPerformanceCounter). SDL_Delay waits AT LEAST the
+            requested time; SDL_DelayPrecise busy-waits. SDL_SetRenderVSync,
+            SDL_RENDERER_VSYNC_DISABLED = 0. SDL_RenderDebugText/Format = 8x8 ASCII font.
+  time-model: absolute time = Uint64 ns (float32 seconds freezes after ~24 h);
+            dt() clamped 0.25 s, raw_dt() unclamped, was_clamped() reports it;
+            fps() smoothed 0.5 s = display only
+  loop: THE loop, settled as of 1.4 and not changing again:
+            drain events -&gt; clk.tick() -&gt; in.update() -&gt; stepper.begin_frame(clk.dt())
+            -&gt; while (stepper.next_step()) { previous = current; simulate(current, h); }
+            -&gt; alpha = stepper.alpha() -&gt; render(lerp(previous, current, alpha))
+  fixed-step: h = 1/60 s by default. Invariant: after the step loop 0 &lt;= accumulator &lt; h,
+            so alpha in [0,1) and the accumulator may safely be a float (it is BOUNDED —
+            1.3's Uint64 rule is about unbounded quantities). previous = current goes
+            INSIDE the loop. simulate() receives h, never clk.dt().
+            Interpolation renders at exactly T - h: a CONSTANT lag replaces one that
+            swung 0..h. That, not immediacy, is what smoothness is.
+            Spiral of death when cost-per-step / h &gt; 1; two guards: clock's dt clamp
+            (bounds one frame to 15 steps at 60 Hz) + max steps per frame (8, drops the
+            excess and REPORTS it — the game goes slow-motion, which is a real loss).
+            Determinism = same binary + same machine + same inputs. NOT cross-platform
+            (FMA contraction, x87, libm, vectorisation).
+            Do not interpolate across a teleport: snap previous = current instead.
+  input-model: poll levels, DERIVE edges; COPY SDL's array, never alias;
+            scancodes for positions, keycodes for symbols
+  shaders: HLSL -&gt; SDL_shadercross (3.0.0-preview) -&gt; SPIR-V/DXIL/MSL  [Module 4+]
+  cpp: C++20, no exceptions/RTTI in core, snake_case, private members trailing _,
+       .hpp + #pragma once, [[nodiscard]], anonymous namespace for TU-local helpers,
+       never `using namespace` at file scope, -Wall -Wextra//W4 all fixed
+  build: CMake >= 3.24, out-of-source (build/); sources listed explicitly (never GLOB);
+         target_include_directories(engine PRIVATE src)
+  docs-tooling: shared &lt;style&gt; AND trailing &lt;script&gt; duplicated into every page and
+         propagated by docs/_template/apply-shared.py — never by hand. Marker regions
+         SHARED-CSS:BEGIN/END and SHARED-SCRIPT:BEGIN/END; widget JS goes OUTSIDE them.
+         Run `apply-shared.py --check` before committing docs/.
+
+curriculum: 94 lessons, ~433 h, 9 modules
+  M0:6  M1:8  M2:12  M3:10  M4:9  M5:10  M6:15  M7:13  M8:11
+
+completed:
+  - MODULE 0 COMPLETE (0.1 … 0.6)
+  - 1.1 Events, Properly
+  - 1.2 Input: State vs Events
+  - 1.3 Frames, Delta Time, and Why Naive Loops Lie
+  - 1.4 The Fixed Timestep with Interpolation, Derived
+
+capabilities:
+  - portable CMake build, four translation units; FetchContent SDL3 (release-3.4.12)
+  - window + complete switch-based event dispatch (quit, window close, resize)
+  - input subsystem: keyboard levels + edges by scancode, mouse buttons + position, wheel
+  - clock subsystem: monotonic ns timing, clamped + raw dt, elapsed, fps
+  - fixed_step subsystem: accumulator, alpha, step cap with drop reporting, set_rate
+  - THE loop: fixed-timestep simulation with render interpolation, spiral-guarded
+  - demo: variable-dt vs fixed-raw vs fixed-interpolated boxes + a frame-rate-independent
+    bouncing ball; runtime sim-rate keys, vsync toggle, throttle
+  - known-and-deliberate: explicit Euler still gains energy — but identically everywhere,
+    at a rate set by h, which is ours to choose (Module 7 fixes the integrator)
+
+files:
+  /: CLAUDE.md, README.md, ARCHITECTURE.md, LEARNINGS.md, PROMPT.md, LICENSE,
+     .gitignore, CMakeLists.txt, STATE.md
+  src/: main.cpp
+  src/core/: input.hpp, input.cpp, clock.hpp, clock.cpp, fixed_step.hpp, fixed_step.cpp
+  docs/: index.html, conventions.html, math-toolbox.html, cpp-style.html
+  docs/lessons/: 00-01..00-06, 01-01-events-properly.html,
+                 01-02-input-state-vs-events.html, 01-03-delta-time.html,
+                 01-04-fixed-timestep.html
+  docs/_template/: lesson-template.html, README.md, apply-shared.py
+  memory/: 2026-07-16.md, 2026-07-18.md
+
+next: 1.5 — The Framebuffer: Your First Owned Pixels</pre>
+  </details>
+
+  <nav class="lesson-nav" aria-label="Lesson navigation (bottom)">
+    <a class="prev-l" href="01-03-delta-time.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">1.3 — Frames, Delta Time, and Why Naive Loops Lie</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="01-05-framebuffer.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">1.5 — The Framebuffer: Your First Owned Pixels</span>
+    </a>
+  </nav>
+
+  <footer class="foot">
+    <p>
+      Build a Professional 3D Game Engine ·
+      <a href="../index.html">Contents</a> ·
+      <a href="../conventions.html">Conventions</a> ·
+      <a href="../math-toolbox.html">Math Toolbox</a> ·
+      <a href="../cpp-style.html">C++ Style</a>
+    </p>
+    <p>MIT licensed. Copyright © 2026 digster.</p>
+  </footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  // Interactive: drawn position with and without interpolation, at a variable
+  // render rate against a fixed 60 Hz simulation. Same arithmetic as the engine.
+  var slider = document.getElementById("interp-fps");
+  if (!slider) { return; }
+  var rawG = document.getElementById("interp-raw");
+  var lerpG = document.getElementById("interp-lerp");
+  var shift = document.getElementById("interp-shift");
+  var outFps = document.getElementById("interp-fps-out");
+  var outRaw = document.getElementById("interp-raw-out");
+  var outLerp = document.getElementById("interp-lerp-out");
+
+  var H = 1 / 60, WINDOW = 0.2;                 // 200 ms of history
+  var X0 = 55, XS = 535, Y0 = 230, YS = 200;    // position 0..WINDOW maps to the chart
+  var px = function (t) { return X0 + (t / WINDOW) * XS; };
+  var py = function (p) { return Y0 - (p / WINDOW) * YS; };   // velocity 1 unit/s
+
+  function dots(g, pts, r) {
+    var s = "";
+    for (var i = 0; i < pts.length; i++) {
+      s += '<circle cx="' + pts[i][0].toFixed(1) + '" cy="' + pts[i][1].toFixed(1) + '" r="' + r + '"/>';
+    }
+    g.innerHTML = s;
+  }
+
+  function render() {
+    var fps = parseInt(slider.value, 10);
+    var frameDt = 1 / fps;
+    var acc = 0, simT = 0, t = 0;
+    var raw = [], interp = [], lags = [];
+
+    while (t + frameDt <= WINDOW) {
+      t += frameDt;
+      acc += frameDt;
+      while (acc >= H) { acc -= H; simT += H; }
+      // Raw: draw the simulation's own position.
+      raw.push([px(t), py(simT)]);
+      // Interpolated: draw between the last two states, i.e. at simT - H + acc.
+      var drawnT = simT > 0 ? simT - H + acc : 0;
+      interp.push([px(t), py(drawnT)]);
+      // Clamp to [0, H]: the invariant guarantees it, but float accumulation can
+      // land a hair outside and print a negative zero.
+      lags.push(Math.min(H, Math.max(0, t - simT)));
+    }
+
+    dots(rawG, raw, 3.1);
+    dots(lerpG, interp, 3.1);
+    shift.setAttribute("x1", px(H).toFixed(1));
+    shift.setAttribute("y1", py(0).toFixed(1));
+    shift.setAttribute("x2", px(WINDOW).toFixed(1));
+    shift.setAttribute("y2", py(WINDOW - H).toFixed(1));
+
+    var lo = Math.min.apply(null, lags), hi = Math.max.apply(null, lags);
+    outFps.textContent = fps + " fps";
+    // A render rate that divides evenly into the simulation rate consumes the same
+    // number of steps every frame, so the raw lag never varies and there is no
+    // judder to fix. That is exactly why this bug survives testing at 60 fps —
+    // worth stating rather than letting the readout look broken.
+    outRaw.textContent = (hi - lo) < 0.0001
+      ? "raw lag: " + (hi * 1000).toFixed(1) + " ms — divides evenly, no judder"
+      : "raw lag: swings " + (lo * 1000).toFixed(1) + "–" + (hi * 1000).toFixed(1) + " ms";
+    outLerp.textContent = "lerp lag: " + (H * 1000).toFixed(1) + " ms flat";
+  }
+  slider.addEventListener("input", render);
+  render();
+})();
+</script>
+
+<!-- SHARED-SCRIPT:BEGIN -->
+<script>
+(function () {
+  "use strict";
+
+  /* ---- Theme toggle: OS default, with a manual override in localStorage ---- */
+  var root = document.documentElement;
+  var KEY = "engine-course-theme";
+  try {
+    var saved = localStorage.getItem(KEY);
+    if (saved) { root.setAttribute("data-theme", saved); root.style.colorScheme = saved; }
+  } catch (e) { /* private mode — fall back to the OS preference */ }
+
+  var btn = document.getElementById("theme-toggle");
+  if (btn) {
+    btn.addEventListener("click", function () {
+      var cur = root.getAttribute("data-theme");
+      if (!cur) {
+        cur = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      }
+      var next = cur === "dark" ? "light" : "dark";
+      root.setAttribute("data-theme", next);
+      root.style.colorScheme = next;
+      try { localStorage.setItem(KEY, next); } catch (e) {}
+    });
+  }
+
+  /* ---- Syntax highlighting -------------------------------------------------
+     A deliberately small tokeniser for C++/HLSL, CMake, and shell. It reads
+     textContent and rebuilds escaped HTML, so it can never execute page content
+     or mangle a listing — worst case a token is mis-coloured.
+
+     Why not highlight.js from a CDN? Because a lesson must render from a bare
+     filesystem with no network, and colour is not worth a dependency that can
+     be absent. This is ~60 lines and always there.
+
+     Keyword vs type matters: `kw` is consulted before `ty`, so a word listed in
+     both lands in .tok-k. Fundamental types (bool, char, int, …) belong in
+     CPP_TYPES only — putting them in CPP_KEYWORDS would silently recolour every
+     declaration in the course.
+     -------------------------------------------------------------------------- */
+  var CPP_KEYWORDS = ("alignas alignof and asm auto break case catch class concept const consteval "
+    + "constexpr constinit const_cast continue co_await co_return co_yield decltype default defined "
+    + "delete do dynamic_cast else enum explicit export extern false final for friend goto if inline "
+    + "mutable namespace new noexcept not nullptr operator or override private protected public "
+    + "register reinterpret_cast requires return sizeof static static_assert static_cast struct "
+    + "switch template this thread_local throw true try typedef typeid typename union using virtual "
+    + "volatile while cbuffer register_space numthreads in out inout").split(" ");
+
+  var CPP_TYPES = ("bool char char8_t char16_t char32_t double float int long short signed unsigned "
+    + "void wchar_t size_t uint8_t uint16_t uint32_t uint64_t int8_t int16_t int32_t int64_t "
+    + "Uint8 Uint16 Uint32 Uint64 Sint8 Sint16 Sint32 Sint64 "
+    + "float2 float3 float4 float4x4 float3x3 half int2 int3 int4 uint uint2 uint3 uint4 matrix "
+    + "Texture2D TextureCube SamplerState StructuredBuffer").split(" ");
+
+  var kw = Object.create(null), ty = Object.create(null);
+  CPP_KEYWORDS.forEach(function (w) { kw[w] = 1; });
+  CPP_TYPES.forEach(function (w) { ty[w] = 1; });
+
+  function esc(s) {
+    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+  function span(cls, s) { return '<span class="tok-' + cls + '">' + esc(s) + "</span>"; }
+
+  // One regex, alternation ordered so longer/greedier forms win.
+  var RE = new RegExp([
+    "(\\/\\*[\\s\\S]*?\\*\\/|\\/\\/[^\\n]*|#[^\\n]*)",       // 1 comment / preprocessor
+    '("(?:\\\\.|[^"\\\\])*"|\'(?:\\\\.|[^\'\\\\])*\')',      // 2 string / char
+    "(\\b\\d[\\w.]*\\b)",                                     // 3 number
+    "([A-Za-z_]\\w*)(?=\\s*\\()",                             // 4 call site
+    "([A-Za-z_]\\w*)",                                        // 5 identifier
+    "([{}()\\[\\];,.<>+\\-*/%=!&|^~?:]+)"                     // 6 punctuation
+  ].join("|"), "g");
+
+  function highlightCLike(src) {
+    var out = "", last = 0, m;
+    RE.lastIndex = 0;
+    while ((m = RE.exec(src)) !== null) {
+      if (m.index > last) out += esc(src.slice(last, m.index));
+      if (m[1])      out += span(m[1].charAt(0) === "#" ? "p" : "c", m[1]);
+      else if (m[2]) out += span("s", m[2]);
+      else if (m[3]) out += span("n", m[3]);
+      else if (m[4]) out += kw[m[4]] ? span("k", m[4]) : span("f", m[4]);
+      else if (m[5]) out += kw[m[5]] ? span("k", m[5])
+                          : ty[m[5]] ? span("t", m[5])
+                          : esc(m[5]);
+      else if (m[6]) out += span("o", m[6]);
+      last = RE.lastIndex;
+    }
+    out += esc(src.slice(last));
+    return out;
+  }
+
+  // Shell: `#` comments anywhere, plus Windows-batch `::` comments — but only at
+  // the start of a line, because `::` is also a namespace separator and a CMake
+  // target separator (`SDL3::SDL3`), which do appear mid-line in shell listings.
+  var SH_RE = /(^|\n)(\s*)(::[^\n]*)|(#[^\n]*)|("(?:\\.|[^"\\])*"|'[^']*')|(^|\n)(\s*)([\w.\/\\-]+)/g;
+  function highlightShell(src) {
+    var out = "", last = 0, m;
+    SH_RE.lastIndex = 0;
+    while ((m = SH_RE.exec(src)) !== null) {
+      if (m.index > last) out += esc(src.slice(last, m.index));
+      if (m[3])      out += esc(m[1] || "") + esc(m[2] || "") + span("c", m[3]);
+      else if (m[4]) out += span("c", m[4]);
+      else if (m[5]) out += span("s", m[5]);
+      else           out += esc(m[6] || "") + esc(m[7] || "") + span("f", m[8]);
+      last = SH_RE.lastIndex;
+    }
+    out += esc(src.slice(last));
+    return out;
+  }
+
+  // CMake: comments, strings, ${vars}, and command names (word before "(").
+  var CMAKE_RE = /(#[^\n]*)|("(?:\\.|[^"\\])*")|(\$\{[^}]*\})|(^|\n)(\s*)([A-Za-z_]\w*)(?=\s*\()/g;
+  function highlightCMake(src) {
+    var out = "", last = 0, m;
+    CMAKE_RE.lastIndex = 0;
+    while ((m = CMAKE_RE.exec(src)) !== null) {
+      if (m.index > last) out += esc(src.slice(last, m.index));
+      if (m[1])      out += span("c", m[1]);
+      else if (m[2]) out += span("s", m[2]);
+      else if (m[3]) out += span("n", m[3]);
+      else           out += esc(m[4] || "") + esc(m[5] || "") + span("f", m[6]);
+      last = CMAKE_RE.lastIndex;
+    }
+    out += esc(src.slice(last));
+    return out;
+  }
+
+  var DISPATCH = {
+    "lang-cpp": highlightCLike, "lang-hlsl": highlightCLike, "lang-c": highlightCLike,
+    "lang-bash": highlightShell, "lang-sh": highlightShell,
+    "lang-cmake": highlightCMake
+  };
+  document.querySelectorAll(".listing pre code").forEach(function (el) {
+    for (var cls in DISPATCH) {
+      if (el.classList.contains(cls)) {
+        el.innerHTML = DISPATCH[cls](el.textContent);
+        return;
+      }
+    }
+  });
+})();
+</script>
+<!-- SHARED-SCRIPT:END -->
+</body>
+</html>

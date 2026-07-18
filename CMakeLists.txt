@@ -46,6 +46,7 @@ FetchContent_MakeAvailable(SDL3)
 add_executable(engine
     src/main.cpp
     src/core/clock.cpp
+    src/core/fixed_step.cpp
     src/core/input.cpp
 )
 

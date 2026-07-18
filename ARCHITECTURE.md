@@ -56,7 +56,9 @@ inventing one — but without paying framework ceremony before it buys anything.
 │   │   ├── input.hpp       # frame-coherent keyboard/mouse snapshot  [EXISTS from 1.2]
 │   │   ├── input.cpp
 │   │   ├── clock.hpp       # monotonic frame timing, clamped dt      [EXISTS from 1.3]
-│   │   └── clock.cpp
+│   │   ├── clock.cpp
+│   │   ├── fixed_step.hpp  # simulation accumulator + alpha          [EXISTS from 1.4]
+│   │   └── fixed_step.cpp
 │   ├── math/               # vec2/3/4, mat3/4, quaternion — hand-rolled, no GLM
 │   ├── gfx/                # framebuffer, software rasterizer → later SDL_GPU renderer
 │   └── platform/           # window + event pumping (Module 5; see the note below)
@@ -88,11 +90,15 @@ engine-fundamental rather than OS-specific. When Module 5 introduces the platfor
 raw device/event plumbing may move to `platform/` while the cached snapshot stays in `core/` —
 and that split will be a taught decision, not an accident.
 
-**The frame's shape, and why the order is load-bearing.** As of Lesson 1.3 the loop in
-`src/main.cpp` runs:
+**The frame's shape, and why the order is load-bearing.** As of Lesson 1.4 the loop in
+`src/main.cpp` is settled, and its shape does not change again for the rest of the course:
 
 ```
-drain events  ->  clk.tick()  ->  in.update()  ->  simulate  ->  render
+drain events -> clk.tick() -> in.update()
+             -> stepper.begin_frame(clk.dt())
+             -> while (stepper.next_step()) { previous = current; simulate(current, h); }
+             -> alpha = stepper.alpha()
+             -> render(lerp(previous, current, alpha))
 ```
 
 The drain must come first because `SDL_PollEvent` *pumps*, and pumping is what refreshes the
@@ -103,9 +109,27 @@ two systems integrating with two different ideas of how long the frame was is a 
 no good symptom. `dt` is captured into a local `const float` at the top of the frame to make that
 guarantee visible at the call site.
 
-Simulation still steps by a variable `dt`, which is correct only for constant velocity. Lesson 1.4
-replaces that with a fixed timestep plus render interpolation; the frame order above survives the
-change.
+**Simulation and rendering are decoupled.** The simulation advances in fixed steps of `h`
+(1/60 s by default) — `simulate()` receives `h` and has no access to the frame duration, which is
+the separation expressed as a function signature. Rendering happens once per frame at whatever rate
+the machine manages, drawing `lerp(previous, current, alpha)` where `alpha` is the accumulator's
+leftover as a fraction of a step.
+
+Three consequences worth knowing before touching this loop:
+
+- **`previous = current` belongs inside the step loop.** A frame may run several steps; `previous`
+  must hold the second-newest state. Hoisting it out is invisible above the simulation rate and
+  rubber-bands below it.
+- **Interpolation costs a duplicate of all render-visible state.** That is why the demo's state
+  lives in a `sim_state` struct rather than loose locals, and it is the same pressure that produces
+  the ECS in Module 5.
+- **Two guards bound the spiral of death:** `clock`'s 0.25 s `dt` clamp (capping one frame at 15
+  steps at 60 Hz) and `fixed_step`'s per-frame step cap, which discards the excess and *reports*
+  it. Past the cap the simulation permanently falls behind the wall clock — a deliberate loss, not
+  a repair.
+
+Determinism from this is same-binary, same-machine only. Cross-platform lockstep needs far more
+(see LEARNINGS.md).
 
 ### 2.2 After the Module 5 refactor: engine / demos / tools
 

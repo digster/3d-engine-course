@@ -179,6 +179,54 @@ h = 1, ½, ¼, ⅛, 1/60 (0, 2.5, 3.75, 4.375, 4.9167 m for g=10, T=1). Semi-imp
 first) overshoots by the same magnitude: `g·T·(T+h)/2`. This is *the* reason for the fixed timestep,
 and it is worth deriving rather than asserting.
 
+### The fixed-timestep loop (settled in Lesson 1.4, not changing again)
+
+```
+drain -> clk.tick() -> in.update() -> stepper.begin_frame(clk.dt())
+      -> while (stepper.next_step()) { previous = current; simulate(current, h); }
+      -> render(lerp(previous, current, stepper.alpha()))
+```
+
+**The invariant is the whole design.** After the step loop, `0 <= accumulator < h` — guaranteed by
+the loop condition. Everything else depends on it: `alpha = accumulator / h` is in `[0,1)`, so the
+lerp can never extrapolate. Keep the `accumulator -= h` inside the type that owns the accumulator;
+a hand-written loop that skips it hangs *inside one frame*, with no crash and no output.
+
+**The accumulator may be a `float`, and `clock`'s absolute time may not.** No contradiction: 1.3's
+rule is about quantities that grow without bound. The accumulator is drained below `h` every frame
+by construction.
+
+**Interpolation renders at exactly `T - h`.** Proof: `T = S + accumulator`; the lerp draws
+`(S - h) + alpha·h = S - h + accumulator`; substitute. The accumulator cancels, so a lag that
+*swings between 0 and h* becomes one that is *always h*. On average interpolation is further
+behind — and it looks dramatically better, because the eye tracks changes in velocity and ignores
+constant delay. **Smoothness is consistency, not immediacy.**
+
+**Verified numerically** (60 Hz sim, 100 fps render): step pattern has period 5 — `0,1,0,1,1` —
+i.e. 7 steps over 12 frames. Raw staleness sawtooths `10.0, 3.33, 13.33, 6.67, 0.0` ms; interpolated
+is a flat 16.67 ms. A render rate that *divides evenly* into the sim rate has zero variation and no
+judder at all — which is exactly why this bug survives testing at 60 fps.
+
+**Spiral of death:** diverges when `cost per step / h > 1` (e.g. a 20 ms step at 60 Hz → 1.2, losing
+3.33 ms per step, compounding). Two guards, both needed: `clock`'s 0.25 s `dt` clamp bounds one
+frame to 15 steps at 60 Hz, and `fixed_step`'s per-frame cap handles the machine that is simply too
+slow every frame. On hitting the cap, **drain the remaining whole steps** rather than just
+returning — otherwise the accumulator stays above `h`, `alpha` exceeds 1, and the renderer silently
+starts extrapolating exactly when the machine is already struggling.
+
+**A fixed timestep gives same-binary, same-machine determinism only.** Cross-machine results still
+diverge through FMA contraction, x87 80-bit intermediates, `libm` differences, and vectorisation
+reordering sums. Necessary for lockstep, nowhere near sufficient — do not promise it.
+
+**Never interpolate across a teleport.** A lerp assumes the two states are a short continuous
+motion apart. A respawn, portal, screen-wrap or camera cut violates that and the lerp faithfully
+draws positions that never existed. Snap `previous = current` at the discontinuity. This is why the
+1.4 demo's box *bounces* rather than wrapping.
+
+**`previous = current` goes INSIDE the step loop.** It must end up holding the second-newest state,
+and a frame may run several steps. Hoisting it out works perfectly whenever the frame rate exceeds
+the sim rate — i.e. on the developer's machine — and rubber-bands on everyone else's.
+
 **Loop model:** we use classic `int main` + our own `while` loop, NOT SDL3's callback model
 (`SDL_MAIN_USE_CALLBACKS` with `SDL_AppInit`/`SDL_AppIterate`/`SDL_AppEvent`/`SDL_AppQuit`), because
 the engine owns its loop (0.1 thesis). The callback model exists and is fine for simple apps; it is
@@ -276,6 +324,26 @@ wide.
 through all 60 positions and its readout checked against the closed form `½·g·T·h`, plus the five
 rows of the lesson's static table. A widget that quietly disagrees with the table beside it is
 worse than no widget, and it is a one-minute check.
+
+**Drive a widget to its degenerate inputs, not just its interesting ones.** 1.4's interpolation
+slider showed `raw lag: 0.0–0.0 ms` at 15/30/60 fps, which looks broken but is *correct*: a render
+rate dividing evenly into the sim rate has no judder. Left as-is it would read as a bug; the fix was
+to have the widget say so. Also caught a `-0.0` from float error in a quantity the invariant says is
+non-negative — clamp display values to the range the maths guarantees.
+
+**A diagram that needs a 7-pixel difference to make its point needs a different diagram.** 1.4's
+Figure 3 originally showed interpolation as a line "parallel to the truth, one step below" — at
+honest scale that offset was ~7 px and read as noise. Replotting the *lag itself* over time (a red
+sawtooth against a flat amber line) made the identical claim unmissable. When an effect is small in
+the natural units, plot the effect rather than the thing it affects.
+
+**Step functions should be drawn as step functions.** The same figure first joined per-frame samples
+with straight segments, which shows the values but hides the behaviour. A proper hold-then-jump path
+makes "two frames at the same position, then a double-sized jump" literally visible.
+
+**Watch for escaping artifacts when editing HTML from a script.** A Python-generated SVG label
+shipped as `can''t` — a doubled apostrophe from quoting. Grep the rendered text for `''` and similar
+after any scripted edit; the browser will render it happily.
 
 ## Testing engine code that talks to SDL
 

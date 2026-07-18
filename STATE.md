@@ -7,7 +7,7 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-07-18 (after Lesson 1.3)
+updated: 2026-07-18 (after Lesson 1.4 — Module 1 half done)
 
 conventions:
   world: right-handed, Y-up, -Z forward
@@ -60,9 +60,28 @@ conventions:
   input-model: poll levels, DERIVE edges (pressed = cur && !prev, released = !cur && prev);
             COPY SDL's array into std::array, never alias the pointer (aliasing makes
             every edge x && !x = false); scancodes for positions, keycodes for symbols
-  frame-order: drain events -> clk.tick() -> in.update() -> simulate -> render.
+  frame-order: THE loop, settled as of 1.4 and not changing again:
+            drain events -> clk.tick() -> in.update() -> stepper.begin_frame(clk.dt())
+            -> while (stepper.next_step()) { previous = current; simulate(current, h); }
+            -> alpha = stepper.alpha() -> render(lerp(previous, current, alpha))
             Drain first because SDL_PollEvent pumps (that is what refreshes the state
             arrays); tick each subsystem exactly once so the whole frame sees one snapshot.
+  fixed-step: h = 1/60 s default. INVARIANT: after the step loop 0 <= accumulator < h, so
+            alpha in [0,1) and a lerp can never extrapolate. The accumulator may be float
+            (it is BOUNDED — 1.3's Uint64 rule is about unbounded quantities).
+            `previous = current` goes INSIDE the step loop (a frame may run 0..N steps;
+            hoisting it out only breaks below the sim rate, i.e. never on the dev machine).
+            simulate() receives h, never clk.dt() — the separation as a signature.
+            Interpolation renders at exactly T - h: a CONSTANT lag replaces one swinging
+            0..h. Smoothness is consistency, not immediacy.
+            Spiral of death when cost-per-step / h > 1. Two guards: clock's 0.25 s dt clamp
+            (bounds a frame to 15 steps at 60 Hz) + fixed_step's per-frame cap, which
+            DRAINS the excess (not just returns — else alpha > 1) and REPORTS the dropped
+            time. Past the cap the sim falls behind permanently: slow motion, a real loss.
+            Determinism = same binary + same machine + same inputs. NOT cross-platform
+            (FMA contraction, x87, libm, vectorisation).
+            NEVER interpolate across a teleport — snap previous = current instead. That is
+            why the 1.4 demo's box bounces rather than wrapping.
   shaders: HLSL -> SDL_shadercross (3.0.0-preview) -> SPIR-V/DXIL/MSL  [Module 4+]
   cpp: C++20, no exceptions/RTTI in core, snake_case, private members trailing _,
        .hpp + #pragma once, [[nodiscard]], -Wall -Wextra // /W4, all warnings fixed
@@ -103,10 +122,11 @@ completed:
   - 1.1  Events, Properly
   - 1.2  Input: State vs Events
   - 1.3  Frames, Delta Time, and Why Naive Loops Lie
+  - 1.4  The Fixed Timestep with Interpolation, Derived
 
 capabilities:
   - verified C++20 toolchain (MSVC / GCC / Clang), 64-bit
-  - portable CMake build, now three translation units; FetchContent SDL3 (release-3.4.12)
+  - portable CMake build, now four translation units; FetchContent SDL3 (release-3.4.12)
   - engine app: 1280x720 window, complete switch-based event dispatch (quit,
     window-close, window-resize), clean shutdown, startup version log
   - input subsystem (src/core/input): keyboard levels + edges addressed by scancode,
@@ -114,9 +134,14 @@ capabilities:
     flipped-scroll correction; one frame-coherent snapshot published per frame
   - clock subsystem (src/core/clock): monotonic ns timing, clamped dt + raw dt +
     was_clamped(), elapsed(), frame_count(), smoothed fps() for display
-  - demo: per-frame box vs per-second box vs dt-scaled bouncing ball, with a runtime
-    vsync toggle and a throttle key; on-screen readout via SDL_RenderDebugTextFormat
-  - known-and-deliberate defect: simulation still steps by a variable dt (1.4 fixes it)
+  - fixed_step subsystem (src/core/fixed_step): accumulator, alpha, per-frame step cap
+    with drop reporting, runtime set_rate
+  - THE loop: fixed-timestep simulation with render interpolation, spiral-guarded
+  - demo: variable-dt vs fixed-raw vs fixed-interpolated boxes + a bouncing ball whose
+    apexes are now identical at 2000 / 240 / 60 / 20 fps; sim-rate keys [1-4], vsync
+    toggle, throttle; on-screen readout via SDL_RenderDebugTextFormat
+  - known-and-deliberate: explicit Euler still gains energy — but identically everywhere,
+    at a rate set by h, which is ours to choose (Module 7 fixes the integrator)
   - skills: reading SDL headers as source of truth; debugging with lldb/gdb/VS
 
 decisions:
@@ -128,17 +153,18 @@ files:
   /: CLAUDE.md, README.md, ARCHITECTURE.md, LEARNINGS.md, PROMPT.md, LICENSE,
      .gitignore, CMakeLists.txt, STATE.md
   src/: main.cpp
-  src/core/: input.hpp, input.cpp, clock.hpp, clock.cpp
+  src/core/: input.hpp, input.cpp, clock.hpp, clock.cpp,
+            fixed_step.hpp, fixed_step.cpp
   docs/: index.html, conventions.html, math-toolbox.html, cpp-style.html
   docs/lessons/: 00-01-what-is-an-engine.html, 00-02-how-this-course-works.html,
                  00-03-toolchain.html, 00-04-cmake-from-zero.html,
                  00-05-first-window.html, 00-06-headers-and-debugger.html,
                  01-01-events-properly.html, 01-02-input-state-vs-events.html,
-                 01-03-delta-time.html
+                 01-03-delta-time.html, 01-04-fixed-timestep.html
   docs/_template/: lesson-template.html, README.md, apply-shared.py
   memory/: 2026-07-16.md, 2026-07-18.md
   (retired: hello.cpp)
 
-next: 1.4 — The Fixed Timestep with Interpolation, Derived
-      (planned filename: docs/lessons/01-04-fixed-timestep.html — 1.3 already links to it)
+next: 1.5 — The Framebuffer: Your First Owned Pixels
+      (planned filename: docs/lessons/01-05-framebuffer.html — 1.4 already links to it)
 ```

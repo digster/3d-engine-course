@@ -117,3 +117,25 @@ diagrams and an interactive explicit-Euler widget.
 | Demo default | vsync **off** | Honest default for an instrument. With vsync on, only one frame rate exists and the bug under study is invisible. |
 | Physics in the demo | Perfectly elastic bounce, explicit Euler | Restitution 1.0 means the integrator is the *only* thing that can change the ball's energy, so the error is unambiguous — and at 20 fps it throws the ball out of the window in three bounces. |
 | Scope held back | Semi-implicit Euler shown numerically but not adopted; integrators deferred to Module 7 | It is still first-order and still frame-rate dependent, so it does not solve 1.3's problem and would pre-empt a lesson that does it properly. |
+
+---
+
+## 2026-07-18 — Lesson 1.4
+
+> next
+
+**Response:** Lesson 1.4 — The Fixed Timestep with Interpolation, Derived. The `fixed_step`
+accumulator (`src/core/fixed_step.{hpp,cpp}`), the main loop's final form, a three-box
+demo comparing variable-dt / fixed-raw / fixed-interpolated motion, and the lesson page
+with four SVG diagrams and an interactive interpolation widget.
+
+**Decisions made in this session:**
+
+| Decision | Choice | Rationale |
+|---|---|---|
+| Lesson structure | Three broken attempts in sequence, each fixing what the last one broke | The sequence *is* the understanding. A reader who has felt attempt one run at half speed will not later mistake the fixed timestep for the whole answer. |
+| Accumulator as a class | `fixed_step` owns the subtraction | The invariant is maintained by one line; inline, skipping it hangs the app inside a single frame with no output. |
+| Step-cap behaviour | Drain the excess whole steps, don't just return | Returning leaves `alpha > 1`, so the renderer starts extrapolating exactly when the machine is already struggling. |
+| Demo box motion | Bounces, never wraps | Wrapping is a teleport, and interpolating a teleport slides the box backwards across the screen. Kept as Exercise 1.4.4 rather than shipped as a bug. |
+| Determinism claim | Explicitly scoped to same-binary/same-machine | Cross-platform float determinism needs far more (FMA, x87, libm, vectorisation). Overclaiming here is how people ship broken lockstep. |
+| Figure 3 | Rebuilt to plot lag-over-time rather than position offset | The "one step behind" offset is ~7 px at honest scale and reads as noise; plotting the lag itself makes the identical claim unmissable. |
