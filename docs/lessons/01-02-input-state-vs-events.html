@@ -1,0 +1,3625 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>1.2 — Input: State vs Events · Build a Professional 3D Game Engine</title>
+<meta name="description" content="Levels and edges: why holding a key and pressing a key are different questions, how to derive both from one snapshot, and why movement must use scancodes.">
+<!-- SHARED-CSS:BEGIN -->
+<style>
+/* ---- Design tokens ------------------------------------------------------- */
+:root {
+  color-scheme: light dark;
+
+  /* Page */
+  --bg:            #fdfdfb;
+  --bg-sunken:     #f4f4f0;
+  --bg-raised:     #ffffff;
+  --text:          #1c1c1a;
+  --text-muted:    #5f5f58;
+  --text-faint:    #8a8a80;
+  --rule:          #e2e2db;
+  --rule-strong:   #cfcfc6;
+
+  /* Accent — used for links, active nav, section marks */
+  --accent:        #b4530a;
+  --accent-soft:   #f5e6d8;
+  --accent-text:   #8f4108;
+
+  /* Callouts */
+  --note-bd:       #3a6ea5;   --note-bg:    #eaf2fb;
+  --warn-bd:       #b8860b;   --warn-bg:    #fdf5e2;
+  --verify-bd:     #a03030;   --verify-bg:  #fbecec;
+  --pitfall-bd:    #7a4fa3;   --pitfall-bg: #f4eefb;
+  --ok-bd:         #2f7d4f;   --ok-bg:      #e9f6ee;
+
+  /* Code — always dark, in both page themes */
+  --code-bg:       #1b1d23;
+  --code-bar:      #262932;
+  --code-text:     #dfe3ec;
+  --code-rule:     #363a45;
+
+  /* Syntax tokens */
+  --tok-comment:   #6d7789;
+  --tok-keyword:   #c98fdb;
+  --tok-type:      #6cc5d9;
+  --tok-string:    #a3cf85;
+  --tok-number:    #e8a978;
+  --tok-preproc:   #d9a05b;
+  --tok-func:      #79b6f2;
+  --tok-punct:     #9aa2b1;
+
+  /* Axis colours — COURSE-WIDE CONVENTION. x/y/z = red/green/blue.
+     Never override these in a diagram. See conventions.html. */
+  --axis-x:        #d1344a;
+  --axis-y:        #2f9e4f;
+  --axis-z:        #2b6fd4;
+  --axis-x-soft:   #f7d8dd;
+  --axis-y-soft:   #d8f0e0;
+  --axis-z-soft:   #d7e4fa;
+
+  /* Diagram neutrals */
+  --dia-bg:        #ffffff;
+  --dia-ink:       #33332e;
+  --dia-ink-soft:  #7a7a72;
+  --dia-grid:      #e8e8e2;
+  --dia-fill:      #f0f0ea;
+  --dia-hi:        #b4530a;
+
+  /* Typography */
+  --font-body: "Iowan Old Style", "Palatino Linotype", "Palatino", "Charter",
+               Georgia, Cambria, "Times New Roman", serif;
+  --font-ui:   -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+               "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "SFMono-Regular", "Cascadia Code",
+               "JetBrains Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  --measure: 42rem;          /* ~72 characters at this size — the reading column */
+  --measure-wide: 58rem;     /* diagrams & tables may breathe past the measure  */
+}
+
+/* Dark tokens.
+   Applied in two situations, which is why the block is written twice:
+     1. the OS asks for dark AND the reader has not overridden to light;
+     2. the reader explicitly chose dark via the toggle.
+   CSS has no mixins, so duplication is the price of supporting both an OS
+   default and a manual override. Keep the two blocks byte-identical. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg:          #15161a;
+    --bg-sunken:   #101115;
+    --bg-raised:   #1c1e24;
+    --text:        #e4e4e0;
+    --text-muted:  #a2a49e;
+    --text-faint:  #74766f;
+    --rule:        #2c2e35;
+    --rule-strong: #3d404a;
+
+    --accent:      #f0a06a;
+    --accent-soft: #33251a;
+    --accent-text: #f5b184;
+
+    --note-bd:     #5a8fc8;   --note-bg:    #16202c;
+    --warn-bd:     #c9a132;   --warn-bg:    #262013;
+    --verify-bd:   #d05555;   --verify-bg:  #2a1717;
+    --pitfall-bd:  #a077c8;   --pitfall-bg: #221a2c;
+    --ok-bd:       #4fa877;   --ok-bg:      #14231a;
+
+    --dia-bg:      #1a1c21;
+    --dia-ink:     #d8d8d2;
+    --dia-ink-soft:#8f918a;
+    --dia-grid:    #2b2d33;
+    --dia-fill:    #24262c;
+    --dia-hi:      #f0a06a;
+
+    --axis-x:      #f2647a;
+    --axis-y:      #5cc47e;
+    --axis-z:      #6b9ef0;
+    --axis-x-soft: #3a2027;
+    --axis-y-soft: #1c3325;
+    --axis-z-soft: #1e2a40;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg:          #15161a;
+  --bg-sunken:   #101115;
+  --bg-raised:   #1c1e24;
+  --text:        #e4e4e0;
+  --text-muted:  #a2a49e;
+  --text-faint:  #74766f;
+  --rule:        #2c2e35;
+  --rule-strong: #3d404a;
+
+  --accent:      #f0a06a;
+  --accent-soft: #33251a;
+  --accent-text: #f5b184;
+
+  --note-bd:     #5a8fc8;   --note-bg:    #16202c;
+  --warn-bd:     #c9a132;   --warn-bg:    #262013;
+  --verify-bd:   #d05555;   --verify-bg:  #2a1717;
+  --pitfall-bd:  #a077c8;   --pitfall-bg: #221a2c;
+  --ok-bd:       #4fa877;   --ok-bg:      #14231a;
+
+  --dia-bg:      #1a1c21;
+  --dia-ink:     #d8d8d2;
+  --dia-ink-soft:#8f918a;
+  --dia-grid:    #2b2d33;
+  --dia-fill:    #24262c;
+  --dia-hi:      #f0a06a;
+
+  --axis-x:      #f2647a;
+  --axis-y:      #5cc47e;
+  --axis-z:      #6b9ef0;
+  --axis-x-soft: #3a2027;
+  --axis-y-soft: #1c3325;
+  --axis-z-soft: #1e2a40;
+}
+
+/* ---- Reset & base -------------------------------------------------------- */
+*, *::before, *::after { box-sizing: border-box; }
+
+html {
+  font-size: 18px;
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
+  scroll-padding-top: 2rem;
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  line-height: 1.7;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* The reading column. Everything is centred on --measure; wide elements opt out. */
+.wrap {
+  max-width: var(--measure);
+  margin: 0 auto;
+  padding: 0 1.25rem;
+}
+.bleed {                       /* for diagrams/tables that need more room */
+  max-width: var(--measure-wide);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* ---- Typography ---------------------------------------------------------- */
+h1, h2, h3, h4 {
+  font-family: var(--font-ui);
+  line-height: 1.25;
+  letter-spacing: -0.015em;
+  margin: 0 0 0.6em;
+  scroll-margin-top: 1.5rem;
+}
+h1 { font-size: 2.15rem; font-weight: 700; margin-top: 0.2em; }
+h2 {
+  font-size: 1.5rem; font-weight: 650;
+  margin-top: 2.6em;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--rule);
+}
+h3 { font-size: 1.15rem; font-weight: 650; margin-top: 2em; }
+h4 { font-size: 1rem;    font-weight: 650; margin-top: 1.6em; color: var(--text-muted); }
+
+/* Section numbers rendered as a quiet prefix */
+h2 .num, h3 .num {
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  margin-right: 0.5em;
+  font-weight: 500;
+}
+
+p { margin: 0 0 1.15em; }
+
+a { color: var(--accent-text); text-decoration-color: var(--rule-strong); text-underline-offset: 2px; }
+a:hover { text-decoration-color: currentColor; }
+
+strong { font-weight: 650; }
+em { font-style: italic; }
+
+ul, ol { margin: 0 0 1.15em; padding-left: 1.5em; }
+li { margin-bottom: 0.4em; }
+li > ul, li > ol { margin-top: 0.4em; margin-bottom: 0.5em; }
+
+hr { border: 0; border-top: 1px solid var(--rule); margin: 2.5em 0; }
+
+blockquote {
+  margin: 1.5em 0;
+  padding: 0.1em 0 0.1em 1.2em;
+  border-left: 3px solid var(--rule-strong);
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* Inline code — light chip, distinct from the dark block listings */
+:not(pre) > code {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 0.08em 0.34em;
+  word-break: break-word;
+}
+
+/* ---- Masthead ------------------------------------------------------------ */
+.masthead {
+  background: var(--bg-sunken);
+  border-bottom: 1px solid var(--rule);
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+}
+.masthead-inner {
+  max-width: var(--measure-wide);
+  margin: 0 auto;
+  padding: 0.6rem 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.masthead .course {
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  text-decoration: none;
+}
+.masthead .spacer { flex: 1; }
+.masthead a { color: var(--text-muted); text-decoration: none; }
+.masthead a:hover { color: var(--accent-text); }
+
+.theme-toggle {
+  font: inherit;
+  font-size: 0.78rem;
+  background: var(--bg-raised);
+  color: var(--text-muted);
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  padding: 0.2rem 0.55rem;
+  cursor: pointer;
+}
+.theme-toggle:hover { border-color: var(--rule-strong); color: var(--text); }
+
+/* ---- Lesson nav (top & bottom) ------------------------------------------- */
+.lesson-nav {
+  display: flex;
+  align-items: stretch;
+  gap: 0.6rem;
+  font-family: var(--font-ui);
+  font-size: 0.82rem;
+  margin: 1.5rem auto;
+}
+.lesson-nav a, .lesson-nav span {
+  flex: 1;
+  padding: 0.55rem 0.8rem;
+  border: 1px solid var(--rule);
+  border-radius: 7px;
+  background: var(--bg-raised);
+  text-decoration: none;
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+.lesson-nav a:hover { border-color: var(--accent); }
+.lesson-nav span { opacity: 0.45; }        /* disabled edge (no prev / no next) */
+.lesson-nav .dir {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-faint);
+}
+.lesson-nav .ttl {
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-weight: 550;
+}
+.lesson-nav .next-l { text-align: right; }
+.lesson-nav .idx-l  { flex: 0 0 auto; justify-content: center; text-align: center; }
+@media (max-width: 34rem) {
+  .lesson-nav { flex-wrap: wrap; }
+  .lesson-nav .idx-l { order: 3; flex: 1 0 100%; }
+}
+
+/* ---- Lesson header block ------------------------------------------------- */
+.lesson-head { margin: 2rem 0 0; }
+.eyebrow {
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+  font-weight: 650;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 0.5rem;
+}
+.deck {
+  font-size: 1.12rem;
+  color: var(--text-muted);
+  margin-bottom: 1.5rem;
+}
+.meta {
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  padding: 1rem 1.15rem;
+  margin-bottom: 1.75rem;
+}
+.meta dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 0.4rem 1rem; }
+.meta dt {
+  color: var(--text-faint);
+  text-transform: uppercase;
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  padding-top: 0.28em;
+  white-space: nowrap;
+}
+.meta dd { margin: 0; }
+@media (max-width: 30rem) {
+  .meta dl { grid-template-columns: 1fr; gap: 0.15rem 0; }
+  .meta dd { margin-bottom: 0.6rem; }
+}
+
+/* Objectives — "you will be able to…" */
+.objectives {
+  border: 1px solid var(--accent);
+  background: var(--accent-soft);
+  border-radius: 9px;
+  padding: 1.1rem 1.25rem;
+  margin: 1.75rem 0;
+}
+.objectives h2 {
+  margin: 0 0 0.5rem;
+  border: 0; padding: 0;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--accent-text);
+}
+.objectives ul { margin: 0; padding-left: 1.25em; }
+.objectives li::marker { color: var(--accent); }
+
+/* ---- Table of contents --------------------------------------------------- */
+.toc {
+  font-family: var(--font-ui);
+  font-size: 0.88rem;
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  padding: 1rem 1.25rem;
+  margin: 2rem 0;
+}
+.toc > summary {
+  cursor: pointer;
+  font-weight: 650;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-muted);
+  list-style: none;
+}
+.toc > summary::-webkit-details-marker { display: none; }
+.toc > summary::before { content: "▸ "; color: var(--accent); }
+.toc[open] > summary::before { content: "▾ "; }
+.toc ol { list-style: none; margin: 0.85rem 0 0; padding: 0; counter-reset: toc; }
+.toc ol ol { margin: 0.3rem 0 0.5rem 1.1rem; }
+.toc li { margin: 0.28em 0; counter-increment: toc; }
+.toc a { text-decoration: none; color: var(--text); }
+.toc a:hover { color: var(--accent-text); text-decoration: underline; }
+.toc ol ol a { color: var(--text-muted); font-size: 0.94em; }
+
+/* ---- Callouts ------------------------------------------------------------ */
+.callout {
+  border-left: 3px solid var(--rule-strong);
+  background: var(--bg-sunken);
+  border-radius: 0 8px 8px 0;
+  padding: 0.9rem 1.1rem;
+  margin: 1.6em 0;
+  font-size: 0.95rem;
+}
+.callout > :first-child { margin-top: 0; }
+.callout > :last-child  { margin-bottom: 0; }
+.callout .label {
+  display: block;
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  margin-bottom: 0.35rem;
+}
+.callout.note    { border-color: var(--note-bd);    background: var(--note-bg); }
+.callout.note .label    { color: var(--note-bd); }
+.callout.warn    { border-color: var(--warn-bd);    background: var(--warn-bg); }
+.callout.warn .label    { color: var(--warn-bd); }
+.callout.verify  { border-color: var(--verify-bd);  background: var(--verify-bg); }
+.callout.verify .label  { color: var(--verify-bd); }
+.callout.pitfall { border-color: var(--pitfall-bd); background: var(--pitfall-bg); }
+.callout.pitfall .label { color: var(--pitfall-bd); }
+.callout.ok      { border-color: var(--ok-bd);      background: var(--ok-bg); }
+.callout.ok .label      { color: var(--ok-bd); }
+/* C++ explainers: a C++ feature taught in place, the first time it appears. */
+.callout.cpp     { border-color: var(--accent);     background: var(--accent-soft); }
+.callout.cpp .label     { color: var(--accent-text); }
+
+/* ---- Code listings ------------------------------------------------------- */
+.listing {
+  margin: 1.6em 0;
+  border-radius: 9px;
+  overflow: hidden;
+  border: 1px solid var(--code-rule);
+  background: var(--code-bg);
+}
+.listing figcaption {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: var(--code-bar);
+  border-bottom: 1px solid var(--code-rule);
+  padding: 0.45rem 0.85rem;
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  color: #aeb6c4;
+}
+.listing figcaption .path { font-weight: 600; color: #dfe3ec; }
+.listing figcaption .tag {
+  font-family: var(--font-ui);
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  background: #3a3f4c;
+  color: #c6cdd9;
+}
+.listing figcaption .tag.new      { background: #1f4433; color: #7fd6a5; }
+.listing figcaption .tag.modified { background: #453a1c; color: #e0be74; }
+.listing figcaption .lang { margin-left: auto; opacity: 0.65; }
+
+/* Horizontal scroll — NEVER wrap. Wrapped code lies about its structure. */
+.listing pre {
+  margin: 0;
+  padding: 0.9rem 1rem;
+  overflow-x: auto;
+  background: var(--code-bg);
+}
+.listing pre code {
+  font-family: var(--font-mono);
+  font-size: 0.79rem;
+  line-height: 1.62;
+  color: var(--code-text);
+  white-space: pre;
+  display: block;
+  tab-size: 4;
+}
+.listing pre::-webkit-scrollbar { height: 9px; }
+.listing pre::-webkit-scrollbar-track { background: var(--code-bar); }
+.listing pre::-webkit-scrollbar-thumb { background: #4a5060; border-radius: 5px; }
+.listing pre::-webkit-scrollbar-thumb:hover { background: #5d6478; }
+
+/* Syntax tokens, applied by the tiny highlighter at the foot of the page. */
+.tok-c { color: var(--tok-comment); font-style: italic; }
+.tok-k { color: var(--tok-keyword); }
+.tok-t { color: var(--tok-type); }
+.tok-s { color: var(--tok-string); }
+.tok-n { color: var(--tok-number); }
+.tok-p { color: var(--tok-preproc); }
+.tok-f { color: var(--tok-func); }
+.tok-o { color: var(--tok-punct); }
+
+/* Emphasised line inside a listing (the line this paragraph is about) */
+.listing .hl { background: rgba(180, 130, 60, 0.16); display: inline-block; width: 100%; }
+
+/* Shell transcripts get a lighter treatment than source files */
+.listing.shell figcaption .path::before { content: "$ "; opacity: 0.6; }
+
+/* ---- Figures & diagrams -------------------------------------------------- */
+figure.dia {
+  margin: 2em auto;
+  padding: 0;
+}
+figure.dia svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: var(--dia-bg);
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+}
+figure.dia figcaption,
+figure.tbl figcaption {
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: 0.65rem;
+  line-height: 1.55;
+}
+figure.dia figcaption .fignum,
+figure.tbl figcaption .fignum {
+  font-weight: 700;
+  color: var(--text);
+}
+/* SVG text inherits the theme so diagrams survive dark mode */
+figure.dia svg text { font-family: var(--font-ui); fill: var(--dia-ink); }
+figure.dia svg .lbl-x { fill: var(--axis-x); }
+figure.dia svg .lbl-y { fill: var(--axis-y); }
+figure.dia svg .lbl-z { fill: var(--axis-z); }
+figure.dia svg .ax-x  { stroke: var(--axis-x); }
+figure.dia svg .ax-y  { stroke: var(--axis-y); }
+figure.dia svg .ax-z  { stroke: var(--axis-z); }
+figure.dia svg .ink       { stroke: var(--dia-ink); }
+figure.dia svg .ink-soft  { stroke: var(--dia-ink-soft); }
+figure.dia svg .grid      { stroke: var(--dia-grid); }
+figure.dia svg .fill-soft { fill: var(--dia-fill); }
+figure.dia svg .hi        { stroke: var(--dia-hi); }
+figure.dia svg .mono      { font-family: var(--font-mono); }
+figure.dia svg .sm        { font-size: 11px; }
+figure.dia svg .xs        { font-size: 9.5px; }
+
+/* Text fills for <text> elements.
+   These MUST be classes, not fill="..." attributes: the `figure.dia svg text`
+   rule above is CSS, and CSS always beats an SVG presentation attribute — an
+   inline fill on a <text> is silently ignored. Class selectors outrank the bare
+   element selector, so these win. (Shapes are unaffected; the rule only targets
+   text, so fill="..." still works on rect/path/circle.) */
+figure.dia svg .muted     { fill: var(--dia-ink-soft); }
+figure.dia svg .t-hi      { fill: var(--dia-hi); }
+figure.dia svg .t-ok      { fill: var(--ok-bd); }
+figure.dia svg .t-bad     { fill: var(--verify-bd); }
+/* For labels sitting ON a saturated filled shape, where the theme ink would be
+   unreadable. Fixed white in both themes, because the shape under it is the
+   same saturated colour in both. */
+figure.dia svg .t-inv     { fill: #ffffff; }
+
+/* ---- Tables -------------------------------------------------------------- */
+.tbl-scroll { overflow-x: auto; margin: 1.6em 0; }
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+th, td {
+  text-align: left;
+  padding: 0.5rem 0.7rem;
+  border-bottom: 1px solid var(--rule);
+  vertical-align: top;
+}
+th {
+  font-weight: 650;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--rule-strong);
+  white-space: nowrap;
+}
+tbody tr:hover { background: var(--bg-sunken); }
+td code { font-size: 0.82em; }
+
+/* File-manifest table: path | new/modified | purpose */
+.manifest td:first-child { font-family: var(--font-mono); font-size: 0.78rem; white-space: nowrap; }
+.badge {
+  font-size: 0.62rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.06em; padding: 0.1rem 0.4rem; border-radius: 3px; white-space: nowrap;
+}
+.badge.new { background: var(--ok-bg); color: var(--ok-bd); border: 1px solid var(--ok-bd); }
+.badge.mod { background: var(--warn-bg); color: var(--warn-bd); border: 1px solid var(--warn-bd); }
+/* Curriculum status, used on index.html */
+.badge.done { background: var(--ok-bg); color: var(--ok-bd); border: 1px solid var(--ok-bd); }
+.badge.soon { background: var(--bg-sunken); color: var(--text-faint); border: 1px solid var(--rule-strong); }
+
+/* ---- Math ---------------------------------------------------------------- */
+/* KaTeX renders these when the CDN is reachable. When it is NOT, the raw TeX
+   stays visible — which is why every equation MUST also be stated in prose.
+   Never let an equation be the only carrier of a fact. */
+.eq {
+  margin: 1.4em 0;
+  padding: 0.9rem 1rem;
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  overflow-x: auto;
+  text-align: center;
+}
+.eq-plain {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  margin-top: 0.6rem;
+  padding-top: 0.6rem;
+  border-top: 1px dashed var(--rule-strong);
+  text-align: left;
+}
+.eq-plain::before {
+  content: "in plain text: ";
+  color: var(--text-faint);
+  font-family: var(--font-ui);
+  font-size: 0.72rem;
+}
+
+/* Worked numeric example — every formula gets one */
+.worked {
+  border: 1px solid var(--rule-strong);
+  border-radius: 9px;
+  padding: 1rem 1.2rem;
+  margin: 1.6em 0;
+  background: var(--bg-raised);
+}
+.worked > .label {
+  display: block;
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--accent);
+  margin-bottom: 0.5rem;
+}
+.worked > :last-child { margin-bottom: 0; }
+
+/* ---- Exercises ----------------------------------------------------------- */
+.exercise {
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 9px 9px 0;
+  padding: 1rem 1.2rem;
+  margin: 1.4em 0;
+  background: var(--bg-raised);
+}
+.exercise h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.98rem;
+}
+.exercise h3 .xnum {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--accent);
+  margin-right: 0.5em;
+}
+.difficulty {
+  font-family: var(--font-ui);
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-faint);
+  border: 1px solid var(--rule-strong);
+  border-radius: 3px;
+  padding: 0.05rem 0.35rem;
+  margin-left: 0.4em;
+  vertical-align: 0.15em;
+}
+.exercise details {
+  margin-top: 0.7rem;
+  border-top: 1px solid var(--rule);
+  padding-top: 0.6rem;
+}
+.exercise summary {
+  cursor: pointer;
+  font-family: var(--font-ui);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.exercise summary:hover { color: var(--accent-text); }
+.exercise details[open] summary { margin-bottom: 0.6rem; }
+
+/* ---- Pitfalls (symptom → cause → fix) ------------------------------------ */
+.pitfalls { margin: 1.5em 0; }
+.pitfall-item {
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  margin-bottom: 0.9rem;
+  overflow: hidden;
+}
+.pitfall-item > summary {
+  cursor: pointer;
+  padding: 0.7rem 1rem;
+  background: var(--bg-sunken);
+  font-family: var(--font-ui);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.pitfall-item > summary:hover { color: var(--accent-text); }
+.pitfall-item > summary .sym {
+  font-weight: 400;
+  color: var(--text-muted);
+  font-style: italic;
+}
+.pitfall-body { padding: 0.9rem 1rem; font-size: 0.94rem; }
+.pitfall-body > :first-child { margin-top: 0; }
+.pitfall-body > :last-child  { margin-bottom: 0; }
+.pitfall-body dt {
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+  margin-top: 0.7rem;
+}
+.pitfall-body dd { margin: 0.2rem 0 0; }
+
+/* ---- Recap / next -------------------------------------------------------- */
+.recap {
+  background: var(--ok-bg);
+  border: 1px solid var(--ok-bd);
+  border-radius: 9px;
+  padding: 1.1rem 1.25rem;
+  margin: 1.75rem 0;
+}
+.recap h2 { margin: 0 0 0.6rem; border: 0; padding: 0; font-size: 1.05rem; }
+.recap > :last-child { margin-bottom: 0; }
+
+/* ---- Further reading ----------------------------------------------------- */
+.reading { font-size: 0.92rem; }
+.reading li { margin-bottom: 0.6em; }
+.reading .src {
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+  margin-right: 0.4em;
+}
+
+/* ---- STATE block --------------------------------------------------------- */
+.state {
+  margin: 2.5em 0 1em;
+  border: 1px dashed var(--rule-strong);
+  border-radius: 9px;
+  background: var(--bg-sunken);
+  overflow: hidden;
+}
+.state > summary {
+  cursor: pointer;
+  padding: 0.6rem 1rem;
+  font-family: var(--font-ui);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-muted);
+}
+.state pre {
+  margin: 0;
+  padding: 0.9rem 1rem;
+  overflow-x: auto;
+  border-top: 1px solid var(--rule);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+  white-space: pre;
+}
+
+/* ---- Footer -------------------------------------------------------------- */
+.foot {
+  border-top: 1px solid var(--rule);
+  margin-top: 3rem;
+  padding: 1.5rem 0 3rem;
+  font-family: var(--font-ui);
+  font-size: 0.78rem;
+  color: var(--text-faint);
+}
+.foot a { color: var(--text-muted); }
+
+/* ---- Interactive widgets ------------------------------------------------- */
+.widget {
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  background: var(--bg-raised);
+  padding: 1rem;
+  margin: 2em 0;
+}
+.widget-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+  align-items: center;
+  margin-top: 0.8rem;
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+.widget-controls label { display: flex; align-items: center; gap: 0.4rem; }
+.widget-controls input[type="range"] { accent-color: var(--accent); }
+.widget-readout {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--text);
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 0.1rem 0.4rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Print --------------------------------------------------------------- */
+@media print {
+  .masthead, .lesson-nav, .theme-toggle { display: none; }
+  body { background: #fff; color: #000; font-size: 11pt; }
+  .listing { break-inside: avoid; }
+  figure.dia { break-inside: avoid; }
+  a::after { content: " (" attr(href) ")"; font-size: 0.7em; color: #666; }
+}
+</style>
+<!-- SHARED-CSS:END -->
+</head>
+<body>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <a class="course" href="../index.html">Build a Professional 3D Game Engine</a>
+    <span class="spacer"></span>
+    <a href="../index.html">Contents</a>
+    <a href="../conventions.html">Conventions</a>
+    <a href="../cpp-style.html">C++ Style</a>
+    <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Toggle colour theme">Theme</button>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="01-01-events-properly.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">1.1 — Events, Properly</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="01-03-delta-time.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">1.3 — Frames, Delta Time, and Why Naive Loops Lie</span>
+    </a>
+  </nav>
+
+  <!-- ================= 1. HEADER BLOCK ================= -->
+  <div class="lesson-head">
+    <div class="eyebrow">Module 1 — The Loop, the Pixel, and Time · Lesson 1.2</div>
+    <h1>Input: State vs Events</h1>
+    <p class="deck">
+      Lesson 1.1 left us with a clean event dispatch, and it is about to fail us. Not because it is
+      wrong — it is exactly right — but because the question gameplay asks is not the question an
+      event answers. An event says <em>the W key went down</em>. Movement needs to know <em>is W
+      down right now</em>. Those two sentences are one word apart and produce completely different
+      bugs. Today we answer both, from one snapshot, and build the engine's first real subsystem
+      to hold the answer.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 3 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd><a href="01-01-events-properly.html">1.1 — Events, Properly</a>, <a href="00-04-cmake-from-zero.html">0.4 — CMake From Zero</a></dd>
+
+        <dt>Files</dt>
+        <dd><code>src/core/input.hpp</code> (new), <code>src/core/input.cpp</code> (new), <code>src/main.cpp</code> (modified), <code>CMakeLists.txt</code> (modified)</dd>
+
+        <dt>Milestone</dt>
+        <dd>A box you can drive smoothly with WASD, recolour with one tap of Space per press, and teleport with a click — and an input system you can explain line by line.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…distinguish a <strong>level</strong> ("is it down?") from an <strong>edge</strong> ("did it just change?"), and pick the right one for any gameplay action.</li>
+      <li>…explain why event-driven movement stutters, and why its speed is secretly a setting in the player's operating system.</li>
+      <li>…derive both answers from a single state snapshot, and defend why edges must never be tracked separately.</li>
+      <li>…explain the difference between a <strong>scancode</strong> and a <strong>keycode</strong>, and predict the AZERTY bug before a player reports it.</li>
+      <li>…state the frame's ordering rule — drain, then sample, then simulate — and say precisely what breaks if you reverse the first two.</li>
+      <li>…identify the inputs that <em>cannot</em> be polled at all, and explain what makes them different.</li>
+      <li>…split a program across translation units: a header, an implementation file, and the build change that joins them.</li>
+    </ul>
+  </section>
+
+  <details class="toc" open>
+    <summary>Contents</summary>
+    <ol>
+      <li><a href="#problem">The Problem</a></li>
+      <li><a href="#intuition">Building Intuition</a>
+        <ol>
+          <li><a href="#doorbell">The doorbell and the light switch</a></li>
+          <li><a href="#two-questions">Two questions, one honest answer each</a></li>
+        </ol>
+      </li>
+      <li><a href="#theory">The Theory</a>
+        <ol>
+          <li><a href="#level-edge">Levels and edges, defined</a></li>
+          <li><a href="#derive">Deriving edges from state</a></li>
+          <li><a href="#copy">Why it must be a copy</a></li>
+          <li><a href="#scancode">Scancodes and keycodes</a></li>
+          <li><a href="#ordering">The ordering rule</a></li>
+          <li><a href="#unpollable">What state cannot tell you</a></li>
+        </ol>
+      </li>
+      <li><a href="#implementation">Implementation: the input subsystem</a></li>
+      <li><a href="#listings">Complete Code Listings</a></li>
+      <li><a href="#build">Build &amp; Run</a></li>
+      <li><a href="#pitfalls">Common Pitfalls &amp; Debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; Next</a></li>
+      <li><a href="#reading">Further Reading</a></li>
+    </ol>
+  </details>
+
+  <!-- ================= 2. THE PROBLEM ================= -->
+  <h2 id="problem"><span class="num">1</span>The Problem</h2>
+
+  <p>
+    We have a working event dispatch. Let us use it for the most ordinary thing a game does: move
+    something when a key is held. The obvious code writes itself — we already have a
+    <code>SDL_EVENT_KEY_DOWN</code> case, so we put the movement in it:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">the obvious approach — and it does not work</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">case SDL_EVENT_KEY_DOWN:
+    // Move the box whenever a movement key is reported down.
+    if (event.key.scancode == SDL_SCANCODE_D) { box.x += 6.0f; }
+    if (event.key.scancode == SDL_SCANCODE_A) { box.x -= 6.0f; }
+    break;</code></pre>
+  </figure>
+
+  <p>
+    Build it, hold <kbd>D</kbd>, and watch. The box jumps once. Then it sits there, for what feels
+    like an embarrassingly long time. Then it starts sliding — but in lurches, far slower than it
+    should, and it never becomes smooth. Let go and press again: one jump, long pause, lurching.
+  </p>
+
+  <p>
+    Nothing is broken. Every line does exactly what it says. What you are watching is the operating
+    system's <strong>key repeat</strong>: the mechanism that lets you hold a key in a text editor and
+    get <code>aaaaaaaa</code>. The OS sends one key-down when the key goes down, waits out a
+    <em>repeat delay</em>, and then starts synthesising further key-downs at a <em>repeat rate</em>.
+    SDL faithfully forwards all of them. Figure 1 shows the shape of what arrives.
+  </p>
+
+  <figure class="dia bleed">
+    <svg viewBox="0 0 660 330" role="img" aria-labelledby="f1-t f1-d">
+      <title id="f1-t">One second of holding a key: what the finger does, what events arrive, and how far the box moves</title>
+      <desc id="f1-d">Three stacked timelines covering one second. The top shows the key held down
+        continuously for the whole second. The middle shows key-down events: one at time zero, then
+        a gap of half a second, then a burst of fifteen evenly spaced repeats. The bottom compares
+        distance travelled: moving on each event produces a staircase that stalls for half a second
+        and reaches sixteen steps, while polling the key state every frame produces a straight ramp
+        reaching sixty steps — nearly four times further, and smooth.</desc>
+
+      <!-- time axis reference marks -->
+      <g class="grid" stroke-width="1">
+        <line x1="100" y1="34" x2="100" y2="300"/>
+        <line x1="360" y1="34" x2="360" y2="300"/>
+        <line x1="620" y1="34" x2="620" y2="300"/>
+      </g>
+      <g class="xs muted">
+        <text x="100" y="26" text-anchor="middle">t = 0</text>
+        <text x="360" y="26" text-anchor="middle">t = 0.5 s</text>
+        <text x="620" y="26" text-anchor="middle">t = 1.0 s</text>
+      </g>
+
+      <!-- Row 1: the finger -->
+      <text x="10" y="62" class="sm">your finger</text>
+      <rect x="100" y="48" width="520" height="18" rx="4" fill="var(--dia-hi)" opacity="0.75"/>
+      <text x="360" y="61" class="xs t-inv" text-anchor="middle" font-weight="700">D held down — continuously, the whole second</text>
+
+      <!-- Row 2: the events -->
+      <text x="10" y="126" class="sm">SDL_EVENT_KEY_DOWN</text>
+      <line x1="100" y1="130" x2="620" y2="130" class="ink-soft" stroke-width="1.2"/>
+      <g class="ink" stroke-width="2">
+        <line x1="100" y1="130" x2="100" y2="104"/>
+      </g>
+      <g stroke="var(--note-bd)" stroke-width="2">
+        <line x1="360.0" y1="130" x2="360.0" y2="112"/>
+        <line x1="377.3" y1="130" x2="377.3" y2="112"/>
+        <line x1="394.7" y1="130" x2="394.7" y2="112"/>
+        <line x1="412.0" y1="130" x2="412.0" y2="112"/>
+        <line x1="429.3" y1="130" x2="429.3" y2="112"/>
+        <line x1="446.7" y1="130" x2="446.7" y2="112"/>
+        <line x1="464.0" y1="130" x2="464.0" y2="112"/>
+        <line x1="481.3" y1="130" x2="481.3" y2="112"/>
+        <line x1="498.7" y1="130" x2="498.7" y2="112"/>
+        <line x1="516.0" y1="130" x2="516.0" y2="112"/>
+        <line x1="533.3" y1="130" x2="533.3" y2="112"/>
+        <line x1="550.7" y1="130" x2="550.7" y2="112"/>
+        <line x1="568.0" y1="130" x2="568.0" y2="112"/>
+        <line x1="585.3" y1="130" x2="585.3" y2="112"/>
+        <line x1="602.7" y1="130" x2="602.7" y2="112"/>
+      </g>
+      <text x="106" y="100" class="xs">the real press — one event</text>
+      <text x="230" y="124" class="xs t-bad" text-anchor="middle" font-weight="700">repeat delay — nothing at all</text>
+      <text x="490" y="104" class="xs muted" text-anchor="middle">OS-synthesised repeats (repeat = true)</text>
+
+      <!-- Row 3: distance travelled -->
+      <text x="10" y="200" class="sm">distance moved</text>
+      <line x1="100" y1="300" x2="620" y2="300" class="ink-soft" stroke-width="1.2"/>
+      <path d="M100,280 L100.0,280.0 L100.0,278.0 L360.0,278.0 L360.0,276.0 L377.3,276.0 L377.3,274.0 L394.7,274.0 L394.7,272.0 L412.0,272.0 L412.0,270.0 L429.3,270.0 L429.3,268.0 L446.7,268.0 L446.7,266.0 L464.0,266.0 L464.0,264.0 L481.3,264.0 L481.3,262.0 L498.7,262.0 L498.7,260.0 L516.0,260.0 L516.0,258.0 L533.3,258.0 L533.3,256.0 L550.7,256.0 L550.7,254.0 L568.0,254.0 L568.0,252.0 L585.3,252.0 L585.3,250.0 L602.7,250.0 L602.7,248.0 L620,248.0"
+            fill="none" stroke="var(--verify-bd)" stroke-width="2.2"/>
+      <path d="M100,280 L620,160" fill="none" stroke="var(--ok-bd)" stroke-width="2.2"/>
+      <circle cx="620" cy="248" r="3.5" fill="var(--verify-bd)"/>
+      <circle cx="620" cy="160" r="3.5" fill="var(--ok-bd)"/>
+      <text x="614" y="242" class="xs t-bad" text-anchor="end" font-weight="700">move on events: 16 steps, lurching</text>
+      <text x="614" y="152" class="xs t-ok" text-anchor="end" font-weight="700">poll the state: 60 steps, smooth</text>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 1.</span> The same finger, the same second, two policies. The red
+      staircase is what the code above produces: one step, a long stall, then a lurch every other
+      frame. The green ramp is one step per frame, which is what the player is asking for. The gap
+      between them is not a tuning problem — it is a category error.
+    </figcaption>
+  </figure>
+
+  <p>
+    Now the number, because "it feels wrong" is not an engineering statement.
+  </p>
+
+  <div class="worked">
+    <span class="label">Worked example — how far the box actually gets</span>
+    <p>
+      A 60 fps game, a key held for exactly one second, with a typical repeat delay of 0.5 s and a
+      repeat rate of 30 per second. Movement is 6 px per event.
+    </p>
+    <ul>
+      <li><strong>The initial press:</strong> 1 event, at <code>t = 0</code>.</li>
+      <li><strong>The delay:</strong> from <code>t = 0</code> to <code>t = 0.5 s</code>, no events at all — that is 30 frames of a held key producing nothing.</li>
+      <li><strong>The repeats:</strong> 30 per second for the remaining 0.5 s = <code>0.5 × 30 = 15</code> events, one every other frame.</li>
+      <li><strong>Total:</strong> <code>1 + 15 = 16</code> movements, so <code>16 × 6 = 96 px</code>.</li>
+    </ul>
+    <p>
+      Polling the key's state once per frame instead gives <code>60</code> movements —
+      <code>360 px</code> — and every frame contributes, so the motion is smooth.
+      <strong>The event-driven version travels 3.75× less far, and stutters getting there.</strong>
+    </p>
+    <p style="margin-bottom:0">
+      And here is the part that should genuinely alarm you: <em>the repeat delay and repeat rate are
+      settings in the player's operating system.</em> On both Windows and macOS a user can drag the
+      repeat rate down to roughly 2 per second. That player gets <code>1 + 1 = 2</code> movements in
+      the first second instead of 16 — <strong>eight times slower than the player sitting next to
+      them</strong>, in the same build, on the same hardware, because of a preference they set for
+      typing. Your game's movement speed is not allowed to live in the Keyboard control panel.
+    </p>
+  </div>
+
+  <p>
+    Filtering the repeats does not save it either. SDL marks synthesised repeats with
+    <code>event.key.repeat == true</code>, so you could ignore them — and then a held key produces
+    exactly <em>one</em> movement, ever. The box moves 6 px and stops. The problem was never which
+    events to keep. The problem is that <strong>"held" is not an event at all</strong>. It is a
+    condition that persists between events, and nothing in the event stream represents it.
+  </p>
+
+  <p>
+    Meanwhile, the mirror-image bug is waiting on the other side. Suppose we fix movement by polling,
+    and then wire jumping the same way: "if the jump key is down, jump." Hold the key and the
+    character jumps sixty times a second. A menu cursor wired this way blurs from the top of the list
+    to the bottom on the lightest tap. So polling is not simply better than events; it is
+    <em>different</em>, and using it for the wrong thing produces its own family of bugs. We need
+    both, and we need to know which is which.
+  </p>
+
+  <!-- ================= 3. BUILDING INTUITION ================= -->
+  <h2 id="intuition"><span class="num">2</span>Building Intuition</h2>
+
+  <h3 id="doorbell">2.1 The doorbell and the light switch</h3>
+
+  <p>
+    Two devices in an ordinary house, and the whole lesson is in the difference between them.
+  </p>
+
+  <p>
+    A <strong>doorbell</strong> is about the moment of pressing. It rings once when pressed. Holding
+    the button in does not produce a continuous ring that means "someone is still standing there" —
+    and if you leave the house and come back, there is no way to look at the doorbell and learn
+    whether it was pressed while you were out. A doorbell reports <em>transitions</em>, and if
+    nobody is listening at the instant it rings, the information is gone.
+  </p>
+
+  <p>
+    A <strong>light switch</strong> is about the condition. It has no memory of being flipped and no
+    interest in when. It simply <em>is</em> up or down, and you can walk in at any hour and read it.
+    A switch reports <em>a state</em>, and the state is still there whenever you get around to
+    looking.
+  </p>
+
+  <p>
+    Events are doorbells. The state array we are about to meet is a light switch. And notice the
+    asymmetry, because it decides the design: <strong>if you watch the doorbell continuously, you can
+    reconstruct the switch</strong> — every ring tells you it flipped, so you can maintain your own
+    record of the current position. The reverse does not hold nearly as cleanly: from the switch
+    alone, glanced at occasionally, you cannot know how many times it was flipped between glances.
+  </p>
+
+  <p>
+    That asymmetry says the state should be primary and the transitions derived from it — provided
+    we glance often enough. We glance every frame, which turns out to be enough for everything except
+    a few genuinely special cases we will name in §<a href="#unpollable">3.6</a>.
+  </p>
+
+  <h3 id="two-questions">2.2 Two questions, one honest answer each</h3>
+
+  <p>
+    Write out what gameplay actually asks, and the code sorts itself into two piles:
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>The action</th><th>The question it asks</th><th>Kind</th></tr></thead>
+      <tbody>
+        <tr><td>Walk forward while W is held</td><td>Is W down <em>right now</em>?</td><td><strong>Level</strong></td></tr>
+        <tr><td>Aim down sights while the right button is held</td><td>Is the button down <em>right now</em>?</td><td><strong>Level</strong></td></tr>
+        <tr><td>Jump</td><td>Did Space go down <em>this frame</em>?</td><td><strong>Edge</strong></td></tr>
+        <tr><td>Open the pause menu</td><td>Did Esc go down <em>this frame</em>?</td><td><strong>Edge</strong></td></tr>
+        <tr><td>Release a charged shot</td><td>Did the fire button come up <em>this frame</em>?</td><td><strong>Edge</strong></td></tr>
+        <tr><td>Move a menu cursor one item</td><td>Did Down go down <em>this frame</em>?</td><td><strong>Edge</strong></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    The test is mechanical, and it is worth internalising because it never stops being useful:
+    <strong>if holding the key longer should do more, it is a level. If holding it longer should do
+    nothing extra, it is an edge.</strong> Walking further by holding longer: level. Jumping twice by
+    holding longer: absurd, so edge.
+  </p>
+
+  <p>
+    Both piles are about the same physical key at the same instant. So they had better come from the
+    same underlying data, or they will eventually disagree — and an engine in which
+    <code>key_down(W)</code> and <code>key_pressed(W)</code> tell contradictory stories is an engine
+    with a bug nobody will find quickly.
+  </p>
+
+  <!-- ================= 4. THE THEORY ================= -->
+  <h2 id="theory"><span class="num">3</span>The Theory</h2>
+
+  <h3 id="level-edge">3.1 Levels and edges, defined</h3>
+
+  <p>
+    These words are borrowed from electronics, where a signal is a voltage over time and you can
+    build a circuit that reacts to either the voltage itself or to the instant it changes.
+  </p>
+
+  <ul>
+    <li>A <strong>level</strong> is the value of the signal now: <em>high</em> or <em>low</em>, down
+      or up. It is true for as long as the condition holds — one frame or ten thousand.</li>
+    <li>An <strong>edge</strong> is a change in the level. A <strong>rising edge</strong> is the
+      instant low becomes high; a <strong>falling edge</strong> is the instant high becomes low.
+      There is exactly one rising edge per press, no matter how long the press lasts.</li>
+  </ul>
+
+  <p>
+    Our three queries fall out immediately, and Figure 2 is the picture to keep in your head for the
+    rest of the course.
+  </p>
+
+  <figure class="dia bleed">
+    <svg viewBox="-16 0 676 275" role="img" aria-labelledby="f2-t f2-d">
+      <title id="f2-t">Level and edge over eight frames for a key held during frames 3, 4 and 5</title>
+      <desc id="f2-d">Four rows across eight frames. The physical key is down during frames three,
+        four and five. key_down is true for all three of those frames. key_pressed is true only in
+        frame three, the frame the key went down. key_released is true only in frame six, the first
+        frame the key is sampled as up. One press therefore yields three true readings of the level
+        but exactly one of each edge.</desc>
+
+      <!-- row labels -->
+      <g class="sm">
+        <text x="88" y="49" text-anchor="end">physical key</text>
+        <text x="88" y="99" text-anchor="end" class="mono">key_down()</text>
+        <text x="88" y="149" text-anchor="end" class="mono">key_pressed()</text>
+        <text x="88" y="199" text-anchor="end" class="mono">key_released()</text>
+      </g>
+
+      <!-- frame column guides -->
+      <g class="grid" stroke-width="1">
+        <line x1="95" y1="28" x2="95" y2="232"/>
+        <line x1="150" y1="28" x2="150" y2="232"/>
+        <line x1="205" y1="28" x2="205" y2="232"/>
+        <line x1="260" y1="28" x2="260" y2="232"/>
+        <line x1="315" y1="28" x2="315" y2="232"/>
+        <line x1="370" y1="28" x2="370" y2="232"/>
+        <line x1="425" y1="28" x2="425" y2="232"/>
+        <line x1="480" y1="28" x2="480" y2="232"/>
+        <line x1="527" y1="28" x2="527" y2="232"/>
+      </g>
+
+      <!-- physical key bar: frames 3..5 -->
+      <rect x="205" y="34" width="157" height="20" rx="4" fill="var(--dia-hi)" opacity="0.75"/>
+      <text x="283" y="48" class="xs t-inv" text-anchor="middle" font-weight="700">key physically held</text>
+
+      <!-- key_down row -->
+      <g>
+        <rect x="95" y="84" width="47" height="20" rx="3" class="fill-soft"/>
+        <rect x="150" y="84" width="47" height="20" rx="3" class="fill-soft"/>
+        <rect x="205" y="84" width="47" height="20" rx="3" fill="var(--note-bd)"/>
+        <rect x="260" y="84" width="47" height="20" rx="3" fill="var(--note-bd)"/>
+        <rect x="315" y="84" width="47" height="20" rx="3" fill="var(--note-bd)"/>
+        <rect x="370" y="84" width="47" height="20" rx="3" class="fill-soft"/>
+        <rect x="425" y="84" width="47" height="20" rx="3" class="fill-soft"/>
+        <rect x="480" y="84" width="47" height="20" rx="3" class="fill-soft"/>
+      </g>
+      <text x="545" y="99" class="xs" font-weight="700">true ×3</text>
+
+      <!-- key_pressed row -->
+      <g>
+        <rect x="95" y="134" width="47" height="20" rx="3" class="fill-soft"/>
+        <rect x="150" y="134" width="47" height="20" rx="3" class="fill-soft"/>
+        <rect x="205" y="134" width="47" height="20" rx="3" fill="var(--ok-bd)"/>
+        <rect x="260" y="134" width="47" height="20" rx="3" class="fill-soft"/>
+        <rect x="315" y="134" width="47" height="20" rx="3" class="fill-soft"/>
+        <rect x="370" y="134" width="47" height="20" rx="3" class="fill-soft"/>
+        <rect x="425" y="134" width="47" height="20" rx="3" class="fill-soft"/>
+        <rect x="480" y="134" width="47" height="20" rx="3" class="fill-soft"/>
+      </g>
+      <text x="545" y="149" class="xs t-ok" font-weight="700">true ×1</text>
+
+      <!-- key_released row -->
+      <g>
+        <rect x="95" y="184" width="47" height="20" rx="3" class="fill-soft"/>
+        <rect x="150" y="184" width="47" height="20" rx="3" class="fill-soft"/>
+        <rect x="205" y="184" width="47" height="20" rx="3" class="fill-soft"/>
+        <rect x="260" y="184" width="47" height="20" rx="3" class="fill-soft"/>
+        <rect x="315" y="184" width="47" height="20" rx="3" class="fill-soft"/>
+        <rect x="370" y="184" width="47" height="20" rx="3" fill="var(--verify-bd)"/>
+        <rect x="425" y="184" width="47" height="20" rx="3" class="fill-soft"/>
+        <rect x="480" y="184" width="47" height="20" rx="3" class="fill-soft"/>
+      </g>
+      <text x="545" y="199" class="xs t-bad" font-weight="700">true ×1</text>
+
+      <!-- frame labels -->
+      <g class="xs muted">
+        <text x="118" y="224" text-anchor="middle">f1</text>
+        <text x="173" y="224" text-anchor="middle">f2</text>
+        <text x="228" y="224" text-anchor="middle">f3</text>
+        <text x="283" y="224" text-anchor="middle">f4</text>
+        <text x="338" y="224" text-anchor="middle">f5</text>
+        <text x="393" y="224" text-anchor="middle">f6</text>
+        <text x="448" y="224" text-anchor="middle">f7</text>
+        <text x="503" y="224" text-anchor="middle">f8</text>
+      </g>
+      <text x="330" y="252" class="xs muted" text-anchor="middle">one press · three frames of level · exactly one rising edge and one falling edge</text>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 2.</span> The defining picture. Note where
+      <code>key_released()</code> fires: in <strong>f6</strong>, the first frame on which the key is
+      <em>sampled</em> as up. The key physically came up somewhere between the f5 and f6 samples,
+      and the engine cannot know exactly when — only that by f6 it was up. Every input system that
+      samples has this granularity, and it is worth being aware of rather than surprised by.
+    </figcaption>
+  </figure>
+
+  <p>
+    If it helps to see it move, the widget below is the same diagram with a live clock. Press and
+    hold the key — with the mouse, or by holding <kbd>H</kbd> — and watch the three counters
+    diverge. That divergence is the entire lesson in one number.
+  </p>
+
+  <div class="widget" id="edge-widget">
+    <div style="display:flex; gap:1.4rem; align-items:center; flex-wrap:wrap;">
+      <button id="vkey" type="button" aria-pressed="false"
+              style="width:78px; height:78px; border-radius:10px; border:2px solid var(--rule-strong);
+                     background:var(--bg-sunken); color:var(--text); font-family:var(--font-mono);
+                     font-size:1.5rem; font-weight:700; cursor:pointer; touch-action:none;">W</button>
+      <div style="flex:1; min-width:230px;">
+        <div id="lamps" style="display:grid; grid-template-columns:auto 1fr; gap:0.35rem 0.7rem;
+                               align-items:center; font-family:var(--font-mono); font-size:0.78rem;"></div>
+      </div>
+    </div>
+    <div id="strip" style="display:flex; gap:2px; margin-top:0.9rem; height:54px; align-items:stretch;"></div>
+    <div class="widget-controls">
+      <span>hold the key (mouse, or the <kbd>H</kbd> key) and compare:</span>
+      <span class="widget-readout" id="ro-down">key_down true: 0 frames</span>
+      <span class="widget-readout" id="ro-press">key_pressed true: 0×</span>
+      <span class="widget-readout" id="ro-rel">key_released true: 0×</span>
+      <button type="button" id="ro-reset"
+              style="font-family:var(--font-ui); font-size:0.75rem; padding:0.2rem 0.6rem;
+                     border-radius:4px; border:1px solid var(--rule-strong);
+                     background:var(--bg-sunken); color:var(--text-muted); cursor:pointer;">reset</button>
+    </div>
+  </div>
+
+  <script>
+  (function () {
+    "use strict";
+    // A deliberately slow simulated frame clock (about 7 "frames" a second) so the
+    // single-frame edges are actually visible. Everything else matches the engine:
+    // one previous snapshot, one current, three derived answers.
+    var TICK_MS = 140, HISTORY = 40;
+    var btn = document.getElementById("vkey");
+    if (!btn) { return; }
+    var lamps = document.getElementById("lamps");
+    var strip = document.getElementById("strip");
+    var roDown = document.getElementById("ro-down");
+    var roPress = document.getElementById("ro-press");
+    var roRel = document.getElementById("ro-rel");
+
+    var held = false, cur = false, prev = false;
+    var nDown = 0, nPress = 0, nRel = 0;
+    var hist = [];
+
+    function setHeld(v) {
+      held = v;
+      btn.setAttribute("aria-pressed", v ? "true" : "false");
+      btn.style.background = v ? "var(--dia-hi)" : "var(--bg-sunken)";
+      btn.style.color = v ? "#fff" : "var(--text)";
+    }
+    btn.addEventListener("pointerdown", function (e) { e.preventDefault(); setHeld(true); });
+    window.addEventListener("pointerup", function () { setHeld(false); });
+    window.addEventListener("keydown", function (e) { if (e.key === "h" || e.key === "H") { setHeld(true); } });
+    window.addEventListener("keyup", function (e) { if (e.key === "h" || e.key === "H") { setHeld(false); } });
+    document.getElementById("ro-reset").addEventListener("click", function () {
+      nDown = nPress = nRel = 0; hist = []; render(false, false, false);
+    });
+
+    function lamp(label, on, colour) {
+      return '<span style="width:13px;height:13px;border-radius:3px;display:inline-block;'
+        + 'border:1px solid var(--rule-strong);background:' + (on ? colour : "var(--bg-sunken)") + '"></span>'
+        + '<span style="color:' + (on ? "var(--text)" : "var(--text-faint)") + '">' + label + "</span>";
+    }
+
+    function render(down, pressed, released) {
+      lamps.innerHTML =
+          lamp("key_down()  &nbsp;— level", down, "var(--note-bd)")
+        + lamp("key_pressed()  — rising edge", pressed, "var(--ok-bd)")
+        + lamp("key_released() — falling edge", released, "var(--verify-bd)");
+      var html = "";
+      for (var i = 0; i < hist.length; i++) {
+        var h = hist[i];
+        html += '<div style="flex:1 1 0;display:flex;flex-direction:column;gap:2px;">'
+          + '<div style="flex:1;border-radius:2px;background:' + (h.d ? "var(--note-bd)" : "var(--bg-sunken)") + '"></div>'
+          + '<div style="flex:1;border-radius:2px;background:' + (h.p ? "var(--ok-bd)" : "var(--bg-sunken)") + '"></div>'
+          + '<div style="flex:1;border-radius:2px;background:' + (h.r ? "var(--verify-bd)" : "var(--bg-sunken)") + '"></div>'
+          + "</div>";
+      }
+      strip.innerHTML = html;
+      roDown.textContent = "key_down true: " + nDown + " frames";
+      roPress.textContent = "key_pressed true: " + nPress + "×";
+      roRel.textContent = "key_released true: " + nRel + "×";
+    }
+
+    setInterval(function () {
+      prev = cur;            // last frame's snapshot
+      cur = held;            // this frame's snapshot
+      var down = cur;
+      var pressed = cur && !prev;
+      var released = !cur && prev;
+      if (down) { nDown++; }
+      if (pressed) { nPress++; }
+      if (released) { nRel++; }
+      hist.push({ d: down, p: pressed, r: released });
+      if (hist.length > HISTORY) { hist.shift(); }
+      render(down, pressed, released);
+    }, TICK_MS);
+
+    render(false, false, false);
+  })();
+  </script>
+
+  <h3 id="derive">3.2 Deriving edges from state</h3>
+
+  <p>
+    Here is the move that makes everything else simple. We do not track edges. We
+    <strong>derive</strong> them, from two things we already have: what the key is doing now, and
+    what it was doing last frame.
+  </p>
+
+  <p>
+    SDL keeps a live array of key states for us, one entry per physical key, and hands it over on
+    request:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">SDL3/SDL_keyboard.h — verified at release-3.4.12</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">const bool *SDL_GetKeyboardState(int *numkeys);</code></pre>
+  </figure>
+
+  <div class="callout warn">
+    <span class="label">An SDL2 habit that will bite you</span>
+    <p>
+      In SDL2 this returned <code>const Uint8 *</code> and you tested <code>state[k] != 0</code>.
+      SDL3 returns <code>const bool *</code>. Any snippet you find online older than SDL3 will
+      declare the wrong pointer type, and since <code>Uint8</code> and <code>bool</code> are both
+      one byte on every platform we target, it may even appear to work — until it does not. Take the
+      type from the header, not from a search result.
+    </p>
+  </div>
+
+  <p>
+    Keep one copy of that array as <code>keys_</code> ("now") and one as <code>keys_prev_</code>
+    ("last frame"), and every question has a one-line answer:
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead>
+        <tr><th><code>keys_prev_[k]</code></th><th><code>keys_[k]</code></th><th><code>key_down</code></th><th><code>key_pressed</code></th><th><code>key_released</code></th><th>What happened</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>false</td><td>false</td><td>false</td><td>false</td><td>false</td><td>Key is idle.</td></tr>
+        <tr><td>false</td><td>true</td><td><strong>true</strong></td><td><strong>true</strong></td><td>false</td><td><strong>Rising edge</strong> — it went down this frame.</td></tr>
+        <tr><td>true</td><td>true</td><td><strong>true</strong></td><td>false</td><td>false</td><td>Still held. No edge; the press already happened.</td></tr>
+        <tr><td>true</td><td>false</td><td>false</td><td>false</td><td><strong>true</strong></td><td><strong>Falling edge</strong> — it came up this frame.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    Read the columns and the three definitions fall out. In plain words: <em>down</em> is just the
+    current value; <em>pressed</em> is "true now and false before"; <em>released</em> is "false now
+    and true before". In code, exactly as literal as it sounds:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">the whole of edge detection</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">down     =  keys_[k];
+pressed  =  keys_[k] &amp;&amp; !keys_prev_[k];
+released  = !keys_[k] &amp;&amp;  keys_prev_[k];</code></pre>
+  </figure>
+
+  <p>
+    That is the entire mechanism. There is no event handler for edges, no list of "keys pressed this
+    frame" to maintain, nothing to clear at the right moment and forget to clear at the wrong one.
+    <strong>One source of truth, two snapshots, three answers.</strong> Because the edges are
+    computed from the same array the level query reads, it is structurally impossible for them to
+    disagree — the class of bug where a character keeps walking after the jump code decided the key
+    was up simply cannot occur.
+  </p>
+
+  <p>
+    It also means the queries are <em>pure</em>: asking does not change anything. You may call
+    <code>key_pressed(SDL_SCANCODE_SPACE)</code> in five different systems in the same frame and all
+    five get <code>true</code>. Compare that with the tempting alternative of a "consume the press"
+    API, where the first caller wins and the other four silently see nothing — a race between
+    subsystems that depends on call order. We will meet that hazard for real in Module 5; here we
+    have avoided it for free.
+  </p>
+
+  <div class="worked">
+    <span class="label">Worked example — six frames of one press, values verified</span>
+    <p>
+      <code>SDL_SCANCODE_W</code> is <code>26</code> (from <code>SDL_scancode.h</code>: letters run
+      alphabetically from <code>SDL_SCANCODE_A = 4</code>, so W is <code>4 + 22 = 26</code>). The
+      key is pressed just before frame 2 and released just before frame 5.
+    </p>
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>Frame</th><th><code>keys_prev_[26]</code></th><th><code>keys_[26]</code></th><th><code>key_down</code></th><th><code>key_pressed</code></th><th><code>key_released</code></th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td></tr>
+          <tr><td>2</td><td>0</td><td>1</td><td>1</td><td><strong>1</strong></td><td>0</td></tr>
+          <tr><td>3</td><td>1</td><td>1</td><td>1</td><td>0</td><td>0</td></tr>
+          <tr><td>4</td><td>1</td><td>1</td><td>1</td><td>0</td><td>0</td></tr>
+          <tr><td>5</td><td>1</td><td>0</td><td>0</td><td>0</td><td><strong>1</strong></td></tr>
+          <tr><td>6</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="margin-bottom:0">
+      Totals for one press: <code>key_down</code> true on <strong>3</strong> frames,
+      <code>key_pressed</code> true on <strong>1</strong>, <code>key_released</code> true on
+      <strong>1</strong>. Move on the level and you get three frames of movement; jump on the edge
+      and you get one jump. This exact sequence is checked by the test described in
+      §<a href="#build">6</a> — the table is not an illustration, it is the observed output.
+    </p>
+  </div>
+
+  <p>
+    One aside for later. <code>pressed</code> and <code>released</code> are both special cases of
+    "the value changed", which is <code>keys_[k] != keys_prev_[k]</code> — an exclusive-or. If you
+    ever pack key states into bit words instead of a byte per key, the whole frame's edge detection
+    becomes <code>changed = cur ^ prev; pressed = changed &amp; cur;</code> across sixteen keys at a
+    time. We do not need that speed now, and reaching for it before it is needed would be exactly
+    the premature optimisation Module 8 teaches you to avoid. It is worth knowing the door is there.
+  </p>
+
+  <h3 id="copy">3.3 Why it must be a copy</h3>
+
+  <p>
+    Now the trap. Read the signature again: <code>SDL_GetKeyboardState</code> returns
+    <code>const bool *</code> — a <em>pointer</em>, and the header is explicit that it points into
+    SDL's own internals and stays valid for the life of the program. So the tidy-looking version of
+    our update is:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">the bug — and it produces no warning, no crash, and no clue</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// WRONG. Do not do this.
+keys_prev_ = keys_;                    // both are `const bool*`
+keys_      = SDL_GetKeyboardState(nullptr);</code></pre>
+  </figure>
+
+  <p>
+    It compiles cleanly. It runs. Movement works perfectly. And <code>key_pressed</code> returns
+    <code>false</code> forever — nothing you press ever registers as a press, in any menu, for any
+    key, with nothing in the debugger looking wrong.
+  </p>
+
+  <p>
+    The reason is that <code>SDL_GetKeyboardState</code> returns <em>the same address every time</em>.
+    It is not a fresh array per call; it is a window onto the one array SDL keeps mutating. So after
+    those two lines, <code>keys_</code> and <code>keys_prev_</code> hold the identical pointer value.
+    They are two names for one array. Evaluate <code>keys_[k] &amp;&amp; !keys_prev_[k]</code> and you
+    are evaluating <code>x &amp;&amp; !x</code>, which is <code>false</code> for every possible
+    <code>x</code>. The code is not comparing two moments in time; it is comparing the present to
+    itself. Figure 3 puts the two versions side by side.
+  </p>
+
+  <figure class="dia bleed">
+    <svg viewBox="0 0 660 320" role="img" aria-labelledby="f3-t f3-d">
+      <title id="f3-t">Copying the array versus keeping SDL's pointer</title>
+      <desc id="f3-d">Left: SDL's internal array is copied into our own keys array each frame, while
+        keys_prev holds the previous frame's copy, so index twenty-six reads one now and zero before
+        and the rising edge is detected. Right: both keys and keys_prev store the same pointer to
+        SDL's array, so both read one, the expression one AND NOT one evaluates to false, and no
+        press is ever detected.</desc>
+
+      <line x1="330" y1="16" x2="330" y2="304" class="grid" stroke-width="1" stroke-dasharray="4 4"/>
+
+      <!-- ================= LEFT: correct ================= -->
+      <text x="16" y="30" class="sm t-ok" font-weight="700">✓ What we do — copy the bytes</text>
+
+      <rect x="16" y="44" width="292" height="40" rx="6" class="fill-soft" stroke="var(--dia-ink-soft)" stroke-width="1"/>
+      <text x="26" y="60" class="xs muted">SDL's internal array (SDL keeps mutating it)</text>
+      <g>
+        <rect x="150" y="64" width="22" height="14" rx="2" class="fill-soft" stroke="var(--dia-ink-soft)" stroke-width="0.8"/>
+        <rect x="174" y="64" width="22" height="14" rx="2" class="fill-soft" stroke="var(--dia-ink-soft)" stroke-width="0.8"/>
+        <rect x="198" y="64" width="22" height="14" rx="2" fill="var(--note-bd)"/>
+        <rect x="222" y="64" width="22" height="14" rx="2" class="fill-soft" stroke="var(--dia-ink-soft)" stroke-width="0.8"/>
+      </g>
+      <text x="209" y="75" class="xs t-inv" text-anchor="middle" font-weight="700">1</text>
+      <text x="209" y="94" class="xs muted" text-anchor="middle">[26] = W</text>
+
+      <line x1="209" y1="100" x2="209" y2="126" class="ink" stroke-width="1.6" marker-end="url(#f3a)"/>
+      <text x="216" y="118" class="xs mono t-ok">std::copy_n</text>
+
+      <rect x="16" y="130" width="292" height="38" rx="6" fill="none" stroke="var(--ok-bd)" stroke-width="1.4"/>
+      <text x="26" y="153" class="xs mono">keys_</text>
+      <g>
+        <rect x="198" y="140" width="22" height="16" rx="2" fill="var(--note-bd)"/>
+      </g>
+      <text x="209" y="152" class="xs t-inv" text-anchor="middle" font-weight="700">1</text>
+
+      <rect x="16" y="180" width="292" height="38" rx="6" fill="none" stroke="var(--dia-ink-soft)" stroke-width="1.4"/>
+      <text x="26" y="203" class="xs mono">keys_prev_</text>
+      <g>
+        <rect x="198" y="190" width="22" height="16" rx="2" class="fill-soft" stroke="var(--dia-ink-soft)" stroke-width="0.8"/>
+      </g>
+      <text x="209" y="202" class="xs" text-anchor="middle" font-weight="700">0</text>
+      <text x="240" y="203" class="xs muted">a separate array</text>
+
+      <rect x="16" y="234" width="292" height="60" rx="6" class="fill-soft"/>
+      <text x="26" y="252" class="xs mono">pressed = keys_[26] &amp;&amp; !keys_prev_[26]</text>
+      <text x="26" y="268" class="xs mono">        = 1 &amp;&amp; !0</text>
+      <text x="26" y="286" class="xs mono t-ok" font-weight="700">        = true  ✓ the press is seen</text>
+
+      <!-- ================= RIGHT: the bug ================= -->
+      <text x="350" y="30" class="sm t-bad" font-weight="700">✗ The bug — keep the pointer</text>
+
+      <rect x="350" y="44" width="294" height="40" rx="6" class="fill-soft" stroke="var(--dia-ink-soft)" stroke-width="1"/>
+      <text x="360" y="60" class="xs muted">SDL's internal array — there is only ever one</text>
+      <g>
+        <rect x="484" y="64" width="22" height="14" rx="2" class="fill-soft" stroke="var(--dia-ink-soft)" stroke-width="0.8"/>
+        <rect x="508" y="64" width="22" height="14" rx="2" class="fill-soft" stroke="var(--dia-ink-soft)" stroke-width="0.8"/>
+        <rect x="532" y="64" width="22" height="14" rx="2" fill="var(--note-bd)"/>
+        <rect x="556" y="64" width="22" height="14" rx="2" class="fill-soft" stroke="var(--dia-ink-soft)" stroke-width="0.8"/>
+      </g>
+      <text x="543" y="75" class="xs t-inv" text-anchor="middle" font-weight="700">1</text>
+      <text x="478" y="76" class="xs muted" text-anchor="end">[26] = W</text>
+
+      <path d="M420,168 L420,140 L536,140 L536,86" fill="none" stroke="var(--verify-bd)" stroke-width="1.6" marker-end="url(#f3b)"/>
+      <path d="M575,218 L575,120 L552,120 L552,86" fill="none" stroke="var(--verify-bd)" stroke-width="1.6" marker-end="url(#f3b)"/>
+
+      <rect x="350" y="170" width="140" height="38" rx="6" fill="none" stroke="var(--verify-bd)" stroke-width="1.4"/>
+      <text x="360" y="193" class="xs mono">keys_</text>
+      <text x="420" y="193" class="xs muted">→ 0x7f…a0</text>
+
+      <rect x="504" y="220" width="140" height="38" rx="6" fill="none" stroke="var(--verify-bd)" stroke-width="1.4"/>
+      <text x="514" y="243" class="xs mono">keys_prev_</text>
+      <text x="596" y="243" class="xs muted">→ 0x7f…a0</text>
+
+      <text x="350" y="284" class="xs mono">pressed = 1 &amp;&amp; !1</text>
+      <text x="350" y="302" class="xs mono t-bad" font-weight="700">        = false  ✗ always, for every key</text>
+
+      <defs>
+        <marker id="f3a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+        <marker id="f3b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--verify-bd)"/></marker>
+      </defs>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 3.</span> Left, two arrays holding two moments. Right, two pointers
+      holding one address — so "before" and "now" are the same memory, and the comparison that
+      detects a press degenerates to <code>x &amp;&amp; !x</code>. Both compile. Only one works.
+    </figcaption>
+  </figure>
+
+  <div class="callout cpp">
+    <span class="label">C++ in place — a pointer names a thing; a copy <em>is</em> a thing</span>
+    <p>
+      Assigning a pointer copies <em>the address</em>, which takes eight bytes and no time. Assigning
+      an array copies <em>the contents</em>. Both are spelled with <code>=</code>, and that is exactly
+      why this bug is so easy to write: the syntax gives no hint that one of them shares and the
+      other duplicates.
+    </p>
+    <p>
+      The question to train yourself to ask at every assignment is <em>"do I now have a second thing,
+      or a second name for the same thing?"</em> When you want a snapshot — a value frozen at a moment
+      — a second name is useless, because the thing it names keeps changing underneath you. This is
+      the same reasoning that will decide, in Module 5, whether a system stores a <code>mesh</code>, a
+      <code>mesh&amp;</code>, or a handle to one. Get it wrong there and you get dangling references;
+      get it wrong here and you get an engine in which nothing is ever pressed.
+    </p>
+  </div>
+
+  <p>
+    So we copy: <code>std::copy_n(sdl_keys, n, keys_.begin())</code>. Five hundred and twelve bytes
+    per frame, which at 60 fps is 30 kB/s — utterly negligible, and it buys correctness that no
+    amount of cleverness with pointers can recover.
+  </p>
+
+  <h3 id="scancode">3.4 Scancodes and keycodes</h3>
+
+  <p>
+    SDL will describe a key to you in two entirely different languages, and choosing the wrong one is
+    the most common internationalisation bug in games. In <code>SDL_KeyboardEvent</code> both are
+    right there next to each other:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">SDL3/SDL_events.h — SDL_KeyboardEvent, verified at release-3.4.12</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">SDL_Scancode scancode;  /**&lt; SDL physical key code */
+SDL_Keycode key;        /**&lt; SDL virtual key code */</code></pre>
+  </figure>
+
+  <ul>
+    <li>A <strong>scancode</strong> is a <em>physical position</em>. <code>SDL_SCANCODE_W</code> means
+      "the key that sits where W is on a US QWERTY board" — second key of the top letter row —
+      regardless of what is printed on it or what it types.</li>
+    <li>A <strong>keycode</strong> is a <em>symbol</em>. <code>SDLK_W</code> means "the key that
+      produces the letter w on this user's layout", wherever that key happens to be.</li>
+  </ul>
+
+  <p>
+    On a US keyboard these two coincide, which is why the bug survives testing. On a French AZERTY
+    keyboard they do not, as Figure 4 shows.
+  </p>
+
+  <figure class="dia bleed">
+    <svg viewBox="0 0 660 300" role="img" aria-labelledby="f4-t f4-d">
+      <title id="f4-t">The same physical keys on QWERTY and AZERTY</title>
+      <desc id="f4-d">Two keyboard fragments. On US QWERTY the highlighted physical keys spell W, A,
+        S and D in the usual movement cluster. On French AZERTY those identical physical positions
+        are labelled Z, Q, S and D — the ZQSD cluster French players actually use. The key that
+        produces the letter W on AZERTY is in the bottom row on the far left, outlined in red, far
+        from the cluster: that is where SDLK_W would send the player.</desc>
+
+      <!-- ---------- QWERTY ---------- -->
+      <text x="16" y="28" class="sm" font-weight="700">US QWERTY</text>
+      <g>
+        <rect x="16" y="40" width="42" height="34" rx="5" class="fill-soft" stroke="var(--dia-ink-soft)" stroke-width="1"/>
+        <rect x="62" y="40" width="42" height="34" rx="5" fill="var(--dia-hi)"/>
+        <rect x="108" y="40" width="42" height="34" rx="5" class="fill-soft" stroke="var(--dia-ink-soft)" stroke-width="1"/>
+        <rect x="154" y="40" width="42" height="34" rx="5" class="fill-soft" stroke="var(--dia-ink-soft)" stroke-width="1"/>
+        <rect x="200" y="40" width="42" height="34" rx="5" class="fill-soft" stroke="var(--dia-ink-soft)" stroke-width="1"/>
+        <rect x="246" y="40" width="42" height="34" rx="5" class="fill-soft" stroke="var(--dia-ink-soft)" stroke-width="1"/>
+      </g>
+      <g class="sm mono">
+        <text x="37" y="62" text-anchor="middle">Q</text>
+        <text x="83" y="62" text-anchor="middle" class="t-inv" font-weight="700">W</text>
+        <text x="129" y="62" text-anchor="middle">E</text>
+        <text x="175" y="62" text-anchor="middle">R</text>
+        <text x="221" y="62" text-anchor="middle">T</text>
+        <text x="267" y="62" text-anchor="middle">Y</text>
+      </g>
+      <g>
+        <rect x="28" y="80" width="42" height="34" rx="5" fill="var(--dia-hi)"/>
+        <rect x="74" y="80" width="42" height="34" rx="5" fill="var(--dia-hi)"/>
+        <rect x="120" y="80" width="42" height="34" rx="5" fill="var(--dia-hi)"/>
+        <rect x="166" y="80" width="42" height="34" rx="5" class="fill-soft" stroke="var(--dia-ink-soft)" stroke-width="1"/>
+        <rect x="212" y="80" width="42" height="34" rx="5" class="fill-soft" stroke="var(--dia-ink-soft)" stroke-width="1"/>
+        <rect x="258" y="80" width="42" height="34" rx="5" class="fill-soft" stroke="var(--dia-ink-soft)" stroke-width="1"/>
+      </g>
+      <g class="sm mono">
+        <text x="49" y="102" text-anchor="middle" class="t-inv" font-weight="700">A</text>
+        <text x="95" y="102" text-anchor="middle" class="t-inv" font-weight="700">S</text>
+        <text x="141" y="102" text-anchor="middle" class="t-inv" font-weight="700">D</text>
+        <text x="187" y="102" text-anchor="middle">F</text>
+        <text x="233" y="102" text-anchor="middle">G</text>
+        <text x="279" y="102" text-anchor="middle">H</text>
+      </g>
+      <g>
+        <rect x="40" y="120" width="42" height="34" rx="5" class="fill-soft" stroke="var(--dia-ink-soft)" stroke-width="1"/>
+        <rect x="86" y="120" width="42" height="34" rx="5" class="fill-soft" stroke="var(--dia-ink-soft)" stroke-width="1"/>
+        <rect x="132" y="120" width="42" height="34" rx="5" class="fill-soft" stroke="var(--dia-ink-soft)" stroke-width="1"/>
+        <rect x="178" y="120" width="42" height="34" rx="5" class="fill-soft" stroke="var(--dia-ink-soft)" stroke-width="1"/>
+        <rect x="224" y="120" width="42" height="34" rx="5" class="fill-soft" stroke="var(--dia-ink-soft)" stroke-width="1"/>
+      </g>
+      <g class="sm mono">
+        <text x="61" y="142" text-anchor="middle">Z</text>
+        <text x="107" y="142" text-anchor="middle">X</text>
+        <text x="153" y="142" text-anchor="middle">C</text>
+        <text x="199" y="142" text-anchor="middle">V</text>
+        <text x="245" y="142" text-anchor="middle">B</text>
+      </g>
+      <text x="16" y="180" class="xs t-hi" font-weight="700">the classic movement cluster</text>
+
+      <!-- ---------- AZERTY ---------- -->
+      <text x="356" y="28" class="sm" font-weight="700">French AZERTY — the same physical keys</text>
+      <g>
+        <rect x="356" y="40" width="42" height="34" rx="5" class="fill-soft" stroke="var(--dia-ink-soft)" stroke-width="1"/>
+        <rect x="402" y="40" width="42" height="34" rx="5" fill="var(--dia-hi)"/>
+        <rect x="448" y="40" width="42" height="34" rx="5" class="fill-soft" stroke="var(--dia-ink-soft)" stroke-width="1"/>
+        <rect x="494" y="40" width="42" height="34" rx="5" class="fill-soft" stroke="var(--dia-ink-soft)" stroke-width="1"/>
+        <rect x="540" y="40" width="42" height="34" rx="5" class="fill-soft" stroke="var(--dia-ink-soft)" stroke-width="1"/>
+        <rect x="586" y="40" width="42" height="34" rx="5" class="fill-soft" stroke="var(--dia-ink-soft)" stroke-width="1"/>
+      </g>
+      <g class="sm mono">
+        <text x="377" y="62" text-anchor="middle">A</text>
+        <text x="423" y="62" text-anchor="middle" class="t-inv" font-weight="700">Z</text>
+        <text x="469" y="62" text-anchor="middle">E</text>
+        <text x="515" y="62" text-anchor="middle">R</text>
+        <text x="561" y="62" text-anchor="middle">T</text>
+        <text x="607" y="62" text-anchor="middle">Y</text>
+      </g>
+      <g>
+        <rect x="368" y="80" width="42" height="34" rx="5" fill="var(--dia-hi)"/>
+        <rect x="414" y="80" width="42" height="34" rx="5" fill="var(--dia-hi)"/>
+        <rect x="460" y="80" width="42" height="34" rx="5" fill="var(--dia-hi)"/>
+        <rect x="506" y="80" width="42" height="34" rx="5" class="fill-soft" stroke="var(--dia-ink-soft)" stroke-width="1"/>
+        <rect x="552" y="80" width="42" height="34" rx="5" class="fill-soft" stroke="var(--dia-ink-soft)" stroke-width="1"/>
+        <rect x="598" y="80" width="42" height="34" rx="5" class="fill-soft" stroke="var(--dia-ink-soft)" stroke-width="1"/>
+      </g>
+      <g class="sm mono">
+        <text x="389" y="102" text-anchor="middle" class="t-inv" font-weight="700">Q</text>
+        <text x="435" y="102" text-anchor="middle" class="t-inv" font-weight="700">S</text>
+        <text x="481" y="102" text-anchor="middle" class="t-inv" font-weight="700">D</text>
+        <text x="527" y="102" text-anchor="middle">F</text>
+        <text x="573" y="102" text-anchor="middle">G</text>
+        <text x="619" y="102" text-anchor="middle">H</text>
+      </g>
+      <g>
+        <rect x="380" y="120" width="42" height="34" rx="5" fill="none" stroke="var(--verify-bd)" stroke-width="2.2"/>
+        <rect x="426" y="120" width="42" height="34" rx="5" class="fill-soft" stroke="var(--dia-ink-soft)" stroke-width="1"/>
+        <rect x="472" y="120" width="42" height="34" rx="5" class="fill-soft" stroke="var(--dia-ink-soft)" stroke-width="1"/>
+        <rect x="518" y="120" width="42" height="34" rx="5" class="fill-soft" stroke="var(--dia-ink-soft)" stroke-width="1"/>
+        <rect x="564" y="120" width="42" height="34" rx="5" class="fill-soft" stroke="var(--dia-ink-soft)" stroke-width="1"/>
+      </g>
+      <g class="sm mono">
+        <text x="401" y="142" text-anchor="middle" class="t-bad" font-weight="700">W</text>
+        <text x="447" y="142" text-anchor="middle">X</text>
+        <text x="493" y="142" text-anchor="middle">C</text>
+        <text x="539" y="142" text-anchor="middle">V</text>
+        <text x="585" y="142" text-anchor="middle">B</text>
+      </g>
+      <text x="356" y="180" class="xs t-hi" font-weight="700">ZQSD — exactly what French players expect</text>
+      <text x="356" y="196" class="xs t-bad">SDLK_W is down here instead, nowhere near the others</text>
+
+      <!-- verdict panel -->
+      <rect x="16" y="212" width="628" height="74" rx="8" class="fill-soft"/>
+      <text x="30" y="234" class="xs mono t-ok" font-weight="700">in.key_down(SDL_SCANCODE_W)</text>
+      <text x="245" y="234" class="xs">→ the same top-row key on both boards — movement keeps its shape everywhere.</text>
+      <text x="30" y="258" class="xs mono t-bad" font-weight="700">in.key_down(SDLK_W)</text>
+      <text x="250" y="258" class="xs">→ top-row on QWERTY, bottom-left on AZERTY. The cluster falls apart.</text>
+      <text x="30" y="278" class="xs muted">Rule: positions are scancodes. Letters — text, shortcuts you describe to the player — are keycodes.</text>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 4.</span> Scancodes address the highlighted <em>positions</em>;
+      keycodes address the <em>letters</em>. Using scancodes for movement gives French players ZQSD
+      without a single line of localisation code, because ZQSD <em>is</em> WASD's physical shape.
+    </figcaption>
+  </figure>
+
+  <p>
+    Hence the rule this course follows without exception:
+    <strong>positions are scancodes; symbols are keycodes.</strong> Movement, and anything else where
+    the shape under the hand is what matters, uses <code>SDL_Scancode</code>. Text entry and
+    shortcuts you would <em>describe</em> to a player ("press Ctrl+S to save" — you mean the S key,
+    the letter) use <code>SDL_Keycode</code>. This is also why our whole input API is typed in terms
+    of <code>SDL_Scancode</code>: the array SDL hands us is indexed by scancode, and making the
+    parameter type match makes the wrong call fail to compile rather than fail in French.
+  </p>
+
+  <div class="callout note">
+    <span class="label">Why the state array can only be scancodes</span>
+    <p>
+      It could not have been otherwise. Keycodes depend on the active layout, which the user can
+      change at any moment — mid-game, with a hotkey. A fixed-size array indexed by "whatever letter
+      this key currently produces" would have entries that move around under you. Physical positions
+      do not move, so they are the only sane index for a persistent array. When you meet an API whose
+      shape seems arbitrary, asking "what would the alternative have had to cope with?" usually
+      explains it.
+    </p>
+  </div>
+
+  <h3 id="ordering">3.5 The ordering rule</h3>
+
+  <p>
+    SDL's keyboard array does not update itself continuously in the background. It updates when SDL
+    <em>pumps</em> — when it drains the operating system's messages and turns them into SDL events,
+    updating its internal state on the way past. The header for
+    <code>SDL_GetKeyboardState</code> says so directly: use <code>SDL_PumpEvents()</code> to update
+    the state array.
+  </p>
+
+  <p>
+    We never call <code>SDL_PumpEvents</code> ourselves, because <code>SDL_PollEvent</code> already
+    does it — in SDL's source, <code>SDL_PollEvent</code> forwards to
+    <code>SDL_WaitEventTimeoutNS(event, 0)</code>, which pumps before it looks at the queue. That is
+    convenient, and it also imposes an order on the frame, shown in Figure 5.
+  </p>
+
+  <figure class="dia bleed">
+    <svg viewBox="0 0 660 260" role="img" aria-labelledby="f5-t f5-d">
+      <title id="f5-t">The order of a frame, and what reversing the first two steps costs</title>
+      <desc id="f5-d">The correct frame runs: drain the event queue, which pumps and refreshes SDL's
+        internal state; then update the input snapshot; then simulate; then render. Reversing the
+        first two steps means the snapshot is taken before the pump, so it holds the previous
+        frame's state and every input is one frame late.</desc>
+
+      <defs>
+        <marker id="f5a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+      </defs>
+
+      <text x="16" y="26" class="sm t-ok" font-weight="700">✓ Correct order</text>
+      <g>
+        <rect x="16" y="38" width="146" height="44" rx="7" fill="none" stroke="var(--ok-bd)" stroke-width="1.6"/>
+        <rect x="186" y="38" width="130" height="44" rx="7" fill="none" stroke="var(--ok-bd)" stroke-width="1.6"/>
+        <rect x="340" y="38" width="130" height="44" rx="7" fill="none" stroke="var(--dia-ink-soft)" stroke-width="1.4"/>
+        <rect x="494" y="38" width="130" height="44" rx="7" fill="none" stroke="var(--dia-ink-soft)" stroke-width="1.4"/>
+      </g>
+      <g class="xs mono">
+        <text x="89" y="58" text-anchor="middle" font-weight="700">drain events</text>
+        <text x="251" y="58" text-anchor="middle" font-weight="700">in.update()</text>
+        <text x="405" y="64" text-anchor="middle" font-weight="700">simulate</text>
+        <text x="559" y="64" text-anchor="middle" font-weight="700">render</text>
+      </g>
+      <g class="xs muted">
+        <text x="89" y="73" text-anchor="middle">…which pumps</text>
+        <text x="251" y="73" text-anchor="middle">snapshot + edges</text>
+      </g>
+      <g class="ink" stroke-width="1.5">
+        <line x1="162" y1="60" x2="182" y2="60" marker-end="url(#f5a)"/>
+        <line x1="316" y1="60" x2="336" y2="60" marker-end="url(#f5a)"/>
+        <line x1="470" y1="60" x2="490" y2="60" marker-end="url(#f5a)"/>
+      </g>
+      <path d="M89,86 L89,104 L251,104 L251,88" fill="none" stroke="var(--ok-bd)" stroke-width="1.3" stroke-dasharray="3 3"/>
+      <text x="170" y="120" class="xs t-ok" text-anchor="middle">the pump refreshes SDL's state, so the snapshot that follows is current</text>
+
+      <text x="16" y="164" class="sm t-bad" font-weight="700">✗ Reversed — a whole frame of lag, for free</text>
+      <g>
+        <rect x="16" y="176" width="146" height="44" rx="7" fill="none" stroke="var(--verify-bd)" stroke-width="1.6"/>
+        <rect x="186" y="176" width="130" height="44" rx="7" fill="none" stroke="var(--verify-bd)" stroke-width="1.6"/>
+        <rect x="340" y="176" width="130" height="44" rx="7" fill="none" stroke="var(--dia-ink-soft)" stroke-width="1.4"/>
+        <rect x="494" y="176" width="130" height="44" rx="7" fill="none" stroke="var(--dia-ink-soft)" stroke-width="1.4"/>
+      </g>
+      <g class="xs mono">
+        <text x="89" y="196" text-anchor="middle" font-weight="700">in.update()</text>
+        <text x="251" y="202" text-anchor="middle" font-weight="700">drain events</text>
+        <text x="405" y="202" text-anchor="middle" font-weight="700">simulate</text>
+        <text x="559" y="202" text-anchor="middle" font-weight="700">render</text>
+      </g>
+      <text x="89" y="211" class="xs t-bad" text-anchor="middle">reads pre-pump state</text>
+      <g class="ink" stroke-width="1.5">
+        <line x1="162" y1="198" x2="182" y2="198" marker-end="url(#f5a)"/>
+        <line x1="316" y1="198" x2="336" y2="198" marker-end="url(#f5a)"/>
+        <line x1="470" y1="198" x2="490" y2="198" marker-end="url(#f5a)"/>
+      </g>
+      <text x="330" y="240" class="xs t-bad" text-anchor="middle">every key, every button: acted on one frame after it happened</text>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 5.</span> The drain is not merely first for tidiness. It is the step
+      that refreshes the data the next step samples, which is why <em>drain, then sample, then
+      simulate</em> is a rule rather than a preference.
+    </figcaption>
+  </figure>
+
+  <p>
+    A frame of lag at 60 fps is 16.7 ms, which sounds ignorable and is not: it is added to every
+    other source of latency in the chain, and it is the kind of "the controls feel mushy" complaint
+    that is nearly impossible to diagnose from the outside. Getting it free by writing two lines in
+    the right order is the best trade in this lesson.
+  </p>
+
+  <p>
+    The ordering has a second payoff that is easy to miss. Consider the classic bug: you hold W to
+    run forward, then alt-tab to another window. Your application never sees a key-up — the key was
+    released while another program had focus — so a naive input system believes W is still down, and
+    the character runs into a wall until you come back. SDL fixes this for us, and the mechanism is
+    worth knowing exactly:
+  </p>
+
+  <div class="callout ok">
+    <span class="label">Verified in SDL's source, not assumed</span>
+    <p>
+      In <code>src/events/SDL_keyboard.c</code>, <code>SDL_SetKeyboardFocus()</code> detects the case
+      where focus moves away from every SDL window and calls <code>SDL_ResetKeyboard()</code>, which
+      walks the key state and — this is the important part — <em>sends a key-up event</em> for every
+      key it finds held. The header for <code>SDL_ResetKeyboard</code> says the same thing: it
+      generates key-up events for all pressed keys.
+    </p>
+    <p style="margin-bottom:0">
+      Because the fix arrives <em>as events</em>, it only reaches your input system if you drain the
+      queue before sampling. Our order does. As a bonus, the released keys produce a proper falling
+      edge, so a "on release, throw the grenade" handler still fires correctly when the player
+      alt-tabs — which is a more sensible outcome than the alternatives.
+    </p>
+  </div>
+
+  <h3 id="unpollable">3.6 What state cannot tell you</h3>
+
+  <p>
+    We have made state primary. Two honest limitations come with that, and pretending otherwise would
+    be the hand-waving this course does not do.
+  </p>
+
+  <p>
+    <strong>First: a tap between two samples is invisible.</strong> The header is admirably blunt
+    about it — if a key is pressed and released before you process events, the pressed state never
+    shows up in <code>SDL_GetKeyboardState</code>. Press and release W within one 16 ms frame and the
+    snapshot at each end reads "up" both times. No level, no edge, nothing happened.
+  </p>
+
+  <p>
+    In practice this is close to a non-issue for a keyboard: the fastest human key tap is on the
+    order of 30–50 ms, comfortably more than one frame at 60 fps. It matters more than you would like
+    on two occasions — when the frame rate collapses (a 200 ms hitch will eat taps, and it is a real
+    complaint in stuttering games), and in Lesson 1.4, where a fixed-timestep loop can run several
+    simulation steps between input samples. We will name it again there rather than let it ambush
+    you. The rigorous fix, when a game truly needs it, is to feed the edges from the event stream
+    (which never loses a transition) instead of from sampling — the doorbell reconstructing the
+    switch, from §<a href="#doorbell">2.1</a>. We are not paying that complexity now, and I would
+    rather tell you the boundary than let you assume there isn't one.
+  </p>
+
+  <p>
+    <strong>Second: some inputs have no state to poll at all.</strong> Ask yourself what
+    <code>mouse_wheel_position()</code> would even return. There is no such quantity: a wheel is not
+    somewhere, it only ever <em>moves</em>. Nothing in SDL can tell you "how scrolled" the wheel is,
+    because the wheel itself does not know. The same is true of typed text (a stream of characters,
+    not a condition) and of relative mouse motion in a first-person camera (a delta since the last
+    report).
+  </p>
+
+  <p>
+    So the input system needs both halves after all — but the split is principled rather than
+    arbitrary:
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>Quantity</th><th>Has a "current value"?</th><th>How we get it</th></tr></thead>
+      <tbody>
+        <tr><td>Key down / up</td><td>Yes — the key is up or down</td><td>Poll, once per frame</td></tr>
+        <tr><td>Mouse button down / up</td><td>Yes</td><td>Poll, once per frame</td></tr>
+        <tr><td>Cursor position</td><td>Yes — the cursor is somewhere</td><td>Poll, once per frame</td></tr>
+        <tr><td>Wheel movement</td><td><strong>No</strong> — only deltas exist</td><td><strong>Accumulate from events</strong></td></tr>
+        <tr><td>Typed text</td><td><strong>No</strong> — a stream</td><td><strong>Accumulate from events</strong></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    That last column is the design. Anything with a current value gets sampled once per frame;
+    anything that only exists as change gets caught from the queue as it goes past. Both halves are
+    then published together, so that from the outside there is one coherent snapshot of "input, this
+    frame" — and no caller ever has to know which mechanism produced which field.
+  </p>
+
+  <!-- ================= 5. IMPLEMENTATION ================= -->
+  <h2 id="implementation"><span class="num">4</span>Implementation: the input subsystem</h2>
+
+  <p>
+    This is the first thing we build that does not belong in <code>main.cpp</code>. Input is a
+    genuine subsystem: it owns state, it has an invariant ("the snapshot is refreshed exactly once
+    per frame"), and every future system will ask it questions. So it gets its own files — and the
+    project acquires the shape it will keep until the big refactor in Module 5:
+  </p>
+
+  <figure class="listing shell">
+    <figcaption>
+      <span class="path">the source tree after this lesson</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash">src/
+├── main.cpp          # the entry point and the frame loop
+└── core/
+    ├── input.hpp     # what input offers to the rest of the engine
+    └── input.cpp     # how it delivers on that offer</code></pre>
+  </figure>
+
+  <div class="callout cpp">
+    <span class="label">C++ in place — headers and translation units</span>
+    <p>
+      A C++ compiler does not compile "a program". It compiles one <strong>translation unit</strong>
+      at a time: a single <code>.cpp</code> file with every <code>#include</code> pasted in, textually,
+      to produce one enormous file that is then turned into one object file. Our build now has two —
+      <code>main.cpp</code> and <code>input.cpp</code> — and they are compiled in complete ignorance
+      of each other. The <strong>linker</strong> joins the object files afterwards, matching each
+      function <em>call</em> in one to the function <em>body</em> in another.
+    </p>
+    <p>
+      That is what the header is for. <code>input.hpp</code> contains <em>declarations</em> — the
+      shape of the class and the signatures of its functions, enough for the compiler to check every
+      call site in <code>main.cpp</code>. <code>input.cpp</code> contains the <em>definitions</em> —
+      the bodies the linker will go looking for. A missing declaration is a <em>compile</em> error
+      ("no member named key_down"); a missing definition is a <em>link</em> error ("undefined symbol
+      engine::input::key_down"). Learning to read which one you got tells you immediately whether you
+      forgot an include or forgot to add a file to the build.
+    </p>
+    <p style="margin-bottom:0">
+      <code>#pragma once</code> at the top of the header means "if this file has already been pasted
+      into this translation unit, skip it." Without it, two headers that both include
+      <code>input.hpp</code> would define <code>class input</code> twice in one translation unit,
+      which is an error. Every header in this course starts with it.
+    </p>
+  </div>
+
+  <h3>4.1 The interface, decided before the implementation</h3>
+
+  <p>
+    Write the header first. It is the part other code has to live with, and deciding it first forces
+    the question "what does a caller actually want?" ahead of "how do I do this?"
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/core/input.hpp — the queries (excerpt)</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">[[nodiscard]] bool key_down(SDL_Scancode key) const;
+[[nodiscard]] bool key_pressed(SDL_Scancode key) const;
+[[nodiscard]] bool key_released(SDL_Scancode key) const;</code></pre>
+  </figure>
+
+  <p>
+    Three things about those three lines. They take <code>SDL_Scancode</code>, so §<a href="#scancode">3.4</a>'s
+    rule is enforced by the type system rather than by a comment nobody reads — pass a keycode and it
+    does not compile. They are <code>const</code>, which says asking a question does not change the
+    answer, and lets a system holding a <code>const input&amp;</code> still use it. And they are
+    <code>[[nodiscard]]</code>, so <code>in.key_pressed(SDL_SCANCODE_SPACE);</code> written as a
+    statement — a real typo, usually a half-finished <code>if</code> — is a warning instead of silence.
+  </p>
+
+  <p>
+    The state itself is two arrays and two words:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/core/input.hpp — the state (excerpt)</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">std::array&lt;bool, SDL_SCANCODE_COUNT&gt; keys_{};
+std::array&lt;bool, SDL_SCANCODE_COUNT&gt; keys_prev_{};
+
+SDL_MouseButtonFlags buttons_ = 0;
+SDL_MouseButtonFlags buttons_prev_ = 0;</code></pre>
+  </figure>
+
+  <p>
+    <code>SDL_SCANCODE_COUNT</code> is <code>512</code> — SDL's own "one past the last scancode"
+    marker, so the array is exactly the right size by construction and stays right if SDL ever adds
+    keys. The <code>{}</code> value-initialises every element to <code>false</code>: without it these
+    are raw bools full of whatever was in that memory, and the engine would start life believing a
+    random subset of the keyboard was held down. Two characters, one whole class of startup bug.
+  </p>
+
+  <p>
+    The mouse gets the same two-snapshot treatment, but its five buttons fit in one 32-bit word as a
+    bitmask, so "copy the previous state" is a single assignment and the edge tests become bit
+    operations. It is the identical idea at a different scale — which is the hint from
+    §<a href="#derive">3.2</a> about packing keys into words, already paying off once.
+  </p>
+
+  <h3>4.2 update(), in three movements</h3>
+
+  <p>
+    Everything that makes the system tick is in one function, and it does exactly three things in a
+    strict order. First, this frame's state is demoted to last frame's — <em>before</em> anything
+    overwrites it:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/core/input.cpp — step 1 (excerpt)</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">keys_prev_ = keys_;
+buttons_prev_ = buttons_;</code></pre>
+  </figure>
+
+  <p>
+    Every scrap of history the edge queries have lives in those two lines. Note that
+    <code>keys_prev_ = keys_</code> here is a genuine element-by-element copy, because these are
+    <code>std::array</code> values rather than pointers — the same syntax that shares in
+    §<a href="#copy">3.3</a> duplicates here, which is precisely why that section exists.
+  </p>
+
+  <p>
+    Second, sample SDL:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/core/input.cpp — step 2 (excerpt)</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">int key_count = 0;
+const bool* sdl_keys = SDL_GetKeyboardState(&amp;key_count);
+
+const int n = std::min(key_count, static_cast&lt;int&gt;(keys_.size()));
+std::copy_n(sdl_keys, n, keys_.begin());
+
+buttons_ = SDL_GetMouseState(&amp;mouse_x_, &amp;mouse_y_);</code></pre>
+  </figure>
+
+  <p>
+    The clamp deserves a word, because it looks like paranoia. <code>SDL_SCANCODE_COUNT</code> is
+    baked into our object file when we compile; <code>key_count</code> is reported by the SDL we are
+    actually linked against at run time. Those are normally the same number and, if the engine is
+    ever run against a differently-built SDL, they are not — and the difference between the two is a
+    buffer overrun. One <code>std::min</code> converts a potential memory-corruption bug into a
+    slightly incomplete copy. Cheap insurance is still insurance.
+  </p>
+
+  <p>
+    <code>SDL_GetMouseState</code> hands back the button bitmask as its return value and writes the
+    cursor position through the two pointers, giving us buttons and position from one call and one
+    consistent moment.
+  </p>
+
+  <p>
+    Third, publish the accumulated wheel movement and reset the accumulator so the next frame starts
+    from zero:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/core/input.cpp — step 3 (excerpt)</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">wheel_x_ = wheel_accum_x_;
+wheel_y_ = wheel_accum_y_;
+wheel_accum_x_ = 0.0f;
+wheel_accum_y_ = 0.0f;</code></pre>
+  </figure>
+
+  <p>
+    Why two variables per axis instead of one? Because the accumulator is being written during the
+    drain, while <code>wheel_y()</code> must be stable for the whole frame no matter who asks or
+    when. Splitting "the value being built" from "the value being read" is a pattern you will meet
+    again as double buffering in Module 4, and for exactly the same reason: never let a reader
+    observe a value that is halfway through being written.
+  </p>
+
+  <h3>4.3 The one event we cannot poll</h3>
+
+  <p>
+    <code>feed_event</code> handles the wheel, and only the wheel:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/core/input.cpp — feed_event (excerpt)</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">if (event.type == SDL_EVENT_MOUSE_WHEEL)
+{
+    const float sign = (event.wheel.direction == SDL_MOUSEWHEEL_FLIPPED) ? -1.0f : 1.0f;
+    wheel_accum_x_ += event.wheel.x * sign;
+    wheel_accum_y_ += event.wheel.y * sign;
+}</code></pre>
+  </figure>
+
+  <p>
+    Two events in one frame add up, which is correct: a fast flick that produces three notches
+    between frames should scroll three notches, not one.
+  </p>
+
+  <p>
+    The <code>sign</code> is the interesting part, and it is a real portability bug hiding in one
+    line. When a user enables "natural scrolling" — the default on macOS, an option on Windows and
+    most Linux desktops — SDL does <em>not</em> quietly negate the numbers for you. It reports the
+    raw values and sets <code>event.wheel.direction</code> to <code>SDL_MOUSEWHEEL_FLIPPED</code>,
+    documented in the header as meaning the X and Y values are opposite and should be multiplied by
+    −1. Ignore the flag and your zoom control works on your machine and runs backwards on your
+    colleague's, with both of you certain the other has it wrong.
+  </p>
+
+  <h3>4.4 Wiring it into the frame</h3>
+
+  <p>
+    The loop changes in three places. Every drained event is offered to input; <code>update()</code>
+    is called once, after the drain; and gameplay reads the snapshot:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/main.cpp — the frame (excerpt)</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">SDL_Event event;
+while (SDL_PollEvent(&amp;event))
+{
+    in.feed_event(event);
+    switch (event.type) { /* quit, close, resize — as in Lesson 1.1 */ }
+}
+
+in.update();
+
+float dx = 0.0f;
+float dy = 0.0f;
+if (in.key_down(SDL_SCANCODE_A) || in.key_down(SDL_SCANCODE_LEFT))  { dx -= 1.0f; }
+if (in.key_down(SDL_SCANCODE_D) || in.key_down(SDL_SCANCODE_RIGHT)) { dx += 1.0f; }</code></pre>
+  </figure>
+
+  <p>
+    Passing every event to <code>feed_event</code> — rather than only the wheel ones — is deliberate.
+    The call site should not have to know which events input cares about; that is input's business,
+    and it will change when we add text entry and gamepads. A subsystem that decides for itself what
+    is relevant is one you can extend without touching every caller.
+  </p>
+
+  <p>
+    Then the demo, which is built to make the distinction visible rather than merely to move a box.
+    Movement reads levels, so it glides. The colour cycle reads an edge:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/main.cpp — level and edge, side by side (excerpt)</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// Level: contributes on every frame the key is held.
+if (in.key_down(SDL_SCANCODE_D)) { dx += 1.0f; }
+
+// Edge: fires exactly once per press, however long you hold.
+if (in.key_pressed(SDL_SCANCODE_SPACE))
+{
+    box_colour = (box_colour + 1) % colour_count;
+}</code></pre>
+  </figure>
+
+  <p>
+    Hold <kbd>Space</kbd> and the colour changes once. Change that one call to
+    <code>key_down</code> and it strobes through the palette sixty times a second. That two-second
+    experiment is the lesson, and Exercise <a href="#exercises">1.2.1</a> asks you to run it.
+  </p>
+
+  <p>
+    One thing in the demo is deliberately, visibly wrong, and I would rather name it than let you
+    find it later and wonder: the box moves a fixed <strong>6 pixels per frame</strong>. Per
+    <em>frame</em> — so on a 144 Hz monitor it crosses the window nearly two and a half times faster
+    than on a 60 Hz one. That is not an oversight to be quietly fixed in a later listing; it is the
+    exact defect Lesson 1.3 exists to explain and repair, and seeing it in code you understand is a
+    better setup than any amount of preamble.
+  </p>
+
+  <h3>4.5 The build change</h3>
+
+  <p>
+    A new <code>.cpp</code> is a new translation unit, and the build has to be told. Two changes:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">CMakeLists.txt — the new target definition (excerpt)</span>
+      <span class="lang" data-lang="cmake">CMake</span>
+    </figcaption>
+    <pre><code class="lang-cmake">add_executable(engine
+    src/main.cpp
+    src/core/input.cpp
+)
+
+target_include_directories(engine PRIVATE src)</code></pre>
+  </figure>
+
+  <p>
+    Sources are listed by hand. CMake will happily glob a directory for you with
+    <code>file(GLOB ...)</code>, and you should not let it: a glob is evaluated when CMake
+    <em>configures</em>, not when it builds, so a file added afterwards is silently absent from the
+    build until someone reconfigures — and the symptom is a link error naming a function you are
+    looking straight at. One line per file is a small price for a build that cannot lie to you.
+  </p>
+
+  <p>
+    <code>target_include_directories(engine PRIVATE src)</code> makes <code>src/</code> a root for our
+    own includes, which is why <code>main.cpp</code> says <code>#include "core/input.hpp"</code>
+    rather than a relative path. Every file spells the include the same way regardless of where it
+    sits, so moving a file does not break the files that include it.
+    <code>PRIVATE</code> means the setting applies to building this target and is not handed on to
+    anything that links it — correct here, since nothing links an executable. When
+    <code>engine</code> becomes a library in Module 5, that keyword becomes a real design decision
+    and gets the discussion it deserves.
+  </p>
+
+  <!-- ================= 6. COMPLETE CODE LISTINGS ================= -->
+  <h2 id="listings"><span class="num">5</span>Complete Code Listings</h2>
+
+  <div class="tbl-scroll">
+    <table class="manifest">
+      <thead><tr><th>Path</th><th>Status</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td>src/core/input.hpp</td><td><span class="badge new">new</span></td><td>The input subsystem's interface: three keyboard queries, three mouse-button queries, cursor position, wheel.</td></tr>
+        <tr><td>src/core/input.cpp</td><td><span class="badge new">new</span></td><td>Snapshot, copy, and edge derivation; wheel accumulation with flipped-direction correction.</td></tr>
+        <tr><td>src/main.cpp</td><td><span class="badge mod">modified</span></td><td>The frame gains <code>feed_event</code> + <code>update()</code>, and a demo driven by levels and edges.</td></tr>
+        <tr><td>CMakeLists.txt</td><td><span class="badge mod">modified</span></td><td>Second translation unit added; <code>src/</code> becomes the include root.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/core/input.hpp</span>
+      <span class="tag new">new</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// src/core/input.hpp — a frame-coherent view of the keyboard and mouse.
+//
+// This is the engine's first real subsystem, and the first file that is not
+// main.cpp. It exists because gameplay code asks two different questions about
+// the same key, and answering them from raw events at every call site produces
+// two different bugs.
+
+#pragma once
+
+#include &lt;SDL3/SDL.h&gt;
+
+#include &lt;array&gt;
+
+namespace engine {
+
+/// A frame-coherent snapshot of the keyboard and mouse.
+///
+/// Gameplay asks two questions that sound alike and are not:
+///
+///   - "Is W down *right now*?"        -&gt; key_down()     — a **level**: true for as
+///                                        long as the key is held.
+///   - "Did Space go down *this frame*?" -&gt; key_pressed() — an **edge**: true for
+///                                        exactly one frame per physical press.
+///
+/// Movement wants the level (hold to keep walking). Jumping, firing, and toggling
+/// want the edge (one press, one jump, however long you hold it).
+///
+/// Both answers come from a single source of truth — the state snapshot — with
+/// edges *derived* by comparing this frame's snapshot against last frame's. Two
+/// independently maintained sources would eventually disagree; one cannot.
+///
+/// The per-frame contract, in this order, no exceptions:
+///
+///   1. Drain the SDL event queue, passing each event to feed_event().
+///   2. Call update() exactly once.
+///   3. Query as much as you like. The answers are frozen until the next update().
+///
+/// Step 1 must precede step 2 because SDL's internal state is only refreshed by
+/// pumping the event queue (SDL_PollEvent pumps), so sampling before the drain
+/// reads state that is one frame stale.
+class input
+{
+public:
+    /// Consume one event drained from the queue.
+    ///
+    /// Most input needs nothing here: SDL already tracks keys and mouse buttons
+    /// internally, and update() samples that. Only quantities that exist *solely*
+    /// as events — the wheel, which has no "current position" to ask for — must be
+    /// caught as they go past.
+    void feed_event(const SDL_Event&amp; event);
+
+    /// Publish one frame of input. Call once per frame, AFTER the event drain.
+    void update();
+
+    // ---- Keyboard ----------------------------------------------------------
+    // Addressed by SDL_Scancode (physical key position), never SDL_Keycode (the
+    // symbol the layout produces). SDL_SCANCODE_W is "the key where W sits on a
+    // US QWERTY board" on every keyboard on earth; SDLK_W is 'z' on French AZERTY.
+    // Movement is about positions, so movement uses scancodes.
+
+    /// True while the key is held. The level.
+    [[nodiscard]] bool key_down(SDL_Scancode key) const;
+
+    /// True for exactly one frame, on the frame the key went down. The rising edge.
+    [[nodiscard]] bool key_pressed(SDL_Scancode key) const;
+
+    /// True for exactly one frame, on the frame the key came up. The falling edge.
+    [[nodiscard]] bool key_released(SDL_Scancode key) const;
+
+    // ---- Mouse -------------------------------------------------------------
+    // `button` is an SDL button index: SDL_BUTTON_LEFT, SDL_BUTTON_MIDDLE,
+    // SDL_BUTTON_RIGHT, SDL_BUTTON_X1, SDL_BUTTON_X2 (1..5, not 0-based).
+
+    [[nodiscard]] bool mouse_down(int button) const;
+    [[nodiscard]] bool mouse_pressed(int button) const;
+    [[nodiscard]] bool mouse_released(int button) const;
+
+    /// Cursor position in window coordinates: (0,0) is the top-left pixel, +Y down.
+    [[nodiscard]] float mouse_x() const { return mouse_x_; }
+    [[nodiscard]] float mouse_y() const { return mouse_y_; }
+
+    /// Wheel movement accumulated during this frame, in notches. Positive Y is
+    /// away from the user, positive X is to the right — already corrected for
+    /// "natural"/flipped scrolling, so these directions hold on every platform.
+    [[nodiscard]] float wheel_x() const { return wheel_x_; }
+    [[nodiscard]] float wheel_y() const { return wheel_y_; }
+
+private:
+    /// Scancodes are 0..SDL_SCANCODE_COUNT-1 by construction, but a value cast in
+    /// from an int is not checked by the type system. One comparison turns a
+    /// potential out-of-bounds read into a defined `false`.
+    [[nodiscard]] static bool valid(SDL_Scancode key)
+    {
+        return key &gt;= 0 &amp;&amp; static_cast&lt;int&gt;(key) &lt; SDL_SCANCODE_COUNT;
+    }
+
+    /// Mouse buttons are 1-based; SDL_BUTTON_MASK(n) is 1u &lt;&lt; (n-1).
+    [[nodiscard]] static SDL_MouseButtonFlags mask(int button)
+    {
+        if (button &lt; 1 || button &gt; 5) { return 0; }
+        return SDL_BUTTON_MASK(button);
+    }
+
+    // Two snapshots, one frame apart. `keys_` is this frame; `keys_prev_` is what
+    // it was last frame. Every edge query is a comparison between the two, which
+    // is why they must be *copies* — see input.cpp for why aliasing SDL's array
+    // instead would silently produce an engine in which no key is ever pressed.
+    std::array&lt;bool, SDL_SCANCODE_COUNT&gt; keys_{};
+    std::array&lt;bool, SDL_SCANCODE_COUNT&gt; keys_prev_{};
+
+    // The same two-snapshot trick for mouse buttons, but the five buttons fit in
+    // one 32-bit word, so the "array" is a bitmask and the copy is a single move.
+    SDL_MouseButtonFlags buttons_ = 0;
+    SDL_MouseButtonFlags buttons_prev_ = 0;
+
+    float mouse_x_ = 0.0f;
+    float mouse_y_ = 0.0f;
+
+    // The wheel is double-buffered by hand: feed_event() adds into the accumulator
+    // during the drain, and update() publishes the total and clears it. Without
+    // the split, a query made mid-drain would see a partial total, and the value
+    // would not be stable across the frame.
+    float wheel_x_ = 0.0f;
+    float wheel_y_ = 0.0f;
+    float wheel_accum_x_ = 0.0f;
+    float wheel_accum_y_ = 0.0f;
+};
+
+} // namespace engine</code></pre>
+  </figure>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/core/input.cpp</span>
+      <span class="tag new">new</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// src/core/input.cpp — implementation of the frame-coherent input snapshot.
+
+#include "core/input.hpp"
+
+#include &lt;algorithm&gt;
+
+namespace engine {
+
+void input::feed_event(const SDL_Event&amp; event)
+{
+    // Only the wheel is handled here, and it is worth being precise about why.
+    //
+    // Keys and mouse buttons have a *current state* SDL will hand us on demand,
+    // so update() just asks. The wheel has no current state: there is no such
+    // thing as "how scrolled is the wheel". It only ever reports movement, and
+    // movement that is not caught as it goes past is gone forever. Anything with
+    // that shape — the wheel, typed text, relative mouse motion — has to be
+    // accumulated from events. Everything else should be polled.
+    if (event.type == SDL_EVENT_MOUSE_WHEEL)
+    {
+        // A wheel event carries a direction flag. On "natural scrolling" systems
+        // (the macOS default, and an option elsewhere) SDL reports the raw values
+        // with direction == SDL_MOUSEWHEEL_FLIPPED rather than pre-negating them,
+        // so it is our job to normalise. Skip this and your scroll direction
+        // inverts on some of your users' machines and not others — a bug report
+        // you will never reproduce locally.
+        const float sign = (event.wheel.direction == SDL_MOUSEWHEEL_FLIPPED) ? -1.0f : 1.0f;
+        wheel_accum_x_ += event.wheel.x * sign;
+        wheel_accum_y_ += event.wheel.y * sign;
+    }
+}
+
+void input::update()
+{
+    // ---- 1. This frame's state becomes next frame's "previous" ---------------
+    // Do this first, before overwriting the current state. Everything the edge
+    // queries know about the past lives in these two lines.
+    keys_prev_ = keys_;
+    buttons_prev_ = buttons_;
+
+    // ---- 2. Sample SDL's live state -----------------------------------------
+    // SDL_GetKeyboardState returns a pointer to SDL's own internal array — the
+    // one SDL keeps mutating as events are pumped. That makes the next line the
+    // most important line in this file:
+    //
+    //   We COPY the contents. We do not keep the pointer.
+    //
+    // Storing the pointer as "current" and last frame's pointer as "previous"
+    // would store the same address twice. Both would name the same live array,
+    // every comparison would compare the array to itself, and key_pressed()
+    // would return false forever — with no crash, no warning, and no obvious
+    // place to look. A pointer names a thing; a copy is a thing.
+    int key_count = 0;
+    const bool* sdl_keys = SDL_GetKeyboardState(&amp;key_count);
+
+    // Clamp defensively rather than trusting the reported length to match our
+    // compile-time SDL_SCANCODE_COUNT. If the engine is ever linked against an
+    // SDL built from different headers, this is the difference between a wrong
+    // number and a buffer overrun.
+    const int n = std::min(key_count, static_cast&lt;int&gt;(keys_.size()));
+    std::copy_n(sdl_keys, n, keys_.begin());
+
+    // Mouse buttons and position arrive together, in one call. The coordinates
+    // are floats relative to the window's top-left, matching SDL3's float-based
+    // render geometry.
+    buttons_ = SDL_GetMouseState(&amp;mouse_x_, &amp;mouse_y_);
+
+    // ---- 3. Publish the accumulated event-only deltas -----------------------
+    // The drain has finished, so the accumulator holds this frame's complete
+    // total. Publish it and reset, so the next frame starts from zero.
+    wheel_x_ = wheel_accum_x_;
+    wheel_y_ = wheel_accum_y_;
+    wheel_accum_x_ = 0.0f;
+    wheel_accum_y_ = 0.0f;
+
+    // A note on a bug we deliberately do NOT fix here: keys held while the window
+    // loses focus. SDL handles it — when keyboard focus moves away from every SDL
+    // window, SDL_SetKeyboardFocus() calls SDL_ResetKeyboard(), which *sends key-up
+    // events* for each held key (verified in SDL's src/events/SDL_keyboard.c).
+    // Because they are events, our drain sees them and this snapshot picks the
+    // change up — but only because we drain before we sample. Reverse the order
+    // and the classic "alt-tab and your character keeps running" bug reappears.
+}
+
+bool input::key_down(SDL_Scancode key) const
+{
+    return valid(key) &amp;&amp; keys_[static_cast&lt;std::size_t&gt;(key)];
+}
+
+bool input::key_pressed(SDL_Scancode key) const
+{
+    // The rising edge: down now, up last frame. Note that this is the whole of
+    // edge detection — there is no separate bookkeeping, no event handler, and
+    // therefore nothing that can drift out of sync with key_down().
+    if (!valid(key)) { return false; }
+    const std::size_t i = static_cast&lt;std::size_t&gt;(key);
+    return keys_[i] &amp;&amp; !keys_prev_[i];
+}
+
+bool input::key_released(SDL_Scancode key) const
+{
+    // The falling edge: up now, down last frame.
+    if (!valid(key)) { return false; }
+    const std::size_t i = static_cast&lt;std::size_t&gt;(key);
+    return !keys_[i] &amp;&amp; keys_prev_[i];
+}
+
+bool input::mouse_down(int button) const
+{
+    const SDL_MouseButtonFlags m = mask(button);
+    return m != 0 &amp;&amp; (buttons_ &amp; m) != 0;
+}
+
+bool input::mouse_pressed(int button) const
+{
+    const SDL_MouseButtonFlags m = mask(button);
+    return m != 0 &amp;&amp; (buttons_ &amp; m) != 0 &amp;&amp; (buttons_prev_ &amp; m) == 0;
+}
+
+bool input::mouse_released(int button) const
+{
+    const SDL_MouseButtonFlags m = mask(button);
+    return m != 0 &amp;&amp; (buttons_ &amp; m) == 0 &amp;&amp; (buttons_prev_ &amp; m) != 0;
+}
+
+} // namespace engine</code></pre>
+  </figure>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/main.cpp</span>
+      <span class="tag modified">modified</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// src/main.cpp — the engine's entry point.
+//
+// The loop here is still deliberately naive — Lessons 1.3 and 1.4 replace it
+// with a proper fixed-timestep loop — but it now owns an input subsystem, and
+// the frame has acquired the shape it will keep for the rest of the course:
+//
+//     drain events  -&gt;  update input  -&gt;  simulate  -&gt;  render
+//
+// The order is not stylistic. Input is sampled after the drain because SDL's
+// internal state is only refreshed by pumping the queue, and simulation runs
+// after input because it reads a snapshot that must not change underneath it.
+
+#include "core/input.hpp"
+
+#include &lt;SDL3/SDL.h&gt;
+#include &lt;SDL3/SDL_main.h&gt;   // Provides the cross-platform entry point. NOTE:
+                             // &lt;SDL3/SDL.h&gt; deliberately does NOT include this,
+                             // so we include it explicitly, exactly once, here.
+
+#include &lt;algorithm&gt;
+
+namespace {
+
+/// The four colours the demo box cycles through when Space is pressed. Grouping
+/// them in an anonymous namespace gives them internal linkage — they exist only
+/// in this translation unit and cannot collide with a name in another.
+struct rgb { Uint8 r, g, b; };
+
+constexpr rgb k_box_colours[] = {
+    {236, 122,  92},   // coral
+    {122, 196, 152},   // sage
+    {126, 162, 236},   // cornflower
+    {226, 196, 110},   // amber
+};
+
+/// Pixels moved per frame while a direction key is held.
+///
+/// Per *frame*, not per second — which means the box moves faster on a 240 Hz
+/// monitor than on a 60 Hz one. That is a real bug, and it is the exact bug
+/// Lesson 1.3 exists to fix. It is left visible here rather than papered over.
+constexpr float k_box_speed = 6.0f;
+
+constexpr float k_box_min_size = 12.0f;
+constexpr float k_box_max_size = 400.0f;
+
+} // namespace
+
+int main(int argc, char* argv[])
+{
+    // We do not use command-line arguments yet. Marking them silences the
+    // -Wall -Wextra "unused parameter" warning without weakening the signature
+    // SDL's entry point requires.
+    (void)argc;
+    (void)argv;
+
+    // ---- 1. Initialise the SDL subsystems we need --------------------------
+    // SDL3's SDL_Init returns a bool: true on success, false on failure. (This
+    // changed from SDL2, where it returned an int — one of many SDL2 habits to
+    // unlearn.) SDL_INIT_VIDEO also brings up the event subsystem we rely on.
+    if (!SDL_Init(SDL_INIT_VIDEO))
+    {
+        SDL_Log("SDL_Init failed: %s", SDL_GetError());
+        return 1;
+    }
+
+    // Log what we actually linked against. This one line is the first thing you
+    // want in a bug report — "it doesn't work" is far more tractable once you
+    // know which SDL the machine is running.
+    const int sdl_version = SDL_GetVersion();
+    SDL_Log("Engine starting — SDL %d.%d.%d",
+            SDL_VERSIONNUM_MAJOR(sdl_version),
+            SDL_VERSIONNUM_MINOR(sdl_version),
+            SDL_VERSIONNUM_MICRO(sdl_version));
+
+    // ---- 2. Create the window ----------------------------------------------
+    // Note the SDL3 signature: title, width, height, flags — and NO x/y
+    // position (SDL places the window). A null return means failure, and the
+    // reason is always in SDL_GetError().
+    int window_w = 1280;
+    int window_h = 720;
+
+    SDL_Window* window = SDL_CreateWindow("Engine", window_w, window_h, SDL_WINDOW_RESIZABLE);
+    if (window == nullptr)
+    {
+        SDL_Log("SDL_CreateWindow failed: %s", SDL_GetError());
+        SDL_Quit();
+        return 1;
+    }
+
+    // ---- 3. Create a renderer ----------------------------------------------
+    // Still scaffolding: it exists so we have something to draw with before we
+    // own our own pixel buffer in Lesson 1.5. Passing nullptr for the name lets
+    // SDL pick the best backend.
+    SDL_Renderer* renderer = SDL_CreateRenderer(window, nullptr);
+    if (renderer == nullptr)
+    {
+        SDL_Log("SDL_CreateRenderer failed: %s", SDL_GetError());
+        SDL_DestroyWindow(window);
+        SDL_Quit();
+        return 1;
+    }
+
+    // ---- 4. The things the demo simulates -----------------------------------
+    engine::input in;
+
+    SDL_FRect box{
+        static_cast&lt;float&gt;(window_w) * 0.5f - 40.0f,
+        static_cast&lt;float&gt;(window_h) * 0.5f - 40.0f,
+        80.0f,
+        80.0f,
+    };
+    int box_colour = 0;
+
+    SDL_Log("Controls: WASD/arrows move · Space cycles colour · "
+            "left-click teleports · wheel resizes · Esc quits");
+
+    // ---- 5. The main loop ---------------------------------------------------
+    bool running = true;
+    while (running)
+    {
+        // --- 5a. Drain the event queue COMPLETELY --------------------------
+        // `while`, never `if` (Lesson 1.1): draining one event per frame lets the
+        // queue grow faster than it empties, and the backlog becomes input lag
+        // that compounds until the app appears frozen.
+        //
+        // Draining also *pumps*: SDL_PollEvent refreshes the internal keyboard
+        // and mouse state that in.update() is about to sample. That is why the
+        // drain comes first.
+        SDL_Event event;
+        while (SDL_PollEvent(&amp;event))
+        {
+            // Hand every event to the input system first. It ignores almost all
+            // of them — it only needs the ones that cannot be polled — but the
+            // call site stays simple: everything goes in, input decides what
+            // matters.
+            in.feed_event(event);
+
+            switch (event.type)
+            {
+            case SDL_EVENT_QUIT:
+                // Application-scoped: "this program should terminate."
+                SDL_Log("Quit requested");
+                running = false;
+                break;
+
+            case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
+                // Window-scoped: THIS window's close was requested. With a single
+                // window it amounts to the same thing, but an app with several
+                // windows must close just the one.
+                SDL_Log("Window %u close requested", static_cast&lt;unsigned&gt;(event.window.windowID));
+                running = false;
+                break;
+
+            case SDL_EVENT_WINDOW_RESIZED:
+                // Remember the new size: the demo clamps the box to the window,
+                // so it needs to know how big the window currently is.
+                window_w = event.window.data1;
+                window_h = event.window.data2;
+                break;
+
+            default:
+                // Everything else is drained and ignored. Draining is mandatory;
+                // reacting is optional.
+                break;
+            }
+        }
+
+        // --- 5b. Publish this frame's input snapshot -----------------------
+        // Exactly once, after the drain, before anything reads input. From here
+        // to the end of the frame, every query returns the same answer.
+        in.update();
+
+        // --- 5c. Simulate ---------------------------------------------------
+        // Esc quits. key_pressed, not key_down, because the intent is "the act of
+        // pressing Esc quits" — an edge, not a level. (Here they behave the same;
+        // saying what you mean is still worth the character count.)
+        if (in.key_pressed(SDL_SCANCODE_ESCAPE))
+        {
+            SDL_Log("Esc pressed — quitting");
+            running = false;
+        }
+
+        // Movement reads LEVELS: true for every frame the key is held, so the box
+        // glides. Scancodes, not keycodes — SDL_SCANCODE_W is the physical key
+        // above S wherever you are, while SDLK_W is a letter that moves house on
+        // an AZERTY keyboard.
+        float dx = 0.0f;
+        float dy = 0.0f;
+        if (in.key_down(SDL_SCANCODE_A) || in.key_down(SDL_SCANCODE_LEFT))  { dx -= 1.0f; }
+        if (in.key_down(SDL_SCANCODE_D) || in.key_down(SDL_SCANCODE_RIGHT)) { dx += 1.0f; }
+        if (in.key_down(SDL_SCANCODE_W) || in.key_down(SDL_SCANCODE_UP))    { dy -= 1.0f; }
+        if (in.key_down(SDL_SCANCODE_S) || in.key_down(SDL_SCANCODE_DOWN))  { dy += 1.0f; }
+
+        // +Y is DOWN in window coordinates, which is why "up" subtracts. This is
+        // the first appearance of a sign that will confuse everyone at least once
+        // more, in Lesson 2.11 when NDC meets the viewport transform.
+        box.x += dx * k_box_speed;
+        box.y += dy * k_box_speed;
+
+        // Colour cycling reads an EDGE: exactly one advance per press, no matter
+        // how long Space is held. Swap this for key_down and the box strobes
+        // through the palette at frame rate — the difference the lesson is about.
+        if (in.key_pressed(SDL_SCANCODE_SPACE))
+        {
+            constexpr int colour_count = static_cast&lt;int&gt;(std::size(k_box_colours));
+            box_colour = (box_colour + 1) % colour_count;
+        }
+
+        // A press-edge combined with a polled position: teleport on click, once
+        // per click, to wherever the cursor was when the frame was sampled.
+        if (in.mouse_pressed(SDL_BUTTON_LEFT))
+        {
+            box.x = in.mouse_x() - box.w * 0.5f;
+            box.y = in.mouse_y() - box.h * 0.5f;
+        }
+
+        // The wheel is the event-only quantity: no state to poll, just this
+        // frame's accumulated movement. Resize around the centre so the box does
+        // not appear to crawl away from the cursor as it grows.
+        if (in.wheel_y() != 0.0f)
+        {
+            const float target = box.w + in.wheel_y() * 8.0f;
+            const float clamped = std::clamp(target, k_box_min_size, k_box_max_size);
+            const float delta = clamped - box.w;
+            box.x -= delta * 0.5f;
+            box.y -= delta * 0.5f;
+            box.w = clamped;
+            box.h = clamped;
+        }
+
+        // Keep the box inside the window, whatever the window's current size.
+        box.x = std::clamp(box.x, 0.0f, static_cast&lt;float&gt;(window_w) - box.w);
+        box.y = std::clamp(box.y, 0.0f, static_cast&lt;float&gt;(window_h) - box.h);
+
+        // --- 5d. Render ------------------------------------------------------
+        SDL_SetRenderDrawColor(renderer, 30, 30, 46, 255);
+        SDL_RenderClear(renderer);
+
+        const rgb c = k_box_colours[box_colour];
+        SDL_SetRenderDrawColor(renderer, c.r, c.g, c.b, 255);
+        SDL_RenderFillRect(renderer, &amp;box);
+
+        SDL_RenderPresent(renderer);
+    }
+
+    // ---- 6. Shut down, in reverse order of creation -------------------------
+    // We destroy what we made, newest first, then quit SDL. Doing this by hand is
+    // error-prone and easy to forget on an early-return path (notice we had to
+    // repeat parts of it above). Module 5 wraps each resource in an RAII type so
+    // cleanup becomes automatic — this manual version is here so you feel the
+    // problem RAII solves.
+    SDL_DestroyRenderer(renderer);
+    SDL_DestroyWindow(window);
+    SDL_Quit();
+    return 0;
+}</code></pre>
+  </figure>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">CMakeLists.txt</span>
+      <span class="tag modified">modified</span>
+      <span class="lang" data-lang="cmake">CMake</span>
+    </figcaption>
+    <pre><code class="lang-cmake"># CMakeLists.txt — the engine's build description.
+#
+# This one file tells CMake how to build the project on Windows, Linux, and
+# macOS, with MSVC, GCC, or Clang, and how to acquire SDL3. You describe the
+# build once here; CMake generates the right native build for whatever machine
+# runs it. This is what Lesson 0.4 builds up, line by line.
+
+# 3.24 is our floor: new enough for modern FetchContent behaviour and the
+# target/property model we rely on. Older CMake will refuse to configure, which
+# is what we want — a clear failure, not a subtle one.
+cmake_minimum_required(VERSION 3.24)
+
+project(engine LANGUAGES CXX)
+
+# The C++ standard, set once for every target in the project. STANDARD_REQUIRED
+# makes a compiler that cannot do C++20 an error rather than a silent downgrade;
+# EXTENSIONS OFF asks for -std=c++20, not -std=gnu++20, so we stay portable.
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+# ---- Dependencies ----------------------------------------------------------
+# FetchContent acquires SDL3 at configure time and adds it to our build. We pin
+# an exact release tag: a moving branch would mean a fresh clone could build
+# different source than yours, which is how "works on my machine" is born.
+include(FetchContent)
+
+# SDL build options must be set BEFORE SDL is configured. We only need the
+# library itself, so skip SDL's own test helpers — it shaves real time off a
+# from-source build.
+set(SDL_TEST_LIBRARY OFF)
+
+FetchContent_Declare(
+    SDL3
+    GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
+    GIT_TAG        release-3.4.12   # pinned — never a branch name
+    GIT_SHALLOW    TRUE             # only this tag's snapshot, not all of history
+)
+FetchContent_MakeAvailable(SDL3)
+
+# ---- Our program -----------------------------------------------------------
+# Every source file is listed by hand. CMake can glob them for you, and you
+# should not let it: a glob is evaluated at configure time, so adding a file
+# leaves the build silently ignoring it until someone reconfigures. An explicit
+# list is one extra line per file and never lies.
+add_executable(engine
+    src/main.cpp
+    src/core/input.cpp
+)
+
+# Make `src/` a root for our own includes, so a file says
+#     #include "core/input.hpp"
+# from anywhere in the tree — the same spelling regardless of which directory
+# the including file lives in. Relative paths like "../core/input.hpp" break the
+# moment a file moves; a stable include root does not. PRIVATE because nothing
+# links against us: this is a leaf executable, and the setting stops here.
+target_include_directories(engine PRIVATE src)
+
+# Link SDL. SDL3::SDL3 is the alias SDL exports for "the SDL library, however it
+# was built"; linking it also pulls in SDL's headers and platform frameworks
+# transitively, so we never name Cocoa or user32 ourselves.
+target_link_libraries(engine PRIVATE SDL3::SDL3)
+
+# Our warning discipline (see cpp-style §9) — applied to OUR target only, never
+# to SDL. Third-party code is compiled with its own flags; holding someone
+# else's library to /W4 just produces noise we cannot act on.
+if(MSVC)
+    target_compile_options(engine PRIVATE /W4 /Zc:__cplusplus)
+else()
+    target_compile_options(engine PRIVATE -Wall -Wextra)
+endif()</code></pre>
+  </figure>
+
+  <!-- ================= 7. BUILD & RUN ================= -->
+  <h2 id="build"><span class="num">6</span>Build &amp; Run</h2>
+
+  <p>
+    Adding a source file means CMake must reconfigure. It notices <code>CMakeLists.txt</code> changed
+    and does it for you, but running the configure step explicitly makes any error appear at the step
+    that caused it:
+  </p>
+
+  <figure class="listing shell">
+    <figcaption>
+      <span class="path">Linux and macOS</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash">cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+cmake --build build
+./build/engine</code></pre>
+  </figure>
+
+  <figure class="listing shell">
+    <figcaption>
+      <span class="path">Windows (MSVC — a multi-config generator, so the config is chosen at build time)</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash">cmake -S . -B build
+cmake --build build --config Debug
+.\build\Debug\engine.exe</code></pre>
+  </figure>
+
+  <h3>What you should see</h3>
+
+  <p>
+    A window with a coral square in the middle, and a console line listing the controls:
+  </p>
+
+  <figure class="listing shell">
+    <figcaption>
+      <span class="path">expected output</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash">Engine starting — SDL 3.4.12
+Controls: WASD/arrows move · Space cycles colour · left-click teleports · wheel resizes · Esc quits</code></pre>
+  </figure>
+
+  <p>Work through all four, because each one exercises a different part of what we built:</p>
+
+  <ul>
+    <li><strong>Hold W, A, S, D or the arrow keys.</strong> The box glides — smoothly, from the first
+      frame, with no pause and no lurching. Compare that with Figure 1's red staircase: same
+      keyboard, same OS repeat settings, completely different feel. Hold two keys and it moves
+      diagonally, because levels compose and events do not.</li>
+    <li><strong>Tap Space, then hold Space.</strong> One colour change per press, and holding does
+      nothing extra. That is the edge.</li>
+    <li><strong>Click anywhere.</strong> The box teleports, once per click. Hold the button and drag:
+      it does <em>not</em> follow, because <code>mouse_pressed</code> is an edge. (Making it follow
+      is Exercise 1.2.2, and it is a one-word change.)</li>
+    <li><strong>Scroll the wheel.</strong> The box grows and shrinks around its centre. Scroll up and
+      it should get bigger — on every machine, including one with natural scrolling enabled, thanks
+      to the <code>SDL_MOUSEWHEEL_FLIPPED</code> correction.</li>
+  </ul>
+
+  <div class="callout ok">
+    <span class="label">Checkpoint — verified before publishing</span>
+    <p>
+      This code was configured, built, and run on macOS with Apple Clang against SDL 3.4.12, warning-clean
+      at <code>-Wall -Wextra</code>. The application starts, logs its version and controls, and shuts
+      down cleanly on SIGTERM via <code>SDL_EVENT_QUIT</code>.
+    </p>
+    <p>
+      The logic was also checked directly, by a test harness that provides its own
+      <code>SDL_GetKeyboardState</code> and <code>SDL_GetMouseState</code> so key states can be driven
+      to order. It confirmed: the full six-frame sequence in §<a href="#derive">3.2</a>'s worked
+      example, value for value; that a held key yields one <code>key_pressed</code> and one
+      <code>key_released</code> regardless of how many frames it is held; that calling
+      <code>key_pressed</code> twice in a frame returns <code>true</code> both times (edges are not
+      consumed); that mouse-button edges behave identically through the bitmask path; that
+      out-of-range scancodes and button indices return <code>false</code> instead of reading out of
+      bounds; and that two wheel events in one frame accumulate, publish once, then reset to zero —
+      with a <code>SDL_MOUSEWHEEL_FLIPPED</code> event of <code>+1</code> correctly reported as
+      <code>−1</code>.
+    </p>
+    <p style="margin-bottom:0">
+      If your own build behaves differently in any of these, trust the difference and go looking —
+      that is what a checkpoint is for.
+    </p>
+  </div>
+
+  <!-- ================= 8. PITFALLS ================= -->
+  <h2 id="pitfalls"><span class="num">7</span>Common Pitfalls &amp; Debugging</h2>
+
+  <div class="pitfalls">
+    <details class="pitfall-item">
+      <summary>Movement stutters, then lurches — <span class="sym">one step, a long pause, then jerky motion</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>Holding a direction key moves the object once, pauses for roughly half a second, then moves it in a rhythmic lurch. The rate differs between machines and between two players on identical hardware.</dd>
+          <dt>Cause</dt>
+          <dd>Movement is driven by <code>SDL_EVENT_KEY_DOWN</code> events. You are receiving the OS's key-repeat stream, whose delay and rate are user preferences meant for typing.</dd>
+          <dt>Fix</dt>
+          <dd>Poll the level: <code>if (in.key_down(SDL_SCANCODE_D))</code>, evaluated every frame. Filtering repeats with <code>event.key.repeat</code> is <em>not</em> the fix — that leaves you with exactly one movement per press.</dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>A jump, shot, or menu item fires continuously — <span class="sym">one tap scrolls the whole menu</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>The action repeats every frame while the key is held: the character bunny-hops, the menu cursor teleports to the bottom of the list, the weapon empties its magazine on a tap.</dd>
+          <dt>Cause</dt>
+          <dd>A discrete action is reading a level. At 60 fps a 200 ms tap is twelve frames, so it fires twelve times.</dd>
+          <dt>Fix</dt>
+          <dd><code>key_pressed</code>, not <code>key_down</code>. Apply the test from §<a href="#two-questions">2.2</a>: if holding longer should not do more, it is an edge. (Genuine auto-fire is then an explicit choice with its own timer, not an accident of the query you happened to call.)</dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>No key is <em>ever</em> pressed — <span class="sym">levels work perfectly, edges never fire</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>Movement is flawless, but <code>key_pressed</code> and <code>key_released</code> return <code>false</code> for every key, always. No crash, no warning, and both arrays look correct in the debugger.</dd>
+          <dt>Cause</dt>
+          <dd>You stored SDL's pointer instead of copying its contents (§<a href="#copy">3.3</a>). <code>keys_</code> and <code>keys_prev_</code> hold the same address, so the edge test evaluates <code>x &amp;&amp; !x</code>.</dd>
+          <dt>Fix</dt>
+          <dd>Copy: <code>std::copy_n(sdl_keys, n, keys_.begin())</code>, into a <code>std::array</code> you own. To confirm the diagnosis in a debugger, print the two <em>addresses</em> rather than the values — if they match, that is your bug in one line.</dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>WASD does nothing on a French or German keyboard — <span class="sym">works for you, broken for a whole country</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>A player reports that movement is unusable. On AZERTY the movement keys are scattered; on QWERTZ, W and Z are swapped relative to your expectation.</dd>
+          <dt>Cause</dt>
+          <dd>Movement is keyed off <code>SDLK_*</code> keycodes, which follow the layout's letters rather than the keys' positions (§<a href="#scancode">3.4</a>).</dd>
+          <dt>Fix</dt>
+          <dd><code>SDL_SCANCODE_*</code> everywhere position is what matters. Our API takes <code>SDL_Scancode</code> precisely so this mistake fails to compile. To reproduce the bug deliberately, add an AZERTY layout in your OS settings and switch to it — it takes a minute and is worth doing once.</dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>Input feels one frame late, or a key sticks after alt-tab — <span class="sym">mushy controls; the character runs on forever</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>Everything works but feels slightly behind. Or: hold W, alt-tab away, come back, and the character is still walking.</dd>
+          <dt>Cause</dt>
+          <dd><code>update()</code> is called before the event drain, so it samples state the pump has not refreshed yet (§<a href="#ordering">3.5</a>). SDL's own fix for the stuck key arrives <em>as key-up events</em>, so sampling before draining misses it too.</dd>
+          <dt>Fix</dt>
+          <dd>Drain, then <code>update()</code>, then simulate. If you are unsure which order your loop actually has, log a counter in both — the number tells you immediately.</dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>The wheel does nothing, or scrolls backwards for some users — <span class="sym">works on your desk, inverted on someone else's</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>Either the wheel is ignored entirely, or zoom works for you and runs the wrong way for a colleague — usually one on macOS.</dd>
+          <dt>Cause</dt>
+          <dd>Ignored: you tried to poll it, or forgot to pass events to <code>feed_event</code>. There is no wheel state to poll (§<a href="#unpollable">3.6</a>). Inverted: you ignored <code>event.wheel.direction</code>, which is <code>SDL_MOUSEWHEEL_FLIPPED</code> under natural scrolling.</dd>
+          <dt>Fix</dt>
+          <dd>Accumulate from events, and negate when the direction is flipped. Test it by toggling natural scrolling in your OS settings — a ten-second check that catches a bug you would otherwise ship.</dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>Link error: <code>undefined symbol: engine::input::update()</code> — <span class="sym">it compiles, it will not link</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>Every file compiles, then the link step fails naming functions that plainly exist in <code>input.cpp</code>.</dd>
+          <dt>Cause</dt>
+          <dd><code>src/core/input.cpp</code> was not added to <code>add_executable</code>, so its translation unit was never compiled and the linker has no definitions to find. The header supplied the declarations, which is why the compile step was perfectly happy.</dd>
+          <dt>Fix</dt>
+          <dd>Add the file to the source list and reconfigure. This is the compile-error-versus-link-error distinction from §<a href="#implementation">4</a> doing useful work: a missing <em>declaration</em> fails at compile time, a missing <em>definition</em> fails at link time, and knowing which you got points straight at the cause.</dd>
+        </dl>
+      </div>
+    </details>
+  </div>
+
+  <!-- ================= 9. EXERCISES ================= -->
+  <h2 id="exercises"><span class="num">8</span>Exercises</h2>
+
+  <div class="exercise">
+    <h3><span class="xnum">1.2.1</span>Feel the difference<span class="difficulty">warm-up</span></h3>
+    <p>
+      Change the colour cycle from <code>in.key_pressed(SDL_SCANCODE_SPACE)</code> to
+      <code>in.key_down(SDL_SCANCODE_SPACE)</code>. Rebuild, hold Space for one second, and count the
+      colour changes. Then predict the number before you look, using your frame rate and the palette
+      size. Put it back afterwards.
+    </p>
+    <details>
+      <summary>Solution</summary>
+      <p>
+        At 60 fps, holding for one second gives 60 changes through a 4-colour palette — 15 complete
+        cycles. The box does not appear to change colour so much as vibrate, and which colour it
+        lands on when you release is pure chance, decided by the exact frame your finger left the
+        key. That randomness is the real tell: an action whose outcome depends on when a frame
+        boundary happened to fall is asking the wrong question of the input system.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3><span class="xnum">1.2.2</span>Drag instead of teleport<span class="difficulty">warm-up</span></h3>
+    <p>
+      Currently a click teleports the box once. Make the box follow the cursor while the left button
+      is held, then stop following when you let go. How many characters does the change take?
+    </p>
+    <details>
+      <summary>Solution</summary>
+      <p>
+        Change <code>in.mouse_pressed(SDL_BUTTON_LEFT)</code> to
+        <code>in.mouse_down(SDL_BUTTON_LEFT)</code> — seven characters. "Teleport once" and "drag" are
+        the same code differing only in which question it asks, which is a fair summary of the whole
+        lesson. For a more polished drag, record the offset between the cursor and the box corner on
+        the <code>mouse_pressed</code> frame and preserve it while dragging, so the box does not
+        snap its centre to the cursor at the start.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3><span class="xnum">1.2.3</span>Diagonal movement is too fast<span class="difficulty">guided</span></h3>
+    <p>
+      Hold W and D together and watch the box carefully. It moves diagonally — and faster than it
+      moves along either axis alone. Measure it: time a traversal of the window horizontally, then
+      time the same horizontal distance while moving diagonally. By what factor is it faster, and
+      why? What would you do about it?
+    </p>
+    <details>
+      <summary>Hint</summary>
+      <p>
+        Write down the per-frame displacement in each case. Straight right is
+        <code>(6, 0)</code>. Up-and-right is <code>(6, −6)</code>. How long is each of those arrows?
+      </p>
+    </details>
+    <details>
+      <summary>Solution</summary>
+      <p>
+        The diagonal step is <code>(6, −6)</code>, whose length is
+        <code>√(6² + 6²) = √72 ≈ 8.49</code> — a factor of <code>√2 ≈ 1.414</code>, so diagonal
+        movement is about <strong>41% faster</strong>. This is the "strafe-running" bug that shipped
+        in several famous games, and speedrunners still exploit the ones where it survives.
+      </p>
+      <p>
+        The fix is to make the <em>direction</em> a unit-length arrow before scaling it by speed:
+        divide <code>(dx, dy)</code> by its own length whenever it is non-zero, so every direction
+        contributes exactly one step's worth of movement. That operation is called
+        <strong>normalisation</strong>, it is the first genuinely vector-shaped thing the engine
+        needs, and it is the opening act of Lesson 1.7 — where we build <code>vec2</code> properly
+        rather than bolting a square root onto <code>main.cpp</code>. Leaving the bug in place for
+        five lessons is deliberate: it is much easier to care about vectors once you have watched
+        something misbehave for want of one.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3><span class="xnum">1.2.4</span>How long has it been held?<span class="difficulty">open</span></h3>
+    <p>
+      Add <code>key_held_frames(SDL_Scancode)</code>, returning the number of consecutive frames a key
+      has been down (0 if it is up). Then use it: make the box's speed ramp up over the first half
+      second of holding a direction, so it eases into motion instead of starting at full speed.
+    </p>
+    <details>
+      <summary>Hint</summary>
+      <p>
+        You need one more piece of per-key state. <code>update()</code> already knows, for every key,
+        whether it is down and whether it just went down — which is exactly enough to decide between
+        incrementing a counter and resetting it.
+      </p>
+    </details>
+    <details>
+      <summary>Solution sketch</summary>
+      <p>
+        Add <code>std::array&lt;Uint32, SDL_SCANCODE_COUNT&gt; held_frames_{};</code> and, at the end
+        of <code>update()</code>, loop over the array: <code>held_frames_[i] = keys_[i] ?
+        held_frames_[i] + 1 : 0;</code>. The query returns the entry. A 512-iteration loop per frame
+        is nothing, but it is worth noticing that it is now <em>work proportional to the whole
+        keyboard</em> rather than to the keys you asked about — the first time in this engine that a
+        convenience has a per-frame cost attached, and exactly the kind of trade Module 8 teaches you
+        to measure rather than guess about.
+      </p>
+      <p style="margin-bottom:0">
+        For the ramp, map frames to a factor — for instance <code>min(1.0f, held / 30.0f)</code> at
+        60 fps — and multiply the speed by it. Be aware you have just written another piece of logic
+        in units of <em>frames</em> rather than seconds, which will be wrong on any other refresh
+        rate. Lesson 1.3 converts both.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3><span class="xnum">1.2.5</span>Actions, not keys<span class="difficulty">open</span></h3>
+    <p>
+      Right now <code>main.cpp</code> spells out <code>SDL_SCANCODE_A || SDL_SCANCODE_LEFT</code> at
+      every movement site. Design (do not necessarily build) a layer where gameplay asks
+      <code>action_down(action::move_left)</code> and a separate binding table decides which
+      scancodes that means. What does the table look like? Where does it come from at startup? What
+      breaks if a player binds one key to two actions?
+    </p>
+    <details>
+      <summary>Solution sketch</summary>
+      <p>
+        The core is an <code>enum class action</code> plus a map from action to a small set of
+        bindings, with the query becoming "is any bound key down for this action?" — and the edge
+        queries needing care, since "pressed" for an action with two bound keys should mean "no bound
+        key was down last frame and at least one is now", not "any bound key was pressed" (otherwise
+        pressing the second key while holding the first fires a spurious edge).
+      </p>
+      <p>
+        The interesting design questions are the ones the exercise asks. Bindings want to be data —
+        loaded from a config file so players can rebind without a recompile, which drags in the
+        serialisation work of Module 8. Analogue sources (a gamepad stick that is 0.6 to the left)
+        need a threshold to answer a boolean question, so the layer eventually wants a <em>value</em>
+        query alongside the boolean ones. And a key bound to two actions is not necessarily an error:
+        it is fine across contexts (Esc closes a menu in one, opens it in another), which is the
+        argument for a stack of input contexts rather than a single flat table.
+      </p>
+      <p style="margin-bottom:0">
+        We build this properly in Module 5's input-mapping lesson, once the engine has an asset system
+        to load the bindings from. Sketching it now is worthwhile because the design will feel
+        inevitable rather than imposed when we get there — and because you will notice
+        <code>main.cpp</code> asking for it every time you type a scancode twice.
+      </p>
+    </details>
+  </div>
+
+  <!-- ================= 10. RECAP ================= -->
+  <h2 id="recap"><span class="num">9</span>Recap &amp; Next</h2>
+
+  <div class="recap">
+    <h2>What the engine can do now that it could not before</h2>
+    <ul>
+      <li>
+        <strong>It has an input subsystem.</strong> The first real one — its own header and
+        implementation file, its own state, its own invariant, and a public interface the rest of the
+        engine will use for the next eighty lessons.
+      </li>
+      <li>
+        <strong>It answers both input questions, from one source of truth.</strong> Levels for
+        continuous actions, edges for discrete ones, derived from two snapshots one frame apart —
+        so they cannot contradict each other, and asking does not consume anything.
+      </li>
+      <li>
+        <strong>It is layout-independent.</strong> Movement is addressed by physical position, so
+        WASD is ZQSD on AZERTY with no localisation code, and the wrong choice does not compile.
+      </li>
+      <li>
+        <strong>The frame has its permanent shape:</strong> drain, sample, simulate, render — with a
+        reason for the order, not a habit.
+      </li>
+      <li>
+        <strong>It builds from multiple translation units,</strong> and you can tell a missing
+        declaration from a missing definition by which stage of the build complains.
+      </li>
+    </ul>
+    <p>
+      The idea to carry forward: <strong>events tell you what happened; state tells you what is.</strong>
+      Most of gameplay wants the second, most of tooling wants the first, and the honest way to serve
+      both is to keep one snapshot and derive the rest — while knowing exactly which inputs cannot be
+      snapshotted at all.
+    </p>
+    <p>
+      <strong>Next:</strong> <a href="01-03-delta-time.html">1.3 — Frames, Delta Time, and Why Naive
+      Loops Lie</a>. We now have a box that moves six pixels per frame, which means its speed is
+      whatever the monitor feels like — a bug we deliberately left standing and can now see clearly.
+      Fixing it means measuring time honestly, which turns out to be harder and far more interesting
+      than it sounds: the obvious fix has its own failure mode, the fix for <em>that</em> has one
+      too, and following the chain to the end is how we arrive at the loop the engine will keep for
+      good.
+    </p>
+  </div>
+
+  <!-- ================= 11. FURTHER READING ================= -->
+  <h2 id="reading"><span class="num">10</span>Further Reading</h2>
+
+  <ul class="reading">
+    <li>
+      <span class="src">SDL3 wiki</span>
+      <strong><a href="https://wiki.libsdl.org/SDL3/SDL_GetKeyboardState">SDL_GetKeyboardState</a></strong> —
+      short, and every sentence matters: the pointer is SDL's, pumping is what refreshes it, and a
+      press-and-release between polls is invisible. The three facts §<a href="#theory">3</a> is built on.
+    </li>
+    <li>
+      <span class="src">SDL3 wiki</span>
+      <strong><a href="https://wiki.libsdl.org/SDL3/SDL_Scancode">SDL_Scancode</a></strong> and
+      <strong><a href="https://wiki.libsdl.org/SDL3/SDL_Keycode">SDL_Keycode</a></strong> —
+      the two languages side by side. Read both pages together; the distinction is much clearer as a
+      pair than either is alone.
+    </li>
+    <li>
+      <span class="src">SDL3 wiki</span>
+      <strong><a href="https://wiki.libsdl.org/SDL3/README/migration">Migrating to SDL 3.0</a></strong> —
+      the keyboard-state type change from <code>Uint8</code> to <code>bool</code>, and the flattening
+      of the key event's <code>keysym</code> nesting. Worth a skim before you copy any SDL code you
+      find in the wild.
+    </li>
+    <li>
+      <span class="src">Source</span>
+      <strong><a href="https://github.com/libsdl-org/SDL/blob/release-3.4.12/src/events/SDL_keyboard.c">SDL_keyboard.c</a></strong> —
+      find <code>SDL_SetKeyboardFocus</code> and <code>SDL_ResetKeyboard</code> and read the twenty
+      lines that stop keys sticking when you alt-tab. Reading the implementation of a library you
+      depend on is a habit worth building early, and this is an unusually approachable place to start.
+    </li>
+    <li>
+      <span class="src">Book</span>
+      <strong>Jason Gregory, <em>Game Engine Architecture</em></strong> — the human-interface-device
+      chapter, especially its treatment of button state, chords, and gesture detection. It is the
+      professional version of what we built today, and it is where Exercise 1.2.5 leads.
+    </li>
+    <li>
+      <span class="src">Reference</span>
+      <strong><a href="https://docs.unity3d.com/ScriptReference/Input.GetKey.html">Unity's GetKey / GetKeyDown / GetKeyUp</a></strong> —
+      confirmation that this is not a course-specific invention. Every mainstream engine exposes
+      exactly these three queries, under different names, for exactly the reasons in
+      §<a href="#level-edge">3.1</a>.
+    </li>
+  </ul>
+
+  <!-- ================= 12. STATE ================= -->
+  <details class="state">
+    <summary>STATE — resume key</summary>
+<pre>course: Build a Professional 3D Game Engine (SDL3 + C++20)
+version: 1.0
+
+conventions:
+  world: right-handed, Y-up, -Z forward
+  clip: left-handed, +Y up, z in [0,1] (SDL_GPU-fixed; projection absorbs the flip)
+  sw-rasterizer: targets SDL_GPU's exact NDC (Module 4 port = API change, not maths change)
+  matrices: column vectors, v' = M*v, column-major storage
+  winding: CCW = front, cull back (per-pipeline state; set explicitly every time)
+  units: 1 unit = 1 metre; radians internally; linear colour in renderer
+  axis colours: x/y/z = red/green/blue
+  sdl3: FetchContent, pinned release-3.4.12; target SDL3::SDL3; SDL_TEST_LIBRARY OFF
+  sdl3-api: bool SDL_Init/PollEvent; SDL_CreateWindow(title,w,h,flags) no x/y;
+            SDL_CreateRenderer(window,name); event.key.key; &lt;SDL3/SDL_main.h&gt; separate;
+            SDL_Event = tagged union, type@0 + timestamp@8 shared by all variants,
+            sizeof 128 (ABI padding); types grouped 0x100 quit / 0x2xx window /
+            0x3xx keyboard / 0x4xx mouse / 0x6xx joystick / 0x8000 user
+  sdl3-input: const bool *SDL_GetKeyboardState(int*) — SDL3 uses bool, NOT SDL2's Uint8;
+            indexed by SDL_Scancode; SDL_SCANCODE_COUNT = 512; SDL_GetMouseState returns
+            SDL_MouseButtonFlags + writes float x,y; SDL_BUTTON_MASK(n) = 1u&lt;&lt;(n-1),
+            buttons 1..5; event.key.{scancode,key,down,repeat} (repeat is bool in SDL3);
+            wheel = event-only (no pollable state), event.wheel.{x,y} float +
+            direction == SDL_MOUSEWHEEL_FLIPPED means negate; SDL_PollEvent pumps
+            (-&gt; SDL_WaitEventTimeoutNS(e,0)); focus loss -&gt; SDL_SetKeyboardFocus(NULL)
+            -&gt; SDL_ResetKeyboard() sends key-UP events (so drain-then-sample fixes stuck keys)
+  input-model: poll levels, derive edges (pressed = cur &amp;&amp; !prev, released = !cur &amp;&amp; prev);
+            COPY SDL's array, never alias the pointer; scancodes for positions,
+            keycodes for symbols; frame order = drain -&gt; update -&gt; simulate -&gt; render
+  cpp: C++20, no exceptions/RTTI in core, snake_case, private members trailing _,
+       .hpp + #pragma once, [[nodiscard]], -Wall -Wextra//W4 all fixed
+  build: CMake >= 3.24, out-of-source (build/), 64-bit; Debug = -DCMAKE_BUILD_TYPE=Debug;
+         sources listed explicitly (never file(GLOB)); target_include_directories(src)
+
+curriculum: 94 lessons, ~433 h, 9 modules
+  M0:6  M1:8  M2:12  M3:10  M4:9  M5:10  M6:15  M7:13  M8:11
+
+completed:
+  - MODULE 0 COMPLETE (0.1 … 0.6)
+  - 1.1 Events, Properly
+  - 1.2 Input: State vs Events
+
+capabilities:
+  - portable CMake build, two translation units; FetchContent SDL3 (release-3.4.12)
+  - window + complete switch-based event dispatch (quit, window close, resize)
+  - input subsystem: keyboard levels + edges by scancode, mouse buttons + position,
+    wheel accumulation with flipped-scroll correction, frame-coherent snapshot
+  - demo: box driven by held keys, recoloured on a press edge, teleported on click,
+    resized by the wheel
+  - known-and-deliberate: movement is per-frame, not per-second (fixed in 1.3)
+
+files:
+  /: CLAUDE.md, README.md, ARCHITECTURE.md, LEARNINGS.md, PROMPT.md, LICENSE,
+     .gitignore, CMakeLists.txt, STATE.md
+  src/: main.cpp
+  src/core/: input.hpp, input.cpp
+  docs/: index.html, conventions.html, math-toolbox.html, cpp-style.html
+  docs/lessons/: 00-01..00-06, 01-01-events-properly.html,
+                 01-02-input-state-vs-events.html
+  docs/_template/: lesson-template.html, README.md, apply-shared-css.py
+  memory/: 2026-07-16.md, 2026-07-18.md
+
+next: 1.3 — Frames, Delta Time, and Why Naive Loops Lie</pre>
+  </details>
+
+  <nav class="lesson-nav" aria-label="Lesson navigation (bottom)">
+    <a class="prev-l" href="01-01-events-properly.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">1.1 — Events, Properly</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="01-03-delta-time.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">1.3 — Frames, Delta Time, and Why Naive Loops Lie</span>
+    </a>
+  </nav>
+
+  <footer class="foot">
+    <p>
+      Build a Professional 3D Game Engine ·
+      <a href="../index.html">Contents</a> ·
+      <a href="../conventions.html">Conventions</a> ·
+      <a href="../math-toolbox.html">Math Toolbox</a> ·
+      <a href="../cpp-style.html">C++ Style</a>
+    </p>
+    <p>MIT licensed. Copyright © 2026 digster.</p>
+  </footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ---- Theme toggle (identical across the course) ---- */
+  var root = document.documentElement;
+  var KEY = "engine-course-theme";
+  try {
+    var saved = localStorage.getItem(KEY);
+    if (saved) { root.setAttribute("data-theme", saved); root.style.colorScheme = saved; }
+  } catch (e) {}
+  var btn = document.getElementById("theme-toggle");
+  if (btn) {
+    btn.addEventListener("click", function () {
+      var cur = root.getAttribute("data-theme");
+      if (!cur) cur = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      var next = cur === "dark" ? "light" : "dark";
+      root.setAttribute("data-theme", next);
+      root.style.colorScheme = next;
+      try { localStorage.setItem(KEY, next); } catch (e) {}
+    });
+  }
+
+  /* ---- Syntax highlighting: C++, CMake, shell ---- */
+  function esc(s) { return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+  function span(c, s) { return '<span class="tok-' + c + '">' + esc(s) + "</span>"; }
+
+  var CPP_KEYWORDS = ("consteval constexpr const static void struct class union enum namespace "
+    + "return if else for while switch case default break inline noexcept nullptr true false int "
+    + "long defined static_assert static_cast bool char unsigned public private protected "
+    + "auto using template typename explicit virtual override final delete this sizeof").split(" ");
+  var CPP_TYPES = ("bool char double float int long short signed unsigned void size_t Uint8 Uint16 Uint32 "
+    + "Uint64 Sint32 Sint64").split(" ");
+  var kw = Object.create(null), ty = Object.create(null);
+  CPP_KEYWORDS.forEach(function (w) { kw[w] = 1; });
+  CPP_TYPES.forEach(function (w) { ty[w] = 1; });
+  var CPP_RE = new RegExp([
+    "(\\/\\*[\\s\\S]*?\\*\\/|\\/\\/[^\\n]*|#[^\\n]*)",
+    '("(?:\\\\.|[^"\\\\])*"|\'(?:\\\\.|[^\'\\\\])*\')',
+    "(\\b\\d[\\w.]*\\b)",
+    "([A-Za-z_]\\w*)(?=\\s*\\()",
+    "([A-Za-z_]\\w*)",
+    "([{}()\\[\\];,.<>+\\-*/%=!&|^~?:]+)"
+  ].join("|"), "g");
+  function highlightCpp(src) {
+    var out = "", last = 0, m;
+    CPP_RE.lastIndex = 0;
+    while ((m = CPP_RE.exec(src)) !== null) {
+      if (m.index > last) out += esc(src.slice(last, m.index));
+      if (m[1])      out += span(m[1].charAt(0) === "#" ? "p" : "c", m[1]);
+      else if (m[2]) out += span("s", m[2]);
+      else if (m[3]) out += span("n", m[3]);
+      else if (m[4]) out += kw[m[4]] ? span("k", m[4]) : span("f", m[4]);
+      else if (m[5]) out += kw[m[5]] ? span("k", m[5]) : ty[m[5]] ? span("t", m[5]) : esc(m[5]);
+      else if (m[6]) out += span("o", m[6]);
+      last = CPP_RE.lastIndex;
+    }
+    return out + esc(src.slice(last));
+  }
+
+  // CMake: comments, strings, ${vars}, and command names (word before "(").
+  var CMAKE_RE = /(#[^\n]*)|("(?:\\.|[^"\\])*")|(\$\{[^}]*\})|(^|\n)(\s*)([A-Za-z_]\w*)(?=\s*\()/g;
+  function highlightCmake(src) {
+    var out = "", last = 0, m;
+    CMAKE_RE.lastIndex = 0;
+    while ((m = CMAKE_RE.exec(src)) !== null) {
+      if (m.index > last) out += esc(src.slice(last, m.index));
+      if (m[1])      out += span("c", m[1]);
+      else if (m[2]) out += span("s", m[2]);
+      else if (m[3]) out += span("n", m[3]);
+      else           out += esc(m[4] || "") + esc(m[5] || "") + span("f", m[6]);
+      last = CMAKE_RE.lastIndex;
+    }
+    return out + esc(src.slice(last));
+  }
+
+  var SH_RE = /(#[^\n]*|::[^\n]*)|("(?:\\.|[^"\\])*"|'[^']*')|(^|\n)(\s*)([\w.\/\\-]+)/g;
+  function highlightShell(src) {
+    var out = "", last = 0, m;
+    SH_RE.lastIndex = 0;
+    while ((m = SH_RE.exec(src)) !== null) {
+      if (m.index > last) out += esc(src.slice(last, m.index));
+      if (m[1]) out += span("c", m[1]);
+      else if (m[2]) out += span("s", m[2]);
+      else out += esc(m[3] || "") + esc(m[4] || "") + span("f", m[5]);
+      last = SH_RE.lastIndex;
+    }
+    return out + esc(src.slice(last));
+  }
+
+  var DISPATCH = { "lang-cpp": highlightCpp, "lang-cmake": highlightCmake, "lang-bash": highlightShell };
+  document.querySelectorAll(".listing pre code").forEach(function (el) {
+    for (var cls in DISPATCH) {
+      if (el.classList.contains(cls)) { el.innerHTML = DISPATCH[cls](el.textContent); return; }
+    }
+  });
+})();
+</script>
+</body>
+</html>

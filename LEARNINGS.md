@@ -118,6 +118,34 @@ Other verified constants/functions used so far: `SDLK_ESCAPE`=0x1b (`SDL_keycode
 `const char *SDL_GetError(void)` (`SDL_error.h`); `SDL_SetRenderDrawColor/RenderClear/RenderPresent`
 all return bool, `SDL_DestroyRenderer/DestroyWindow/Quit` return void (`SDL_render.h`, `SDL_video.h`).
 
+### Input specifics (verified at `release-3.4.12` for Lesson 1.2)
+
+| Fact | Detail |
+|---|---|
+| `const bool *SDL_GetKeyboardState(int *numkeys)` | **`bool`, not SDL2's `Uint8`.** Both are 1 byte, so the wrong type may appear to work. `SDL_keyboard.h`. |
+| `SDL_SCANCODE_COUNT` | `= 512` (`SDL_scancode.h`). SDL2's name was `SDL_NUM_SCANCODES`. |
+| Scancode values | Letters run alphabetically from `SDL_SCANCODE_A = 4`, so W = `4 + 22` = **26**; SPACE = 44. Useful for worked examples. |
+| `SDL_MouseButtonFlags SDL_GetMouseState(float *x, float *y)` | Buttons via return value, position via **`float`** out-params. `SDL_mouse.h`. |
+| `SDL_BUTTON_MASK(n)` | `= 1u << (n-1)`; buttons are **1-based** (`SDL_BUTTON_LEFT` = 1 … `X2` = 5). SDL2 spelled it `SDL_BUTTON(n)`. |
+| `event.key.{scancode,key,down,repeat}` | `down` and `repeat` are **`bool`** in SDL3 (`Uint8` in SDL2). |
+| `event.wheel.{x,y}` | **`float`**, plus `direction`; `SDL_MOUSEWHEEL_FLIPPED` means the values are inverted and must be multiplied by −1. Natural scrolling is the macOS default, so skipping this ships an inverted-scroll bug. |
+
+**`SDL_PollEvent` pumps.** It forwards to `SDL_WaitEventTimeoutNS(event, 0)`, which calls
+`SDL_PumpEventsInternal` (`src/events/SDL_events.c`). Since pumping is what refreshes the keyboard
+and mouse state arrays, the frame order **drain → sample → simulate** is mandatory, not stylistic.
+Sampling first costs a full frame of input latency.
+
+**Focus loss does not strand held keys — but only if you drain.** `SDL_SetKeyboardFocus()` calls
+`SDL_ResetKeyboard()` when focus leaves every SDL window (`src/events/SDL_keyboard.c:350`), and
+`SDL_ResetKeyboard` fixes state by **sending key-up events**, not by zeroing the array. So SDL's
+own fix for "alt-tab and the character keeps running" is delivered through the event queue and is
+missed entirely by an input system that samples before draining.
+
+**The state array cannot see a tap between samples.** The header says so plainly: a key pressed
+and released before you process events never shows up in `SDL_GetKeyboardState`. Fine for a
+keyboard at 60 fps (a human tap is 30–50 ms), but worth naming again in 1.4, where a fixed
+timestep can run several sim steps per input sample.
+
 **Loop model:** we use classic `int main` + our own `while` loop, NOT SDL3's callback model
 (`SDL_MAIN_USE_CALLBACKS` with `SDL_AppInit`/`SDL_AppIterate`/`SDL_AppEvent`/`SDL_AppQuit`), because
 the engine owns its loop (0.1 thesis). The callback model exists and is fine for simple apps; it is
@@ -144,3 +172,46 @@ Extend this table whenever a signature surprises you. The fastest check:
   short.
 - **Zero placeholders in code listings** (§8). No `// ...`, no "rest of file as before". A
   changed file appears whole. Continuity errors across lessons are correctness bugs.
+- **Generate code listings from the real files, never retype them.** Author the lesson with
+  `<!--INCLUDE:path-->` inside the `<code>` element and splice the escaped file contents in with a
+  throwaway script before publishing. Hand-copying a 250-line listing is how a lesson comes to show
+  code that no longer matches `src/` — the exact continuity bug §8 calls a correctness error.
+- **The trailing `<script>` block has drifted between lessons, and nothing propagates it.**
+  `apply-shared-css.py` stamps the `<style>` block only. As of 1.2: `00-04` has a `highlightCmake`
+  function and a shell regex handling `::` comments that `00-06` and `01-01` lack, while `01-01`
+  has a richer C++ keyword/type list that `00-04` lacks. 1.2 uses the **union** of both. The real
+  fix is to extend the stamper to cover a `SHARED-SCRIPT` marker region and re-stamp every lesson;
+  until then, take the newest superset when authoring and expect to reconcile.
+
+---
+
+## Verifying a lesson page — what actually catches things
+
+Eyeballing a page misses SVG defects. Serve `docs/` over HTTP and drive a real browser (the
+preview pane reports impossible computed styles). Three checks earned their keep on 1.2:
+
+1. **Label spill** — compare every `<text>` bounding box against its `<svg>` box. Caught a
+   monospace row label clipped off the left edge of Figure 2 and a caption running 10 px past the
+   right edge of Figure 4.
+2. **Label collision** — pairwise overlap test over each SVG's `<text>` nodes.
+3. **Look at the rendered figure.** Neither check above catches a *line* crossing the wrong row:
+   Figure 1's comparison ramp was drawn straight through the event-tick timeline, and only a
+   screenshot revealed it. When a diagram has stacked rows, compute the path coordinates in Python
+   and check the extremes land inside their band.
+
+Also worth confirming per page: zero inline `fill=` on `<text>` (the stamper lints this), both
+themes, code `white-space: pre` with horizontal scroll, and `scrollWidth == clientWidth` at 375 px
+wide.
+
+## Testing engine code that talks to SDL
+
+`SDL_GetKeyboardState` has no injection point — pushing a synthetic `SDL_EVENT_KEY_DOWN` with
+`SDL_PushEvent` does **not** update the state array, because SDL updates it in
+`SDL_SendKeyboardKey` when the event is *generated*, not when it is dequeued.
+
+The seam that works: compile the unit under test together with a test TU that **defines**
+`extern "C" const bool *SDL_GetKeyboardState(int *)` (and `SDL_GetMouseState`) itself. The linker
+prefers the definition in the object file over the one in `libSDL3.dylib`, so key state becomes
+fully drivable with no changes to the production code. This is how 1.2's six-frame edge table was
+verified value-for-value rather than asserted. Keep such harnesses in the scratchpad — they are
+authoring-time verification, not course content, until Module 8's testing lesson.

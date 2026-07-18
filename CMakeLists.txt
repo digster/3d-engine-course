@@ -39,8 +39,22 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(SDL3)
 
 # ---- Our program -----------------------------------------------------------
-# The executable is now the real engine, built from src/. hello.cpp is retired.
-add_executable(engine src/main.cpp)
+# Every source file is listed by hand. CMake can glob them for you, and you
+# should not let it: a glob is evaluated at configure time, so adding a file
+# leaves the build silently ignoring it until someone reconfigures. An explicit
+# list is one extra line per file and never lies.
+add_executable(engine
+    src/main.cpp
+    src/core/input.cpp
+)
+
+# Make `src/` a root for our own includes, so a file says
+#     #include "core/input.hpp"
+# from anywhere in the tree — the same spelling regardless of which directory
+# the including file lives in. Relative paths like "../core/input.hpp" break the
+# moment a file moves; a stable include root does not. PRIVATE because nothing
+# links against us: this is a leaf executable, and the setting stops here.
+target_include_directories(engine PRIVATE src)
 
 # Link SDL. SDL3::SDL3 is the alias SDL exports for "the SDL library, however it
 # was built"; linking it also pulls in SDL's headers and platform frameworks

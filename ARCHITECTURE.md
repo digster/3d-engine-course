@@ -50,21 +50,41 @@ inventing one — but without paying framework ceremony before it buys anything.
 ├── cmake/                  # helper modules (warnings, shader compilation)
 ├── memory/                 # dated session summaries
 ├── docs/                   # THE COURSE (see §3)
-├── src/                    # the engine-to-be, single executable
-│   ├── main.cpp
-│   ├── core/               # logging, assertions, time, error handling
+├── src/                    # the engine-to-be, single executable  [EXISTS from 0.5]
+│   ├── main.cpp            # entry point + frame loop            [EXISTS]
+│   ├── core/               # input, logging, assertions, time, error handling
+│   │   ├── input.hpp       # frame-coherent keyboard/mouse snapshot  [EXISTS from 1.2]
+│   │   └── input.cpp
 │   ├── math/               # vec2/3/4, mat3/4, quaternion — hand-rolled, no GLM
 │   ├── gfx/                # framebuffer, software rasterizer → later SDL_GPU renderer
-│   └── platform/           # window, events, input
+│   └── platform/           # window + event pumping (Module 5; see the note below)
 ├── shaders/                # HLSL sources (Module 4+). Compiled output is gitignored.
 ├── assets/                 # meshes, textures, fonts
 ├── tests/                  # unit tests (math first — it is the most testable layer)
 └── third_party/            # stb, ImGui, cgltf. SDL3 arrives via FetchContent.
 ```
 
-> **Nothing under `src/` or `CMakeLists.txt` exists yet, and that is intentional.** Module 0
-> teaches CMake from zero and has the student write the first `CMakeLists.txt` themselves.
-> Pre-creating it would spoil the lesson. This section describes the *target*.
+> **Directories appear only when a lesson needs them.** The tree above is the *target*; entries
+> marked `[EXISTS]` are the only ones on disk. Module 0 has the student write the first
+> `CMakeLists.txt` themselves, so pre-creating any of this would spoil a lesson.
+
+**Include root.** `target_include_directories(engine PRIVATE src)` makes `src/` the root for our
+own headers, so every file spells an include the same way — `#include "core/input.hpp"` — no
+matter where it sits. Relative paths (`../core/input.hpp`) break when a file moves; a stable
+include root does not. Sources are **listed explicitly** in `add_executable`, never `file(GLOB)`:
+a glob is evaluated at configure time, so a newly added file is silently absent from the build
+until someone reconfigures, and the symptom is a link error naming a function you are looking
+straight at.
+
+**Why input lives in `core/` and not `platform/`.** Input is the first subsystem the course
+extracts (Lesson 1.2), and at that point there is no platform layer to put it in — `main.cpp`
+still calls SDL directly, and the platform/application abstraction is not taught until Module 5.
+Creating `src/platform/` for a single class, before the concept that justifies it, is exactly the
+premature ceremony §2.1 exists to avoid. `core::input` is also not a device driver: it is a
+frame-coherent *state cache* (poll levels, derive edges) that gameplay queries, which is
+engine-fundamental rather than OS-specific. When Module 5 introduces the platform layer, the
+raw device/event plumbing may move to `platform/` while the cached snapshot stays in `core/` —
+and that split will be a taught decision, not an accident.
 
 ### 2.2 After the Module 5 refactor: engine / demos / tools
 
