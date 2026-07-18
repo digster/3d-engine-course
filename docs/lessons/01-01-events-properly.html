@@ -1,0 +1,2115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>1.1 — Events, Properly · Build a Professional 3D Game Engine</title>
+<meta name="description" content="SDL3's event model in depth: the tagged union, the event taxonomy, and why you must drain the queue completely every single frame.">
+<!-- SHARED-CSS:BEGIN -->
+<style>
+/* ---- Design tokens ------------------------------------------------------- */
+:root {
+  color-scheme: light dark;
+
+  /* Page */
+  --bg:            #fdfdfb;
+  --bg-sunken:     #f4f4f0;
+  --bg-raised:     #ffffff;
+  --text:          #1c1c1a;
+  --text-muted:    #5f5f58;
+  --text-faint:    #8a8a80;
+  --rule:          #e2e2db;
+  --rule-strong:   #cfcfc6;
+
+  /* Accent — used for links, active nav, section marks */
+  --accent:        #b4530a;
+  --accent-soft:   #f5e6d8;
+  --accent-text:   #8f4108;
+
+  /* Callouts */
+  --note-bd:       #3a6ea5;   --note-bg:    #eaf2fb;
+  --warn-bd:       #b8860b;   --warn-bg:    #fdf5e2;
+  --verify-bd:     #a03030;   --verify-bg:  #fbecec;
+  --pitfall-bd:    #7a4fa3;   --pitfall-bg: #f4eefb;
+  --ok-bd:         #2f7d4f;   --ok-bg:      #e9f6ee;
+
+  /* Code — always dark, in both page themes */
+  --code-bg:       #1b1d23;
+  --code-bar:      #262932;
+  --code-text:     #dfe3ec;
+  --code-rule:     #363a45;
+
+  /* Syntax tokens */
+  --tok-comment:   #6d7789;
+  --tok-keyword:   #c98fdb;
+  --tok-type:      #6cc5d9;
+  --tok-string:    #a3cf85;
+  --tok-number:    #e8a978;
+  --tok-preproc:   #d9a05b;
+  --tok-func:      #79b6f2;
+  --tok-punct:     #9aa2b1;
+
+  /* Axis colours — COURSE-WIDE CONVENTION. x/y/z = red/green/blue.
+     Never override these in a diagram. See conventions.html. */
+  --axis-x:        #d1344a;
+  --axis-y:        #2f9e4f;
+  --axis-z:        #2b6fd4;
+  --axis-x-soft:   #f7d8dd;
+  --axis-y-soft:   #d8f0e0;
+  --axis-z-soft:   #d7e4fa;
+
+  /* Diagram neutrals */
+  --dia-bg:        #ffffff;
+  --dia-ink:       #33332e;
+  --dia-ink-soft:  #7a7a72;
+  --dia-grid:      #e8e8e2;
+  --dia-fill:      #f0f0ea;
+  --dia-hi:        #b4530a;
+
+  /* Typography */
+  --font-body: "Iowan Old Style", "Palatino Linotype", "Palatino", "Charter",
+               Georgia, Cambria, "Times New Roman", serif;
+  --font-ui:   -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+               "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "SFMono-Regular", "Cascadia Code",
+               "JetBrains Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  --measure: 42rem;          /* ~72 characters at this size — the reading column */
+  --measure-wide: 58rem;     /* diagrams & tables may breathe past the measure  */
+}
+
+/* Dark tokens.
+   Applied in two situations, which is why the block is written twice:
+     1. the OS asks for dark AND the reader has not overridden to light;
+     2. the reader explicitly chose dark via the toggle.
+   CSS has no mixins, so duplication is the price of supporting both an OS
+   default and a manual override. Keep the two blocks byte-identical. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg:          #15161a;
+    --bg-sunken:   #101115;
+    --bg-raised:   #1c1e24;
+    --text:        #e4e4e0;
+    --text-muted:  #a2a49e;
+    --text-faint:  #74766f;
+    --rule:        #2c2e35;
+    --rule-strong: #3d404a;
+
+    --accent:      #f0a06a;
+    --accent-soft: #33251a;
+    --accent-text: #f5b184;
+
+    --note-bd:     #5a8fc8;   --note-bg:    #16202c;
+    --warn-bd:     #c9a132;   --warn-bg:    #262013;
+    --verify-bd:   #d05555;   --verify-bg:  #2a1717;
+    --pitfall-bd:  #a077c8;   --pitfall-bg: #221a2c;
+    --ok-bd:       #4fa877;   --ok-bg:      #14231a;
+
+    --dia-bg:      #1a1c21;
+    --dia-ink:     #d8d8d2;
+    --dia-ink-soft:#8f918a;
+    --dia-grid:    #2b2d33;
+    --dia-fill:    #24262c;
+    --dia-hi:      #f0a06a;
+
+    --axis-x:      #f2647a;
+    --axis-y:      #5cc47e;
+    --axis-z:      #6b9ef0;
+    --axis-x-soft: #3a2027;
+    --axis-y-soft: #1c3325;
+    --axis-z-soft: #1e2a40;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg:          #15161a;
+  --bg-sunken:   #101115;
+  --bg-raised:   #1c1e24;
+  --text:        #e4e4e0;
+  --text-muted:  #a2a49e;
+  --text-faint:  #74766f;
+  --rule:        #2c2e35;
+  --rule-strong: #3d404a;
+
+  --accent:      #f0a06a;
+  --accent-soft: #33251a;
+  --accent-text: #f5b184;
+
+  --note-bd:     #5a8fc8;   --note-bg:    #16202c;
+  --warn-bd:     #c9a132;   --warn-bg:    #262013;
+  --verify-bd:   #d05555;   --verify-bg:  #2a1717;
+  --pitfall-bd:  #a077c8;   --pitfall-bg: #221a2c;
+  --ok-bd:       #4fa877;   --ok-bg:      #14231a;
+
+  --dia-bg:      #1a1c21;
+  --dia-ink:     #d8d8d2;
+  --dia-ink-soft:#8f918a;
+  --dia-grid:    #2b2d33;
+  --dia-fill:    #24262c;
+  --dia-hi:      #f0a06a;
+
+  --axis-x:      #f2647a;
+  --axis-y:      #5cc47e;
+  --axis-z:      #6b9ef0;
+  --axis-x-soft: #3a2027;
+  --axis-y-soft: #1c3325;
+  --axis-z-soft: #1e2a40;
+}
+
+/* ---- Reset & base -------------------------------------------------------- */
+*, *::before, *::after { box-sizing: border-box; }
+
+html {
+  font-size: 18px;
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
+  scroll-padding-top: 2rem;
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  line-height: 1.7;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* The reading column. Everything is centred on --measure; wide elements opt out. */
+.wrap {
+  max-width: var(--measure);
+  margin: 0 auto;
+  padding: 0 1.25rem;
+}
+.bleed {                       /* for diagrams/tables that need more room */
+  max-width: var(--measure-wide);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* ---- Typography ---------------------------------------------------------- */
+h1, h2, h3, h4 {
+  font-family: var(--font-ui);
+  line-height: 1.25;
+  letter-spacing: -0.015em;
+  margin: 0 0 0.6em;
+  scroll-margin-top: 1.5rem;
+}
+h1 { font-size: 2.15rem; font-weight: 700; margin-top: 0.2em; }
+h2 {
+  font-size: 1.5rem; font-weight: 650;
+  margin-top: 2.6em;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--rule);
+}
+h3 { font-size: 1.15rem; font-weight: 650; margin-top: 2em; }
+h4 { font-size: 1rem;    font-weight: 650; margin-top: 1.6em; color: var(--text-muted); }
+
+/* Section numbers rendered as a quiet prefix */
+h2 .num, h3 .num {
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  margin-right: 0.5em;
+  font-weight: 500;
+}
+
+p { margin: 0 0 1.15em; }
+
+a { color: var(--accent-text); text-decoration-color: var(--rule-strong); text-underline-offset: 2px; }
+a:hover { text-decoration-color: currentColor; }
+
+strong { font-weight: 650; }
+em { font-style: italic; }
+
+ul, ol { margin: 0 0 1.15em; padding-left: 1.5em; }
+li { margin-bottom: 0.4em; }
+li > ul, li > ol { margin-top: 0.4em; margin-bottom: 0.5em; }
+
+hr { border: 0; border-top: 1px solid var(--rule); margin: 2.5em 0; }
+
+blockquote {
+  margin: 1.5em 0;
+  padding: 0.1em 0 0.1em 1.2em;
+  border-left: 3px solid var(--rule-strong);
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* Inline code — light chip, distinct from the dark block listings */
+:not(pre) > code {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 0.08em 0.34em;
+  word-break: break-word;
+}
+
+/* ---- Masthead ------------------------------------------------------------ */
+.masthead {
+  background: var(--bg-sunken);
+  border-bottom: 1px solid var(--rule);
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+}
+.masthead-inner {
+  max-width: var(--measure-wide);
+  margin: 0 auto;
+  padding: 0.6rem 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.masthead .course {
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  text-decoration: none;
+}
+.masthead .spacer { flex: 1; }
+.masthead a { color: var(--text-muted); text-decoration: none; }
+.masthead a:hover { color: var(--accent-text); }
+
+.theme-toggle {
+  font: inherit;
+  font-size: 0.78rem;
+  background: var(--bg-raised);
+  color: var(--text-muted);
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  padding: 0.2rem 0.55rem;
+  cursor: pointer;
+}
+.theme-toggle:hover { border-color: var(--rule-strong); color: var(--text); }
+
+/* ---- Lesson nav (top & bottom) ------------------------------------------- */
+.lesson-nav {
+  display: flex;
+  align-items: stretch;
+  gap: 0.6rem;
+  font-family: var(--font-ui);
+  font-size: 0.82rem;
+  margin: 1.5rem auto;
+}
+.lesson-nav a, .lesson-nav span {
+  flex: 1;
+  padding: 0.55rem 0.8rem;
+  border: 1px solid var(--rule);
+  border-radius: 7px;
+  background: var(--bg-raised);
+  text-decoration: none;
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+.lesson-nav a:hover { border-color: var(--accent); }
+.lesson-nav span { opacity: 0.45; }        /* disabled edge (no prev / no next) */
+.lesson-nav .dir {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-faint);
+}
+.lesson-nav .ttl {
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-weight: 550;
+}
+.lesson-nav .next-l { text-align: right; }
+.lesson-nav .idx-l  { flex: 0 0 auto; justify-content: center; text-align: center; }
+@media (max-width: 34rem) {
+  .lesson-nav { flex-wrap: wrap; }
+  .lesson-nav .idx-l { order: 3; flex: 1 0 100%; }
+}
+
+/* ---- Lesson header block ------------------------------------------------- */
+.lesson-head { margin: 2rem 0 0; }
+.eyebrow {
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+  font-weight: 650;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 0.5rem;
+}
+.deck {
+  font-size: 1.12rem;
+  color: var(--text-muted);
+  margin-bottom: 1.5rem;
+}
+.meta {
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  padding: 1rem 1.15rem;
+  margin-bottom: 1.75rem;
+}
+.meta dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 0.4rem 1rem; }
+.meta dt {
+  color: var(--text-faint);
+  text-transform: uppercase;
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  padding-top: 0.28em;
+  white-space: nowrap;
+}
+.meta dd { margin: 0; }
+@media (max-width: 30rem) {
+  .meta dl { grid-template-columns: 1fr; gap: 0.15rem 0; }
+  .meta dd { margin-bottom: 0.6rem; }
+}
+
+/* Objectives — "you will be able to…" */
+.objectives {
+  border: 1px solid var(--accent);
+  background: var(--accent-soft);
+  border-radius: 9px;
+  padding: 1.1rem 1.25rem;
+  margin: 1.75rem 0;
+}
+.objectives h2 {
+  margin: 0 0 0.5rem;
+  border: 0; padding: 0;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--accent-text);
+}
+.objectives ul { margin: 0; padding-left: 1.25em; }
+.objectives li::marker { color: var(--accent); }
+
+/* ---- Table of contents --------------------------------------------------- */
+.toc {
+  font-family: var(--font-ui);
+  font-size: 0.88rem;
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  padding: 1rem 1.25rem;
+  margin: 2rem 0;
+}
+.toc > summary {
+  cursor: pointer;
+  font-weight: 650;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-muted);
+  list-style: none;
+}
+.toc > summary::-webkit-details-marker { display: none; }
+.toc > summary::before { content: "▸ "; color: var(--accent); }
+.toc[open] > summary::before { content: "▾ "; }
+.toc ol { list-style: none; margin: 0.85rem 0 0; padding: 0; counter-reset: toc; }
+.toc ol ol { margin: 0.3rem 0 0.5rem 1.1rem; }
+.toc li { margin: 0.28em 0; counter-increment: toc; }
+.toc a { text-decoration: none; color: var(--text); }
+.toc a:hover { color: var(--accent-text); text-decoration: underline; }
+.toc ol ol a { color: var(--text-muted); font-size: 0.94em; }
+
+/* ---- Callouts ------------------------------------------------------------ */
+.callout {
+  border-left: 3px solid var(--rule-strong);
+  background: var(--bg-sunken);
+  border-radius: 0 8px 8px 0;
+  padding: 0.9rem 1.1rem;
+  margin: 1.6em 0;
+  font-size: 0.95rem;
+}
+.callout > :first-child { margin-top: 0; }
+.callout > :last-child  { margin-bottom: 0; }
+.callout .label {
+  display: block;
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  margin-bottom: 0.35rem;
+}
+.callout.note    { border-color: var(--note-bd);    background: var(--note-bg); }
+.callout.note .label    { color: var(--note-bd); }
+.callout.warn    { border-color: var(--warn-bd);    background: var(--warn-bg); }
+.callout.warn .label    { color: var(--warn-bd); }
+.callout.verify  { border-color: var(--verify-bd);  background: var(--verify-bg); }
+.callout.verify .label  { color: var(--verify-bd); }
+.callout.pitfall { border-color: var(--pitfall-bd); background: var(--pitfall-bg); }
+.callout.pitfall .label { color: var(--pitfall-bd); }
+.callout.ok      { border-color: var(--ok-bd);      background: var(--ok-bg); }
+.callout.ok .label      { color: var(--ok-bd); }
+/* C++ explainers: a C++ feature taught in place, the first time it appears. */
+.callout.cpp     { border-color: var(--accent);     background: var(--accent-soft); }
+.callout.cpp .label     { color: var(--accent-text); }
+
+/* ---- Code listings ------------------------------------------------------- */
+.listing {
+  margin: 1.6em 0;
+  border-radius: 9px;
+  overflow: hidden;
+  border: 1px solid var(--code-rule);
+  background: var(--code-bg);
+}
+.listing figcaption {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: var(--code-bar);
+  border-bottom: 1px solid var(--code-rule);
+  padding: 0.45rem 0.85rem;
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  color: #aeb6c4;
+}
+.listing figcaption .path { font-weight: 600; color: #dfe3ec; }
+.listing figcaption .tag {
+  font-family: var(--font-ui);
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  background: #3a3f4c;
+  color: #c6cdd9;
+}
+.listing figcaption .tag.new      { background: #1f4433; color: #7fd6a5; }
+.listing figcaption .tag.modified { background: #453a1c; color: #e0be74; }
+.listing figcaption .lang { margin-left: auto; opacity: 0.65; }
+
+/* Horizontal scroll — NEVER wrap. Wrapped code lies about its structure. */
+.listing pre {
+  margin: 0;
+  padding: 0.9rem 1rem;
+  overflow-x: auto;
+  background: var(--code-bg);
+}
+.listing pre code {
+  font-family: var(--font-mono);
+  font-size: 0.79rem;
+  line-height: 1.62;
+  color: var(--code-text);
+  white-space: pre;
+  display: block;
+  tab-size: 4;
+}
+.listing pre::-webkit-scrollbar { height: 9px; }
+.listing pre::-webkit-scrollbar-track { background: var(--code-bar); }
+.listing pre::-webkit-scrollbar-thumb { background: #4a5060; border-radius: 5px; }
+.listing pre::-webkit-scrollbar-thumb:hover { background: #5d6478; }
+
+/* Syntax tokens, applied by the tiny highlighter at the foot of the page. */
+.tok-c { color: var(--tok-comment); font-style: italic; }
+.tok-k { color: var(--tok-keyword); }
+.tok-t { color: var(--tok-type); }
+.tok-s { color: var(--tok-string); }
+.tok-n { color: var(--tok-number); }
+.tok-p { color: var(--tok-preproc); }
+.tok-f { color: var(--tok-func); }
+.tok-o { color: var(--tok-punct); }
+
+/* Emphasised line inside a listing (the line this paragraph is about) */
+.listing .hl { background: rgba(180, 130, 60, 0.16); display: inline-block; width: 100%; }
+
+/* Shell transcripts get a lighter treatment than source files */
+.listing.shell figcaption .path::before { content: "$ "; opacity: 0.6; }
+
+/* ---- Figures & diagrams -------------------------------------------------- */
+figure.dia {
+  margin: 2em auto;
+  padding: 0;
+}
+figure.dia svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: var(--dia-bg);
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+}
+figure.dia figcaption,
+figure.tbl figcaption {
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: 0.65rem;
+  line-height: 1.55;
+}
+figure.dia figcaption .fignum,
+figure.tbl figcaption .fignum {
+  font-weight: 700;
+  color: var(--text);
+}
+/* SVG text inherits the theme so diagrams survive dark mode */
+figure.dia svg text { font-family: var(--font-ui); fill: var(--dia-ink); }
+figure.dia svg .lbl-x { fill: var(--axis-x); }
+figure.dia svg .lbl-y { fill: var(--axis-y); }
+figure.dia svg .lbl-z { fill: var(--axis-z); }
+figure.dia svg .ax-x  { stroke: var(--axis-x); }
+figure.dia svg .ax-y  { stroke: var(--axis-y); }
+figure.dia svg .ax-z  { stroke: var(--axis-z); }
+figure.dia svg .ink       { stroke: var(--dia-ink); }
+figure.dia svg .ink-soft  { stroke: var(--dia-ink-soft); }
+figure.dia svg .grid      { stroke: var(--dia-grid); }
+figure.dia svg .fill-soft { fill: var(--dia-fill); }
+figure.dia svg .hi        { stroke: var(--dia-hi); }
+figure.dia svg .mono      { font-family: var(--font-mono); }
+figure.dia svg .sm        { font-size: 11px; }
+figure.dia svg .xs        { font-size: 9.5px; }
+
+/* Text fills for <text> elements.
+   These MUST be classes, not fill="..." attributes: the `figure.dia svg text`
+   rule above is CSS, and CSS always beats an SVG presentation attribute — an
+   inline fill on a <text> is silently ignored. Class selectors outrank the bare
+   element selector, so these win. (Shapes are unaffected; the rule only targets
+   text, so fill="..." still works on rect/path/circle.) */
+figure.dia svg .muted     { fill: var(--dia-ink-soft); }
+figure.dia svg .t-hi      { fill: var(--dia-hi); }
+figure.dia svg .t-ok      { fill: var(--ok-bd); }
+figure.dia svg .t-bad     { fill: var(--verify-bd); }
+/* For labels sitting ON a saturated filled shape, where the theme ink would be
+   unreadable. Fixed white in both themes, because the shape under it is the
+   same saturated colour in both. */
+figure.dia svg .t-inv     { fill: #ffffff; }
+
+/* ---- Tables -------------------------------------------------------------- */
+.tbl-scroll { overflow-x: auto; margin: 1.6em 0; }
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+th, td {
+  text-align: left;
+  padding: 0.5rem 0.7rem;
+  border-bottom: 1px solid var(--rule);
+  vertical-align: top;
+}
+th {
+  font-weight: 650;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--rule-strong);
+  white-space: nowrap;
+}
+tbody tr:hover { background: var(--bg-sunken); }
+td code { font-size: 0.82em; }
+
+/* File-manifest table: path | new/modified | purpose */
+.manifest td:first-child { font-family: var(--font-mono); font-size: 0.78rem; white-space: nowrap; }
+.badge {
+  font-size: 0.62rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.06em; padding: 0.1rem 0.4rem; border-radius: 3px; white-space: nowrap;
+}
+.badge.new { background: var(--ok-bg); color: var(--ok-bd); border: 1px solid var(--ok-bd); }
+.badge.mod { background: var(--warn-bg); color: var(--warn-bd); border: 1px solid var(--warn-bd); }
+/* Curriculum status, used on index.html */
+.badge.done { background: var(--ok-bg); color: var(--ok-bd); border: 1px solid var(--ok-bd); }
+.badge.soon { background: var(--bg-sunken); color: var(--text-faint); border: 1px solid var(--rule-strong); }
+
+/* ---- Math ---------------------------------------------------------------- */
+/* KaTeX renders these when the CDN is reachable. When it is NOT, the raw TeX
+   stays visible — which is why every equation MUST also be stated in prose.
+   Never let an equation be the only carrier of a fact. */
+.eq {
+  margin: 1.4em 0;
+  padding: 0.9rem 1rem;
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  overflow-x: auto;
+  text-align: center;
+}
+.eq-plain {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  margin-top: 0.6rem;
+  padding-top: 0.6rem;
+  border-top: 1px dashed var(--rule-strong);
+  text-align: left;
+}
+.eq-plain::before {
+  content: "in plain text: ";
+  color: var(--text-faint);
+  font-family: var(--font-ui);
+  font-size: 0.72rem;
+}
+
+/* Worked numeric example — every formula gets one */
+.worked {
+  border: 1px solid var(--rule-strong);
+  border-radius: 9px;
+  padding: 1rem 1.2rem;
+  margin: 1.6em 0;
+  background: var(--bg-raised);
+}
+.worked > .label {
+  display: block;
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--accent);
+  margin-bottom: 0.5rem;
+}
+.worked > :last-child { margin-bottom: 0; }
+
+/* ---- Exercises ----------------------------------------------------------- */
+.exercise {
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 9px 9px 0;
+  padding: 1rem 1.2rem;
+  margin: 1.4em 0;
+  background: var(--bg-raised);
+}
+.exercise h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.98rem;
+}
+.exercise h3 .xnum {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--accent);
+  margin-right: 0.5em;
+}
+.difficulty {
+  font-family: var(--font-ui);
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-faint);
+  border: 1px solid var(--rule-strong);
+  border-radius: 3px;
+  padding: 0.05rem 0.35rem;
+  margin-left: 0.4em;
+  vertical-align: 0.15em;
+}
+.exercise details {
+  margin-top: 0.7rem;
+  border-top: 1px solid var(--rule);
+  padding-top: 0.6rem;
+}
+.exercise summary {
+  cursor: pointer;
+  font-family: var(--font-ui);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.exercise summary:hover { color: var(--accent-text); }
+.exercise details[open] summary { margin-bottom: 0.6rem; }
+
+/* ---- Pitfalls (symptom → cause → fix) ------------------------------------ */
+.pitfalls { margin: 1.5em 0; }
+.pitfall-item {
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  margin-bottom: 0.9rem;
+  overflow: hidden;
+}
+.pitfall-item > summary {
+  cursor: pointer;
+  padding: 0.7rem 1rem;
+  background: var(--bg-sunken);
+  font-family: var(--font-ui);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.pitfall-item > summary:hover { color: var(--accent-text); }
+.pitfall-item > summary .sym {
+  font-weight: 400;
+  color: var(--text-muted);
+  font-style: italic;
+}
+.pitfall-body { padding: 0.9rem 1rem; font-size: 0.94rem; }
+.pitfall-body > :first-child { margin-top: 0; }
+.pitfall-body > :last-child  { margin-bottom: 0; }
+.pitfall-body dt {
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+  margin-top: 0.7rem;
+}
+.pitfall-body dd { margin: 0.2rem 0 0; }
+
+/* ---- Recap / next -------------------------------------------------------- */
+.recap {
+  background: var(--ok-bg);
+  border: 1px solid var(--ok-bd);
+  border-radius: 9px;
+  padding: 1.1rem 1.25rem;
+  margin: 1.75rem 0;
+}
+.recap h2 { margin: 0 0 0.6rem; border: 0; padding: 0; font-size: 1.05rem; }
+.recap > :last-child { margin-bottom: 0; }
+
+/* ---- Further reading ----------------------------------------------------- */
+.reading { font-size: 0.92rem; }
+.reading li { margin-bottom: 0.6em; }
+.reading .src {
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+  margin-right: 0.4em;
+}
+
+/* ---- STATE block --------------------------------------------------------- */
+.state {
+  margin: 2.5em 0 1em;
+  border: 1px dashed var(--rule-strong);
+  border-radius: 9px;
+  background: var(--bg-sunken);
+  overflow: hidden;
+}
+.state > summary {
+  cursor: pointer;
+  padding: 0.6rem 1rem;
+  font-family: var(--font-ui);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-muted);
+}
+.state pre {
+  margin: 0;
+  padding: 0.9rem 1rem;
+  overflow-x: auto;
+  border-top: 1px solid var(--rule);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+  white-space: pre;
+}
+
+/* ---- Footer -------------------------------------------------------------- */
+.foot {
+  border-top: 1px solid var(--rule);
+  margin-top: 3rem;
+  padding: 1.5rem 0 3rem;
+  font-family: var(--font-ui);
+  font-size: 0.78rem;
+  color: var(--text-faint);
+}
+.foot a { color: var(--text-muted); }
+
+/* ---- Interactive widgets ------------------------------------------------- */
+.widget {
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  background: var(--bg-raised);
+  padding: 1rem;
+  margin: 2em 0;
+}
+.widget-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+  align-items: center;
+  margin-top: 0.8rem;
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+.widget-controls label { display: flex; align-items: center; gap: 0.4rem; }
+.widget-controls input[type="range"] { accent-color: var(--accent); }
+.widget-readout {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--text);
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 0.1rem 0.4rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Print --------------------------------------------------------------- */
+@media print {
+  .masthead, .lesson-nav, .theme-toggle { display: none; }
+  body { background: #fff; color: #000; font-size: 11pt; }
+  .listing { break-inside: avoid; }
+  figure.dia { break-inside: avoid; }
+  a::after { content: " (" attr(href) ")"; font-size: 0.7em; color: #666; }
+}
+</style>
+<!-- SHARED-CSS:END -->
+</head>
+<body>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <a class="course" href="../index.html">Build a Professional 3D Game Engine</a>
+    <span class="spacer"></span>
+    <a href="../index.html">Contents</a>
+    <a href="../conventions.html">Conventions</a>
+    <a href="../cpp-style.html">C++ Style</a>
+    <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Toggle colour theme">Theme</button>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="00-06-headers-and-debugger.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">0.6 — Reading Headers &amp; the Debugger</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="01-02-input-state-vs-events.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">1.2 — Input: State vs Events</span>
+    </a>
+  </nav>
+
+  <!-- ================= 1. HEADER BLOCK ================= -->
+  <div class="lesson-head">
+    <div class="eyebrow">Module 1 — The Loop, the Pixel, and Time · Lesson 1.1</div>
+    <h1>Events, Properly</h1>
+    <p class="deck">
+      In 0.5 we drained the event queue with two <code>if</code> statements and a shrug. Now we do
+      it properly: what an <code>SDL_Event</code> actually <em>is</em>, how SDL organises the
+      hundred-odd kinds of them, and why the difference between <code>while</code> and
+      <code>if</code> is the difference between a responsive game and a frozen one.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 3 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd><a href="00-05-first-window.html">0.5 — Your First Window</a>, <a href="00-06-headers-and-debugger.html">0.6 — Reading Headers</a></dd>
+
+        <dt>Files</dt>
+        <dd><code>src/main.cpp</code> (modified — a proper event dispatch)</dd>
+
+        <dt>Milestone</dt>
+        <dd>A complete <code>switch</code>-based event dispatch that handles quit, window close, and resize — and you can explain why it must drain to empty.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…explain what a <strong>tagged union</strong> is, and why <code>event.type</code> is always safe to read while other members are not.</li>
+      <li>…navigate SDL's event taxonomy, and classify an event by its numeric range without memorising every constant.</li>
+      <li>…prove, with arithmetic, why polling one event per frame produces compounding input lag.</li>
+      <li>…write a complete <code>switch</code> dispatch, and say why draining is mandatory but reacting is optional.</li>
+      <li>…distinguish <code>SDL_EVENT_QUIT</code> from <code>SDL_EVENT_WINDOW_CLOSE_REQUESTED</code>, and know when the difference matters.</li>
+    </ul>
+  </section>
+
+  <details class="toc" open>
+    <summary>Contents</summary>
+    <ol>
+      <li><a href="#problem">The Problem</a></li>
+      <li><a href="#intuition">Building Intuition</a>
+        <ol>
+          <li><a href="#mailbox">A mailbox, not an interrupt</a></li>
+          <li><a href="#envelope">One envelope, many letters</a></li>
+        </ol>
+      </li>
+      <li><a href="#theory">The Theory</a>
+        <ol>
+          <li><a href="#union">The tagged union, measured</a></li>
+          <li><a href="#taxonomy">The event taxonomy</a></li>
+          <li><a href="#drain">Why you must drain to empty</a></li>
+          <li><a href="#quit">Quit vs window-close</a></li>
+        </ol>
+      </li>
+      <li><a href="#implementation">Implementation: a real dispatch</a></li>
+      <li><a href="#listings">Complete Code Listings</a></li>
+      <li><a href="#build">Build &amp; Run</a></li>
+      <li><a href="#pitfalls">Common Pitfalls &amp; Debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; Next</a></li>
+      <li><a href="#reading">Further Reading</a></li>
+    </ol>
+  </details>
+
+  <!-- ================= 2. THE PROBLEM ================= -->
+  <h2 id="problem"><span class="num">1</span>The Problem</h2>
+
+  <p>
+    Our event loop from 0.5 handles exactly two things and silently discards everything else:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">what we wrote in 0.5 — a placeholder, honestly</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">while (SDL_PollEvent(&amp;event))
+{
+    if (event.type == SDL_EVENT_QUIT) { running = false; }
+    else if (event.type == SDL_EVENT_KEY_DOWN &amp;&amp; event.key.key == SDLK_ESCAPE) { running = false; }
+}</code></pre>
+  </figure>
+
+  <p>
+    It works, and it taught the shape of a loop. But it leaves four real questions unanswered, and
+    each of them will bite something we build later:
+  </p>
+
+  <ul>
+    <li><strong>What is actually <em>in</em> an <code>SDL_Event</code>?</strong> We read <code>event.key.key</code> on faith. Why is that safe on a key event and not on a mouse event?</li>
+    <li><strong>What else can arrive?</strong> Mouse, gamepad, text, display changes, drag-and-drop — dozens of kinds. How are they organised?</li>
+    <li><strong>Why <code>while</code> and not <code>if</code>?</strong> Both compile. Both appear to work.</li>
+    <li><strong>Is <code>SDL_EVENT_QUIT</code> really the right thing to check?</strong> There is a separate window-close event. Which is correct?</li>
+  </ul>
+
+  <p>
+    The third question has the most spectacular answer, so let us look at it first — because it is
+    a bug you can create by changing one word:
+  </p>
+
+  <div class="callout warn">
+    <span class="label">The failure mode: the queue that outruns you</span>
+    <p>
+      Change the <code>while</code> to an <code>if</code>. The program still compiles, still runs,
+      still closes on Esc. Then you move the mouse — and the game starts responding to your inputs
+      <em>seconds late</em>, drifting further behind the longer you play, until it feels like a
+      frozen application that is somehow still drawing.
+    </p>
+    <p>
+      Nothing crashed. What happened is that events arrive <em>faster than one per frame</em>, and
+      an <code>if</code> removes exactly one per frame. The queue grows without bound, and every
+      event you eventually process is a stale report of something the player did ages ago.
+      §<a href="#drain">3.3</a> works the arithmetic — and the numbers are far worse than intuition
+      suggests.
+    </p>
+  </div>
+
+  <!-- ================= 3. BUILDING INTUITION ================= -->
+  <h2 id="intuition"><span class="num">2</span>Building Intuition</h2>
+
+  <h3 id="mailbox">2.1 A mailbox, not an interrupt</h3>
+
+  <p>
+    There are two ways a system can tell your program that something happened, and knowing which
+    one SDL uses explains the entire shape of the loop.
+  </p>
+
+  <p>
+    The first is an <strong>interrupt</strong> (or a callback): the moment the user presses a key,
+    the system <em>calls your function</em>, wherever you happen to be. This is how hardware
+    interrupts work, and how many GUI toolkits present themselves. It sounds convenient and it is
+    a nightmare for a game: your handler could fire in the middle of physics, halfway through
+    updating a position, on some other thread — and you would have to make every piece of state
+    safe against being interrupted at any instant.
+  </p>
+
+  <p>
+    The second is a <strong>queue</strong>: the system quietly <em>writes the event down</em> and
+    adds it to a list. Nothing in your program is interrupted. Later, at a moment <em>you</em>
+    choose, you read the list. This is SDL's model, and it is the mailbox from
+    <a href="00-05-first-window.html#os-owns">0.5 §2.1</a>, now stated precisely.
+  </p>
+
+  <p>
+    The queue model is what makes a game loop tractable. Input arrives at unpredictable times, but
+    you <em>consume</em> it at exactly one predictable point in the frame — the top, before
+    simulation. Everything downstream can then assume input is fixed for the duration of the frame.
+    That property is worth a great deal: it is what will let Module 1.4's fixed-timestep simulation
+    be deterministic, and it is why we never let event handling scatter itself across the frame.
+  </p>
+
+  <h3 id="envelope">2.2 One envelope, many letters</h3>
+
+  <p>
+    Now the shape of an event. SDL must deliver wildly different things through one function: a key
+    press carries a keycode and modifiers; a mouse move carries coordinates; a window resize carries
+    a new width and height; a dropped file carries a path. Yet <code>SDL_PollEvent</code> takes one
+    <code>SDL_Event*</code>.
+  </p>
+
+  <p>
+    The trick is an envelope that is always the same size and always has the same label on the
+    front, but whose contents differ. The label — <code>event.type</code> — tells you which kind of
+    letter is inside, and therefore which fields are meaningful. Read the label first, then open the
+    matching compartment. Read the <em>wrong</em> compartment and you get whatever bytes happened to
+    be there: not a crash, just nonsense, which is worse.
+  </p>
+
+  <p>
+    In C this pattern is a <strong>tagged union</strong>, and SDL implements it with a guarantee we
+    can measure directly. That measurement is the next section, and it is more concrete than most
+    explanations of unions you will read.
+  </p>
+
+  <!-- ================= 4. THE THEORY ================= -->
+  <h2 id="theory"><span class="num">3</span>The Theory</h2>
+
+  <h3 id="union">3.1 The tagged union, measured</h3>
+
+  <p>
+    <code>SDL_Event</code> is a <code>union</code>: about forty differently-shaped structs occupying
+    <em>the same memory</em>. Only one is valid at a time, and <code>type</code> says which.
+  </p>
+
+  <div class="callout cpp">
+    <span class="label">C++ in place — <code>union</code></span>
+    <p>
+      A <code>struct</code> lays its members out one after another, so its size is roughly the
+      <em>sum</em> of them. A <code>union</code> overlays its members at the same address, so its
+      size is the <em>largest</em> of them, and writing one member overwrites the others. That makes
+      a union a way of saying "this memory holds exactly one of these possibilities."
+    </p>
+    <p>
+      The catch is that the union itself does not remember which possibility is live — that is the
+      programmer's job. Pairing a union with a field that records the active member is the
+      <strong>tagged union</strong>, and reading a member other than the one the tag names is
+      undefined behaviour in C++ (in practice: garbage). C++17's <code>std::variant</code> is the
+      type-safe modern version; SDL is a C library, so it uses the classic form, and the discipline
+      falls to us — which is exactly why our dispatch is a <code>switch</code> on the tag with each
+      case touching only its own member.
+    </p>
+  </div>
+
+  <p>
+    For that to work at all, <code>event.type</code> must be readable no matter which member is
+    live. SDL guarantees this by starting <em>every single variant</em> with the same header. We do
+    not have to take that on faith — we can measure it with <code>offsetof</code>, and here are the
+    real numbers from the SDL we pinned:
+  </p>
+
+  <figure class="listing shell">
+    <figcaption>
+      <span class="path">measured with offsetof on SDL 3.4.12 (64-bit)</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash">sizeof(SDL_Event)        = 128
+--- common header (shared by EVERY variant) ---
+offsetof common.type      = 0 (size 4)
+offsetof common.timestamp = 8 (size 8)
+sizeof(SDL_CommonEvent)   = 16
+--- variants: same first bytes, different tails ---
+key.type=0     key.timestamp=8   key.scancode=24  key.key=28   sizeof=40
+win.type=0     win.timestamp=8   win.data1=20     win.data2=24  sizeof=32
+motion.type=0  motion.x=28       motion.y=32                    sizeof=48</code></pre>
+  </figure>
+
+  <p>
+    Look at the first column: <strong><code>type</code> sits at offset 0 in every variant, and
+    <code>timestamp</code> at offset 8 in every variant.</strong> That is the whole guarantee. The
+    first sixteen bytes of an <code>SDL_Event</code> mean the same thing regardless of what kind of
+    event it is, so reading <code>event.type</code> is always valid — and after that, the tails
+    diverge. Figure 1 draws it.
+  </p>
+
+  <figure class="dia bleed">
+    <svg viewBox="0 0 660 330" role="img" aria-labelledby="f1-t f1-d">
+      <title id="f1-t">SDL_Event memory layout: a shared common header, then divergent tails</title>
+      <desc id="f1-d">A memory strip 128 bytes wide. The first 16 bytes are the common header —
+        type at offset 0, reserved at 4, timestamp at 8 — and are identical in every variant. Below
+        it, three interpretations of the same memory: a keyboard event with scancode at 24 and key
+        at 28, a window event with data1 at 20 and data2 at 24, and a mouse motion event with x at
+        28 and y at 32. All three share the first sixteen bytes.</desc>
+
+      <!-- header strip -->
+      <text x="16" y="20" class="sm" font-weight="700">One SDL_Event — 128 bytes of memory</text>
+
+      <g>
+        <rect x="16" y="32" width="120" height="34" rx="4" class="fill-soft" stroke="var(--dia-hi)" stroke-width="2"/>
+        <text x="76" y="47" class="xs t-hi" text-anchor="middle" font-weight="700">common header</text>
+        <text x="76" y="60" class="xs muted" text-anchor="middle">bytes 0–15</text>
+
+        <rect x="136" y="32" width="508" height="34" rx="4" fill="none" stroke="var(--dia-ink-soft)" stroke-width="1.2" stroke-dasharray="5 4"/>
+        <text x="390" y="53" class="xs muted" text-anchor="middle">variant-specific tail — meaning depends on `type`</text>
+      </g>
+
+      <!-- header detail -->
+      <g class="xs mono">
+        <text x="16" y="84" class="xs muted">@0</text>
+        <text x="60" y="84" class="xs muted">@4</text>
+        <text x="104" y="84" class="xs muted">@8</text>
+      </g>
+      <g>
+        <rect x="16" y="90" width="40" height="26" rx="3" class="fill-soft" stroke="var(--dia-hi)" stroke-width="1.4"/>
+        <text x="36" y="107" class="xs mono t-hi" text-anchor="middle" font-weight="700">type</text>
+        <rect x="58" y="90" width="42" height="26" rx="3" class="fill-soft" stroke="var(--dia-ink-soft)" stroke-width="1.1"/>
+        <text x="79" y="107" class="xs mono muted" text-anchor="middle">resvd</text>
+        <rect x="102" y="90" width="72" height="26" rx="3" class="fill-soft" stroke="var(--dia-ink-soft)" stroke-width="1.1"/>
+        <text x="138" y="107" class="xs mono muted" text-anchor="middle">timestamp</text>
+      </g>
+      <text x="186" y="107" class="xs muted">← identical in all ~40 variants. This is why event.type is always safe.</text>
+
+      <!-- three interpretations -->
+      <text x="16" y="146" class="sm" font-weight="700">The same bytes, read three ways:</text>
+
+      <!-- keyboard -->
+      <g>
+        <rect x="16" y="158" width="120" height="28" rx="4" class="fill-soft" stroke="var(--dia-hi)" stroke-width="1.6"/>
+        <text x="76" y="176" class="xs t-hi" text-anchor="middle" font-weight="700">common (0–15)</text>
+        <rect x="138" y="158" width="180" height="28" rx="4" class="fill-soft" stroke="var(--axis-z)" stroke-width="1.4"/>
+        <text x="228" y="176" class="xs lbl-z" text-anchor="middle" font-weight="700">scancode@24 · key@28</text>
+        <text x="330" y="176" class="xs mono muted">event.key</text>
+        <text x="430" y="176" class="xs muted">— valid only if type is a KEY_* event</text>
+      </g>
+
+      <!-- window -->
+      <g>
+        <rect x="16" y="196" width="120" height="28" rx="4" class="fill-soft" stroke="var(--dia-hi)" stroke-width="1.6"/>
+        <text x="76" y="214" class="xs t-hi" text-anchor="middle" font-weight="700">common (0–15)</text>
+        <rect x="138" y="196" width="180" height="28" rx="4" class="fill-soft" stroke="var(--axis-y)" stroke-width="1.4"/>
+        <text x="228" y="214" class="xs t-ok" text-anchor="middle" font-weight="700">data1@20 · data2@24</text>
+        <text x="330" y="214" class="xs mono muted">event.window</text>
+        <text x="430" y="214" class="xs muted">— the new width &amp; height on a resize</text>
+      </g>
+
+      <!-- motion -->
+      <g>
+        <rect x="16" y="234" width="120" height="28" rx="4" class="fill-soft" stroke="var(--dia-hi)" stroke-width="1.6"/>
+        <text x="76" y="252" class="xs t-hi" text-anchor="middle" font-weight="700">common (0–15)</text>
+        <rect x="138" y="234" width="180" height="28" rx="4" class="fill-soft" stroke="var(--axis-x)" stroke-width="1.4"/>
+        <text x="228" y="252" class="xs lbl-x" text-anchor="middle" font-weight="700">x@28 · y@32</text>
+        <text x="330" y="252" class="xs mono muted">event.motion</text>
+        <text x="430" y="252" class="xs muted">— cursor position</text>
+      </g>
+
+      <path d="M16,274 H318" class="ink-soft" stroke-width="1.2" stroke-dasharray="4 3" fill="none"/>
+      <text x="16" y="292" class="xs muted">Read event.key on a mouse event and you get whatever bytes live at 24 and 28 —</text>
+      <text x="16" y="306" class="xs muted">not a crash, just plausible-looking nonsense. Hence: switch on the tag, first.</text>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 1.</span> <code>SDL_Event</code> in memory, with offsets measured
+      on the SDL we pinned. The orange block is identical in every variant; everything after it is
+      an interpretation that only <code>type</code> can authorise.
+    </figcaption>
+  </figure>
+
+  <div class="callout note">
+    <span class="label">Why 128 bytes, when the largest variant here is 48?</span>
+    <p>
+      The union is padded to a fixed size on purpose. SDL's header explains: MSVC and GCC compute
+      union sizes differently, so SDL adds explicit padding "to force the size to be the same for
+      both" — an <strong>ABI</strong> concern, so that a library and an application built by
+      different compilers agree on how big an event is. It is a small, real example of the kind of
+      constraint that shapes public C APIs, and worth noticing now: our own engine will face the
+      same question when it grows a public API in Module 5.
+    </p>
+  </div>
+
+  <h3 id="taxonomy">3.2 The event taxonomy</h3>
+
+  <p>
+    SDL defines well over a hundred event types. You will never memorise them, and you do not need
+    to, because they are <strong>numbered by category</strong> — each family gets its own block of
+    values:
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>Block</th><th>Category</th><th>Examples (verified in <code>SDL_events.h</code>)</th></tr></thead>
+      <tbody>
+        <tr><td><code>0x100</code></td><td>Application</td><td><code>SDL_EVENT_QUIT</code> = 0x100</td></tr>
+        <tr><td><code>0x15x</code></td><td>Display</td><td>monitor added/removed, orientation</td></tr>
+        <tr><td><code>0x2xx</code></td><td>Window</td><td><code>SDL_EVENT_WINDOW_SHOWN</code> = 0x202, …<code>RESIZED</code>, …<code>CLOSE_REQUESTED</code></td></tr>
+        <tr><td><code>0x3xx</code></td><td>Keyboard</td><td><code>KEY_DOWN</code> = 0x300, <code>KEY_UP</code> = 0x301, <code>TEXT_EDITING</code> = 0x302, <code>TEXT_INPUT</code> = 0x303</td></tr>
+        <tr><td><code>0x4xx</code></td><td>Mouse</td><td><code>MOUSE_MOTION</code> = 0x400, <code>MOUSE_BUTTON_DOWN</code> = 0x401, <code>MOUSE_BUTTON_UP</code> = 0x402, <code>MOUSE_WHEEL</code> = 0x403</td></tr>
+        <tr><td><code>0x6xx</code></td><td>Joystick</td><td><code>JOYSTICK_AXIS_MOTION</code> = 0x600</td></tr>
+        <tr><td><code>0x65x</code></td><td>Gamepad</td><td><code>GAMEPAD_AXIS_MOTION</code> = 0x650</td></tr>
+        <tr><td><code>0x8000</code></td><td>User-defined</td><td><code>SDL_EVENT_USER</code> = 0x8000 — yours to push</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    SDL also defines range markers — <code>SDL_EVENT_WINDOW_FIRST</code> and
+    <code>SDL_EVENT_WINDOW_LAST</code> — so you can test "is this any window event?" with a range
+    comparison instead of a fifteen-case <code>switch</code>.
+  </p>
+
+  <div class="worked">
+    <span class="label">Worked example — classifying an event you have never seen</span>
+    <p>
+      You are debugging, you print <code>event.type</code>, and it reads <code>770</code>. What is
+      it?
+    </p>
+    <ul>
+      <li>Convert to hex: <code>770 = 0x302</code>. (Because <code>770 = 3·256 + 0·16 + 2</code>.)</li>
+      <li>It falls in <code>[0x300, 0x400)</code> — the <strong>keyboard</strong> block.</li>
+      <li>Counting from <code>KEY_DOWN</code> = 0x300: 0x301 is <code>KEY_UP</code>, so <strong>0x302 is <code>SDL_EVENT_TEXT_EDITING</code></strong>.</li>
+    </ul>
+    <p>
+      You classified it without looking anything up, and confirmed it by counting two entries down
+      the header's list. That is the practical value of a numbered taxonomy: an unknown event is
+      never <em>completely</em> unknown, because its number tells you which family it belongs to and
+      therefore which union member would be the one to read.
+    </p>
+  </div>
+
+  <h3 id="drain">3.3 Why you must drain to empty</h3>
+
+  <p>
+    Now the arithmetic promised in §<a href="#problem">1</a>. The question: what does changing
+    <code>while</code> to <code>if</code> actually cost?
+  </p>
+
+  <p>
+    Events do not arrive one per frame. A modern gaming mouse reports at <strong>1000 Hz</strong> —
+    a thousand motion events every second — while your game runs at 60 frames per second. So each
+    frame, roughly seventeen mouse events are waiting for you before you count anything else.
+  </p>
+
+  <div class="worked">
+    <span class="label">Worked example — the compounding backlog</span>
+    <p>A 1000 Hz mouse, a 60 fps game, and an <code>if</code> instead of a <code>while</code>:</p>
+    <ul>
+      <li><strong>Arriving per frame:</strong> <code>1000 / 60 = 16.67</code> events.</li>
+      <li><strong>Drained per frame:</strong> <code>1</code> (that is what <code>if</code> means).</li>
+      <li><strong>Net growth:</strong> <code>16.67 − 1 = 15.67</code> events added to the queue, every frame.</li>
+      <li><strong>After one second</strong> (60 frames): <code>60 × 15.67 ≈ 940</code> events backed up.</li>
+      <li><strong>Time to clear that backlog</strong>, draining 60 per second: <code>940 / 60 ≈ 15.7 seconds</code>.</li>
+    </ul>
+    <p>
+      So <strong>one second of mouse movement puts you roughly sixteen seconds behind</strong>, and
+      every further second of movement adds another sixteen. The lag does not merely exist — it
+      <em>compounds</em>. Within a minute the program is processing input from a minute ago; it is
+      an application that has, for all practical purposes, stopped responding, even though it is
+      still cheerfully drawing frames.
+    </p>
+    <p>
+      With <code>while</code>, the same 16.67 events per frame are all drained in the same frame.
+      The queue returns to empty every frame, latency stays at a fraction of a frame, and the number
+      of events simply does not matter. One keyword; the entire difference.
+    </p>
+  </div>
+
+  <figure class="dia bleed">
+    <svg viewBox="0 0 660 300" role="img" aria-labelledby="f2-t f2-d">
+      <title id="f2-t">Queue depth over time: draining fully versus draining one per frame</title>
+      <desc id="f2-d">Two timelines over five frames. With while, roughly seventeen events arrive
+        each frame and all are drained, so the queue depth returns to zero every frame. With if,
+        seventeen arrive and one is drained, so the queue depth climbs by about sixteen each frame,
+        reaching roughly eighty after five frames and growing without bound.</desc>
+      <defs>
+        <marker id="e2-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+      </defs>
+
+      <!-- while -->
+      <text x="16" y="22" class="sm t-ok" font-weight="700">while (SDL_PollEvent(&amp;e)) — drain to empty</text>
+      <line x1="60" y1="100" x2="620" y2="100" class="ink" stroke-width="1.3"/>
+      <text x="30" y="104" class="xs muted">0</text>
+      <g>
+        <!-- sawtooth: spike then back to zero, per frame -->
+        <path d="M60,100 L108,72 L108,100 L168,72 L168,100 L228,72 L228,100 L288,72 L288,100 L348,72 L348,100"
+              fill="none" class="ink" stroke="var(--ok-bd)" stroke-width="2"/>
+        <text x="380" y="80" class="xs t-ok" font-weight="700">queue returns to 0 every frame</text>
+        <text x="380" y="94" class="xs muted">latency &lt; 1 frame, forever</text>
+      </g>
+      <g class="xs muted">
+        <text x="84" y="118" text-anchor="middle">f1</text>
+        <text x="144" y="118" text-anchor="middle">f2</text>
+        <text x="204" y="118" text-anchor="middle">f3</text>
+        <text x="264" y="118" text-anchor="middle">f4</text>
+        <text x="324" y="118" text-anchor="middle">f5</text>
+      </g>
+
+      <!-- if -->
+      <text x="16" y="164" class="sm t-bad" font-weight="700">if (SDL_PollEvent(&amp;e)) — drain one</text>
+      <line x1="60" y1="266" x2="620" y2="266" class="ink" stroke-width="1.3"/>
+      <text x="30" y="270" class="xs muted">0</text>
+      <line x1="60" y1="266" x2="60" y2="180" class="ink-soft" stroke-width="1.2" marker-end="url(#e2-a)"/>
+      <text x="44" y="196" class="xs muted" transform="rotate(-90 44 196)" text-anchor="middle">queue depth</text>
+      <g>
+        <path d="M60,266 L108,250 L168,234 L228,218 L288,202 L348,186"
+              fill="none" stroke="var(--verify-bd)" stroke-width="2.2"/>
+        <circle cx="348" cy="186" r="3.5" fill="var(--verify-bd)"/>
+        <text x="380" y="196" class="xs t-bad" font-weight="700">+15.7 events every frame, forever</text>
+        <text x="380" y="210" class="xs muted">≈ 940 backed up after 1 second</text>
+        <text x="380" y="224" class="xs muted">≈ 16 s behind, and growing</text>
+      </g>
+      <g class="xs muted">
+        <text x="84" y="284" text-anchor="middle">f1</text>
+        <text x="144" y="284" text-anchor="middle">f2</text>
+        <text x="204" y="284" text-anchor="middle">f3</text>
+        <text x="264" y="284" text-anchor="middle">f4</text>
+        <text x="324" y="284" text-anchor="middle">f5</text>
+      </g>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 2.</span> The same event rate, two loop keywords. The green
+      sawtooth returns to zero every frame; the red line never comes back down. This is why the
+      inner loop is a <code>while</code>, and why "drain to empty" is stated as a rule rather than
+      a preference.
+    </figcaption>
+  </figure>
+
+  <p>
+    Note the corollary, which surprises people: <strong>draining is mandatory, but reacting is
+    optional.</strong> An event you do not care about still has to come off the queue. Our
+    <code>default:</code> case does nothing at all — and that is not laziness, it is the entire job.
+    The queue is emptied whether or not anything is done with the contents.
+  </p>
+
+  <h3 id="quit">3.4 Quit vs window-close</h3>
+
+  <p>
+    Finally, the two events that both mean "we're done", and are not the same thing:
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>Event</th><th>Scope</th><th>Means</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>SDL_EVENT_QUIT</code></td>
+          <td><strong>Application</strong></td>
+          <td>"This program should terminate." Not tied to any window.</td>
+        </tr>
+        <tr>
+          <td><code>SDL_EVENT_WINDOW_CLOSE_REQUESTED</code></td>
+          <td><strong>One window</strong></td>
+          <td>The header's words: "the window manager requests that the window be closed." It names <em>which</em> window in <code>event.window.windowID</code>.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    With a single window the distinction is invisible — either one means quit, which is why 0.5 got
+    away with checking only <code>SDL_EVENT_QUIT</code>. The moment you have two windows it becomes
+    essential: closing a tool palette must close <em>that</em> window, not the whole program.
+    Handling both now, distinctly, costs three lines and builds the right habit.
+  </p>
+
+  <div class="callout ok">
+    <span class="label">A quit you did not expect: Ctrl-C</span>
+    <p>
+      SDL installs signal handlers, so pressing <kbd>Ctrl-C</kbd> in the terminal (SIGINT), or a
+      <code>kill</code> (SIGTERM), does not tear your process down mid-frame — SDL converts it into
+      an <code>SDL_EVENT_QUIT</code> that arrives through the normal queue. Your ordinary handler
+      runs, the loop exits, and the destroy-and-quit path executes cleanly.
+    </p>
+    <p>
+      This is not a claim from the docs: while verifying this lesson, the engine was run under a
+      timeout that sends SIGTERM, and it printed <code>Quit requested</code> and shut down through
+      the normal path. Handling <code>SDL_EVENT_QUIT</code> properly gives you clean Ctrl-C
+      termination for free.
+    </p>
+  </div>
+
+  <!-- ================= 5. IMPLEMENTATION ================= -->
+  <h2 id="implementation"><span class="num">4</span>Implementation: a real dispatch</h2>
+
+  <p>
+    Replace the two <code>if</code>s with a <code>switch</code> on the tag. The structure matters
+    as much as the cases: <em>tag first, then the matching member, and nothing else</em>.
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/main.cpp — the dispatch</span>
+      <span class="tag modified">modified</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">        SDL_Event event;
+        while (SDL_PollEvent(&amp;event))
+        {
+            switch (event.type)
+            {
+            case SDL_EVENT_QUIT:
+                SDL_Log("Quit requested");
+                running = false;
+                break;
+
+            case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
+                SDL_Log("Window %u close requested", static_cast&lt;unsigned&gt;(event.window.windowID));
+                running = false;
+                break;
+
+            case SDL_EVENT_WINDOW_RESIZED:
+                SDL_Log("Window resized to %dx%d", event.window.data1, event.window.data2);
+                break;
+
+            case SDL_EVENT_KEY_DOWN:
+                if (event.key.key == SDLK_ESCAPE) { running = false; }
+                break;
+
+            default:
+                break;
+            }
+        }</code></pre>
+  </figure>
+
+  <p>
+    Three things in there are deliberate. The <code>switch</code> reads <code>event.type</code>
+    <em>before</em> touching any variant member — Figure 1's rule made structural. Each case then
+    touches only its own member: <code>event.window</code> in the window cases,
+    <code>event.key</code> in the keyboard case, and never the two mixed. And the
+    <code>default:</code> case is an explicit, empty statement of intent: <em>drained, deliberately
+    ignored</em>.
+  </p>
+
+  <p>
+    The resize case finally pays off the exercise from
+    <a href="00-05-first-window.html#exercises">0.5.2</a>. The header documents
+    <code>SDL_EVENT_WINDOW_RESIZED</code> as "Window has been resized to data1xdata2", so
+    <code>event.window.data1</code> and <code>data2</code> are the new width and height — a fact we
+    read from the header rather than guessed, exactly as 0.6 taught.
+  </p>
+
+  <div class="callout note">
+    <span class="label">Why not extract this into its own file yet?</span>
+    <p>
+      It is tempting to move event handling into <code>src/platform/events.cpp</code> right now.
+      We are deliberately not doing that. The engine's internal structure grows when a boundary
+      <em>earns</em> its existence (0.1 §3.4: a boundary belongs where a rate or an owner changes),
+      and right now nothing has changed hands — this is still one program, one loop. In 1.2 we build
+      an input layer that genuinely owns state across frames, and <em>that</em> is a real owner
+      boundary. Premature file-splitting is architecture theatre, and Module 5 exists precisely so
+      the real refactor is done once, with reasons.
+    </p>
+  </div>
+
+  <!-- ================= 6. COMPLETE CODE LISTINGS ================= -->
+  <h2 id="listings"><span class="num">5</span>Complete Code Listings</h2>
+
+  <div class="tbl-scroll">
+    <table class="manifest">
+      <thead><tr><th>Path</th><th>Status</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td>src/main.cpp</td><td><span class="badge mod">modified</span></td><td>The event loop becomes a complete <code>switch</code> dispatch: quit, window close, window resize, keyboard.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/main.cpp</span>
+      <span class="tag modified">modified</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// src/main.cpp — the engine's entry point.
+//
+// This is the first file of the real engine. It replaces the throwaway
+// hello.cpp: it opens a window, runs an event loop that responds to input, and
+// shuts down cleanly. The loop here is deliberately naive — Module 1 replaces it
+// with a proper fixed-timestep loop — but the structure (init, create, loop,
+// destroy) is the skeleton every engine shares.
+
+#include &lt;SDL3/SDL.h&gt;
+#include &lt;SDL3/SDL_main.h&gt;   // Provides the cross-platform entry point. NOTE:
+                             // &lt;SDL3/SDL.h&gt; deliberately does NOT include this,
+                             // so we include it explicitly, exactly once, here.
+
+int main(int argc, char* argv[])
+{
+    // We do not use command-line arguments yet. Marking them silences the
+    // -Wall -Wextra "unused parameter" warning without weakening the signature
+    // SDL's entry point requires.
+    (void)argc;
+    (void)argv;
+
+    // ---- 1. Initialise the SDL subsystems we need --------------------------
+    // SDL3's SDL_Init returns a bool: true on success, false on failure. (This
+    // changed from SDL2, where it returned an int — one of many SDL2 habits to
+    // unlearn.) SDL_INIT_VIDEO also brings up the event subsystem we rely on.
+    if (!SDL_Init(SDL_INIT_VIDEO))
+    {
+        SDL_Log("SDL_Init failed: %s", SDL_GetError());
+        return 1;
+    }
+
+    // Log what we actually linked against. This one line is the first thing you
+    // want in a bug report — "it doesn't work" is far more tractable once you
+    // know which SDL the machine is running. It is "instrument the program", the
+    // middle of the three debugging tools from Lesson 0.6.
+    const int sdl_version = SDL_GetVersion();
+    SDL_Log("Engine starting — SDL %d.%d.%d",
+            SDL_VERSIONNUM_MAJOR(sdl_version),
+            SDL_VERSIONNUM_MINOR(sdl_version),
+            SDL_VERSIONNUM_MICRO(sdl_version));
+
+    // ---- 2. Create the window ----------------------------------------------
+    // Note the SDL3 signature: title, width, height, flags — and NO x/y
+    // position (SDL places the window). A null return means failure, and the
+    // reason is always in SDL_GetError().
+    SDL_Window* window = SDL_CreateWindow("Engine", 1280, 720, SDL_WINDOW_RESIZABLE);
+    if (window == nullptr)
+    {
+        SDL_Log("SDL_CreateWindow failed: %s", SDL_GetError());
+        SDL_Quit();
+        return 1;
+    }
+
+    // ---- 3. Create a renderer ----------------------------------------------
+    // For now the renderer exists only so the window shows a defined colour
+    // instead of undefined garbage. Passing nullptr for the name lets SDL pick
+    // the best backend. Module 1 replaces this with our own CPU pixel buffer,
+    // so treat the renderer as scaffolding, not architecture.
+    SDL_Renderer* renderer = SDL_CreateRenderer(window, nullptr);
+    if (renderer == nullptr)
+    {
+        SDL_Log("SDL_CreateRenderer failed: %s", SDL_GetError());
+        SDL_DestroyWindow(window);
+        SDL_Quit();
+        return 1;
+    }
+
+    // ---- 4. The main loop --------------------------------------------------
+    // Naive on purpose: poll every pending event, then draw one frame, forever,
+    // until we are told to stop. Module 1.4 derives the real loop — with a fixed
+    // simulation step and render interpolation — from this starting point.
+    bool running = true;
+    while (running)
+    {
+        // Drain the event queue COMPLETELY, every frame. SDL_PollEvent removes
+        // one event from the front and returns true; it returns false when the
+        // queue is empty. `while`, never `if` — see Lesson 1.1: draining one per
+        // frame lets the queue grow faster than it empties, and the backlog
+        // becomes input lag that compounds until the app appears frozen.
+        SDL_Event event;
+        while (SDL_PollEvent(&amp;event))
+        {
+            // event.type is the tag of a tagged union: it tells you which member
+            // of SDL_Event is the valid one to read. Read the wrong member and
+            // you get garbage, so every case below touches only its own member.
+            switch (event.type)
+            {
+            case SDL_EVENT_QUIT:
+                // Application-scoped: "this program should terminate."
+                SDL_Log("Quit requested");
+                running = false;
+                break;
+
+            case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
+                // Window-scoped: THIS window's close was requested. With a single
+                // window it amounts to the same thing, but an app with several
+                // windows must close just the one — which is why SDL keeps the
+                // two events distinct.
+                SDL_Log("Window %u close requested", static_cast&lt;unsigned&gt;(event.window.windowID));
+                running = false;
+                break;
+
+            case SDL_EVENT_WINDOW_RESIZED:
+                // For a resize, SDL_WindowEvent's data1/data2 carry the new width
+                // and height (the header says so: "resized to data1xdata2").
+                SDL_Log("Window resized to %dx%d", event.window.data1, event.window.data2);
+                break;
+
+            case SDL_EVENT_KEY_DOWN:
+                // SDL3 exposes the virtual key as event.key.key. (SDL2 nested it
+                // as event.key.keysym.sym — do not reach for that.)
+                if (event.key.key == SDLK_ESCAPE)
+                {
+                    running = false;
+                }
+                break;
+
+            default:
+                // Everything else — mouse motion, text input, gamepads — is
+                // drained and ignored. Draining is mandatory; reacting is
+                // optional. An event you never handle still has to be removed.
+                break;
+            }
+        }
+
+        // Fill the window with a calm dark slate so we can see it is alive.
+        SDL_SetRenderDrawColor(renderer, 30, 30, 46, 255);
+        SDL_RenderClear(renderer);
+        SDL_RenderPresent(renderer);
+    }
+
+    // ---- 5. Shut down, in reverse order of creation ------------------------
+    // We destroy what we made, newest first, then quit SDL. Doing this by hand
+    // is error-prone and easy to forget on an early-return path (notice we had
+    // to repeat parts of it above). Module 5 wraps each resource in an RAII type
+    // so cleanup becomes automatic — this manual version is here so you feel the
+    // problem RAII solves.
+    SDL_DestroyRenderer(renderer);
+    SDL_DestroyWindow(window);
+    SDL_Quit();
+    return 0;
+}</code></pre>
+  </figure>
+
+  <!-- ================= 7. BUILD & RUN ================= -->
+  <h2 id="build"><span class="num">6</span>Build &amp; Run</h2>
+
+  <figure class="listing shell">
+    <figcaption>
+      <span class="path">build and run</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash">cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+cmake --build build
+./build/engine</code></pre>
+  </figure>
+
+  <h3>What you should see</h3>
+
+  <p>
+    The same window as before — but now it <em>talks</em>. Drag its edge and the console reports
+    each new size; close it or press Esc and it says so on the way out:
+  </p>
+
+  <figure class="listing shell">
+    <figcaption>
+      <span class="path">expected output — drag the window edge, then close it</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash">Engine starting — SDL 3.4.12
+Window resized to 1122x720
+Window resized to 964x720
+Window resized to 964x612
+Window 1 close requested
+Quit requested</code></pre>
+  </figure>
+
+  <div class="callout ok">
+    <span class="label">Checkpoint — verified before publishing</span>
+    <p>
+      This dispatch was built warning-clean and exercised by pushing synthetic events through the
+      queue with <code>SDL_PushEvent</code>: a fabricated <code>SDL_EVENT_WINDOW_RESIZED</code>
+      carrying <code>data1 = 800, data2 = 600</code> produced exactly
+      <code>Window resized to 800x600</code> — proving both the dispatch and the union member access
+      — and a fabricated Esc key-down ended the loop cleanly. Separately, a SIGTERM produced
+      <code>Quit requested</code> and a clean shutdown, as described in §<a href="#quit">3.4</a>.
+    </p>
+    <p style="margin-bottom:0">
+      A burst of resize lines while dragging is <em>correct</em>, not a bug: resize events fire
+      continuously during a drag. That flood is your first direct evidence of how fast events can
+      arrive — and therefore of why §<a href="#drain">3.3</a> matters.
+    </p>
+  </div>
+
+  <!-- ================= 8. PITFALLS ================= -->
+  <h2 id="pitfalls"><span class="num">7</span>Common Pitfalls &amp; Debugging</h2>
+
+  <div class="pitfalls">
+    <details class="pitfall-item">
+      <summary><code>if</code> instead of <code>while</code> — <span class="sym">input lags further behind the longer you play</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>The game responds to clicks and keys seconds after they happen, and it gets worse over time. It looks like a performance problem; it is not.</dd>
+          <dt>Cause</dt>
+          <dd>The inner poll is an <code>if</code>, so exactly one event is removed per frame while many more arrive. The queue grows without bound (§<a href="#drain">3.3</a>: about 940 events backed up after one second of mouse movement).</dd>
+          <dt>Fix</dt>
+          <dd>Make it <code>while (SDL_PollEvent(&amp;event))</code>. If you want to <em>see</em> the problem first, count iterations of the inner loop and log the count — a healthy frame drains a handful; a sick one drains one while dozens pile up.</dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>Reading the wrong union member — <span class="sym">plausible but wrong values</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>A coordinate or keycode holds a value that is not nonsense enough to look like corruption, but is definitely wrong — mouse positions that jump, keys that are not the key you pressed.</dd>
+          <dt>Cause</dt>
+          <dd>You read <code>event.motion</code> (or <code>event.key</code>, or …) on an event whose <code>type</code> says otherwise. All variants overlap the same bytes (Figure 1), so you get whatever the live variant happened to store there. This is undefined behaviour, and its punishment is bad data rather than a crash.</dd>
+          <dt>Fix</dt>
+          <dd>Only touch a member inside the <code>case</code> that its <code>type</code> authorises. If you find yourself reaching for a member outside its case, that is the bug.</dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>SDL2's <code>SDL_WINDOWEVENT</code> does not exist — <span class="sym">"undeclared identifier"</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>Code copied from an SDL2 tutorial checks <code>event.type == SDL_WINDOWEVENT</code> and then switches on <code>event.window.event</code>. Neither compiles.</dd>
+          <dt>Cause</dt>
+          <dd>SDL2 had a single <code>SDL_WINDOWEVENT</code> type with a sub-type inside the struct. SDL3 flattened this: every window event is its own top-level type — <code>SDL_EVENT_WINDOW_RESIZED</code>, <code>SDL_EVENT_WINDOW_CLOSE_REQUESTED</code>, and so on — so they sit directly in your main <code>switch</code>.</dd>
+          <dt>Fix</dt>
+          <dd>Use the flat SDL3 types. This flattening is a genuine improvement: one switch, no nested dispatch. The <a href="https://wiki.libsdl.org/SDL3/README/migration">migration guide</a> lists the mapping.</dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>Handling only <code>SDL_EVENT_QUIT</code> in a multi-window app — <span class="sym">closing one window kills everything</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>You add a second window (a tools palette, say) and closing it terminates the whole program.</dd>
+          <dt>Cause</dt>
+          <dd>Treating every close as application-scoped. <code>SDL_EVENT_WINDOW_CLOSE_REQUESTED</code> names the specific window in <code>event.window.windowID</code>; ignoring that ID throws the information away.</dd>
+          <dt>Fix</dt>
+          <dd>Compare <code>event.window.windowID</code> against the window you mean (<code>SDL_GetWindowID</code> gives you a window's ID) and destroy just that one. Not needed today with a single window — but the structure is already in place for when it is.</dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>Trying to handle every event type — <span class="sym">a switch that never ends</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>The dispatch grows toward a hundred cases in pursuit of "completeness", and most do nothing.</dd>
+          <dt>Cause</dt>
+          <dd>Confusing draining with reacting. The queue does not care whether you interpret an event; it only cares that you remove it.</dd>
+          <dt>Fix</dt>
+          <dd>Handle what your game needs and let <code>default:</code> absorb the rest. Add a case the day you need it. An empty <code>default</code> is a complete and correct answer to "what about all the others?".</dd>
+        </dl>
+      </div>
+    </details>
+  </div>
+
+  <!-- ================= 9. EXERCISES ================= -->
+  <h2 id="exercises"><span class="num">8</span>Exercises</h2>
+
+  <div class="exercise">
+    <h3><span class="xnum">1.1.1</span>See the flood<span class="difficulty">warm-up</span></h3>
+    <p>
+      In <code>default:</code>, log the event type in hex: <code>SDL_Log("unhandled 0x%X",
+      event.type);</code>. Run it, move the mouse for two seconds, then stop and read the output.
+      Which categories do you recognise from §<a href="#taxonomy">3.2</a>, and roughly how many
+      events arrived?
+    </p>
+    <details>
+      <summary>Solution</summary>
+      <p>
+        You will see a torrent of <code>0x400</code> (mouse motion), plus <code>0x200</code>-block
+        window events when the cursor enters or leaves, and possibly <code>0x40x</code> button
+        events. The sheer volume from two seconds of mouse movement is the point: this is
+        §<a href="#drain">3.3</a>'s arithmetic made visible, and it is the best argument for
+        <code>while</code> that exists. Remember to remove the log afterwards — 0.6's pitfall about
+        print-debugging that never leaves.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3><span class="xnum">1.1.2</span>Create the lag on purpose<span class="difficulty">guided</span></h3>
+    <p>
+      Change the inner <code>while</code> to an <code>if</code>, rebuild, and use the program:
+      move the mouse for a few seconds, then press Esc. What happens, and how long does it take?
+      Then put it back.
+    </p>
+    <details>
+      <summary>Solution</summary>
+      <p>
+        Esc does not appear to work — for a long time. The key-down event is real and is sitting in
+        the queue, but it is behind the hundreds of mouse-motion events that arrived first, and the
+        program is retiring them at one per frame. Eventually it reaches your keypress and quits.
+        You have just experienced <em>latency as a queueing problem</em> rather than a speed problem:
+        the program was never slow, it was behind. That distinction matters again in Module 8 when
+        we profile for real.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3><span class="xnum">1.1.3</span>Test a whole category<span class="difficulty">guided</span></h3>
+    <p>
+      Add a branch that catches <em>any</em> window event, using the range markers
+      <code>SDL_EVENT_WINDOW_FIRST</code> and <code>SDL_EVENT_WINDOW_LAST</code>, and logs it.
+      Why is a range test sometimes better than fifteen <code>case</code> labels — and when is it
+      worse?
+    </p>
+    <details>
+      <summary>Hint</summary>
+      <p>
+        A <code>switch</code> case cannot express a range portably, so this one wants an
+        <code>if</code> before or after the switch: <code>if (event.type &gt;= SDL_EVENT_WINDOW_FIRST
+        &amp;&amp; event.type &lt;= SDL_EVENT_WINDOW_LAST) { … }</code>.
+      </p>
+    </details>
+    <details>
+      <summary>Solution sketch</summary>
+      <p>
+        A range test is better when you want uniform treatment of a family — logging every window
+        event, or forwarding them all to a window manager object — because it stays correct when SDL
+        adds a new window event type. It is worse when you actually need to distinguish members of
+        the family, because it hides which ones you handle: a reader cannot tell from the range test
+        whether resize is covered. Use ranges for <em>categorical</em> decisions and explicit cases
+        for <em>behavioural</em> ones.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3><span class="xnum">1.1.4</span>Measure an event's age<span class="difficulty">open</span></h3>
+    <p>
+      Every event carries a <code>timestamp</code> in nanoseconds (Figure 1 — it is in the common
+      header, so it is available on <em>any</em> event). Compare it against
+      <code>SDL_GetTicksNS()</code> when you process the event, and log the difference. What is a
+      typical age with <code>while</code>? What happens to it with <code>if</code>?
+    </p>
+    <details>
+      <summary>Solution sketch</summary>
+      <p>
+        With <code>while</code>, ages are small — a fraction of a frame, since events are consumed
+        very soon after they are queued. With <code>if</code>, the age climbs without limit, and
+        watching that number grow is the most direct possible measurement of the backlog: it is
+        input latency, in nanoseconds, reported by the events themselves.
+      </p>
+      <p>
+        This little experiment is worth more than it looks. It is the first time in this course we
+        measure a <em>time</em> rather than reason about one, and it foreshadows the whole of
+        1.3 and 1.4 — where the difference between "how fast" and "how late" becomes the central
+        design problem of the loop.
+      </p>
+    </details>
+  </div>
+
+  <!-- ================= 10. RECAP & NEXT ================= -->
+  <h2 id="recap"><span class="num">9</span>Recap &amp; Next</h2>
+
+  <div class="recap">
+    <h2>What the engine can do now that it could not before</h2>
+    <ul>
+      <li>
+        <strong>It dispatches events properly.</strong> A <code>switch</code> on the tag, each case
+        touching only its own union member, with quit, window-close, resize, and keyboard handled
+        distinctly.
+      </li>
+      <li>
+        <strong>You understand the envelope.</strong> <code>SDL_Event</code> is a tagged union whose
+        first sixteen bytes are identical across every variant — measured, not assumed — which is
+        precisely why <code>event.type</code> is always safe and everything else is conditional.
+      </li>
+      <li>
+        <strong>You can navigate a hundred event types</strong> by category, and classify an unknown
+        one from its number alone.
+      </li>
+      <li>
+        <strong>You can prove why the loop drains to empty</strong> — and roughly how catastrophic
+        <code>if</code> would be.
+      </li>
+    </ul>
+    <p>
+      The idea to carry forward: <strong>draining is mandatory; reacting is optional.</strong> The
+      queue is a mailbox you must empty every frame, whatever you decide to do with the letters.
+    </p>
+    <p>
+      <strong>Next:</strong> <a href="01-02-input-state-vs-events.html">1.2 — Input: State vs
+      Events</a>. Events tell you what <em>happened</em>: "the W key went down." But gameplay
+      usually wants to know what <em>is</em>: "is W held right now?" Those are different questions
+      with different bugs, and answering them from the same event stream requires keeping state
+      across frames — which is the first thing in this engine that genuinely owns something, and
+      therefore the first thing that has earned its own module.
+    </p>
+  </div>
+
+  <!-- ================= 11. FURTHER READING ================= -->
+  <h2 id="reading"><span class="num">10</span>Further Reading</h2>
+
+  <ul class="reading">
+    <li>
+      <span class="src">SDL3 wiki</span>
+      <strong><a href="https://wiki.libsdl.org/SDL3/CategoryEvents">The events category</a></strong> —
+      every event type SDL can deliver, with the struct each one uses. Skim it once so you know what
+      is available before you need it.
+    </li>
+    <li>
+      <span class="src">SDL3 wiki</span>
+      <strong><a href="https://wiki.libsdl.org/SDL3/SDL_Event">SDL_Event</a></strong> and
+      <strong><a href="https://wiki.libsdl.org/SDL3/SDL_PollEvent">SDL_PollEvent</a></strong> —
+      the union's members and the polling contract, from the source of truth.
+    </li>
+    <li>
+      <span class="src">SDL3 wiki</span>
+      <strong><a href="https://wiki.libsdl.org/SDL3/README/migration">Migrating to SDL 3.0</a></strong> —
+      in particular the flattening of <code>SDL_WINDOWEVENT</code> into individual event types, the
+      pitfall above.
+    </li>
+    <li>
+      <span class="src">Reference</span>
+      <strong><a href="https://en.cppreference.com/w/cpp/utility/variant">cppreference: std::variant</a></strong> —
+      the type-safe C++ successor to the tagged union. We do not use it for SDL events (SDL's API is
+      C), but it is the pattern's modern form and worth knowing.
+    </li>
+    <li>
+      <span class="src">Book</span>
+      <strong>Jason Gregory, <em>Game Engine Architecture</em></strong> — the chapter on the
+      human-interface-device layer, for how events become a real input system. Good companion
+      reading before 1.2.
+    </li>
+  </ul>
+
+  <!-- ================= 12. STATE ================= -->
+  <details class="state">
+    <summary>STATE — resume key</summary>
+<pre>course: Build a Professional 3D Game Engine (SDL3 + C++20)
+version: 1.0
+
+conventions:
+  world: right-handed, Y-up, -Z forward
+  clip: left-handed, +Y up, z in [0,1] (SDL_GPU-fixed; projection absorbs the flip)
+  sw-rasterizer: targets SDL_GPU's exact NDC (Module 4 port = API change, not maths change)
+  matrices: column vectors, v' = M*v, column-major storage
+  winding: CCW = front, cull back (per-pipeline state; set explicitly every time)
+  units: 1 unit = 1 metre; radians internally; linear colour in renderer
+  axis colours: x/y/z = red/green/blue
+  sdl3: FetchContent, pinned release-3.4.12; target SDL3::SDL3; SDL_TEST_LIBRARY OFF
+  sdl3-api: bool SDL_Init/PollEvent; SDL_CreateWindow(title,w,h,flags) no x/y;
+            SDL_CreateRenderer(window,name); event.key.key; <SDL3/SDL_main.h> separate;
+            SDL_Event = tagged union, type@0 + timestamp@8 shared by all variants,
+            sizeof 128 (ABI padding); types grouped 0x100 quit / 0x2xx window /
+            0x3xx keyboard / 0x4xx mouse / 0x6xx joystick / 0x8000 user
+  cpp: C++20, no exceptions/RTTI in core, snake_case, -Wall -Wextra//W4 all fixed
+  build: CMake >= 3.24, out-of-source (build/), 64-bit; Debug = -DCMAKE_BUILD_TYPE=Debug
+
+curriculum: 94 lessons, ~433 h, 9 modules
+  M0:6  M1:8  M2:12  M3:10  M4:9  M5:10  M6:15  M7:13  M8:11
+
+completed:
+  - MODULE 0 COMPLETE (0.1 … 0.6)
+  - 1.1 Events, Properly
+
+capabilities:
+  - portable CMake build; FetchContent SDL3 (release-3.4.12)
+  - window + complete switch-based event dispatch (quit, window close, resize, keys)
+  - clean shutdown; startup version log
+  - skills: reading SDL headers as source of truth; lldb/gdb/VS debugging
+
+files:
+  /: CLAUDE.md, README.md, ARCHITECTURE.md, LEARNINGS.md, PROMPT.md, LICENSE,
+     .gitignore, CMakeLists.txt, STATE.md
+  src/: main.cpp
+  docs/: index.html, conventions.html, math-toolbox.html, cpp-style.html
+  docs/lessons/: 00-01..00-06, 01-01-events-properly.html
+  docs/_template/: lesson-template.html, README.md, apply-shared-css.py
+  memory/: 2026-07-16.md
+
+next: 1.2 — Input: State vs Events</pre>
+  </details>
+
+  <nav class="lesson-nav" aria-label="Lesson navigation (bottom)">
+    <a class="prev-l" href="00-06-headers-and-debugger.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">0.6 — Reading Headers &amp; the Debugger</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="01-02-input-state-vs-events.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">1.2 — Input: State vs Events</span>
+    </a>
+  </nav>
+
+  <footer class="foot">
+    <p>
+      Build a Professional 3D Game Engine ·
+      <a href="../index.html">Contents</a> ·
+      <a href="../conventions.html">Conventions</a> ·
+      <a href="../math-toolbox.html">Math Toolbox</a> ·
+      <a href="../cpp-style.html">C++ Style</a>
+    </p>
+    <p>MIT licensed. Copyright © 2026 digster.</p>
+  </footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ---- Theme toggle (identical across the course) ---- */
+  var root = document.documentElement;
+  var KEY = "engine-course-theme";
+  try {
+    var saved = localStorage.getItem(KEY);
+    if (saved) { root.setAttribute("data-theme", saved); root.style.colorScheme = saved; }
+  } catch (e) {}
+  var btn = document.getElementById("theme-toggle");
+  if (btn) {
+    btn.addEventListener("click", function () {
+      var cur = root.getAttribute("data-theme");
+      if (!cur) cur = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      var next = cur === "dark" ? "light" : "dark";
+      root.setAttribute("data-theme", next);
+      root.style.colorScheme = next;
+      try { localStorage.setItem(KEY, next); } catch (e) {}
+    });
+  }
+
+  /* ---- Syntax highlighting: C++ and shell ---- */
+  function esc(s) { return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+  function span(c, s) { return '<span class="tok-' + c + '">' + esc(s) + "</span>"; }
+
+  var CPP_KEYWORDS = ("consteval constexpr const static void struct class union enum namespace "
+    + "return if else for while switch case default break inline noexcept nullptr true false int "
+    + "long defined static_assert static_cast bool char unsigned").split(" ");
+  var CPP_TYPES = ("bool char double float int long short signed unsigned void size_t Uint8 Uint32 "
+    + "Uint64 Sint32").split(" ");
+  var kw = Object.create(null), ty = Object.create(null);
+  CPP_KEYWORDS.forEach(function (w) { kw[w] = 1; });
+  CPP_TYPES.forEach(function (w) { ty[w] = 1; });
+  var CPP_RE = new RegExp([
+    "(\\/\\*[\\s\\S]*?\\*\\/|\\/\\/[^\\n]*|#[^\\n]*)",
+    '("(?:\\\\.|[^"\\\\])*"|\'(?:\\\\.|[^\'\\\\])*\')',
+    "(\\b\\d[\\w.]*\\b)",
+    "([A-Za-z_]\\w*)(?=\\s*\\()",
+    "([A-Za-z_]\\w*)",
+    "([{}()\\[\\];,.<>+\\-*/%=!&|^~?:]+)"
+  ].join("|"), "g");
+  function highlightCpp(src) {
+    var out = "", last = 0, m;
+    CPP_RE.lastIndex = 0;
+    while ((m = CPP_RE.exec(src)) !== null) {
+      if (m.index > last) out += esc(src.slice(last, m.index));
+      if (m[1])      out += span(m[1].charAt(0) === "#" ? "p" : "c", m[1]);
+      else if (m[2]) out += span("s", m[2]);
+      else if (m[3]) out += span("n", m[3]);
+      else if (m[4]) out += kw[m[4]] ? span("k", m[4]) : span("f", m[4]);
+      else if (m[5]) out += kw[m[5]] ? span("k", m[5]) : ty[m[5]] ? span("t", m[5]) : esc(m[5]);
+      else if (m[6]) out += span("o", m[6]);
+      last = CPP_RE.lastIndex;
+    }
+    return out + esc(src.slice(last));
+  }
+
+  var SH_RE = /(#[^\n]*)|("(?:\\.|[^"\\])*"|'[^']*')|(^|\n)(\s*)([\w.\/\\-]+)/g;
+  function highlightShell(src) {
+    var out = "", last = 0, m;
+    SH_RE.lastIndex = 0;
+    while ((m = SH_RE.exec(src)) !== null) {
+      if (m.index > last) out += esc(src.slice(last, m.index));
+      if (m[1]) out += span("c", m[1]);
+      else if (m[2]) out += span("s", m[2]);
+      else out += esc(m[3] || "") + esc(m[4] || "") + span("f", m[5]);
+      last = SH_RE.lastIndex;
+    }
+    return out + esc(src.slice(last));
+  }
+
+  var DISPATCH = { "lang-cpp": highlightCpp, "lang-bash": highlightShell };
+  document.querySelectorAll(".listing pre code").forEach(function (el) {
+    for (var cls in DISPATCH) {
+      if (el.classList.contains(cls)) { el.innerHTML = DISPATCH[cls](el.textContent); return; }
+    }
+  });
+})();
+</script>
+</body>
+</html>

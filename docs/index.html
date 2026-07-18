@@ -965,7 +965,7 @@ table.lessons .d { color: var(--text-muted); font-size: 0.95em; line-height: 1.4
     <div class="stat"><span class="n">94</span><span class="l">lessons</span></div>
     <div class="stat"><span class="n">9</span><span class="l">modules</span></div>
     <div class="stat"><span class="n">~433</span><span class="l">hours</span></div>
-    <div class="stat"><span class="n">6</span><span class="l">published</span></div>
+    <div class="stat"><span class="n">7</span><span class="l">published</span></div>
   </div>
 
   <p>
@@ -1212,7 +1212,7 @@ table.lessons .d { color: var(--text-muted); font-size: 0.95em; line-height: 1.4
       <div class="tbl-scroll">
         <table class="lessons">
           <tbody>
-            <tr><td class="id">1.1</td><td><span class="t">Events, Properly</span><span class="d">SDL3's event model, and why polling until empty matters. The event queue as a mailbox, not an interrupt.</span></td><td class="hrs">3 h</td></tr>
+            <tr><td class="id">1.1</td><td><span class="t"><a href="lessons/01-01-events-properly.html">Events, Properly</a> <span class="badge done">published</span></span><span class="d">SDL_Event as a tagged union (measured in memory), the event taxonomy by numeric category, and the arithmetic proving why draining one event per frame produces compounding input lag.</span></td><td class="hrs">3 h</td></tr>
             <tr><td class="id">1.2</td><td><span class="t">Input: State vs Events</span><span class="d">"Is the key down?" and "was the key pressed?" are different questions with different bugs. We answer both, correctly.</span></td><td class="hrs">3 h</td></tr>
             <tr><td class="id">1.3</td><td><span class="t">Frames, Delta Time, and Why Naive Loops Lie</span><span class="d">Measuring time honestly. Why <code>dt</code>-scaled movement still stutters, and why the spiral of death is waiting for you.</span></td><td class="hrs">4 h</td></tr>
             <tr><td class="id">1.4</td><td><span class="t">The Fixed Timestep with Interpolation, Derived</span><span class="d">The accumulator loop built from the problem up: why simulation and rendering must decouple, and how interpolation removes the judder. Determinism you design in, not retrofit.</span></td><td class="hrs">5 h</td></tr>

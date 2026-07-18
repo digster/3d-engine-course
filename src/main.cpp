@@ -72,21 +72,54 @@ int main(int argc, char* argv[])
     bool running = true;
     while (running)
     {
-        // Drain the event queue. SDL_PollEvent returns true while events remain
-        // and fills `event`; it returns false (a SDL3 bool, again) when empty.
+        // Drain the event queue COMPLETELY, every frame. SDL_PollEvent removes
+        // one event from the front and returns true; it returns false when the
+        // queue is empty. `while`, never `if` — see Lesson 1.1: draining one per
+        // frame lets the queue grow faster than it empties, and the backlog
+        // becomes input lag that compounds until the app appears frozen.
         SDL_Event event;
         while (SDL_PollEvent(&event))
         {
-            if (event.type == SDL_EVENT_QUIT)
+            // event.type is the tag of a tagged union: it tells you which member
+            // of SDL_Event is the valid one to read. Read the wrong member and
+            // you get garbage, so every case below touches only its own member.
+            switch (event.type)
             {
-                // The user closed the window (title-bar button, Cmd/Alt+F4, …).
+            case SDL_EVENT_QUIT:
+                // Application-scoped: "this program should terminate."
+                SDL_Log("Quit requested");
                 running = false;
-            }
-            else if (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_ESCAPE)
-            {
-                // SDL3 keyboard events expose the virtual key in event.key.key.
-                // (SDL2 nested it as event.key.keysym.sym — do not reach for that.)
+                break;
+
+            case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
+                // Window-scoped: THIS window's close was requested. With a single
+                // window it amounts to the same thing, but an app with several
+                // windows must close just the one — which is why SDL keeps the
+                // two events distinct.
+                SDL_Log("Window %u close requested", static_cast<unsigned>(event.window.windowID));
                 running = false;
+                break;
+
+            case SDL_EVENT_WINDOW_RESIZED:
+                // For a resize, SDL_WindowEvent's data1/data2 carry the new width
+                // and height (the header says so: "resized to data1xdata2").
+                SDL_Log("Window resized to %dx%d", event.window.data1, event.window.data2);
+                break;
+
+            case SDL_EVENT_KEY_DOWN:
+                // SDL3 exposes the virtual key as event.key.key. (SDL2 nested it
+                // as event.key.keysym.sym — do not reach for that.)
+                if (event.key.key == SDLK_ESCAPE)
+                {
+                    running = false;
+                }
+                break;
+
+            default:
+                // Everything else — mouse motion, text input, gamepads — is
+                // drained and ignored. Draining is mandatory; reacting is
+                // optional. An event you never handle still has to be removed.
+                break;
             }
         }
 

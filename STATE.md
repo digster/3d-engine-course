@@ -7,7 +7,7 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-07-17 (after Lesson 0.6)
+updated: 2026-07-18 (after Lesson 1.1)
 
 conventions:
   world: right-handed, Y-up, -Z forward
@@ -21,7 +21,11 @@ conventions:
         target SDL3::SDL3; SDL_TEST_LIBRARY OFF
   sdl3-api: bool SDL_Init / bool SDL_PollEvent; SDL_CreateWindow(title,w,h,flags) — no x/y;
             SDL_CreateRenderer(window,name); event.key.key (NOT SDL2's keysym.sym);
-            #include <SDL3/SDL_main.h> separately for the entry point; classic main + own loop
+            #include <SDL3/SDL_main.h> separately; classic main + our own loop
+  sdl3-events: SDL_Event is a tagged union — type@0, timestamp@8 identical in every
+            variant; sizeof 128 (explicit MSVC/GCC ABI padding). Types grouped by range:
+            0x100 quit · 0x2xx window · 0x3xx keyboard · 0x4xx mouse · 0x6xx joystick ·
+            0x650 gamepad · 0x8000 user. SDL turns SIGINT/SIGTERM into SDL_EVENT_QUIT.
   shaders: HLSL -> SDL_shadercross (3.0.0-preview) -> SPIR-V/DXIL/MSL  [Module 4+]
   cpp: C++20, no exceptions/RTTI in core, snake_case, -Wall -Wextra // /W4, all warnings fixed
   build: CMake >= 3.24, out-of-source (build/), 64-bit; two phases (configure, build);
@@ -38,12 +42,13 @@ completed:
   - 0.5  Your First Window
   - 0.6  Reading Headers & the Debugger
   ===> MODULE 0 COMPLETE <===
+  - 1.1  Events, Properly
 
 capabilities:
   - verified C++20 toolchain (MSVC / GCC / Clang), 64-bit
   - portable CMake build; FetchContent fetches + builds + links SDL3 (release-3.4.12)
-  - engine app: opens a 1280x720 window, event loop (quit + Esc), clean shutdown,
-    startup log line reporting the linked SDL version
+  - engine app: 1280x720 window, complete switch-based event dispatch (quit,
+    window-close, window-resize, keyboard), clean shutdown, startup version log
   - init -> create -> loop -> destroy skeleton in src/main.cpp
   - skills: reading SDL headers as source of truth; debugging with lldb/gdb/VS
 
@@ -54,10 +59,11 @@ files:
   docs/: index.html, conventions.html, math-toolbox.html, cpp-style.html
   docs/lessons/: 00-01-what-is-an-engine.html, 00-02-how-this-course-works.html,
                  00-03-toolchain.html, 00-04-cmake-from-zero.html,
-                 00-05-first-window.html, 00-06-headers-and-debugger.html
+                 00-05-first-window.html, 00-06-headers-and-debugger.html,
+                 01-01-events-properly.html
   docs/_template/: lesson-template.html, README.md, apply-shared-css.py
   memory/: 2026-07-16.md
   (retired: hello.cpp)
 
-next: 1.1 — Events, Properly  (Module 1 — The Loop, the Pixel, and Time)
+next: 1.2 — Input: State vs Events
 ```
