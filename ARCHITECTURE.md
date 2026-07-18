@@ -52,9 +52,11 @@ inventing one — but without paying framework ceremony before it buys anything.
 ├── docs/                   # THE COURSE (see §3)
 ├── src/                    # the engine-to-be, single executable  [EXISTS from 0.5]
 │   ├── main.cpp            # entry point + frame loop            [EXISTS]
-│   ├── core/               # input, logging, assertions, time, error handling
+│   ├── core/               # input, time, logging, assertions, error handling
 │   │   ├── input.hpp       # frame-coherent keyboard/mouse snapshot  [EXISTS from 1.2]
-│   │   └── input.cpp
+│   │   ├── input.cpp
+│   │   ├── clock.hpp       # monotonic frame timing, clamped dt      [EXISTS from 1.3]
+│   │   └── clock.cpp
 │   ├── math/               # vec2/3/4, mat3/4, quaternion — hand-rolled, no GLM
 │   ├── gfx/                # framebuffer, software rasterizer → later SDL_GPU renderer
 │   └── platform/           # window + event pumping (Module 5; see the note below)
@@ -85,6 +87,25 @@ frame-coherent *state cache* (poll levels, derive edges) that gameplay queries, 
 engine-fundamental rather than OS-specific. When Module 5 introduces the platform layer, the
 raw device/event plumbing may move to `platform/` while the cached snapshot stays in `core/` —
 and that split will be a taught decision, not an accident.
+
+**The frame's shape, and why the order is load-bearing.** As of Lesson 1.3 the loop in
+`src/main.cpp` runs:
+
+```
+drain events  ->  clk.tick()  ->  in.update()  ->  simulate  ->  render
+```
+
+The drain must come first because `SDL_PollEvent` *pumps*, and pumping is what refreshes the
+internal keyboard and mouse state `input` samples — sampling first costs a full frame of latency
+and re-opens the stuck-key-after-alt-tab bug. The clock and input are each ticked **exactly once**
+per frame, before anything reads them, so every system in the frame sees one coherent snapshot:
+two systems integrating with two different ideas of how long the frame was is a class of bug with
+no good symptom. `dt` is captured into a local `const float` at the top of the frame to make that
+guarantee visible at the call site.
+
+Simulation still steps by a variable `dt`, which is correct only for constant velocity. Lesson 1.4
+replaces that with a fixed timestep plus render interpolation; the frame order above survives the
+change.
 
 ### 2.2 After the Module 5 refactor: engine / demos / tools
 

@@ -1,0 +1,3318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>1.3 — Frames, Delta Time, and Why Naive Loops Lie · Build a Professional 3D Game Engine</title>
+<meta name="description" content="Measuring time honestly with a monotonic clock, scaling motion by delta time, and the precise limits of that fix: first-order error, lost determinism, tunnelling, and the spiral of death.">
+<!-- SHARED-CSS:BEGIN -->
+<style>
+/* ---- Design tokens ------------------------------------------------------- */
+:root {
+  color-scheme: light dark;
+
+  /* Page */
+  --bg:            #fdfdfb;
+  --bg-sunken:     #f4f4f0;
+  --bg-raised:     #ffffff;
+  --text:          #1c1c1a;
+  --text-muted:    #5f5f58;
+  --text-faint:    #8a8a80;
+  --rule:          #e2e2db;
+  --rule-strong:   #cfcfc6;
+
+  /* Accent — used for links, active nav, section marks */
+  --accent:        #b4530a;
+  --accent-soft:   #f5e6d8;
+  --accent-text:   #8f4108;
+
+  /* Callouts */
+  --note-bd:       #3a6ea5;   --note-bg:    #eaf2fb;
+  --warn-bd:       #b8860b;   --warn-bg:    #fdf5e2;
+  --verify-bd:     #a03030;   --verify-bg:  #fbecec;
+  --pitfall-bd:    #7a4fa3;   --pitfall-bg: #f4eefb;
+  --ok-bd:         #2f7d4f;   --ok-bg:      #e9f6ee;
+
+  /* Code — always dark, in both page themes */
+  --code-bg:       #1b1d23;
+  --code-bar:      #262932;
+  --code-text:     #dfe3ec;
+  --code-rule:     #363a45;
+
+  /* Syntax tokens */
+  --tok-comment:   #6d7789;
+  --tok-keyword:   #c98fdb;
+  --tok-type:      #6cc5d9;
+  --tok-string:    #a3cf85;
+  --tok-number:    #e8a978;
+  --tok-preproc:   #d9a05b;
+  --tok-func:      #79b6f2;
+  --tok-punct:     #9aa2b1;
+
+  /* Axis colours — COURSE-WIDE CONVENTION. x/y/z = red/green/blue.
+     Never override these in a diagram. See conventions.html. */
+  --axis-x:        #d1344a;
+  --axis-y:        #2f9e4f;
+  --axis-z:        #2b6fd4;
+  --axis-x-soft:   #f7d8dd;
+  --axis-y-soft:   #d8f0e0;
+  --axis-z-soft:   #d7e4fa;
+
+  /* Diagram neutrals */
+  --dia-bg:        #ffffff;
+  --dia-ink:       #33332e;
+  --dia-ink-soft:  #7a7a72;
+  --dia-grid:      #e8e8e2;
+  --dia-fill:      #f0f0ea;
+  --dia-hi:        #b4530a;
+
+  /* Typography */
+  --font-body: "Iowan Old Style", "Palatino Linotype", "Palatino", "Charter",
+               Georgia, Cambria, "Times New Roman", serif;
+  --font-ui:   -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+               "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "SFMono-Regular", "Cascadia Code",
+               "JetBrains Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  --measure: 42rem;          /* ~72 characters at this size — the reading column */
+  --measure-wide: 58rem;     /* diagrams & tables may breathe past the measure  */
+}
+
+/* Dark tokens.
+   Applied in two situations, which is why the block is written twice:
+     1. the OS asks for dark AND the reader has not overridden to light;
+     2. the reader explicitly chose dark via the toggle.
+   CSS has no mixins, so duplication is the price of supporting both an OS
+   default and a manual override. Keep the two blocks byte-identical. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg:          #15161a;
+    --bg-sunken:   #101115;
+    --bg-raised:   #1c1e24;
+    --text:        #e4e4e0;
+    --text-muted:  #a2a49e;
+    --text-faint:  #74766f;
+    --rule:        #2c2e35;
+    --rule-strong: #3d404a;
+
+    --accent:      #f0a06a;
+    --accent-soft: #33251a;
+    --accent-text: #f5b184;
+
+    --note-bd:     #5a8fc8;   --note-bg:    #16202c;
+    --warn-bd:     #c9a132;   --warn-bg:    #262013;
+    --verify-bd:   #d05555;   --verify-bg:  #2a1717;
+    --pitfall-bd:  #a077c8;   --pitfall-bg: #221a2c;
+    --ok-bd:       #4fa877;   --ok-bg:      #14231a;
+
+    --dia-bg:      #1a1c21;
+    --dia-ink:     #d8d8d2;
+    --dia-ink-soft:#8f918a;
+    --dia-grid:    #2b2d33;
+    --dia-fill:    #24262c;
+    --dia-hi:      #f0a06a;
+
+    --axis-x:      #f2647a;
+    --axis-y:      #5cc47e;
+    --axis-z:      #6b9ef0;
+    --axis-x-soft: #3a2027;
+    --axis-y-soft: #1c3325;
+    --axis-z-soft: #1e2a40;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg:          #15161a;
+  --bg-sunken:   #101115;
+  --bg-raised:   #1c1e24;
+  --text:        #e4e4e0;
+  --text-muted:  #a2a49e;
+  --text-faint:  #74766f;
+  --rule:        #2c2e35;
+  --rule-strong: #3d404a;
+
+  --accent:      #f0a06a;
+  --accent-soft: #33251a;
+  --accent-text: #f5b184;
+
+  --note-bd:     #5a8fc8;   --note-bg:    #16202c;
+  --warn-bd:     #c9a132;   --warn-bg:    #262013;
+  --verify-bd:   #d05555;   --verify-bg:  #2a1717;
+  --pitfall-bd:  #a077c8;   --pitfall-bg: #221a2c;
+  --ok-bd:       #4fa877;   --ok-bg:      #14231a;
+
+  --dia-bg:      #1a1c21;
+  --dia-ink:     #d8d8d2;
+  --dia-ink-soft:#8f918a;
+  --dia-grid:    #2b2d33;
+  --dia-fill:    #24262c;
+  --dia-hi:      #f0a06a;
+
+  --axis-x:      #f2647a;
+  --axis-y:      #5cc47e;
+  --axis-z:      #6b9ef0;
+  --axis-x-soft: #3a2027;
+  --axis-y-soft: #1c3325;
+  --axis-z-soft: #1e2a40;
+}
+
+/* ---- Reset & base -------------------------------------------------------- */
+*, *::before, *::after { box-sizing: border-box; }
+
+html {
+  font-size: 18px;
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
+  scroll-padding-top: 2rem;
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  line-height: 1.7;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* The reading column. Everything is centred on --measure; wide elements opt out. */
+.wrap {
+  max-width: var(--measure);
+  margin: 0 auto;
+  padding: 0 1.25rem;
+}
+.bleed {                       /* for diagrams/tables that need more room */
+  max-width: var(--measure-wide);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* ---- Typography ---------------------------------------------------------- */
+h1, h2, h3, h4 {
+  font-family: var(--font-ui);
+  line-height: 1.25;
+  letter-spacing: -0.015em;
+  margin: 0 0 0.6em;
+  scroll-margin-top: 1.5rem;
+}
+h1 { font-size: 2.15rem; font-weight: 700; margin-top: 0.2em; }
+h2 {
+  font-size: 1.5rem; font-weight: 650;
+  margin-top: 2.6em;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--rule);
+}
+h3 { font-size: 1.15rem; font-weight: 650; margin-top: 2em; }
+h4 { font-size: 1rem;    font-weight: 650; margin-top: 1.6em; color: var(--text-muted); }
+
+/* Section numbers rendered as a quiet prefix */
+h2 .num, h3 .num {
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  margin-right: 0.5em;
+  font-weight: 500;
+}
+
+p { margin: 0 0 1.15em; }
+
+a { color: var(--accent-text); text-decoration-color: var(--rule-strong); text-underline-offset: 2px; }
+a:hover { text-decoration-color: currentColor; }
+
+strong { font-weight: 650; }
+em { font-style: italic; }
+
+ul, ol { margin: 0 0 1.15em; padding-left: 1.5em; }
+li { margin-bottom: 0.4em; }
+li > ul, li > ol { margin-top: 0.4em; margin-bottom: 0.5em; }
+
+hr { border: 0; border-top: 1px solid var(--rule); margin: 2.5em 0; }
+
+blockquote {
+  margin: 1.5em 0;
+  padding: 0.1em 0 0.1em 1.2em;
+  border-left: 3px solid var(--rule-strong);
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* Inline code — light chip, distinct from the dark block listings */
+:not(pre) > code {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 0.08em 0.34em;
+  word-break: break-word;
+}
+
+/* ---- Masthead ------------------------------------------------------------ */
+.masthead {
+  background: var(--bg-sunken);
+  border-bottom: 1px solid var(--rule);
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+}
+.masthead-inner {
+  max-width: var(--measure-wide);
+  margin: 0 auto;
+  padding: 0.6rem 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.masthead .course {
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  text-decoration: none;
+}
+.masthead .spacer { flex: 1; }
+.masthead a { color: var(--text-muted); text-decoration: none; }
+.masthead a:hover { color: var(--accent-text); }
+
+.theme-toggle {
+  font: inherit;
+  font-size: 0.78rem;
+  background: var(--bg-raised);
+  color: var(--text-muted);
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  padding: 0.2rem 0.55rem;
+  cursor: pointer;
+}
+.theme-toggle:hover { border-color: var(--rule-strong); color: var(--text); }
+
+/* ---- Lesson nav (top & bottom) ------------------------------------------- */
+.lesson-nav {
+  display: flex;
+  align-items: stretch;
+  gap: 0.6rem;
+  font-family: var(--font-ui);
+  font-size: 0.82rem;
+  margin: 1.5rem auto;
+}
+.lesson-nav a, .lesson-nav span {
+  flex: 1;
+  padding: 0.55rem 0.8rem;
+  border: 1px solid var(--rule);
+  border-radius: 7px;
+  background: var(--bg-raised);
+  text-decoration: none;
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+.lesson-nav a:hover { border-color: var(--accent); }
+.lesson-nav span { opacity: 0.45; }        /* disabled edge (no prev / no next) */
+.lesson-nav .dir {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-faint);
+}
+.lesson-nav .ttl {
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-weight: 550;
+}
+.lesson-nav .next-l { text-align: right; }
+.lesson-nav .idx-l  { flex: 0 0 auto; justify-content: center; text-align: center; }
+@media (max-width: 34rem) {
+  .lesson-nav { flex-wrap: wrap; }
+  .lesson-nav .idx-l { order: 3; flex: 1 0 100%; }
+}
+
+/* ---- Lesson header block ------------------------------------------------- */
+.lesson-head { margin: 2rem 0 0; }
+.eyebrow {
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+  font-weight: 650;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 0.5rem;
+}
+.deck {
+  font-size: 1.12rem;
+  color: var(--text-muted);
+  margin-bottom: 1.5rem;
+}
+.meta {
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  padding: 1rem 1.15rem;
+  margin-bottom: 1.75rem;
+}
+.meta dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 0.4rem 1rem; }
+.meta dt {
+  color: var(--text-faint);
+  text-transform: uppercase;
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  padding-top: 0.28em;
+  white-space: nowrap;
+}
+.meta dd { margin: 0; }
+@media (max-width: 30rem) {
+  .meta dl { grid-template-columns: 1fr; gap: 0.15rem 0; }
+  .meta dd { margin-bottom: 0.6rem; }
+}
+
+/* Objectives — "you will be able to…" */
+.objectives {
+  border: 1px solid var(--accent);
+  background: var(--accent-soft);
+  border-radius: 9px;
+  padding: 1.1rem 1.25rem;
+  margin: 1.75rem 0;
+}
+.objectives h2 {
+  margin: 0 0 0.5rem;
+  border: 0; padding: 0;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--accent-text);
+}
+.objectives ul { margin: 0; padding-left: 1.25em; }
+.objectives li::marker { color: var(--accent); }
+
+/* ---- Table of contents --------------------------------------------------- */
+.toc {
+  font-family: var(--font-ui);
+  font-size: 0.88rem;
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  padding: 1rem 1.25rem;
+  margin: 2rem 0;
+}
+.toc > summary {
+  cursor: pointer;
+  font-weight: 650;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-muted);
+  list-style: none;
+}
+.toc > summary::-webkit-details-marker { display: none; }
+.toc > summary::before { content: "▸ "; color: var(--accent); }
+.toc[open] > summary::before { content: "▾ "; }
+.toc ol { list-style: none; margin: 0.85rem 0 0; padding: 0; counter-reset: toc; }
+.toc ol ol { margin: 0.3rem 0 0.5rem 1.1rem; }
+.toc li { margin: 0.28em 0; counter-increment: toc; }
+.toc a { text-decoration: none; color: var(--text); }
+.toc a:hover { color: var(--accent-text); text-decoration: underline; }
+.toc ol ol a { color: var(--text-muted); font-size: 0.94em; }
+
+/* ---- Callouts ------------------------------------------------------------ */
+.callout {
+  border-left: 3px solid var(--rule-strong);
+  background: var(--bg-sunken);
+  border-radius: 0 8px 8px 0;
+  padding: 0.9rem 1.1rem;
+  margin: 1.6em 0;
+  font-size: 0.95rem;
+}
+.callout > :first-child { margin-top: 0; }
+.callout > :last-child  { margin-bottom: 0; }
+.callout .label {
+  display: block;
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  margin-bottom: 0.35rem;
+}
+.callout.note    { border-color: var(--note-bd);    background: var(--note-bg); }
+.callout.note .label    { color: var(--note-bd); }
+.callout.warn    { border-color: var(--warn-bd);    background: var(--warn-bg); }
+.callout.warn .label    { color: var(--warn-bd); }
+.callout.verify  { border-color: var(--verify-bd);  background: var(--verify-bg); }
+.callout.verify .label  { color: var(--verify-bd); }
+.callout.pitfall { border-color: var(--pitfall-bd); background: var(--pitfall-bg); }
+.callout.pitfall .label { color: var(--pitfall-bd); }
+.callout.ok      { border-color: var(--ok-bd);      background: var(--ok-bg); }
+.callout.ok .label      { color: var(--ok-bd); }
+/* C++ explainers: a C++ feature taught in place, the first time it appears. */
+.callout.cpp     { border-color: var(--accent);     background: var(--accent-soft); }
+.callout.cpp .label     { color: var(--accent-text); }
+
+/* ---- Code listings ------------------------------------------------------- */
+.listing {
+  margin: 1.6em 0;
+  border-radius: 9px;
+  overflow: hidden;
+  border: 1px solid var(--code-rule);
+  background: var(--code-bg);
+}
+.listing figcaption {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: var(--code-bar);
+  border-bottom: 1px solid var(--code-rule);
+  padding: 0.45rem 0.85rem;
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  color: #aeb6c4;
+}
+.listing figcaption .path { font-weight: 600; color: #dfe3ec; }
+.listing figcaption .tag {
+  font-family: var(--font-ui);
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  background: #3a3f4c;
+  color: #c6cdd9;
+}
+.listing figcaption .tag.new      { background: #1f4433; color: #7fd6a5; }
+.listing figcaption .tag.modified { background: #453a1c; color: #e0be74; }
+.listing figcaption .lang { margin-left: auto; opacity: 0.65; }
+
+/* Horizontal scroll — NEVER wrap. Wrapped code lies about its structure. */
+.listing pre {
+  margin: 0;
+  padding: 0.9rem 1rem;
+  overflow-x: auto;
+  background: var(--code-bg);
+}
+.listing pre code {
+  font-family: var(--font-mono);
+  font-size: 0.79rem;
+  line-height: 1.62;
+  color: var(--code-text);
+  white-space: pre;
+  display: block;
+  tab-size: 4;
+}
+.listing pre::-webkit-scrollbar { height: 9px; }
+.listing pre::-webkit-scrollbar-track { background: var(--code-bar); }
+.listing pre::-webkit-scrollbar-thumb { background: #4a5060; border-radius: 5px; }
+.listing pre::-webkit-scrollbar-thumb:hover { background: #5d6478; }
+
+/* Syntax tokens, applied by the tiny highlighter at the foot of the page. */
+.tok-c { color: var(--tok-comment); font-style: italic; }
+.tok-k { color: var(--tok-keyword); }
+.tok-t { color: var(--tok-type); }
+.tok-s { color: var(--tok-string); }
+.tok-n { color: var(--tok-number); }
+.tok-p { color: var(--tok-preproc); }
+.tok-f { color: var(--tok-func); }
+.tok-o { color: var(--tok-punct); }
+
+/* Emphasised line inside a listing (the line this paragraph is about) */
+.listing .hl { background: rgba(180, 130, 60, 0.16); display: inline-block; width: 100%; }
+
+/* Shell transcripts get a lighter treatment than source files */
+.listing.shell figcaption .path::before { content: "$ "; opacity: 0.6; }
+
+/* ---- Figures & diagrams -------------------------------------------------- */
+figure.dia {
+  margin: 2em auto;
+  padding: 0;
+}
+figure.dia svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: var(--dia-bg);
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+}
+figure.dia figcaption,
+figure.tbl figcaption {
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: 0.65rem;
+  line-height: 1.55;
+}
+figure.dia figcaption .fignum,
+figure.tbl figcaption .fignum {
+  font-weight: 700;
+  color: var(--text);
+}
+/* SVG text inherits the theme so diagrams survive dark mode */
+figure.dia svg text { font-family: var(--font-ui); fill: var(--dia-ink); }
+figure.dia svg .lbl-x { fill: var(--axis-x); }
+figure.dia svg .lbl-y { fill: var(--axis-y); }
+figure.dia svg .lbl-z { fill: var(--axis-z); }
+figure.dia svg .ax-x  { stroke: var(--axis-x); }
+figure.dia svg .ax-y  { stroke: var(--axis-y); }
+figure.dia svg .ax-z  { stroke: var(--axis-z); }
+figure.dia svg .ink       { stroke: var(--dia-ink); }
+figure.dia svg .ink-soft  { stroke: var(--dia-ink-soft); }
+figure.dia svg .grid      { stroke: var(--dia-grid); }
+figure.dia svg .fill-soft { fill: var(--dia-fill); }
+figure.dia svg .hi        { stroke: var(--dia-hi); }
+figure.dia svg .mono      { font-family: var(--font-mono); }
+figure.dia svg .sm        { font-size: 11px; }
+figure.dia svg .xs        { font-size: 9.5px; }
+
+/* Text fills for <text> elements.
+   These MUST be classes, not fill="..." attributes: the `figure.dia svg text`
+   rule above is CSS, and CSS always beats an SVG presentation attribute — an
+   inline fill on a <text> is silently ignored. Class selectors outrank the bare
+   element selector, so these win. (Shapes are unaffected; the rule only targets
+   text, so fill="..." still works on rect/path/circle.) */
+figure.dia svg .muted     { fill: var(--dia-ink-soft); }
+figure.dia svg .t-hi      { fill: var(--dia-hi); }
+figure.dia svg .t-ok      { fill: var(--ok-bd); }
+figure.dia svg .t-bad     { fill: var(--verify-bd); }
+/* For labels sitting ON a saturated filled shape, where the theme ink would be
+   unreadable. Fixed white in both themes, because the shape under it is the
+   same saturated colour in both. */
+figure.dia svg .t-inv     { fill: #ffffff; }
+
+/* ---- Tables -------------------------------------------------------------- */
+.tbl-scroll { overflow-x: auto; margin: 1.6em 0; }
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+th, td {
+  text-align: left;
+  padding: 0.5rem 0.7rem;
+  border-bottom: 1px solid var(--rule);
+  vertical-align: top;
+}
+th {
+  font-weight: 650;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--rule-strong);
+  white-space: nowrap;
+}
+tbody tr:hover { background: var(--bg-sunken); }
+td code { font-size: 0.82em; }
+
+/* File-manifest table: path | new/modified | purpose */
+.manifest td:first-child { font-family: var(--font-mono); font-size: 0.78rem; white-space: nowrap; }
+.badge {
+  font-size: 0.62rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.06em; padding: 0.1rem 0.4rem; border-radius: 3px; white-space: nowrap;
+}
+.badge.new { background: var(--ok-bg); color: var(--ok-bd); border: 1px solid var(--ok-bd); }
+.badge.mod { background: var(--warn-bg); color: var(--warn-bd); border: 1px solid var(--warn-bd); }
+/* Curriculum status, used on index.html */
+.badge.done { background: var(--ok-bg); color: var(--ok-bd); border: 1px solid var(--ok-bd); }
+.badge.soon { background: var(--bg-sunken); color: var(--text-faint); border: 1px solid var(--rule-strong); }
+
+/* ---- Math ---------------------------------------------------------------- */
+/* KaTeX renders these when the CDN is reachable. When it is NOT, the raw TeX
+   stays visible — which is why every equation MUST also be stated in prose.
+   Never let an equation be the only carrier of a fact. */
+.eq {
+  margin: 1.4em 0;
+  padding: 0.9rem 1rem;
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  overflow-x: auto;
+  text-align: center;
+}
+.eq-plain {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  margin-top: 0.6rem;
+  padding-top: 0.6rem;
+  border-top: 1px dashed var(--rule-strong);
+  text-align: left;
+}
+.eq-plain::before {
+  content: "in plain text: ";
+  color: var(--text-faint);
+  font-family: var(--font-ui);
+  font-size: 0.72rem;
+}
+
+/* Worked numeric example — every formula gets one */
+.worked {
+  border: 1px solid var(--rule-strong);
+  border-radius: 9px;
+  padding: 1rem 1.2rem;
+  margin: 1.6em 0;
+  background: var(--bg-raised);
+}
+.worked > .label {
+  display: block;
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--accent);
+  margin-bottom: 0.5rem;
+}
+.worked > :last-child { margin-bottom: 0; }
+
+/* ---- Exercises ----------------------------------------------------------- */
+.exercise {
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 9px 9px 0;
+  padding: 1rem 1.2rem;
+  margin: 1.4em 0;
+  background: var(--bg-raised);
+}
+.exercise h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.98rem;
+}
+.exercise h3 .xnum {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--accent);
+  margin-right: 0.5em;
+}
+.difficulty {
+  font-family: var(--font-ui);
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-faint);
+  border: 1px solid var(--rule-strong);
+  border-radius: 3px;
+  padding: 0.05rem 0.35rem;
+  margin-left: 0.4em;
+  vertical-align: 0.15em;
+}
+.exercise details {
+  margin-top: 0.7rem;
+  border-top: 1px solid var(--rule);
+  padding-top: 0.6rem;
+}
+.exercise summary {
+  cursor: pointer;
+  font-family: var(--font-ui);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.exercise summary:hover { color: var(--accent-text); }
+.exercise details[open] summary { margin-bottom: 0.6rem; }
+
+/* ---- Pitfalls (symptom → cause → fix) ------------------------------------ */
+.pitfalls { margin: 1.5em 0; }
+.pitfall-item {
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  margin-bottom: 0.9rem;
+  overflow: hidden;
+}
+.pitfall-item > summary {
+  cursor: pointer;
+  padding: 0.7rem 1rem;
+  background: var(--bg-sunken);
+  font-family: var(--font-ui);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.pitfall-item > summary:hover { color: var(--accent-text); }
+.pitfall-item > summary .sym {
+  font-weight: 400;
+  color: var(--text-muted);
+  font-style: italic;
+}
+.pitfall-body { padding: 0.9rem 1rem; font-size: 0.94rem; }
+.pitfall-body > :first-child { margin-top: 0; }
+.pitfall-body > :last-child  { margin-bottom: 0; }
+.pitfall-body dt {
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+  margin-top: 0.7rem;
+}
+.pitfall-body dd { margin: 0.2rem 0 0; }
+
+/* ---- Recap / next -------------------------------------------------------- */
+.recap {
+  background: var(--ok-bg);
+  border: 1px solid var(--ok-bd);
+  border-radius: 9px;
+  padding: 1.1rem 1.25rem;
+  margin: 1.75rem 0;
+}
+.recap h2 { margin: 0 0 0.6rem; border: 0; padding: 0; font-size: 1.05rem; }
+.recap > :last-child { margin-bottom: 0; }
+
+/* ---- Further reading ----------------------------------------------------- */
+.reading { font-size: 0.92rem; }
+.reading li { margin-bottom: 0.6em; }
+.reading .src {
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+  margin-right: 0.4em;
+}
+
+/* ---- STATE block --------------------------------------------------------- */
+.state {
+  margin: 2.5em 0 1em;
+  border: 1px dashed var(--rule-strong);
+  border-radius: 9px;
+  background: var(--bg-sunken);
+  overflow: hidden;
+}
+.state > summary {
+  cursor: pointer;
+  padding: 0.6rem 1rem;
+  font-family: var(--font-ui);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-muted);
+}
+.state pre {
+  margin: 0;
+  padding: 0.9rem 1rem;
+  overflow-x: auto;
+  border-top: 1px solid var(--rule);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+  white-space: pre;
+}
+
+/* ---- Footer -------------------------------------------------------------- */
+.foot {
+  border-top: 1px solid var(--rule);
+  margin-top: 3rem;
+  padding: 1.5rem 0 3rem;
+  font-family: var(--font-ui);
+  font-size: 0.78rem;
+  color: var(--text-faint);
+}
+.foot a { color: var(--text-muted); }
+
+/* ---- Interactive widgets ------------------------------------------------- */
+.widget {
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  background: var(--bg-raised);
+  padding: 1rem;
+  margin: 2em 0;
+}
+.widget-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+  align-items: center;
+  margin-top: 0.8rem;
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+.widget-controls label { display: flex; align-items: center; gap: 0.4rem; }
+.widget-controls input[type="range"] { accent-color: var(--accent); }
+.widget-readout {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--text);
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 0.1rem 0.4rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Print --------------------------------------------------------------- */
+@media print {
+  .masthead, .lesson-nav, .theme-toggle { display: none; }
+  body { background: #fff; color: #000; font-size: 11pt; }
+  .listing { break-inside: avoid; }
+  figure.dia { break-inside: avoid; }
+  a::after { content: " (" attr(href) ")"; font-size: 0.7em; color: #666; }
+}
+</style>
+<!-- SHARED-CSS:END -->
+</head>
+<body>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <a class="course" href="../index.html">Build a Professional 3D Game Engine</a>
+    <span class="spacer"></span>
+    <a href="../index.html">Contents</a>
+    <a href="../conventions.html">Conventions</a>
+    <a href="../cpp-style.html">C++ Style</a>
+    <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Toggle colour theme">Theme</button>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="01-02-input-state-vs-events.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">1.2 — Input: State vs Events</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="01-04-fixed-timestep.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">1.4 — The Fixed Timestep with Interpolation, Derived</span>
+    </a>
+  </nav>
+
+  <!-- ================= 1. HEADER BLOCK ================= -->
+  <div class="lesson-head">
+    <div class="eyebrow">Module 1 — The Loop, the Pixel, and Time · Lesson 1.3</div>
+    <h1>Frames, Delta Time, and Why Naive Loops Lie</h1>
+    <p class="deck">
+      The box we built in 1.2 moves six pixels per frame, which means its speed is a property of
+      your monitor rather than of your game. Fixing that takes one multiplication. Then we spend
+      the rest of the lesson finding out how much that fix does <em>not</em> fix — because the
+      honest answer is "less than every tutorial on the internet implies", and knowing exactly
+      where it stops working is what makes Lesson 1.4 feel inevitable instead of arbitrary.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 4 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd><a href="01-02-input-state-vs-events.html">1.2 — Input: State vs Events</a>, <a href="01-01-events-properly.html">1.1 — Events, Properly</a></dd>
+
+        <dt>Files</dt>
+        <dd><code>src/core/clock.hpp</code> (new), <code>src/core/clock.cpp</code> (new), <code>src/main.cpp</code> (modified), <code>CMakeLists.txt</code> (modified)</dd>
+
+        <dt>Milestone</dt>
+        <dd>A demo in which one box's speed follows your frame rate, another's does not, and a ball obeying neither flies off the top of the window — all three on screen at once, with the frame rate under your control.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…explain, with numbers, why "six pixels per frame" makes speed a property of the hardware.</li>
+      <li>…choose a clock deliberately: monotonic rather than wall, nanoseconds rather than milliseconds, integer rather than floating point — and say what each wrong choice breaks.</li>
+      <li>…scale motion by <code>dt</code>, and prove it is <em>exactly</em> right for constant velocity.</li>
+      <li>…show numerically that for anything accelerating it is only <strong>first-order</strong> accurate, with error proportional to <code>dt</code> — so the simulation still depends on the frame rate.</li>
+      <li>…name and recognise the four ways variable <code>dt</code> betrays you: lost determinism, tunnelling, <code>dt = 0</code>, and the debugger-breakpoint spike.</li>
+      <li>…evaluate the naive patches — clamping, smoothing, capping — and say what each one trades away.</li>
+      <li>…describe the shape of the real answer, and what the <em>spiral of death</em> is before you meet it.</li>
+    </ul>
+  </section>
+
+  <details class="toc" open>
+    <summary>Contents</summary>
+    <ol>
+      <li><a href="#problem">The Problem</a></li>
+      <li><a href="#intuition">Building Intuition</a>
+        <ol>
+          <li><a href="#no-time">A speed with no time in it</a></li>
+          <li><a href="#ruler">The ruler is part of the experiment</a></li>
+        </ol>
+      </li>
+      <li><a href="#theory">The Theory</a>
+        <ol>
+          <li><a href="#which-clock">Which clock</a></li>
+          <li><a href="#which-unit">Which unit, and which type</a></li>
+          <li><a href="#dt-exact">Delta time, and where it is exactly right</a></li>
+          <li><a href="#dt-approx">Where it is only approximately right</a></li>
+          <li><a href="#betrayals">The four betrayals of a variable step</a></li>
+          <li><a href="#patches">The patches, and what each one costs</a></li>
+        </ol>
+      </li>
+      <li><a href="#implementation">Implementation: the clock</a></li>
+      <li><a href="#listings">Complete Code Listings</a></li>
+      <li><a href="#build">Build &amp; Run</a></li>
+      <li><a href="#pitfalls">Common Pitfalls &amp; Debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; Next</a></li>
+      <li><a href="#reading">Further Reading</a></li>
+    </ol>
+  </details>
+
+  <!-- ================= 2. THE PROBLEM ================= -->
+  <h2 id="problem"><span class="num">1</span>The Problem</h2>
+
+  <p>
+    Here is the line we wrote in 1.2, and flagged at the time as deliberately wrong:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/main.cpp — Lesson 1.2</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">box.x += dx * k_box_speed;   // k_box_speed = 6.0f</code></pre>
+  </figure>
+
+  <p>
+    Six pixels, once per frame. Read that as a physical claim and it says: <em>the box moves six
+    pixels every time the machine finishes drawing.</em> Nothing in it refers to time, so its
+    speed is whatever number of frames per second the machine happens to achieve — a number that
+    depends on the monitor, the GPU, the scene, the weather inside the laptop, and whether the
+    player has vsync on.
+  </p>
+
+  <div class="worked">
+    <span class="label">Worked example — the same build, three machines</span>
+    <p>Six pixels per frame, across a 1280-pixel window:</p>
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>Frame rate</th><th>Actual speed</th><th>Time to cross the window</th></tr></thead>
+        <tbody>
+          <tr><td>30 fps</td><td><code>6 × 30 = 180</code> px/s</td><td><code>1280 / 180 = 7.1 s</code></td></tr>
+          <tr><td>60 fps</td><td><code>6 × 60 = 360</code> px/s</td><td><code>1280 / 360 = 3.6 s</code></td></tr>
+          <tr><td>144 fps</td><td><code>6 × 144 = 864</code> px/s</td><td><code>1280 / 864 = 1.5 s</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="margin-bottom:0">
+      The 144 Hz player's box is <strong>4.8× faster</strong> than the 30 fps player's. Not
+      "smoother" — <em>faster</em>. If this were a platformer, the two players are playing games
+      with different physics, and any jump the designer tuned at 60 fps is either unmakeable or
+      trivial for everyone else. Figure 1 is the same fact drawn.
+    </p>
+  </div>
+
+  <figure class="dia bleed">
+    <svg viewBox="0 0 660 250" role="img" aria-labelledby="f1-t f1-d">
+      <title id="f1-t">Where the box has travelled after one second, at three frame rates</title>
+      <desc id="f1-d">Three tracks of equal length representing a 1280 pixel window. After one second
+        of the same code, the 30 fps box has travelled 180 pixels, the 60 fps box 360 pixels, and
+        the 144 fps box 864 pixels — nearly five times further than the slowest. The same code and
+        the same elapsed time produce three different positions.</desc>
+
+      <g class="xs muted">
+        <text x="14" y="34">after exactly one second of the same code</text>
+      </g>
+
+      <!-- 30 fps -->
+      <text x="14" y="72" class="sm mono">30 fps</text>
+      <rect x="86" y="56" width="520" height="22" rx="4" class="fill-soft" stroke="var(--dia-ink-soft)" stroke-width="1"/>
+      <rect x="86" y="56" width="73" height="22" rx="4" fill="var(--verify-bd)" opacity="0.85"/>
+      <text x="616" y="72" class="xs muted">180 px</text>
+
+      <!-- 60 fps -->
+      <text x="14" y="122" class="sm mono">60 fps</text>
+      <rect x="86" y="106" width="520" height="22" rx="4" class="fill-soft" stroke="var(--dia-ink-soft)" stroke-width="1"/>
+      <rect x="86" y="106" width="146" height="22" rx="4" fill="var(--verify-bd)" opacity="0.85"/>
+      <text x="616" y="122" class="xs muted">360 px</text>
+
+      <!-- 144 fps -->
+      <text x="14" y="172" class="sm mono">144 fps</text>
+      <rect x="86" y="156" width="520" height="22" rx="4" class="fill-soft" stroke="var(--dia-ink-soft)" stroke-width="1"/>
+      <rect x="86" y="156" width="351" height="22" rx="4" fill="var(--verify-bd)" opacity="0.85"/>
+      <text x="616" y="172" class="xs muted">864 px</text>
+
+      <line x1="86" y1="46" x2="86" y2="196" class="grid" stroke-width="1"/>
+      <line x1="606" y1="46" x2="606" y2="196" class="grid" stroke-width="1"/>
+      <text x="86" y="212" class="xs muted" text-anchor="middle">0</text>
+      <text x="606" y="212" class="xs muted" text-anchor="end">1280 px — the right edge of the window</text>
+
+      <text x="330" y="238" class="xs t-bad" text-anchor="middle" font-weight="700">one build · one second · three different games</text>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 1.</span> The bug is not that the fast machine is smoother. It is
+      that the fast machine is <em>playing a different game</em> — one where everything moves nearly
+      five times as fast.
+    </figcaption>
+  </figure>
+
+  <p>
+    You may object that this was true of the games you grew up with, and you are right. On a NES,
+    every machine ran at the same fixed refresh rate, so "per frame" <em>was</em> a unit of time —
+    which is exactly why those games run at comic speed on emulators that do not throttle, and why
+    old PC games tied to the CPU clock became unplayable the moment CPUs got faster. The assumption
+    was load-bearing, and then it broke. We are writing for machines that run at 30, 60, 120, 144,
+    165 and 240 Hz, sometimes changing mid-session when the laptop switches to battery.
+  </p>
+
+  <p>
+    So: multiply by elapsed time. That is the fix, it is one line, and by §<a href="#dt-exact">3.3</a>
+    we will have it. The reason this lesson keeps going afterwards is that the fix has a precise
+    domain of validity, and the failures outside it are the ones that get shipped.
+  </p>
+
+  <!-- ================= 3. BUILDING INTUITION ================= -->
+  <h2 id="intuition"><span class="num">2</span>Building Intuition</h2>
+
+  <h3 id="no-time">2.1 A speed with no time in it</h3>
+
+  <p>
+    Ask anyone how fast a car goes and the answer has two units in it: <em>kilometres per hour</em>.
+    Distance over time. You cannot state a speed without naming a duration, because speed
+    <em>is</em> a ratio — that is what the word means.
+  </p>
+
+  <p>
+    <code>6.0f</code> pixels per frame has a distance and no time. It is not a speed; it is a
+    <strong>distance per event</strong>, and the event happens at a rate nobody promised anything
+    about. It is like agreeing to pay rent "per visit from the landlord": a perfectly well-defined
+    arrangement whose annual cost is entirely up to someone else.
+  </p>
+
+  <p>
+    Once you see it that way, the fix writes itself. If you want 360 pixels per second, then in a
+    frame that lasted <code>dt</code> seconds you should move <code>360 × dt</code> pixels. A frame
+    that took twice as long moves the box twice as far, so the box covers the same ground per second
+    on every machine. The frames cancel out, leaving a quantity in real units.
+  </p>
+
+  <h3 id="ruler">2.2 The ruler is part of the experiment</h3>
+
+  <p>
+    Before we can multiply by elapsed time, we have to <em>measure</em> elapsed time — and this is
+    where a surprising number of engines go wrong, because measurement feels like it should be free.
+    It is not. Three questions have to be answered deliberately, and getting any one of them wrong
+    corrupts every number downstream.
+  </p>
+
+  <p>
+    <strong>Which clock?</strong> Your computer has more than one, and they disagree on purpose.
+    One tells you what time it is in the world — and gets corrected, by NTP, by daylight saving, by
+    the user dragging it. The other only counts forward from some arbitrary start and never gets
+    corrected. Ask the first one for a duration and you can get a negative answer.
+  </p>
+
+  <p>
+    <strong>Which resolution?</strong> A ruler marked only in centimetres cannot measure a
+    millimetre, and it will not tell you it cannot — it will just answer 0 or 1, confidently. A
+    clock that reports whole milliseconds, asked about a frame that took 3.3 ms, has the same
+    problem.
+  </p>
+
+  <p>
+    <strong>Which number type?</strong> A duration and a timestamp are different animals. Durations
+    are small and want to be convenient; timestamps grow without bound and want to be exact. Storing
+    the second in a type sized for the first is a bug that takes hours of uptime to appear, and then
+    freezes time completely.
+  </p>
+
+  <p>
+    Take those three in order, and then we can talk about motion.
+  </p>
+
+  <!-- ================= 4. THE THEORY ================= -->
+  <h2 id="theory"><span class="num">3</span>The Theory</h2>
+
+  <h3 id="which-clock">3.1 Which clock</h3>
+
+  <p>
+    The clock on your wall is a <strong>wall clock</strong> — it tries to tell you the truth about
+    the world, and to keep doing so it must occasionally be <em>corrected</em>. NTP nudges it
+    constantly, in both directions. Daylight saving moves it an hour. A user setting their date
+    moves it a year. In C++, <code>std::chrono::system_clock</code>, <code>time()</code> and
+    <code>::GetSystemTime</code> are all wall clocks.
+  </p>
+
+  <p>
+    A <strong>monotonic clock</strong> makes a different promise: it counts forward from an
+    arbitrary zero and <em>never</em> goes backwards or jumps. It cannot tell you what day it is.
+    It is the only correct choice for measuring a duration, and Figure 2 shows why in one picture.
+  </p>
+
+  <figure class="dia bleed">
+    <svg viewBox="0 0 660 240" role="img" aria-labelledby="f2-t f2-d">
+      <title id="f2-t">A wall clock corrected backwards mid-frame, compared with a monotonic clock</title>
+      <desc id="f2-d">Two timelines across five frames. The wall clock is corrected backwards by NTP
+        between frames three and four, so the measured delta for that frame is negative: the
+        simulation is asked to advance by minus forty milliseconds. The monotonic clock counts
+        steadily forward through the same interval and reports a normal positive delta.</desc>
+
+      <defs>
+        <marker id="t2a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--verify-bd)"/></marker>
+      </defs>
+
+      <!-- wall clock -->
+      <text x="14" y="30" class="sm t-bad" font-weight="700">✗ Wall clock (system_clock, time())</text>
+      <line x1="70" y1="76" x2="620" y2="76" class="ink-soft" stroke-width="1.2"/>
+      <g class="ink" stroke-width="1.6">
+        <line x1="90" y1="70" x2="90" y2="82"/>
+        <line x1="190" y1="70" x2="190" y2="82"/>
+        <line x1="290" y1="70" x2="290" y2="82"/>
+        <line x1="350" y1="70" x2="350" y2="82"/>
+        <line x1="450" y1="70" x2="450" y2="82"/>
+      </g>
+      <g class="xs mono muted">
+        <text x="90" y="96" text-anchor="middle">10.00</text>
+        <text x="190" y="96" text-anchor="middle">10.02</text>
+        <text x="290" y="96" text-anchor="middle">10.04</text>
+        <text x="350" y="96" text-anchor="middle">10.00</text>
+        <text x="450" y="96" text-anchor="middle">10.02</text>
+      </g>
+      <path d="M356,58 L286,58" stroke="var(--verify-bd)" stroke-width="1.8" marker-end="url(#t2a)"/>
+      <text x="321" y="48" class="xs t-bad" text-anchor="middle" font-weight="700">NTP corrects the value backwards</text>
+      <text x="470" y="60" class="xs t-bad" font-weight="700">dt = −0.04 s</text>
+      <text x="470" y="74" class="xs muted">everything moves backwards</text>
+
+      <!-- monotonic -->
+      <text x="14" y="150" class="sm t-ok" font-weight="700">✓ Monotonic clock (SDL_GetTicksNS)</text>
+      <line x1="70" y1="196" x2="620" y2="196" class="ink-soft" stroke-width="1.2"/>
+      <g class="ink" stroke-width="1.6">
+        <line x1="90" y1="190" x2="90" y2="202"/>
+        <line x1="190" y1="190" x2="190" y2="202"/>
+        <line x1="290" y1="190" x2="290" y2="202"/>
+        <line x1="390" y1="190" x2="390" y2="202"/>
+        <line x1="490" y1="190" x2="490" y2="202"/>
+      </g>
+      <g class="xs mono muted">
+        <text x="90" y="216" text-anchor="middle">1.000</text>
+        <text x="190" y="216" text-anchor="middle">1.020</text>
+        <text x="290" y="216" text-anchor="middle">1.040</text>
+        <text x="390" y="216" text-anchor="middle">1.060</text>
+        <text x="490" y="216" text-anchor="middle">1.080</text>
+      </g>
+      <text x="520" y="180" class="xs t-ok" font-weight="700">dt = +0.02 s, always</text>
+      <text x="520" y="194" class="xs muted">no correction can reach it</text>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 2.</span> A wall clock is corrected; a monotonic clock is not. Ask
+      a wall clock for a duration and one day — reliably, in production, once — it hands you a
+      negative one, and every object in your scene takes a step into the past.
+    </figcaption>
+  </figure>
+
+  <p>
+    SDL gives us the right clock, and it is worth knowing that we checked rather than assumed:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">SDL3/SDL_timer.h — verified at release-3.4.12</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">Uint64 SDL_GetTicks(void);      // milliseconds since SDL was initialised
+Uint64 SDL_GetTicksNS(void);    // nanoseconds  since SDL was initialised
+
+Uint64 SDL_GetPerformanceCounter(void);
+Uint64 SDL_GetPerformanceFrequency(void);</code></pre>
+  </figure>
+
+  <div class="callout ok">
+    <span class="label">Verified in SDL's source</span>
+    <p style="margin-bottom:0">
+      The headers say "since SDL was initialised" but do not use the word <em>monotonic</em>, so we
+      followed it down. <code>SDL_GetTicksNS</code> is implemented on top of
+      <code>SDL_GetPerformanceCounter</code> (<code>src/timer/SDL_timer.c</code>), which uses
+      <code>CLOCK_MONOTONIC_RAW</code> where available — the Unix source carries the comment that it
+      chose that clock because it "is not subject to adjustment by NTP" — falling back to
+      <code>CLOCK_MONOTONIC</code>, and using <code>mach_absolute_time</code> on Apple platforms and
+      <code>QueryPerformanceCounter</code> on Windows. All monotonic. Figure 2's disaster cannot
+      reach us.
+    </p>
+  </div>
+
+  <h3 id="which-unit">3.2 Which unit, and which type</h3>
+
+  <p>
+    SDL offers the same instant in milliseconds and in nanoseconds. Milliseconds feel like plenty —
+    a frame is about 16 of them — and they are not, because a frame is <em>about</em> 16 of them and
+    the interesting part is the "about".
+  </p>
+
+  <div class="worked">
+    <span class="label">Worked example — measuring with a ruler that is too coarse</span>
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>Frame rate</th><th>True frame time</th><th>As whole milliseconds</th><th>Measurement error</th></tr></thead>
+        <tbody>
+          <tr><td>60 fps</td><td>16.667 ms</td><td>16 or 17</td><td>up to 2%</td></tr>
+          <tr><td>300 fps</td><td>3.333 ms</td><td>3 or 4</td><td><strong>up to 20%</strong></td></tr>
+          <tr><td>1000 fps</td><td>1.000 ms</td><td>1 or 2</td><td>up to 100%</td></tr>
+          <tr><td>2000 fps</td><td>0.500 ms</td><td><strong>0</strong></td><td>total — nothing moves</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="margin-bottom:0">
+      At 300 fps the box moves 20% further on some frames than others, purely because of how the
+      clock rounds — <em>the measurement itself is producing judder</em>, on a machine that is
+      performing beautifully. And above 1000 fps, which an uncapped 2D loop reaches trivially,
+      truncation reaches zero: <code>dt</code> is <code>0</code>, the multiplication yields nothing,
+      and the game freezes on the fastest hardware you own. Nanoseconds cost nothing extra and make
+      the whole category of problem disappear.
+    </p>
+  </div>
+
+  <p>
+    Now the type, which is the subtler decision. There are two different quantities here and they
+    want opposite things:
+  </p>
+
+  <ul>
+    <li><strong>A delta</strong> is tiny (0.016), used in arithmetic constantly, and thrown away at
+      the end of the frame. <code>float</code> is ideal.</li>
+    <li><strong>A timestamp</strong> grows for as long as the program runs and must stay exact,
+      because everything else is derived from differences between timestamps.</li>
+  </ul>
+
+  <p>
+    A <code>float</code> has a 24-bit significand — roughly seven decimal digits, <em>total</em>. It
+    does not lose a fixed amount of precision; it loses precision <em>proportionally</em>, so the
+    bigger the number gets, the coarser its steps become. Keep your elapsed time in a
+    <code>float</code> and the resolution of your clock quietly degrades all day.
+  </p>
+
+  <div class="worked">
+    <span class="label">Worked example — the day time stopped</span>
+    <p>
+      The gap between representable <code>float</code> values (the <em>ulp</em>) at two magnitudes:
+    </p>
+    <ul>
+      <li>At <code>3600.0</code> (1 hour of uptime): ulp = <code>0.000244 s</code>. A 60 fps frame
+        of 0.016667 s is stored as 0.0166016 — already 0.4% wrong, every frame, forever.</li>
+      <li>At <code>86400.0</code> (24 hours): ulp = <code>0.0078125 s</code>, which is
+        <strong>7.8 milliseconds</strong>.</li>
+    </ul>
+    <p>
+      A frame at 500 fps is 0.002 s. That is less than half of one ulp at 86 400, so the addition
+      rounds to nothing:
+    </p>
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>Expression</th><th>Result</th></tr></thead>
+        <tbody>
+          <tr><td><code>float(86400.0f) + float(1.0f/500)</code></td><td><code>86400.0f</code> — <strong>unchanged</strong></td></tr>
+          <tr><td><code>Uint64(86400 s in ns) + Uint64(1/500 s in ns)</code></td><td>advanced by exactly <code>2 000 000 ns</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="margin-bottom:0">
+      Time simply stops. Not "drifts" — <em>stops</em>, permanently, for a program that has been up
+      a day. This is the bug behind arcade cabinets and kiosk builds that go strange overnight, and
+      it is invisible in any test that runs for less than a few hours. Both rows above were checked
+      by compiling and running them, not by reasoning about IEEE-754.
+    </p>
+  </div>
+
+  <p>
+    Hence the rule the <code>clock</code> class is built around: <strong>absolute time is
+    <code>Uint64</code> nanoseconds; only the small delta is ever converted to
+    <code>float</code>.</strong> A <code>Uint64</code> of nanoseconds is exact, and it does not
+    overflow for about 584 years, which comfortably outlasts the session.
+  </p>
+
+  <h3 id="dt-exact">3.3 Delta time, and where it is exactly right</h3>
+
+  <p>
+    With a good measurement in hand, the fix is the one you already derived in
+    §<a href="#no-time">2.1</a>. Express speed in units of distance per <em>second</em>, and
+    multiply by the seconds that actually elapsed:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">frame-rate-independent movement</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">constexpr float k_pixels_per_second = 360.0f;
+
+box.x += k_pixels_per_second * dt;</code></pre>
+  </figure>
+
+  <div class="worked">
+    <span class="label">Worked example — the frames cancel</span>
+    <p>360 px/s, one second of running, at four wildly different frame rates:</p>
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>Frame rate</th><th><code>dt</code></th><th>Movement per frame</th><th>Frames in 1 s</th><th>Total distance</th></tr></thead>
+        <tbody>
+          <tr><td>30 fps</td><td>0.033333 s</td><td><code>360 × 0.033333 = 12.0</code> px</td><td>30</td><td><strong>360.0 px</strong></td></tr>
+          <tr><td>60 fps</td><td>0.016667 s</td><td><code>360 × 0.016667 = 6.0</code> px</td><td>60</td><td><strong>360.0 px</strong></td></tr>
+          <tr><td>144 fps</td><td>0.006944 s</td><td><code>360 × 0.006944 = 2.5</code> px</td><td>144</td><td><strong>360.0 px</strong></td></tr>
+          <tr><td>1000 fps</td><td>0.001000 s</td><td><code>360 × 0.001 = 0.36</code> px</td><td>1000</td><td><strong>360.0 px</strong></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="margin-bottom:0">
+      Identical, to the last decimal, on every machine. And this is not approximately right — for
+      constant velocity it is <strong>exact</strong>, because distance really is velocity times time
+      and the sum of the parts is the whole: <code>Σ(v × dtᵢ) = v × Σdtᵢ = v × T</code>, whatever
+      the individual <code>dtᵢ</code> happen to be. That last identity is worth pausing on, because
+      it is the entire reason the technique works, and it is also the reason it stops working in
+      the next section.
+    </p>
+  </div>
+
+  <p>
+    Note precisely <em>why</em> it worked: <code>v</code> could be pulled out of the sum, because it
+    never changed. Anything that makes the velocity change during the interval breaks that step —
+    and gravity, thrust, friction, drag and springs are all exactly that.
+  </p>
+
+  <h3 id="dt-approx">3.4 Where it is only approximately right</h3>
+
+  <p>
+    Put the box under gravity. Velocity is no longer a constant; it is itself changing, at
+    <code>g</code> per second. The obvious code is:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">explicit Euler integration — the obvious two lines</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">position += velocity * dt;   // move using the velocity we had at the START of the step
+velocity += gravity  * dt;   // then update the velocity</code></pre>
+  </figure>
+
+  <p>
+    This is <strong>explicit Euler integration</strong>, and it is doing something specific and
+    visible: it pretends the velocity was constant for the whole step. It was not — it was growing
+    the entire time — so every step falls a little short. Figure 3 draws exactly that.
+  </p>
+
+  <figure class="dia bleed">
+    <svg viewBox="0 0 660 270" role="img" aria-labelledby="f3-t f3-d">
+      <title id="f3-t">Explicit Euler steps against the true parabola of free fall</title>
+      <desc id="f3-d">A falling object's true position is a smooth parabola reaching five metres
+        after one second. Explicit Euler with a quarter-second step draws four straight segments
+        that stay above the curve, reaching only 3.75 metres — short by 1.25 metres. Each segment
+        uses the velocity from the start of its step, so it under-shoots, and the shortfall is
+        proportional to the step size.</desc>
+
+      <!-- grid -->
+      <g class="grid" stroke-width="1">
+        <line x1="60" y1="40" x2="580" y2="40"/>
+        <line x1="60" y1="76" x2="580" y2="76"/>
+        <line x1="60" y1="112" x2="580" y2="112"/>
+        <line x1="60" y1="148" x2="580" y2="148"/>
+        <line x1="60" y1="184" x2="580" y2="184"/>
+        <line x1="60" y1="220" x2="580" y2="220"/>
+      </g>
+      <g class="xs muted">
+        <text x="52" y="44" text-anchor="end">0 m</text>
+        <text x="52" y="116" text-anchor="end">2 m</text>
+        <text x="52" y="188" text-anchor="end">4 m</text>
+        <text x="52" y="224" text-anchor="end">5 m</text>
+      </g>
+      <g class="xs muted">
+        <text x="60" y="242" text-anchor="middle">t = 0</text>
+        <text x="320" y="242" text-anchor="middle">0.5 s</text>
+        <text x="580" y="242" text-anchor="middle">1.0 s</text>
+      </g>
+      <text x="18" y="132" class="xs muted" transform="rotate(-90 18 132)" text-anchor="middle">distance fallen</text>
+
+      <!-- true parabola -->
+      <polyline fill="none" stroke="var(--ok-bd)" stroke-width="2.4"
+        points="60.0,40.0 86.0,40.5 112.0,41.8 138.0,44.0 164.0,47.2 190.0,51.2 216.0,56.2 242.0,62.0 268.0,68.8 294.0,76.5 320.0,85.0 346.0,94.5 372.0,104.8 398.0,116.1 424.0,128.2 450.0,141.2 476.0,155.2 502.0,170.0 528.0,185.8 554.0,202.5 580.0,220.0"/>
+
+      <!-- euler h=0.25 -->
+      <path d="M60.0,40.0 L190.0,40.0 L320.0,62.5 L450.0,107.5 L580.0,175.0"
+            fill="none" stroke="var(--verify-bd)" stroke-width="2.4"/>
+      <g fill="var(--verify-bd)">
+        <circle cx="60" cy="40" r="3.4"/>
+        <circle cx="190" cy="40" r="3.4"/>
+        <circle cx="320" cy="62.5" r="3.4"/>
+        <circle cx="450" cy="107.5" r="3.4"/>
+        <circle cx="580" cy="175" r="3.4"/>
+      </g>
+
+      <!-- the gap -->
+      <line x1="580" y1="175" x2="580" y2="220" class="ink" stroke-width="1.4" stroke-dasharray="3 3"/>
+      <text x="590" y="201" class="xs t-bad" font-weight="700">short by</text>
+      <text x="590" y="213" class="xs t-bad" font-weight="700">1.25 m</text>
+
+      <text x="404" y="54" class="xs t-bad" font-weight="700">explicit Euler, h = 0.25 s</text>
+      <text x="300" y="158" class="xs t-ok" font-weight="700">the truth: p = ½gt²</text>
+
+      <text x="60" y="262" class="xs muted">first step: velocity is still 0 for the whole quarter-second, so the object does not move at all</text>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 3.</span> Each red segment is straight because Euler assumes the
+      velocity held constant across the step. The very first step is the clearest case: the object
+      starts at rest, so Euler moves it <em>nowhere</em> for a quarter of a second, while the truth
+      has it already 0.31 m down.
+    </figcaption>
+  </figure>
+
+  <div class="worked">
+    <span class="label">Worked example — the error is proportional to the step</span>
+    <p>
+      Free fall from rest, <code>g = 10 m/s²</code>, over exactly <code>T = 1 s</code>. The true
+      answer is <code>½ g T² = 5.0 m</code>. Running the two lines above with different step sizes:
+    </p>
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>Step <code>h</code></th><th>Steps</th><th>Euler's answer</th><th>Error</th></tr></thead>
+        <tbody>
+          <tr><td>1.0 s</td><td>1</td><td>0.0000 m</td><td>5.0000 m</td></tr>
+          <tr><td>0.5 s</td><td>2</td><td>2.5000 m</td><td>2.5000 m</td></tr>
+          <tr><td>0.25 s</td><td>4</td><td>3.7500 m</td><td>1.2500 m</td></tr>
+          <tr><td>0.125 s</td><td>8</td><td>4.3750 m</td><td>0.6250 m</td></tr>
+          <tr><td>1/60 s</td><td>60</td><td>4.9167 m</td><td>0.0833 m</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      Read the error column: every time the step halves, the error halves. That is the signature of
+      a <strong>first-order</strong> method, and here it has an exact closed form — the sum of the
+      staircase works out to <code>g·T·(T − h)/2</code>, so the shortfall is
+      <code>½·g·T·h</code>. Substituting <code>h = 0.25</code> gives <code>½ × 10 × 1 × 0.25 =
+      1.25 m</code>, matching the table and Figure 3's dashed gap.
+    </p>
+    <p style="margin-bottom:0">
+      Now read that formula as a statement about your game: <strong>the error is proportional to
+      <code>h</code>, and <code>h</code> is the player's frame rate.</strong> The 144 Hz player and
+      the 30 Hz player are not running the same physics. They fall at different rates, their jumps
+      peak at different heights, and no amount of dt-scaling will reconcile them, because
+      dt-scaling is what produced the discrepancy.
+    </p>
+  </div>
+
+  <p>
+    Drag the slider below to watch the staircase converge. Notice that it never touches the curve —
+    it only gets closer, and it approaches from the same side every time.
+  </p>
+
+  <div class="widget" id="euler-widget">
+    <svg id="euler-svg" viewBox="0 0 620 250" role="img" aria-label="Interactive: explicit Euler steps against the true free-fall curve, with an adjustable step rate">
+      <g stroke="var(--rule)" stroke-width="1">
+        <line x1="60" y1="30" x2="580" y2="30"/>
+        <line x1="60" y1="68" x2="580" y2="68"/>
+        <line x1="60" y1="106" x2="580" y2="106"/>
+        <line x1="60" y1="144" x2="580" y2="144"/>
+        <line x1="60" y1="182" x2="580" y2="182"/>
+        <line x1="60" y1="220" x2="580" y2="220"/>
+      </g>
+      <g style="font-size:9.5px; fill:var(--text-faint); font-family:var(--font-ui)">
+        <text x="52" y="34" text-anchor="end">0 m</text>
+        <text x="52" y="110" text-anchor="end">2 m</text>
+        <text x="52" y="186" text-anchor="end">4 m</text>
+        <text x="52" y="224" text-anchor="end">5 m</text>
+        <text x="60" y="240">t = 0</text>
+        <text x="580" y="240" text-anchor="end">t = 1 s</text>
+      </g>
+      <polyline id="euler-true" fill="none" stroke="var(--ok-bd)" stroke-width="2.4" points=""/>
+      <path id="euler-steps" fill="none" stroke="var(--verify-bd)" stroke-width="2.2"/>
+    </svg>
+    <div class="widget-controls">
+      <label for="euler-rate">steps per second
+        <input type="range" id="euler-rate" min="1" max="60" value="4" step="1">
+      </label>
+      <span class="widget-readout" id="euler-h">h = 0.2500 s</span>
+      <span class="widget-readout" id="euler-p">Euler: 3.7500 m</span>
+      <span class="widget-readout" id="euler-e">error: 1.2500 m</span>
+    </div>
+    <p style="margin:0.7rem 0 0; font-size:0.82rem; color:var(--text-muted)">
+      Green is the truth, <code>p = ½gt²</code>, reaching 5 m. Red is what your engine computes.
+      The readout tracks <code>½·g·T·h</code> exactly — halve the step, halve the error, and never
+      reach zero.
+    </p>
+  </div>
+
+  <script>
+  (function () {
+    "use strict";
+    var slider = document.getElementById("euler-rate");
+    if (!slider) { return; }
+    var truePoly = document.getElementById("euler-true");
+    var stepPath = document.getElementById("euler-steps");
+    var outH = document.getElementById("euler-h");
+    var outP = document.getElementById("euler-p");
+    var outE = document.getElementById("euler-e");
+
+    var G = 10, T = 1, X0 = 60, XS = 520, Y0 = 30, YS = 38;   // 38 px per metre
+    var px = function (t) { return X0 + t * XS; };
+    var py = function (p) { return Y0 + p * YS; };
+
+    // The true curve never changes; draw it once.
+    var pts = [];
+    for (var i = 0; i <= 40; i++) {
+      var t = i / 40;
+      pts.push(px(t).toFixed(1) + "," + py(0.5 * G * t * t).toFixed(1));
+    }
+    truePoly.setAttribute("points", pts.join(" "));
+
+    function render() {
+      var rate = parseInt(slider.value, 10);
+      var h = T / rate;
+      // The same two lines the engine runs: move with the OLD velocity, then update it.
+      var p = 0, v = 0, t = 0;
+      var d = "M" + px(0).toFixed(1) + "," + py(0).toFixed(1);
+      for (var n = 0; n < rate; n++) {
+        p += v * h;
+        v += G * h;
+        t += h;
+        d += " L" + px(t).toFixed(1) + "," + py(p).toFixed(1);
+      }
+      stepPath.setAttribute("d", d);
+      outH.textContent = "h = " + h.toFixed(4) + " s";
+      outP.textContent = "Euler: " + p.toFixed(4) + " m";
+      outE.textContent = "error: " + (0.5 * G * T * T - p).toFixed(4) + " m";
+    }
+    slider.addEventListener("input", render);
+    render();
+  })();
+  </script>
+
+  <div class="callout note">
+    <span class="label">The other order, and why we are not fixing it here</span>
+    <p style="margin-bottom:0">
+      Swap the two lines — update velocity <em>first</em>, then move with the new one — and you get
+      <strong>semi-implicit Euler</strong>, which for the same one-second fall gives 10.0 m at
+      <code>h = 1</code> and 5.0833 m at <code>h = 1/60</code>: it overshoots by exactly as much as
+      explicit Euler undershoots. It is strictly better behaved for games (it conserves energy far
+      better in oscillating systems), and swapping two lines is a real improvement you could make
+      today. But it is <em>still</em> first-order, its error is <em>still</em> proportional to
+      <code>h</code>, and the frame rate still changes the answer — so it does not solve today's
+      problem, and it deserves the proper treatment it gets in Module 7 rather than a footnote here.
+    </p>
+  </div>
+
+  <h3 id="betrayals">3.5 The four betrayals of a variable step</h3>
+
+  <p>
+    §<a href="#dt-approx">3.4</a> is the deep problem. Four more concrete ones travel with it, and
+    each has a characteristic bug report attached.
+  </p>
+
+  <p>
+    <strong>One: determinism is gone.</strong> <code>dt</code> is a measurement of a noisy physical
+    process — OS scheduling, cache state, the GPU, another process waking up. Run the same build
+    with the same inputs twice and you get two different sequences of <code>dt</code>, and therefore
+    two different outcomes. That makes replays impossible to store as input logs, lockstep
+    multiplayer impossible outright, and physics bugs impossible to reproduce: the report says "my
+    car flipped at that corner" and it will never flip there for you, because your machine sliced
+    time differently. Determinism is not a feature you add later. It is a property you either
+    designed for or destroyed.
+  </p>
+
+  <p>
+    <strong>Two: tunnelling.</strong> Collision detection typically asks "is the object inside the
+    wall <em>now</em>?" — a question asked only at step boundaries. Make the step long enough and
+    the object is on one side at the end of one step and past it at the end of the next, having
+    never been detected inside it.
+  </p>
+
+  <figure class="dia bleed">
+    <svg viewBox="0 0 660 200" role="img" aria-labelledby="f4-t f4-d">
+      <title id="f4-t">A frame spike lets a fast object step straight through a thin wall</title>
+      <desc id="f4-d">A bullet travelling at 600 pixels per second approaches a 20 pixel wall. At a
+        normal 16 millisecond frame it advances 10 pixels per step and is tested inside the wall.
+        After a half-second stall it advances 300 pixels in a single step, landing far past the
+        wall; the collision test at each end of that step finds nothing, so the bullet passes
+        through.</desc>
+
+      <!-- normal -->
+      <text x="14" y="26" class="sm t-ok" font-weight="700">✓ Normal frame — dt = 0.016 s, step = 10 px</text>
+      <rect x="300" y="38" width="20" height="44" fill="var(--dia-ink-soft)"/>
+      <text x="310" y="98" class="xs muted" text-anchor="middle">wall, 20 px</text>
+      <g fill="var(--ok-bd)">
+        <circle cx="240" cy="60" r="5"/>
+        <circle cx="260" cy="60" r="5"/>
+        <circle cx="280" cy="60" r="5"/>
+        <circle cx="300" cy="60" r="5"/>
+        <circle cx="310" cy="60" r="6"/>
+      </g>
+      <text x="330" y="52" class="xs t-ok" font-weight="700">a step lands inside → hit detected</text>
+      <line x1="200" y1="60" x2="236" y2="60" class="ink-soft" stroke-width="1.2"/>
+
+      <!-- spike -->
+      <text x="14" y="136" class="sm t-bad" font-weight="700">✗ After a 0.5 s stall — step = 300 px</text>
+      <rect x="300" y="148" width="20" height="40" fill="var(--dia-ink-soft)"/>
+      <g fill="var(--verify-bd)">
+        <circle cx="160" cy="168" r="5"/>
+        <circle cx="460" cy="168" r="5"/>
+      </g>
+      <path d="M166,168 Q310,120 454,168" fill="none" stroke="var(--verify-bd)" stroke-width="1.8" stroke-dasharray="5 4"/>
+      <text x="440" y="131" class="xs t-bad" text-anchor="middle" font-weight="700">one step — nothing is tested in between</text>
+      <text x="474" y="172" class="xs t-bad" font-weight="700">through the wall, no collision</text>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 4.</span> Nothing here is a collision bug — the collision code is
+      correct and simply was never asked the right question. Long steps make the world coarse, and a
+      variable <code>dt</code> means the world's coarseness is decided by whatever the operating
+      system was doing.
+    </figcaption>
+  </figure>
+
+  <p>
+    <strong>Three: <code>dt</code> can be zero.</strong> Two ticks inside the same clock resolution,
+    a first frame measured before anything happened, a paused-and-resumed loop. Anything of the form
+    <code>something / dt</code> — deriving a velocity from positions, an average, a smoothing
+    factor — becomes a division by zero, and IEEE-754 does not stop you: you get <code>inf</code>,
+    then <code>NaN</code> as soon as it meets a subtraction. <code>NaN</code> then propagates
+    through every arithmetic operation it touches, silently, and since <code>NaN != NaN</code>, even
+    your comparisons stop behaving. The classic symptom is an entire scene vanishing at once,
+    several frames after the actual mistake.
+  </p>
+
+  <p>
+    <strong>Four: <code>dt</code> can be enormous.</strong> You hit a breakpoint, look at a variable
+    for forty seconds, and continue. The next <code>dt</code> is <code>40.0</code>. A character
+    walking at 5 m/s teleports 200 metres, through the level, into the void — and this is the very
+    first thing that happens after every debugging session, which is a special kind of
+    infuriating. A laptop resuming from sleep does the same thing without a debugger involved.
+  </p>
+
+  <h3 id="patches">3.6 The patches, and what each one costs</h3>
+
+  <p>
+    Each betrayal has an obvious patch. None of them is free, and being able to state the price is
+    the difference between engineering and cargo-culting.
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>Patch</th><th>What it fixes</th><th>What it costs</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>Clamp</strong> <code>dt</code> to a ceiling (0.25 s)</td>
+          <td>The breakpoint spike, sleep/resume, the worst tunnelling</td>
+          <td>Simulated time now runs <em>slower</em> than real time whenever it triggers. The game enters slow motion rather than teleporting — usually the right trade, but it is a trade, and it means your clock and the wall clock have silently diverged.</td>
+        </tr>
+        <tr>
+          <td><strong>Floor</strong> <code>dt</code> to a small epsilon</td>
+          <td>Division by zero</td>
+          <td>Cheap and worth doing, but it papers over the real question of why you are dividing by a measured duration at all.</td>
+        </tr>
+        <tr>
+          <td><strong>Smooth</strong> <code>dt</code> over several frames</td>
+          <td>Visible judder from frame-time noise</td>
+          <td>Adds latency, and the simulation now advances by a time that <em>did not happen</em>. Still not deterministic — it is a filtered version of the same noise.</td>
+        </tr>
+        <tr>
+          <td><strong>Cap</strong> the frame rate with a sleep</td>
+          <td>Wasted power; wildly varying <code>dt</code></td>
+          <td><code>SDL_Delay</code> is documented to wait <em>at least</em> the requested time, "but possibly longer due to OS scheduling" — so you get a noisy approximation of a cap. And it does nothing for determinism: every machine still measures its own slightly different frame times.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    Look down the "costs" column and one word keeps recurring: <strong>determinism</strong>. Not one
+    of these patches restores it, because they all keep the same broken premise — that the amount of
+    time the simulation advances should be decided by how long rendering happened to take. Those two
+    quantities have nothing to do with each other. One is a property of the physics you designed;
+    the other is a property of the hardware you are running on.
+  </p>
+
+  <p>
+    So the real answer is not another patch. It is to <strong>stop deriving one from the other</strong>:
+    let the simulation advance in fixed, identical steps that you chose, and let rendering happen as
+    often as the machine can manage, showing whatever the simulation's state currently is. Figure 5
+    is the idea in outline; deriving it properly is Lesson 1.4.
+  </p>
+
+  <figure class="dia bleed">
+    <svg viewBox="0 0 660 244" role="img" aria-labelledby="f5-t f5-d">
+      <title id="f5-t">Coupled versus decoupled simulation and rendering</title>
+      <desc id="f5-d">In the coupled loop, each simulation step is as long as the frame that
+        produced it, so the steps are of uneven length. In the decoupled loop, simulation advances
+        in identical fixed steps of one sixtieth of a second regardless of when frames are drawn,
+        and the renderer simply displays the current state; the leftover time between the last
+        simulation step and the frame is what interpolation exists to hide.</desc>
+
+      <text x="14" y="26" class="sm t-bad" font-weight="700">✗ Coupled — the step is whatever the frame took</text>
+      <line x1="60" y1="70" x2="620" y2="70" class="ink-soft" stroke-width="1.2"/>
+      <g stroke="var(--verify-bd)" stroke-width="2">
+        <line x1="60" y1="58" x2="60" y2="82"/>
+        <line x1="128" y1="58" x2="128" y2="82"/>
+        <line x1="164" y1="58" x2="164" y2="82"/>
+        <line x1="330" y1="58" x2="330" y2="82"/>
+        <line x1="382" y1="58" x2="382" y2="82"/>
+        <line x1="500" y1="58" x2="500" y2="82"/>
+        <line x1="620" y1="58" x2="620" y2="82"/>
+      </g>
+      <g class="xs muted">
+        <text x="94" y="98" text-anchor="middle">18 ms</text>
+        <text x="146" y="98" text-anchor="middle">9</text>
+        <text x="247" y="98" text-anchor="middle">44 ms</text>
+        <text x="356" y="98" text-anchor="middle">14</text>
+        <text x="441" y="98" text-anchor="middle">31 ms</text>
+        <text x="560" y="98" text-anchor="middle">32 ms</text>
+      </g>
+      <text x="340" y="46" class="xs t-bad" text-anchor="middle">every step a different length → a different simulation on every machine</text>
+
+      <text x="14" y="140" class="sm t-ok" font-weight="700">✓ Decoupled — fixed steps, rendered whenever</text>
+      <line x1="60" y1="184" x2="620" y2="184" class="ink-soft" stroke-width="1.2"/>
+      <g stroke="var(--ok-bd)" stroke-width="2">
+        <line x1="60" y1="172" x2="60" y2="196"/>
+        <line x1="130" y1="172" x2="130" y2="196"/>
+        <line x1="200" y1="172" x2="200" y2="196"/>
+        <line x1="270" y1="172" x2="270" y2="196"/>
+        <line x1="340" y1="172" x2="340" y2="196"/>
+        <line x1="410" y1="172" x2="410" y2="196"/>
+        <line x1="480" y1="172" x2="480" y2="196"/>
+        <line x1="550" y1="172" x2="550" y2="196"/>
+        <line x1="620" y1="172" x2="620" y2="196"/>
+      </g>
+      <g class="xs muted">
+        <text x="95" y="212" text-anchor="middle">16.67</text>
+        <text x="165" y="212" text-anchor="middle">16.67</text>
+        <text x="235" y="212" text-anchor="middle">16.67</text>
+        <text x="305" y="212" text-anchor="middle">16.67</text>
+        <text x="375" y="212" text-anchor="middle">16.67</text>
+        <text x="445" y="212" text-anchor="middle">16.67</text>
+        <text x="515" y="212" text-anchor="middle">16.67</text>
+        <text x="585" y="212" text-anchor="middle">16.67</text>
+      </g>
+      <g fill="var(--dia-hi)">
+        <circle cx="112" cy="160" r="4"/>
+        <circle cx="286" cy="160" r="4"/>
+        <circle cx="398" cy="160" r="4"/>
+        <circle cx="567" cy="160" r="4"/>
+      </g>
+      <circle cx="66" cy="234" r="4" fill="var(--dia-hi)"/>
+      <text x="78" y="238" class="xs t-hi" font-weight="700">a frame is drawn — at no particular moment, and never mid-step</text>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 5.</span> The shape of the answer. Simulation steps become a
+      property of the game; frames become a property of the machine; and the gap between the last
+      completed step and the moment being drawn is what <em>interpolation</em> exists to smooth
+      over. That gap is the subject of Lesson 1.4.
+    </figcaption>
+  </figure>
+
+  <div class="callout warn">
+    <span class="label">The spiral of death — meet it before it meets you</span>
+    <p>
+      That decoupling has one famous trap, and it is worth naming now so it is not a surprise. If
+      the loop has fallen behind, it must run <em>several</em> fixed steps to catch up. Suppose each
+      1/60 s step costs 20 ms of real time to compute:
+    </p>
+    <ul>
+      <li>Each step simulates <strong>16.67 ms</strong> of game time…</li>
+      <li>…but consumes <strong>20 ms</strong> of real time doing it.</li>
+      <li>So every step puts the engine <strong>3.33 ms further behind</strong>, which means more
+        steps next frame, which means more real time, which means further behind.</li>
+    </ul>
+    <p style="margin-bottom:0">
+      The frame time grows without bound and the application locks solid. The condition is simply
+      <em>cost per step ÷ time simulated per step &gt; 1</em> — here <code>20 / 16.67 = 1.2</code>.
+      This is the <strong>spiral of death</strong>, and it is the reason 1.4 is a full lesson rather
+      than a five-line snippet.
+    </p>
+  </div>
+
+  <!-- ================= 5. IMPLEMENTATION ================= -->
+  <h2 id="implementation"><span class="num">4</span>Implementation: the clock</h2>
+
+  <p>
+    The engine gains its second subsystem, alongside <code>input</code>, and it is built on the
+    three decisions from §3.1–3.2: a monotonic source, nanosecond resolution, and integers for
+    absolute time.
+  </p>
+
+  <div class="callout cpp">
+    <span class="label">C++ in place — namespaces, and why <code>engine::clock</code> is safe</span>
+    <p>
+      There is already a <code>clock</code> in C++: <code>std::clock()</code> from
+      <code>&lt;ctime&gt;</code>, which most standard headers drag in transitively. Naming a class
+      <code>clock</code> sounds like asking for trouble, and it is not, because ours lives in
+      <code>namespace engine</code>.
+    </p>
+    <p>
+      A namespace is a named scope for declarations. <code>engine::clock</code> and
+      <code>::clock</code> are different names in the way that two files in different directories are
+      different files, and the compiler resolves an unqualified <code>clock</code> by searching
+      outward from the current scope — so inside <code>namespace engine</code>, ours is found first
+      and the global one is never reached. This is precisely why the course never writes
+      <code>using namespace std;</code> at file scope: that instruction drags every standard name
+      into the global scope and re-creates the collisions namespaces exist to prevent.
+    </p>
+    <p style="margin-bottom:0">
+      There is a second, smaller namespace in <code>clock.cpp</code> — an <strong>anonymous</strong>
+      one, <code>namespace { … }</code>, holding the <code>ns_to_seconds</code> helper. Anything
+      inside it has <em>internal linkage</em>: it exists only in that translation unit and is
+      invisible to the linker, so another file may define its own <code>ns_to_seconds</code> without
+      a clash. That is the modern replacement for C's <code>static</code> at file scope, and it is
+      where every helper that is not part of the interface belongs.
+    </p>
+  </div>
+
+  <h3>4.1 tick(), and the three numbers it produces</h3>
+
+  <p>
+    The whole of the measurement is four lines, and every one of them is a decision:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/core/clock.cpp — the measurement (excerpt)</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">prev_ns_ = now_ns_;
+now_ns_ = SDL_GetTicksNS();
+
+const Uint64 delta_ns = now_ns_ - prev_ns_;
+
+raw_dt_ = ns_to_seconds(delta_ns);
+dt_ = (raw_dt_ &gt; max_dt_) ? max_dt_ : raw_dt_;</code></pre>
+  </figure>
+
+  <p>
+    The subtraction is on <code>Uint64</code>, which would be a landmine if the clock could ever run
+    backwards: <code>0 - 1</code> in unsigned arithmetic is not <code>-1</code>, it is about
+    18 quintillion, and one such frame would fling every object in the scene into the void. It
+    cannot happen, because §<a href="#which-clock">3.1</a> established the source is monotonic. Note
+    the shape of that reasoning, because it recurs throughout engine work: the safety comes from an
+    invariant established elsewhere, so the code carries a comment naming the invariant it depends
+    on. Silent reliance is how an invariant gets broken by someone who did not know it existed.
+  </p>
+
+  <p>
+    Then <code>ns_to_seconds</code>, whose one subtlety is the order of operations:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/core/clock.cpp — the conversion (excerpt)</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">return static_cast&lt;float&gt;(static_cast&lt;double&gt;(ns) / static_cast&lt;double&gt;(SDL_NS_PER_SECOND));</code></pre>
+  </figure>
+
+  <p>
+    Divide in <code>double</code>, then narrow the small result to <code>float</code>. Converting
+    the nanosecond count to <code>float</code> <em>first</em> would destroy it before the division:
+    a <code>float</code> cannot represent one second's worth of nanoseconds — 1 000 000 000 — to the
+    nearest integer, so the numerator would already be wrong. This is the same proportional-precision
+    fact from §<a href="#which-unit">3.2</a>, appearing one layer down.
+  </p>
+
+  <h3>4.2 The clamp, and telling the truth about it</h3>
+
+  <p>
+    <code>dt()</code> is clamped and <code>raw_dt()</code> is not. Two accessors instead of one,
+    because they answer different questions and only one of them is safe to simulate with:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/core/clock.hpp — the two deltas (excerpt)</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">/// Seconds since the previous tick, **clamped**. Simulation uses this.
+[[nodiscard]] float dt() const { return dt_; }
+
+/// Seconds since the previous tick, unclamped — what actually happened.
+[[nodiscard]] float raw_dt() const { return raw_dt_; }
+
+/// True when the last frame was long enough that dt() had to lie about it.
+[[nodiscard]] bool was_clamped() const { return raw_dt_ &gt; dt_; }</code></pre>
+  </figure>
+
+  <p>
+    The clamp is a deliberate falsehood, so the class exposes the fact that it lied. That is the
+    principle worth taking from this section: <strong>when a system has to distort reality to stay
+    safe, it should be able to say so.</strong> A profiler that read the clamped value would report
+    a healthy 4 ms frame during a catastrophic stall, and the one moment you most need the truth is
+    the moment the safety mechanism engaged. <code>was_clamped()</code> is why the demo can print
+    <code>CLAMPED</code> on screen the instant it happens.
+  </p>
+
+  <p>
+    <code>fps()</code> has the same character. An instantaneous <code>1/dt</code> is unreadable —
+    it flickers across hundreds of values a second — so the clock averages over a half-second
+    window. That makes it a statement about the recent past rather than about this frame, which is
+    ideal for a human reading a number and disqualifying for a simulation. The doc comment says so
+    in as many words.
+  </p>
+
+  <h3>4.3 Wiring it into the frame</h3>
+
+  <p>
+    The loop gains one call, in a position that matters:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/main.cpp — the frame (excerpt)</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">SDL_Event event;
+while (SDL_PollEvent(&amp;event)) { in.feed_event(event); /* … */ }
+
+clk.tick();
+in.update();
+
+const float dt = clk.dt();</code></pre>
+  </figure>
+
+  <p>
+    Once per frame, after the drain, before anything reads it — the same frame-coherence rule
+    <code>input</code> follows, for the same reason. Tick it twice and the second <code>dt</code> is
+    almost zero; tick it inside the simulation and two systems integrate with two different ideas of
+    how long the frame was. Capturing <code>dt</code> into a local <code>const float</code> at the
+    top makes that guarantee visible at a glance.
+  </p>
+
+  <h3>4.4 A demo built to fail in three different ways</h3>
+
+  <p>
+    The demo replaces 1.2's box (which has served its purpose) with three moving things, chosen so
+    that changing the frame rate affects each one differently:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/main.cpp — the three behaviours (excerpt)</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// Coral: the bug. No mention of time, so speed follows the frame rate.
+box_bad_x = wrap_x(box_bad_x + k_pixels_per_frame, window_w);
+
+// Sage: the fix. Exact for constant velocity, on every machine.
+box_good_x = wrap_x(box_good_x + k_pixels_per_second * dt, window_w);
+
+// Blue: dt-scaled, and still wrong. Explicit Euler adds energy from nowhere.
+ball_y += ball_vy * dt;
+ball_vy += k_gravity * dt;
+
+if (ball_y + k_ball_size &gt; k_floor_y)
+{
+    ball_y = k_floor_y - k_ball_size;
+    ball_vy = -ball_vy;
+}</code></pre>
+  </figure>
+
+  <p>
+    The bounce is <em>perfectly elastic</em> — <code>ball_vy = -ball_vy</code>, with no energy lost
+    — on purpose. With a physically exact simulation the ball would return to the grey line it was
+    dropped from, forever. It does not: it climbs higher after every bounce, because explicit Euler
+    injects energy that does not exist. Since the size of that error is proportional to
+    <code>dt</code> (§<a href="#dt-approx">3.4</a>), the climb is barely perceptible at a thousand
+    frames a second and violent at twenty. <strong>Anything the ball does that is not "return to the
+    line" is the integrator's error made visible.</strong>
+  </p>
+
+  <p>
+    Two controls change the frame rate under all three:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/main.cpp — the controls (excerpt)</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// An edge: one toggle per press, however long V is held (Lesson 1.2).
+if (in.key_pressed(SDL_SCANCODE_V))
+{
+    vsync = (vsync == SDL_RENDERER_VSYNC_DISABLED) ? 1 : SDL_RENDERER_VSYNC_DISABLED;
+    if (!SDL_SetRenderVSync(renderer, vsync))
+    {
+        SDL_Log("SDL_SetRenderVSync(%d) failed: %s", vsync, SDL_GetError());
+    }
+}
+
+// A level: stall on every frame the key is held.
+if (in.key_down(SDL_SCANCODE_T))
+{
+    SDL_Delay(k_throttle_ms);
+}</code></pre>
+  </figure>
+
+  <p>
+    Note that this is 1.2's distinction earning its keep in ordinary code, with no ceremony:
+    toggling is an edge, stalling is a level, and writing either one the other way would be
+    immediately, visibly wrong. The throttle sits at the very <em>end</em> of the loop body, after
+    <code>SDL_RenderPresent</code>, so the stall lands between presenting one frame and measuring
+    the next — exactly where a real hitch would land.
+  </p>
+
+  <p>
+    Vsync starts <strong>off</strong>, which is not how a game should ship but is the honest default
+    for a measuring instrument. With vsync on, every <code>dt</code> is your monitor's refresh
+    interval, and a bug about frame-rate dependence is invisible because only one frame rate is
+    available.
+  </p>
+
+  <div class="callout note">
+    <span class="label">Where the on-screen text comes from</span>
+    <p style="margin-bottom:0">
+      The readout uses <code>SDL_RenderDebugTextFormat</code>, SDL's built-in bitmap font: a single
+      hardcoded 8×8 typeface, ASCII only, no wrapping, drawn in the current draw colour. It is not a
+      text-rendering system and does not pretend to be — SDL's own header points you at SDL_ttf or
+      stb_truetype for anything real, and we build proper text in Module 6. For numbers you stare at
+      while debugging, with zero assets and zero dependencies, it is exactly right. We scale it 2×
+      with <code>SDL_SetRenderScale</code> to make it legible, which also multiplies the
+      coordinates — hence the halved positions in the listing.
+    </p>
+  </div>
+
+  <!-- ================= 6. COMPLETE CODE LISTINGS ================= -->
+  <h2 id="listings"><span class="num">5</span>Complete Code Listings</h2>
+
+  <div class="tbl-scroll">
+    <table class="manifest">
+      <thead><tr><th>Path</th><th>Status</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td>src/core/clock.hpp</td><td><span class="badge new">new</span></td><td>The frame clock's interface: clamped <code>dt</code>, raw <code>dt</code>, elapsed time, frame count, smoothed fps.</td></tr>
+        <tr><td>src/core/clock.cpp</td><td><span class="badge new">new</span></td><td>Monotonic sampling in <code>Uint64</code> nanoseconds, conversion, the clamp, and the fps window.</td></tr>
+        <tr><td>src/main.cpp</td><td><span class="badge mod">modified</span></td><td>The frame ticks the clock; the demo becomes three time-scaled behaviours with vsync and throttle controls.</td></tr>
+        <tr><td>CMakeLists.txt</td><td><span class="badge mod">modified</span></td><td>Third translation unit added.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/core/clock.hpp</span>
+      <span class="tag new">new</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// src/core/clock.hpp — the engine's measurement of time.
+//
+// One job: answer "how long since the last frame?" honestly, and expose enough
+// of its own workings that the answer can be questioned. Everything that moves
+// will be scaled by the number this produces, so a lie told here is a lie told
+// everywhere.
+
+#pragma once
+
+#include &lt;SDL3/SDL.h&gt;
+
+namespace engine {
+
+/// Per-frame timing, measured from a monotonic clock.
+///
+/// Call tick() exactly once per frame, at the top, and read dt() for the rest of
+/// the frame. Between ticks the answers do not change, which is the same
+/// frame-coherence guarantee `input` makes — for the same reason. A simulation
+/// that asked the clock twice and got two different answers would be integrating
+/// with numbers that disagree about how long a frame is.
+///
+/// Two deliberate design choices, both explained at length in Lesson 1.3:
+///
+/// 1. **Absolute time is kept as `Uint64` nanoseconds; only the small delta is
+///    ever converted to `float`.** A `float` seconds counter loses so much
+///    precision as it grows that after about a day of uptime, adding a short
+///    frame to it rounds to no change at all and time silently stops advancing.
+///    An integer nanosecond counter is exact and does not overflow for 584 years.
+///
+/// 2. **dt() is clamped; raw_dt() is not.** The clamp is a lie we tell on
+///    purpose, so that a breakpoint or a stalled disk cannot hand the simulation
+///    a forty-second frame. Anything that needs the truth — a profiler, a frame
+///    graph, a log line — asks raw_dt() instead.
+class clock
+{
+public:
+    /// @param max_dt_seconds Longest frame the simulation is allowed to see.
+    ///        0.25 s is the conventional value: long enough never to trigger in
+    ///        normal running, short enough that the worst single step is
+    ///        survivable. See was_clamped() for detecting when it bites.
+    explicit clock(float max_dt_seconds = 0.25f);
+
+    /// Sample the clock. Call once per frame, before anything reads dt().
+    void tick();
+
+    /// Seconds since the previous tick, **clamped** to the configured maximum.
+    /// This is the number simulation should use.
+    [[nodiscard]] float dt() const { return dt_; }
+
+    /// Seconds since the previous tick, unclamped — what actually happened.
+    /// For diagnostics and profiling, never for simulation.
+    [[nodiscard]] float raw_dt() const { return raw_dt_; }
+
+    /// True when the last frame was long enough that dt() had to lie about it.
+    /// Worth logging: it means the engine's clock and the wall clock have drifted
+    /// apart, and it is usually the first evidence of a real performance problem.
+    [[nodiscard]] bool was_clamped() const { return raw_dt_ &gt; dt_; }
+
+    /// Seconds since the clock was constructed. `double`, not `float`: this one
+    /// grows without bound, and `double` has enough mantissa to stay precise for
+    /// far longer than any session will last.
+    [[nodiscard]] double elapsed() const;
+
+    /// Nanoseconds since the clock was constructed — the exact, integer form.
+    [[nodiscard]] Uint64 elapsed_ns() const { return now_ns_ - start_ns_; }
+
+    /// Frames completed since construction.
+    [[nodiscard]] Uint64 frame_count() const { return frames_; }
+
+    /// Frames per second, averaged over roughly half a second.
+    ///
+    /// **For display only.** An instantaneous 1/dt jitters far too much to read,
+    /// so this is smoothed — which makes it a number about the recent past, not
+    /// about this frame. Never simulate with it.
+    [[nodiscard]] float fps() const { return fps_; }
+
+private:
+    // Absolute times, always integer nanoseconds. SDL_GetTicksNS() is built on
+    // SDL_GetPerformanceCounter(), which uses CLOCK_MONOTONIC_RAW / mach_absolute_time
+    // / QueryPerformanceCounter depending on platform — all monotonic. It therefore
+    // cannot run backwards when the user changes their system clock or when NTP
+    // adjusts it, which is exactly why we do not use a wall clock here.
+    Uint64 start_ns_ = 0;
+    Uint64 prev_ns_ = 0;
+    Uint64 now_ns_ = 0;
+
+    float dt_ = 0.0f;
+    float raw_dt_ = 0.0f;
+    float max_dt_ = 0.25f;
+
+    Uint64 frames_ = 0;
+
+    // The fps display window: count frames until half a second of real time has
+    // passed, then divide. Simple, stable, and honest about being an average.
+    Uint64 fps_window_ns_ = 0;
+    Uint64 fps_window_frames_ = 0;
+    float fps_ = 0.0f;
+};
+
+} // namespace engine</code></pre>
+  </figure>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/core/clock.cpp</span>
+      <span class="tag new">new</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// src/core/clock.cpp — implementation of the frame clock.
+
+#include "core/clock.hpp"
+
+namespace engine {
+
+namespace {
+
+/// Nanoseconds to seconds, via double.
+///
+/// The division happens in `double` and only the small result is narrowed to
+/// `float`. Doing it the other way — converting the nanosecond count to `float`
+/// first — would throw away precision before the division: a `float` cannot even
+/// represent one second's worth of nanoseconds (1e9) to the nearest integer, so
+/// the numerator would already be wrong.
+[[nodiscard]] float ns_to_seconds(Uint64 ns)
+{
+    return static_cast&lt;float&gt;(static_cast&lt;double&gt;(ns) / static_cast&lt;double&gt;(SDL_NS_PER_SECOND));
+}
+
+} // namespace
+
+clock::clock(float max_dt_seconds)
+    : max_dt_(max_dt_seconds)
+{
+    // Sample once at construction so the first tick() measures the time from
+    // here to the first frame, rather than from SDL's initialisation. Without
+    // this, frame one would be handed however long the window and renderer took
+    // to create — easily hundreds of milliseconds, and a violent first step.
+    start_ns_ = SDL_GetTicksNS();
+    prev_ns_ = start_ns_;
+    now_ns_ = start_ns_;
+}
+
+void clock::tick()
+{
+    prev_ns_ = now_ns_;
+    now_ns_ = SDL_GetTicksNS();
+
+    // The subtraction is unsigned, which would be a bug waiting to happen if the
+    // clock could ever run backwards — 0 - 1 in Uint64 is not −1, it is about
+    // 18 quintillion, and a single such frame would launch every moving object
+    // out of the level. It cannot happen here, because the underlying clock is
+    // monotonic (see the header). Relying on that is fine; relying on it
+    // *silently* is not, which is why this comment exists.
+    const Uint64 delta_ns = now_ns_ - prev_ns_;
+
+    raw_dt_ = ns_to_seconds(delta_ns);
+
+    // The clamp. Everything above the ceiling is discarded, so simulation time
+    // falls behind wall time whenever it triggers — the engine effectively enters
+    // slow motion rather than taking one enormous step. That is the right trade:
+    // a slow frame should degrade smoothly, not teleport the world.
+    dt_ = (raw_dt_ &gt; max_dt_) ? max_dt_ : raw_dt_;
+
+    ++frames_;
+
+    // Rolling fps window. Note this counts *real* elapsed nanoseconds, not
+    // clamped dt, so the number stays truthful even during a stall.
+    fps_window_ns_ += delta_ns;
+    ++fps_window_frames_;
+    if (fps_window_ns_ &gt;= SDL_NS_PER_SECOND / 2)
+    {
+        fps_ = static_cast&lt;float&gt;(static_cast&lt;double&gt;(fps_window_frames_)
+                                  * static_cast&lt;double&gt;(SDL_NS_PER_SECOND)
+                                  / static_cast&lt;double&gt;(fps_window_ns_));
+        fps_window_frames_ = 0;
+        fps_window_ns_ = 0;
+    }
+}
+
+double clock::elapsed() const
+{
+    return static_cast&lt;double&gt;(elapsed_ns()) / static_cast&lt;double&gt;(SDL_NS_PER_SECOND);
+}
+
+} // namespace engine</code></pre>
+  </figure>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/main.cpp</span>
+      <span class="tag modified">modified</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// src/main.cpp — the engine's entry point.
+//
+// The frame now measures itself. Its shape:
+//
+//     drain events  -&gt;  tick clock  -&gt;  update input  -&gt;  simulate  -&gt;  render
+//
+// The clock is ticked before input rather than after only for tidiness — both
+// must happen after the drain and before simulation, and nothing reads the clock
+// during input's update.
+//
+// This lesson's demo exists to be *watched*, not admired: three moving things,
+// each scaled by time differently, and two controls that change the frame rate
+// out from under them. The disagreement between them is the lesson.
+
+#include "core/clock.hpp"
+#include "core/input.hpp"
+
+#include &lt;SDL3/SDL.h&gt;
+#include &lt;SDL3/SDL_main.h&gt;   // Provides the cross-platform entry point. NOTE:
+                             // &lt;SDL3/SDL.h&gt; deliberately does NOT include this,
+                             // so we include it explicitly, exactly once, here.
+
+namespace {
+
+// ---- Demo constants --------------------------------------------------------
+// Named, because a number in the middle of an expression is a number nobody can
+// question later.
+
+/// The broken one: pixels per FRAME. Its real-world speed is whatever the
+/// machine's frame rate happens to be, multiplied by this. Lesson 1.3 §1.
+constexpr float k_pixels_per_frame = 6.0f;
+
+/// The fixed one: pixels per SECOND. A speed expressed in units of time, so it
+/// means the same thing on every machine.
+constexpr float k_pixels_per_second = 360.0f;
+
+constexpr float k_box_size = 40.0f;
+constexpr float k_track_a_y = 130.0f;
+constexpr float k_track_b_y = 210.0f;
+
+/// Gravity for the bouncing ball, in pixels per second squared.
+constexpr float k_gravity = 1200.0f;
+constexpr float k_ball_size = 24.0f;
+constexpr float k_ball_start_y = 260.0f;
+constexpr float k_floor_y = 620.0f;
+
+/// Milliseconds of artificial stall while the throttle key is held. Roughly
+/// 20 fps — slow enough to break things visibly, not so slow the demo is
+/// unusable.
+constexpr Uint32 k_throttle_ms = 50;
+
+struct rgb { Uint8 r, g, b; };
+
+constexpr rgb k_bad   = {236, 122,  92};   // coral — the frame-rate-dependent box
+constexpr rgb k_good  = {122, 196, 152};   // sage  — the time-scaled box
+constexpr rgb k_ball  = {126, 162, 236};   // cornflower — the physics ball
+constexpr rgb k_guide = { 90,  90, 110};   // the reference lines
+
+/// Wrap a box back to the left edge once it has fully left the right edge.
+[[nodiscard]] float wrap_x(float x, int window_w)
+{
+    const float limit = static_cast&lt;float&gt;(window_w);
+    if (x &gt; limit) { return -k_box_size; }
+    return x;
+}
+
+} // namespace
+
+int main(int argc, char* argv[])
+{
+    (void)argc;
+    (void)argv;
+
+    // ---- 1. Initialise the SDL subsystems we need --------------------------
+    if (!SDL_Init(SDL_INIT_VIDEO))
+    {
+        SDL_Log("SDL_Init failed: %s", SDL_GetError());
+        return 1;
+    }
+
+    const int sdl_version = SDL_GetVersion();
+    SDL_Log("Engine starting — SDL %d.%d.%d",
+            SDL_VERSIONNUM_MAJOR(sdl_version),
+            SDL_VERSIONNUM_MINOR(sdl_version),
+            SDL_VERSIONNUM_MICRO(sdl_version));
+
+    // ---- 2. Create the window ----------------------------------------------
+    int window_w = 1280;
+    int window_h = 720;
+
+    SDL_Window* window = SDL_CreateWindow("Engine", window_w, window_h, SDL_WINDOW_RESIZABLE);
+    if (window == nullptr)
+    {
+        SDL_Log("SDL_CreateWindow failed: %s", SDL_GetError());
+        SDL_Quit();
+        return 1;
+    }
+
+    // ---- 3. Create a renderer ----------------------------------------------
+    SDL_Renderer* renderer = SDL_CreateRenderer(window, nullptr);
+    if (renderer == nullptr)
+    {
+        SDL_Log("SDL_CreateRenderer failed: %s", SDL_GetError());
+        SDL_DestroyWindow(window);
+        SDL_Quit();
+        return 1;
+    }
+
+    // Start with vsync OFF so the loop runs as fast as the machine allows. That
+    // is not how a game should ship, but it is the honest default for measuring:
+    // with vsync on, every dt is the monitor's refresh interval and the whole
+    // problem is invisible because one machine's frame rate is being imposed on
+    // the measurement. Press V at runtime to see both regimes.
+    int vsync = SDL_RENDERER_VSYNC_DISABLED;
+    SDL_SetRenderVSync(renderer, vsync);
+
+    // ---- 4. Subsystems and demo state --------------------------------------
+    engine::clock clk;
+    engine::input in;
+
+    float box_bad_x = 0.0f;      // moved per frame
+    float box_good_x = 0.0f;     // moved per second
+
+    float ball_y = k_ball_start_y;
+    float ball_vy = 0.0f;
+
+    SDL_Log("Controls: V toggles vsync · hold T to throttle to ~%d fps · R resets the ball · Esc quits",
+            1000 / static_cast&lt;int&gt;(k_throttle_ms));
+
+    // ---- 5. The main loop ---------------------------------------------------
+    bool running = true;
+    while (running)
+    {
+        // --- 5a. Drain the event queue COMPLETELY --------------------------
+        SDL_Event event;
+        while (SDL_PollEvent(&amp;event))
+        {
+            in.feed_event(event);
+
+            switch (event.type)
+            {
+            case SDL_EVENT_QUIT:
+                SDL_Log("Quit requested");
+                running = false;
+                break;
+
+            case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
+                SDL_Log("Window %u close requested", static_cast&lt;unsigned&gt;(event.window.windowID));
+                running = false;
+                break;
+
+            case SDL_EVENT_WINDOW_RESIZED:
+                window_w = event.window.data1;
+                window_h = event.window.data2;
+                break;
+
+            default:
+                break;
+            }
+        }
+
+        // --- 5b. Measure the frame, then publish input ----------------------
+        // The clock must be ticked exactly once, here. Tick it twice and the
+        // second dt is near zero; tick it inside the simulation and different
+        // systems integrate with different numbers.
+        clk.tick();
+        in.update();
+
+        const float dt = clk.dt();
+
+        // --- 5c. Handle controls -------------------------------------------
+        if (in.key_pressed(SDL_SCANCODE_ESCAPE))
+        {
+            running = false;
+        }
+
+        // An edge — one toggle per press (Lesson 1.2). Holding V must not flip
+        // vsync sixty times a second.
+        if (in.key_pressed(SDL_SCANCODE_V))
+        {
+            vsync = (vsync == SDL_RENDERER_VSYNC_DISABLED) ? 1 : SDL_RENDERER_VSYNC_DISABLED;
+            if (!SDL_SetRenderVSync(renderer, vsync))
+            {
+                // Not every backend can change this on the fly. Report and carry
+                // on rather than pretending it worked.
+                SDL_Log("SDL_SetRenderVSync(%d) failed: %s", vsync, SDL_GetError());
+            }
+            SDL_Log("vsync %s", vsync == SDL_RENDERER_VSYNC_DISABLED ? "OFF" : "ON");
+        }
+
+        if (in.key_pressed(SDL_SCANCODE_R))
+        {
+            ball_y = k_ball_start_y;
+            ball_vy = 0.0f;
+        }
+
+        // --- 5d. Simulate ---------------------------------------------------
+
+        // The bug, kept deliberately. Nothing here mentions time, so this box's
+        // speed is "6 pixels times however many frames the machine manages".
+        box_bad_x = wrap_x(box_bad_x + k_pixels_per_frame, window_w);
+
+        // The fix. A speed in pixels per second, multiplied by the seconds that
+        // actually elapsed. Frame rate cancels out — exactly, for constant
+        // velocity. Lesson 1.3 §3.2.
+        box_good_x = wrap_x(box_good_x + k_pixels_per_second * dt, window_w);
+
+        // And the limit of that fix. This is dt-scaled too, by the same clock,
+        // and it is still wrong: explicit Euler advances position using the
+        // velocity from the *start* of the step, and the resulting error is
+        // proportional to dt. With a perfectly elastic bounce the only thing
+        // that can change the ball's energy is the integrator — so watch it
+        // climb higher every bounce, and climb faster the slower the frame rate.
+        // Lesson 1.3 §3.4; the integrators themselves are Module 7.
+        ball_y += ball_vy * dt;
+        ball_vy += k_gravity * dt;
+
+        if (ball_y + k_ball_size &gt; k_floor_y)
+        {
+            ball_y = k_floor_y - k_ball_size;
+            ball_vy = -ball_vy;
+        }
+
+        // --- 5e. Render ------------------------------------------------------
+        SDL_SetRenderDrawColor(renderer, 30, 30, 46, 255);
+        SDL_RenderClear(renderer);
+
+        // Reference lines: the floor, and the height the ball was dropped from.
+        // A correct simulation would return to that line on every bounce.
+        SDL_SetRenderDrawColor(renderer, k_guide.r, k_guide.g, k_guide.b, 255);
+        SDL_RenderLine(renderer, 0.0f, k_floor_y, static_cast&lt;float&gt;(window_w), k_floor_y);
+        SDL_RenderLine(renderer, 0.0f, k_ball_start_y, static_cast&lt;float&gt;(window_w), k_ball_start_y);
+
+        const SDL_FRect box_bad{box_bad_x, k_track_a_y, k_box_size, k_box_size};
+        SDL_SetRenderDrawColor(renderer, k_bad.r, k_bad.g, k_bad.b, 255);
+        SDL_RenderFillRect(renderer, &amp;box_bad);
+
+        const SDL_FRect box_good{box_good_x, k_track_b_y, k_box_size, k_box_size};
+        SDL_SetRenderDrawColor(renderer, k_good.r, k_good.g, k_good.b, 255);
+        SDL_RenderFillRect(renderer, &amp;box_good);
+
+        const SDL_FRect ball{static_cast&lt;float&gt;(window_w) * 0.5f - k_ball_size * 0.5f,
+                             ball_y, k_ball_size, k_ball_size};
+        SDL_SetRenderDrawColor(renderer, k_ball.r, k_ball.g, k_ball.b, 255);
+        SDL_RenderFillRect(renderer, &amp;ball);
+
+        // The readout. SDL_RenderDebugText is SDL's built-in 8x8 bitmap font —
+        // no asset, no dependency, and exactly good enough for numbers you stare
+        // at while debugging. Real text rendering arrives in Module 6. Scale 2x
+        // so it is legible; note that the scale multiplies the coordinates too,
+        // which is why the positions below are in half-pixels.
+        SDL_SetRenderScale(renderer, 2.0f, 2.0f);
+        SDL_SetRenderDrawColor(renderer, 220, 220, 210, 255);
+        SDL_RenderDebugTextFormat(renderer, 8.0f, 8.0f,
+                                  "fps %7.1f   dt %6.2f ms   raw %6.2f ms%s   frame %llu   up %.1f s",
+                                  static_cast&lt;double&gt;(clk.fps()),
+                                  static_cast&lt;double&gt;(clk.dt()) * 1000.0,
+                                  static_cast&lt;double&gt;(clk.raw_dt()) * 1000.0,
+                                  clk.was_clamped() ? "  CLAMPED" : "",
+                                  static_cast&lt;unsigned long long&gt;(clk.frame_count()),
+                                  clk.elapsed());
+        SDL_RenderDebugTextFormat(renderer, 8.0f, 20.0f,
+                                  "vsync %s    [V] toggle   [T] hold to throttle   [R] reset ball   [Esc] quit",
+                                  vsync == SDL_RENDERER_VSYNC_DISABLED ? "OFF" : "ON ");
+        SDL_RenderDebugText(renderer, 8.0f, 40.0f, "coral  6 px per FRAME     - speed follows the frame rate");
+        SDL_RenderDebugText(renderer, 8.0f, 52.0f, "sage   360 px per SECOND  - speed does not");
+        SDL_RenderDebugText(renderer, 8.0f, 64.0f, "blue   dt-scaled gravity  - climbs anyway; faster when slower");
+        SDL_SetRenderScale(renderer, 1.0f, 1.0f);
+
+        SDL_RenderPresent(renderer);
+
+        // --- 5f. The throttle ------------------------------------------------
+        // A level, not an edge: it should stall every frame the key is held.
+        // Placed at the very end so the stall lands *between* the present and the
+        // next clock tick — which is precisely where a real hitch would land.
+        if (in.key_down(SDL_SCANCODE_T))
+        {
+            SDL_Delay(k_throttle_ms);
+        }
+    }
+
+    // ---- 6. Shut down, in reverse order of creation -------------------------
+    SDL_DestroyRenderer(renderer);
+    SDL_DestroyWindow(window);
+    SDL_Quit();
+    return 0;
+}</code></pre>
+  </figure>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">CMakeLists.txt</span>
+      <span class="tag modified">modified</span>
+      <span class="lang" data-lang="cmake">CMake</span>
+    </figcaption>
+    <pre><code class="lang-cmake"># CMakeLists.txt — the engine's build description.
+#
+# This one file tells CMake how to build the project on Windows, Linux, and
+# macOS, with MSVC, GCC, or Clang, and how to acquire SDL3. You describe the
+# build once here; CMake generates the right native build for whatever machine
+# runs it. This is what Lesson 0.4 builds up, line by line.
+
+# 3.24 is our floor: new enough for modern FetchContent behaviour and the
+# target/property model we rely on. Older CMake will refuse to configure, which
+# is what we want — a clear failure, not a subtle one.
+cmake_minimum_required(VERSION 3.24)
+
+project(engine LANGUAGES CXX)
+
+# The C++ standard, set once for every target in the project. STANDARD_REQUIRED
+# makes a compiler that cannot do C++20 an error rather than a silent downgrade;
+# EXTENSIONS OFF asks for -std=c++20, not -std=gnu++20, so we stay portable.
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+# ---- Dependencies ----------------------------------------------------------
+# FetchContent acquires SDL3 at configure time and adds it to our build. We pin
+# an exact release tag: a moving branch would mean a fresh clone could build
+# different source than yours, which is how "works on my machine" is born.
+include(FetchContent)
+
+# SDL build options must be set BEFORE SDL is configured. We only need the
+# library itself, so skip SDL's own test helpers — it shaves real time off a
+# from-source build.
+set(SDL_TEST_LIBRARY OFF)
+
+FetchContent_Declare(
+    SDL3
+    GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
+    GIT_TAG        release-3.4.12   # pinned — never a branch name
+    GIT_SHALLOW    TRUE             # only this tag's snapshot, not all of history
+)
+FetchContent_MakeAvailable(SDL3)
+
+# ---- Our program -----------------------------------------------------------
+# Every source file is listed by hand. CMake can glob them for you, and you
+# should not let it: a glob is evaluated at configure time, so adding a file
+# leaves the build silently ignoring it until someone reconfigures. An explicit
+# list is one extra line per file and never lies.
+add_executable(engine
+    src/main.cpp
+    src/core/clock.cpp
+    src/core/input.cpp
+)
+
+# Make `src/` a root for our own includes, so a file says
+#     #include "core/input.hpp"
+# from anywhere in the tree — the same spelling regardless of which directory
+# the including file lives in. Relative paths like "../core/input.hpp" break the
+# moment a file moves; a stable include root does not. PRIVATE because nothing
+# links against us: this is a leaf executable, and the setting stops here.
+target_include_directories(engine PRIVATE src)
+
+# Link SDL. SDL3::SDL3 is the alias SDL exports for "the SDL library, however it
+# was built"; linking it also pulls in SDL's headers and platform frameworks
+# transitively, so we never name Cocoa or user32 ourselves.
+target_link_libraries(engine PRIVATE SDL3::SDL3)
+
+# Our warning discipline (see cpp-style §9) — applied to OUR target only, never
+# to SDL. Third-party code is compiled with its own flags; holding someone
+# else's library to /W4 just produces noise we cannot act on.
+if(MSVC)
+    target_compile_options(engine PRIVATE /W4 /Zc:__cplusplus)
+else()
+    target_compile_options(engine PRIVATE -Wall -Wextra)
+endif()</code></pre>
+  </figure>
+
+  <p>
+    <code>src/core/input.hpp</code> and <code>src/core/input.cpp</code> are unchanged from Lesson
+    1.2 and are not reproduced here.
+  </p>
+
+  <!-- ================= 7. BUILD & RUN ================= -->
+  <h2 id="build"><span class="num">6</span>Build &amp; Run</h2>
+
+  <figure class="listing shell">
+    <figcaption>
+      <span class="path">Linux and macOS</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash">cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+cmake --build build
+./build/engine</code></pre>
+  </figure>
+
+  <figure class="listing shell">
+    <figcaption>
+      <span class="path">Windows (MSVC)</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash">cmake -S . -B build
+cmake --build build --config Debug
+.\build\Debug\engine.exe</code></pre>
+  </figure>
+
+  <h3>What you should see</h3>
+
+  <p>
+    A coral box and a sage box sliding left to right on two tracks, a blue ball bouncing between two
+    grey guide lines, and a readout across the top:
+  </p>
+
+  <figure class="listing shell">
+    <figcaption>
+      <span class="path">the on-screen readout (yours will differ)</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash">fps  3184.6   dt   0.31 ms   raw   0.31 ms   frame 19042   up 6.1 s
+vsync OFF    [V] toggle   [T] hold to throttle   [R] reset ball   [Esc] quit
+coral  6 px per FRAME     - speed follows the frame rate
+sage   360 px per SECOND  - speed does not
+blue   dt-scaled gravity  - climbs anyway; faster when slower</code></pre>
+  </figure>
+
+  <p>Now run the experiment. This is the part of the lesson that only works by doing it:</p>
+
+  <ol>
+    <li><strong>Watch the two boxes with vsync off.</strong> The coral box is a blur — at a few
+      thousand frames a second it is moving thousands of pixels per second. The sage box crosses the
+      window in about three and a half seconds.</li>
+    <li><strong>Press V.</strong> Vsync engages and the frame rate drops to your monitor's refresh.
+      The coral box slows down <em>dramatically</em>. <strong>The sage box does not change at
+      all.</strong> That is frame-rate independence, and seeing the two side by side is worth more
+      than the derivation in §<a href="#dt-exact">3.3</a>.</li>
+    <li><strong>Hold T.</strong> The frame rate collapses to about 20. The coral box crawls. The
+      sage box carries on at the same speed, unbothered.</li>
+    <li><strong>Now watch the ball while you hold T.</strong> It climbs above its grey drop line,
+      then higher, then straight off the top of the window — in about three bounces. Release T,
+      press R to reset, and watch it at full speed: the climb is still there, just slow. The ball is
+      dt-scaled exactly like the sage box, and it is still wrong, because
+      §<a href="#dt-approx">3.4</a>.</li>
+  </ol>
+
+  <div class="callout ok">
+    <span class="label">Checkpoint — verified before publishing</span>
+    <p>
+      Built warning-clean at <code>-Wall -Wextra</code> with Apple Clang against SDL 3.4.12, run,
+      and shut down cleanly. The <code>clock</code> was then driven by a test harness against real
+      elapsed time, confirming: a 50 ms frame measures as 50 ms with no clamping; a 400 ms frame
+      reports <code>dt() == 0.25</code> exactly while <code>raw_dt()</code> reports ≈0.40 and
+      <code>was_clamped()</code> is true; a custom 0.05 s ceiling clamps to 0.05; <code>elapsed()</code>
+      tracks real time across clamped frames; <code>fps()</code> converges on the true rate over its
+      window; and <code>dt()</code> is never negative.
+    </p>
+    <p>
+      §<a href="#which-unit">3.2</a>'s float claim was compiled and run rather than argued:
+      <code>86400.0f + (1.0f/500)</code> evaluates to exactly <code>86400.0f</code> — time frozen —
+      while the same sum in <code>Uint64</code> nanoseconds advances by exactly 2 000 000 ns.
+    </p>
+    <p style="margin-bottom:0">
+      The ball's behaviour was predicted numerically before it was coded. Dropped from
+      <code>y = 260</code> onto a floor at <code>y = 620</code> with <code>g = 1200 px/s²</code> and
+      a perfectly elastic bounce, successive apex heights are: at 2000 fps 259, 258, 257 (barely
+      drifting); at 60 fps 236, 204, 171 (visibly climbing); at 20 fps 188, 83, −34 — <em>off the
+      top of the window on the third bounce</em>. If yours escapes at a different bounce, your frame
+      rate differs from the model's; the direction is what matters.
+    </p>
+  </div>
+
+  <!-- ================= 8. PITFALLS ================= -->
+  <h2 id="pitfalls"><span class="num">7</span>Common Pitfalls &amp; Debugging</h2>
+
+  <div class="pitfalls">
+    <details class="pitfall-item">
+      <summary>Everything teleports the moment you resume from a breakpoint — <span class="sym">objects vanish or land outside the level</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>You break, inspect a variable, continue — and the character is gone. Reliably, every debugging session.</dd>
+          <dt>Cause</dt>
+          <dd>The frame you paused in lasted as long as you were paused, so <code>dt</code> is 40 seconds and one step moved everything 40 seconds' worth (§<a href="#betrayals">3.5</a>).</dd>
+          <dt>Fix</dt>
+          <dd>Clamp <code>dt</code> to a ceiling — <code>clock</code> does this by default at 0.25 s. Expose <code>was_clamped()</code> so the distortion is visible rather than silent.</dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>Movement is choppy at high frame rates, smooth at low ones — <span class="sym">the faster machine looks worse</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>Uncapped, the game judders. Turn vsync on and it smooths out. Backwards from every intuition.</dd>
+          <dt>Cause</dt>
+          <dd><code>dt</code> is being measured in whole milliseconds. At 300 fps the true frame is 3.33 ms and the clock reports 3 or 4 — a ±20% error, frame to frame, generated by the measurement itself (§<a href="#which-unit">3.2</a>).</dd>
+          <dt>Fix</dt>
+          <dd><code>SDL_GetTicksNS()</code>, not <code>SDL_GetTicks()</code>. If you must keep a millisecond API, at least accumulate the remainder rather than discarding it every frame.</dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>The whole scene disappears, several frames after nothing in particular — <span class="sym">every position is NaN</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>Objects vanish all at once. In the debugger, positions read <code>nan</code> or <code>-nan</code>, and comparisons behave impossibly — <code>x == x</code> is false.</dd>
+          <dt>Cause</dt>
+          <dd>Something divided by <code>dt</code> on a frame where <code>dt</code> was zero, producing <code>inf</code>, and a later subtraction turned <code>inf - inf</code> into <code>NaN</code>. <code>NaN</code> then spread through every operation it touched (§<a href="#betrayals">3.5</a>).</dd>
+          <dt>Fix</dt>
+          <dd>Guard the division rather than the symptom: <code>if (dt &gt; 0.0f)</code>. To find the origin, test <code>std::isnan</code> at a few checkpoints and bisect — the crash site is never where the <code>NaN</code> was born, because <code>NaN</code> propagates silently for a long time first.</dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>Time runs slightly slow, and slightly slower the longer the game is open — <span class="sym">a timer that drifts by minutes</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>An in-game clock loses time compared with a stopwatch. The discrepancy grows with uptime, and on a long-running build eventually stops advancing altogether.</dd>
+          <dt>Cause</dt>
+          <dd>Elapsed time is accumulated in a <code>float</code>. Its precision degrades in proportion to its magnitude, and beyond about a day of uptime a short frame is smaller than one ulp and adds nothing at all (§<a href="#which-unit">3.2</a>).</dd>
+          <dt>Fix</dt>
+          <dd>Keep absolute time in <code>Uint64</code> nanoseconds and derive seconds on demand. Only the per-frame delta should ever be a <code>float</code>.</dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>Fast objects pass through thin walls, but only sometimes — <span class="sym">unreproducible; worse on slow machines</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>A bullet or a falling player occasionally goes through geometry. Impossible to reproduce on demand, and much more common under load.</dd>
+          <dt>Cause</dt>
+          <dd>Tunnelling. Collision is tested at step boundaries, and a long <code>dt</code> makes the step longer than the wall is thick (§<a href="#betrayals">3.5</a>, Figure 4).</dd>
+          <dt>Fix</dt>
+          <dd>Bound the step — a fixed timestep does this by construction, which is one of its main attractions (1.4). Genuinely fast objects also want swept/continuous collision, which is Module 7. Clamping <code>dt</code> reduces the worst case but does not eliminate it.</dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>The game runs at the right speed but the physics differs between machines — <span class="sym">"that jump is impossible on my PC"</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>Movement speed is correctly frame-rate independent, yet jump heights, fall times, or vehicle handling differ between players — and between two runs on the same machine.</dd>
+          <dt>Cause</dt>
+          <dd>Anything <em>accelerating</em> is integrated with error proportional to <code>dt</code>, so a different frame rate is a different simulation (§<a href="#dt-approx">3.4</a>). This is not fixable by scaling harder; it is inherent to stepping a variable amount.</dd>
+          <dt>Fix</dt>
+          <dd>Give the simulation a step size of its own, independent of the frame rate. That is Lesson 1.4, and this pitfall is the reason it exists.</dd>
+        </dl>
+      </div>
+    </details>
+  </div>
+
+  <!-- ================= 9. EXERCISES ================= -->
+  <h2 id="exercises"><span class="num">8</span>Exercises</h2>
+
+  <div class="exercise">
+    <h3><span class="xnum">1.3.1</span>Make the measurement worse<span class="difficulty">warm-up</span></h3>
+    <p>
+      In <code>clock::tick()</code>, swap <code>SDL_GetTicksNS()</code> for
+      <code>SDL_GetTicks() * 1000000</code> — the same instant, measured in whole milliseconds.
+      Rebuild and run with vsync off. What happens to the sage box, and to the readout?
+    </p>
+    <details>
+      <summary>Solution</summary>
+      <p>
+        The sage box develops a visible stutter and the <code>dt</code> readout snaps between a few
+        discrete values instead of varying smoothly. At a high enough frame rate it stops entirely:
+        every frame measures 0 ms, <code>dt</code> is 0, and <code>360 × 0 = 0</code>. Nothing has
+        gone wrong with the machine — the ruler simply has no marks between the numbers being
+        measured. Restore <code>SDL_GetTicksNS</code> afterwards.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3><span class="xnum">1.3.2</span>Find the clamp<span class="difficulty">warm-up</span></h3>
+    <p>
+      Put a breakpoint inside the main loop, run, wait ten seconds at the breakpoint, then continue.
+      What do <code>dt()</code> and <code>raw_dt()</code> report on the next frame, and what does the
+      readout show? Then set the ceiling to <code>10.0f</code> in the constructor and repeat.
+    </p>
+    <details>
+      <summary>Solution</summary>
+      <p>
+        With the default ceiling, <code>raw_dt()</code> is about 10.0 and <code>dt()</code> is
+        exactly 0.25, with <code>CLAMPED</code> on the readout. The sage box jumps 90 pixels (a
+        quarter-second's worth) — noticeable but harmless. With the ceiling raised to 10 seconds the
+        clamp does nothing: the box jumps 3600 pixels, wrapping clean off the screen, and the ball
+        is launched out of the window entirely. That is what every frame after a breakpoint would do
+        without the clamp, which is why 0.25 s is the conventional value.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3><span class="xnum">1.3.3</span>Measure the integrator's error yourself<span class="difficulty">guided</span></h3>
+    <p>
+      Add a small program (or a temporary block in <code>main</code>) that simulates one second of
+      free fall with <code>g = 10</code> using explicit Euler at <code>h = 1, 1/2, 1/4, 1/8,
+      1/60</code>, printing the final position and its error against <code>½ g T² = 5.0</code>.
+      Confirm the error halves as the step halves, and check your numbers against
+      <code>½·g·T·h</code>.
+    </p>
+    <details>
+      <summary>Hint</summary>
+      <p>
+        Two nested loops: the outer over step sizes, the inner running <code>1/h</code> steps of
+        <code>p += v*h; v += g*h;</code>. Print with enough decimals to see the pattern — four is
+        plenty.
+      </p>
+    </details>
+    <details>
+      <summary>Solution</summary>
+      <p>
+        You should reproduce §<a href="#dt-approx">3.4</a>'s table exactly: 0.0, 2.5, 3.75, 4.375,
+        4.9167, with errors 5.0, 2.5, 1.25, 0.625, 0.0833. Each error is <code>½ × 10 × 1 × h</code>.
+      </p>
+      <p style="margin-bottom:0">
+        Then try the interesting variation: swap the two lines so velocity updates first. The errors
+        become <code>−5.0, −2.5, −1.25, …</code> — the same magnitudes, opposite sign. Explicit Euler
+        undershoots and semi-implicit overshoots by exactly the same amount, which is a strong hint
+        that averaging them would be better still. That hint is worth remembering; it is where
+        Module 7's better integrators come from.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3><span class="xnum">1.3.4</span>Prove the ball gains energy<span class="difficulty">guided</span></h3>
+    <p>
+      The bounce is perfectly elastic, so total energy should be constant. Compute it each frame —
+      kinetic plus potential, <code>½v² + g·h</code> per unit mass, with <code>h</code> the height
+      above the floor — and log it once a second. Watch it while you hold T. Where is the energy
+      coming from?
+    </p>
+    <details>
+      <summary>Solution sketch</summary>
+      <p>
+        Energy climbs steadily, and much faster while throttled. Nothing in the code adds energy on
+        purpose: it comes from the integrator. During each step, position is advanced with the
+        velocity from the start of the step, so on the way <em>up</em> the ball is credited with more
+        upward travel than it earned — and the discrepancy scales with <code>dt</code>.
+      </p>
+      <p style="margin-bottom:0">
+        The point worth carrying forward is that "conserved" quantities in a simulation are only ever
+        conserved to the accuracy of the integrator. When something in a game slowly gains or loses
+        energy for no reason, the integrator is the first suspect, and a conservation check like this
+        one is the cheapest instrument you can build to catch it.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3><span class="xnum">1.3.5</span>Cap the frame rate, honestly<span class="difficulty">open</span></h3>
+    <p>
+      Add a frame-rate cap: after presenting, sleep until the frame has lasted at least
+      <code>1/target</code> seconds. Use <code>SDL_DelayNS</code>, then try
+      <code>SDL_DelayPrecise</code>. Measure what you actually get — log <code>raw_dt()</code> for a
+      few hundred frames and look at the spread, not the average. Is the cap doing what you asked?
+    </p>
+    <details>
+      <summary>Hint</summary>
+      <p>
+        Compute the target frame length in nanoseconds, compare it against the time since
+        <code>clk</code> last ticked, and sleep the difference — never a fixed amount. And read the
+        header docs for both delay functions before you decide which result surprised you.
+      </p>
+    </details>
+    <details>
+      <summary>Solution sketch</summary>
+      <p>
+        You will overshoot, and the amount varies. <code>SDL_Delay</code> and
+        <code>SDL_DelayNS</code> are documented to wait <em>at least</em> the requested time "but
+        possibly longer due to OS scheduling" — you are asking the scheduler for a favour, not
+        setting a timer. <code>SDL_DelayPrecise</code> is documented to get as close as it can,
+        "busy waiting if necessary", which is tighter and costs CPU (and battery) to achieve. That
+        tradeoff is the whole of frame pacing in one pair of functions.
+      </p>
+      <p style="margin-bottom:0">
+        Worth noticing while measuring: even the tightest cap does not make two machines agree, since
+        each still measures its own jittery frame times and simulates by them. A cap is a
+        power-and-heat tool and a smoothness tool. It is not a determinism tool, and no amount of
+        precision turns it into one.
+      </p>
+    </details>
+  </div>
+
+  <!-- ================= 10. RECAP ================= -->
+  <h2 id="recap"><span class="num">9</span>Recap &amp; Next</h2>
+
+  <div class="recap">
+    <h2>What the engine can do now that it could not before</h2>
+    <ul>
+      <li>
+        <strong>It knows what time it is</strong> — from a monotonic clock, in nanoseconds, with
+        absolute time kept in integers so it stays exact for as long as anyone will ever run it.
+      </li>
+      <li>
+        <strong>Its motion is expressed in real units.</strong> Speeds are per second, not per frame,
+        and for constant velocity the result is identical on every machine — exactly, not
+        approximately.
+      </li>
+      <li>
+        <strong>It is honest about the lies it tells.</strong> <code>dt()</code> is clamped for
+        safety, <code>raw_dt()</code> reports what really happened, and <code>was_clamped()</code>
+        says which you are looking at.
+      </li>
+      <li>
+        <strong>You can see the remaining problem, on screen, on demand.</strong> Two keys change
+        the frame rate; one box tracks it, one ignores it, and a ball that ignores it is
+        nevertheless launched out of the window.
+      </li>
+      <li>
+        <strong>You can state the limit precisely:</strong> dt-scaling is exact for constant
+        velocity and first-order for everything else, with error proportional to <code>dt</code> —
+        so the frame rate is still an input to the simulation.
+      </li>
+    </ul>
+    <p>
+      The idea to carry forward: <strong>how long the last frame took and how far the simulation
+      should advance are two unrelated questions</strong>, and every problem in
+      §<a href="#betrayals">3.5</a> comes from answering the second with the first.
+    </p>
+    <p>
+      <strong>Next:</strong> <a href="01-04-fixed-timestep.html">1.4 — The Fixed Timestep with
+      Interpolation, Derived</a>. We stop letting the hardware choose the step size. The simulation
+      advances in identical slices we picked; rendering happens whenever the machine is ready; and
+      the leftover time between the two gets smoothed by interpolating between the last two states.
+      Along the way we defuse the spiral of death, and the engine gains a loop it will keep for the
+      rest of the course.
+    </p>
+  </div>
+
+  <!-- ================= 11. FURTHER READING ================= -->
+  <h2 id="reading"><span class="num">10</span>Further Reading</h2>
+
+  <ul class="reading">
+    <li>
+      <span class="src">Gaffer on Games</span>
+      <strong><a href="https://gafferongames.com/post/fix_your_timestep/">Fix Your Timestep!</a></strong> —
+      Glenn Fiedler's article, the canonical treatment of everything in this lesson and the next.
+      Read it now for §<a href="#betrayals">3.5</a>'s problems, then again after 1.4 for the
+      accumulator. It is where the phrase "spiral of death" comes from.
+    </li>
+    <li>
+      <span class="src">SDL3 wiki</span>
+      <strong><a href="https://wiki.libsdl.org/SDL3/SDL_GetTicksNS">SDL_GetTicksNS</a></strong>,
+      <strong><a href="https://wiki.libsdl.org/SDL3/SDL_GetPerformanceCounter">SDL_GetPerformanceCounter</a></strong> and
+      <strong><a href="https://wiki.libsdl.org/SDL3/SDL_DelayPrecise">SDL_DelayPrecise</a></strong> —
+      the timing API. Note how carefully the delay functions are worded about what they do
+      <em>not</em> promise.
+    </li>
+    <li>
+      <span class="src">Reference</span>
+      <strong><a href="https://en.cppreference.com/w/cpp/chrono/steady_clock">cppreference: std::chrono::steady_clock</a></strong> —
+      the standard library's monotonic clock, and the contrast with <code>system_clock</code> right
+      next to it. We use SDL's for consistency with the rest of the engine, but the distinction is
+      universal and worth seeing stated twice.
+    </li>
+    <li>
+      <span class="src">Paper</span>
+      <strong><a href="https://docs.oracle.com/cd/E19957-01/806-3568/ncg_goldberg.html">David Goldberg, "What Every Computer Scientist Should Know About Floating-Point Arithmetic"</a></strong> —
+      the reference for §<a href="#which-unit">3.2</a>'s precision argument. Dense; the first few
+      sections are enough to make the ulp reasoning feel obvious rather than magical.
+    </li>
+    <li>
+      <span class="src">Book</span>
+      <strong>Jason Gregory, <em>Game Engine Architecture</em></strong> — the chapter on the game
+      loop and time, which covers clock drift, pausing, time scaling, and single-stepping. The
+      natural next step once 1.4's loop exists.
+    </li>
+    <li>
+      <span class="src">Article</span>
+      <strong><a href="https://randomascii.wordpress.com/2012/02/13/dont-store-that-in-a-float/">Bruce Dawson, "Don't Store That in a Float"</a></strong> —
+      exactly the mistake in §<a href="#which-unit">3.2</a>, from an engineer who has debugged it in
+      shipped software. Dawson's whole floating-point series is worth the afternoon.
+    </li>
+  </ul>
+
+  <!-- ================= 12. STATE ================= -->
+  <details class="state">
+    <summary>STATE — resume key</summary>
+<pre>course: Build a Professional 3D Game Engine (SDL3 + C++20)
+version: 1.0
+
+conventions:
+  world: right-handed, Y-up, -Z forward
+  clip: left-handed, +Y up, z in [0,1] (SDL_GPU-fixed; projection absorbs the flip)
+  sw-rasterizer: targets SDL_GPU's exact NDC (Module 4 port = API change, not maths change)
+  matrices: column vectors, v' = M*v, column-major storage
+  winding: CCW = front, cull back (per-pipeline state; set explicitly every time)
+  units: 1 unit = 1 metre; radians internally; linear colour in renderer
+  axis colours: x/y/z = red/green/blue
+  sdl3: FetchContent, pinned release-3.4.12; target SDL3::SDL3; SDL_TEST_LIBRARY OFF
+  sdl3-api: bool SDL_Init/PollEvent; SDL_CreateWindow(title,w,h,flags) no x/y;
+            SDL_CreateRenderer(window,name); event.key.key; &lt;SDL3/SDL_main.h&gt; separate;
+            SDL_Event = tagged union, type@0 + timestamp@8, sizeof 128
+  sdl3-input: const bool *SDL_GetKeyboardState(int*) — bool, NOT SDL2's Uint8;
+            SDL_SCANCODE_COUNT = 512 (A=4, W=26, SPACE=44); SDL_GetMouseState returns
+            SDL_MouseButtonFlags + float x,y; SDL_BUTTON_MASK(n) = 1u&lt;&lt;(n-1);
+            wheel is event-only, SDL_MOUSEWHEEL_FLIPPED means negate;
+            SDL_PollEvent pumps; focus loss -&gt; SDL_ResetKeyboard() sends key-UP events
+  sdl3-time: Uint64 SDL_GetTicks() ms / SDL_GetTicksNS() ns since SDL_Init, both built on
+            SDL_GetPerformanceCounter -&gt; CLOCK_MONOTONIC_RAW / mach_absolute_time /
+            QueryPerformanceCounter, i.e. MONOTONIC (verified in src/timer/). Constants
+            SDL_NS_PER_SECOND etc. SDL_Delay/SDL_DelayNS wait AT LEAST the given time;
+            SDL_DelayPrecise busy-waits to get closer. SDL_SetRenderVSync(renderer, n),
+            SDL_RENDERER_VSYNC_DISABLED = 0. SDL_RenderDebugText/Format = built-in 8x8
+            bitmap font, ASCII only, uses current draw colour (Module 6 does real text).
+  time-model: absolute time = Uint64 ns (float32 seconds FREEZES after ~24 h uptime:
+            86400.0f + 1/500 == 86400.0f, verified); only the small delta becomes float.
+            dt() clamped to 0.25 s, raw_dt() unclamped, was_clamped() reports the lie.
+            fps() smoothed over 0.5 s — DISPLAY ONLY. Frame order:
+            drain -&gt; clk.tick() -&gt; in.update() -&gt; simulate -&gt; render.
+            dt-scaling is EXACT for constant velocity, first-order for anything
+            accelerating (explicit Euler error = 0.5*g*T*h, proportional to h) — which
+            is why 1.4 exists.
+  input-model: poll levels, DERIVE edges (pressed = cur &amp;&amp; !prev); COPY SDL's array,
+            never alias; scancodes for positions, keycodes for symbols
+  shaders: HLSL -&gt; SDL_shadercross (3.0.0-preview) -&gt; SPIR-V/DXIL/MSL  [Module 4+]
+  cpp: C++20, no exceptions/RTTI in core, snake_case, private members trailing _,
+       .hpp + #pragma once, [[nodiscard]], anonymous namespace for TU-local helpers,
+       never `using namespace` at file scope, -Wall -Wextra//W4 all fixed
+  build: CMake >= 3.24, out-of-source (build/), 64-bit; sources listed explicitly
+         (never file(GLOB)); target_include_directories(engine PRIVATE src)
+  docs-tooling: shared &lt;style&gt; AND trailing &lt;script&gt; are duplicated into every page and
+         propagated by docs/_template/apply-shared.py — never by hand. Marker regions
+         SHARED-CSS:BEGIN/END and SHARED-SCRIPT:BEGIN/END. Page-specific widget JS goes
+         OUTSIDE the markers. Run `apply-shared.py --check` before committing docs/.
+
+curriculum: 94 lessons, ~433 h, 9 modules
+  M0:6  M1:8  M2:12  M3:10  M4:9  M5:10  M6:15  M7:13  M8:11
+
+completed:
+  - MODULE 0 COMPLETE (0.1 … 0.6)
+  - 1.1 Events, Properly
+  - 1.2 Input: State vs Events
+  - 1.3 Frames, Delta Time, and Why Naive Loops Lie
+
+capabilities:
+  - portable CMake build, three translation units; FetchContent SDL3 (release-3.4.12)
+  - window + complete switch-based event dispatch (quit, window close, resize)
+  - input subsystem: keyboard levels + edges by scancode, mouse buttons + position,
+    wheel accumulation with flipped-scroll correction
+  - clock subsystem: monotonic ns timing, clamped + raw dt, elapsed, frame count,
+    smoothed fps, was_clamped()
+  - demo: per-frame box vs per-second box vs dt-scaled bouncing ball, with runtime
+    vsync toggle and a throttle key; on-screen readout via SDL_RenderDebugTextFormat
+  - known-and-deliberate: simulation still steps by a variable dt (1.4 fixes it)
+
+files:
+  /: CLAUDE.md, README.md, ARCHITECTURE.md, LEARNINGS.md, PROMPT.md, LICENSE,
+     .gitignore, CMakeLists.txt, STATE.md
+  src/: main.cpp
+  src/core/: input.hpp, input.cpp, clock.hpp, clock.cpp
+  docs/: index.html, conventions.html, math-toolbox.html, cpp-style.html
+  docs/lessons/: 00-01..00-06, 01-01-events-properly.html,
+                 01-02-input-state-vs-events.html, 01-03-delta-time.html
+  docs/_template/: lesson-template.html, README.md, apply-shared.py
+  memory/: 2026-07-16.md, 2026-07-18.md
+
+next: 1.4 — The Fixed Timestep with Interpolation, Derived</pre>
+  </details>
+
+  <nav class="lesson-nav" aria-label="Lesson navigation (bottom)">
+    <a class="prev-l" href="01-02-input-state-vs-events.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">1.2 — Input: State vs Events</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="01-04-fixed-timestep.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">1.4 — The Fixed Timestep with Interpolation, Derived</span>
+    </a>
+  </nav>
+
+  <footer class="foot">
+    <p>
+      Build a Professional 3D Game Engine ·
+      <a href="../index.html">Contents</a> ·
+      <a href="../conventions.html">Conventions</a> ·
+      <a href="../math-toolbox.html">Math Toolbox</a> ·
+      <a href="../cpp-style.html">C++ Style</a>
+    </p>
+    <p>MIT licensed. Copyright © 2026 digster.</p>
+  </footer>
+</div>
+
+<!-- SHARED-SCRIPT:BEGIN -->
+<script>
+(function () {
+  "use strict";
+
+  /* ---- Theme toggle: OS default, with a manual override in localStorage ---- */
+  var root = document.documentElement;
+  var KEY = "engine-course-theme";
+  try {
+    var saved = localStorage.getItem(KEY);
+    if (saved) { root.setAttribute("data-theme", saved); root.style.colorScheme = saved; }
+  } catch (e) { /* private mode — fall back to the OS preference */ }
+
+  var btn = document.getElementById("theme-toggle");
+  if (btn) {
+    btn.addEventListener("click", function () {
+      var cur = root.getAttribute("data-theme");
+      if (!cur) {
+        cur = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      }
+      var next = cur === "dark" ? "light" : "dark";
+      root.setAttribute("data-theme", next);
+      root.style.colorScheme = next;
+      try { localStorage.setItem(KEY, next); } catch (e) {}
+    });
+  }
+
+  /* ---- Syntax highlighting -------------------------------------------------
+     A deliberately small tokeniser for C++/HLSL, CMake, and shell. It reads
+     textContent and rebuilds escaped HTML, so it can never execute page content
+     or mangle a listing — worst case a token is mis-coloured.
+
+     Why not highlight.js from a CDN? Because a lesson must render from a bare
+     filesystem with no network, and colour is not worth a dependency that can
+     be absent. This is ~60 lines and always there.
+
+     Keyword vs type matters: `kw` is consulted before `ty`, so a word listed in
+     both lands in .tok-k. Fundamental types (bool, char, int, …) belong in
+     CPP_TYPES only — putting them in CPP_KEYWORDS would silently recolour every
+     declaration in the course.
+     -------------------------------------------------------------------------- */
+  var CPP_KEYWORDS = ("alignas alignof and asm auto break case catch class concept const consteval "
+    + "constexpr constinit const_cast continue co_await co_return co_yield decltype default defined "
+    + "delete do dynamic_cast else enum explicit export extern false final for friend goto if inline "
+    + "mutable namespace new noexcept not nullptr operator or override private protected public "
+    + "register reinterpret_cast requires return sizeof static static_assert static_cast struct "
+    + "switch template this thread_local throw true try typedef typeid typename union using virtual "
+    + "volatile while cbuffer register_space numthreads in out inout").split(" ");
+
+  var CPP_TYPES = ("bool char char8_t char16_t char32_t double float int long short signed unsigned "
+    + "void wchar_t size_t uint8_t uint16_t uint32_t uint64_t int8_t int16_t int32_t int64_t "
+    + "Uint8 Uint16 Uint32 Uint64 Sint8 Sint16 Sint32 Sint64 "
+    + "float2 float3 float4 float4x4 float3x3 half int2 int3 int4 uint uint2 uint3 uint4 matrix "
+    + "Texture2D TextureCube SamplerState StructuredBuffer").split(" ");
+
+  var kw = Object.create(null), ty = Object.create(null);
+  CPP_KEYWORDS.forEach(function (w) { kw[w] = 1; });
+  CPP_TYPES.forEach(function (w) { ty[w] = 1; });
+
+  function esc(s) {
+    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+  function span(cls, s) { return '<span class="tok-' + cls + '">' + esc(s) + "</span>"; }
+
+  // One regex, alternation ordered so longer/greedier forms win.
+  var RE = new RegExp([
+    "(\\/\\*[\\s\\S]*?\\*\\/|\\/\\/[^\\n]*|#[^\\n]*)",       // 1 comment / preprocessor
+    '("(?:\\\\.|[^"\\\\])*"|\'(?:\\\\.|[^\'\\\\])*\')',      // 2 string / char
+    "(\\b\\d[\\w.]*\\b)",                                     // 3 number
+    "([A-Za-z_]\\w*)(?=\\s*\\()",                             // 4 call site
+    "([A-Za-z_]\\w*)",                                        // 5 identifier
+    "([{}()\\[\\];,.<>+\\-*/%=!&|^~?:]+)"                     // 6 punctuation
+  ].join("|"), "g");
+
+  function highlightCLike(src) {
+    var out = "", last = 0, m;
+    RE.lastIndex = 0;
+    while ((m = RE.exec(src)) !== null) {
+      if (m.index > last) out += esc(src.slice(last, m.index));
+      if (m[1])      out += span(m[1].charAt(0) === "#" ? "p" : "c", m[1]);
+      else if (m[2]) out += span("s", m[2]);
+      else if (m[3]) out += span("n", m[3]);
+      else if (m[4]) out += kw[m[4]] ? span("k", m[4]) : span("f", m[4]);
+      else if (m[5]) out += kw[m[5]] ? span("k", m[5])
+                          : ty[m[5]] ? span("t", m[5])
+                          : esc(m[5]);
+      else if (m[6]) out += span("o", m[6]);
+      last = RE.lastIndex;
+    }
+    out += esc(src.slice(last));
+    return out;
+  }
+
+  // Shell: `#` comments anywhere, plus Windows-batch `::` comments — but only at
+  // the start of a line, because `::` is also a namespace separator and a CMake
+  // target separator (`SDL3::SDL3`), which do appear mid-line in shell listings.
+  var SH_RE = /(^|\n)(\s*)(::[^\n]*)|(#[^\n]*)|("(?:\\.|[^"\\])*"|'[^']*')|(^|\n)(\s*)([\w.\/\\-]+)/g;
+  function highlightShell(src) {
+    var out = "", last = 0, m;
+    SH_RE.lastIndex = 0;
+    while ((m = SH_RE.exec(src)) !== null) {
+      if (m.index > last) out += esc(src.slice(last, m.index));
+      if (m[3])      out += esc(m[1] || "") + esc(m[2] || "") + span("c", m[3]);
+      else if (m[4]) out += span("c", m[4]);
+      else if (m[5]) out += span("s", m[5]);
+      else           out += esc(m[6] || "") + esc(m[7] || "") + span("f", m[8]);
+      last = SH_RE.lastIndex;
+    }
+    out += esc(src.slice(last));
+    return out;
+  }
+
+  // CMake: comments, strings, ${vars}, and command names (word before "(").
+  var CMAKE_RE = /(#[^\n]*)|("(?:\\.|[^"\\])*")|(\$\{[^}]*\})|(^|\n)(\s*)([A-Za-z_]\w*)(?=\s*\()/g;
+  function highlightCMake(src) {
+    var out = "", last = 0, m;
+    CMAKE_RE.lastIndex = 0;
+    while ((m = CMAKE_RE.exec(src)) !== null) {
+      if (m.index > last) out += esc(src.slice(last, m.index));
+      if (m[1])      out += span("c", m[1]);
+      else if (m[2]) out += span("s", m[2]);
+      else if (m[3]) out += span("n", m[3]);
+      else           out += esc(m[4] || "") + esc(m[5] || "") + span("f", m[6]);
+      last = CMAKE_RE.lastIndex;
+    }
+    out += esc(src.slice(last));
+    return out;
+  }
+
+  var DISPATCH = {
+    "lang-cpp": highlightCLike, "lang-hlsl": highlightCLike, "lang-c": highlightCLike,
+    "lang-bash": highlightShell, "lang-sh": highlightShell,
+    "lang-cmake": highlightCMake
+  };
+  document.querySelectorAll(".listing pre code").forEach(function (el) {
+    for (var cls in DISPATCH) {
+      if (el.classList.contains(cls)) {
+        el.innerHTML = DISPATCH[cls](el.textContent);
+        return;
+      }
+    }
+  });
+})();
+</script>
+<!-- SHARED-SCRIPT:END -->
+</body>
+</html>

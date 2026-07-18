@@ -45,6 +45,7 @@ FetchContent_MakeAvailable(SDL3)
 # list is one extra line per file and never lies.
 add_executable(engine
     src/main.cpp
+    src/core/clock.cpp
     src/core/input.cpp
 )
 

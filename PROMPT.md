@@ -96,3 +96,24 @@ made the tool's two extraction paths pointless: collapsed both onto one marker-b
 STATE.md itself gained `docs-tooling` and `docs-verify` convention entries — it is the resume
 key, so without them a session picking up 1.3 would have quietly reintroduced the drift this
 session removed.
+
+---
+
+## 2026-07-18 — Lesson 1.3
+
+> next
+
+**Response:** Lesson 1.3 — Frames, Delta Time, and Why Naive Loops Lie. The `clock`
+subsystem (`src/core/clock.{hpp,cpp}`), a demo rebuilt around three time-scaled
+behaviours with runtime vsync and throttle controls, and the lesson page with five SVG
+diagrams and an interactive explicit-Euler widget.
+
+**Decisions made in this session:**
+
+| Decision | Choice | Rationale |
+|---|---|---|
+| Clock ceiling | `dt()` clamped at 0.25 s by default, with `raw_dt()` and `was_clamped()` alongside | The clamp is a deliberate lie; a system that distorts reality to stay safe should be able to say so. A profiler reading the clamped value would report a healthy frame during a stall. |
+| Absolute time type | `Uint64` nanoseconds; only the delta becomes `float` | Verified by compiling it: a `float` seconds counter stops advancing entirely after ~24 h of uptime. |
+| Demo default | vsync **off** | Honest default for an instrument. With vsync on, only one frame rate exists and the bug under study is invisible. |
+| Physics in the demo | Perfectly elastic bounce, explicit Euler | Restitution 1.0 means the integrator is the *only* thing that can change the ball's energy, so the error is unambiguous — and at 20 fps it throws the ball out of the window in three bounces. |
+| Scope held back | Semi-implicit Euler shown numerically but not adopted; integrators deferred to Module 7 | It is still first-order and still frame-rate dependent, so it does not solve 1.3's problem and would pre-empt a lesson that does it properly. |

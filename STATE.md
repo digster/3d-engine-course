@@ -7,7 +7,7 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-07-18 (after Lesson 1.2; then a docs-tooling pass — see docs-tooling below)
+updated: 2026-07-18 (after Lesson 1.3)
 
 conventions:
   world: right-handed, Y-up, -Z forward
@@ -37,10 +37,32 @@ conventions:
             only as fresh as the last drain. Focus loss -> SDL_SetKeyboardFocus(NULL) ->
             SDL_ResetKeyboard() sends key-UP EVENTS, so drain-then-sample is what stops
             keys sticking after alt-tab.
+  sdl3-time: Uint64 SDL_GetTicks() ms / SDL_GetTicksNS() ns since SDL_Init. Both are
+            MONOTONIC — not stated in the header, traced through SDL_GetPerformanceCounter
+            to CLOCK_MONOTONIC_RAW / mach_absolute_time / QueryPerformanceCounter.
+            SDL_Delay/SDL_DelayNS wait AT LEAST the requested time (measured: Delay(10)
+            ~= 11.8 ms); SDL_DelayPrecise busy-waits to get closer.
+            SDL_NS_PER_SECOND etc. in SDL_timer.h. SDL_SetRenderVSync(renderer, n) with
+            SDL_RENDERER_VSYNC_DISABLED = 0 — can fail per backend, check the return.
+            SDL_RenderDebugText/Format = built-in 8x8 ASCII bitmap font in the current
+            draw colour; SDL_SetRenderScale also scales its coordinates. Real text = M6.
+  time-model: absolute time = Uint64 ns; NEVER float seconds — ulp(86400.0f) = 7.8 ms, so
+            86400.0f + 1/500 == 86400.0f and time FREEZES after ~24 h at 500 fps (compiled
+            and verified). Only the small delta becomes float, and the ns->s division runs
+            in double before narrowing. Milliseconds are too coarse to measure a frame
+            (+-20% at 300 fps; truncates to 0 above 1000 fps).
+            dt() clamped to 0.25 s, raw_dt() unclamped, was_clamped() reports the lie;
+            fps() smoothed over 0.5 s = DISPLAY ONLY.
+            dt-scaling is EXACT for constant velocity (v factors out of the sum) and only
+            first-order for anything accelerating: explicit Euler error = 0.5*g*T*h,
+            proportional to the step, so frame rate is an input to the physics. That is
+            the whole argument for 1.4's fixed timestep.
   input-model: poll levels, DERIVE edges (pressed = cur && !prev, released = !cur && prev);
             COPY SDL's array into std::array, never alias the pointer (aliasing makes
-            every edge x && !x = false); scancodes for positions, keycodes for symbols;
-            frame order = drain -> input.update() -> simulate -> render
+            every edge x && !x = false); scancodes for positions, keycodes for symbols
+  frame-order: drain events -> clk.tick() -> in.update() -> simulate -> render.
+            Drain first because SDL_PollEvent pumps (that is what refreshes the state
+            arrays); tick each subsystem exactly once so the whole frame sees one snapshot.
   shaders: HLSL -> SDL_shadercross (3.0.0-preview) -> SPIR-V/DXIL/MSL  [Module 4+]
   cpp: C++20, no exceptions/RTTI in core, snake_case, private members trailing _,
        .hpp + #pragma once, [[nodiscard]], -Wall -Wextra // /W4, all warnings fixed
@@ -80,18 +102,21 @@ completed:
   ===> MODULE 0 COMPLETE <===
   - 1.1  Events, Properly
   - 1.2  Input: State vs Events
+  - 1.3  Frames, Delta Time, and Why Naive Loops Lie
 
 capabilities:
   - verified C++20 toolchain (MSVC / GCC / Clang), 64-bit
-  - portable CMake build, now two translation units; FetchContent SDL3 (release-3.4.12)
+  - portable CMake build, now three translation units; FetchContent SDL3 (release-3.4.12)
   - engine app: 1280x720 window, complete switch-based event dispatch (quit,
     window-close, window-resize), clean shutdown, startup version log
   - input subsystem (src/core/input): keyboard levels + edges addressed by scancode,
     mouse buttons (levels + edges) and cursor position, wheel accumulation with
     flipped-scroll correction; one frame-coherent snapshot published per frame
-  - demo: box driven smoothly by held keys, recoloured once per Space press,
-    teleported on click, resized by the wheel
-  - known-and-deliberate defect: movement is per-FRAME, not per-second (1.3 fixes it)
+  - clock subsystem (src/core/clock): monotonic ns timing, clamped dt + raw dt +
+    was_clamped(), elapsed(), frame_count(), smoothed fps() for display
+  - demo: per-frame box vs per-second box vs dt-scaled bouncing ball, with a runtime
+    vsync toggle and a throttle key; on-screen readout via SDL_RenderDebugTextFormat
+  - known-and-deliberate defect: simulation still steps by a variable dt (1.4 fixes it)
   - skills: reading SDL headers as source of truth; debugging with lldb/gdb/VS
 
 decisions:
@@ -103,16 +128,17 @@ files:
   /: CLAUDE.md, README.md, ARCHITECTURE.md, LEARNINGS.md, PROMPT.md, LICENSE,
      .gitignore, CMakeLists.txt, STATE.md
   src/: main.cpp
-  src/core/: input.hpp, input.cpp
+  src/core/: input.hpp, input.cpp, clock.hpp, clock.cpp
   docs/: index.html, conventions.html, math-toolbox.html, cpp-style.html
   docs/lessons/: 00-01-what-is-an-engine.html, 00-02-how-this-course-works.html,
                  00-03-toolchain.html, 00-04-cmake-from-zero.html,
                  00-05-first-window.html, 00-06-headers-and-debugger.html,
-                 01-01-events-properly.html, 01-02-input-state-vs-events.html
+                 01-01-events-properly.html, 01-02-input-state-vs-events.html,
+                 01-03-delta-time.html
   docs/_template/: lesson-template.html, README.md, apply-shared.py
   memory/: 2026-07-16.md, 2026-07-18.md
   (retired: hello.cpp)
 
-next: 1.3 — Frames, Delta Time, and Why Naive Loops Lie
-      (planned filename: docs/lessons/01-03-delta-time.html — 1.2 already links to it)
+next: 1.4 — The Fixed Timestep with Interpolation, Derived
+      (planned filename: docs/lessons/01-04-fixed-timestep.html — 1.3 already links to it)
 ```
