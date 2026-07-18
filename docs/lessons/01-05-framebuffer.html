@@ -1,0 +1,3517 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>1.5 — The Framebuffer: Your First Owned Pixels · Build a Professional 3D Game Engine</title>
+<meta name="description" content="Memory as an image: the row-major index formula, the wrap bug it causes, what 32 bits of colour actually are, presenting through a streaming texture, and two ways to write a pixel — measured.">
+<!-- SHARED-CSS:BEGIN -->
+<style>
+/* ---- Design tokens ------------------------------------------------------- */
+:root {
+  color-scheme: light dark;
+
+  /* Page */
+  --bg:            #fdfdfb;
+  --bg-sunken:     #f4f4f0;
+  --bg-raised:     #ffffff;
+  --text:          #1c1c1a;
+  --text-muted:    #5f5f58;
+  --text-faint:    #8a8a80;
+  --rule:          #e2e2db;
+  --rule-strong:   #cfcfc6;
+
+  /* Accent — used for links, active nav, section marks */
+  --accent:        #b4530a;
+  --accent-soft:   #f5e6d8;
+  --accent-text:   #8f4108;
+
+  /* Callouts */
+  --note-bd:       #3a6ea5;   --note-bg:    #eaf2fb;
+  --warn-bd:       #b8860b;   --warn-bg:    #fdf5e2;
+  --verify-bd:     #a03030;   --verify-bg:  #fbecec;
+  --pitfall-bd:    #7a4fa3;   --pitfall-bg: #f4eefb;
+  --ok-bd:         #2f7d4f;   --ok-bg:      #e9f6ee;
+
+  /* Code — always dark, in both page themes */
+  --code-bg:       #1b1d23;
+  --code-bar:      #262932;
+  --code-text:     #dfe3ec;
+  --code-rule:     #363a45;
+
+  /* Syntax tokens */
+  --tok-comment:   #6d7789;
+  --tok-keyword:   #c98fdb;
+  --tok-type:      #6cc5d9;
+  --tok-string:    #a3cf85;
+  --tok-number:    #e8a978;
+  --tok-preproc:   #d9a05b;
+  --tok-func:      #79b6f2;
+  --tok-punct:     #9aa2b1;
+
+  /* Axis colours — COURSE-WIDE CONVENTION. x/y/z = red/green/blue.
+     Never override these in a diagram. See conventions.html. */
+  --axis-x:        #d1344a;
+  --axis-y:        #2f9e4f;
+  --axis-z:        #2b6fd4;
+  --axis-x-soft:   #f7d8dd;
+  --axis-y-soft:   #d8f0e0;
+  --axis-z-soft:   #d7e4fa;
+
+  /* Diagram neutrals */
+  --dia-bg:        #ffffff;
+  --dia-ink:       #33332e;
+  --dia-ink-soft:  #7a7a72;
+  --dia-grid:      #e8e8e2;
+  --dia-fill:      #f0f0ea;
+  --dia-hi:        #b4530a;
+
+  /* Typography */
+  --font-body: "Iowan Old Style", "Palatino Linotype", "Palatino", "Charter",
+               Georgia, Cambria, "Times New Roman", serif;
+  --font-ui:   -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+               "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "SFMono-Regular", "Cascadia Code",
+               "JetBrains Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  --measure: 42rem;          /* ~72 characters at this size — the reading column */
+  --measure-wide: 58rem;     /* diagrams & tables may breathe past the measure  */
+}
+
+/* Dark tokens.
+   Applied in two situations, which is why the block is written twice:
+     1. the OS asks for dark AND the reader has not overridden to light;
+     2. the reader explicitly chose dark via the toggle.
+   CSS has no mixins, so duplication is the price of supporting both an OS
+   default and a manual override. Keep the two blocks byte-identical. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg:          #15161a;
+    --bg-sunken:   #101115;
+    --bg-raised:   #1c1e24;
+    --text:        #e4e4e0;
+    --text-muted:  #a2a49e;
+    --text-faint:  #74766f;
+    --rule:        #2c2e35;
+    --rule-strong: #3d404a;
+
+    --accent:      #f0a06a;
+    --accent-soft: #33251a;
+    --accent-text: #f5b184;
+
+    --note-bd:     #5a8fc8;   --note-bg:    #16202c;
+    --warn-bd:     #c9a132;   --warn-bg:    #262013;
+    --verify-bd:   #d05555;   --verify-bg:  #2a1717;
+    --pitfall-bd:  #a077c8;   --pitfall-bg: #221a2c;
+    --ok-bd:       #4fa877;   --ok-bg:      #14231a;
+
+    --dia-bg:      #1a1c21;
+    --dia-ink:     #d8d8d2;
+    --dia-ink-soft:#8f918a;
+    --dia-grid:    #2b2d33;
+    --dia-fill:    #24262c;
+    --dia-hi:      #f0a06a;
+
+    --axis-x:      #f2647a;
+    --axis-y:      #5cc47e;
+    --axis-z:      #6b9ef0;
+    --axis-x-soft: #3a2027;
+    --axis-y-soft: #1c3325;
+    --axis-z-soft: #1e2a40;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg:          #15161a;
+  --bg-sunken:   #101115;
+  --bg-raised:   #1c1e24;
+  --text:        #e4e4e0;
+  --text-muted:  #a2a49e;
+  --text-faint:  #74766f;
+  --rule:        #2c2e35;
+  --rule-strong: #3d404a;
+
+  --accent:      #f0a06a;
+  --accent-soft: #33251a;
+  --accent-text: #f5b184;
+
+  --note-bd:     #5a8fc8;   --note-bg:    #16202c;
+  --warn-bd:     #c9a132;   --warn-bg:    #262013;
+  --verify-bd:   #d05555;   --verify-bg:  #2a1717;
+  --pitfall-bd:  #a077c8;   --pitfall-bg: #221a2c;
+  --ok-bd:       #4fa877;   --ok-bg:      #14231a;
+
+  --dia-bg:      #1a1c21;
+  --dia-ink:     #d8d8d2;
+  --dia-ink-soft:#8f918a;
+  --dia-grid:    #2b2d33;
+  --dia-fill:    #24262c;
+  --dia-hi:      #f0a06a;
+
+  --axis-x:      #f2647a;
+  --axis-y:      #5cc47e;
+  --axis-z:      #6b9ef0;
+  --axis-x-soft: #3a2027;
+  --axis-y-soft: #1c3325;
+  --axis-z-soft: #1e2a40;
+}
+
+/* ---- Reset & base -------------------------------------------------------- */
+*, *::before, *::after { box-sizing: border-box; }
+
+html {
+  font-size: 18px;
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
+  scroll-padding-top: 2rem;
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  line-height: 1.7;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* The reading column. Everything is centred on --measure; wide elements opt out. */
+.wrap {
+  max-width: var(--measure);
+  margin: 0 auto;
+  padding: 0 1.25rem;
+}
+.bleed {                       /* for diagrams/tables that need more room */
+  max-width: var(--measure-wide);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* ---- Typography ---------------------------------------------------------- */
+h1, h2, h3, h4 {
+  font-family: var(--font-ui);
+  line-height: 1.25;
+  letter-spacing: -0.015em;
+  margin: 0 0 0.6em;
+  scroll-margin-top: 1.5rem;
+}
+h1 { font-size: 2.15rem; font-weight: 700; margin-top: 0.2em; }
+h2 {
+  font-size: 1.5rem; font-weight: 650;
+  margin-top: 2.6em;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--rule);
+}
+h3 { font-size: 1.15rem; font-weight: 650; margin-top: 2em; }
+h4 { font-size: 1rem;    font-weight: 650; margin-top: 1.6em; color: var(--text-muted); }
+
+/* Section numbers rendered as a quiet prefix */
+h2 .num, h3 .num {
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  margin-right: 0.5em;
+  font-weight: 500;
+}
+
+p { margin: 0 0 1.15em; }
+
+a { color: var(--accent-text); text-decoration-color: var(--rule-strong); text-underline-offset: 2px; }
+a:hover { text-decoration-color: currentColor; }
+
+strong { font-weight: 650; }
+em { font-style: italic; }
+
+ul, ol { margin: 0 0 1.15em; padding-left: 1.5em; }
+li { margin-bottom: 0.4em; }
+li > ul, li > ol { margin-top: 0.4em; margin-bottom: 0.5em; }
+
+hr { border: 0; border-top: 1px solid var(--rule); margin: 2.5em 0; }
+
+blockquote {
+  margin: 1.5em 0;
+  padding: 0.1em 0 0.1em 1.2em;
+  border-left: 3px solid var(--rule-strong);
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* Inline code — light chip, distinct from the dark block listings */
+:not(pre) > code {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 0.08em 0.34em;
+  word-break: break-word;
+}
+
+/* ---- Masthead ------------------------------------------------------------ */
+.masthead {
+  background: var(--bg-sunken);
+  border-bottom: 1px solid var(--rule);
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+}
+.masthead-inner {
+  max-width: var(--measure-wide);
+  margin: 0 auto;
+  padding: 0.6rem 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.masthead .course {
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  text-decoration: none;
+}
+.masthead .spacer { flex: 1; }
+.masthead a { color: var(--text-muted); text-decoration: none; }
+.masthead a:hover { color: var(--accent-text); }
+
+.theme-toggle {
+  font: inherit;
+  font-size: 0.78rem;
+  background: var(--bg-raised);
+  color: var(--text-muted);
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  padding: 0.2rem 0.55rem;
+  cursor: pointer;
+}
+.theme-toggle:hover { border-color: var(--rule-strong); color: var(--text); }
+
+/* ---- Lesson nav (top & bottom) ------------------------------------------- */
+.lesson-nav {
+  display: flex;
+  align-items: stretch;
+  gap: 0.6rem;
+  font-family: var(--font-ui);
+  font-size: 0.82rem;
+  margin: 1.5rem auto;
+}
+.lesson-nav a, .lesson-nav span {
+  flex: 1;
+  padding: 0.55rem 0.8rem;
+  border: 1px solid var(--rule);
+  border-radius: 7px;
+  background: var(--bg-raised);
+  text-decoration: none;
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+.lesson-nav a:hover { border-color: var(--accent); }
+.lesson-nav span { opacity: 0.45; }        /* disabled edge (no prev / no next) */
+.lesson-nav .dir {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-faint);
+}
+.lesson-nav .ttl {
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-weight: 550;
+}
+.lesson-nav .next-l { text-align: right; }
+.lesson-nav .idx-l  { flex: 0 0 auto; justify-content: center; text-align: center; }
+@media (max-width: 34rem) {
+  .lesson-nav { flex-wrap: wrap; }
+  .lesson-nav .idx-l { order: 3; flex: 1 0 100%; }
+}
+
+/* ---- Lesson header block ------------------------------------------------- */
+.lesson-head { margin: 2rem 0 0; }
+.eyebrow {
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+  font-weight: 650;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 0.5rem;
+}
+.deck {
+  font-size: 1.12rem;
+  color: var(--text-muted);
+  margin-bottom: 1.5rem;
+}
+.meta {
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  padding: 1rem 1.15rem;
+  margin-bottom: 1.75rem;
+}
+.meta dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 0.4rem 1rem; }
+.meta dt {
+  color: var(--text-faint);
+  text-transform: uppercase;
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  padding-top: 0.28em;
+  white-space: nowrap;
+}
+.meta dd { margin: 0; }
+@media (max-width: 30rem) {
+  .meta dl { grid-template-columns: 1fr; gap: 0.15rem 0; }
+  .meta dd { margin-bottom: 0.6rem; }
+}
+
+/* Objectives — "you will be able to…" */
+.objectives {
+  border: 1px solid var(--accent);
+  background: var(--accent-soft);
+  border-radius: 9px;
+  padding: 1.1rem 1.25rem;
+  margin: 1.75rem 0;
+}
+.objectives h2 {
+  margin: 0 0 0.5rem;
+  border: 0; padding: 0;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--accent-text);
+}
+.objectives ul { margin: 0; padding-left: 1.25em; }
+.objectives li::marker { color: var(--accent); }
+
+/* ---- Table of contents --------------------------------------------------- */
+.toc {
+  font-family: var(--font-ui);
+  font-size: 0.88rem;
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  padding: 1rem 1.25rem;
+  margin: 2rem 0;
+}
+.toc > summary {
+  cursor: pointer;
+  font-weight: 650;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-muted);
+  list-style: none;
+}
+.toc > summary::-webkit-details-marker { display: none; }
+.toc > summary::before { content: "▸ "; color: var(--accent); }
+.toc[open] > summary::before { content: "▾ "; }
+.toc ol { list-style: none; margin: 0.85rem 0 0; padding: 0; counter-reset: toc; }
+.toc ol ol { margin: 0.3rem 0 0.5rem 1.1rem; }
+.toc li { margin: 0.28em 0; counter-increment: toc; }
+.toc a { text-decoration: none; color: var(--text); }
+.toc a:hover { color: var(--accent-text); text-decoration: underline; }
+.toc ol ol a { color: var(--text-muted); font-size: 0.94em; }
+
+/* ---- Callouts ------------------------------------------------------------ */
+.callout {
+  border-left: 3px solid var(--rule-strong);
+  background: var(--bg-sunken);
+  border-radius: 0 8px 8px 0;
+  padding: 0.9rem 1.1rem;
+  margin: 1.6em 0;
+  font-size: 0.95rem;
+}
+.callout > :first-child { margin-top: 0; }
+.callout > :last-child  { margin-bottom: 0; }
+.callout .label {
+  display: block;
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  margin-bottom: 0.35rem;
+}
+.callout.note    { border-color: var(--note-bd);    background: var(--note-bg); }
+.callout.note .label    { color: var(--note-bd); }
+.callout.warn    { border-color: var(--warn-bd);    background: var(--warn-bg); }
+.callout.warn .label    { color: var(--warn-bd); }
+.callout.verify  { border-color: var(--verify-bd);  background: var(--verify-bg); }
+.callout.verify .label  { color: var(--verify-bd); }
+.callout.pitfall { border-color: var(--pitfall-bd); background: var(--pitfall-bg); }
+.callout.pitfall .label { color: var(--pitfall-bd); }
+.callout.ok      { border-color: var(--ok-bd);      background: var(--ok-bg); }
+.callout.ok .label      { color: var(--ok-bd); }
+/* C++ explainers: a C++ feature taught in place, the first time it appears. */
+.callout.cpp     { border-color: var(--accent);     background: var(--accent-soft); }
+.callout.cpp .label     { color: var(--accent-text); }
+
+/* ---- Code listings ------------------------------------------------------- */
+.listing {
+  margin: 1.6em 0;
+  border-radius: 9px;
+  overflow: hidden;
+  border: 1px solid var(--code-rule);
+  background: var(--code-bg);
+}
+.listing figcaption {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: var(--code-bar);
+  border-bottom: 1px solid var(--code-rule);
+  padding: 0.45rem 0.85rem;
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  color: #aeb6c4;
+}
+.listing figcaption .path { font-weight: 600; color: #dfe3ec; }
+.listing figcaption .tag {
+  font-family: var(--font-ui);
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  background: #3a3f4c;
+  color: #c6cdd9;
+}
+.listing figcaption .tag.new      { background: #1f4433; color: #7fd6a5; }
+.listing figcaption .tag.modified { background: #453a1c; color: #e0be74; }
+.listing figcaption .lang { margin-left: auto; opacity: 0.65; }
+
+/* Horizontal scroll — NEVER wrap. Wrapped code lies about its structure. */
+.listing pre {
+  margin: 0;
+  padding: 0.9rem 1rem;
+  overflow-x: auto;
+  background: var(--code-bg);
+}
+.listing pre code {
+  font-family: var(--font-mono);
+  font-size: 0.79rem;
+  line-height: 1.62;
+  color: var(--code-text);
+  white-space: pre;
+  display: block;
+  tab-size: 4;
+}
+.listing pre::-webkit-scrollbar { height: 9px; }
+.listing pre::-webkit-scrollbar-track { background: var(--code-bar); }
+.listing pre::-webkit-scrollbar-thumb { background: #4a5060; border-radius: 5px; }
+.listing pre::-webkit-scrollbar-thumb:hover { background: #5d6478; }
+
+/* Syntax tokens, applied by the tiny highlighter at the foot of the page. */
+.tok-c { color: var(--tok-comment); font-style: italic; }
+.tok-k { color: var(--tok-keyword); }
+.tok-t { color: var(--tok-type); }
+.tok-s { color: var(--tok-string); }
+.tok-n { color: var(--tok-number); }
+.tok-p { color: var(--tok-preproc); }
+.tok-f { color: var(--tok-func); }
+.tok-o { color: var(--tok-punct); }
+
+/* Emphasised line inside a listing (the line this paragraph is about) */
+.listing .hl { background: rgba(180, 130, 60, 0.16); display: inline-block; width: 100%; }
+
+/* Shell transcripts get a lighter treatment than source files */
+.listing.shell figcaption .path::before { content: "$ "; opacity: 0.6; }
+
+/* ---- Figures & diagrams -------------------------------------------------- */
+figure.dia {
+  margin: 2em auto;
+  padding: 0;
+}
+figure.dia svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: var(--dia-bg);
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+}
+figure.dia figcaption,
+figure.tbl figcaption {
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: 0.65rem;
+  line-height: 1.55;
+}
+figure.dia figcaption .fignum,
+figure.tbl figcaption .fignum {
+  font-weight: 700;
+  color: var(--text);
+}
+/* SVG text inherits the theme so diagrams survive dark mode */
+figure.dia svg text { font-family: var(--font-ui); fill: var(--dia-ink); }
+figure.dia svg .lbl-x { fill: var(--axis-x); }
+figure.dia svg .lbl-y { fill: var(--axis-y); }
+figure.dia svg .lbl-z { fill: var(--axis-z); }
+figure.dia svg .ax-x  { stroke: var(--axis-x); }
+figure.dia svg .ax-y  { stroke: var(--axis-y); }
+figure.dia svg .ax-z  { stroke: var(--axis-z); }
+figure.dia svg .ink       { stroke: var(--dia-ink); }
+figure.dia svg .ink-soft  { stroke: var(--dia-ink-soft); }
+figure.dia svg .grid      { stroke: var(--dia-grid); }
+figure.dia svg .fill-soft { fill: var(--dia-fill); }
+figure.dia svg .hi        { stroke: var(--dia-hi); }
+figure.dia svg .mono      { font-family: var(--font-mono); }
+figure.dia svg .sm        { font-size: 11px; }
+figure.dia svg .xs        { font-size: 9.5px; }
+
+/* Text fills for <text> elements.
+   These MUST be classes, not fill="..." attributes: the `figure.dia svg text`
+   rule above is CSS, and CSS always beats an SVG presentation attribute — an
+   inline fill on a <text> is silently ignored. Class selectors outrank the bare
+   element selector, so these win. (Shapes are unaffected; the rule only targets
+   text, so fill="..." still works on rect/path/circle.) */
+figure.dia svg .muted     { fill: var(--dia-ink-soft); }
+figure.dia svg .t-hi      { fill: var(--dia-hi); }
+figure.dia svg .t-ok      { fill: var(--ok-bd); }
+figure.dia svg .t-bad     { fill: var(--verify-bd); }
+/* For labels sitting ON a saturated filled shape, where the theme ink would be
+   unreadable. Fixed white in both themes, because the shape under it is the
+   same saturated colour in both. */
+figure.dia svg .t-inv     { fill: #ffffff; }
+
+/* ---- Tables -------------------------------------------------------------- */
+.tbl-scroll { overflow-x: auto; margin: 1.6em 0; }
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+th, td {
+  text-align: left;
+  padding: 0.5rem 0.7rem;
+  border-bottom: 1px solid var(--rule);
+  vertical-align: top;
+}
+th {
+  font-weight: 650;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--rule-strong);
+  white-space: nowrap;
+}
+tbody tr:hover { background: var(--bg-sunken); }
+td code { font-size: 0.82em; }
+
+/* File-manifest table: path | new/modified | purpose */
+.manifest td:first-child { font-family: var(--font-mono); font-size: 0.78rem; white-space: nowrap; }
+.badge {
+  font-size: 0.62rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.06em; padding: 0.1rem 0.4rem; border-radius: 3px; white-space: nowrap;
+}
+.badge.new { background: var(--ok-bg); color: var(--ok-bd); border: 1px solid var(--ok-bd); }
+.badge.mod { background: var(--warn-bg); color: var(--warn-bd); border: 1px solid var(--warn-bd); }
+/* Curriculum status, used on index.html */
+.badge.done { background: var(--ok-bg); color: var(--ok-bd); border: 1px solid var(--ok-bd); }
+.badge.soon { background: var(--bg-sunken); color: var(--text-faint); border: 1px solid var(--rule-strong); }
+
+/* ---- Math ---------------------------------------------------------------- */
+/* KaTeX renders these when the CDN is reachable. When it is NOT, the raw TeX
+   stays visible — which is why every equation MUST also be stated in prose.
+   Never let an equation be the only carrier of a fact. */
+.eq {
+  margin: 1.4em 0;
+  padding: 0.9rem 1rem;
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  overflow-x: auto;
+  text-align: center;
+}
+.eq-plain {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  margin-top: 0.6rem;
+  padding-top: 0.6rem;
+  border-top: 1px dashed var(--rule-strong);
+  text-align: left;
+}
+.eq-plain::before {
+  content: "in plain text: ";
+  color: var(--text-faint);
+  font-family: var(--font-ui);
+  font-size: 0.72rem;
+}
+
+/* Worked numeric example — every formula gets one */
+.worked {
+  border: 1px solid var(--rule-strong);
+  border-radius: 9px;
+  padding: 1rem 1.2rem;
+  margin: 1.6em 0;
+  background: var(--bg-raised);
+}
+.worked > .label {
+  display: block;
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--accent);
+  margin-bottom: 0.5rem;
+}
+.worked > :last-child { margin-bottom: 0; }
+
+/* ---- Exercises ----------------------------------------------------------- */
+.exercise {
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 9px 9px 0;
+  padding: 1rem 1.2rem;
+  margin: 1.4em 0;
+  background: var(--bg-raised);
+}
+.exercise h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.98rem;
+}
+.exercise h3 .xnum {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--accent);
+  margin-right: 0.5em;
+}
+.difficulty {
+  font-family: var(--font-ui);
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-faint);
+  border: 1px solid var(--rule-strong);
+  border-radius: 3px;
+  padding: 0.05rem 0.35rem;
+  margin-left: 0.4em;
+  vertical-align: 0.15em;
+}
+.exercise details {
+  margin-top: 0.7rem;
+  border-top: 1px solid var(--rule);
+  padding-top: 0.6rem;
+}
+.exercise summary {
+  cursor: pointer;
+  font-family: var(--font-ui);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.exercise summary:hover { color: var(--accent-text); }
+.exercise details[open] summary { margin-bottom: 0.6rem; }
+
+/* ---- Pitfalls (symptom → cause → fix) ------------------------------------ */
+.pitfalls { margin: 1.5em 0; }
+.pitfall-item {
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  margin-bottom: 0.9rem;
+  overflow: hidden;
+}
+.pitfall-item > summary {
+  cursor: pointer;
+  padding: 0.7rem 1rem;
+  background: var(--bg-sunken);
+  font-family: var(--font-ui);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.pitfall-item > summary:hover { color: var(--accent-text); }
+.pitfall-item > summary .sym {
+  font-weight: 400;
+  color: var(--text-muted);
+  font-style: italic;
+}
+.pitfall-body { padding: 0.9rem 1rem; font-size: 0.94rem; }
+.pitfall-body > :first-child { margin-top: 0; }
+.pitfall-body > :last-child  { margin-bottom: 0; }
+.pitfall-body dt {
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+  margin-top: 0.7rem;
+}
+.pitfall-body dd { margin: 0.2rem 0 0; }
+
+/* ---- Recap / next -------------------------------------------------------- */
+.recap {
+  background: var(--ok-bg);
+  border: 1px solid var(--ok-bd);
+  border-radius: 9px;
+  padding: 1.1rem 1.25rem;
+  margin: 1.75rem 0;
+}
+.recap h2 { margin: 0 0 0.6rem; border: 0; padding: 0; font-size: 1.05rem; }
+.recap > :last-child { margin-bottom: 0; }
+
+/* ---- Further reading ----------------------------------------------------- */
+.reading { font-size: 0.92rem; }
+.reading li { margin-bottom: 0.6em; }
+.reading .src {
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+  margin-right: 0.4em;
+}
+
+/* ---- STATE block --------------------------------------------------------- */
+.state {
+  margin: 2.5em 0 1em;
+  border: 1px dashed var(--rule-strong);
+  border-radius: 9px;
+  background: var(--bg-sunken);
+  overflow: hidden;
+}
+.state > summary {
+  cursor: pointer;
+  padding: 0.6rem 1rem;
+  font-family: var(--font-ui);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-muted);
+}
+.state pre {
+  margin: 0;
+  padding: 0.9rem 1rem;
+  overflow-x: auto;
+  border-top: 1px solid var(--rule);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+  white-space: pre;
+}
+
+/* ---- Footer -------------------------------------------------------------- */
+.foot {
+  border-top: 1px solid var(--rule);
+  margin-top: 3rem;
+  padding: 1.5rem 0 3rem;
+  font-family: var(--font-ui);
+  font-size: 0.78rem;
+  color: var(--text-faint);
+}
+.foot a { color: var(--text-muted); }
+
+/* ---- Interactive widgets ------------------------------------------------- */
+.widget {
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  background: var(--bg-raised);
+  padding: 1rem;
+  margin: 2em 0;
+}
+.widget-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+  align-items: center;
+  margin-top: 0.8rem;
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+.widget-controls label { display: flex; align-items: center; gap: 0.4rem; }
+.widget-controls input[type="range"] { accent-color: var(--accent); }
+.widget-readout {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--text);
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 0.1rem 0.4rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Print --------------------------------------------------------------- */
+@media print {
+  .masthead, .lesson-nav, .theme-toggle { display: none; }
+  body { background: #fff; color: #000; font-size: 11pt; }
+  .listing { break-inside: avoid; }
+  figure.dia { break-inside: avoid; }
+  a::after { content: " (" attr(href) ")"; font-size: 0.7em; color: #666; }
+}
+</style>
+<!-- SHARED-CSS:END -->
+</head>
+<body>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <a class="course" href="../index.html">Build a Professional 3D Game Engine</a>
+    <span class="spacer"></span>
+    <a href="../index.html">Contents</a>
+    <a href="../conventions.html">Conventions</a>
+    <a href="../cpp-style.html">C++ Style</a>
+    <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Toggle colour theme">Theme</button>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="01-04-fixed-timestep.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">1.4 — The Fixed Timestep with Interpolation, Derived</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="01-06-colour.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">1.6 — Colour, and an Honest Teaser of sRGB</span>
+    </a>
+  </nav>
+
+  <!-- ================= 1. HEADER BLOCK ================= -->
+  <div class="lesson-head">
+    <div class="eyebrow">Module 1 — The Loop, the Pixel, and Time · Lesson 1.5</div>
+    <h1>The Framebuffer: Your First Owned Pixels</h1>
+    <p class="deck">
+      Every pixel on screen so far has been SDL's doing. We asked for a rectangle and one appeared,
+      by means we never examined. That has to end here, because you cannot build a rasterizer on top
+      of a function that already draws the shape for you. Today we allocate a block of memory, decide
+      what every byte in it means, write into it by hand, and hand the result to the GPU. From this
+      lesson to the end of Module 3, everything you see is bytes you wrote.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 4 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd><a href="01-04-fixed-timestep.html">1.4 — The Fixed Timestep</a>, <a href="00-06-headers-and-debugger.html">0.6 — Reading Headers &amp; the Debugger</a></dd>
+
+        <dt>Files</dt>
+        <dd><code>src/gfx/framebuffer.hpp</code> (new), <code>src/gfx/framebuffer.cpp</code> (new), <code>src/main.cpp</code> (modified), <code>CMakeLists.txt</code> (modified)</dd>
+
+        <dt>Milestone</dt>
+        <dd>A 320×180 image you own, drawn pixel by pixel, scaled crisply to the window — with an on-screen measurement of the two ways to fill it.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…explain why a 2-D image lives in 1-D memory, and derive <code>index = y × width + x</code> rather than memorise it.</li>
+      <li>…predict exactly what a stray x-coordinate does to the picture, and why it is not an error.</li>
+      <li>…say what a 32-bit pixel contains, and navigate SDL's <code>ARGB8888</code>-versus-<code>RGBA32</code> naming without guessing.</li>
+      <li>…present a CPU buffer through a streaming texture, and explain why you must copy row by row rather than in one <code>memcpy</code>.</li>
+      <li>…write both a safe per-pixel API and a fast row-pointer path, and justify having both.</li>
+      <li>…measure the difference instead of assuming it — and recognise when your instrument is louder than the thing you are measuring.</li>
+    </ul>
+  </section>
+
+  <details class="toc" open>
+    <summary>Contents</summary>
+    <ol>
+      <li><a href="#problem">The Problem</a></li>
+      <li><a href="#intuition">Building Intuition</a>
+        <ol>
+          <li><a href="#line">Memory is a line; an image is an agreement</a></li>
+          <li><a href="#folding">Folding the line into a rectangle</a></li>
+        </ol>
+      </li>
+      <li><a href="#theory">The Theory</a>
+        <ol>
+          <li><a href="#index">The index formula</a></li>
+          <li><a href="#wrap">When x leaves the row</a></li>
+          <li><a href="#bits">What a pixel actually is</a></li>
+          <li><a href="#present">Getting it onto the screen</a></li>
+          <li><a href="#measure">Two ways to write a pixel, measured</a></li>
+        </ol>
+      </li>
+      <li><a href="#implementation">Implementation: the framebuffer</a></li>
+      <li><a href="#listings">Complete Code Listings</a></li>
+      <li><a href="#build">Build &amp; Run</a></li>
+      <li><a href="#pitfalls">Common Pitfalls &amp; Debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; Next</a></li>
+      <li><a href="#reading">Further Reading</a></li>
+    </ol>
+  </details>
+
+  <!-- ================= 2. THE PROBLEM ================= -->
+  <h2 id="problem"><span class="num">1</span>The Problem</h2>
+
+  <p>
+    Here is the line that has been drawing our boxes since Lesson 1.2:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">what we have been doing</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">SDL_RenderFillRect(renderer, &amp;box);</code></pre>
+  </figure>
+
+  <p>
+    It works, and it is a dead end. Ask the questions the next three modules depend on and this
+    function has no answers: <em>which</em> pixels did it touch? What value did it write into each?
+    Where is that memory? How would I draw a triangle instead — or interpolate a colour across one,
+    or reject a pixel because something nearer already occupies it?
+  </p>
+
+  <p>
+    Every one of those questions is about the individual pixel, and
+    <code>SDL_RenderFillRect</code>'s entire purpose is to spare you from thinking about individual
+    pixels. It is a fine tool for drawing a rectangle and a useless foundation for a renderer,
+    because a renderer is precisely a machine for deciding what colour each pixel should be.
+  </p>
+
+  <p>
+    So we take over. The plan is smaller than it sounds:
+  </p>
+
+  <ol>
+    <li>Allocate a block of memory big enough for one image.</li>
+    <li>Agree on what each part of it means.</li>
+    <li>Write into it by hand.</li>
+    <li>Hand the finished block to the GPU as a texture, once per frame.</li>
+  </ol>
+
+  <p>
+    Step 4 still uses SDL, and will keep doing so until Module 4 — we are not writing a display
+    driver. But steps 1 to 3 are entirely ours, and the whole software rasterizer of Modules 2 and 3
+    is built out of nothing but those three steps repeated with increasing cleverness.
+  </p>
+
+  <div class="callout note">
+    <span class="label">Why 320×180, when the window is 1280×720</span>
+    <p style="margin-bottom:0">
+      Our framebuffer will be deliberately small, and stretched over the window on presentation.
+      Partly that is pedagogy: at exactly 4× magnification every pixel you write becomes a visible
+      4×4 block, so <code>put_pixel</code> has consequences you can see from across the room. But it
+      is also a real technique — rendering at a fixed internal resolution and scaling to the display
+      is how a great many games ship, from pixel-art indies to console titles using dynamic
+      resolution to hold a frame budget. A pleasant side effect: window resizing needs no code at
+      all, because the framebuffer's size no longer depends on the window's.
+    </p>
+  </div>
+
+  <!-- ================= 3. BUILDING INTUITION ================= -->
+  <h2 id="intuition"><span class="num">2</span>Building Intuition</h2>
+
+  <h3 id="line">2.1 Memory is a line; an image is an agreement</h3>
+
+  <p>
+    A computer's memory is one-dimensional. It is an enormous row of numbered boxes, and the number
+    of a box — its address — is a single integer. There is no such thing as memory address
+    <em>(3, 7)</em>. Nothing in the hardware knows what a rectangle is.
+  </p>
+
+  <p>
+    An image, meanwhile, is two-dimensional by nature. So somewhere between the two, somebody has to
+    decide how a rectangle is going to be laid down along a line. That decision is a
+    <strong>convention</strong> — a shared agreement between the code that writes pixels and the code
+    that reads them — and it is not enforced by anything. Get the two ends of the agreement to
+    disagree and the machine will not complain; it will just show you a mangled picture.
+  </p>
+
+  <p>
+    The convention nearly everything uses is the same one you use to read this page: start at the top
+    left, go along the first row to its end, then drop to the start of the next row and repeat. Laid
+    out along a line, an image is simply its rows, one after another, nose to tail. That is called
+    <strong>row-major order</strong>, and it is the only structural idea in this lesson.
+  </p>
+
+  <h3 id="folding">2.2 Folding the line into a rectangle</h3>
+
+  <p>
+    Take a strip of memory 40 boxes long and agree that the image is 8 wide. Then the strip folds
+    into a grid: boxes 0–7 are the top row, 8–15 the next, and so on, five rows in all. Figure 1 is
+    that fold, drawn.
+  </p>
+
+  <figure class="dia bleed">
+    <svg viewBox="0 0 660 400" role="img" aria-labelledby="f1-t f1-d">
+      <title id="f1-t">An 8 by 5 image and the 40-element line of memory it is stored in</title>
+      <desc id="f1-d">A grid eight cells wide and five tall, with each cell labelled by its position
+        in memory: the top row holds 0 to 7, the second row 8 to 15, and so on to 39. Below it the
+        same forty cells are drawn as one continuous strip, showing that the rows are stored end to
+        end. The cell at x equals 3, y equals 2 is highlighted in both, at position 19, because
+        2 times 8 plus 3 is 19.</desc>
+
+      <text x="14" y="24" class="sm" font-weight="700">The image, as we agree to see it — width = 8</text>
+
+      <g class="fill-soft" stroke="var(--dia-ink-soft)" stroke-width="1">
+        <rect x="60" y="44" width="368" height="230" fill="none"/>
+      </g>
+      <g stroke="var(--dia-grid)" stroke-width="1">
+        <line x1="106" y1="44" x2="106" y2="274"/><line x1="152" y1="44" x2="152" y2="274"/>
+        <line x1="198" y1="44" x2="198" y2="274"/><line x1="244" y1="44" x2="244" y2="274"/>
+        <line x1="290" y1="44" x2="290" y2="274"/><line x1="336" y1="44" x2="336" y2="274"/>
+        <line x1="382" y1="44" x2="382" y2="274"/>
+        <line x1="60" y1="90" x2="428" y2="90"/><line x1="60" y1="136" x2="428" y2="136"/>
+        <line x1="60" y1="182" x2="428" y2="182"/><line x1="60" y1="228" x2="428" y2="228"/>
+      </g>
+      <rect x="198" y="136" width="46" height="46" fill="var(--dia-hi)" opacity="0.85"/>
+
+      <g class="xs mono muted">
+        <text x="83" y="72" text-anchor="middle">0</text><text x="129" y="72" text-anchor="middle">1</text>
+        <text x="175" y="72" text-anchor="middle">2</text><text x="221" y="72" text-anchor="middle">3</text>
+        <text x="267" y="72" text-anchor="middle">4</text><text x="313" y="72" text-anchor="middle">5</text>
+        <text x="359" y="72" text-anchor="middle">6</text><text x="405" y="72" text-anchor="middle">7</text>
+
+        <text x="83" y="118" text-anchor="middle">8</text><text x="129" y="118" text-anchor="middle">9</text>
+        <text x="175" y="118" text-anchor="middle">10</text><text x="221" y="118" text-anchor="middle">11</text>
+        <text x="267" y="118" text-anchor="middle">12</text><text x="313" y="118" text-anchor="middle">13</text>
+        <text x="359" y="118" text-anchor="middle">14</text><text x="405" y="118" text-anchor="middle">15</text>
+
+        <text x="83" y="164" text-anchor="middle">16</text><text x="129" y="164" text-anchor="middle">17</text>
+        <text x="175" y="164" text-anchor="middle">18</text>
+        <text x="267" y="164" text-anchor="middle">20</text><text x="313" y="164" text-anchor="middle">21</text>
+        <text x="359" y="164" text-anchor="middle">22</text><text x="405" y="164" text-anchor="middle">23</text>
+
+        <text x="83" y="210" text-anchor="middle">24</text><text x="129" y="210" text-anchor="middle">25</text>
+        <text x="175" y="210" text-anchor="middle">26</text><text x="221" y="210" text-anchor="middle">27</text>
+        <text x="267" y="210" text-anchor="middle">28</text><text x="313" y="210" text-anchor="middle">29</text>
+        <text x="359" y="210" text-anchor="middle">30</text><text x="405" y="210" text-anchor="middle">31</text>
+
+        <text x="83" y="256" text-anchor="middle">32</text><text x="129" y="256" text-anchor="middle">33</text>
+        <text x="175" y="256" text-anchor="middle">34</text><text x="221" y="256" text-anchor="middle">35</text>
+        <text x="267" y="256" text-anchor="middle">36</text><text x="313" y="256" text-anchor="middle">37</text>
+        <text x="359" y="256" text-anchor="middle">38</text><text x="405" y="256" text-anchor="middle">39</text>
+      </g>
+      <text x="221" y="164" text-anchor="middle" class="xs mono t-inv" font-weight="700">19</text>
+
+      <g class="xs muted">
+        <text x="52" y="72" text-anchor="end">y = 0</text>
+        <text x="52" y="118" text-anchor="end">1</text>
+        <text x="52" y="164" text-anchor="end">2</text>
+        <text x="52" y="210" text-anchor="end">3</text>
+        <text x="52" y="256" text-anchor="end">4</text>
+        <text x="83" y="38" text-anchor="middle">x = 0</text>
+        <text x="405" y="38" text-anchor="middle">7</text>
+      </g>
+
+      <text x="446" y="150" class="xs t-hi" font-weight="700">(x=3, y=2)</text>
+      <text x="446" y="166" class="xs mono">2 × 8 + 3</text>
+      <text x="446" y="182" class="xs mono t-hi" font-weight="700">= 19</text>
+
+      <!-- the strip -->
+      <text x="14" y="304" class="sm" font-weight="700">The memory, as it actually is — one line</text>
+      <g>
+        <rect x="60" y="326" width="536" height="26" rx="3" class="fill-soft" stroke="var(--dia-ink-soft)" stroke-width="1"/>
+        <rect x="60" y="326" width="107.2" height="26" fill="var(--note-bd)" opacity="0.30"/>
+        <rect x="274.4" y="326" width="107.2" height="26" fill="var(--note-bd)" opacity="0.30"/>
+        <rect x="488.8" y="326" width="107.2" height="26" fill="var(--note-bd)" opacity="0.30"/>
+        <rect x="314.6" y="326" width="13.4" height="26" fill="var(--dia-hi)"/>
+      </g>
+      <g class="xs muted">
+        <text x="113" y="368" text-anchor="middle">row 0</text>
+        <text x="221" y="368" text-anchor="middle">row 1</text>
+        <text x="328" y="368" text-anchor="middle">row 2</text>
+        <text x="435" y="368" text-anchor="middle">row 3</text>
+        <text x="542" y="368" text-anchor="middle">row 4</text>
+      </g>
+      <text x="60" y="320" class="xs muted">0</text>
+      <text x="596" y="320" class="xs muted" text-anchor="end">39</text>
+      <text x="321" y="392" class="xs t-hi" text-anchor="middle" font-weight="700">index 19 — the same box, reached by counting instead of by pointing</text>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 1.</span> The grid and the strip are the same forty boxes. "Two
+      dimensions" is a way of talking about the strip, not a property of it — which is why the
+      arithmetic that converts between them has to be exactly right, and why nothing catches you when
+      it is not.
+    </figcaption>
+  </figure>
+
+  <p>
+    Play with the mapping below: click any cell to see where it lands in the strip, and drag the
+    width slider to watch the same line of memory refold into differently shaped images.
+  </p>
+
+  <div class="widget" id="fb-widget">
+    <svg id="fb-svg" viewBox="0 0 620 280" role="img" aria-label="Interactive: click a cell to see its one-dimensional index; change the width to refold the same memory">
+      <g id="fb-grid"></g>
+      <g id="fb-strip"></g>
+      <g id="fb-labels"></g>
+    </svg>
+    <div class="widget-controls">
+      <label for="fb-width">width
+        <input type="range" id="fb-width" min="0" max="3" value="2" step="1">
+      </label>
+      <span class="widget-readout" id="fb-w-out">width = 8</span>
+      <span class="widget-readout" id="fb-calc">(3, 2) → 2 × 8 + 3 = 19</span>
+    </div>
+    <p style="margin:0.7rem 0 0; font-size:0.82rem; color:var(--text-muted)">
+      The strip below the grid is always the same 24 boxes of memory. Only the agreed width changes,
+      and with it the shape of the picture those boxes represent.
+    </p>
+  </div>
+
+  <!-- ================= 4. THE THEORY ================= -->
+  <h2 id="theory"><span class="num">3</span>The Theory</h2>
+
+  <h3 id="index">3.1 The index formula</h3>
+
+  <p>
+    Derive it rather than remember it. To reach the pixel at <code>(x, y)</code>, count from the
+    start of the strip:
+  </p>
+
+  <ul>
+    <li>Every <em>complete</em> row above yours contributes <code>width</code> pixels. There are
+      <code>y</code> of those rows, so they take up <code>y × width</code> boxes.</li>
+    <li>Within your own row you then step <code>x</code> boxes to the right.</li>
+  </ul>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">the whole of image addressing</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">index = y * width + x;</code></pre>
+  </figure>
+
+  <div class="worked">
+    <span class="label">Worked example — pushing real numbers through</span>
+    <p>An 8 × 5 image, as in Figure 1:</p>
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>Pixel</th><th>Arithmetic</th><th>Index</th><th>Check</th></tr></thead>
+        <tbody>
+          <tr><td><code>(0, 0)</code></td><td><code>0 × 8 + 0</code></td><td><strong>0</strong></td><td>First box. Top-left.</td></tr>
+          <tr><td><code>(7, 0)</code></td><td><code>0 × 8 + 7</code></td><td><strong>7</strong></td><td>Last box of the first row.</td></tr>
+          <tr><td><code>(0, 1)</code></td><td><code>1 × 8 + 0</code></td><td><strong>8</strong></td><td>The next box along — rows really are nose to tail.</td></tr>
+          <tr><td><code>(3, 2)</code></td><td><code>2 × 8 + 3</code></td><td><strong>19</strong></td><td>The highlighted cell.</td></tr>
+          <tr><td><code>(7, 4)</code></td><td><code>4 × 8 + 7</code></td><td><strong>39</strong></td><td>Last box. <code>8 × 5 − 1</code>, as it must be.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="margin-bottom:0">
+      That last row is the check worth doing whenever you write one of these: the bottom-right pixel
+      must land on the very last element, <code>width × height − 1</code>. If it lands anywhere else,
+      the formula is wrong and every image you draw will be sheared.
+    </p>
+  </div>
+
+  <p>
+    Two consequences follow immediately, and both matter later.
+  </p>
+
+  <p>
+    <strong>Moving one pixel right adds 1 to the index; moving one pixel down adds
+    <code>width</code>.</strong> Horizontal neighbours are adjacent in memory. Vertical neighbours are
+    a whole row apart. Those two facts are why §<a href="#measure">3.5</a>'s measurement comes out the
+    way it does, and they shape every inner loop in the rasterizer to come.
+  </p>
+
+  <p>
+    <strong>Nothing in the formula knows the width is a boundary.</strong> It happily accepts an
+    <code>x</code> of 8 in an 8-wide image and returns an index that is perfectly valid memory — just
+    not the pixel you meant. That is the next section.
+  </p>
+
+  <h3 id="wrap">3.2 When x leaves the row</h3>
+
+  <p>
+    Suppose you draw a 4-pixel-wide horizontal run starting at <code>x = 6</code> on row 2 of our
+    8-wide image, and you do it without checking bounds.
+  </p>
+
+  <div class="worked">
+    <span class="label">Worked example — the wrap</span>
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>You asked for</th><th><code>y × width + x</code></th><th>Index</th><th>Which pixel that actually is</th></tr></thead>
+        <tbody>
+          <tr><td><code>(6, 2)</code></td><td><code>2 × 8 + 6</code></td><td>22</td><td><code>(6, 2)</code> ✓</td></tr>
+          <tr><td><code>(7, 2)</code></td><td><code>2 × 8 + 7</code></td><td>23</td><td><code>(7, 2)</code> ✓</td></tr>
+          <tr><td><code>(8, 2)</code></td><td><code>2 × 8 + 8</code></td><td>24</td><td><strong><code>(0, 3)</code></strong> — first pixel of the next row</td></tr>
+          <tr><td><code>(9, 2)</code></td><td><code>2 × 8 + 9</code></td><td>25</td><td><strong><code>(1, 3)</code></strong></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="margin-bottom:0">
+      No crash. No warning. Index 24 is a real pixel inside the buffer, and writing to it is a
+      perfectly legal thing to do — it is simply the wrong pixel. Your rectangle's right-hand edge
+      has reappeared on the far left, one row down.
+    </p>
+  </div>
+
+  <figure class="dia bleed">
+    <svg viewBox="0 0 660 300" role="img" aria-labelledby="f2-t f2-d">
+      <title id="f2-t">A four-pixel run drawn past the right edge wraps onto the next row</title>
+      <desc id="f2-d">In an eight-wide image, a horizontal run of four pixels starting at x equals
+        six covers the last two cells of row two correctly, but its final two pixels land at indices
+        24 and 25, which are the first two cells of row three. The picture shows the intended run
+        broken in half and reappearing at the opposite edge one row lower. A second panel shows a
+        larger example: a rectangle drawn past the right edge of a real image produces diagonal
+        candy-striping across the whole picture.</desc>
+
+      <text x="14" y="24" class="sm t-bad" font-weight="700">✗ Unchecked: a run from x = 6, width 4, on row 2</text>
+
+      <g stroke="var(--dia-grid)" stroke-width="1">
+        <rect x="60" y="40" width="296" height="185" fill="none" stroke="var(--dia-ink-soft)"/>
+        <line x1="97" y1="40" x2="97" y2="225"/><line x1="134" y1="40" x2="134" y2="225"/>
+        <line x1="171" y1="40" x2="171" y2="225"/><line x1="208" y1="40" x2="208" y2="225"/>
+        <line x1="245" y1="40" x2="245" y2="225"/><line x1="282" y1="40" x2="282" y2="225"/>
+        <line x1="319" y1="40" x2="319" y2="225"/>
+        <line x1="60" y1="77" x2="356" y2="77"/><line x1="60" y1="114" x2="356" y2="114"/>
+        <line x1="60" y1="151" x2="356" y2="151"/><line x1="60" y1="188" x2="356" y2="188"/>
+      </g>
+      <!-- correct part: row 2 (y=114..151), x=6,7 -->
+      <rect x="282" y="114" width="74" height="37" fill="var(--ok-bd)" opacity="0.85"/>
+      <!-- wrapped part: row 3, x=0,1 -->
+      <rect x="60" y="151" width="74" height="37" fill="var(--verify-bd)" opacity="0.85"/>
+
+      <g class="xs mono t-inv" font-weight="700">
+        <text x="300" y="137" text-anchor="middle">22</text>
+        <text x="337" y="137" text-anchor="middle">23</text>
+        <text x="78" y="174" text-anchor="middle">24</text>
+        <text x="115" y="174" text-anchor="middle">25</text>
+      </g>
+      <g class="xs muted">
+        <text x="52" y="63" text-anchor="end">y=0</text>
+        <text x="52" y="100" text-anchor="end">1</text>
+        <text x="52" y="137" text-anchor="end">2</text>
+        <text x="52" y="174" text-anchor="end">3</text>
+        <text x="52" y="211" text-anchor="end">4</text>
+      </g>
+      <text x="356" y="106" class="xs t-ok" text-anchor="end" font-weight="700">these 2 fit</text>
+      <text x="150" y="211" class="xs t-bad" font-weight="700">…and these 2 wrapped</text>
+
+      <!-- right panel: what it looks like at scale -->
+      <text x="410" y="24" class="sm t-bad" font-weight="700">At real size</text>
+      <rect x="410" y="40" width="230" height="130" class="fill-soft" stroke="var(--dia-ink-soft)" stroke-width="1"/>
+      <g fill="var(--verify-bd)" opacity="0.8">
+        <rect x="410" y="52" width="40" height="9"/>
+        <rect x="410" y="70" width="40" height="9"/>
+        <rect x="410" y="88" width="40" height="9"/>
+        <rect x="410" y="106" width="40" height="9"/>
+        <rect x="410" y="124" width="40" height="9"/>
+        <rect x="410" y="142" width="40" height="9"/>
+        <rect x="600" y="43" width="40" height="9"/>
+        <rect x="600" y="61" width="40" height="9"/>
+        <rect x="600" y="79" width="40" height="9"/>
+        <rect x="600" y="97" width="40" height="9"/>
+        <rect x="600" y="115" width="40" height="9"/>
+        <rect x="600" y="133" width="40" height="9"/>
+      </g>
+      <text x="525" y="190" class="xs t-bad" text-anchor="middle" font-weight="700">the classic candy-stripe</text>
+      <text x="525" y="206" class="xs muted" text-anchor="middle">every row leaks a little onto the next</text>
+
+      <text x="60" y="255" class="xs">Index 24 is <tspan font-weight="700">valid memory</tspan> — inside the buffer, safely writable, and the wrong pixel. Nothing</text>
+      <text x="60" y="271" class="xs">reports an error, because from memory's point of view no error occurred: you asked for box 24 and got box 24.</text>
+      <text x="60" y="291" class="xs t-ok" font-weight="700">This is why put_pixel checks bounds — and why fill_rect clips before it writes rather than after.</text>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 2.</span> The bug that teaches the convention. Because
+      two-dimensionality is our agreement rather than the machine's, a coordinate that breaks the
+      agreement produces a picture that is wrong rather than a program that stops. Learn to recognise
+      this stripe: it means an x-coordinate escaped its row.
+    </figcaption>
+  </figure>
+
+  <p>
+    Worth noticing what a <em>lucky</em> version of this bug looks like. If <code>x</code> strays far
+    enough — or <code>y</code> does — the index leaves the buffer entirely, and now you are writing
+    over whatever happens to live after your pixels in memory. That is undefined behaviour, and its
+    symptoms range from a corrupted variable elsewhere in the program to an immediate crash. The
+    crash is the lucky outcome. The stripe is the unlucky one, because it can survive review.
+  </p>
+
+  <h3 id="bits">3.3 What a pixel actually is</h3>
+
+  <p>
+    We have been saying "pixel" as though it were a colour. In memory it is 32 bits — four bytes —
+    holding four 8-bit numbers: red, green, blue, and alpha (opacity). Eight bits gives each channel
+    256 levels, and 256⁴ ≈ 4.3 billion combinations, which is why 32-bit colour became the default
+    and stayed there.
+  </p>
+
+  <p>
+    The interesting question is the <em>order</em>, and this is where a great deal of confusion lives.
+    Packing our four numbers into one <code>Uint32</code>:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/framebuffer.hpp — packing a pixel</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">[[nodiscard]] constexpr Uint32 pack_argb(Uint8 r, Uint8 g, Uint8 b, Uint8 a = 255)
+{
+    return (static_cast&lt;Uint32&gt;(a) &lt;&lt; 24)
+         | (static_cast&lt;Uint32&gt;(r) &lt;&lt; 16)
+         | (static_cast&lt;Uint32&gt;(g) &lt;&lt; 8)
+         | static_cast&lt;Uint32&gt;(b);
+}</code></pre>
+  </figure>
+
+  <p>
+    Each component is shifted into its own byte of the 32-bit word: alpha into the top eight bits,
+    then red, then green, with blue left at the bottom. The result reads as
+    <code>0xAARRGGBB</code> — which is exactly how you would write the colour by hand.
+  </p>
+
+  <div class="worked">
+    <span class="label">Worked example — packing, verified by running it</span>
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>Call</th><th>Result</th><th>Reading the bytes</th></tr></thead>
+        <tbody>
+          <tr><td><code>pack_argb(0x12, 0x34, 0x56, 0x78)</code></td><td><code>0x78123456</code></td><td>a=0x78, r=0x12, g=0x34, b=0x56</td></tr>
+          <tr><td><code>pack_argb(255, 0, 0)</code></td><td><code>0xFFFF0000</code></td><td>Opaque red</td></tr>
+          <tr><td><code>pack_argb(0, 0, 255)</code></td><td><code>0xFF0000FF</code></td><td>Opaque blue</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="margin-bottom:0">
+      Note how much less confusing <code>0xFFFF0000</code> is than "the red one" once you can read the
+      byte positions directly. Getting fluent at that is worth ten minutes with a debugger.
+    </p>
+  </div>
+
+  <figure class="dia bleed">
+    <svg viewBox="0 0 660 275" role="img" aria-labelledby="f3-t f3-d">
+      <title id="f3-t">One pixel as a packed 32-bit integer and as four bytes in memory</title>
+      <desc id="f3-d">The upper bar shows a 32-bit integer divided into four 8-bit fields: alpha in
+        bits 31 to 24, red in 23 to 16, green in 15 to 8, blue in 7 to 0, spelling ARGB from most
+        significant to least. The lower bar shows the same value's four bytes as they are laid out in
+        memory on a little-endian machine, which is the reverse order: blue, green, red, alpha. SDL
+        calls the first view ARGB8888 and the second view BGRA32, and they are the same format.</desc>
+
+      <text x="14" y="24" class="sm" font-weight="700">As a 32-bit integer — this is what our code manipulates</text>
+      <g>
+        <rect x="60" y="40" width="140" height="40" rx="3" fill="var(--dia-fill)" stroke="var(--dia-ink-soft)" stroke-width="1"/>
+        <rect x="200" y="40" width="140" height="40" rx="3" fill="var(--axis-x)" opacity="0.75"/>
+        <rect x="340" y="40" width="140" height="40" rx="3" fill="var(--axis-y)" opacity="0.75"/>
+        <rect x="480" y="40" width="140" height="40" rx="3" fill="var(--axis-z)" opacity="0.75"/>
+      </g>
+      <g class="sm mono" font-weight="700">
+        <text x="130" y="66" text-anchor="middle">A</text>
+        <text x="270" y="66" text-anchor="middle" class="t-inv">R</text>
+        <text x="410" y="66" text-anchor="middle" class="t-inv">G</text>
+        <text x="550" y="66" text-anchor="middle" class="t-inv">B</text>
+      </g>
+      <g class="xs muted">
+        <text x="130" y="96" text-anchor="middle">bits 31–24</text>
+        <text x="270" y="96" text-anchor="middle">23–16</text>
+        <text x="410" y="96" text-anchor="middle">15–8</text>
+        <text x="550" y="96" text-anchor="middle">7–0</text>
+      </g>
+      <text x="60" y="34" class="xs muted">most significant</text>
+      <text x="620" y="34" class="xs muted" text-anchor="end">least significant</text>
+      <text x="60" y="120" class="xs mono t-hi" font-weight="700">0xFF804020  →  a=255  r=128  g=64  b=32</text>
+      <text x="360" y="120" class="xs t-ok" font-weight="700">SDL calls this ARGB8888</text>
+
+      <!-- memory view -->
+      <text x="14" y="164" class="sm" font-weight="700">As four bytes in memory, on a little-endian CPU</text>
+      <g>
+        <rect x="60" y="180" width="140" height="40" rx="3" fill="var(--axis-z)" opacity="0.75"/>
+        <rect x="200" y="180" width="140" height="40" rx="3" fill="var(--axis-y)" opacity="0.75"/>
+        <rect x="340" y="180" width="140" height="40" rx="3" fill="var(--axis-x)" opacity="0.75"/>
+        <rect x="480" y="180" width="140" height="40" rx="3" fill="var(--dia-fill)" stroke="var(--dia-ink-soft)" stroke-width="1"/>
+      </g>
+      <g class="sm mono" font-weight="700">
+        <text x="130" y="206" text-anchor="middle" class="t-inv">B</text>
+        <text x="270" y="206" text-anchor="middle" class="t-inv">G</text>
+        <text x="410" y="206" text-anchor="middle" class="t-inv">R</text>
+        <text x="550" y="206" text-anchor="middle">A</text>
+      </g>
+      <g class="xs muted">
+        <text x="130" y="236" text-anchor="middle">byte 0</text>
+        <text x="270" y="236" text-anchor="middle">byte 1</text>
+        <text x="410" y="236" text-anchor="middle">byte 2</text>
+        <text x="550" y="236" text-anchor="middle">byte 3</text>
+      </g>
+      <text x="60" y="258" class="xs t-bad" font-weight="700">The order is reversed — and SDL calls this exact same format BGRA32.</text>
+      <text x="60" y="272" class="xs muted">Same bits, same pixel. Two names, because they answer two different questions.</text>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 3.</span> Little-endian machines store the least significant byte
+      first, so the byte order in memory is the mirror image of the bit order in the integer. Neither
+      view is more correct; you simply have to know which one a given name is talking about.
+    </figcaption>
+  </figure>
+
+  <p>
+    SDL's format names encode which question they answer, and the header spells the rule out:
+  </p>
+
+  <ul>
+    <li><strong>Names with a bit count per component</strong> — <code>ARGB8888</code>,
+      <code>XRGB1555</code> — describe a value <em>packed into a native-endianness integer</em>, most
+      significant component first. Use these when what matters is the meaning of each bit position.</li>
+    <li><strong>Names with a single total bit count</strong> — <code>RGBA32</code>,
+      <code>RGB24</code> — describe the <em>order of bytes in memory</em>, and are
+      platform-independent. Use these when what matters is the byte layout.</li>
+  </ul>
+
+  <p>
+    The two views disagree on little-endian hardware, and SDL's own header makes that concrete in a
+    way worth seeing:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">SDL3/SDL_pixels.h — verified at release-3.4.12</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">/* Aliases for RGBA byte arrays of color data, for the current platform */
+#if SDL_BYTEORDER == SDL_BIG_ENDIAN
+SDL_PIXELFORMAT_RGBA32 = SDL_PIXELFORMAT_RGBA8888,
+SDL_PIXELFORMAT_ARGB32 = SDL_PIXELFORMAT_ARGB8888,
+/* … */
+#else
+SDL_PIXELFORMAT_RGBA32 = SDL_PIXELFORMAT_ABGR8888,
+SDL_PIXELFORMAT_ARGB32 = SDL_PIXELFORMAT_BGRA8888,
+/* … */
+#endif</code></pre>
+  </figure>
+
+  <p>
+    On the machine you are almost certainly reading this on, <code>RGBA32</code> <em>is</em>
+    <code>ABGR8888</code>. That looks like a typo and is not: the two names describe the same bytes
+    from opposite ends.
+  </p>
+
+  <div class="callout ok">
+    <span class="label">How we sidestep the whole problem</span>
+    <p style="margin-bottom:0">
+      Our framebuffer stores <code>Uint32</code> values and we build them with shifts, never by
+      writing individual bytes. That means we are working purely in the packed-integer view, so we
+      ask SDL for <code>SDL_PIXELFORMAT_ARGB8888</code> — the packed-integer name — and the two match
+      by construction on every platform, big-endian included. Endianness only becomes your problem
+      the moment you reach for a <code>Uint8*</code> and start writing bytes, which is exactly what
+      an image file loader has to do. Module 6's <code>stb_image</code> integration meets that
+      properly; until then we simply never open the box.
+    </p>
+  </div>
+
+  <h3 id="present">3.4 Getting it onto the screen</h3>
+
+  <p>
+    Our buffer lives in ordinary CPU memory. The display is driven by the GPU. Bridging them takes
+    three steps, once per frame.
+  </p>
+
+  <figure class="dia bleed">
+    <svg viewBox="0 0 660 250" role="img" aria-labelledby="f4-t f4-d">
+      <title id="f4-t">The path from CPU framebuffer to window</title>
+      <desc id="f4-d">Our 320 by 180 pixel buffer in CPU memory is copied row by row into a locked
+        streaming texture on the GPU, then drawn to the window scaled up four times with
+        nearest-neighbour filtering. The copy is done row by row because the texture's pitch may be
+        larger than the image width, with padding at the end of each row.</desc>
+
+      <defs>
+        <marker id="p4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+      </defs>
+
+      <rect x="20" y="60" width="150" height="76" rx="7" fill="none" stroke="var(--ok-bd)" stroke-width="1.6"/>
+      <text x="95" y="84" class="xs mono" text-anchor="middle" font-weight="700">framebuffer</text>
+      <text x="95" y="100" class="xs muted" text-anchor="middle">320 × 180 Uint32</text>
+      <text x="95" y="114" class="xs muted" text-anchor="middle">225 KB of CPU RAM</text>
+      <text x="95" y="128" class="xs t-ok" text-anchor="middle" font-weight="700">ours</text>
+
+      <line x1="172" y1="98" x2="228" y2="98" class="ink" stroke-width="1.5" marker-end="url(#p4)"/>
+      <text x="200" y="88" class="xs muted" text-anchor="middle">lock</text>
+
+      <rect x="230" y="60" width="170" height="76" rx="7" fill="none" stroke="var(--note-bd)" stroke-width="1.6"/>
+      <text x="315" y="84" class="xs mono" text-anchor="middle" font-weight="700">streaming texture</text>
+      <text x="315" y="100" class="xs muted" text-anchor="middle">write-only while locked</text>
+      <text x="315" y="114" class="xs muted" text-anchor="middle">old contents undefined</text>
+      <text x="315" y="128" class="xs t-bad" text-anchor="middle" font-weight="700">pitch may ≠ width × 4</text>
+
+      <line x1="402" y1="98" x2="458" y2="98" class="ink" stroke-width="1.5" marker-end="url(#p4)"/>
+      <text x="430" y="88" class="xs muted" text-anchor="middle">draw</text>
+
+      <rect x="460" y="60" width="170" height="76" rx="7" fill="none" stroke="var(--dia-ink-soft)" stroke-width="1.6"/>
+      <text x="545" y="84" class="xs mono" text-anchor="middle" font-weight="700">window</text>
+      <text x="545" y="100" class="xs muted" text-anchor="middle">1280 × 720</text>
+      <text x="545" y="114" class="xs muted" text-anchor="middle">4× nearest-neighbour</text>
+      <text x="545" y="128" class="xs muted" text-anchor="middle">one pixel → a 4×4 block</text>
+
+      <!-- pitch detail -->
+      <text x="20" y="176" class="sm" font-weight="700">Why the copy goes row by row</text>
+      <g>
+        <rect x="200" y="188" width="240" height="16" rx="2" fill="var(--ok-bd)" opacity="0.8"/>
+        <text x="190" y="200" class="xs muted" text-anchor="end">ours</text>
+        <text x="320" y="200" class="xs t-inv" text-anchor="middle" font-weight="700">320 px = 1280 bytes</text>
+
+        <rect x="200" y="212" width="240" height="16" rx="2" fill="var(--note-bd)" opacity="0.8"/>
+        <rect x="440" y="212" width="60" height="16" rx="2" fill="var(--verify-bd)" opacity="0.6"/>
+        <text x="190" y="224" class="xs muted" text-anchor="end">texture</text>
+        <text x="320" y="224" class="xs t-inv" text-anchor="middle" font-weight="700">320 px of image</text>
+        <text x="470" y="224" class="xs t-inv" text-anchor="middle" font-weight="700">padding</text>
+      </g>
+      <text x="515" y="212" class="xs t-bad" font-weight="700">one big memcpy here</text>
+      <text x="515" y="226" class="xs t-bad">= a sheared image</text>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 4.</span> The GPU may want each row aligned — to 64 or 256 bytes,
+      typically — so a texture row can be wider than the image. Copy with one <code>memcpy</code>
+      that assumes the pitches match, and the picture skews diagonally on precisely the machines
+      where they do not, which will never be yours.
+    </figcaption>
+  </figure>
+
+  <p>
+    First, create the texture once, at startup:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/main.cpp — the texture (excerpt)</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">SDL_Texture* screen_texture = SDL_CreateTexture(renderer,
+                                                SDL_PIXELFORMAT_ARGB8888,
+                                                SDL_TEXTUREACCESS_STREAMING,
+                                                k_fb_width, k_fb_height);
+
+SDL_SetTextureScaleMode(screen_texture, SDL_SCALEMODE_NEAREST);</code></pre>
+  </figure>
+
+  <p>
+    <code>SDL_TEXTUREACCESS_STREAMING</code> tells SDL this texture changes every frame and must be
+    lockable. <code>SDL_SCALEMODE_NEAREST</code> makes the 4× upscale produce crisp blocks rather than
+    a blurred average of them — for a lesson about individual pixels, linear filtering would hide the
+    subject. (SDL 3.4 also offers <code>SDL_SCALEMODE_PIXELART</code>, a sharper-but-smoother variant
+    worth knowing about for real pixel-art projects.)
+  </p>
+
+  <p>
+    Then, each frame, lock it and copy — one row at a time:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/main.cpp — the upload (excerpt)</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">void* dst_pixels = nullptr;
+int dst_pitch = 0;
+
+if (!SDL_LockTexture(texture, nullptr, &amp;dst_pixels, &amp;dst_pitch))
+{
+    return false;
+}
+
+Uint8* const dst = static_cast&lt;Uint8*&gt;(dst_pixels);
+
+for (int y = 0; y &lt; fb.height(); ++y)
+{
+    std::memcpy(dst + static_cast&lt;std::size_t&gt;(y) * static_cast&lt;std::size_t&gt;(dst_pitch),
+                fb.row(y),
+                static_cast&lt;std::size_t&gt;(fb.pitch()));
+}
+
+SDL_UnlockTexture(texture);</code></pre>
+  </figure>
+
+  <p>
+    <code>SDL_LockTexture</code> hands back a pointer <em>and a pitch</em>, and the pitch is the one
+    that matters: it is the distance in bytes from the start of one row to the start of the next,
+    which may exceed the row's actual content. We step the destination by <em>its</em> pitch and copy
+    <em>our</em> row's worth of bytes into each row. On most machines the two pitches happen to be
+    equal and a single big <code>memcpy</code> would work — which is exactly what makes this bug so
+    good at reaching production.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">Locked texture memory is write-only, and starts as garbage</span>
+    <p style="margin-bottom:0">
+      SDL's header is blunt about it: locking gives <strong>write-only</strong> access, and "the
+      pixels made available for editing don't necessarily contain the old texture data… if you need
+      to keep a copy of the texture data you should do that at the application level." Two rules
+      follow. Never read from the locked pointer — the contents are whatever the driver felt like
+      leaving there. And write <em>every</em> pixel you care about, every frame, because last frame's
+      image is not necessarily still in there. Our design satisfies both without effort: the
+      framebuffer <em>is</em> the application-level copy the docs are asking for, and the lock is a
+      one-way push.
+    </p>
+  </div>
+
+  <p>
+    Finally, draw it:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/main.cpp — presenting (excerpt)</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">SDL_RenderTexture(renderer, screen_texture, nullptr, nullptr);</code></pre>
+  </figure>
+
+  <p>
+    A null source rectangle means the whole texture; a null destination means "the entire rendering
+    target". So our 320×180 image is stretched over the window at whatever size it currently is — and
+    that is the whole of our resize handling. The window event we used to care about in 1.3 is gone
+    from the loop entirely.
+  </p>
+
+  <h3 id="measure">3.5 Two ways to write a pixel, measured</h3>
+
+  <p>
+    We now have a safe way to set a pixel:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/framebuffer.cpp — the safe path</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">void framebuffer::put_pixel(int x, int y, Uint32 colour)
+{
+    if (!in_bounds(x, y))
+    {
+        return;
+    }
+    pixels_[index(x, y)] = colour;
+}</code></pre>
+  </figure>
+
+  <p>
+    Every call pays for two comparisons, a multiply and an add. For scattered points that is exactly
+    right and utterly negligible. For filling a whole 320×180 background it is 57,600 repetitions of
+    work the loop already knows the answer to: <code>x</code> and <code>y</code> are loop counters
+    bounded by the buffer's own dimensions, so the check cannot fail, and <code>y × width</code> is
+    constant across an entire row.
+  </p>
+
+  <p>
+    So the framebuffer also exposes a row pointer, and the inner loop walks it:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/main.cpp — the same image, addressed differently</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">for (int y = 0; y &lt; fb.height(); ++y)
+{
+    Uint32* const line = fb.row(y);
+    const Uint8 g = static_cast&lt;Uint8&gt;(y &gt;&gt; 2);
+    for (int x = 0; x &lt; fb.width(); ++x)
+    {
+        const Uint8 r = static_cast&lt;Uint8&gt;(x &gt;&gt; 2);
+        line[x] = engine::pack_argb(r, g, 60);
+    }
+}</code></pre>
+  </figure>
+
+  <div class="worked">
+    <span class="label">Worked example — measured, not guessed</span>
+    <p>
+      Filling all 57,600 pixels of the 320×180 buffer, median of nine runs, Apple M4 Pro:
+    </p>
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>Method</th><th>Debug (<code>-O0</code>)</th><th>Release (<code>-O2</code>)</th></tr></thead>
+        <tbody>
+          <tr><td><code>put_pixel</code> per pixel</td><td>0.331 ms</td><td>0.042 ms</td></tr>
+          <tr><td>Row pointer</td><td><strong>0.065 ms</strong></td><td><strong>0.003 ms</strong></td></tr>
+          <tr><td>Speed-up</td><td>5.1×</td><td><strong>14.8×</strong></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="margin-bottom:0">
+      Two things are worth extracting. The optimiser closes some of the gap but nowhere near all of
+      it — it cannot prove the bounds check is redundant, so it keeps emitting it. And the
+      <em>ratio</em> is much larger in the optimised build, because optimisation makes the useful
+      work cheaper while the unavoidable per-call overhead stays. That is the general shape of this
+      kind of result, and it is why performance claims measured in a Debug build should be treated as
+      fiction.
+    </p>
+  </div>
+
+  <p>
+    Both loops produce byte-identical images — that is checked, not assumed — so this is a pure
+    addressing difference. Press <kbd>G</kbd> in the demo to switch between them and watch the
+    on-screen millisecond figure move.
+  </p>
+
+  <p>
+    Now the second measurement, which is where memory layout starts to matter. §<a href="#index">3.1</a>
+    established that horizontal neighbours are adjacent in memory and vertical neighbours are a whole
+    row apart. The CPU does not fetch bytes; it fetches <strong>cache lines</strong>, typically 64
+    bytes — sixteen 32-bit pixels — at a time. So walking a row uses all sixteen pixels of each line
+    it fetches. Walking a column uses one, then moves 1,280 bytes away and fetches another.
+  </p>
+
+  <div class="worked">
+    <span class="label">Worked example — the same writes, two orders</span>
+    <p>
+      Filling the entire buffer through row pointers, changing only which loop is outer, at several
+      sizes (<code>-O2</code>, median of seven):
+    </p>
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>Framebuffer</th><th>Size</th><th>Rows outer</th><th>Columns outer</th><th>Penalty</th></tr></thead>
+        <tbody>
+          <tr><td>320 × 180</td><td>225 KB</td><td>0.004 ms</td><td>0.045 ms</td><td>10.9×</td></tr>
+          <tr><td>640 × 360</td><td>900 KB</td><td>0.011 ms</td><td>0.354 ms</td><td>33.3×</td></tr>
+          <tr><td>1280 × 720</td><td>3.5 MB</td><td>0.053 ms</td><td>1.718 ms</td><td>32.7×</td></tr>
+          <tr><td>1920 × 1080</td><td>7.9 MB</td><td>0.102 ms</td><td>3.793 ms</td><td>37.2×</td></tr>
+          <tr><td>3840 × 2160</td><td>31.6 MB</td><td>0.327 ms</td><td>15.923 ms</td><td><strong>48.8×</strong></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="margin-bottom:0">
+      Identical instructions, identical writes, identical output — reordered. The penalty grows with
+      the buffer because the machine's caches (64 KB of L1 data, 4 MB of L2 on this chip) stop being
+      able to hide the waste: at 320×180 the buffer still fits in L2, so the cost is mostly wasted
+      L1 traffic; by 4K each column step is a trip towards main memory. <strong>Rows outer, columns
+      inner. Always.</strong> It is the cheapest performance decision in graphics programming, and it
+      is made by choosing which loop to write first.
+    </p>
+  </div>
+
+  <div class="callout warn">
+    <span class="label">The measurement that lied — and what it teaches</span>
+    <p>
+      The first version of that experiment showed <em>no difference at all</em>: 0.267 ms row-major
+      against 0.267 ms column-major, a ratio of 1.00. Which would have been a fascinating result, and
+      was entirely an artefact.
+    </p>
+    <p>
+      The reason: both loops were written with <code>put_pixel</code>. Its per-call overhead — the
+      bounds check and index multiply from the table above — was so much larger than the difference
+      in memory-access cost that it swamped it completely. <strong>The instrument was louder than the
+      signal.</strong> Rewriting both loops to use row pointers, so that the only remaining difference
+      was the access order, revealed the 10.9× gap.
+    </p>
+    <p style="margin-bottom:0">
+      Keep that failure. When a benchmark reports that something you have good reason to expect is
+      absent, the first hypothesis should be that your measurement is not measuring it. Module 3
+      returns to this with real profiling tools, and Module 8 makes a discipline of it; the habit is
+      worth starting now.
+    </p>
+  </div>
+
+  <!-- ================= 5. IMPLEMENTATION ================= -->
+  <h2 id="implementation"><span class="num">4</span>Implementation: the framebuffer</h2>
+
+  <p>
+    The engine gains a third subsystem and its first <code>gfx/</code> directory — the one that grows
+    into the software rasterizer, and eventually into the SDL_GPU renderer.
+  </p>
+
+  <div class="callout cpp">
+    <span class="label">C++ in place — the buffer owns its memory, and frees it for you</span>
+    <p>
+      This is the first time the engine allocates memory that outlives a function. The C way is
+      <code>malloc</code> and a matching <code>free</code>; the C++-with-a-C-accent way is
+      <code>new[]</code> and a matching <code>delete[]</code>. We do neither:
+    </p>
+    <figure class="listing" style="margin:0.8rem 0">
+      <figcaption><span class="path">the entire memory management story</span><span class="lang" data-lang="cpp">C++</span></figcaption>
+      <pre><code class="lang-cpp">std::vector&lt;Uint32&gt; pixels_;</code></pre>
+    </figure>
+    <p>
+      A <code>std::vector</code> allocates when you fill it and releases when it is destroyed —
+      including when the destruction happens because a function returned early, or because an object
+      containing it went out of scope. There is no matching call to forget, on any path.
+    </p>
+    <p>
+      That pattern is <strong>RAII</strong>: <em>resource acquisition is initialisation</em>. A
+      resource's lifetime is tied to an object's lifetime, so the compiler enforces cleanup instead
+      of your discipline doing it. You have already seen the alternative in <code>main</code>, where
+      the window, renderer and now the texture are each created by hand and destroyed by hand — and
+      where every early-return path has to repeat the cleanup, which is why those early returns are
+      so repetitive and so easy to get wrong.
+    </p>
+    <p style="margin-bottom:0">
+      Module 5 wraps those SDL handles in RAII types and deletes all that repetition. It is left
+      standing for now on purpose: the contrast between <code>main</code>'s manual bookkeeping and
+      this one-line vector is the argument, and it is much more convincing seen than described.
+    </p>
+  </div>
+
+  <h3>4.1 The interface, and what it deliberately exposes</h3>
+
+  <p>
+    Three drawing operations, and an escape hatch:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/framebuffer.hpp — the interface (excerpt)</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">void clear(Uint32 colour);
+void put_pixel(int x, int y, Uint32 colour);
+[[nodiscard]] Uint32 pixel_at(int x, int y) const;
+void fill_rect(int x, int y, int w, int h, Uint32 colour);
+
+[[nodiscard]] Uint32* row(int y);</code></pre>
+  </figure>
+
+  <p>
+    <code>put_pixel</code> is bounds-checked and <code>row</code> is not — that asymmetry is the
+    design, not an oversight. An API that is only safe forces you to write slow code; an API that is
+    only fast forces every caller to get bounds right or corrupt the image. Offering both, with the
+    safe one as the obvious default and the fast one documented as the deliberate escape hatch, is
+    the shape this engine's drawing API keeps.
+  </p>
+
+  <p>
+    Even the escape hatch is not fully sharp. <code>row()</code> validates <em>the row index</em> and
+    clamps it, so a caller with bad arithmetic scribbles within one row of the image rather than
+    somewhere loose in the process. You give up the per-pixel check because the loop already
+    guarantees it; you do not give up the containment.
+  </p>
+
+  <h3>4.2 fill_rect: clip once, then stop checking</h3>
+
+  <p>
+    <code>fill_rect</code> is where the two ideas of this lesson meet. The naive implementation calls
+    <code>put_pixel</code> in a nested loop and pays the bounds check on every pixel. Ours clips the
+    rectangle against the buffer once, up front, and then fills without any checks at all:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/framebuffer.cpp — clipping (excerpt)</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">const int x0 = std::max(x, 0);
+const int y0 = std::max(y, 0);
+const int x1 = std::min(x + w, width_);
+const int y1 = std::min(y + h, height_);
+
+if (x0 &gt;= x1 || y0 &gt;= y1)
+{
+    return;   // entirely off-screen
+}
+
+for (int row_y = y0; row_y &lt; y1; ++row_y)
+{
+    Uint32* const start = &amp;pixels_[index(x0, row_y)];
+    std::fill_n(start, x1 - x0, colour);
+}</code></pre>
+  </figure>
+
+  <p>
+    Four comparisons replace two-per-pixel — for a full-screen rectangle, four instead of 115,200.
+    And <code>std::fill_n</code> on a contiguous run is the shape the standard library and the
+    hardware both want: it compiles down to a wide vectorised store, which is why the measured
+    <code>fill_rect</code> of the whole screen (0.0027 ms) beats even the hand-written row-pointer
+    gradient loop.
+  </p>
+
+  <p>
+    The early return for a fully off-screen rectangle is not just an optimisation. Without it,
+    <code>x1 - x0</code> could be negative, and <code>std::fill_n</code> with a negative count is
+    undefined behaviour — one of those cases where the "obvious" guard and the "correct" guard turn
+    out to be the same line for different reasons.
+  </p>
+
+  <h3>4.3 The demo: everything you see, you drew</h3>
+
+  <p>
+    The 1.4 demo carries over unchanged in behaviour and completely changed in mechanism. The three
+    timing boxes and the ball are now <code>fill_rect</code> calls into our buffer; the background is
+    a gradient computed per pixel; and the ball leaves a trail of individual pixels — one per
+    <em>simulation step</em>, so the spacing between dots is the fixed timestep of Lesson 1.4 made
+    visible. Change the simulation rate with <kbd>1</kbd>–<kbd>4</kbd> and the trail's spacing changes
+    with it.
+  </p>
+
+  <p>
+    One line in the render section is worth pointing at, because it is the line that is not there:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/main.cpp — the missing clear (excerpt)</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// Note what is missing: there is no fb.clear() call. The gradient writes
+// every pixel in the buffer, so clearing first would be writing 57,600
+// pixels twice.</code></pre>
+  </figure>
+
+  <p>
+    Skipping a redundant clear is a real optimisation that real engines make. It is also a trap: the
+    moment a background stops covering the whole frame, the previous frame shows through as smearing,
+    and the fix is a <code>clear()</code> that was removed for good reasons a year earlier. Module 2's
+    rasterizer will need it back the moment we draw a scene rather than a full-screen gradient.
+  </p>
+
+  <p>
+    Finally, note that the text readout is still drawn by <code>SDL_RenderDebugText</code>,
+    <em>over</em> our framebuffer rather than into it. It is now the only thing on screen we did not
+    draw ourselves — we have no font, and will not until Module 6. A slightly uncomfortable seam, and
+    an honest one.
+  </p>
+
+  <!-- ================= 6. COMPLETE CODE LISTINGS ================= -->
+  <h2 id="listings"><span class="num">5</span>Complete Code Listings</h2>
+
+  <div class="tbl-scroll">
+    <table class="manifest">
+      <thead><tr><th>Path</th><th>Status</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td>src/gfx/framebuffer.hpp</td><td><span class="badge new">new</span></td><td>The CPU pixel buffer: the index formula, <code>pack_argb</code>, and the safe/fast API split.</td></tr>
+        <tr><td>src/gfx/framebuffer.cpp</td><td><span class="badge new">new</span></td><td>Bounds-checked pixel access, clip-once rectangle filling, row pointers.</td></tr>
+        <tr><td>src/main.cpp</td><td><span class="badge mod">modified</span></td><td>Streaming texture, row-wise upload, and a demo drawn entirely into our own buffer.</td></tr>
+        <tr><td>CMakeLists.txt</td><td><span class="badge mod">modified</span></td><td>Fifth translation unit; <code>src/gfx/</code> begins.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/framebuffer.hpp</span>
+      <span class="tag new">new</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// src/gfx/framebuffer.hpp — a block of memory that is an image.
+//
+// The first pixels the engine owns. Everything drawn from here to the end of
+// Module 3 lands in one of these, one pixel at a time, by code we wrote.
+
+#pragma once
+
+#include &lt;SDL3/SDL.h&gt;
+
+#include &lt;cstddef&gt;
+#include &lt;vector&gt;
+
+namespace engine {
+
+/// Pack 8-bit colour components into one 32-bit pixel, alpha in the most
+/// significant byte: 0xAARRGGBB.
+///
+/// This layout is not arbitrary — it is exactly what SDL calls
+/// `SDL_PIXELFORMAT_ARGB8888`. SDL's "8888" names describe a value packed into
+/// a native-endianness 32-bit integer, with the leftmost component in the most
+/// significant bits. So as long as we only ever touch these pixels as `Uint32`,
+/// this matches byte-for-byte on both little- and big-endian machines, and we
+/// never have to think about endianness at all. (Look at the individual bytes
+/// instead and the order flips underneath you — see Lesson 1.5 §3.3.)
+///
+/// Colour is treated as a bag of bits here on purpose. What those bits actually
+/// mean — why 128 is not half as bright as 255 — is Lesson 1.6.
+[[nodiscard]] constexpr Uint32 pack_argb(Uint8 r, Uint8 g, Uint8 b, Uint8 a = 255)
+{
+    return (static_cast&lt;Uint32&gt;(a) &lt;&lt; 24)
+         | (static_cast&lt;Uint32&gt;(r) &lt;&lt; 16)
+         | (static_cast&lt;Uint32&gt;(g) &lt;&lt; 8)
+         | static_cast&lt;Uint32&gt;(b);
+}
+
+/// A CPU-side image: `width × height` 32-bit pixels, tightly packed, row-major.
+///
+/// "Row-major" is the whole idea, and it is worth stating as a formula because
+/// every drawing routine in the next two modules is built on it:
+///
+///     index = y * width + x
+///
+/// Memory is one-dimensional. The two-dimensionality of an image is a
+/// *convention* about how to read that line of memory — we agree to treat the
+/// first `width` pixels as the top row, the next `width` as the row below it,
+/// and so on. Nothing in the hardware enforces it, which is precisely why an
+/// x-coordinate that strays past `width` does not produce an error: it produces
+/// a pixel on the *next row down*, and a rectangle drawn off the right edge
+/// reappears, shredded, on the left. See Lesson 1.5 §3.2.
+class framebuffer
+{
+public:
+    /// Allocates `width * height` pixels, zero-initialised (transparent black).
+    /// Dimensions below 1 are clamped: a zero-sized buffer would make every
+    /// index calculation degenerate rather than fail.
+    framebuffer(int width, int height);
+
+    // ---- Drawing ------------------------------------------------------------
+
+    /// Set every pixel to one colour.
+    void clear(Uint32 colour);
+
+    /// Set one pixel. **Bounds-checked**: coordinates outside the buffer are
+    /// silently ignored rather than corrupting a neighbouring row.
+    ///
+    /// This is the safe default, and it costs two comparisons and a multiply per
+    /// pixel. Code that fills large areas should hoist that work out of its
+    /// inner loop with row() instead.
+    void put_pixel(int x, int y, Uint32 colour);
+
+    /// Read one pixel. Returns 0 for out-of-bounds coordinates.
+    [[nodiscard]] Uint32 pixel_at(int x, int y) const;
+
+    /// Fill an axis-aligned rectangle, clipped to the buffer.
+    ///
+    /// Note what this does *not* do: call put_pixel in a loop. The rectangle is
+    /// clipped once, up front, and then each row is filled as a contiguous run.
+    /// Clipping once instead of per-pixel is the difference between two
+    /// comparisons and two-comparisons-times-the-area.
+    void fill_rect(int x, int y, int w, int h, Uint32 colour);
+
+    // ---- Access -------------------------------------------------------------
+
+    [[nodiscard]] int width() const { return width_; }
+    [[nodiscard]] int height() const { return height_; }
+
+    /// Bytes per row. For this tightly-packed buffer it is always
+    /// `width * 4`, but the concept is separate from the width for a reason:
+    /// the GPU texture we upload into may have a *different* pitch, with padding
+    /// at the end of each row. Lesson 1.5 §4.3.
+    [[nodiscard]] int pitch() const { return width_ * static_cast&lt;int&gt;(sizeof(Uint32)); }
+
+    /// Pointer to the first pixel. For uploads and tests.
+    [[nodiscard]] const Uint32* data() const { return pixels_.data(); }
+
+    /// Pointer to the first pixel of row `y`.
+    ///
+    /// This is the deliberate escape hatch: a tight inner loop that has already
+    /// established its own bounds can write through this pointer and skip
+    /// put_pixel's per-pixel check and index multiply entirely. The row index
+    /// itself is still validated, so the worst a caller can do is scribble within
+    /// one row rather than anywhere in the process.
+    ///
+    /// Safe by default, fast when you ask — the pattern every part of this
+    /// engine's drawing API will follow.
+    [[nodiscard]] Uint32* row(int y);
+    [[nodiscard]] const Uint32* row(int y) const;
+
+private:
+    [[nodiscard]] bool in_bounds(int x, int y) const
+    {
+        return x &gt;= 0 &amp;&amp; y &gt;= 0 &amp;&amp; x &lt; width_ &amp;&amp; y &lt; height_;
+    }
+
+    [[nodiscard]] std::size_t index(int x, int y) const
+    {
+        return static_cast&lt;std::size_t&gt;(y) * static_cast&lt;std::size_t&gt;(width_)
+             + static_cast&lt;std::size_t&gt;(x);
+    }
+
+    // std::vector owns the allocation, so the buffer frees itself when the
+    // framebuffer goes out of scope — no matching delete to forget, on any exit
+    // path. That is RAII, and it is why the engine core will keep reaching for
+    // owning containers rather than new/delete. Module 5 makes the principle
+    // explicit; here it is simply the obvious choice.
+    std::vector&lt;Uint32&gt; pixels_;
+    int width_;
+    int height_;
+};
+
+} // namespace engine</code></pre>
+  </figure>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/framebuffer.cpp</span>
+      <span class="tag new">new</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// src/gfx/framebuffer.cpp — implementation of the CPU pixel buffer.
+
+#include "gfx/framebuffer.hpp"
+
+#include &lt;algorithm&gt;
+
+namespace engine {
+
+framebuffer::framebuffer(int width, int height)
+    : width_(width &gt; 0 ? width : 1)
+    , height_(height &gt; 0 ? height : 1)
+{
+    // One allocation, value-initialised to zero. A framebuffer full of whatever
+    // happened to be in that memory would show as static on the first frame —
+    // and, worse, would look like a bug in whatever drew next.
+    pixels_.assign(static_cast&lt;std::size_t&gt;(width_) * static_cast&lt;std::size_t&gt;(height_), 0u);
+}
+
+void framebuffer::clear(Uint32 colour)
+{
+    // std::fill over the whole vector, not a nested x/y loop. The buffer is one
+    // contiguous run of memory and the two-dimensionality is our interpretation,
+    // so a clear has no reason to know about rows at all.
+    std::fill(pixels_.begin(), pixels_.end(), colour);
+}
+
+void framebuffer::put_pixel(int x, int y, Uint32 colour)
+{
+    if (!in_bounds(x, y))
+    {
+        return;
+    }
+    pixels_[index(x, y)] = colour;
+}
+
+Uint32 framebuffer::pixel_at(int x, int y) const
+{
+    if (!in_bounds(x, y))
+    {
+        return 0u;
+    }
+    return pixels_[index(x, y)];
+}
+
+void framebuffer::fill_rect(int x, int y, int w, int h, Uint32 colour)
+{
+    if (w &lt;= 0 || h &lt;= 0)
+    {
+        return;
+    }
+
+    // Clip once. Everything after this point is guaranteed to be inside the
+    // buffer, so the fill itself needs no checks at all.
+    //
+    // Doing it this way round matters more than it looks. The alternative —
+    // testing each pixel as you write it — costs two comparisons per pixel, so a
+    // full-screen rectangle at 320x180 pays 115,200 comparisons to answer a
+    // question that four comparisons settled up front.
+    const int x0 = std::max(x, 0);
+    const int y0 = std::max(y, 0);
+    const int x1 = std::min(x + w, width_);
+    const int y1 = std::min(y + h, height_);
+
+    if (x0 &gt;= x1 || y0 &gt;= y1)
+    {
+        return;   // entirely off-screen
+    }
+
+    for (int row_y = y0; row_y &lt; y1; ++row_y)
+    {
+        // Fill each row as one contiguous run — rows outer, columns inner, never
+        // the reverse. A 64-byte cache line holds sixteen 32-bit pixels, so
+        // walking along a row uses all sixteen before needing another line;
+        // walking down a column uses one of every sixteen and touches a new line
+        // every write. Measured on this codebase (Apple M4 Pro, -O2): the column
+        // order costs 10.9x more at 320x180 and 48.8x more at 3840x2160, the gap
+        // widening as the buffer outgrows the caches. Lesson 1.5 §3.5.
+        Uint32* const start = &amp;pixels_[index(x0, row_y)];
+        std::fill_n(start, x1 - x0, colour);
+    }
+}
+
+Uint32* framebuffer::row(int y)
+{
+    // Clamp rather than assert: this is an inner-loop accessor, and returning a
+    // valid row for a bad index keeps a caller's arithmetic mistake inside the
+    // buffer instead of loose in the process.
+    const int clamped = std::clamp(y, 0, height_ - 1);
+    return &amp;pixels_[index(0, clamped)];
+}
+
+const Uint32* framebuffer::row(int y) const
+{
+    const int clamped = std::clamp(y, 0, height_ - 1);
+    return &amp;pixels_[index(0, clamped)];
+}
+
+} // namespace engine</code></pre>
+  </figure>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/main.cpp</span>
+      <span class="tag modified">modified</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// src/main.cpp — the engine's entry point.
+//
+// The loop is the one settled in Lesson 1.4 and does not change again:
+//
+//     drain events -&gt; tick clock -&gt; update input -&gt; N fixed steps -&gt; render
+//
+// What changed in 1.5 is the last word. Rendering no longer means asking SDL to
+// draw shapes; it means writing pixels into memory we own, then handing that
+// block to the GPU as a texture. Everything visible below — the gradient, the
+// boxes, the ball, the trail — is bytes this program wrote by hand.
+
+#include "core/clock.hpp"
+#include "core/fixed_step.hpp"
+#include "core/input.hpp"
+#include "gfx/framebuffer.hpp"
+
+#include &lt;SDL3/SDL.h&gt;
+#include &lt;SDL3/SDL_main.h&gt;   // Provides the cross-platform entry point. NOTE:
+                             // &lt;SDL3/SDL.h&gt; deliberately does NOT include this,
+                             // so we include it explicitly, exactly once, here.
+
+#include &lt;array&gt;
+#include &lt;cstring&gt;
+
+namespace {
+
+// ---- The framebuffer's size ------------------------------------------------
+// Deliberately small. At 320x180 the window's 1280x720 is exactly 4x, so every
+// pixel we write becomes a visible 4x4 block — which is the point of a lesson
+// about individual pixels. It is also a real technique: rendering at a fixed
+// internal resolution and scaling to the window is how a great many games ship,
+// and it means a window resize needs no code at all.
+constexpr int k_fb_width = 320;
+constexpr int k_fb_height = 180;
+
+// ---- Demo constants, now in framebuffer pixels ------------------------------
+constexpr float k_pixels_per_second = 90.0f;
+constexpr float k_box_size = 10.0f;
+constexpr float k_track_var_y = 24.0f;
+constexpr float k_track_raw_y = 40.0f;
+constexpr float k_track_lerp_y = 56.0f;
+
+constexpr float k_gravity = 300.0f;
+constexpr float k_ball_size = 6.0f;
+constexpr float k_ball_start_y = 84.0f;
+constexpr float k_floor_y = 168.0f;
+
+constexpr Uint32 k_throttle_ms = 50;
+
+/// How many past ball positions to draw as a trail. One entry per simulation
+/// step, so the spacing between dots is literally the fixed timestep made
+/// visible — closer together at 120 Hz, further apart at 10 Hz.
+constexpr std::size_t k_trail_length = 150;
+
+/// Everything the simulation owns (Lesson 1.4). Two of these exist so the
+/// renderer can interpolate between them.
+struct sim_state
+{
+    float box_x = 0.0f;
+    float box_dir = 1.0f;
+    float ball_y = k_ball_start_y;
+    float ball_vy = 0.0f;
+};
+
+void step_simulation(sim_state&amp; s, float h)
+{
+    s.box_x += k_pixels_per_second * s.box_dir * h;
+    const float max_x = static_cast&lt;float&gt;(k_fb_width) - k_box_size;
+    if (s.box_x &gt; max_x) { s.box_x = max_x; s.box_dir = -1.0f; }
+    if (s.box_x &lt; 0.0f)  { s.box_x = 0.0f;  s.box_dir =  1.0f; }
+
+    s.ball_y += s.ball_vy * h;
+    s.ball_vy += k_gravity * h;
+
+    if (s.ball_y + k_ball_size &gt; k_floor_y)
+    {
+        s.ball_y = k_floor_y - k_ball_size;
+        s.ball_vy = -s.ball_vy;
+    }
+}
+
+[[nodiscard]] float lerp(float a, float b, float t)
+{
+    return a + (b - a) * t;
+}
+
+// ---- The two ways to fill the background -----------------------------------
+// Both produce the identical image. The difference is entirely in how the
+// pixels are addressed, which is the measurement Lesson 1.5 §3.5 is about.
+
+/// The safe way: one bounds-checked call per pixel.
+void draw_gradient_safe(engine::framebuffer&amp; fb)
+{
+    for (int y = 0; y &lt; fb.height(); ++y)
+    {
+        for (int x = 0; x &lt; fb.width(); ++x)
+        {
+            const Uint8 r = static_cast&lt;Uint8&gt;(x &gt;&gt; 2);
+            const Uint8 g = static_cast&lt;Uint8&gt;(y &gt;&gt; 2);
+            fb.put_pixel(x, y, engine::pack_argb(r, g, 60));
+        }
+    }
+}
+
+/// The fast way: fetch the row pointer once, then walk it.
+///
+/// Same arithmetic, same output. What disappears is per-pixel work that the
+/// loop already knows the answer to — the bounds check (x and y are loop
+/// counters bounded by the buffer's own size) and the `y * width` multiply
+/// (constant for the whole row).
+void draw_gradient_fast(engine::framebuffer&amp; fb)
+{
+    for (int y = 0; y &lt; fb.height(); ++y)
+    {
+        Uint32* const line = fb.row(y);
+        const Uint8 g = static_cast&lt;Uint8&gt;(y &gt;&gt; 2);
+        for (int x = 0; x &lt; fb.width(); ++x)
+        {
+            const Uint8 r = static_cast&lt;Uint8&gt;(x &gt;&gt; 2);
+            line[x] = engine::pack_argb(r, g, 60);
+        }
+    }
+}
+
+/// Copy the framebuffer into a streaming texture, one row at a time.
+///
+/// Row by row, rather than one memcpy of the whole thing, because the pitch SDL
+/// hands back is the GPU's, not ours: drivers routinely align each row to 64 or
+/// 256 bytes, leaving padding at the end that is not part of the image. Assume
+/// the pitches match and the picture shears diagonally on exactly the machines
+/// where they do not. Lesson 1.5 §4.3.
+[[nodiscard]] bool upload(SDL_Texture* texture, const engine::framebuffer&amp; fb)
+{
+    void* dst_pixels = nullptr;
+    int dst_pitch = 0;
+
+    // Locking a streaming texture gives write-only access to driver memory whose
+    // previous contents are undefined — SDL's header is explicit that if you
+    // need to keep the image, you keep it yourself. We do: `fb` is the master
+    // copy and this is only ever a one-way push.
+    if (!SDL_LockTexture(texture, nullptr, &amp;dst_pixels, &amp;dst_pitch))
+    {
+        return false;
+    }
+
+    Uint8* const dst = static_cast&lt;Uint8*&gt;(dst_pixels);
+    const int row_bytes = fb.pitch();
+
+    for (int y = 0; y &lt; fb.height(); ++y)
+    {
+        std::memcpy(dst + static_cast&lt;std::size_t&gt;(y) * static_cast&lt;std::size_t&gt;(dst_pitch),
+                    fb.row(y),
+                    static_cast&lt;std::size_t&gt;(row_bytes));
+    }
+
+    SDL_UnlockTexture(texture);
+    return true;
+}
+
+} // namespace
+
+int main(int argc, char* argv[])
+{
+    (void)argc;
+    (void)argv;
+
+    // ---- 1. Initialise ------------------------------------------------------
+    if (!SDL_Init(SDL_INIT_VIDEO))
+    {
+        SDL_Log("SDL_Init failed: %s", SDL_GetError());
+        return 1;
+    }
+
+    const int sdl_version = SDL_GetVersion();
+    SDL_Log("Engine starting — SDL %d.%d.%d",
+            SDL_VERSIONNUM_MAJOR(sdl_version),
+            SDL_VERSIONNUM_MINOR(sdl_version),
+            SDL_VERSIONNUM_MICRO(sdl_version));
+
+    // ---- 2. Window and renderer --------------------------------------------
+    SDL_Window* window = SDL_CreateWindow("Engine", 1280, 720, SDL_WINDOW_RESIZABLE);
+    if (window == nullptr)
+    {
+        SDL_Log("SDL_CreateWindow failed: %s", SDL_GetError());
+        SDL_Quit();
+        return 1;
+    }
+
+    SDL_Renderer* renderer = SDL_CreateRenderer(window, nullptr);
+    if (renderer == nullptr)
+    {
+        SDL_Log("SDL_CreateRenderer failed: %s", SDL_GetError());
+        SDL_DestroyWindow(window);
+        SDL_Quit();
+        return 1;
+    }
+
+    int vsync = SDL_RENDERER_VSYNC_DISABLED;
+    SDL_SetRenderVSync(renderer, vsync);
+
+    // ---- 3. The framebuffer, and the texture that shows it -----------------
+    engine::framebuffer fb(k_fb_width, k_fb_height);
+
+    // SDL_PIXELFORMAT_ARGB8888 matches pack_argb exactly: a 32-bit integer with
+    // alpha in the most significant bits. STREAMING because we rewrite the whole
+    // thing every frame and want to lock it rather than pay for an upload path
+    // meant for images that rarely change.
+    SDL_Texture* screen_texture = SDL_CreateTexture(renderer,
+                                                    SDL_PIXELFORMAT_ARGB8888,
+                                                    SDL_TEXTUREACCESS_STREAMING,
+                                                    k_fb_width, k_fb_height);
+    if (screen_texture == nullptr)
+    {
+        SDL_Log("SDL_CreateTexture failed: %s", SDL_GetError());
+        SDL_DestroyRenderer(renderer);
+        SDL_DestroyWindow(window);
+        SDL_Quit();
+        return 1;
+    }
+
+    // Nearest-neighbour, so a 4x upscale produces crisp 4x4 blocks rather than a
+    // blurred interpolation of them. For a lesson about individual pixels,
+    // anything else would hide the subject.
+    SDL_SetTextureScaleMode(screen_texture, SDL_SCALEMODE_NEAREST);
+
+    // ---- 4. Subsystems and demo state --------------------------------------
+    engine::clock clk;
+    engine::input in;
+    engine::fixed_step stepper(60.0f);
+
+    sim_state previous;
+    sim_state current;
+
+    float var_box_x = 0.0f;
+    float var_box_dir = 1.0f;
+
+    // The ball's recent positions, as a ring buffer. Written once per simulation
+    // step, so the trail records the simulation's path rather than the renderer's.
+    std::array&lt;int, k_trail_length&gt; trail_y{};
+    std::size_t trail_head = 0;
+    std::size_t trail_count = 0;
+
+    bool fast_gradient = true;
+    Uint64 gradient_ns = 0;      // smoothed, for the readout
+
+    const Uint32 k_var_colour = engine::pack_argb(236, 122, 92);
+    const Uint32 k_raw_colour = engine::pack_argb(226, 196, 110);
+    const Uint32 k_lerp_colour = engine::pack_argb(122, 196, 152);
+    const Uint32 k_ball_colour = engine::pack_argb(126, 162, 236);
+    const Uint32 k_trail_colour = engine::pack_argb(70, 90, 130);
+    const Uint32 k_floor_colour = engine::pack_argb(90, 90, 110);
+
+    SDL_Log("Controls: [G] gradient path · [1-4] sim rate · [V] vsync · [T] throttle · [R] reset · [Esc] quit");
+
+    // ---- 5. The loop --------------------------------------------------------
+    bool running = true;
+    while (running)
+    {
+        SDL_Event event;
+        while (SDL_PollEvent(&amp;event))
+        {
+            in.feed_event(event);
+
+            switch (event.type)
+            {
+            case SDL_EVENT_QUIT:
+                SDL_Log("Quit requested");
+                running = false;
+                break;
+
+            case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
+                SDL_Log("Window %u close requested", static_cast&lt;unsigned&gt;(event.window.windowID));
+                running = false;
+                break;
+
+            default:
+                // Window resizes need no handling at all now: the framebuffer is
+                // a fixed size and SDL stretches it over whatever the window
+                // currently is.
+                break;
+            }
+        }
+
+        clk.tick();
+        in.update();
+
+        // --- 5a. Controls ----------------------------------------------------
+        if (in.key_pressed(SDL_SCANCODE_ESCAPE)) { running = false; }
+        if (in.key_pressed(SDL_SCANCODE_G)) { fast_gradient = !fast_gradient; }
+
+        if (in.key_pressed(SDL_SCANCODE_1)) { stepper.set_rate(10.0f); }
+        if (in.key_pressed(SDL_SCANCODE_2)) { stepper.set_rate(30.0f); }
+        if (in.key_pressed(SDL_SCANCODE_3)) { stepper.set_rate(60.0f); }
+        if (in.key_pressed(SDL_SCANCODE_4)) { stepper.set_rate(120.0f); }
+
+        if (in.key_pressed(SDL_SCANCODE_V))
+        {
+            vsync = (vsync == SDL_RENDERER_VSYNC_DISABLED) ? 1 : SDL_RENDERER_VSYNC_DISABLED;
+            if (!SDL_SetRenderVSync(renderer, vsync))
+            {
+                SDL_Log("SDL_SetRenderVSync(%d) failed: %s", vsync, SDL_GetError());
+            }
+        }
+
+        if (in.key_pressed(SDL_SCANCODE_R))
+        {
+            previous = sim_state{};
+            current = sim_state{};
+            var_box_x = 0.0f;
+            var_box_dir = 1.0f;
+            trail_head = 0;
+            trail_count = 0;
+        }
+
+        // --- 5b. Simulate ----------------------------------------------------
+        stepper.begin_frame(clk.dt());
+        while (stepper.next_step())
+        {
+            previous = current;
+            step_simulation(current, stepper.h());
+
+            trail_y[trail_head] = static_cast&lt;int&gt;(current.ball_y);
+            trail_head = (trail_head + 1) % k_trail_length;
+            if (trail_count &lt; k_trail_length) { ++trail_count; }
+        }
+
+        const float alpha = stepper.alpha();
+
+        var_box_x += k_pixels_per_second * var_box_dir * clk.dt();
+        const float var_max_x = static_cast&lt;float&gt;(k_fb_width) - k_box_size;
+        if (var_box_x &gt; var_max_x) { var_box_x = var_max_x; var_box_dir = -1.0f; }
+        if (var_box_x &lt; 0.0f)      { var_box_x = 0.0f;      var_box_dir =  1.0f; }
+
+        // --- 5c. Draw, one pixel at a time -----------------------------------
+        // Note what is missing: there is no fb.clear() call. The gradient writes
+        // every pixel in the buffer, so clearing first would be writing 57,600
+        // pixels twice. Skipping a redundant clear is a real optimisation, not a
+        // trick — and the moment a background stops covering the whole frame,
+        // clear() has to come back or the previous frame shows through as
+        // smearing. Module 2's rasterizer will need it for exactly that reason.
+        //
+        // The background gradient, timed. Both paths write the same image; only
+        // the addressing differs.
+        const Uint64 gradient_start = SDL_GetTicksNS();
+        if (fast_gradient) { draw_gradient_fast(fb); }
+        else               { draw_gradient_safe(fb); }
+        const Uint64 gradient_end = SDL_GetTicksNS();
+
+        // A rolling average, because a single frame's measurement is noise.
+        const Uint64 sample = gradient_end - gradient_start;
+        gradient_ns = (gradient_ns * 15 + sample) / 16;
+
+        // The floor line the ball bounces on: a one-pixel-tall rectangle.
+        fb.fill_rect(0, static_cast&lt;int&gt;(k_floor_y), k_fb_width, 1, k_floor_colour);
+        fb.fill_rect(0, static_cast&lt;int&gt;(k_ball_start_y), k_fb_width, 1, k_floor_colour);
+
+        // The trail: individual pixels, one per simulation step. This is
+        // put_pixel earning its keep — scattered single points, where clipping
+        // once would buy nothing.
+        const int trail_x = k_fb_width / 2;
+        for (std::size_t i = 0; i &lt; trail_count; ++i)
+        {
+            fb.put_pixel(trail_x - 6, trail_y[i], k_trail_colour);
+            fb.put_pixel(trail_x + 6, trail_y[i], k_trail_colour);
+        }
+
+        // The three timing boxes from Lesson 1.4, now drawn by us.
+        fb.fill_rect(static_cast&lt;int&gt;(var_box_x), static_cast&lt;int&gt;(k_track_var_y),
+                     static_cast&lt;int&gt;(k_box_size), static_cast&lt;int&gt;(k_box_size), k_var_colour);
+
+        fb.fill_rect(static_cast&lt;int&gt;(current.box_x), static_cast&lt;int&gt;(k_track_raw_y),
+                     static_cast&lt;int&gt;(k_box_size), static_cast&lt;int&gt;(k_box_size), k_raw_colour);
+
+        fb.fill_rect(static_cast&lt;int&gt;(lerp(previous.box_x, current.box_x, alpha)),
+                     static_cast&lt;int&gt;(k_track_lerp_y),
+                     static_cast&lt;int&gt;(k_box_size), static_cast&lt;int&gt;(k_box_size), k_lerp_colour);
+
+        fb.fill_rect(trail_x - static_cast&lt;int&gt;(k_ball_size) / 2,
+                     static_cast&lt;int&gt;(lerp(previous.ball_y, current.ball_y, alpha)),
+                     static_cast&lt;int&gt;(k_ball_size), static_cast&lt;int&gt;(k_ball_size), k_ball_colour);
+
+        // --- 5d. Present ------------------------------------------------------
+        if (!upload(screen_texture, fb))
+        {
+            SDL_Log("SDL_LockTexture failed: %s", SDL_GetError());
+        }
+
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+        SDL_RenderClear(renderer);
+
+        // NULL destination rectangle means "the entire rendering target", so our
+        // 320x180 image is stretched over the whole window at whatever size it
+        // currently is.
+        SDL_RenderTexture(renderer, screen_texture, nullptr, nullptr);
+
+        // The readout is still drawn by SDL, *over* our framebuffer, because we
+        // have no font of our own yet. Module 6 fixes that; until then this is
+        // the one thing on screen we did not draw ourselves.
+        SDL_SetRenderScale(renderer, 2.0f, 2.0f);
+        SDL_SetRenderDrawColor(renderer, 225, 225, 215, 255);
+        SDL_RenderDebugTextFormat(renderer, 6.0f, 6.0f,
+                                  "fps %7.1f   sim %3.0f Hz   alpha %.2f   framebuffer %dx%d",
+                                  static_cast&lt;double&gt;(clk.fps()),
+                                  static_cast&lt;double&gt;(stepper.rate_hz()),
+                                  static_cast&lt;double&gt;(alpha),
+                                  fb.width(), fb.height());
+        SDL_RenderDebugTextFormat(renderer, 6.0f, 18.0f,
+                                  "gradient: %-13s %6.3f ms for %d pixels   [G] to switch",
+                                  fast_gradient ? "row pointer" : "put_pixel",
+                                  static_cast&lt;double&gt;(gradient_ns) / 1000000.0,
+                                  fb.width() * fb.height());
+        SDL_RenderDebugText(renderer, 6.0f, 34.0f,
+                            "[1-4] sim rate   [V] vsync   [T] throttle   [R] reset   [Esc] quit");
+        SDL_SetRenderScale(renderer, 1.0f, 1.0f);
+
+        SDL_RenderPresent(renderer);
+
+        if (in.key_down(SDL_SCANCODE_T))
+        {
+            SDL_Delay(k_throttle_ms);
+        }
+    }
+
+    // ---- 6. Shut down, in reverse order of creation -------------------------
+    SDL_DestroyTexture(screen_texture);
+    SDL_DestroyRenderer(renderer);
+    SDL_DestroyWindow(window);
+    SDL_Quit();
+    return 0;
+}</code></pre>
+  </figure>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">CMakeLists.txt</span>
+      <span class="tag modified">modified</span>
+      <span class="lang" data-lang="cmake">CMake</span>
+    </figcaption>
+    <pre><code class="lang-cmake"># CMakeLists.txt — the engine's build description.
+#
+# This one file tells CMake how to build the project on Windows, Linux, and
+# macOS, with MSVC, GCC, or Clang, and how to acquire SDL3. You describe the
+# build once here; CMake generates the right native build for whatever machine
+# runs it. This is what Lesson 0.4 builds up, line by line.
+
+# 3.24 is our floor: new enough for modern FetchContent behaviour and the
+# target/property model we rely on. Older CMake will refuse to configure, which
+# is what we want — a clear failure, not a subtle one.
+cmake_minimum_required(VERSION 3.24)
+
+project(engine LANGUAGES CXX)
+
+# The C++ standard, set once for every target in the project. STANDARD_REQUIRED
+# makes a compiler that cannot do C++20 an error rather than a silent downgrade;
+# EXTENSIONS OFF asks for -std=c++20, not -std=gnu++20, so we stay portable.
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+# ---- Dependencies ----------------------------------------------------------
+# FetchContent acquires SDL3 at configure time and adds it to our build. We pin
+# an exact release tag: a moving branch would mean a fresh clone could build
+# different source than yours, which is how "works on my machine" is born.
+include(FetchContent)
+
+# SDL build options must be set BEFORE SDL is configured. We only need the
+# library itself, so skip SDL's own test helpers — it shaves real time off a
+# from-source build.
+set(SDL_TEST_LIBRARY OFF)
+
+FetchContent_Declare(
+    SDL3
+    GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
+    GIT_TAG        release-3.4.12   # pinned — never a branch name
+    GIT_SHALLOW    TRUE             # only this tag's snapshot, not all of history
+)
+FetchContent_MakeAvailable(SDL3)
+
+# ---- Our program -----------------------------------------------------------
+# Every source file is listed by hand. CMake can glob them for you, and you
+# should not let it: a glob is evaluated at configure time, so adding a file
+# leaves the build silently ignoring it until someone reconfigures. An explicit
+# list is one extra line per file and never lies.
+add_executable(engine
+    src/main.cpp
+    src/core/clock.cpp
+    src/core/fixed_step.cpp
+    src/core/input.cpp
+    src/gfx/framebuffer.cpp
+)
+
+# Make `src/` a root for our own includes, so a file says
+#     #include "core/input.hpp"
+# from anywhere in the tree — the same spelling regardless of which directory
+# the including file lives in. Relative paths like "../core/input.hpp" break the
+# moment a file moves; a stable include root does not. PRIVATE because nothing
+# links against us: this is a leaf executable, and the setting stops here.
+target_include_directories(engine PRIVATE src)
+
+# Link SDL. SDL3::SDL3 is the alias SDL exports for "the SDL library, however it
+# was built"; linking it also pulls in SDL's headers and platform frameworks
+# transitively, so we never name Cocoa or user32 ourselves.
+target_link_libraries(engine PRIVATE SDL3::SDL3)
+
+# Our warning discipline (see cpp-style §9) — applied to OUR target only, never
+# to SDL. Third-party code is compiled with its own flags; holding someone
+# else's library to /W4 just produces noise we cannot act on.
+if(MSVC)
+    target_compile_options(engine PRIVATE /W4 /Zc:__cplusplus)
+else()
+    target_compile_options(engine PRIVATE -Wall -Wextra)
+endif()</code></pre>
+  </figure>
+
+  <p>
+    <code>src/core/clock.{hpp,cpp}</code>, <code>src/core/input.{hpp,cpp}</code> and
+    <code>src/core/fixed_step.{hpp,cpp}</code> are unchanged from Lessons 1.2–1.4.
+  </p>
+
+  <!-- ================= 7. BUILD & RUN ================= -->
+  <h2 id="build"><span class="num">6</span>Build &amp; Run</h2>
+
+  <figure class="listing shell">
+    <figcaption>
+      <span class="path">Linux and macOS</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash">cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+cmake --build build
+./build/engine</code></pre>
+  </figure>
+
+  <figure class="listing shell">
+    <figcaption>
+      <span class="path">Windows (MSVC)</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash">cmake -S . -B build
+cmake --build build --config Debug
+.\build\Debug\engine.exe</code></pre>
+  </figure>
+
+  <h3>What you should see</h3>
+
+  <p>
+    A window filled with a soft two-axis gradient — dark at the top left, brightening right and
+    down — with three chunky boxes tracking across it, a ball bouncing between two guide lines, and
+    two columns of single-pixel dots marking the ball's path. Every one of those pixels came out of
+    our buffer.
+  </p>
+
+  <ol>
+    <li><strong>Look closely at the gradient.</strong> It is visibly blocky: each 4×4 block on screen
+      is one pixel in our 320×180 image. You are looking at individual writes.</li>
+    <li><strong>Press <kbd>G</kbd>.</strong> The image does not change — but the millisecond figure in
+      the readout does, by roughly 5× in a Debug build. Same picture, same pixels, different
+      addressing.</li>
+    <li><strong>Press <kbd>1</kbd> for a 10 Hz simulation.</strong> The trail dots spread out
+      dramatically: each dot is one simulation step, so at 10 Hz there are six times fewer of them per
+      second. Press <kbd>4</kbd> and they crowd together. The fixed timestep, drawn.</li>
+    <li><strong>Resize the window.</strong> Nothing in our code responds, and everything scales
+      correctly — the framebuffer's size is now independent of the window's.</li>
+    <li><strong>Hold <kbd>T</kbd>.</strong> The 1.4 machinery is all still running underneath: the
+      sage box stays smooth, the amber one judders, and the ball's bounce heights do not change.</li>
+  </ol>
+
+  <div class="callout ok">
+    <span class="label">Checkpoint — verified before publishing</span>
+    <p>
+      Built warning-clean at <code>-Wall -Wextra</code> with Apple Clang against SDL 3.4.12; runs and
+      shuts down cleanly. The framebuffer was driven through a 20-assertion harness confirming, among
+      others:
+    </p>
+    <ul>
+      <li><code>pack_argb(0x12, 0x34, 0x56, 0x78)</code> produces exactly <code>0x78123456</code>.</li>
+      <li>A pixel written at <code>(3, 2)</code> in an 8-wide buffer lands at raw index
+        <strong>19</strong>, and its neighbours are untouched — §<a href="#index">3.1</a>'s formula
+        checked against memory rather than reasoning.</li>
+      <li>All four out-of-range writes — past each edge — are dropped, and the buffer stays entirely
+        clean.</li>
+      <li>The naive index for <code>(8, 2)</code> is 24, which is <code>(0, 3)</code>: the wrap of
+        §<a href="#wrap">3.2</a>, computed rather than asserted.</li>
+      <li>A rectangle straddling the top-left corner paints exactly 9 pixels of a 3×3 region and
+        nothing outside it; fully off-screen and zero/negative-sized rectangles paint nothing.</li>
+      <li><code>row(y)</code> addresses the same memory as <code>put_pixel</code>, consecutive rows
+        are exactly <code>width</code> apart, and a wild row index is clamped into the buffer.</li>
+      <li>The two gradient paths produce <strong>byte-identical</strong> 320×180 images
+        (<code>memcmp</code> over all 230,400 bytes).</li>
+    </ul>
+    <p style="margin-bottom:0">
+      The performance figures in §<a href="#measure">3.5</a> are medians of repeated runs on an Apple
+      M4 Pro at <code>-O2</code> unless labelled otherwise. Your ratios will differ; the ordering
+      should not.
+    </p>
+  </div>
+
+  <!-- ================= 8. PITFALLS ================= -->
+  <h2 id="pitfalls"><span class="num">7</span>Common Pitfalls &amp; Debugging</h2>
+
+  <div class="pitfalls">
+    <details class="pitfall-item">
+      <summary>The image is sheared diagonally — <span class="sym">everything slants, progressively worse down the screen</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>The picture leans, as if each row were shifted a little further than the last. Shapes are recognisable but skewed.</dd>
+          <dt>Cause</dt>
+          <dd>A pitch mismatch. Either the upload assumed the texture's pitch equals <code>width × 4</code> when the driver padded its rows, or the index formula used the wrong width — a buffer resized in one place but not another.</dd>
+          <dt>Fix</dt>
+          <dd>Copy row by row using the pitch <code>SDL_LockTexture</code> actually returned (§<a href="#present">3.4</a>). If you are debugging it, print <code>dst_pitch</code> and <code>fb.pitch()</code> side by side — a shear is nearly always those two numbers disagreeing.</dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>Shapes wrap around to the opposite edge — <span class="sym">candy-striping down the picture</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>A rectangle drawn near the right edge leaves fragments down the left edge, one row lower each time.</dd>
+          <dt>Cause</dt>
+          <dd>An x-coordinate past <code>width</code>, written without a bounds check. <code>y × width + x</code> happily rolls over into the next row (§<a href="#wrap">3.2</a>).</dd>
+          <dt>Fix</dt>
+          <dd>Use <code>put_pixel</code>, or clip before writing as <code>fill_rect</code> does. When you find one of these, check the y direction too — a stray <code>y</code> writes outside the buffer entirely, which is undefined behaviour rather than a stripe.</dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>The colours are wrong — <span class="sym">red and blue swapped</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>Everything is recognisable but the colours are off in a very specific way: what should be red renders blue and vice versa, while greys and greens look fine.</dd>
+          <dt>Cause</dt>
+          <dd>A format mismatch between what you pack and what the texture expects — almost always an <code>ARGB</code>/<code>ABGR</code> confusion, which swaps exactly the red and blue channels and leaves green where it was. Often introduced by copying code that used an <code>SDL_PIXELFORMAT_RGBA32</code>-style byte-order name for a packed-integer buffer (§<a href="#bits">3.3</a>).</dd>
+          <dt>Fix</dt>
+          <dd>Pick one view and stay in it. We build pixels as integers with shifts, so we use the packed-integer name <code>SDL_PIXELFORMAT_ARGB8888</code>. "Green looks right, red and blue are swapped" is the fingerprint — it tells you the problem is channel order and not, say, gamma.</dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>The previous frame smears — <span class="sym">motion leaves trails you did not ask for</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>Moving objects leave streaks. Or, more confusingly, the screen fills with garbage that changes between runs.</dd>
+          <dt>Cause</dt>
+          <dd>Not every pixel is being written each frame. Either a <code>clear()</code> was removed once a full-screen background made it redundant and the background later stopped covering everything, or you are relying on the locked texture retaining last frame's contents — which SDL explicitly does not promise (§<a href="#present">3.4</a>).</dd>
+          <dt>Fix</dt>
+          <dd>Either clear, or guarantee full coverage. Choose deliberately and leave a comment saying which, because the next person to change the background needs to know the invariant exists.</dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>Everything is blurry after upscaling — <span class="sym">soft pixel-art</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>The 320×180 buffer scaled to 1280×720 looks smeared rather than crisp and blocky.</dd>
+          <dt>Cause</dt>
+          <dd>The texture is using linear filtering, which averages neighbouring pixels when magnifying.</dd>
+          <dt>Fix</dt>
+          <dd><code>SDL_SetTextureScaleMode(texture, SDL_SCALEMODE_NEAREST)</code>. For real pixel-art projects also look at <code>SDL_SCALEMODE_PIXELART</code> (SDL 3.4+), which handles non-integer scale factors more gracefully than either.</dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>A "no difference" benchmark result — <span class="sym">the optimisation you expected does nothing</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>You compare two approaches you have good reason to think differ, and measure them as identical.</dd>
+          <dt>Cause</dt>
+          <dd>Something common to both paths dominates the measurement — as happened while writing this lesson, where <code>put_pixel</code>'s overhead hid a genuine 10.9× cache effect (§<a href="#measure">3.5</a>). Or: you measured a Debug build, or the compiler deleted the loop because its result was unused.</dd>
+          <dt>Fix</dt>
+          <dd>Make the two paths differ in <em>only</em> the thing under test, measure at <code>-O2</code>, ensure the results are consumed so nothing is optimised away, and take a median of several runs. A surprising null result deserves suspicion before it deserves belief.</dd>
+        </dl>
+      </div>
+    </details>
+  </div>
+
+  <!-- ================= 9. EXERCISES ================= -->
+  <h2 id="exercises"><span class="num">8</span>Exercises</h2>
+
+  <div class="exercise">
+    <h3><span class="xnum">1.5.1</span>Cause the stripe<span class="difficulty">warm-up</span></h3>
+    <p>
+      Add a deliberately unchecked pixel setter to <code>framebuffer</code> — one that skips
+      <code>in_bounds</code> — and use it to draw a horizontal run that starts near the right edge and
+      overshoots by ten pixels. Predict what you will see before you run it, then run it.
+    </p>
+    <details>
+      <summary>Solution</summary>
+      <p>
+        The run's overshoot appears at the far left of the row <em>below</em>, exactly as
+        §<a href="#wrap">3.2</a> predicts. Do it on several rows and you get the candy-stripe of
+        Figure 2. It is worth seeing once, in a program small enough that you know it is not a
+        rendering bug, so that you recognise the pattern instantly when it shows up in something
+        complicated. Remove the unchecked setter afterwards — or keep it private and clearly named,
+        as real rasterizers do.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3><span class="xnum">1.5.2</span>Change the resolution<span class="difficulty">warm-up</span></h3>
+    <p>
+      Set <code>k_fb_width</code> and <code>k_fb_height</code> to 160×90, then to 1280×720. What
+      changes on screen, what changes in the gradient timing, and what does <em>not</em> change?
+    </p>
+    <details>
+      <summary>Solution</summary>
+      <p>
+        At 160×90 the pixels are 8× blocks and the gradient fill takes about a quarter as long
+        (a quarter the pixels). At 1280×720 the image is pixel-perfect on the window, the blockiness
+        vanishes, and the fill costs roughly sixteen times the 320×180 figure. What does not change is
+        anything else: the simulation, the timing, the layout arithmetic. The framebuffer's size is
+        genuinely a parameter, which is what makes dynamic resolution possible in shipping games —
+        drop the render target when the frame budget is tight, keep the game identical.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3><span class="xnum">1.5.3</span>Reproduce the cache measurement<span class="difficulty">guided</span></h3>
+    <p>
+      Write a small benchmark that fills the whole buffer twice — once with the row loop outer, once
+      with the column loop outer — using row pointers in both. Time each at <code>-O2</code>, take a
+      median, and compare your ratio with the table in §<a href="#measure">3.5</a>. Then repeat at
+      1920×1080.
+    </p>
+    <details>
+      <summary>Hint</summary>
+      <p>
+        Both loops must write through <code>fb.row(y)[x]</code>, not <code>put_pixel</code> — that is
+        the entire point of the exercise. Make sure the compiler cannot delete the work: fills that
+        nothing ever reads are legal to remove entirely.
+      </p>
+    </details>
+    <details>
+      <summary>Solution</summary>
+      <p>
+        Expect a ratio somewhere between 5× and 50×, growing with the buffer size. The exact numbers
+        depend on your cache hierarchy — check yours with <code>sysctl hw.l2cachesize</code> on macOS,
+        <code>lscpu</code> on Linux, or Task Manager's performance tab on Windows — but the direction
+        is universal.
+      </p>
+      <p style="margin-bottom:0">
+        Then do the thing that makes this exercise worth its time: rewrite both loops with
+        <code>put_pixel</code> and watch the difference collapse to nothing. You will have reproduced
+        the false result described in §<a href="#measure">3.5</a>, which is a more useful thing to have
+        experienced than the true one.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3><span class="xnum">1.5.4</span>Draw a line<span class="difficulty">guided</span></h3>
+    <p>
+      Add <code>draw_line(int x0, int y0, int x1, int y1, Uint32 colour)</code> using the simplest
+      thing that works: step whichever axis changes more, and compute the other with floating-point
+      interpolation. Draw a few lines from the centre of the screen at various angles. Then look
+      carefully at a nearly-horizontal one and a nearly-vertical one.
+    </p>
+    <details>
+      <summary>Hint</summary>
+      <p>
+        <code>dx = x1 - x0</code>, <code>dy = y1 - y0</code>. Take <code>steps = max(|dx|, |dy|)</code>
+        and advance by <code>dx/steps</code>, <code>dy/steps</code> each iteration, rounding to the
+        nearest pixel.
+      </p>
+    </details>
+    <details>
+      <summary>Solution sketch</summary>
+      <p>
+        Stepping the <em>longer</em> axis is what guarantees no gaps: step the shorter one and the
+        line comes out dotted. Lines will look jagged — that is aliasing, and it is a genuine
+        artefact of representing a continuous line on a discrete grid rather than a bug.
+      </p>
+      <p style="margin-bottom:0">
+        This is deliberately the naive version. Lesson 2.1 opens by deriving exactly this algorithm
+        (DDA), then shows why Bresenham replaced it — the floating-point accumulation you just wrote
+        is doing work the integers can do exactly. Writing the naive one now means that lesson starts
+        from something you already own.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3><span class="xnum">1.5.5</span>Make the trail fade<span class="difficulty">open</span></h3>
+    <p>
+      The ball's trail is currently a uniform colour. Make older dots dimmer, so the trail fades out
+      behind the ball. Then consider: what would it take to make the trail blend with the gradient
+      behind it rather than replacing those pixels?
+    </p>
+    <details>
+      <summary>Solution sketch</summary>
+      <p>
+        Fading is straightforward — the ring buffer knows each dot's age, so scale the colour
+        components by <code>1 - age/length</code> and pack the result. Watch out for the ring buffer's
+        wraparound when computing age; off-by-one there produces a trail with a bright dot in the
+        middle of the faded part.
+      </p>
+      <p>
+        Blending is the more interesting half, and it is a real preview. To blend you must
+        <em>read</em> the existing pixel, combine it with the new one weighted by alpha, and write the
+        result back: <code>out = src × a + dst × (1 − a)</code>. That is alpha compositing, it is why
+        <code>pixel_at</code> exists on a class otherwise concerned with writing, and it is the same
+        equation that will appear in Module 6 for transparent surfaces.
+      </p>
+      <p style="margin-bottom:0">
+        One trap worth discovering now: doing that arithmetic directly on the stored 0–255 values is
+        subtly wrong, and blended edges will look too dark. The reason is the subject of Lesson 1.6,
+        which is next.
+      </p>
+    </details>
+  </div>
+
+  <!-- ================= 10. RECAP ================= -->
+  <h2 id="recap"><span class="num">9</span>Recap &amp; Next</h2>
+
+  <div class="recap">
+    <h2>What the engine can do now that it could not before</h2>
+    <ul>
+      <li>
+        <strong>It owns an image.</strong> A block of memory whose every byte has a meaning we
+        defined, and which nothing else may interpret for us.
+      </li>
+      <li>
+        <strong>It can set any pixel to any colour</strong> — safely by coordinate, or fast through a
+        row pointer, with the tradeoff between them measured rather than assumed.
+      </li>
+      <li>
+        <strong>It presents that image properly:</strong> a streaming texture, locked, copied row by
+        row using the driver's pitch, drawn scaled with nearest-neighbour filtering.
+      </li>
+      <li>
+        <strong>It has a resolution independent of the window,</strong> so resizing costs no code and
+        render scale is a parameter.
+      </li>
+      <li>
+        <strong>You can read a pixel format name</strong> and know whether it is describing bits in
+        an integer or bytes in memory.
+      </li>
+    </ul>
+    <p>
+      The idea to carry forward: <strong>two-dimensionality is a convention, not a fact.</strong>
+      <code>index = y × width + x</code> is the whole agreement, and every artefact in this
+      lesson — the stripe, the shear, the swapped channels — is what it looks like when two pieces of
+      code disagree about it.
+    </p>
+    <p>
+      <strong>Next:</strong> <a href="01-06-colour.html">1.6 — Colour, and an Honest Teaser of
+      sRGB</a>. We have been treating those 32 bits as a bag of numbers, and they are not. The value
+      128 is not half as bright as 255, blending two colours by averaging their stored values gives
+      the wrong answer, and the reason is a transformation applied to every image you have ever
+      seen. We take the first honest look at it, and pay it off completely in Module 6.
+    </p>
+  </div>
+
+  <!-- ================= 11. FURTHER READING ================= -->
+  <h2 id="reading"><span class="num">10</span>Further Reading</h2>
+
+  <ul class="reading">
+    <li>
+      <span class="src">SDL3 wiki</span>
+      <strong><a href="https://wiki.libsdl.org/SDL3/SDL_LockTexture">SDL_LockTexture</a></strong>,
+      <strong><a href="https://wiki.libsdl.org/SDL3/SDL_CreateTexture">SDL_CreateTexture</a></strong> and
+      <strong><a href="https://wiki.libsdl.org/SDL3/SDL_PixelFormat">SDL_PixelFormat</a></strong> —
+      the three pages this lesson is built on. The <code>SDL_PixelFormat</code> page carries the
+      naming-convention explanation quoted in §<a href="#bits">3.3</a>; it repays a slow read.
+    </li>
+    <li>
+      <span class="src">Article</span>
+      <strong><a href="https://fabiensanglard.net/graphics_of_gods/index.php">Fabien Sanglard, <em>The Graphics of Gods</em></a></strong> —
+      how framebuffers, palettes and page flipping worked when memory was scarce enough that every
+      byte was argued over. The constraints are gone; the thinking is not.
+    </li>
+    <li>
+      <span class="src">Reference</span>
+      <strong><a href="https://en.cppreference.com/w/cpp/container/vector">cppreference: std::vector</a></strong> —
+      particularly the distinction between <code>size</code> and <code>capacity</code>, and what
+      <code>data()</code> guarantees about contiguity. We depend on that guarantee every time we hand
+      SDL a pointer.
+    </li>
+    <li>
+      <span class="src">Article</span>
+      <strong><a href="https://igoro.com/archive/gallery-of-processor-cache-effects/">Igor Ostrovsky, "Gallery of Processor Cache Effects"</a></strong> —
+      short, experimental, and the clearest demonstration anywhere of why the loop order in
+      §<a href="#measure">3.5</a> matters. Example 2 is our measurement, in a different shape.
+    </li>
+    <li>
+      <span class="src">Book</span>
+      <strong>Ulrich Drepper, <em>What Every Programmer Should Know About Memory</em></strong> —
+      the exhaustive treatment. Sections 3.1–3.3 cover everything needed to explain our table and
+      nothing that is not; the rest is there when you want it.
+    </li>
+  </ul>
+
+  <!-- ================= 12. STATE ================= -->
+  <details class="state">
+    <summary>STATE — resume key</summary>
+<pre>course: Build a Professional 3D Game Engine (SDL3 + C++20)
+version: 1.0
+
+conventions:
+  world: right-handed, Y-up, -Z forward
+  clip: left-handed, +Y up, z in [0,1] (SDL_GPU-fixed; projection absorbs the flip)
+  sw-rasterizer: targets SDL_GPU's exact NDC (Module 4 port = API change, not maths change)
+  matrices: column vectors, v' = M*v, column-major storage
+  winding: CCW = front, cull back (per-pipeline state; set explicitly every time)
+  units: 1 unit = 1 metre; radians internally; linear colour in renderer
+  axis colours: x/y/z = red/green/blue
+  sdl3: FetchContent, pinned release-3.4.12; target SDL3::SDL3; SDL_TEST_LIBRARY OFF
+  sdl3-api: bool SDL_Init/PollEvent; SDL_CreateWindow(title,w,h,flags) no x/y;
+            SDL_CreateRenderer(window,name); event.key.key; &lt;SDL3/SDL_main.h&gt; separate
+  sdl3-input: const bool *SDL_GetKeyboardState(int*) — bool, NOT SDL2's Uint8;
+            SDL_SCANCODE_COUNT = 512; wheel is event-only; SDL_PollEvent pumps;
+            focus loss -&gt; SDL_ResetKeyboard() sends key-UP events
+  sdl3-time: SDL_GetTicksNS() is monotonic (traced to CLOCK_MONOTONIC_RAW /
+            mach_absolute_time / QueryPerformanceCounter). SDL_Delay waits AT LEAST the
+            requested time. SDL_SetRenderVSync, SDL_RENDERER_VSYNC_DISABLED = 0.
+            SDL_RenderDebugText/Format = 8x8 ASCII font, drawn OVER the framebuffer.
+  sdl3-pixels: SDL_CreateTexture(renderer, format, access, w, h);
+            SDL_TEXTUREACCESS_STREAMING for a per-frame buffer.
+            SDL_LockTexture(tex, NULL, &amp;pixels, &amp;pitch) = WRITE-ONLY, previous contents
+            UNDEFINED, so keep the master copy app-side (SDL's docs say so explicitly);
+            SDL_UnlockTexture. The returned pitch may exceed width*4 (row padding), so
+            copy ROW BY ROW or the image shears.
+            SDL_RenderTexture(r, tex, NULL, NULL): NULL dst = entire render target, so a
+            small framebuffer scales to the window and resize needs no code.
+            SDL_SetTextureScaleMode(tex, SDL_SCALEMODE_NEAREST) for crisp upscaling
+            (SDL_SCALEMODE_PIXELART also exists, 3.4+).
+            FORMAT NAMING: "8888" names = packed into a native-endian integer, MSB first
+            (ARGB8888 = 0xAARRGGBB). "32" names = byte order in memory. On little-endian
+            they are REVERSED: SDL_PIXELFORMAT_RGBA32 == SDL_PIXELFORMAT_ABGR8888.
+            We store Uint32 and build with shifts, so we use ARGB8888 and never touch
+            bytes — endianness stays out of the engine until an image loader (Module 6).
+  framebuffer: row-major, index = y*width + x. Moving right = +1, moving down = +width.
+            An x past width does NOT error — it lands on the next row (candy-striping).
+            put_pixel is bounds-checked; row(y) is the documented fast path (row index
+            still clamped). fill_rect CLIPS ONCE then std::fill_n per row.
+            Measured (M4 Pro): put_pixel vs row pointer = 5.1x (-O0), 14.8x (-O2);
+            rows-outer vs columns-outer = 10.9x at 320x180 rising to 48.8x at 4K
+            (64-byte cache line = 16 pixels).
+            BENCHMARK TRAP: measuring both loop orders THROUGH put_pixel showed 1.00x —
+            its overhead swamped the cache effect. Make the paths differ only in the
+            thing under test.
+  time-model: absolute time = Uint64 ns; dt() clamped 0.25 s; fps() display only
+  loop: THE loop, settled as of 1.4 and not changing again:
+            drain -&gt; clk.tick() -&gt; in.update() -&gt; stepper.begin_frame(clk.dt())
+            -&gt; while (stepper.next_step()) { previous = current; simulate(current, h); }
+            -&gt; alpha = stepper.alpha() -&gt; draw into framebuffer -&gt; upload -&gt; present
+  fixed-step: h = 1/60 default; invariant 0 &lt;= accumulator &lt; h so alpha in [0,1);
+            previous = current INSIDE the loop; simulate() gets h, never clk.dt();
+            interpolation renders at exactly T - h; spiral guarded by dt clamp + step cap;
+            never interpolate across a teleport
+  input-model: poll levels, DERIVE edges; COPY SDL's array, never alias;
+            scancodes for positions, keycodes for symbols
+  shaders: HLSL -&gt; SDL_shadercross (3.0.0-preview) -&gt; SPIR-V/DXIL/MSL  [Module 4+]
+  cpp: C++20, no exceptions/RTTI in core, snake_case, private members trailing _,
+       .hpp + #pragma once, [[nodiscard]], anonymous namespace for TU-local helpers,
+       never `using namespace` at file scope, -Wall -Wextra//W4 all fixed.
+       Owning containers (std::vector) over new/delete — RAII. SDL handles are still
+       manually managed in main.cpp on purpose; Module 5 wraps them.
+  build: CMake >= 3.24, out-of-source (build/); sources listed explicitly (never GLOB);
+         target_include_directories(engine PRIVATE src)
+  docs-tooling: shared &lt;style&gt; AND trailing &lt;script&gt; propagated by
+         docs/_template/apply-shared.py — never by hand. Marker regions
+         SHARED-CSS:BEGIN/END and SHARED-SCRIPT:BEGIN/END; widget JS goes OUTSIDE them.
+         Run `apply-shared.py --check` before committing docs/.
+
+curriculum: 94 lessons, ~433 h, 9 modules
+  M0:6  M1:8  M2:12  M3:10  M4:9  M5:10  M6:15  M7:13  M8:11
+
+completed:
+  - MODULE 0 COMPLETE (0.1 … 0.6)
+  - 1.1 Events, Properly
+  - 1.2 Input: State vs Events
+  - 1.3 Frames, Delta Time, and Why Naive Loops Lie
+  - 1.4 The Fixed Timestep with Interpolation, Derived
+  - 1.5 The Framebuffer: Your First Owned Pixels
+
+capabilities:
+  - portable CMake build, five translation units; FetchContent SDL3 (release-3.4.12)
+  - window + event dispatch; input subsystem; clock subsystem; fixed_step subsystem
+  - THE loop: fixed-timestep simulation with render interpolation, spiral-guarded
+  - framebuffer subsystem (src/gfx/framebuffer): 320x180 ARGB8888 CPU buffer,
+    clear / put_pixel / pixel_at / fill_rect / row(), pack_argb
+  - presentation: streaming texture, locked + row-wise upload, NEAREST 4x upscale,
+    window resize needs no code
+  - demo: gradient background (two addressing paths, timed on screen), 1.4's three
+    timing boxes and ball drawn by us, per-simulation-step pixel trail
+  - known-and-deliberate: colour is still treated as raw numbers (1.6 fixes that);
+    the debug text overlay is the only thing on screen SDL still draws
+
+files:
+  /: CLAUDE.md, README.md, ARCHITECTURE.md, LEARNINGS.md, PROMPT.md, LICENSE,
+     .gitignore, CMakeLists.txt, STATE.md
+  src/: main.cpp
+  src/core/: input.hpp, input.cpp, clock.hpp, clock.cpp, fixed_step.hpp, fixed_step.cpp
+  src/gfx/: framebuffer.hpp, framebuffer.cpp
+  docs/: index.html, conventions.html, math-toolbox.html, cpp-style.html
+  docs/lessons/: 00-01..00-06, 01-01-events-properly.html,
+                 01-02-input-state-vs-events.html, 01-03-delta-time.html,
+                 01-04-fixed-timestep.html, 01-05-framebuffer.html
+  docs/_template/: lesson-template.html, README.md, apply-shared.py
+  memory/: 2026-07-16.md, 2026-07-18.md
+
+next: 1.6 — Colour, and an Honest Teaser of sRGB</pre>
+  </details>
+
+  <nav class="lesson-nav" aria-label="Lesson navigation (bottom)">
+    <a class="prev-l" href="01-04-fixed-timestep.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">1.4 — The Fixed Timestep with Interpolation, Derived</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="01-06-colour.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">1.6 — Colour, and an Honest Teaser of sRGB</span>
+    </a>
+  </nav>
+
+  <footer class="foot">
+    <p>
+      Build a Professional 3D Game Engine ·
+      <a href="../index.html">Contents</a> ·
+      <a href="../conventions.html">Conventions</a> ·
+      <a href="../math-toolbox.html">Math Toolbox</a> ·
+      <a href="../cpp-style.html">C++ Style</a>
+    </p>
+    <p>MIT licensed. Copyright © 2026 digster.</p>
+  </footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  // Interactive: the 2-D to 1-D mapping. The same 48 boxes of memory, refolded
+  // as the agreed width changes.
+  var slider = document.getElementById("fb-width");
+  if (!slider) { return; }
+  var gridG = document.getElementById("fb-grid");
+  var stripG = document.getElementById("fb-strip");
+  var labelG = document.getElementById("fb-labels");
+  var wOut = document.getElementById("fb-w-out");
+  var calc = document.getElementById("fb-calc");
+
+  var TOTAL = 24;
+  // Only widths that divide TOTAL exactly, so the grid always accounts for every box
+  // in the strip — no unexplained leftovers at the end of the line.
+  var WIDTHS = [4, 6, 8, 12];
+  var GRID_TOP = 26, GRID_LEFT = 40, GRID_MAX_H = 174;
+  var STRIP_Y = 214, STRIP_LEFT = 40, STRIP_W = 520;
+  var sel = { x: 3, y: 2 };
+
+  function render() {
+    var w = WIDTHS[parseInt(slider.value, 10)];
+    var h = TOTAL / w;
+    if (sel.x >= w) { sel.x = w - 1; }
+    if (sel.y >= h) { sel.y = h - 1; }
+
+    // Fit the grid to the space available, in both directions.
+    var cell = Math.min(40, Math.floor(430 / w), Math.floor(GRID_MAX_H / h));
+
+    var g = "";
+    for (var y = 0; y < h; y++) {
+      for (var x = 0; x < w; x++) {
+        var idx = y * w + x;
+        var on = (x === sel.x && y === sel.y);
+        g += '<rect class="fb-cell" data-x="' + x + '" data-y="' + y
+           + '" x="' + (GRID_LEFT + x*cell) + '" y="' + (GRID_TOP + y*cell)
+           + '" width="' + (cell-2) + '" height="' + (cell-2)
+           + '" rx="2" fill="' + (on ? "var(--dia-hi)" : "var(--dia-fill)")
+           + '" stroke="var(--dia-ink-soft)" stroke-width="1" style="cursor:pointer"/>';
+        g += '<text x="' + (GRID_LEFT + x*cell + (cell-2)/2) + '" y="' + (GRID_TOP + y*cell + (cell-2)/2 + 4)
+           + '" text-anchor="middle" style="font-size:10px;font-family:var(--font-mono);pointer-events:none;fill:'
+           + (on ? "#fff" : "var(--text-faint)") + '">' + idx + "</text>";
+      }
+    }
+    gridG.innerHTML = g;
+
+    // The strip: always TOTAL boxes, at a fixed position so it cannot be clipped
+    // by a tall grid.
+    var sw = STRIP_W / TOTAL;
+    var s = '<rect x="' + STRIP_LEFT + '" y="' + STRIP_Y + '" width="' + STRIP_W
+          + '" height="22" rx="2" fill="var(--dia-fill)" stroke="var(--dia-ink-soft)" stroke-width="1"/>';
+    for (var r = 0; r < h; r += 2) {
+      s += '<rect x="' + (STRIP_LEFT + r*w*sw) + '" y="' + STRIP_Y + '" width="' + (w*sw)
+         + '" height="22" fill="var(--note-bd)" opacity="0.22"/>';
+    }
+    var selIdx = sel.y * w + sel.x;
+    s += '<rect x="' + (STRIP_LEFT + selIdx*sw) + '" y="' + STRIP_Y + '" width="' + sw
+       + '" height="22" fill="var(--dia-hi)"/>';
+    stripG.innerHTML = s;
+
+    var fnt = 'style="font-size:9.5px;font-family:var(--font-ui);fill:var(--text-faint)"';
+    labelG.innerHTML =
+        '<text x="' + STRIP_LEFT + '" y="' + (STRIP_Y - 8) + '" ' + fnt + '>memory, one line — always '
+      + TOTAL + ' boxes, shaded per row</text>'
+      + '<text x="' + STRIP_LEFT + '" y="' + (STRIP_Y + 38) + '" ' + fnt + '>0</text>'
+      + '<text x="' + (STRIP_LEFT + STRIP_W) + '" y="' + (STRIP_Y + 38) + '" text-anchor="end" ' + fnt + '>'
+      + (TOTAL-1) + '</text>';
+
+    wOut.textContent = "width = " + w;
+    calc.textContent = "(" + sel.x + ", " + sel.y + ") → " + sel.y + " × " + w + " + " + sel.x + " = " + selIdx;
+  }
+
+  gridG.addEventListener("click", function (e) {
+    var t = e.target;
+    if (t && t.classList && t.classList.contains("fb-cell")) {
+      sel.x = parseInt(t.getAttribute("data-x"), 10);
+      sel.y = parseInt(t.getAttribute("data-y"), 10);
+      render();
+    }
+  });
+  slider.addEventListener("input", render);
+  render();
+})();
+</script>
+
+<!-- SHARED-SCRIPT:BEGIN -->
+<script>
+(function () {
+  "use strict";
+
+  /* ---- Theme toggle: OS default, with a manual override in localStorage ---- */
+  var root = document.documentElement;
+  var KEY = "engine-course-theme";
+  try {
+    var saved = localStorage.getItem(KEY);
+    if (saved) { root.setAttribute("data-theme", saved); root.style.colorScheme = saved; }
+  } catch (e) { /* private mode — fall back to the OS preference */ }
+
+  var btn = document.getElementById("theme-toggle");
+  if (btn) {
+    btn.addEventListener("click", function () {
+      var cur = root.getAttribute("data-theme");
+      if (!cur) {
+        cur = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      }
+      var next = cur === "dark" ? "light" : "dark";
+      root.setAttribute("data-theme", next);
+      root.style.colorScheme = next;
+      try { localStorage.setItem(KEY, next); } catch (e) {}
+    });
+  }
+
+  /* ---- Syntax highlighting -------------------------------------------------
+     A deliberately small tokeniser for C++/HLSL, CMake, and shell. It reads
+     textContent and rebuilds escaped HTML, so it can never execute page content
+     or mangle a listing — worst case a token is mis-coloured.
+
+     Why not highlight.js from a CDN? Because a lesson must render from a bare
+     filesystem with no network, and colour is not worth a dependency that can
+     be absent. This is ~60 lines and always there.
+
+     Keyword vs type matters: `kw` is consulted before `ty`, so a word listed in
+     both lands in .tok-k. Fundamental types (bool, char, int, …) belong in
+     CPP_TYPES only — putting them in CPP_KEYWORDS would silently recolour every
+     declaration in the course.
+     -------------------------------------------------------------------------- */
+  var CPP_KEYWORDS = ("alignas alignof and asm auto break case catch class concept const consteval "
+    + "constexpr constinit const_cast continue co_await co_return co_yield decltype default defined "
+    + "delete do dynamic_cast else enum explicit export extern false final for friend goto if inline "
+    + "mutable namespace new noexcept not nullptr operator or override private protected public "
+    + "register reinterpret_cast requires return sizeof static static_assert static_cast struct "
+    + "switch template this thread_local throw true try typedef typeid typename union using virtual "
+    + "volatile while cbuffer register_space numthreads in out inout").split(" ");
+
+  var CPP_TYPES = ("bool char char8_t char16_t char32_t double float int long short signed unsigned "
+    + "void wchar_t size_t uint8_t uint16_t uint32_t uint64_t int8_t int16_t int32_t int64_t "
+    + "Uint8 Uint16 Uint32 Uint64 Sint8 Sint16 Sint32 Sint64 "
+    + "float2 float3 float4 float4x4 float3x3 half int2 int3 int4 uint uint2 uint3 uint4 matrix "
+    + "Texture2D TextureCube SamplerState StructuredBuffer").split(" ");
+
+  var kw = Object.create(null), ty = Object.create(null);
+  CPP_KEYWORDS.forEach(function (w) { kw[w] = 1; });
+  CPP_TYPES.forEach(function (w) { ty[w] = 1; });
+
+  function esc(s) {
+    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+  function span(cls, s) { return '<span class="tok-' + cls + '">' + esc(s) + "</span>"; }
+
+  // One regex, alternation ordered so longer/greedier forms win.
+  var RE = new RegExp([
+    "(\\/\\*[\\s\\S]*?\\*\\/|\\/\\/[^\\n]*|#[^\\n]*)",       // 1 comment / preprocessor
+    '("(?:\\\\.|[^"\\\\])*"|\'(?:\\\\.|[^\'\\\\])*\')',      // 2 string / char
+    "(\\b\\d[\\w.]*\\b)",                                     // 3 number
+    "([A-Za-z_]\\w*)(?=\\s*\\()",                             // 4 call site
+    "([A-Za-z_]\\w*)",                                        // 5 identifier
+    "([{}()\\[\\];,.<>+\\-*/%=!&|^~?:]+)"                     // 6 punctuation
+  ].join("|"), "g");
+
+  function highlightCLike(src) {
+    var out = "", last = 0, m;
+    RE.lastIndex = 0;
+    while ((m = RE.exec(src)) !== null) {
+      if (m.index > last) out += esc(src.slice(last, m.index));
+      if (m[1])      out += span(m[1].charAt(0) === "#" ? "p" : "c", m[1]);
+      else if (m[2]) out += span("s", m[2]);
+      else if (m[3]) out += span("n", m[3]);
+      else if (m[4]) out += kw[m[4]] ? span("k", m[4]) : span("f", m[4]);
+      else if (m[5]) out += kw[m[5]] ? span("k", m[5])
+                          : ty[m[5]] ? span("t", m[5])
+                          : esc(m[5]);
+      else if (m[6]) out += span("o", m[6]);
+      last = RE.lastIndex;
+    }
+    out += esc(src.slice(last));
+    return out;
+  }
+
+  // Shell: `#` comments anywhere, plus Windows-batch `::` comments — but only at
+  // the start of a line, because `::` is also a namespace separator and a CMake
+  // target separator (`SDL3::SDL3`), which do appear mid-line in shell listings.
+  var SH_RE = /(^|\n)(\s*)(::[^\n]*)|(#[^\n]*)|("(?:\\.|[^"\\])*"|'[^']*')|(^|\n)(\s*)([\w.\/\\-]+)/g;
+  function highlightShell(src) {
+    var out = "", last = 0, m;
+    SH_RE.lastIndex = 0;
+    while ((m = SH_RE.exec(src)) !== null) {
+      if (m.index > last) out += esc(src.slice(last, m.index));
+      if (m[3])      out += esc(m[1] || "") + esc(m[2] || "") + span("c", m[3]);
+      else if (m[4]) out += span("c", m[4]);
+      else if (m[5]) out += span("s", m[5]);
+      else           out += esc(m[6] || "") + esc(m[7] || "") + span("f", m[8]);
+      last = SH_RE.lastIndex;
+    }
+    out += esc(src.slice(last));
+    return out;
+  }
+
+  // CMake: comments, strings, ${vars}, and command names (word before "(").
+  var CMAKE_RE = /(#[^\n]*)|("(?:\\.|[^"\\])*")|(\$\{[^}]*\})|(^|\n)(\s*)([A-Za-z_]\w*)(?=\s*\()/g;
+  function highlightCMake(src) {
+    var out = "", last = 0, m;
+    CMAKE_RE.lastIndex = 0;
+    while ((m = CMAKE_RE.exec(src)) !== null) {
+      if (m.index > last) out += esc(src.slice(last, m.index));
+      if (m[1])      out += span("c", m[1]);
+      else if (m[2]) out += span("s", m[2]);
+      else if (m[3]) out += span("n", m[3]);
+      else           out += esc(m[4] || "") + esc(m[5] || "") + span("f", m[6]);
+      last = CMAKE_RE.lastIndex;
+    }
+    out += esc(src.slice(last));
+    return out;
+  }
+
+  var DISPATCH = {
+    "lang-cpp": highlightCLike, "lang-hlsl": highlightCLike, "lang-c": highlightCLike,
+    "lang-bash": highlightShell, "lang-sh": highlightShell,
+    "lang-cmake": highlightCMake
+  };
+  document.querySelectorAll(".listing pre code").forEach(function (el) {
+    for (var cls in DISPATCH) {
+      if (el.classList.contains(cls)) {
+        el.innerHTML = DISPATCH[cls](el.textContent);
+        return;
+      }
+    }
+  });
+})();
+</script>
+<!-- SHARED-SCRIPT:END -->
+</body>
+</html>

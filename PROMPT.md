@@ -139,3 +139,24 @@ with four SVG diagrams and an interactive interpolation widget.
 | Demo box motion | Bounces, never wraps | Wrapping is a teleport, and interpolating a teleport slides the box backwards across the screen. Kept as Exercise 1.4.4 rather than shipped as a bug. |
 | Determinism claim | Explicitly scoped to same-binary/same-machine | Cross-platform float determinism needs far more (FMA, x87, libm, vectorisation). Overclaiming here is how people ship broken lockstep. |
 | Figure 3 | Rebuilt to plot lag-over-time rather than position offset | The "one step behind" offset is ~7 px at honest scale and reads as noise; plotting the lag itself makes the identical claim unmissable. |
+
+---
+
+## 2026-07-18 — Lesson 1.5
+
+> next
+
+**Response:** Lesson 1.5 — The Framebuffer: Your First Owned Pixels. The `gfx::framebuffer`
+CPU pixel buffer, streaming-texture presentation with row-wise upload, the demo redrawn
+entirely into our own memory, and the lesson page with four SVG diagrams and an
+interactive 2-D-to-1-D index widget.
+
+**Decisions made in this session:**
+
+| Decision | Choice | Rationale |
+|---|---|---|
+| Framebuffer size | 320×180, scaled 4× to the window | Every pixel becomes a visible 4×4 block, so `put_pixel` has consequences you can see — and fixed internal resolution is a real shipping technique that also makes window resize free. |
+| Upload path | `SDL_LockTexture` + row-by-row copy | SDL's docs prefer locking for streaming textures, and it makes the pitch lesson concrete: the driver's row stride may exceed `width × 4`. |
+| Pixel format | `ARGB8888`, built with shifts, never byte writes | Keeps us in the packed-integer view, so the format matches on big-endian too and endianness stays out of the engine until Module 6's image loader. |
+| API shape | `put_pixel` bounds-checked, `row(y)` the documented fast path | Safe-only forces slow code; fast-only forces every caller to be perfect. Measured the gap (5–15×) rather than asserting it. |
+| Performance claims | All measured, and one corrected | A first benchmark showed row/column order made no difference; the cause was measuring through `put_pixel`, whose overhead hid the 10.9× cache effect. Written up as a pitfall and an exercise. |

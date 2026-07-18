@@ -227,6 +227,64 @@ draws positions that never existed. Snap `previous = current` at the discontinui
 and a frame may run several steps. Hoisting it out works perfectly whenever the frame rate exceeds
 the sim rate — i.e. on the developer's machine — and rubber-bands on everyone else's.
 
+### Pixels and textures (verified at `release-3.4.12` for Lesson 1.5)
+
+| Fact | Detail |
+|---|---|
+| `SDL_CreateTexture(renderer, format, access, w, h)` | `SDL_TEXTUREACCESS_STREAMING` for a buffer rewritten every frame. |
+| `SDL_LockTexture(tex, NULL, &pixels, &pitch)` | **Write-only.** The header: "the pixels made available for editing don't necessarily contain the old texture data… if you need to keep a copy of the texture data you should do that at the application level." So keep the master copy app-side and treat the lock as a one-way push. |
+| The returned **pitch** | Bytes from one row's start to the next; may exceed `width * 4` because drivers pad rows for alignment. **Copy row by row** — a single whole-buffer `memcpy` shears the image on exactly the machines where the pitches differ. |
+| `SDL_UpdateTexture` | Documented as "fairly slow… intended for use with static textures"; for streaming textures the locking functions are preferred. |
+| `SDL_RenderTexture(r, tex, NULL, NULL)` | `NULL` dst = "the entire rendering target", so a small framebuffer scales to the window. Window resize then needs **no code at all**. |
+| `SDL_SetTextureScaleMode(tex, SDL_SCALEMODE_NEAREST)` | Crisp upscaling. `SDL_SCALEMODE_PIXELART` also exists (3.4+) for non-integer scale factors. |
+
+**Pixel format naming is the trap.** From `SDL_pixels.h`:
+
+- **`ARGB8888`-style** (bit count per component) = packed into a **native-endianness integer**, most
+  significant component first. `ARGB8888` is `0xAARRGGBB` as a `Uint32`.
+- **`RGBA32`-style** (single total bit count) = **byte order in memory**, platform-independent.
+
+On little-endian these are *reversed*, and the header proves it:
+`SDL_PIXELFORMAT_RGBA32 = SDL_PIXELFORMAT_ABGR8888`, and
+`SDL_PIXELFORMAT_BGRA32 = SDL_PIXELFORMAT_ARGB8888`.
+
+**Our escape:** store `Uint32` and build pixels with shifts only, never by writing bytes. That keeps
+us purely in the packed-integer view, so `ARGB8888` matches `pack_argb` on every platform including
+big-endian. Endianness becomes a real problem only when something reads bytes — an image loader —
+which is Module 6's `stb_image` work. Symptom to recognise: **red and blue swapped while green looks
+fine** is always a channel-order mismatch, never gamma.
+
+### Framebuffer facts, measured on this codebase
+
+`index = y * width + x`, row-major. Moving right is `+1`; moving down is `+width`.
+
+**An x past `width` is not an error.** It lands on the *next row*: in an 8-wide buffer, `(8,2)`
+computes index 24, which is `(0,3)`. The visible symptom is candy-striping — each row leaking its
+overshoot onto the left of the next. A stray `y`, by contrast, leaves the buffer entirely and is
+undefined behaviour; the crash is the *lucky* outcome, because the stripe can survive review.
+
+Measured on an Apple M4 Pro (L1d 64 KB, L2 4 MB), median of repeated runs, 320×180 = 57,600 pixels:
+
+| Comparison | Result |
+|---|---|
+| `put_pixel` vs row pointer | **5.1×** at `-O0`, **14.8×** at `-O2` |
+| Rows-outer vs columns-outer, 320×180 (225 KB) | **10.9×** |
+| …1280×720 (3.5 MB) | 32.7× |
+| …3840×2160 (31.6 MB) | **48.8×** |
+
+A 64-byte cache line holds 16 `Uint32` pixels, so a row walk uses all 16 and a column walk uses one
+before moving 1,280+ bytes away. The penalty grows as the buffer outgrows the caches. **Rows outer,
+columns inner — always.**
+
+**The benchmark that lied, and the lesson in it.** The first version of that second experiment
+measured **1.00×** — no difference at all between row and column order. The cause was not that
+locality is a myth: both loops were written through `put_pixel`, whose per-call bounds check and
+index multiply swamped the memory-access difference entirely. **The instrument was louder than the
+signal.** Rewriting both paths to use row pointers, so the *only* remaining difference was access
+order, revealed the 10.9× gap. When a benchmark says a well-founded effect is absent, suspect the
+measurement before believing the result — and always measure at `-O2`, since the ratio was 3× larger
+there than in a Debug build.
+
 **Loop model:** we use classic `int main` + our own `while` loop, NOT SDL3's callback model
 (`SDL_MAIN_USE_CALLBACKS` with `SDL_AppInit`/`SDL_AppIterate`/`SDL_AppEvent`/`SDL_AppQuit`), because
 the engine owns its loop (0.1 thesis). The callback model exists and is fine for simple apps; it is
@@ -344,6 +402,23 @@ makes "two frames at the same position, then a double-sized jump" literally visi
 **Watch for escaping artifacts when editing HTML from a script.** A Python-generated SVG label
 shipped as `can''t` — a doubled apostrophe from quoting. Grep the rendered text for `''` and similar
 after any scripted edit; the browser will render it happily.
+
+**A widget whose content changes size will outgrow its viewBox.** 1.5's index widget rebuilt its
+grid from a slider; at the narrowest width the grid grew to twelve rows and pushed the memory strip
+below the fixed `viewBox` height, where it was silently clipped. Nothing errored and the geometry
+checks passed — only the screenshot showed it. Two fixes worth reusing: size cells from *both*
+constraints (`min(max, availableWidth/cols, availableHeight/rows)`), and place anything that must
+always be visible at a **fixed** coordinate rather than relative to variable-height content.
+
+**Constrain a widget's inputs so no configuration has loose ends.** The same widget allowed any
+width from 4 to 12 over a 48-box strip, so at width 10 the grid covered 40 boxes and 8 sat
+unexplained at the end of the line. Restricting the slider to exact divisors removed the question
+entirely. If a control can reach a state the caption does not explain, either explain it or make it
+unreachable.
+
+**Check a widget's initial state against the prose.** 1.5's widget must open showing
+`(3, 2) → 2 × 8 + 3 = 19` because that is the worked example in the surrounding text. Verified
+explicitly after a fresh load, since interacting with it during testing leaves it elsewhere.
 
 ## Testing engine code that talks to SDL
 

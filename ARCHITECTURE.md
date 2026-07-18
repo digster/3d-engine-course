@@ -61,6 +61,8 @@ inventing one — but without paying framework ceremony before it buys anything.
 │   │   └── fixed_step.cpp
 │   ├── math/               # vec2/3/4, mat3/4, quaternion — hand-rolled, no GLM
 │   ├── gfx/                # framebuffer, software rasterizer → later SDL_GPU renderer
+│   │   ├── framebuffer.hpp # CPU pixel buffer, ARGB8888, row-major   [EXISTS from 1.5]
+│   │   └── framebuffer.cpp
 │   └── platform/           # window + event pumping (Module 5; see the note below)
 ├── shaders/                # HLSL sources (Module 4+). Compiled output is gitignored.
 ├── assets/                 # meshes, textures, fonts
@@ -130,6 +132,34 @@ Three consequences worth knowing before touching this loop:
 
 Determinism from this is same-binary, same-machine only. Cross-platform lockstep needs far more
 (see LEARNINGS.md).
+
+**Rendering, as of Lesson 1.5.** The engine draws into a `gfx::framebuffer` — a `320×180`
+row-major buffer of `Uint32` ARGB8888 pixels that it owns — and presents it once per frame through
+an `SDL_TEXTUREACCESS_STREAMING` texture:
+
+```
+draw into framebuffer -> SDL_LockTexture -> copy row by row -> SDL_UnlockTexture
+                      -> SDL_RenderTexture(NULL dst)  [scales to the window]
+```
+
+Four structural points:
+
+- **`index = y * width + x`.** The only addressing convention in the engine. An x past `width` is
+  not an error — it silently lands on the next row, which is why `put_pixel` is bounds-checked and
+  `fill_rect` clips before writing rather than testing per pixel.
+- **The copy is row by row, using the pitch `SDL_LockTexture` returns.** Drivers pad rows for
+  alignment, so the texture's pitch may exceed `width * 4`. A single whole-buffer `memcpy` shears
+  the image on exactly the machines where it does.
+- **Pixels are only ever touched as `Uint32`,** built with shifts, so we use SDL's packed-integer
+  format name (`ARGB8888`) and endianness never enters the engine. It becomes a real concern when an
+  image loader starts reading bytes (Module 6).
+- **Render resolution is independent of window size.** A `NULL` destination rect stretches the
+  framebuffer over the whole target, so window resizing needs no code and render scale is a
+  parameter — the mechanism behind dynamic resolution.
+
+The API is deliberately two-tier: `put_pixel` is safe and checked, `row(y)` is the documented fast
+path for inner loops that have already established their bounds (measured at 5–15× depending on
+optimisation level). That split is the shape the drawing API keeps as the rasterizer grows.
 
 ### 2.2 After the Module 5 refactor: engine / demos / tools
 

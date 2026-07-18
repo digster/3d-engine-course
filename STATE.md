@@ -7,7 +7,7 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-07-18 (after Lesson 1.4 — Module 1 half done)
+updated: 2026-07-18 (after Lesson 1.5 — Module 1: 5 of 8)
 
 conventions:
   world: right-handed, Y-up, -Z forward
@@ -82,6 +82,36 @@ conventions:
             (FMA contraction, x87, libm, vectorisation).
             NEVER interpolate across a teleport — snap previous = current instead. That is
             why the 1.4 demo's box bounces rather than wrapping.
+  sdl3-pixels: SDL_CreateTexture(renderer, format, access, w, h) with
+            SDL_TEXTUREACCESS_STREAMING for a per-frame buffer.
+            SDL_LockTexture(tex, NULL, &pixels, &pitch) = WRITE-ONLY, previous contents
+            UNDEFINED — SDL's docs say to keep the master copy app-side, which the
+            framebuffer is. The returned pitch MAY EXCEED width*4 (driver row padding),
+            so copy ROW BY ROW or the image shears on other people's machines.
+            SDL_UpdateTexture is documented as slow / for static textures.
+            SDL_RenderTexture(r, tex, NULL, NULL): NULL dst = entire render target, so a
+            small framebuffer scales to the window and resize needs NO code.
+            SDL_SetTextureScaleMode(tex, SDL_SCALEMODE_NEAREST) for crisp upscaling
+            (SDL_SCALEMODE_PIXELART also exists, 3.4+).
+            FORMAT NAMES: "8888" = packed into a native-endian integer, MSB first
+            (ARGB8888 = 0xAARRGGBB). "32" = byte order in memory. On little-endian they
+            are REVERSED: RGBA32 == ABGR8888 and BGRA32 == ARGB8888 (header-verified).
+            We store Uint32 and build with shifts only, so ARGB8888 matches everywhere
+            and endianness never enters the engine until an image loader (Module 6).
+            Symptom: red/blue swapped with green fine = channel order, never gamma.
+  framebuffer: row-major, index = y*width + x. Right = +1, down = +width.
+            An x past width is NOT an error — it lands on the next row (candy-striping);
+            a stray y leaves the buffer entirely (UB, and the crash is the lucky case).
+            put_pixel is bounds-checked; row(y) is the documented fast path (row index
+            still clamped). fill_rect CLIPS ONCE then std::fill_n per row. No clear() in
+            the demo because the gradient covers every pixel — a real optimisation with a
+            real trap attached.
+            MEASURED (M4 Pro, median): put_pixel vs row pointer = 5.1x (-O0), 14.8x (-O2);
+            rows-outer vs columns-outer = 10.9x @320x180, 32.7x @720p, 48.8x @4K
+            (64-byte line = 16 pixels). Rows outer, columns inner, always.
+            BENCHMARK TRAP: measuring both loop orders THROUGH put_pixel gave 1.00x —
+            its overhead swamped the effect. Make the paths differ ONLY in what is under
+            test, and measure at -O2.
   shaders: HLSL -> SDL_shadercross (3.0.0-preview) -> SPIR-V/DXIL/MSL  [Module 4+]
   cpp: C++20, no exceptions/RTTI in core, snake_case, private members trailing _,
        .hpp + #pragma once, [[nodiscard]], -Wall -Wextra // /W4, all warnings fixed
@@ -123,10 +153,11 @@ completed:
   - 1.2  Input: State vs Events
   - 1.3  Frames, Delta Time, and Why Naive Loops Lie
   - 1.4  The Fixed Timestep with Interpolation, Derived
+  - 1.5  The Framebuffer: Your First Owned Pixels
 
 capabilities:
   - verified C++20 toolchain (MSVC / GCC / Clang), 64-bit
-  - portable CMake build, now four translation units; FetchContent SDL3 (release-3.4.12)
+  - portable CMake build, now five translation units; FetchContent SDL3 (release-3.4.12)
   - engine app: 1280x720 window, complete switch-based event dispatch (quit,
     window-close, window-resize), clean shutdown, startup version log
   - input subsystem (src/core/input): keyboard levels + edges addressed by scancode,
@@ -140,8 +171,17 @@ capabilities:
   - demo: variable-dt vs fixed-raw vs fixed-interpolated boxes + a bouncing ball whose
     apexes are now identical at 2000 / 240 / 60 / 20 fps; sim-rate keys [1-4], vsync
     toggle, throttle; on-screen readout via SDL_RenderDebugTextFormat
+  - framebuffer subsystem (src/gfx/framebuffer): 320x180 ARGB8888 CPU buffer,
+    clear / put_pixel / pixel_at / fill_rect / row(), pack_argb
+  - presentation: streaming texture, locked + row-wise upload honouring the driver pitch,
+    NEAREST 4x upscale; render resolution independent of window size
+  - demo now drawn ENTIRELY into our own pixels: gradient background (two addressing
+    paths, timed on screen via [G]), 1.4's three timing boxes and ball, and a pixel trail
+    with one dot per simulation step
   - known-and-deliberate: explicit Euler still gains energy — but identically everywhere,
-    at a rate set by h, which is ours to choose (Module 7 fixes the integrator)
+    at a rate set by h, which is ours to choose (Module 7 fixes the integrator);
+    colour is still raw numbers (1.6); the debug-text overlay is the only thing on
+    screen SDL still draws for us (Module 6 gives us real text)
   - skills: reading SDL headers as source of truth; debugging with lldb/gdb/VS
 
 decisions:
@@ -155,16 +195,18 @@ files:
   src/: main.cpp
   src/core/: input.hpp, input.cpp, clock.hpp, clock.cpp,
             fixed_step.hpp, fixed_step.cpp
+  src/gfx/: framebuffer.hpp, framebuffer.cpp
   docs/: index.html, conventions.html, math-toolbox.html, cpp-style.html
   docs/lessons/: 00-01-what-is-an-engine.html, 00-02-how-this-course-works.html,
                  00-03-toolchain.html, 00-04-cmake-from-zero.html,
                  00-05-first-window.html, 00-06-headers-and-debugger.html,
                  01-01-events-properly.html, 01-02-input-state-vs-events.html,
-                 01-03-delta-time.html, 01-04-fixed-timestep.html
+                 01-03-delta-time.html, 01-04-fixed-timestep.html,
+                 01-05-framebuffer.html
   docs/_template/: lesson-template.html, README.md, apply-shared.py
   memory/: 2026-07-16.md, 2026-07-18.md
   (retired: hello.cpp)
 
-next: 1.5 — The Framebuffer: Your First Owned Pixels
-      (planned filename: docs/lessons/01-05-framebuffer.html — 1.4 already links to it)
+next: 1.6 — Colour, and an Honest Teaser of sRGB
+      (planned filename: docs/lessons/01-06-colour.html — 1.5 already links to it)
 ```
