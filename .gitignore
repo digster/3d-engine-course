@@ -67,3 +67,8 @@ perf.data*
 # ---- Local scratch ----------------------------------------------------------
 scratch/
 *.log
+
+# Snapshots/logs dropped by the Playwright MCP when verifying docs/ in a real
+# browser (see docs/_template/README.md — the preview pane is not trustworthy
+# for computed styles, so verification always goes through Chromium).
+.playwright-mcp/

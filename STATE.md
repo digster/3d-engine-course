@@ -7,7 +7,7 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-07-18 (after Lesson 1.2)
+updated: 2026-07-18 (after Lesson 1.2; then a docs-tooling pass — see docs-tooling below)
 
 conventions:
   world: right-handed, Y-up, -Z forward
@@ -47,6 +47,25 @@ conventions:
   build: CMake >= 3.24, out-of-source (build/), 64-bit; two phases (configure, build);
          Debug build = -DCMAKE_BUILD_TYPE=Debug (adds -g); sources listed explicitly
          (never file(GLOB)); target_include_directories(engine PRIVATE src)
+  docs-tooling: pages stay self-contained, so the shared <style> AND the shared trailing
+         <script> are DUPLICATED into every page — and propagated by
+         docs/_template/apply-shared.py, never by hand. Two marker regions:
+         <!-- SHARED-CSS:BEGIN/END --> and <!-- SHARED-SCRIPT:BEGIN/END -->.
+         Edit lesson-template.html, then stamp. NEVER edit one lesson's copy in
+         isolation — that is how the script drifted into 6 versions before 1.2.
+         The template carries both marker pairs, so a new lesson started by copying
+         it is already opted in; keep the markers when filling the template in.
+         Page-specific JS (interactive widgets) goes OUTSIDE the markers — the
+         stamper rewrites only what is between them (see 1.2's key-state widget).
+         Highlighter word lists: kw is checked before ty, so fundamental types
+         (bool/char/int/Uint32/...) belong in CPP_TYPES only. Shell `::` comments
+         are anchored to line start (SDL3::SDL3 must not read as a comment).
+         `apply-shared.py --check` exits 1 on drift, 2 on a broken template, and
+         also lints inline fill= on SVG <text>. Run it before committing docs/.
+  docs-verify: serve docs/ over HTTP and drive REAL Chromium (Playwright). The
+         preview pane reports impossible computed styles — it will show a dead
+         highlighter or broken theme toggle as fine. Strongest highlighter check:
+         live textContent after highlighting == DOMParser parse of the same file.
 
 curriculum: 94 lessons, ~433 h, 9 modules
   M0:6  M1:8  M2:12  M3:10  M4:9  M5:10  M6:15  M7:13  M8:11
@@ -90,7 +109,7 @@ files:
                  00-03-toolchain.html, 00-04-cmake-from-zero.html,
                  00-05-first-window.html, 00-06-headers-and-debugger.html,
                  01-01-events-properly.html, 01-02-input-state-vs-events.html
-  docs/_template/: lesson-template.html, README.md, apply-shared-css.py
+  docs/_template/: lesson-template.html, README.md, apply-shared.py
   memory/: 2026-07-16.md, 2026-07-18.md
   (retired: hello.cpp)
 

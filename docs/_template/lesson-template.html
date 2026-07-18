@@ -17,6 +17,7 @@
      Source of truth: docs/_template/lesson-template.html
      Change it here first, then propagate. Never edit a lesson's copy alone.
      ========================================================================== -->
+<!-- SHARED-CSS:BEGIN -->
 <style>
 /* ---- Design tokens ------------------------------------------------------- */
 :root {
@@ -870,6 +871,7 @@ td code { font-size: 0.82em; }
   a::after { content: " (" attr(href) ")"; font-size: 0.7em; color: #666; }
 }
 </style>
+<!-- SHARED-CSS:END -->
 
 <!-- KaTeX (optional). If unreachable the raw TeX remains readable, and every
      equation is also stated in prose + .eq-plain, so nothing is lost. -->
@@ -1485,6 +1487,7 @@ next: 0.2 — Next lesson title</pre>
      gracefully: with JS off you get unhighlighted (but perfectly readable)
      code and the OS colour theme.
      ========================================================================== -->
+<!-- SHARED-SCRIPT:BEGIN -->
 <script>
 (function () {
   "use strict";
@@ -1519,17 +1522,23 @@ next: 0.2 — Next lesson title</pre>
      Why not highlight.js from a CDN? Because a lesson must render from a bare
      filesystem with no network, and colour is not worth a dependency that can
      be absent. This is ~60 lines and always there.
+
+     Keyword vs type matters: `kw` is consulted before `ty`, so a word listed in
+     both lands in .tok-k. Fundamental types (bool, char, int, …) belong in
+     CPP_TYPES only — putting them in CPP_KEYWORDS would silently recolour every
+     declaration in the course.
      -------------------------------------------------------------------------- */
   var CPP_KEYWORDS = ("alignas alignof and asm auto break case catch class concept const consteval "
-    + "constexpr constinit const_cast continue co_await co_return co_yield decltype default delete "
-    + "do dynamic_cast else enum explicit export extern false for friend goto if inline mutable "
-    + "namespace new noexcept not nullptr operator or private protected public register "
-    + "reinterpret_cast requires return sizeof static static_assert static_cast struct switch "
-    + "template this thread_local throw true try typedef typeid typename union using virtual "
+    + "constexpr constinit const_cast continue co_await co_return co_yield decltype default defined "
+    + "delete do dynamic_cast else enum explicit export extern false final for friend goto if inline "
+    + "mutable namespace new noexcept not nullptr operator or override private protected public "
+    + "register reinterpret_cast requires return sizeof static static_assert static_cast struct "
+    + "switch template this thread_local throw true try typedef typeid typename union using virtual "
     + "volatile while cbuffer register_space numthreads in out inout").split(" ");
 
   var CPP_TYPES = ("bool char char8_t char16_t char32_t double float int long short signed unsigned "
     + "void wchar_t size_t uint8_t uint16_t uint32_t uint64_t int8_t int16_t int32_t int64_t "
+    + "Uint8 Uint16 Uint32 Uint64 Sint8 Sint16 Sint32 Sint64 "
     + "float2 float3 float4 float4x4 float3x3 half int2 int3 int4 uint uint2 uint3 uint4 matrix "
     + "Texture2D TextureCube SamplerState StructuredBuffer").split(" ");
 
@@ -1571,21 +1580,26 @@ next: 0.2 — Next lesson title</pre>
     return out;
   }
 
-  var SH_RE = /(#[^\n]*)|("(?:\\.|[^"\\])*"|'[^']*')|(^|\n)(\s*)([\w.\/\\-]+)/g;
+  // Shell: `#` comments anywhere, plus Windows-batch `::` comments — but only at
+  // the start of a line, because `::` is also a namespace separator and a CMake
+  // target separator (`SDL3::SDL3`), which do appear mid-line in shell listings.
+  var SH_RE = /(^|\n)(\s*)(::[^\n]*)|(#[^\n]*)|("(?:\\.|[^"\\])*"|'[^']*')|(^|\n)(\s*)([\w.\/\\-]+)/g;
   function highlightShell(src) {
     var out = "", last = 0, m;
     SH_RE.lastIndex = 0;
     while ((m = SH_RE.exec(src)) !== null) {
       if (m.index > last) out += esc(src.slice(last, m.index));
-      if (m[1])      out += span("c", m[1]);
-      else if (m[2]) out += span("s", m[2]);
-      else           out += esc(m[3] || "") + esc(m[4] || "") + span("f", m[5]);
+      if (m[3])      out += esc(m[1] || "") + esc(m[2] || "") + span("c", m[3]);
+      else if (m[4]) out += span("c", m[4]);
+      else if (m[5]) out += span("s", m[5]);
+      else           out += esc(m[6] || "") + esc(m[7] || "") + span("f", m[8]);
       last = SH_RE.lastIndex;
     }
     out += esc(src.slice(last));
     return out;
   }
 
+  // CMake: comments, strings, ${vars}, and command names (word before "(").
   var CMAKE_RE = /(#[^\n]*)|("(?:\\.|[^"\\])*")|(\$\{[^}]*\})|(^|\n)(\s*)([A-Za-z_]\w*)(?=\s*\()/g;
   function highlightCMake(src) {
     var out = "", last = 0, m;
@@ -1607,7 +1621,6 @@ next: 0.2 — Next lesson title</pre>
     "lang-bash": highlightShell, "lang-sh": highlightShell,
     "lang-cmake": highlightCMake
   };
-
   document.querySelectorAll(".listing pre code").forEach(function (el) {
     for (var cls in DISPATCH) {
       if (el.classList.contains(cls)) {
@@ -1618,6 +1631,7 @@ next: 0.2 — Next lesson title</pre>
   });
 })();
 </script>
+<!-- SHARED-SCRIPT:END -->
 
 <!-- KaTeX auto-render. Loaded last, async, and entirely optional: if the CDN is
      unreachable the raw TeX stays on the page and every equation is still stated

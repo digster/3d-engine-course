@@ -12,9 +12,11 @@ the master prompt wins.
 
 1. **One lesson = one self-contained `.html` file.** No external assets, no build step, no
    server. It must render by double-clicking it on a machine with no network.
-2. **The `<style>` block is identical in every lesson.** It is duplicated, not linked, because
-   of constraint 1. `lesson-template.html` is the source of truth — change it there first,
-   then propagate to every lesson. Never edit one lesson's copy in isolation.
+2. **The `<style>` block and the trailing `<script>` block are identical in every lesson.** Both
+   are duplicated, not linked, because of constraint 1. `lesson-template.html` is the source of
+   truth — change it there first, then run `apply-shared.py` (§14). Never edit one lesson's copy
+   in isolation: that is precisely how the highlighter ended up with three different keyword
+   lists across six lessons.
 3. **The only permitted remote is the KaTeX CDN**, and the page must survive its absence
    (see §5).
 4. **All 13 sections of the master prompt's §6, in order.** Not a menu.
@@ -44,6 +46,11 @@ Search the template for these placeholders and replace every one:
 Then delete any example content that survives (the dot-product worked example, the
 `src/gfx/example.*` listings, the specimen pitfalls). They are demonstrations of the house
 style, not content.
+
+**Keep the four `SHARED-CSS` / `SHARED-SCRIPT` marker comments.** The template carries both
+pairs precisely so a copy of it is already opted into propagation (§14). Delete them and your
+new lesson silently stops receiving shared CSS and script updates — `apply-shared.py` will
+report it as `skip`, which is easy to read past.
 
 ### The `<title>`
 
@@ -119,6 +126,17 @@ The highlighter is ~60 lines of embedded vanilla JS rather than highlight.js fro
 colour is not worth a dependency that can be absent. It reads `textContent` and rebuilds escaped
 HTML, so the worst it can do is mis-colour a token — it can never corrupt a listing or execute
 page content.
+
+It lives in the shared `SHARED-SCRIPT` region (§14), so **add a keyword by editing the template
+and re-stamping**, never by patching the lesson you happen to be writing.
+
+Two things to know if you touch its word lists:
+
+- `CPP_KEYWORDS` is consulted **before** `CPP_TYPES`, so a word in both renders as a keyword.
+  Fundamental types (`bool`, `char`, `int`, `Uint32`, …) belong in `CPP_TYPES` **only**.
+- The shell rule treats `::` as a Windows-batch comment **only at the start of a line**, because
+  `::` is also a CMake target separator — an unanchored rule turns
+  `cmake --build . --target SDL3::SDL3 --config Release` into a comment from `::` onward.
 
 ## 7. Diagrams
 
@@ -264,3 +282,46 @@ python3 -m http.server 8000
 Check: light **and** dark; the page offline (kill the network — equations must stay legible);
 code blocks scroll rather than wrap; the reading measure stays ~70–80 characters; and every
 inter-page link resolves.
+
+**Use a real browser (Playwright/Chromium), not an embedded preview pane.** The preview pane
+reports computed styles that the page cannot actually produce, so a broken theme or a dead
+highlighter can look fine there. Serve over HTTP and drive Chromium.
+
+A good highlighter check is a *round-trip* rather than an eyeball: for every
+`.listing pre code`, the live `textContent` after highlighting must equal the `textContent` of
+the same element parsed with `DOMParser` (which never runs scripts). Any difference means the
+tokeniser corrupted a listing.
+
+## 14. The shared CSS and script regions
+
+`apply-shared.py` propagates two blocks from `lesson-template.html` into every page that opts in
+with a marker pair:
+
+```
+<!-- SHARED-CSS:BEGIN -->      …stylesheet…      <!-- SHARED-CSS:END -->
+<!-- SHARED-SCRIPT:BEGIN -->   …page script…     <!-- SHARED-SCRIPT:END -->
+```
+
+```sh
+python3 docs/_template/apply-shared.py           # stamp every page
+python3 docs/_template/apply-shared.py --check   # verify only; exit 1 on drift
+```
+
+**This is not a build step.** Readers never run it; the published files are complete and work by
+double-clicking. It is an authoring-time tool, like a formatter. Run it after editing the
+template, and run `--check` before committing.
+
+The canonical copy of each region is read from between that same marker pair **in the template
+itself**, so the template carries every marker a page does. That is what makes "copy the
+template to start a lesson" produce a page that is already opted in — see §3.
+
+The regions are independent — a page may opt into either, both, or neither. `index.html` and
+`math-toolbox.html` carry the script region even though they have no listings today, so the
+highlighter is simply dormant until they gain one.
+
+**Page-specific JavaScript goes *outside* the markers.** Lesson 1.2's key-state widget sits in
+its own `<script>` earlier in the body and is never touched by the stamp.
+
+`--check` also lints for `fill="…"` on an SVG `<text>`: the shared stylesheet's
+`figure.dia svg text { fill: … }` always beats a presentation attribute, so an inline fill is
+silently ignored. Use the classes in §7 instead.

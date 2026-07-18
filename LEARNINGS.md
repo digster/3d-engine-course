@@ -176,12 +176,36 @@ Extend this table whenever a signature surprises you. The fastest check:
   `<!--INCLUDE:path-->` inside the `<code>` element and splice the escaped file contents in with a
   throwaway script before publishing. Hand-copying a 250-line listing is how a lesson comes to show
   code that no longer matches `src/` — the exact continuity bug §8 calls a correctness error.
-- **The trailing `<script>` block has drifted between lessons, and nothing propagates it.**
-  `apply-shared-css.py` stamps the `<style>` block only. As of 1.2: `00-04` has a `highlightCmake`
-  function and a shell regex handling `::` comments that `00-06` and `01-01` lack, while `01-01`
-  has a richer C++ keyword/type list that `00-04` lacks. 1.2 uses the **union** of both. The real
-  fix is to extend the stamper to cover a `SHARED-SCRIPT` marker region and re-stamp every lesson;
-  until then, take the newest superset when authoring and expect to reconcile.
+- **The trailing `<script>` block drifted between lessons because nothing propagated it.**
+  *(Resolved after 1.2 — kept because the shape of the failure recurs.)* The stamper covered
+  `<style>` only, so by 1.2 the script existed in six inconsistent versions: three C++ keyword
+  lists, a CMake highlighter in exactly one lesson, a Windows-batch `::` rule in two. The fix was
+  `apply-shared.py` with a second `SHARED-SCRIPT` marker region, stamped across all 12 pages.
+  **Every one of those defects was a silent mis-render rather than a crash** — which is why they
+  survived review, and the general lesson: duplication that nothing propagates always drifts, and
+  drift in *presentation* code is invisible precisely when you most need to see it.
+- **"Take the union" is the wrong merge rule for a keyword list.** Reconciling the drifted
+  highlighters looked like a set union, but two lists disagreed on *classification*, not
+  membership: one filed `bool char int long unsigned void` under `CPP_KEYWORDS`, the other under
+  `CPP_TYPES`. Since the tokeniser checks `kw` before `ty`, a naive union would have recoloured
+  every fundamental type in the course from `.tok-t` to `.tok-k` — a 12-page regression that
+  compiles, throws nothing, and looks plausible. Superset means superset of *coverage*; keep the
+  more correct classification and fold in only what is genuinely absent.
+- **A propagation template must carry every marker the pages carry.** After adding
+  `SHARED-SCRIPT` markers to `lesson-template.html`, the template still lacked `SHARED-CSS`
+  markers — those had been hand-added to the pages. Because a new lesson is authored by *copying
+  the template*, the next lesson would have inherited script propagation and silently missed CSS
+  propagation, with `apply-shared.py` reporting only a `skip` line. The general rule: if the
+  source of truth does not itself carry the opt-in marks, every artifact derived from it starts
+  un-opted-in, and the failure is a quiet omission rather than an error. Test it the cheap way —
+  copy the template to a scratch page and run `--check`.
+- **Anchor a `::` comment rule to the line start.** The batch-comment rule inherited from 1.2 was
+  `/(#[^\n]*|::[^\n]*)/` — unanchored, so it also matches the `::` in a CMake target and eats the
+  rest of the line. `cmake --build . --target SDL3::SDL3 --config Release` renders as
+  `cmake --build . --target SDL3` followed by a comment. `SDL3::SDL3` is *the* link target in this
+  course, so this was a live trap. Use `(^|\n)(\s*)(::[^\n]*)` and renumber the capture groups.
+  Worth unit-testing a tokeniser change in `node` before stamping it into every page — the
+  invariant is that stripping the emitted tags must reproduce the input exactly.
 
 ---
 

@@ -141,18 +141,50 @@ docs/
 │   ├── 00-01-what-is-an-engine.html
 │   └── ...                 # NN-MM-slug.html, zero-padded so they sort correctly
 └── _template/
-    ├── lesson-template.html   # the canonical lesson skeleton + shared CSS
+    ├── lesson-template.html   # canonical lesson skeleton + shared CSS + shared script
+    ├── apply-shared.py        # authoring-time: stamps both shared regions into every page
     └── README.md              # authoring & visual style guide
 ```
 
 `index.html`, `conventions.html` and `math-toolbox.html` are **living pages**, reissued updated
 at every module boundary.
 
-**The shared CSS is duplicated into every lesson file, by design.** It is the one place we
-knowingly trade DRY for the self-containment guarantee: a lesson must render from a bare
-filesystem, so it cannot reference a shared stylesheet. `_template/lesson-template.html` is the
-source of truth; when the CSS changes, it changes there first and propagates. This trade is
-worth naming out loud because it looks like a mistake until you know the constraint.
+**The shared CSS and the shared page script are duplicated into every lesson file, by design.**
+This is the one place we knowingly trade DRY for the self-containment guarantee: a lesson must
+render from a bare filesystem, so it can reference neither a shared stylesheet nor a shared
+script. `_template/lesson-template.html` is the source of truth for both. This trade is worth
+naming out loud because it looks like a mistake until you know the constraint.
+
+Duplication that nothing propagates *will* drift, and it drifted here before it was mechanised:
+by Lesson 1.2 the trailing `<script>` existed in six mutually inconsistent versions — three
+different C++ keyword lists, a CMake highlighter present in exactly one lesson, and a
+Windows-batch comment rule present in two. Each was a silent mis-render, never a crash, which is
+what made it survive review.
+
+`apply-shared.py` closes that hole. Each page opts a region in with a marker pair, and the tool
+rewrites only what lies between the markers:
+
+```
+<!-- SHARED-CSS:BEGIN -->    …    <!-- SHARED-CSS:END -->
+<!-- SHARED-SCRIPT:BEGIN --> …    <!-- SHARED-SCRIPT:END -->
+```
+
+```sh
+python3 docs/_template/apply-shared.py           # stamp
+python3 docs/_template/apply-shared.py --check   # verify only; exit 1 on drift
+```
+
+Each region's canonical copy is read from between that same marker pair **in the template
+itself**, so the template carries every marker a page does — which is what makes starting a
+lesson by copying the template produce a page that is already opted into both regions. A new
+lesson that drops the markers silently stops receiving updates, so the authoring guide calls
+them out as must-keep.
+
+Two further properties matter architecturally. **It is not a build step** — readers never run it
+and the published files are complete static HTML, so the "no build tooling" guarantee in §1
+holds; it is an authoring-time formatter. And **it is region-scoped, not file-scoped**, so a page
+keeps its own page-specific JavaScript (Lesson 1.2's key-state widget, and any future
+interactive diagram) outside the markers where the stamp cannot reach it.
 
 ---
 
@@ -254,6 +286,22 @@ kill the "forgot `git submodule update --init`" failure mode.
 
 The build runs at `-Wall -Wextra` (`/W4`) and all warnings get fixed. A warning left standing is
 a broken window.
+
+### Authoring a lesson page
+
+```sh
+python3 docs/_template/apply-shared.py --check   # before committing docs/ changes
+python3 docs/_template/apply-shared.py           # after editing lesson-template.html
+cd docs && python3 -m http.server 8000           # then verify in a real browser
+```
+
+Edit the shared CSS or the shared page script **in `lesson-template.html` only**, then stamp
+(§3). `--check` exits 1 on drift, so it works unchanged as a pre-commit hook or CI gate; it also
+lints for inline `fill=` on SVG `<text>`, which the shared stylesheet silently overrides.
+
+Verify pages in **Playwright/Chromium over HTTP, never an embedded preview pane** — the pane
+misreports computed styles, so a dead highlighter or a broken theme toggle can look correct
+there.
 
 ### Shaders (Module 4+)
 

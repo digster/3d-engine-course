@@ -56,3 +56,43 @@ and an interactive level-versus-edge widget.
 | Code listings | Spliced from the real source files at publish time via `<!--INCLUDE:path-->` markers | A hand-copied listing is how a lesson drifts from `src/` — the §8 continuity bug. |
 | Interactive widgets | First one introduced here (the CSS was already in the template) | §7 encourages them where they materially aid intuition; edge-vs-level is a timing idea that a still diagram can only half-show. |
 | Deliberate defect retained | Demo movement stays per-frame, not per-second | It is exactly what 1.3 exists to fix, and it is more convincing on screen than in prose. |
+
+## 2026-07-18 — Shared script region (tooling)
+
+> The trailing `<script>` block in each lesson page under docs/lessons/ is duplicated per file
+> (required — pages must be self-contained) but nothing propagates it, and it has drifted.
+> [Details of the drift across 00-04 / 00-06 / 01-01 / 01-02, with 01-02 named as the canonical
+> superset.] Task: (1) add the canonical script to lesson-template.html, reconciling to the
+> superset; (2) extend apply-shared-css.py to stamp a SHARED-SCRIPT region, keeping --check and
+> the inline-`fill=` lint, considering a rename to apply-shared.py; (3) add markers to the 8
+> lesson pages plus index/conventions/cpp-style/math-toolbox and stamp; (4) verify over HTTP in
+> a real browser (Playwright, not the preview pane) that cpp/cmake/bash highlighting still works
+> on 00-04, 01-01 and 01-02, the theme toggle works, and no console errors appear.
+
+**Response:** Renamed to `apply-shared.py` and generalised it to a `Region` dataclass covering
+`SHARED-CSS` (unchanged extraction, byte-identical behaviour) and `SHARED-SCRIPT` (extracted from
+the template's own markers). Stamped all 12 pages; verified in Chromium.
+
+**Corrections to the brief, flagged for ratification:**
+
+| Finding | Action taken |
+|---|---|
+| `lesson-template.html` already held a **richer** script than 01-02 — full C++20 keyword set, HLSL types, `lang-hlsl`/`lang-c`/`lang-sh` dispatch. 01-02 is not the superset. | Built the true union: template's breadth + 01-02's SDL `Uint*`/`Sint*` types, `defined`/`override`/`final`, and the `::` rule. |
+| A **literal** union would regress 12 pages: 01-02 files `bool char int long unsigned void` as keywords, the template as types, and `kw` is checked before `ty`. | Kept the template's classification; folded in only genuinely-absent words. Verified in-browser that `int`/`bool`/`Uint8` still render `.tok-t`. |
+| 01-02's `::` shell-comment rule is **unanchored**, so `--target SDL3::SDL3 --config Release` renders as a comment. | Re-anchored to line start, capture groups renumbered, unit-tested in `node` before stamping. |
+| Lesson STATE-block manifests still name `apply-shared-css.py`. | **1.2's updated** on a follow-up "ok update it" — it is the live resume key, so a dead filename there is a hazard. 00-01…01-01 left as history: the rename postdates them. Rule: only the newest lesson's STATE block tracks reality. |
+
+> what about STATE.md?
+
+**Response:** The one-line rename was the smallest part of it, and the question surfaced a real
+bug. `lesson-template.html` carried `SHARED-SCRIPT` markers but had **never** carried
+`SHARED-CSS` ones — those were hand-added to the 12 pages. Since a lesson is authored by copying
+the template, Lesson 1.3 would have inherited script propagation and silently missed CSS
+propagation (reported only as a `skip` line). Wrapped the template's `<style>` in markers, which
+made the tool's two extraction paths pointless: collapsed both onto one marker-based
+`Region.find()`, deleting `STYLE_RE`, the `Callable` field and both `_extract_*` helpers.
+`--check` staying clean across the refactor proves extraction is byte-identical.
+
+STATE.md itself gained `docs-tooling` and `docs-verify` convention entries — it is the resume
+key, so without them a session picking up 1.3 would have quietly reintroduced the drift this
+session removed.
