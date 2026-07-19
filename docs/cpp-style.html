@@ -1557,6 +1557,33 @@ private:
   });
 })();
 </script>
+
+<!-- KaTeX auto-render. Loaded last, async, and entirely optional: if the CDN is
+     unreachable the raw TeX stays on the page and every equation is still stated
+     in prose and in its .eq-plain twin.
+
+     This lives INSIDE the shared region deliberately. It used to sit just below
+     the END marker, which meant apply-shared.py never propagated it: a new lesson
+     copied from this template silently shipped without a maths renderer, and the
+     symptom — raw TeX where an equation should be — looks so much like the
+     documented CDN-unreachable fallback that it reads as working-as-intended.
+     Lesson 1.8 was the first lesson with display math and the first to catch it.
+     Anything every page needs belongs between the markers. -->
+<script defer
+        src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"
+        integrity="sha384-7zkQWkzuo3B5mTepMUcHkMB5jZaolc2xDwL6VFqjFALcbeS9Ggm/Yr2r3Dy4lfFg"
+        crossorigin="anonymous"></script>
+<script defer
+        src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+        integrity="sha384-43gviWU0YVjaDtb/GhzOouOXtZMP/7XUzwPTstBeZFe/+rCMvRwr4yROQP43s0Xk"
+        crossorigin="anonymous"
+        onload="renderMathInElement(document.body, {
+          delimiters: [
+            {left: '\\[', right: '\\]', display: true},
+            {left: '\\(', right: '\\)', display: false}
+          ],
+          throwOnError: false
+        });"></script>
 <!-- SHARED-SCRIPT:END -->
 </body>
 </html>

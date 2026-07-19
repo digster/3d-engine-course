@@ -965,7 +965,7 @@ table.lessons .d { color: var(--text-muted); font-size: 0.95em; line-height: 1.4
     <div class="stat"><span class="n">94</span><span class="l">lessons</span></div>
     <div class="stat"><span class="n">9</span><span class="l">modules</span></div>
     <div class="stat"><span class="n">~433</span><span class="l">hours</span></div>
-    <div class="stat"><span class="n">7</span><span class="l">published</span></div>
+    <div class="stat"><span class="n">14</span><span class="l">published</span></div>
   </div>
 
   <p>
@@ -1200,7 +1200,7 @@ table.lessons .d { color: var(--text-muted); font-size: 0.95em; line-height: 1.4
   <details class="module">
     <summary>
       <span class="m-num">Module 1</span>
-      <span class="m-name">The Loop, the Pixel, and Time <span class="stage-tag a">CPU</span></span>
+      <span class="m-name">The Loop, the Pixel, and Time <span class="stage-tag a">CPU</span> <span class="badge done">complete</span></span>
       <span class="m-meta">8 lessons · ~32 h</span>
     </summary>
     <div class="m-body">
@@ -1219,7 +1219,7 @@ table.lessons .d { color: var(--text-muted); font-size: 0.95em; line-height: 1.4
             <tr><td class="id">1.5</td><td><span class="t"><a href="lessons/01-05-framebuffer.html">The Framebuffer: Your First Owned Pixels</a> <span class="badge done">published</span></span><span class="d">Memory as an image: <code>index = y × width + x</code> and the candy-stripe it causes when broken, what 32 bits of colour really are, streaming-texture presentation with pitch, and two ways to write a pixel — measured.</span></td><td class="hrs">4 h</td></tr>
             <tr><td class="id">1.6</td><td><span class="t"><a href="lessons/01-06-colour.html">Colour, and an Honest Teaser of sRGB</a> <span class="badge done">published</span></span><span class="d">The stored value 128 emits 21.6% of white's light, and half the light is stored as 188. Which operations that breaks, why alpha is exempt, and what a real linear pipeline would cost.</span></td><td class="hrs">4 h</td></tr>
             <tr><td class="id">1.7</td><td><span class="t"><a href="lessons/01-07-vectors-2d.html">2D Vectors, Geometrically</a> <span class="badge done">published</span></span><span class="d">Arrows before components, and the dot product derived as a shadow — <code>ax·bx + ay·by</code> falls out of projecting onto the axes. Closes the 41.4% diagonal bug from 1.2.</span></td><td class="hrs">4 h</td></tr>
-            <tr><td class="id">1.8</td><td><span class="t">Checkpoint: Pong</span><span class="d">A small, complete toy that consolidates loop, input, time, and drawing. The first thing you build that someone else can play.</span></td><td class="hrs">5 h</td></tr>
+            <tr><td class="id">1.8</td><td><span class="t"><a href="lessons/01-08-pong.html">Checkpoint: Pong</a> <span class="badge done">published</span></span><span class="d">Seven lessons of parts become a game — and the assembly exposes a bug no demo could: a ball that tunnels through a paddle. Reflection derived from projection, collision asked about intervals instead of instants, and the exact speed at which a discrete test stops being valid.</span></td><td class="hrs">5 h</td></tr>
           </tbody>
         </table>
       </div>
@@ -1660,6 +1660,33 @@ table.lessons .d { color: var(--text-muted); font-size: 0.95em; line-height: 1.4
   });
 })();
 </script>
+
+<!-- KaTeX auto-render. Loaded last, async, and entirely optional: if the CDN is
+     unreachable the raw TeX stays on the page and every equation is still stated
+     in prose and in its .eq-plain twin.
+
+     This lives INSIDE the shared region deliberately. It used to sit just below
+     the END marker, which meant apply-shared.py never propagated it: a new lesson
+     copied from this template silently shipped without a maths renderer, and the
+     symptom — raw TeX where an equation should be — looks so much like the
+     documented CDN-unreachable fallback that it reads as working-as-intended.
+     Lesson 1.8 was the first lesson with display math and the first to catch it.
+     Anything every page needs belongs between the markers. -->
+<script defer
+        src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"
+        integrity="sha384-7zkQWkzuo3B5mTepMUcHkMB5jZaolc2xDwL6VFqjFALcbeS9Ggm/Yr2r3Dy4lfFg"
+        crossorigin="anonymous"></script>
+<script defer
+        src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+        integrity="sha384-43gviWU0YVjaDtb/GhzOouOXtZMP/7XUzwPTstBeZFe/+rCMvRwr4yROQP43s0Xk"
+        crossorigin="anonymous"
+        onload="renderMathInElement(document.body, {
+          delimiters: [
+            {left: '\\[', right: '\\]', display: true},
+            {left: '\\(', right: '\\)', display: false}
+          ],
+          throwOnError: false
+        });"></script>
 <!-- SHARED-SCRIPT:END -->
 </body>
 </html>

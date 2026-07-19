@@ -938,6 +938,7 @@ td code { font-size: 0.82em; }
       <li><a href="#notation">Notation and conventions</a></li>
       <li><a href="#trig">Trigonometry, only what we need</a></li>
       <li><a href="#vectors">Vectors</a></li>
+      <li><a href="#intersection">Geometry and intersection</a></li>
       <li><a href="#coming">Coming as the course proceeds</a></li>
     </ol>
   </details>
@@ -1142,6 +1143,48 @@ td code { font-size: 0.82em; }
   </div>
 
   <div class="tool">
+    <h3>Projection and reflection <span class="from">Lessons 1.7, 1.8</span></h3>
+    <div class="eq">
+      <span>\[ \operatorname{proj}_{\mathbf{b}}(\mathbf{a}) = \frac{\mathbf{a}\cdot\mathbf{b}}{\mathbf{b}\cdot\mathbf{b}}\,\mathbf{b}, \qquad \operatorname{reflect}(\mathbf{v}, \hat{\mathbf{n}}) = \mathbf{v} - 2(\mathbf{v}\cdot\hat{\mathbf{n}})\,\hat{\mathbf{n}} \]</span>
+      <span class="eq-plain">project_onto(a, b) = b * (dot(a,b) / dot(b,b));   reflect(v, n) = v - 2*dot(v,n)*n</span>
+    </div>
+    <p>
+      <strong>Projection is the shadow as a vector</strong> rather than as a number: it is the
+      part of <strong>a</strong> that lies along <strong>b</strong>. <strong>Reflection is that
+      shadow subtracted twice</strong> — once to cancel the motion into the surface, once more to
+      send an equal amount back out. Whatever ran <em>along</em> the surface is untouched, which
+      is why a bounce keeps its sideways drift.
+    </p>
+    <div class="callout warn">
+      <span class="label">The normal must be unit length</span>
+      <p>
+        <code>reflect</code> has no division because with <code>‖n̂‖ = 1</code> the projection's
+        division by <code>‖n‖²</code> is a division by one. Hand it a normal of length <em>k</em>
+        and the correction is scaled by <em>k²</em>: the reflected vector gains or loses energy
+        on every bounce, silently. The invariant to assert is
+        <code>‖reflect(v, n̂)‖ = ‖v‖</code>.
+      </p>
+    </div>
+    <div class="worked">
+      <span class="label">Worked example — the case a sign flip cannot do</span>
+      <p>
+        A 45° wall has unit normal <code>n̂ = (0.70711, −0.70711)</code>. Drop a ball straight
+        down onto it: <code>v = (0, 5)</code>.
+      </p>
+      <ul>
+        <li><code>v · n̂ = 0(0.70711) + 5(−0.70711) = −3.53553</code></li>
+        <li><code>2(v · n̂)n̂ = −7.07107 · (0.70711, −0.70711) = (−5, 5)</code></li>
+        <li><code>reflect = (0, 5) − (−5, 5) = (5, 0)</code></li>
+      </ul>
+      <p>
+        A vertical drop leaves horizontally, and <code>‖(0,5)‖ = ‖(5,0)‖ = 5</code> — speed
+        preserved, as a mirror requires. For an axis-aligned wall the same formula collapses to
+        negating one component, which is the check that the general form is right.
+      </p>
+    </div>
+  </div>
+
+  <div class="tool">
     <h3>Cross product <span class="from">Lesson 3.4</span></h3>
     <div class="eq">
       <span>\[ \mathbf{a} \times \mathbf{b} = \begin{pmatrix} a_y b_z - a_z b_y \\ a_z b_x - a_x b_z \\ a_x b_y - a_y b_x \end{pmatrix} \]</span>
@@ -1219,7 +1262,78 @@ td code { font-size: 0.82em; }
   </div>
 
   <!-- ===================================================================== -->
-  <h2 id="coming"><span class="num">4</span>Coming as the course proceeds</h2>
+  <h2 id="intersection"><span class="num">4</span>Geometry and intersection</h2>
+
+  <div class="tool">
+    <h3>Axis-aligned box overlap <span class="from">Lesson 1.8</span></h3>
+    <div class="eq">
+      <span>\[ \text{overlap} \iff \bigwedge_{\text{axes}} \left( a_{\min} &lt; b_{\max} \;\wedge\; a_{\max} &gt; b_{\min} \right) \]</span>
+      <span class="eq-plain">overlap  ==  for every axis: (a_min &lt; b_max AND a_max &gt; b_min)</span>
+    </div>
+    <p>
+      <strong>Two shapes are apart exactly when some axis exists on which their shadows do not
+      overlap.</strong> That is the <em>Separating Axis Theorem</em>, and for axis-aligned boxes
+      the only candidate axes are x and y (and z), so the whole test collapses to two comparisons
+      per axis. Rotate a box and the candidate axes stop being obvious — that is Module 7's
+      generalisation, and the theorem itself does not change.
+    </p>
+    <p>
+      <strong>The overlap window.</strong> Along any axis, the interval in which the two boxes
+      overlap is as wide as the two boxes put together:
+      <code>w = size_a + size_b</code>. This is the Minkowski-sum idea in miniature, and it is
+      the number that decides whether a discrete test is safe — see below.
+    </p>
+  </div>
+
+  <div class="tool">
+    <h3>Time of impact (the swept test) <span class="from">Lesson 1.8</span></h3>
+    <div class="eq">
+      <span>\[ t = \frac{p_{\text{face}} - p_{\text{from}}}{p_{\text{to}} - p_{\text{from}}}, \qquad t \in [0, 1] \]</span>
+      <span class="eq-plain">t = (face - from) / (to - from),  with t between 0 and 1</span>
+    </div>
+    <p>
+      <strong>Collision is a fact about an interval, not about an instant.</strong> A simulation
+      that advances in steps never occupies the space between two steps, so asking "are these
+      overlapping <em>now</em>?" can return the correct answer at every single step while an
+      object passes clean through a wall. Ask instead: <em>did the path cross the surface during
+      this step, and where was the object at that moment?</em>
+    </p>
+    <p>
+      Within one step the velocity is constant, so the path is a straight line and
+      <code>t</code> is a simple fraction. Everything else is then interpolated <em>at</em>
+      <code>t</code> — the contact position, the other axes' overlap test — and the remaining
+      <code>(1 − t)</code> of the step is spent travelling in the post-collision direction.
+    </p>
+    <div class="callout warn">
+      <span class="label">When a discrete overlap test stops being valid</span>
+      <div class="eq">
+        <span>\[ |v| \, h \;&lt;\; \textit{size}_a + \textit{size}_b \]</span>
+        <span class="eq-plain">|v| * h  &lt;  size_a + size_b</span>
+      </div>
+      <p>
+        <em>A discrete overlap test is reliable only while the object moves less than the overlap
+        window's width in a single step.</em> Work this number out and write it in a comment
+        wherever you sample a continuous process — the failure it predicts is invisible at your
+        step size and certain at someone else's.
+      </p>
+    </div>
+    <div class="worked">
+      <span class="label">Worked example</span>
+      <p>
+        A 4-px ball at <code>x = 16</code> travelling left at 105&nbsp;px/s; a 4-px paddle whose
+        face is at <code>x = 14</code>; the simulation at 10&nbsp;Hz, so <code>h = 0.1&nbsp;s</code>
+        and the ball ends the step at <code>x = 5.5</code>.
+      </p>
+      <ul>
+        <li><strong>Overlap window:</strong> <code>4 + 4 = 8&nbsp;px</code>. Per-step motion is <code>105 × 0.1 = 10.5&nbsp;px &gt; 8</code>, so a discrete test <em>can</em> miss — and here it does.</li>
+        <li><strong>Crossed?</strong> <code>16 ≥ 14</code> and <code>5.5 &lt; 14</code>: yes.</li>
+        <li><code>t = (14 − 16) / (5.5 − 16) = −2 / −10.5 = 0.190476</code></li>
+        <li>Interpolate the other axis at that <code>t</code> to decide whether it was a hit; then spend the remaining <code>0.1 × 0.809524 = 0.0809524&nbsp;s</code> in the new direction.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2 id="coming"><span class="num">5</span>Coming as the course proceeds</h2>
 
   <p>
     This page is reissued at every module boundary. Each entry lands here only once its lesson
@@ -1237,8 +1351,9 @@ td code { font-size: 0.82em; }
 
   <div class="pending">
     <b>Module 3 — Depth and light.</b> The 1/w trick for perspective-correct interpolation ·
-    plane equations · Lambert's cosine law · the reflection vector · the halfway vector and
-    Blinn-Phong · bilinear filtering as a double lerp.
+    plane equations · Lambert's cosine law · the halfway vector and Blinn-Phong · bilinear
+    filtering as a double lerp. (The reflection vector arrived early, in 1.8, because a bouncing
+    ball needed it before a specular highlight did.)
   </div>
 
   <div class="pending">
@@ -1436,17 +1551,33 @@ td code { font-size: 0.82em; }
   });
 })();
 </script>
-<!-- SHARED-SCRIPT:END -->
-<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"
+
+<!-- KaTeX auto-render. Loaded last, async, and entirely optional: if the CDN is
+     unreachable the raw TeX stays on the page and every equation is still stated
+     in prose and in its .eq-plain twin.
+
+     This lives INSIDE the shared region deliberately. It used to sit just below
+     the END marker, which meant apply-shared.py never propagated it: a new lesson
+     copied from this template silently shipped without a maths renderer, and the
+     symptom — raw TeX where an equation should be — looks so much like the
+     documented CDN-unreachable fallback that it reads as working-as-intended.
+     Lesson 1.8 was the first lesson with display math and the first to catch it.
+     Anything every page needs belongs between the markers. -->
+<script defer
+        src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"
         integrity="sha384-7zkQWkzuo3B5mTepMUcHkMB5jZaolc2xDwL6VFqjFALcbeS9Ggm/Yr2r3Dy4lfFg"
         crossorigin="anonymous"></script>
-<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+<script defer
+        src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
         integrity="sha384-43gviWU0YVjaDtb/GhzOouOXtZMP/7XUzwPTstBeZFe/+rCMvRwr4yROQP43s0Xk"
         crossorigin="anonymous"
         onload="renderMathInElement(document.body, {
           delimiters: [
             {left: '\\[', right: '\\]', display: true},
             {left: '\\(', right: '\\)', display: false}
-          ], throwOnError: false });"></script>
+          ],
+          throwOnError: false
+        });"></script>
+<!-- SHARED-SCRIPT:END -->
 </body>
 </html>

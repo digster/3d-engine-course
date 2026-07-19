@@ -68,9 +68,10 @@ Three living pages sit alongside the lessons and are updated at every module bou
 
 ## Building the code
 
-The engine itself is a normal CMake project. There is no code in the repo yet: you write the
-first `CMakeLists.txt` yourself in **Module 0**, because CMake is taught from zero rather than
-handed over as a magic file.
+The engine itself is a normal CMake project. You write the first `CMakeLists.txt` yourself in
+**Module 0**, because CMake is taught from zero rather than handed over as a magic file — so if
+you are following along from the start, ignore the one in this repository until Lesson 0.4 asks
+you to write it.
 
 Once you are past Module 0, the build is the standard incantation everywhere:
 
@@ -78,6 +79,21 @@ Once you are past Module 0, the build is the standard incantation everywhere:
 cmake -S . -B build
 cmake --build build
 ```
+
+The code in `src/` is the state of the engine as of the most recently published lesson (see
+[STATE.md](STATE.md)). Running it today gives you the **Module 1 checkpoint: a complete, playable
+game of Pong**, drawn entirely into a CPU framebuffer we own pixel by pixel:
+
+```sh
+./build/engine            # macOS / Linux
+.\build\Debug\engine.exe  # Windows
+```
+
+Left paddle <kbd>W</kbd>/<kbd>S</kbd>, right paddle <kbd>↑</kbd>/<kbd>↓</kbd> (<kbd>C</kbd> swaps
+the AI for a second player). Press <kbd>K</kbd> then <kbd>1</kbd> to switch to a naive collision
+test at 10 Hz and watch the ball tunnel straight through a paddle — that failure, and why a
+60 Hz machine can never show it to you, is what
+[Lesson 1.8](docs/lessons/01-08-pong.html) is about.
 
 ### Prerequisites
 

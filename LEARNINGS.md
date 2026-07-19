@@ -384,6 +384,82 @@ needs **no CMake change at all**.
 **Does not generalise to 3-D:** `perpendicular()` (in 3-D there is a whole plane of them). The
 operation that exists only in 3-D is the **cross product** — Module 2.
 
+### Collision and reflection (Lesson 1.8) — all numbers verified in a scratch harness
+
+**`reflect(v, n̂) = v − 2 (v·n̂) n̂`**, derived by splitting `v` into its shadow on the normal plus
+whatever is left, keeping the leftover and reversing the shadow — hence subtracting it *twice*.
+
+- **`n̂` MUST be unit length.** `project_onto` divides by `|b|²`; `reflect` has no such division
+  because with a unit normal it is a division by one. A normal of length *k* scales the correction
+  by *k²*, so the ball gains or loses energy on every bounce with nothing to warn you.
+- The invariant that catches it instantly: **`|reflect(v, n̂)| == |v|`**.
+- Verified: `reflect((3,4), (0,−1)) = (3,−4)` — matches the obvious sign flip, which is the point
+  of the check. And `reflect((0,5), (0.70711,−0.70711)) = (5,0)`: a vertical drop onto a 45° wall
+  leaves horizontally, which no single-component negation can produce.
+- **Framebuffer normals point *into* the court**, and +y is down: the ceiling at `y=0` has normal
+  `(0,+1)`, the floor has `(0,−1)`.
+
+**A bounce needs BOTH the velocity turned and the position mirrored back inside.** Velocity only →
+the object spends a step outside the wall. Position only → it sticks to the wall and re-collides
+every step. This is the single most common bounce bug.
+
+**Tunnelling — the headline result, and it generalises far past Pong.** A discrete "do the boxes
+overlap *now*?" test is a question about an instant; collision is a fact about an interval. The
+overlap window along an axis is as wide as the two boxes put together (`size_a + size_b` — the
+Minkowski-sum idea), so the test is guaranteed to catch a mover only while:
+
+```
+|v_axis| * h  <  size_a + size_b
+```
+
+With our numbers (paddle 4 px + ball 4 px = 8 px window, ball capped at 260 px/s):
+
+| sim rate | h | safe up to | reachable at 260 px/s? |
+|---|---|---|---|
+| 120 Hz | 0.00833 s | 960 px/s | no |
+| 60 Hz | 0.01667 s | **480 px/s** | **NO — the bug is unreachable, and still there** |
+| 30 Hz | 0.03333 s | 240 px/s | yes, after ~20 hits (intermittent — the worst kind) |
+| 10 Hz | 0.1 s | 80 px/s | yes, on the opening serve at 105 px/s |
+
+**The lesson beyond collision: a passing test suite tells you the bug is not reachable under the
+conditions you tested, not that the code is correct.** Whenever you write a discrete test of a
+continuous process, compute the bound at which it stops being valid and put it in a comment even
+when today's numbers are safely inside it. Same shape recurs as aliasing (M2), texture shimmer
+(M3), shadow acne (M6).
+
+**The swept fix.** Within one step the velocity is constant, so the path is a straight line and
+`t = (face − lead_from) / (lead_to − lead_from)`. Two details that matter:
+
+- Require the leading edge **began** on the near side *and* **ended** on the far side. "Ended past
+  it" alone also fires for something that got behind the paddle on an earlier step. The pair also
+  makes the denominator non-zero **by construction** — crossing implies motion — which is a safer
+  guarantee than a guard someone can edit away.
+- Interpolate the *other* axis **at `t`**, not at the endpoint. Using the endpoint's `y` is the
+  same mistake rotated 90°.
+- **Spend the remaining `(1 − t)` of the step** in the new direction, or the object loses a sliver
+  of motion at every bounce — invisible once, a measurable drag over a long rally.
+- Verified end to end: ball 4 px at `x=16` going left at 105 px/s, `h=0.1`, paddle face at `x=14`
+  → `t = 0.190476`, speed 105→112, velocity `(109.5525, −23.2861)`, final `x = 22.8685`. The naive
+  test on the identical step reports **no collision** and the ball scores.
+
+**Keep the PRNG seed inside the simulation state.** `SDL_srand`/`SDL_rand`/`SDL_randf` exist and
+work, but keep state in a hidden global, which means the sim is no longer a function of its inputs:
+no replays, and two copies cannot be compared. xorshift32 is three shifts and three xors —
+**seed 0 is a fixed point**, every operation maps 0→0, so guard it. For a float in [0,1) take the
+top 24 bits (`>> 8`) and scale by 2⁻²⁴: exact, and it avoids letting xorshift's worst bits decide
+the rounding.
+
+**Determinism means: same binary + machine + seed + inputs + step size.** Verified bit-identical
+over 20 000 steps with a shared seed. It is **not** step-size-independent — same seed at 60 Hz vs
+120 Hz diverges within two simulated seconds, because `h` is an input too. (Nor cross-platform:
+FMA contraction, x87 excess precision, libm, vectorisation.)
+
+**A game-design fact worth keeping.** A physically honest paddle — `reflect` with normal `(±1,0)`
+— conserves `v.y` for the whole match, because walls negate it and paddles then ignore it. Neither
+player can influence it, so there is no way to place a shot and no game. Pong's angle-from-hit-
+position paddle is a deliberate physical lie, and the useful generalisation is: *a game needs the
+player to be able to change state in ways the opponent must respond to.*
+
 **Loop model:** we use classic `int main` + our own `while` loop, NOT SDL3's callback model
 (`SDL_MAIN_USE_CALLBACKS` with `SDL_AppInit`/`SDL_AppIterate`/`SDL_AppEvent`/`SDL_AppQuit`), because
 the engine owns its loop (0.1 thesis). The callback model exists and is fine for simple apps; it is
@@ -444,6 +520,19 @@ Extend this table whenever a signature surprises you. The fastest check:
   course, so this was a live trap. Use `(^|\n)(\s*)(::[^\n]*)` and renumber the capture groups.
   Worth unit-testing a tokeniser change in `node` before stamping it into every page — the
   invariant is that stripping the emitted tags must reproduce the input exactly.
+- **Anything every page needs must live BETWEEN the shared markers, not next to them.** The KaTeX
+  loader `<script>` tags sat immediately *below* `<!-- SHARED-SCRIPT:END -->` in the template, so
+  `apply-shared.py` never propagated them. Lessons authored by copying the template shipped with
+  the KaTeX **CSS** (in `<head>`, above the markers, hand-copied) but no renderer — and the
+  symptom, raw TeX where an equation should be, is *identical to the documented CDN-unreachable
+  fallback*. It therefore read as working-as-intended for six lessons. It only surfaced at 1.8,
+  the first lesson with display math: lessons 1.1–1.7 have zero `.eq` blocks, so there was nothing
+  to fail. Fixed by moving the block inside the region and deleting the now-duplicate standalone
+  copies from `conventions.html` and `math-toolbox.html` (which had them, being hand-authored) —
+  otherwise those two pages load KaTeX twice.
+  **The general shape:** a fallback that is indistinguishable from the failure it guards against
+  will hide that failure indefinitely. Check for the *positive* signal instead —
+  `document.querySelectorAll('.katex').length > 0` — not for the absence of an error.
 
 ---
 
@@ -558,7 +647,29 @@ mentions *outside* `.fignum`, or expect a count of at least 2.
 **Watch the working directory when a session mixes `cd` and scripts.** A `cd docs && python3 -m
 http.server` left the shell in `docs/`, and the next repo-root-relative script failed with a
 confusing `FileNotFoundError`. Prefer absolute paths, or `cd` back explicitly, in any command that
-follows a directory change.
+follows a directory change. **This recurred in 1.8** — a link-checker run from `docs/` looked for
+`docs/docs/` and cheerfully reported "0 broken links" from an empty glob. A check that scans
+nothing passes. Always print the count of things *examined*, not just the count of failures.
+
+**Use `getBoundingClientRect()`, not `getBBox()`, for spill and collision checks.** `getBBox()`
+returns coordinates in the element's *local* space, so every `<text>` inside a
+`<g transform="translate(...)">` is compared against the wrong origin. In 1.8 that produced three
+confident false positives ("11 px above the top edge") for labels that were correctly placed.
+`getBoundingClientRect()` accounts for the full transform chain and needs no viewBox arithmetic:
+compare each text's rect against the `<svg>`'s own rect.
+
+**Verify a renderer by its positive signal.** See the KaTeX entry above: checking "no console
+errors" passed for six lessons while the maths renderer was entirely absent. The check that works
+is `document.querySelectorAll('.katex').length === document.querySelectorAll('.eq').length`, plus
+asserting exactly **two** `script[src*="katex"]` tags (more means a duplicated block, which
+double-renders).
+
+**Splice code listings mechanically; never retype them.** 1.8 has five full-file listings totalling
+~700 lines. Writing `@@LISTING:src/game/pong.cpp@@` in the page and substituting the real file
+(HTML-escaped) with a small script makes drift between the listing and the compiled source
+*impossible* rather than merely unlikely, which is exactly what §8's "every listing compiles at its
+point in the course" demands. It also gets the `&lt;`/`&gt;`/`&amp;` escaping right every time —
+and the highlighter's round-trip check then confirms the escaping survived, end to end.
 
 ## Testing engine code that talks to SDL
 

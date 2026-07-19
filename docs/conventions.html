@@ -922,6 +922,7 @@ td code { font-size: 0.82em; }
       <li><a href="#matrices">Matrices: column vectors, column-major</a></li>
       <li><a href="#winding">Winding and culling</a></li>
       <li><a href="#units">Units and angles</a></li>
+      <li><a href="#simulation">The simulation contract</a></li>
       <li><a href="#colour">Colour and diagram conventions</a></li>
       <li><a href="#verified">The verified-facts table</a></li>
     </ol>
@@ -1617,7 +1618,72 @@ td code { font-size: 0.82em; }
   </p>
 
   <!-- ===================================================================== -->
-  <h2 id="colour"><span class="num">9</span>Colour and diagram conventions</h2>
+  <h2 id="simulation"><span class="num">9</span>The simulation contract</h2>
+
+  <p>
+    Settled across Lessons 1.3, 1.4 and 1.8, and binding from here to the capstone. Every system
+    added later — physics, animation, the ECS, networking — plugs into this shape rather than
+    negotiating its own.
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>Rule</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>The frame order never changes:</strong> drain events → <code>clk.tick()</code> → <code>in.update()</code> → N fixed steps → render</td>
+          <td>Draining first is what refreshes SDL's state arrays (<code>SDL_PollEvent</code> pumps). Ticking each subsystem exactly once means the whole frame sees one coherent snapshot.</td>
+        </tr>
+        <tr>
+          <td><strong>Simulation advances by a fixed <code>h</code>, never by a frame duration.</strong> Default <code>h = 1/60 s</code>.</td>
+          <td>A frame-rate-dependent simulation gives different answers on different machines. Enforced by signature: <code>step()</code> takes <code>h</code>, so there is nowhere to pass <code>dt</code> in.</td>
+        </tr>
+        <tr>
+          <td><strong>Rendering interpolates between the two most recent states</strong> by <code>alpha ∈ [0,1)</code>.</td>
+          <td>Trades a lag that swings between 0 and <code>h</code> for one that is always exactly <code>h</code>. Smoothness is consistency, not immediacy.</td>
+        </tr>
+        <tr>
+          <td><strong>Interpolate quantities that were continuous before sampling. Nothing else.</strong></td>
+          <td>A position between two samples is meaningful; a score between two values was never true. Lesson 1.8 §4.6.</td>
+        </tr>
+        <tr>
+          <td><strong>Never interpolate across a teleport</strong> — snap <code>previous = current</code> instead.</td>
+          <td>The two states are not connected by motion, so the lerp draws a streak at a speed the object never had. Whatever teleports must say so.</td>
+        </tr>
+        <tr>
+          <td><strong>The simulation is a pure function of <code>(state, input, h)</code>.</strong> No globals, no clock reads, no hidden RNG — the seed lives in the state.</td>
+          <td>This is what makes replays, deterministic tests, and (much later) lockstep networking possible at all. A single global read destroys it silently.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout warn">
+    <span class="label">What "deterministic" does and does not promise</span>
+    <p>
+      Determinism here means: <strong>same binary, same machine, same seed, same inputs, same
+      step size</strong> produce a bit-identical run. It is <em>not</em> cross-platform — floating
+      point differs across compilers and architectures through FMA contraction, x87 excess
+      precision, differing <code>libm</code> implementations, and auto-vectorisation. It is not
+      even step-size-independent: change <code>h</code> and the run diverges, because
+      <code>h</code> is an input too. (Measured in Lesson 1.8: the same seed at 60&nbsp;Hz and
+      120&nbsp;Hz diverges within two simulated seconds.)
+    </p>
+  </div>
+
+  <div class="callout note">
+    <span class="label">Sampling a continuous thing is where the artifacts come from</span>
+    <p>
+      A discrete test of a continuous process is valid only within a bound, and that bound is
+      worth computing and writing down every time. Lesson 1.8's case: an overlap test catches a
+      moving object only while <code>|v|·h &lt; size_a + size_b</code>. The same shape recurs as
+      aliasing on triangle edges (Module 2), texture shimmer (Module 3), and shadow acne
+      (Module 6) — one idea, four artifacts.
+    </p>
+  </div>
+
+  <!-- ===================================================================== -->
+  <h2 id="colour"><span class="num">10</span>Colour and diagram conventions</h2>
 
   <p>
     Every diagram in this course obeys these. They are as binding as the maths, because a reader
@@ -1656,7 +1722,7 @@ td code { font-size: 0.82em; }
   </p>
 
   <!-- ===================================================================== -->
-  <h2 id="verified"><span class="num">10</span>The verified-facts table</h2>
+  <h2 id="verified"><span class="num">11</span>The verified-facts table</h2>
 
   <p>
     The master prompt forbids guessing API details, so these were checked against the SDL wiki
@@ -1896,17 +1962,33 @@ td code { font-size: 0.82em; }
   });
 })();
 </script>
-<!-- SHARED-SCRIPT:END -->
-<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"
+
+<!-- KaTeX auto-render. Loaded last, async, and entirely optional: if the CDN is
+     unreachable the raw TeX stays on the page and every equation is still stated
+     in prose and in its .eq-plain twin.
+
+     This lives INSIDE the shared region deliberately. It used to sit just below
+     the END marker, which meant apply-shared.py never propagated it: a new lesson
+     copied from this template silently shipped without a maths renderer, and the
+     symptom — raw TeX where an equation should be — looks so much like the
+     documented CDN-unreachable fallback that it reads as working-as-intended.
+     Lesson 1.8 was the first lesson with display math and the first to catch it.
+     Anything every page needs belongs between the markers. -->
+<script defer
+        src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"
         integrity="sha384-7zkQWkzuo3B5mTepMUcHkMB5jZaolc2xDwL6VFqjFALcbeS9Ggm/Yr2r3Dy4lfFg"
         crossorigin="anonymous"></script>
-<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+<script defer
+        src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
         integrity="sha384-43gviWU0YVjaDtb/GhzOouOXtZMP/7XUzwPTstBeZFe/+rCMvRwr4yROQP43s0Xk"
         crossorigin="anonymous"
         onload="renderMathInElement(document.body, {
           delimiters: [
             {left: '\\[', right: '\\]', display: true},
             {left: '\\(', right: '\\)', display: false}
-          ], throwOnError: false });"></script>
+          ],
+          throwOnError: false
+        });"></script>
+<!-- SHARED-SCRIPT:END -->
 </body>
 </html>

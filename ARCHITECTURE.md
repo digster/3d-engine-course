@@ -60,12 +60,15 @@ inventing one — but without paying framework ceremony before it buys anything.
 │   │   ├── fixed_step.hpp  # simulation accumulator + alpha          [EXISTS from 1.4]
 │   │   └── fixed_step.cpp
 │   ├── math/               # vec2/3/4, mat3/4, quaternion — hand-rolled, no GLM
-│   │   └── vec2.hpp        # header-only; arithmetic, dot, normalise  [EXISTS from 1.7]
+│   │   └── vec2.hpp        # header-only; dot, normalise, reflect     [EXISTS from 1.7]
 │   ├── gfx/                # framebuffer, software rasterizer → later SDL_GPU renderer
 │   │   ├── colour.hpp      # pack/unpack, sRGB transfer functions   [EXISTS from 1.6]
 │   │   ├── colour.cpp
 │   │   ├── framebuffer.hpp # CPU pixel buffer, ARGB8888, row-major   [EXISTS from 1.5]
 │   │   └── framebuffer.cpp
+│   ├── game/               # NOT engine — game code, see §2.1.1        [EXISTS from 1.8]
+│   │   ├── pong.hpp        # the Module 1 checkpoint game
+│   │   └── pong.cpp
 │   └── platform/           # window + event pumping (Module 5; see the note below)
 ├── shaders/                # HLSL sources (Module 4+). Compiled output is gitignored.
 ├── assets/                 # meshes, textures, fonts
@@ -209,6 +212,34 @@ fallback where some direction must exist.
 Note that a header-only addition needs **no `CMakeLists.txt` change at all**, which is the build
 system agreeing with the design.
 
+#### 2.1.1 `src/game/` — the boundary, three modules early
+
+Introduced in **Lesson 1.8**, and the first directory in the tree that is emphatically *not*
+engine. The test that decides where a file goes is one question:
+
+> Could a completely different game use this unchanged?
+
+`core`, `gfx` and `math` all answer yes — none of them knows that a paddle exists. `game/` answers
+no, and is the only place that may know. The rule that follows is one-way and absolute:
+**game code may depend on engine code; engine code may never depend on game code.**
+
+Today this is enforced by a directory name and discipline, because everything still links into one
+executable. That is the point of doing it now: the Module 5 refactor's difficulty is decided
+entirely by how many wrong-way dependencies have accumulated before it starts. Zero of them makes
+it a rename.
+
+Two habits established here that carry into the refactor:
+
+- **`pong.hpp` forward-declares `engine::framebuffer` rather than including it.** The header names
+  the type in a signature but never dereferences one, so the compiler needs nothing more. Include
+  what you use; forward declare what you merely mention. This is *physical design*, and it is a
+  large part of why big C++ builds are fast or slow.
+- **The simulation is a pure function of `(state, intent, h)`.** No globals, no clock reads, no
+  hidden RNG — the PRNG seed lives inside the state struct. `state` is a plain copyable aggregate
+  with no pointers, which is what makes `previous = current` cheap enough to run every step, and
+  what will let Module 8 serialise it in one call. A single global read would silently destroy
+  replayability; see [conventions.html §9](docs/conventions.html).
+
 ### 2.2 After the Module 5 refactor: engine / demos / tools
 
 Module 5 opens with a dedicated refactor arc, taught as a **first-class architecture lesson**
@@ -249,6 +280,10 @@ tools/ ──►
 `math` depends on nothing but the standard library — which is exactly why it is the first thing
 under test. `core` may not include `gfx`. Nothing in `engine/` may include from `demos/`. A
 cycle here is a design error, not an inconvenience to work around.
+
+The same rule already applies in today's single-executable layout, with `src/game/` standing in
+for `demos/` (§2.1.1): `src/game/` may include from `core`, `gfx` and `math`; none of those three
+may ever include from `src/game/`.
 
 ---
 

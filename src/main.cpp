@@ -1,18 +1,24 @@
 // src/main.cpp — the engine's entry point.
 //
+// Notice how little is left here. Everything this file does is host work: open a
+// window, own a framebuffer, run the loop, hand the game its inputs, put the
+// resulting pixels on screen. The rules of Pong are not in this file and could
+// not be — they live in src/game/pong.cpp, and the only things crossing the
+// boundary are a state struct, an intent struct, and two function calls.
+//
+// That shape is the point of the checkpoint. Module 5 turns this arrangement
+// into a static library and a demo executable; the work of that refactor is
+// mostly deleting the word "src" from some include paths, precisely because the
+// separation was maintained from here on.
+//
 // The loop is the one settled in Lesson 1.4 and does not change again:
 //
 //     drain events -> tick clock -> update input -> N fixed steps -> render
-//
-// Lesson 1.7 gives the engine vectors, and the demo is in two halves. Above: the
-// dot product as a shadow — drag the mouse and watch one arrow's projection onto
-// another, with the number that describes it. Below: two squares driven by the
-// same keys, one moving by a raw input vector and one by a normalised one, so the
-// 41% diagonal error from Exercise 1.2.3 is finally visible and finally fixed.
 
 #include "core/clock.hpp"
 #include "core/fixed_step.hpp"
 #include "core/input.hpp"
+#include "game/pong.hpp"
 #include "gfx/colour.hpp"
 #include "gfx/framebuffer.hpp"
 #include "math/vec2.hpp"
@@ -22,121 +28,25 @@
                              // <SDL3/SDL.h> deliberately does NOT include this,
                              // so we include it explicitly, exactly once, here.
 
-#include <algorithm>
 #include <cmath>
 #include <cstring>
 
 namespace {
 
-constexpr int k_fb_width = 320;
-constexpr int k_fb_height = 180;
-
-// ---- Panel A: the dot product ----------------------------------------------
-constexpr engine::vec2 k_dot_origin{86.0f, 46.0f};
-constexpr engine::vec2 k_reference{62.0f, 0.0f};   // the arrow we project onto
-
-// ---- Panel B: the normalisation race ---------------------------------------
-constexpr float k_speed = 55.0f;          // pixels per second
-constexpr float k_square = 8.0f;
-constexpr float k_panel_top = 108.0f;
-constexpr float k_panel_bottom = 172.0f;
-constexpr float k_start_x = 24.0f;
+// The framebuffer is exactly the court. Two constants that must agree would
+// eventually stop agreeing, so there is only one of each — game::court owns them
+// and this file derives its buffer size from there.
+constexpr int k_fb_width = static_cast<int>(game::court::width);
+constexpr int k_fb_height = static_cast<int>(game::court::height);
 
 constexpr Uint32 k_throttle_ms = 50;
 
-struct sim_state
-{
-    engine::vec2 raw{k_start_x, 126.0f};      // moved by the input vector as-is
-    engine::vec2 unit{k_start_x, 150.0f};     // moved by the normalised input
-    float raw_travelled = 0.0f;
-    float unit_travelled = 0.0f;
-};
-
-/// Advance both squares using the same input direction, one normalised and one not.
-void step_simulation(sim_state& s, engine::vec2 input, float h)
-{
-    // The bug, kept side by side with its fix. `input` is whatever the keys add up
-    // to: (1,0) for one key, (1,-1) for two. Its length is 1 in the first case and
-    // sqrt(2) in the second, so scaling it directly by speed makes diagonals
-    // travel 41.4% further per second.
-    const engine::vec2 raw_step = input * (k_speed * h);
-
-    // The fix: take the direction only, then choose the speed separately.
-    const engine::vec2 unit_step = engine::normalised(input) * (k_speed * h);
-
-    s.raw += raw_step;
-    s.unit += unit_step;
-    s.raw_travelled += engine::length(raw_step);
-    s.unit_travelled += engine::length(unit_step);
-
-    const float max_x = static_cast<float>(k_fb_width) - k_square;
-    s.raw.x = std::clamp(s.raw.x, 0.0f, max_x);
-    s.unit.x = std::clamp(s.unit.x, 0.0f, max_x);
-    s.raw.y = std::clamp(s.raw.y, k_panel_top, k_panel_bottom - k_square);
-    s.unit.y = std::clamp(s.unit.y, k_panel_top, k_panel_bottom - k_square);
-}
-
-/// The naive line from Exercise 1.5.4: step whichever axis changes more.
+/// Copy the framebuffer into a streaming texture, row by row.
 ///
-/// Lesson 2.1 derives this properly (it is called DDA), shows why Bresenham
-/// replaced it, and moves the result into the engine. It lives here, local to the
-/// demo, because a lesson about vectors needs to draw arrows and it would be
-/// silly to wait.
-void draw_line(engine::framebuffer& fb, engine::vec2 a, engine::vec2 b, Uint32 colour)
-{
-    const float dx = b.x - a.x;
-    const float dy = b.y - a.y;
-    const int steps = static_cast<int>(std::max(std::fabs(dx), std::fabs(dy)));
-
-    if (steps <= 0)
-    {
-        fb.put_pixel(static_cast<int>(a.x), static_cast<int>(a.y), colour);
-        return;
-    }
-
-    const float step_x = dx / static_cast<float>(steps);
-    const float step_y = dy / static_cast<float>(steps);
-    engine::vec2 p = a;
-
-    for (int i = 0; i <= steps; ++i)
-    {
-        fb.put_pixel(static_cast<int>(p.x + 0.5f), static_cast<int>(p.y + 0.5f), colour);
-        p.x += step_x;
-        p.y += step_y;
-    }
-}
-
-/// A line with gaps, for construction lines that should not compete with the
-/// arrows they annotate.
-void draw_dashed(engine::framebuffer& fb, engine::vec2 a, engine::vec2 b, Uint32 colour)
-{
-    const float dx = b.x - a.x;
-    const float dy = b.y - a.y;
-    const int steps = static_cast<int>(std::max(std::fabs(dx), std::fabs(dy)));
-    if (steps <= 0) { return; }
-
-    const float step_x = dx / static_cast<float>(steps);
-    const float step_y = dy / static_cast<float>(steps);
-    engine::vec2 p = a;
-
-    for (int i = 0; i <= steps; ++i)
-    {
-        if ((i / 3) % 2 == 0)
-        {
-            fb.put_pixel(static_cast<int>(p.x + 0.5f), static_cast<int>(p.y + 0.5f), colour);
-        }
-        p.x += step_x;
-        p.y += step_y;
-    }
-}
-
-/// An arrow: a line with a small solid block at the tip.
-void draw_arrow(engine::framebuffer& fb, engine::vec2 from, engine::vec2 to, Uint32 colour)
-{
-    draw_line(fb, from, to, colour);
-    fb.fill_rect(static_cast<int>(to.x) - 1, static_cast<int>(to.y) - 1, 3, 3, colour);
-}
-
+/// Row by row rather than one big memcpy because the pitch SDL hands back may
+/// exceed width*4 — some drivers pad each row — and copying as one block would
+/// shear the image diagonally on exactly the machines you do not own. Lesson 1.5
+/// §4.3.
 [[nodiscard]] bool upload(SDL_Texture* texture, const engine::framebuffer& fb)
 {
     void* dst_pixels = nullptr;
@@ -161,6 +71,29 @@ void draw_arrow(engine::framebuffer& fb, engine::vec2 from, engine::vec2 to, Uin
     return true;
 }
 
+/// Turn the keyboard into the two numbers the simulation actually wants.
+///
+/// This is the whole of the translation layer between hardware and gameplay, and
+/// it is worth seeing how thin it is. The game is never told about scancodes; it
+/// is told "the left player wants to go up". Module 5 generalises this into an
+/// input-mapping system with named actions, and the reason that refactor is easy
+/// is that the seam already exists here.
+[[nodiscard]] game::intent read_intent(const engine::input& in, bool right_is_ai)
+{
+    game::intent wanted;
+    wanted.right_is_ai = right_is_ai;
+
+    // Levels, not edges: movement continues for as long as the key is held.
+    // Lesson 1.2's distinction, and the reason both queries exist.
+    if (in.key_down(SDL_SCANCODE_W)) { wanted.left -= 1.0f; }
+    if (in.key_down(SDL_SCANCODE_S)) { wanted.left += 1.0f; }
+
+    if (in.key_down(SDL_SCANCODE_UP))   { wanted.right -= 1.0f; }
+    if (in.key_down(SDL_SCANCODE_DOWN)) { wanted.right += 1.0f; }
+
+    return wanted;
+}
+
 } // namespace
 
 int main(int argc, char* argv[])
@@ -180,7 +113,8 @@ int main(int argc, char* argv[])
             SDL_VERSIONNUM_MINOR(sdl_version),
             SDL_VERSIONNUM_MICRO(sdl_version));
 
-    SDL_Window* window = SDL_CreateWindow("Engine", 1280, 720, SDL_WINDOW_RESIZABLE);
+    SDL_Window* window = SDL_CreateWindow("Pong — Module 1 Checkpoint", 1280, 720,
+                                          SDL_WINDOW_RESIZABLE);
     if (window == nullptr)
     {
         SDL_Log("SDL_CreateWindow failed: %s", SDL_GetError());
@@ -197,8 +131,13 @@ int main(int argc, char* argv[])
         return 1;
     }
 
-    int vsync = SDL_RENDERER_VSYNC_DISABLED;
-    SDL_SetRenderVSync(renderer, vsync);
+    int vsync = 1;
+    if (!SDL_SetRenderVSync(renderer, vsync))
+    {
+        SDL_Log("SDL_SetRenderVSync(%d) failed: %s — continuing unsynchronised",
+                vsync, SDL_GetError());
+        vsync = SDL_RENDERER_VSYNC_DISABLED;
+    }
 
     engine::framebuffer fb(k_fb_width, k_fb_height);
 
@@ -221,19 +160,20 @@ int main(int argc, char* argv[])
     engine::input in;
     engine::fixed_step stepper(60.0f);
 
-    sim_state previous;
-    sim_state current;
+    // The seed is an INPUT to the simulation, not a hidden detail of it. Taking
+    // it from the clock gives a different game each run; logging it means any
+    // particular game can be replayed exactly by passing the same number back.
+    // That is the practical form of Lesson 1.4's determinism claim.
+    const Uint32 seed = static_cast<Uint32>(SDL_GetTicksNS() & 0xFFFFFFFFu);
+    SDL_Log("Match seed: %u  (same seed + same inputs = the same match)", seed);
 
-    const Uint32 k_bg = engine::pack_argb(14, 14, 22);
-    const Uint32 k_axis = engine::pack_argb(70, 70, 90);
-    const Uint32 k_ref_colour = engine::pack_argb(226, 196, 110);   // b, the reference
-    const Uint32 k_arrow_colour = engine::pack_argb(126, 162, 236); // a, to the mouse
-    const Uint32 k_shadow_colour = engine::pack_argb(122, 196, 152);
-    const Uint32 k_raw_colour = engine::pack_argb(236, 122, 92);
-    const Uint32 k_unit_colour = engine::pack_argb(122, 196, 152);
+    game::state current = game::make_state(seed);
+    game::state previous = current;
 
-    SDL_Log("Move the mouse over the top panel; drive the squares with WASD or the arrows.");
-    SDL_Log("Controls: [R] reset · [1-4] sim rate · [V] vsync · [T] throttle · [Esc] quit");
+    bool right_is_ai = true;
+
+    SDL_Log("Left paddle: [W]/[S].  Right paddle: [Up]/[Down] (press [C] for a human).");
+    SDL_Log("[K] collision rule · [1-4] sim rate · [V] vsync · [T] throttle · [R] reset · [Esc] quit");
 
     bool running = true;
     while (running)
@@ -263,11 +203,23 @@ int main(int argc, char* argv[])
         clk.tick();
         in.update();
 
+        // --- Commands: edges, because each should happen once per press --------
         if (in.key_pressed(SDL_SCANCODE_ESCAPE)) { running = false; }
         if (in.key_pressed(SDL_SCANCODE_1)) { stepper.set_rate(10.0f); }
         if (in.key_pressed(SDL_SCANCODE_2)) { stepper.set_rate(30.0f); }
         if (in.key_pressed(SDL_SCANCODE_3)) { stepper.set_rate(60.0f); }
         if (in.key_pressed(SDL_SCANCODE_4)) { stepper.set_rate(120.0f); }
+
+        if (in.key_pressed(SDL_SCANCODE_C)) { right_is_ai = !right_is_ai; }
+
+        if (in.key_pressed(SDL_SCANCODE_K))
+        {
+            current.swept_collision = !current.swept_collision;
+            previous.swept_collision = current.swept_collision;
+            SDL_Log("Collision rule: %s",
+                    current.swept_collision ? "swept (asks about the path)"
+                                            : "naive (asks only where the ball ended up)");
+        }
 
         if (in.key_pressed(SDL_SCANCODE_V))
         {
@@ -280,72 +232,31 @@ int main(int argc, char* argv[])
 
         if (in.key_pressed(SDL_SCANCODE_R))
         {
-            previous = sim_state{};
-            current = sim_state{};
+            const bool keep_swept = current.swept_collision;
+            current = game::make_state(seed);
+            current.swept_collision = keep_swept;
+            previous = current;
         }
 
-        // --- Gather the input as a VECTOR, not as two independent numbers ------
-        // This is the shape the rest of the engine will use: one arrow describing
-        // "which way", separate from "how fast".
-        engine::vec2 input{0.0f, 0.0f};
-        if (in.key_down(SDL_SCANCODE_A) || in.key_down(SDL_SCANCODE_LEFT))  { input.x -= 1.0f; }
-        if (in.key_down(SDL_SCANCODE_D) || in.key_down(SDL_SCANCODE_RIGHT)) { input.x += 1.0f; }
-        if (in.key_down(SDL_SCANCODE_W) || in.key_down(SDL_SCANCODE_UP))    { input.y -= 1.0f; }
-        if (in.key_down(SDL_SCANCODE_S) || in.key_down(SDL_SCANCODE_DOWN))  { input.y += 1.0f; }
+        const game::intent wanted = read_intent(in, right_is_ai);
 
+        // --- Simulate: zero or more fixed steps, never a partial one -----------
         stepper.begin_frame(clk.dt());
         while (stepper.next_step())
         {
             previous = current;
-            step_simulation(current, input, stepper.h());
+            game::step(current, wanted, stepper.h());
+
+            // The one exception to interpolation. A ball that was teleported to
+            // the centre after a point has no meaningful "in between", and
+            // lerping to it would draw a streak across the court at a speed the
+            // ball never had. Snapping the history forward makes this frame's
+            // lerp a no-op. Lesson 1.4 §5.4.
+            if (current.teleported) { previous = current; }
         }
 
-        const float alpha = stepper.alpha();
-
-        // --- Where is the mouse, in framebuffer pixels? -----------------------
-        // The framebuffer is stretched over the whole window, so converting is a
-        // ratio of widths. Doing it as a vector keeps the two axes together.
-        int window_w = 1280;
-        int window_h = 720;
-        SDL_GetWindowSize(window, &window_w, &window_h);
-
-        const engine::vec2 mouse_fb{
-            in.mouse_x() * static_cast<float>(k_fb_width) / static_cast<float>(window_w),
-            in.mouse_y() * static_cast<float>(k_fb_height) / static_cast<float>(window_h)};
-
-        // --- The dot product, as geometry -------------------------------------
-        const engine::vec2 a = mouse_fb - k_dot_origin;   // arrow to the cursor
-        const engine::vec2 b = k_reference;               // arrow we project onto
-        const float a_dot_b = engine::dot(a, b);
-        const float len_a = engine::length(a);
-        const float len_b = engine::length(b);
-        const engine::vec2 shadow = engine::project_onto(a, b);
-        const float cos_theta = (len_a > 0.0f) ? a_dot_b / (len_a * len_b) : 0.0f;
-
-        // --- Draw --------------------------------------------------------------
-        fb.clear(k_bg);
-
-        // Panel A: a horizontal guide through the origin, so the projection has a
-        // visible line to fall on even when it runs backwards.
-        draw_line(fb, {4.0f, k_dot_origin.y}, {static_cast<float>(k_fb_width) - 4.0f, k_dot_origin.y}, k_axis);
-
-        // The shadow, drawn first so the arrows sit on top of it.
-        draw_line(fb, k_dot_origin, k_dot_origin + shadow, k_shadow_colour);
-        draw_dashed(fb, mouse_fb, k_dot_origin + shadow, k_axis);
-
-        draw_arrow(fb, k_dot_origin, k_dot_origin + b, k_ref_colour);
-        draw_arrow(fb, k_dot_origin, mouse_fb, k_arrow_colour);
-
-        // Panel B: the divider, then the two squares.
-        fb.fill_rect(0, static_cast<int>(k_panel_top) - 6, k_fb_width, 1, k_axis);
-
-        const engine::vec2 raw_pos = engine::lerp(previous.raw, current.raw, alpha);
-        const engine::vec2 unit_pos = engine::lerp(previous.unit, current.unit, alpha);
-
-        fb.fill_rect(static_cast<int>(raw_pos.x), static_cast<int>(raw_pos.y),
-                     static_cast<int>(k_square), static_cast<int>(k_square), k_raw_colour);
-        fb.fill_rect(static_cast<int>(unit_pos.x), static_cast<int>(unit_pos.y),
-                     static_cast<int>(k_square), static_cast<int>(k_square), k_unit_colour);
+        // --- Draw -------------------------------------------------------------
+        game::draw(fb, previous, current, stepper.alpha());
 
         if (!upload(screen_texture, fb))
         {
@@ -356,32 +267,47 @@ int main(int argc, char* argv[])
         SDL_RenderClear(renderer);
         SDL_RenderTexture(renderer, screen_texture, nullptr, nullptr);
 
-        // Labels. A text coordinate is exactly twice a framebuffer coordinate:
-        // 2x text scale over a 4x framebuffer scale.
-        const float ratio = (current.unit_travelled > 0.01f)
-            ? current.raw_travelled / current.unit_travelled
-            : 1.0f;
+        // --- The debug overlay -------------------------------------------------
+        // Still SDL's built-in font rather than ours: this is developer
+        // instrumentation, not part of the game, and it is the only thing on
+        // screen we did not rasterise ourselves. A text coordinate here is twice
+        // a framebuffer coordinate — 2x text scale over a 4x framebuffer scale.
+        const float ball_speed = engine::length(current.ball_vel);
 
         SDL_SetRenderScale(renderer, 2.0f, 2.0f);
-        SDL_SetRenderDrawColor(renderer, 225, 225, 215, 255);
+        SDL_SetRenderDrawColor(renderer, 210, 212, 220, 255);
         SDL_RenderDebugTextFormat(renderer, 6.0f, 6.0f,
-                                  "a . b = %8.1f    |a| = %6.1f  |b| = %5.1f    cos = %+5.2f   %s",
-                                  static_cast<double>(a_dot_b),
-                                  static_cast<double>(len_a),
-                                  static_cast<double>(len_b),
-                                  static_cast<double>(cos_theta),
-                                  a_dot_b > 0.0f ? "in front" : (a_dot_b < 0.0f ? "behind" : "exactly side-on"));
-        SDL_RenderDebugText(renderer, 6.0f, 20.0f,
-                            "blue = a (to the mouse)   amber = b   green = a's shadow on b");
-        SDL_RenderDebugTextFormat(renderer, 6.0f, 210.0f,
-                                  "coral: input used raw      travelled %7.1f px",
-                                  static_cast<double>(current.raw_travelled));
-        SDL_RenderDebugTextFormat(renderer, 6.0f, 224.0f,
-                                  "green: input normalised    travelled %7.1f px",
-                                  static_cast<double>(current.unit_travelled));
-        SDL_RenderDebugTextFormat(renderer, 6.0f, 238.0f,
-                                  "ratio %5.3f  (hold a diagonal and watch it approach 1.414)   [R] reset  [Esc] quit",
-                                  static_cast<double>(ratio));
+                                  "sim %5.1f Hz   fps %6.1f   alpha %4.2f   ball %5.1f px/s   rally %d",
+                                  static_cast<double>(stepper.rate_hz()),
+                                  static_cast<double>(clk.fps()),
+                                  static_cast<double>(stepper.alpha()),
+                                  static_cast<double>(ball_speed),
+                                  current.rally_hits);
+
+        // The step budget the naive test has to fit inside: a ball whose
+        // HORIZONTAL motion in one step exceeds the width of the overlap window
+        // can step clean over it. Note it is |vx| and not the speed — a ball
+        // moving steeply is crossing the window slowly whatever its speed says.
+        // Printing it beside the actual per-step motion turns §3.3's arithmetic
+        // into something you can watch cross over.
+        const float per_step = std::fabs(current.ball_vel.x) * stepper.h();
+        const float budget = game::court::paddle_w + game::court::ball_size;
+
+        SDL_SetRenderDrawColor(renderer,
+                               (per_step > budget && !current.swept_collision) ? 236 : 150,
+                               (per_step > budget && !current.swept_collision) ? 122 : 152,
+                               (per_step > budget && !current.swept_collision) ? 92 : 170,
+                               255);
+        SDL_RenderDebugTextFormat(renderer, 6.0f, 20.0f,
+                                  "[K] collision: %-6s   ball moves %5.2f px/step, naive test needs < %.0f",
+                                  current.swept_collision ? "swept" : "naive",
+                                  static_cast<double>(per_step),
+                                  static_cast<double>(budget));
+
+        SDL_SetRenderDrawColor(renderer, 150, 152, 170, 255);
+        SDL_RenderDebugTextFormat(renderer, 6.0f, 328.0f,
+                                  "left [W]/[S]   right %s   [C] swap   [1-4] sim rate   [V] vsync   [T] throttle   [R] reset",
+                                  right_is_ai ? "= AI" : "[Up]/[Down]");
         SDL_SetRenderScale(renderer, 1.0f, 1.0f);
 
         SDL_RenderPresent(renderer);

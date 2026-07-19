@@ -7,7 +7,7 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-07-18 (after Lesson 1.7 — Module 1: 7 of 8)
+updated: 2026-07-18 (after Lesson 1.8 — MODULE 1 COMPLETE, 14 of 94 lessons)
 
 conventions:
   world: right-handed, Y-up, -Z forward
@@ -151,6 +151,33 @@ conventions:
             addition needs NO CMakeLists change. Not a general licence.
             Does NOT generalise to 3-D: perpendicular() (a whole plane of them in 3-D);
             the cross product is the 3-D-only operation Module 2 adds.
+  collision: a discrete overlap test answers about an INSTANT; collision is a fact about an
+            INTERVAL. Overlap window along an axis = size_a + size_b (Minkowski sum), so a
+            naive test is guaranteed only while |v_axis|*h < size_a + size_b. Ours: 8 px window,
+            ball capped 260 px/s -> safe to 480 px/s at 60 Hz (bug UNREACHABLE and still there),
+            240 at 30 Hz (intermittent), 80 at 10 Hz (fails on the opening serve).
+            SWEPT FIX: t = (face - lead_from)/(lead_to - lead_from); require the edge BEGAN near
+            and ENDED far (also makes the divisor non-zero by construction); interpolate the
+            other axis AT t, not at the endpoint; then spend the remaining (1-t) of the step.
+            VERIFIED: ball at x=16, -105 px/s, h=0.1, face x=14 -> t=0.190476, speed 105->112,
+            vel (109.5525,-23.2861), final x=22.8685; naive test on the same step says NO HIT.
+            One impact per step for now — Module 7 iterates until the budget is spent.
+  reflect: reflect(v,n) = v - 2*dot(v,n)*n, derived as "subtract the shadow twice". n MUST be
+            unit (project_onto's /|n|^2 is what is missing); a length-k normal scales the
+            correction by k^2 and the ball silently gains/loses energy. Assert |reflect|==|v|.
+            VERIFIED (3,4) off (0,-1) -> (3,-4); (0,5) off a 45-deg wall -> (5,0).
+            A bounce needs BOTH velocity turned AND position mirrored back inside: velocity-only
+            leaves the ball outside for a step, position-only sticks it to the wall.
+            Framebuffer normals point INTO the court: ceiling (0,+1), floor (0,-1) — +y is down.
+  determinism: same binary + machine + seed + inputs + STEP SIZE. Verified bit-identical over
+            20000 steps; the same seed at 60 vs 120 Hz diverges within 2 simulated seconds,
+            because h is an input too. PRNG seed lives IN the state (not SDL_rand's hidden
+            global) or the sim is not a function of its inputs. xorshift32: seed 0 is a fixed
+            point — guard it; take the top 24 bits for an exact float in [0,1).
+  engine/game: src/game/ is the first NOT-engine directory. Test: could a different game use
+            this unchanged? game -> engine only, never back. Enforced by discipline today, by
+            the compiler in Module 5. pong.hpp FORWARD-DECLARES engine::framebuffer rather than
+            including it (include what you use, forward declare what you mention).
   shaders: HLSL -> SDL_shadercross (3.0.0-preview) -> SPIR-V/DXIL/MSL  [Module 4+]
   cpp: C++20, no exceptions/RTTI in core, snake_case, private members trailing _,
        .hpp + #pragma once, [[nodiscard]], -Wall -Wextra // /W4, all warnings fixed
@@ -176,6 +203,21 @@ conventions:
          preview pane reports impossible computed styles — it will show a dead
          highlighter or broken theme toggle as fine. Strongest highlighter check:
          live textContent after highlighting == DOMParser parse of the same file.
+         Use getBoundingClientRect(), NOT getBBox(), for spill/collision checks —
+         getBBox is in LOCAL coords, so anything inside a <g transform> is compared
+         against the wrong origin (three false positives in 1.8).
+         Verify a renderer by its POSITIVE signal: .katex count == .eq count, and
+         exactly two script[src*=katex] tags. "No console errors" passed for six
+         lessons while KaTeX was entirely absent.
+         Listings are SPLICED from the real files (@@LISTING:path@@ + a small script),
+         never retyped — makes drift from the compiled source impossible.
+  katex-trap: the KaTeX loader used to sit just BELOW <!-- SHARED-SCRIPT:END --> in the
+         template, so apply-shared.py never propagated it and every lesson shipped
+         without a maths renderer. Invisible because raw TeX is also the documented
+         CDN-unreachable fallback, and 1.1-1.7 have zero .eq blocks so nothing failed.
+         FIXED in 1.8: moved inside the region, duplicate standalone copies removed
+         from conventions.html and math-toolbox.html. ANYTHING every page needs goes
+         BETWEEN the markers.
 
 curriculum: 94 lessons, ~433 h, 9 modules
   M0:6  M1:8  M2:12  M3:10  M4:9  M5:10  M6:15  M7:13  M8:11
@@ -195,6 +237,8 @@ completed:
   - 1.5  The Framebuffer: Your First Owned Pixels
   - 1.6  Colour, and an Honest Teaser of sRGB
   - 1.7  2D Vectors, Geometrically
+  - 1.8  Checkpoint: Pong
+  ===> MODULE 1 COMPLETE <===
 
 capabilities:
   - verified C++20 toolchain (MSVC / GCC / Clang), 64-bit
@@ -225,20 +269,34 @@ capabilities:
     TOUCHING so the seam shows the error — plus the bouncing ball, whose trail fade rule
     switches with [M]
   - maths: src/math/vec2.hpp (header-only) — arithmetic, length/length_squared,
-    normalised(+_or), dot, perpendicular, project_onto, lerp, distance
-  - demo: a live dot-product visualiser driven by the mouse (shadow, angle, sign) and
-    two squares racing to show the 41.4% diagonal error beside its fix
+    normalised(+_or), dot, perpendicular, project_onto, reflect, lerp, distance
+  - game: src/game/pong.{hpp,cpp} — a COMPLETE, WINNABLE Pong. Swept collision with a
+    runtime toggle back to the naive test so tunnelling can be watched happening;
+    angle-from-hit-position paddles; a beatable AI (0.82 speed, chase-only-when-incoming,
+    3 px deadzone); deterministic in-state xorshift32; 3x5 bitmap digits for the score;
+    teleport-aware interpolation. Verified: perfect tracker beats the AI 11-4, longest
+    rally 61 hits, ball reaches the 260 px/s cap, never leaves the court in 300k steps.
+  - main.cpp is now a HOST only: window, framebuffer, loop, input->intent, upload, HUD.
+    The rules of Pong are not in it and could not be.
   - known-and-deliberate: explicit Euler still gains energy — but identically everywhere,
     at a rate set by h, which is ours to choose (Module 7 fixes the integrator);
     colour converts per-operation rather than at the pipeline edges (Module 6);
-    line drawing is a local naive DDA in main.cpp (Lesson 2.1 derives it and moves it
-    into gfx/); the debug-text overlay is the only thing on screen SDL still draws
+    the debug-text overlay is the only thing on screen SDL still draws;
+    ONE impact resolved per simulation step (Module 7 iterates until the budget is spent);
+    the naive DDA line routine was RETIRED with 1.7's demo — Lesson 2.1 derives line
+    drawing properly and puts it in gfx/ (nothing draws lines at the moment)
   - skills: reading SDL headers as source of truth; debugging with lldb/gdb/VS
 
 decisions:
   - input lives in src/core/, not src/platform/ — there is no platform layer until
     Module 5, and input is a state cache rather than a device driver. Revisit at the
     Module 5 refactor. Recorded in ARCHITECTURE.md §2.1.
+  - src/game/ created in 1.8, three modules before the Module 5 refactor needs it. The
+    boundary costs nothing now and decides how hard that refactor is. ARCHITECTURE.md §2.1.1.
+  - the naive collision test is KEPT in the shipped code behind state::swept_collision
+    rather than deleted, so the failure can be reproduced on demand (pedagogy §5:
+    show the artifact). It is dead weight only if you think a bug you can summon is
+    worth less than one you can only describe.
 
 files:
   /: CLAUDE.md, README.md, ARCHITECTURE.md, LEARNINGS.md, PROMPT.md, LICENSE,
@@ -248,6 +306,7 @@ files:
             fixed_step.hpp, fixed_step.cpp
   src/gfx/: colour.hpp, colour.cpp, framebuffer.hpp, framebuffer.cpp
   src/math/: vec2.hpp
+  src/game/: pong.hpp, pong.cpp
   docs/: index.html, conventions.html, math-toolbox.html, cpp-style.html
   docs/lessons/: 00-01-what-is-an-engine.html, 00-02-how-this-course-works.html,
                  00-03-toolchain.html, 00-04-cmake-from-zero.html,
@@ -255,11 +314,14 @@ files:
                  01-01-events-properly.html, 01-02-input-state-vs-events.html,
                  01-03-delta-time.html, 01-04-fixed-timestep.html,
                  01-05-framebuffer.html, 01-06-colour.html,
-                 01-07-vectors-2d.html
+                 01-07-vectors-2d.html, 01-08-pong.html
   docs/_template/: lesson-template.html, README.md, apply-shared.py
   memory/: 2026-07-16.md, 2026-07-18.md
   (retired: hello.cpp)
 
-next: 1.8 — Checkpoint: Pong  (LAST LESSON OF MODULE 1)
-      (planned filename: docs/lessons/01-08-pong.html — 1.7 already links to it)
+next: 2.1 — Lines: DDA, then Bresenham  (FIRST LESSON OF MODULE 2)
+      (planned filename: docs/lessons/02-01-lines.html — 1.8 already links to it)
+      Opens by paying a debt: the naive DDA that lived in main.cpp through 1.7 is
+      derived properly, weighed against Bresenham (integers, error terms, what the
+      machine finds cheap), and moved into src/gfx/ as the rasterizer's first routine.
 ```

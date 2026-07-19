@@ -150,4 +150,24 @@ constexpr vec2& operator/=(vec2& v, float s) { v.x /= s; v.y /= s; return v; }
     return b * (dot(a, b) / len_sq);
 }
 
+/// Reflect `v` in a surface whose **unit** normal is `n` — a mirror bounce.
+///
+/// Built directly on the shadow picture above. Split `v` into two parts: the part
+/// along `n` (its shadow, which is the part driving *into* the surface) and
+/// whatever is left over, which runs *along* the surface. A bounce keeps the
+/// sideways part untouched and flips the other one — and flipping a part means
+/// subtracting it twice: once to cancel it, once more to send it back out.
+///
+///     reflect(v, n) = v - 2 * dot(v, n) * n
+///
+/// The precondition matters. `n` must already be normalised, because with a unit
+/// normal project_onto's division by |n|² is a division by one — that division is
+/// the only thing missing from the line below, and it is missing on purpose.
+/// Pass an unnormalised normal and the bounce comes back either too strong or too
+/// weak, with nothing to warn you. Lesson 1.8 §3.2 derives it.
+[[nodiscard]] constexpr vec2 reflect(vec2 v, vec2 n)
+{
+    return v - n * (2.0f * dot(v, n));
+}
+
 } // namespace engine

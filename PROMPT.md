@@ -201,3 +201,37 @@ page with five SVG diagrams and a drag-to-explore widget.
 | Zero-vector normalisation | Returns `(0,0)`, presented as a choice | There is no correct answer, only a safe one. `normalised_or()` exists for callers who need a direction to exist. |
 | Worked numbers | 3-4-5 triangles throughout | Checkable by hand. Cost a Figure 4 redraw, since a 4.8 shadow on a length-5 arrow overlaps almost exactly — solved with an offset dimension bar rather than by changing the numbers. |
 | Line drawing | Local to `main.cpp`, debt flagged | A vector lesson must draw arrows. Lesson 2.1 derives DDA properly and moves it into `gfx/`. |
+
+---
+
+## 2026-07-18 — Lesson 1.8
+
+> Based on the STATE and the project's claude instructions, work on the next.
+
+**Response:** Lesson 1.8 — Checkpoint: Pong, the last lesson of Module 1. A complete
+playable game in `src/game/pong.{hpp,cpp}`, `reflect()` added to `vec2.hpp`, `main.cpp`
+reduced to a host, and the lesson page with seven SVG diagrams. Module 1 complete: the
+three living pages (index, conventions, math-toolbox) reissued at the boundary.
+
+**Decisions made in this session:**
+
+| Decision | Choice | Rationale |
+|---|---|---|
+| Where Pong lives | A new `src/game/` directory, three modules before Module 5 needs it | The refactor's difficulty is decided entirely by how many wrong-way dependencies accumulate first. Zero of them makes it a rename. The test for engine-ness: *could a different game use this unchanged?* |
+| The new idea for a "consolidation" lesson | Swept collision — collision as a fact about an **interval**, not an instant | A checkpoint still needs a spine. This is the first lesson where anything can *hit* anything, so it is the first place the discrete-sampling failure can exist at all — and it recurs as aliasing (M2), texture shimmer (M3) and shadow acne (M6). |
+| The naive test | **Kept in the shipped code**, behind `state::swept_collision`, toggled with `[K]` | Pedagogy §5 requires showing the artifact. A bug you can summon on demand teaches more than one you can only describe — and the toggle makes the two rules differ in exactly one thing. |
+| Demonstrating tunnelling | Reuse 1.4's existing `[1-4]` sim-rate keys | At 10 Hz the opening serve tunnels immediately; at 60 Hz it is unreachable. No new controls, and it makes the fixed timestep the *cause* rather than a separate topic. |
+| The headline claim | `\|v_axis\|·h < size_a + size_b`, tabulated per sim rate | At 60 Hz the safe ceiling is 480 px/s and the ball caps at 260 — the bug is not merely untested but **unobservable**, which is a sharper statement about test suites than any amount of exhortation. |
+| Paddle bounce | Angle from hit position, **not** an honest `reflect` | A mirror paddle conserves `v.y` for the whole match, so no player can place a shot and there is no game. Exercise 1.8.1 has the student break it and diagnose it. The lie is documented, which is what separates a design decision from a bug. |
+| Wall bounce | The general `reflect()` even though a sign flip would do | Same cost (`constexpr`, folds to a negation), and it is the form that survives Exercise 1.8.4's angled wall. Worked example 2 shows a 45° wall turning a vertical drop horizontal — something no component negation can produce. |
+| Randomness | Hand-rolled xorshift32 **inside the state**, not `SDL_rand` | `SDL_rand` exists and works (verified in `SDL_stdinc.h`), but keeps state in a hidden global — which would mean the simulation is not a function of its inputs, and replays and determinism die silently. |
+| Code listings | Spliced from the real files by a script (`@@LISTING:path@@`) | §8 demands zero placeholders and that every listing compile at its point in the course. Splicing makes drift impossible rather than unlikely, and gets the HTML escaping right every time. |
+| Verification | A throwaway harness in the scratchpad, not a test suite in the repo | Testing is Module 8's lesson; adding a framework now would spoil it. The harness proved every number in the lesson, and found that two of its own first assertions were wrong rather than the code. |
+
+**Bug found and fixed along the way:** the KaTeX loader sat *below* `<!-- SHARED-SCRIPT:END -->`
+in the template, so `apply-shared.py` never propagated it — every lesson shipped without a maths
+renderer. It stayed invisible for six lessons because raw TeX is *also* the documented
+CDN-unreachable fallback, and because lessons 1.1–1.7 contain no display math at all. 1.8 is the
+first lesson with equations and the first to catch it. Moved inside the region; the duplicate
+standalone copies in `conventions.html` and `math-toolbox.html` removed so those pages do not
+load KaTeX twice.
