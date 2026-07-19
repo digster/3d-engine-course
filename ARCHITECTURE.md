@@ -60,6 +60,7 @@ inventing one — but without paying framework ceremony before it buys anything.
 │   │   ├── fixed_step.hpp  # simulation accumulator + alpha          [EXISTS from 1.4]
 │   │   └── fixed_step.cpp
 │   ├── math/               # vec2/3/4, mat3/4, quaternion — hand-rolled, no GLM
+│   │   └── vec2.hpp        # header-only; arithmetic, dot, normalise  [EXISTS from 1.7]
 │   ├── gfx/                # framebuffer, software rasterizer → later SDL_GPU renderer
 │   │   ├── colour.hpp      # pack/unpack, sRGB transfer functions   [EXISTS from 1.6]
 │   │   ├── colour.cpp
@@ -183,6 +184,30 @@ trip requantises to 256 steps. A properly linear renderer decodes once on the wa
 once on the way out, which needs a float or half-float framebuffer, headroom above 1.0, and a
 tonemapping step. That is Module 6's HDR work, and 1.6 states the debt explicitly rather than
 implying the problem is solved.
+
+**Maths, as of Lesson 1.7.** `src/math/vec2.hpp` is **header-only**, and that is a deliberate
+exception to the `.hpp`/`.cpp` split every other subsystem follows. These functions are two or three
+lines and are called thousands of times per frame; a definition in another translation unit
+generally cannot be inlined, so `a + b` would become a real function call. The trade — changing one
+line recompiles every dependant — is acceptable for code that is **small, hot and stable**, and a
+vector type is all three. It is not a general licence, and Module 5's public-API boundary turns the
+judgement into a rule.
+
+Two conventions that propagate from here:
+
+- **Pass small value types by value.** `sizeof(vec2) == 8`, which fits in a register; a
+  `const vec2&` would hand over an address to dereference. Reach for a reference when the object is
+  large or must be mutated in place.
+- **`length_squared` is the default; `length` is the exception.** Square root is monotonic, so every
+  comparison of distances gives the same answer without it. Square the constant, do not root the
+  variable.
+
+`normalised()` returns `(0,0)` for a zero-length input rather than dividing by zero — a `NaN` there
+would spread silently through the frame (Lesson 1.3 §3.5). `normalised_or()` takes an explicit
+fallback where some direction must exist.
+
+Note that a header-only addition needs **no `CMakeLists.txt` change at all**, which is the build
+system agreeing with the design.
 
 ### 2.2 After the Module 5 refactor: engine / demos / tools
 

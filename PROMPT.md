@@ -181,3 +181,23 @@ the lesson page with three SVG diagrams and an interactive display-calibration t
 | Demo construction | One `draw_ramp` taking the mix rule as a function pointer | The two sides of a comparison must differ in exactly one thing, or you are comparing code paths rather than rules. |
 | Alpha | Never converted, in either mixing rule | Alpha is coverage — a fraction of area, already linear. Converting it makes 50% behave like 20%, and the bug can hide for months because nothing composites yet. |
 | Numbers | Every figure derived in Python, then reproduced by a 24-assertion C++ harness | The engine prints the two headline numbers at startup, so a build disagreeing with the prose is a real signal rather than a rounding difference. |
+
+---
+
+## 2026-07-18 — Lesson 1.7
+
+> next
+
+**Response:** Lesson 1.7 — 2D Vectors, Geometrically. `src/math/vec2.hpp` (header-only),
+a demo pairing a live dot-product visualiser with a normalisation race, and the lesson
+page with five SVG diagrams and a drag-to-explore widget.
+
+**Decisions made in this session:**
+
+| Decision | Choice | Rationale |
+|---|---|---|
+| Dot-product derivation | Via projection onto the axes, **not** the law of cosines | The brief bans assumed trigonometry beyond basics. The chosen route needs only "shadows add" and "components are projections", and it explains *why* the formula looks like that. |
+| `vec2` is header-only | Yes, with the argument made in the lesson | Small, hot, stable code must be inlinable. The recompilation cost is named, and it is explicitly not a general licence. |
+| Zero-vector normalisation | Returns `(0,0)`, presented as a choice | There is no correct answer, only a safe one. `normalised_or()` exists for callers who need a direction to exist. |
+| Worked numbers | 3-4-5 triangles throughout | Checkable by hand. Cost a Figure 4 redraw, since a 4.8 shadow on a length-5 arrow overlaps almost exactly — solved with an offset dimension bar rather than by changing the numbers. |
+| Line drawing | Local to `main.cpp`, debt flagged | A vector lesson must draw arrows. Lesson 2.1 derives DDA properly and moves it into `gfx/`. |

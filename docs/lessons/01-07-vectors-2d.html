@@ -1,0 +1,3314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>1.7 — 2D Vectors, Geometrically · Build a Professional 3D Game Engine</title>
+<meta name="description" content="Vectors as arrows before components, normalisation as the fix for a five-lesson-old bug, and the dot product derived as a shadow — with the component formula falling out of projection onto the axes.">
+<!-- SHARED-CSS:BEGIN -->
+<style>
+/* ---- Design tokens ------------------------------------------------------- */
+:root {
+  color-scheme: light dark;
+
+  /* Page */
+  --bg:            #fdfdfb;
+  --bg-sunken:     #f4f4f0;
+  --bg-raised:     #ffffff;
+  --text:          #1c1c1a;
+  --text-muted:    #5f5f58;
+  --text-faint:    #8a8a80;
+  --rule:          #e2e2db;
+  --rule-strong:   #cfcfc6;
+
+  /* Accent — used for links, active nav, section marks */
+  --accent:        #b4530a;
+  --accent-soft:   #f5e6d8;
+  --accent-text:   #8f4108;
+
+  /* Callouts */
+  --note-bd:       #3a6ea5;   --note-bg:    #eaf2fb;
+  --warn-bd:       #b8860b;   --warn-bg:    #fdf5e2;
+  --verify-bd:     #a03030;   --verify-bg:  #fbecec;
+  --pitfall-bd:    #7a4fa3;   --pitfall-bg: #f4eefb;
+  --ok-bd:         #2f7d4f;   --ok-bg:      #e9f6ee;
+
+  /* Code — always dark, in both page themes */
+  --code-bg:       #1b1d23;
+  --code-bar:      #262932;
+  --code-text:     #dfe3ec;
+  --code-rule:     #363a45;
+
+  /* Syntax tokens */
+  --tok-comment:   #6d7789;
+  --tok-keyword:   #c98fdb;
+  --tok-type:      #6cc5d9;
+  --tok-string:    #a3cf85;
+  --tok-number:    #e8a978;
+  --tok-preproc:   #d9a05b;
+  --tok-func:      #79b6f2;
+  --tok-punct:     #9aa2b1;
+
+  /* Axis colours — COURSE-WIDE CONVENTION. x/y/z = red/green/blue.
+     Never override these in a diagram. See conventions.html. */
+  --axis-x:        #d1344a;
+  --axis-y:        #2f9e4f;
+  --axis-z:        #2b6fd4;
+  --axis-x-soft:   #f7d8dd;
+  --axis-y-soft:   #d8f0e0;
+  --axis-z-soft:   #d7e4fa;
+
+  /* Diagram neutrals */
+  --dia-bg:        #ffffff;
+  --dia-ink:       #33332e;
+  --dia-ink-soft:  #7a7a72;
+  --dia-grid:      #e8e8e2;
+  --dia-fill:      #f0f0ea;
+  --dia-hi:        #b4530a;
+
+  /* Typography */
+  --font-body: "Iowan Old Style", "Palatino Linotype", "Palatino", "Charter",
+               Georgia, Cambria, "Times New Roman", serif;
+  --font-ui:   -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+               "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "SFMono-Regular", "Cascadia Code",
+               "JetBrains Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  --measure: 42rem;          /* ~72 characters at this size — the reading column */
+  --measure-wide: 58rem;     /* diagrams & tables may breathe past the measure  */
+}
+
+/* Dark tokens.
+   Applied in two situations, which is why the block is written twice:
+     1. the OS asks for dark AND the reader has not overridden to light;
+     2. the reader explicitly chose dark via the toggle.
+   CSS has no mixins, so duplication is the price of supporting both an OS
+   default and a manual override. Keep the two blocks byte-identical. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg:          #15161a;
+    --bg-sunken:   #101115;
+    --bg-raised:   #1c1e24;
+    --text:        #e4e4e0;
+    --text-muted:  #a2a49e;
+    --text-faint:  #74766f;
+    --rule:        #2c2e35;
+    --rule-strong: #3d404a;
+
+    --accent:      #f0a06a;
+    --accent-soft: #33251a;
+    --accent-text: #f5b184;
+
+    --note-bd:     #5a8fc8;   --note-bg:    #16202c;
+    --warn-bd:     #c9a132;   --warn-bg:    #262013;
+    --verify-bd:   #d05555;   --verify-bg:  #2a1717;
+    --pitfall-bd:  #a077c8;   --pitfall-bg: #221a2c;
+    --ok-bd:       #4fa877;   --ok-bg:      #14231a;
+
+    --dia-bg:      #1a1c21;
+    --dia-ink:     #d8d8d2;
+    --dia-ink-soft:#8f918a;
+    --dia-grid:    #2b2d33;
+    --dia-fill:    #24262c;
+    --dia-hi:      #f0a06a;
+
+    --axis-x:      #f2647a;
+    --axis-y:      #5cc47e;
+    --axis-z:      #6b9ef0;
+    --axis-x-soft: #3a2027;
+    --axis-y-soft: #1c3325;
+    --axis-z-soft: #1e2a40;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg:          #15161a;
+  --bg-sunken:   #101115;
+  --bg-raised:   #1c1e24;
+  --text:        #e4e4e0;
+  --text-muted:  #a2a49e;
+  --text-faint:  #74766f;
+  --rule:        #2c2e35;
+  --rule-strong: #3d404a;
+
+  --accent:      #f0a06a;
+  --accent-soft: #33251a;
+  --accent-text: #f5b184;
+
+  --note-bd:     #5a8fc8;   --note-bg:    #16202c;
+  --warn-bd:     #c9a132;   --warn-bg:    #262013;
+  --verify-bd:   #d05555;   --verify-bg:  #2a1717;
+  --pitfall-bd:  #a077c8;   --pitfall-bg: #221a2c;
+  --ok-bd:       #4fa877;   --ok-bg:      #14231a;
+
+  --dia-bg:      #1a1c21;
+  --dia-ink:     #d8d8d2;
+  --dia-ink-soft:#8f918a;
+  --dia-grid:    #2b2d33;
+  --dia-fill:    #24262c;
+  --dia-hi:      #f0a06a;
+
+  --axis-x:      #f2647a;
+  --axis-y:      #5cc47e;
+  --axis-z:      #6b9ef0;
+  --axis-x-soft: #3a2027;
+  --axis-y-soft: #1c3325;
+  --axis-z-soft: #1e2a40;
+}
+
+/* ---- Reset & base -------------------------------------------------------- */
+*, *::before, *::after { box-sizing: border-box; }
+
+html {
+  font-size: 18px;
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
+  scroll-padding-top: 2rem;
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  line-height: 1.7;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* The reading column. Everything is centred on --measure; wide elements opt out. */
+.wrap {
+  max-width: var(--measure);
+  margin: 0 auto;
+  padding: 0 1.25rem;
+}
+.bleed {                       /* for diagrams/tables that need more room */
+  max-width: var(--measure-wide);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* ---- Typography ---------------------------------------------------------- */
+h1, h2, h3, h4 {
+  font-family: var(--font-ui);
+  line-height: 1.25;
+  letter-spacing: -0.015em;
+  margin: 0 0 0.6em;
+  scroll-margin-top: 1.5rem;
+}
+h1 { font-size: 2.15rem; font-weight: 700; margin-top: 0.2em; }
+h2 {
+  font-size: 1.5rem; font-weight: 650;
+  margin-top: 2.6em;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--rule);
+}
+h3 { font-size: 1.15rem; font-weight: 650; margin-top: 2em; }
+h4 { font-size: 1rem;    font-weight: 650; margin-top: 1.6em; color: var(--text-muted); }
+
+/* Section numbers rendered as a quiet prefix */
+h2 .num, h3 .num {
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  margin-right: 0.5em;
+  font-weight: 500;
+}
+
+p { margin: 0 0 1.15em; }
+
+a { color: var(--accent-text); text-decoration-color: var(--rule-strong); text-underline-offset: 2px; }
+a:hover { text-decoration-color: currentColor; }
+
+strong { font-weight: 650; }
+em { font-style: italic; }
+
+ul, ol { margin: 0 0 1.15em; padding-left: 1.5em; }
+li { margin-bottom: 0.4em; }
+li > ul, li > ol { margin-top: 0.4em; margin-bottom: 0.5em; }
+
+hr { border: 0; border-top: 1px solid var(--rule); margin: 2.5em 0; }
+
+blockquote {
+  margin: 1.5em 0;
+  padding: 0.1em 0 0.1em 1.2em;
+  border-left: 3px solid var(--rule-strong);
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* Inline code — light chip, distinct from the dark block listings */
+:not(pre) > code {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 0.08em 0.34em;
+  word-break: break-word;
+}
+
+/* ---- Masthead ------------------------------------------------------------ */
+.masthead {
+  background: var(--bg-sunken);
+  border-bottom: 1px solid var(--rule);
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+}
+.masthead-inner {
+  max-width: var(--measure-wide);
+  margin: 0 auto;
+  padding: 0.6rem 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.masthead .course {
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  text-decoration: none;
+}
+.masthead .spacer { flex: 1; }
+.masthead a { color: var(--text-muted); text-decoration: none; }
+.masthead a:hover { color: var(--accent-text); }
+
+.theme-toggle {
+  font: inherit;
+  font-size: 0.78rem;
+  background: var(--bg-raised);
+  color: var(--text-muted);
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  padding: 0.2rem 0.55rem;
+  cursor: pointer;
+}
+.theme-toggle:hover { border-color: var(--rule-strong); color: var(--text); }
+
+/* ---- Lesson nav (top & bottom) ------------------------------------------- */
+.lesson-nav {
+  display: flex;
+  align-items: stretch;
+  gap: 0.6rem;
+  font-family: var(--font-ui);
+  font-size: 0.82rem;
+  margin: 1.5rem auto;
+}
+.lesson-nav a, .lesson-nav span {
+  flex: 1;
+  padding: 0.55rem 0.8rem;
+  border: 1px solid var(--rule);
+  border-radius: 7px;
+  background: var(--bg-raised);
+  text-decoration: none;
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+.lesson-nav a:hover { border-color: var(--accent); }
+.lesson-nav span { opacity: 0.45; }        /* disabled edge (no prev / no next) */
+.lesson-nav .dir {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-faint);
+}
+.lesson-nav .ttl {
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-weight: 550;
+}
+.lesson-nav .next-l { text-align: right; }
+.lesson-nav .idx-l  { flex: 0 0 auto; justify-content: center; text-align: center; }
+@media (max-width: 34rem) {
+  .lesson-nav { flex-wrap: wrap; }
+  .lesson-nav .idx-l { order: 3; flex: 1 0 100%; }
+}
+
+/* ---- Lesson header block ------------------------------------------------- */
+.lesson-head { margin: 2rem 0 0; }
+.eyebrow {
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+  font-weight: 650;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 0.5rem;
+}
+.deck {
+  font-size: 1.12rem;
+  color: var(--text-muted);
+  margin-bottom: 1.5rem;
+}
+.meta {
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  padding: 1rem 1.15rem;
+  margin-bottom: 1.75rem;
+}
+.meta dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 0.4rem 1rem; }
+.meta dt {
+  color: var(--text-faint);
+  text-transform: uppercase;
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  padding-top: 0.28em;
+  white-space: nowrap;
+}
+.meta dd { margin: 0; }
+@media (max-width: 30rem) {
+  .meta dl { grid-template-columns: 1fr; gap: 0.15rem 0; }
+  .meta dd { margin-bottom: 0.6rem; }
+}
+
+/* Objectives — "you will be able to…" */
+.objectives {
+  border: 1px solid var(--accent);
+  background: var(--accent-soft);
+  border-radius: 9px;
+  padding: 1.1rem 1.25rem;
+  margin: 1.75rem 0;
+}
+.objectives h2 {
+  margin: 0 0 0.5rem;
+  border: 0; padding: 0;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--accent-text);
+}
+.objectives ul { margin: 0; padding-left: 1.25em; }
+.objectives li::marker { color: var(--accent); }
+
+/* ---- Table of contents --------------------------------------------------- */
+.toc {
+  font-family: var(--font-ui);
+  font-size: 0.88rem;
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  padding: 1rem 1.25rem;
+  margin: 2rem 0;
+}
+.toc > summary {
+  cursor: pointer;
+  font-weight: 650;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-muted);
+  list-style: none;
+}
+.toc > summary::-webkit-details-marker { display: none; }
+.toc > summary::before { content: "▸ "; color: var(--accent); }
+.toc[open] > summary::before { content: "▾ "; }
+.toc ol { list-style: none; margin: 0.85rem 0 0; padding: 0; counter-reset: toc; }
+.toc ol ol { margin: 0.3rem 0 0.5rem 1.1rem; }
+.toc li { margin: 0.28em 0; counter-increment: toc; }
+.toc a { text-decoration: none; color: var(--text); }
+.toc a:hover { color: var(--accent-text); text-decoration: underline; }
+.toc ol ol a { color: var(--text-muted); font-size: 0.94em; }
+
+/* ---- Callouts ------------------------------------------------------------ */
+.callout {
+  border-left: 3px solid var(--rule-strong);
+  background: var(--bg-sunken);
+  border-radius: 0 8px 8px 0;
+  padding: 0.9rem 1.1rem;
+  margin: 1.6em 0;
+  font-size: 0.95rem;
+}
+.callout > :first-child { margin-top: 0; }
+.callout > :last-child  { margin-bottom: 0; }
+.callout .label {
+  display: block;
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  margin-bottom: 0.35rem;
+}
+.callout.note    { border-color: var(--note-bd);    background: var(--note-bg); }
+.callout.note .label    { color: var(--note-bd); }
+.callout.warn    { border-color: var(--warn-bd);    background: var(--warn-bg); }
+.callout.warn .label    { color: var(--warn-bd); }
+.callout.verify  { border-color: var(--verify-bd);  background: var(--verify-bg); }
+.callout.verify .label  { color: var(--verify-bd); }
+.callout.pitfall { border-color: var(--pitfall-bd); background: var(--pitfall-bg); }
+.callout.pitfall .label { color: var(--pitfall-bd); }
+.callout.ok      { border-color: var(--ok-bd);      background: var(--ok-bg); }
+.callout.ok .label      { color: var(--ok-bd); }
+/* C++ explainers: a C++ feature taught in place, the first time it appears. */
+.callout.cpp     { border-color: var(--accent);     background: var(--accent-soft); }
+.callout.cpp .label     { color: var(--accent-text); }
+
+/* ---- Code listings ------------------------------------------------------- */
+.listing {
+  margin: 1.6em 0;
+  border-radius: 9px;
+  overflow: hidden;
+  border: 1px solid var(--code-rule);
+  background: var(--code-bg);
+}
+.listing figcaption {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: var(--code-bar);
+  border-bottom: 1px solid var(--code-rule);
+  padding: 0.45rem 0.85rem;
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  color: #aeb6c4;
+}
+.listing figcaption .path { font-weight: 600; color: #dfe3ec; }
+.listing figcaption .tag {
+  font-family: var(--font-ui);
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  background: #3a3f4c;
+  color: #c6cdd9;
+}
+.listing figcaption .tag.new      { background: #1f4433; color: #7fd6a5; }
+.listing figcaption .tag.modified { background: #453a1c; color: #e0be74; }
+.listing figcaption .lang { margin-left: auto; opacity: 0.65; }
+
+/* Horizontal scroll — NEVER wrap. Wrapped code lies about its structure. */
+.listing pre {
+  margin: 0;
+  padding: 0.9rem 1rem;
+  overflow-x: auto;
+  background: var(--code-bg);
+}
+.listing pre code {
+  font-family: var(--font-mono);
+  font-size: 0.79rem;
+  line-height: 1.62;
+  color: var(--code-text);
+  white-space: pre;
+  display: block;
+  tab-size: 4;
+}
+.listing pre::-webkit-scrollbar { height: 9px; }
+.listing pre::-webkit-scrollbar-track { background: var(--code-bar); }
+.listing pre::-webkit-scrollbar-thumb { background: #4a5060; border-radius: 5px; }
+.listing pre::-webkit-scrollbar-thumb:hover { background: #5d6478; }
+
+/* Syntax tokens, applied by the tiny highlighter at the foot of the page. */
+.tok-c { color: var(--tok-comment); font-style: italic; }
+.tok-k { color: var(--tok-keyword); }
+.tok-t { color: var(--tok-type); }
+.tok-s { color: var(--tok-string); }
+.tok-n { color: var(--tok-number); }
+.tok-p { color: var(--tok-preproc); }
+.tok-f { color: var(--tok-func); }
+.tok-o { color: var(--tok-punct); }
+
+/* Emphasised line inside a listing (the line this paragraph is about) */
+.listing .hl { background: rgba(180, 130, 60, 0.16); display: inline-block; width: 100%; }
+
+/* Shell transcripts get a lighter treatment than source files */
+.listing.shell figcaption .path::before { content: "$ "; opacity: 0.6; }
+
+/* ---- Figures & diagrams -------------------------------------------------- */
+figure.dia {
+  margin: 2em auto;
+  padding: 0;
+}
+figure.dia svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: var(--dia-bg);
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+}
+figure.dia figcaption,
+figure.tbl figcaption {
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: 0.65rem;
+  line-height: 1.55;
+}
+figure.dia figcaption .fignum,
+figure.tbl figcaption .fignum {
+  font-weight: 700;
+  color: var(--text);
+}
+/* SVG text inherits the theme so diagrams survive dark mode */
+figure.dia svg text { font-family: var(--font-ui); fill: var(--dia-ink); }
+figure.dia svg .lbl-x { fill: var(--axis-x); }
+figure.dia svg .lbl-y { fill: var(--axis-y); }
+figure.dia svg .lbl-z { fill: var(--axis-z); }
+figure.dia svg .ax-x  { stroke: var(--axis-x); }
+figure.dia svg .ax-y  { stroke: var(--axis-y); }
+figure.dia svg .ax-z  { stroke: var(--axis-z); }
+figure.dia svg .ink       { stroke: var(--dia-ink); }
+figure.dia svg .ink-soft  { stroke: var(--dia-ink-soft); }
+figure.dia svg .grid      { stroke: var(--dia-grid); }
+figure.dia svg .fill-soft { fill: var(--dia-fill); }
+figure.dia svg .hi        { stroke: var(--dia-hi); }
+figure.dia svg .mono      { font-family: var(--font-mono); }
+figure.dia svg .sm        { font-size: 11px; }
+figure.dia svg .xs        { font-size: 9.5px; }
+
+/* Text fills for <text> elements.
+   These MUST be classes, not fill="..." attributes: the `figure.dia svg text`
+   rule above is CSS, and CSS always beats an SVG presentation attribute — an
+   inline fill on a <text> is silently ignored. Class selectors outrank the bare
+   element selector, so these win. (Shapes are unaffected; the rule only targets
+   text, so fill="..." still works on rect/path/circle.) */
+figure.dia svg .muted     { fill: var(--dia-ink-soft); }
+figure.dia svg .t-hi      { fill: var(--dia-hi); }
+figure.dia svg .t-ok      { fill: var(--ok-bd); }
+figure.dia svg .t-bad     { fill: var(--verify-bd); }
+/* For labels sitting ON a saturated filled shape, where the theme ink would be
+   unreadable. Fixed white in both themes, because the shape under it is the
+   same saturated colour in both. */
+figure.dia svg .t-inv     { fill: #ffffff; }
+
+/* ---- Tables -------------------------------------------------------------- */
+.tbl-scroll { overflow-x: auto; margin: 1.6em 0; }
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+th, td {
+  text-align: left;
+  padding: 0.5rem 0.7rem;
+  border-bottom: 1px solid var(--rule);
+  vertical-align: top;
+}
+th {
+  font-weight: 650;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--rule-strong);
+  white-space: nowrap;
+}
+tbody tr:hover { background: var(--bg-sunken); }
+td code { font-size: 0.82em; }
+
+/* File-manifest table: path | new/modified | purpose */
+.manifest td:first-child { font-family: var(--font-mono); font-size: 0.78rem; white-space: nowrap; }
+.badge {
+  font-size: 0.62rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.06em; padding: 0.1rem 0.4rem; border-radius: 3px; white-space: nowrap;
+}
+.badge.new { background: var(--ok-bg); color: var(--ok-bd); border: 1px solid var(--ok-bd); }
+.badge.mod { background: var(--warn-bg); color: var(--warn-bd); border: 1px solid var(--warn-bd); }
+/* Curriculum status, used on index.html */
+.badge.done { background: var(--ok-bg); color: var(--ok-bd); border: 1px solid var(--ok-bd); }
+.badge.soon { background: var(--bg-sunken); color: var(--text-faint); border: 1px solid var(--rule-strong); }
+
+/* ---- Math ---------------------------------------------------------------- */
+/* KaTeX renders these when the CDN is reachable. When it is NOT, the raw TeX
+   stays visible — which is why every equation MUST also be stated in prose.
+   Never let an equation be the only carrier of a fact. */
+.eq {
+  margin: 1.4em 0;
+  padding: 0.9rem 1rem;
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  overflow-x: auto;
+  text-align: center;
+}
+.eq-plain {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  margin-top: 0.6rem;
+  padding-top: 0.6rem;
+  border-top: 1px dashed var(--rule-strong);
+  text-align: left;
+}
+.eq-plain::before {
+  content: "in plain text: ";
+  color: var(--text-faint);
+  font-family: var(--font-ui);
+  font-size: 0.72rem;
+}
+
+/* Worked numeric example — every formula gets one */
+.worked {
+  border: 1px solid var(--rule-strong);
+  border-radius: 9px;
+  padding: 1rem 1.2rem;
+  margin: 1.6em 0;
+  background: var(--bg-raised);
+}
+.worked > .label {
+  display: block;
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--accent);
+  margin-bottom: 0.5rem;
+}
+.worked > :last-child { margin-bottom: 0; }
+
+/* ---- Exercises ----------------------------------------------------------- */
+.exercise {
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 9px 9px 0;
+  padding: 1rem 1.2rem;
+  margin: 1.4em 0;
+  background: var(--bg-raised);
+}
+.exercise h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.98rem;
+}
+.exercise h3 .xnum {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--accent);
+  margin-right: 0.5em;
+}
+.difficulty {
+  font-family: var(--font-ui);
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-faint);
+  border: 1px solid var(--rule-strong);
+  border-radius: 3px;
+  padding: 0.05rem 0.35rem;
+  margin-left: 0.4em;
+  vertical-align: 0.15em;
+}
+.exercise details {
+  margin-top: 0.7rem;
+  border-top: 1px solid var(--rule);
+  padding-top: 0.6rem;
+}
+.exercise summary {
+  cursor: pointer;
+  font-family: var(--font-ui);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.exercise summary:hover { color: var(--accent-text); }
+.exercise details[open] summary { margin-bottom: 0.6rem; }
+
+/* ---- Pitfalls (symptom → cause → fix) ------------------------------------ */
+.pitfalls { margin: 1.5em 0; }
+.pitfall-item {
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  margin-bottom: 0.9rem;
+  overflow: hidden;
+}
+.pitfall-item > summary {
+  cursor: pointer;
+  padding: 0.7rem 1rem;
+  background: var(--bg-sunken);
+  font-family: var(--font-ui);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.pitfall-item > summary:hover { color: var(--accent-text); }
+.pitfall-item > summary .sym {
+  font-weight: 400;
+  color: var(--text-muted);
+  font-style: italic;
+}
+.pitfall-body { padding: 0.9rem 1rem; font-size: 0.94rem; }
+.pitfall-body > :first-child { margin-top: 0; }
+.pitfall-body > :last-child  { margin-bottom: 0; }
+.pitfall-body dt {
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+  margin-top: 0.7rem;
+}
+.pitfall-body dd { margin: 0.2rem 0 0; }
+
+/* ---- Recap / next -------------------------------------------------------- */
+.recap {
+  background: var(--ok-bg);
+  border: 1px solid var(--ok-bd);
+  border-radius: 9px;
+  padding: 1.1rem 1.25rem;
+  margin: 1.75rem 0;
+}
+.recap h2 { margin: 0 0 0.6rem; border: 0; padding: 0; font-size: 1.05rem; }
+.recap > :last-child { margin-bottom: 0; }
+
+/* ---- Further reading ----------------------------------------------------- */
+.reading { font-size: 0.92rem; }
+.reading li { margin-bottom: 0.6em; }
+.reading .src {
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+  margin-right: 0.4em;
+}
+
+/* ---- STATE block --------------------------------------------------------- */
+.state {
+  margin: 2.5em 0 1em;
+  border: 1px dashed var(--rule-strong);
+  border-radius: 9px;
+  background: var(--bg-sunken);
+  overflow: hidden;
+}
+.state > summary {
+  cursor: pointer;
+  padding: 0.6rem 1rem;
+  font-family: var(--font-ui);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-muted);
+}
+.state pre {
+  margin: 0;
+  padding: 0.9rem 1rem;
+  overflow-x: auto;
+  border-top: 1px solid var(--rule);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+  white-space: pre;
+}
+
+/* ---- Footer -------------------------------------------------------------- */
+.foot {
+  border-top: 1px solid var(--rule);
+  margin-top: 3rem;
+  padding: 1.5rem 0 3rem;
+  font-family: var(--font-ui);
+  font-size: 0.78rem;
+  color: var(--text-faint);
+}
+.foot a { color: var(--text-muted); }
+
+/* ---- Interactive widgets ------------------------------------------------- */
+.widget {
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  background: var(--bg-raised);
+  padding: 1rem;
+  margin: 2em 0;
+}
+.widget-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+  align-items: center;
+  margin-top: 0.8rem;
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+.widget-controls label { display: flex; align-items: center; gap: 0.4rem; }
+.widget-controls input[type="range"] { accent-color: var(--accent); }
+.widget-readout {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--text);
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 0.1rem 0.4rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Print --------------------------------------------------------------- */
+@media print {
+  .masthead, .lesson-nav, .theme-toggle { display: none; }
+  body { background: #fff; color: #000; font-size: 11pt; }
+  .listing { break-inside: avoid; }
+  figure.dia { break-inside: avoid; }
+  a::after { content: " (" attr(href) ")"; font-size: 0.7em; color: #666; }
+}
+</style>
+<!-- SHARED-CSS:END -->
+</head>
+<body>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <a class="course" href="../index.html">Build a Professional 3D Game Engine</a>
+    <span class="spacer"></span>
+    <a href="../index.html">Contents</a>
+    <a href="../conventions.html">Conventions</a>
+    <a href="../cpp-style.html">C++ Style</a>
+    <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Toggle colour theme">Theme</button>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="01-06-colour.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">1.6 — Colour, and an Honest Teaser of sRGB</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="01-08-pong.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">1.8 — Checkpoint: Pong</span>
+    </a>
+  </nav>
+
+  <!-- ================= 1. HEADER BLOCK ================= -->
+  <div class="lesson-head">
+    <div class="eyebrow">Module 1 — The Loop, the Pixel, and Time · Lesson 1.7</div>
+    <h1>2D Vectors, Geometrically</h1>
+    <p class="deck">
+      Five lessons ago, Exercise 1.2.3 asked you to notice that moving diagonally was 41% too fast,
+      and promised the fix would need a tool we did not have: a way to say <em>this direction, one
+      unit long</em>. That tool is the vector, and it is worth far more than the bug it fixes. Today
+      it arrives as an arrow — not as a pair of numbers — and the dot product arrives as a shadow,
+      long before any formula. By the end you will have the first piece of the maths library that
+      everything from Module 2 onwards stands on.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 4 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd><a href="01-05-framebuffer.html">1.5 — The Framebuffer</a>, <a href="01-02-input-state-vs-events.html">1.2 — Input</a> (Exercise 1.2.3 in particular)</dd>
+
+        <dt>Files</dt>
+        <dd><code>src/math/vec2.hpp</code> (new), <code>src/main.cpp</code> (modified)</dd>
+
+        <dt>Milestone</dt>
+        <dd>Two squares driven by the same keys, one 41.4% faster on diagonals than the other — and a live dot-product visualiser you steer with the mouse.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…say what a vector is without mentioning coordinates, and explain why it has no position.</li>
+      <li>…add and scale vectors geometrically, and see why the component rules follow rather than being handed down.</li>
+      <li>…derive normalisation, and use it to separate <em>direction</em> from <em>speed</em>.</li>
+      <li>…explain the dot product as a shadow, and <strong>derive</strong> <code>ax·bx + ay·by</code> from that picture instead of memorising it.</li>
+      <li>…read the sign of a dot product as "in front", "side-on" or "behind", and use it without any trigonometry.</li>
+      <li>…say why <code>length_squared</code> should be your default and <code>length</code> the exception.</li>
+      <li>…name the one input that breaks normalisation, and handle it before it produces a NaN.</li>
+    </ul>
+  </section>
+
+  <details class="toc" open>
+    <summary>Contents</summary>
+    <ol>
+      <li><a href="#problem">The Problem</a></li>
+      <li><a href="#intuition">Building Intuition</a>
+        <ol>
+          <li><a href="#arrow">An arrow with nowhere to be</a></li>
+          <li><a href="#combining">Adding and stretching</a></li>
+        </ol>
+      </li>
+      <li><a href="#theory">The Theory</a>
+        <ol>
+          <li><a href="#components">Components, at last</a></li>
+          <li><a href="#length">Length, and the unit vector</a></li>
+          <li><a href="#shadow">The dot product, as a shadow</a></li>
+          <li><a href="#derive">Deriving the formula</a></li>
+          <li><a href="#sign">Reading the sign</a></li>
+        </ol>
+      </li>
+      <li><a href="#implementation">Implementation: vec2</a></li>
+      <li><a href="#listings">Complete Code Listings</a></li>
+      <li><a href="#build">Build &amp; Run</a></li>
+      <li><a href="#pitfalls">Common Pitfalls &amp; Debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; Next</a></li>
+      <li><a href="#reading">Further Reading</a></li>
+    </ol>
+  </details>
+
+  <!-- ================= 2. THE PROBLEM ================= -->
+  <h2 id="problem"><span class="num">1</span>The Problem</h2>
+
+  <p>
+    Here is the movement code, essentially unchanged since Lesson 1.2:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">the movement we have been living with</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">float dx = 0.0f;
+float dy = 0.0f;
+if (in.key_down(SDL_SCANCODE_A)) { dx -= 1.0f; }
+if (in.key_down(SDL_SCANCODE_D)) { dx += 1.0f; }
+if (in.key_down(SDL_SCANCODE_W)) { dy -= 1.0f; }
+if (in.key_down(SDL_SCANCODE_S)) { dy += 1.0f; }
+
+x += dx * speed * dt;
+y += dy * speed * dt;</code></pre>
+  </figure>
+
+  <p>
+    Press <kbd>D</kbd> and the player moves at <code>speed</code>. Press <kbd>W</kbd> and the same.
+    Press both and the player moves at… not <code>speed</code>.
+  </p>
+
+  <div class="worked">
+    <span class="label">Worked example — the diagonal, measured</span>
+    <p>
+      With <kbd>W</kbd> and <kbd>D</kbd> both held, <code>dx = 1</code> and <code>dy = −1</code>
+      (up is negative y on screen). At a speed of 90 pixels per second the per-second movement is:
+    </p>
+    <ul>
+      <li>Horizontally: <code>1 × 90 = 90</code> px</li>
+      <li>Vertically: <code>−1 × 90 = −90</code> px</li>
+      <li>Actual distance covered, by Pythagoras: <code>√(90² + 90²) = √16200 = <strong>127.28</strong></code> px</li>
+    </ul>
+    <p style="margin-bottom:0">
+      <code>127.28 / 90 = 1.4142</code> — the player travels <strong>41.4% further per second</strong>
+      diagonally than along an axis. That number is <code>√2</code>, and it is not a rounding error
+      or a tuning problem: it is the length of the arrow <code>(1, −1)</code>, which we scaled by
+      speed as though its length were 1.
+    </p>
+  </div>
+
+  <p>
+    The bug is small. What it reveals is not. We have been writing <code>x</code> and <code>y</code>
+    as two independent numbers that happen to be near each other, and doing arithmetic on each
+    separately — and the moment a question involves <em>both at once</em>, such as "how long is this
+    step?", the code has no way to ask it. There is no name for the thing whose length we needed.
+  </p>
+
+  <p>
+    Every geometric idea in the next eight modules has this shape. "How far apart are these?" "Which
+    way is the light coming from?" "Is this triangle facing me?" "Is this point inside?" All of them
+    are questions about a quantity with direction and size, and none of them can be asked cleanly of
+    two loose floats.
+  </p>
+
+  <p>
+    So we introduce that quantity. Its name is a <strong>vector</strong>, and the reason to introduce
+    it as geometry rather than as a pair of numbers is that the geometry is what makes it useful. A
+    student who thinks of a vector as "a struct with x and y" will implement the dot product from a
+    formula and never know what it is <em>for</em>. A student who thinks of it as an arrow will
+    reinvent the formula when they need it.
+  </p>
+
+  <!-- ================= 3. BUILDING INTUITION ================= -->
+  <h2 id="intuition"><span class="num">2</span>Building Intuition</h2>
+
+  <h3 id="arrow">2.1 An arrow with nowhere to be</h3>
+
+  <p>
+    A vector is an <strong>arrow</strong>. It has two properties and only two:
+  </p>
+
+  <ul>
+    <li>a <strong>direction</strong> — which way it points;</li>
+    <li>a <strong>length</strong> — how long it is, also called its magnitude.</li>
+  </ul>
+
+  <p>
+    And now the part that is easy to read past and worth stopping on: <strong>a vector has no
+    position.</strong> It is not <em>at</em> anywhere. "Three metres east" is a complete vector; it
+    does not become a different vector if you start from your kitchen instead of from mine. Slide an
+    arrow around the page without turning or stretching it and it is the same arrow throughout.
+  </p>
+
+  <figure class="dia bleed">
+    <svg viewBox="0 0 660 230" role="img" aria-labelledby="f1-t f1-d">
+      <title id="f1-t">The same vector drawn in four places, and two different vectors</title>
+      <desc id="f1-d">On the left, four identical arrows are drawn at different positions on the
+        page. Because they have the same direction and the same length, they are all the same
+        vector. On the right, two arrows start from the same point: one is longer, and one points
+        elsewhere. Those are different vectors, because direction and length are the only two things
+        a vector has.</desc>
+
+      <defs>
+        <marker id="v1a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+        <marker id="v1b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--note-bd)"/></marker>
+      </defs>
+
+      <text x="14" y="26" class="sm t-hi" font-weight="700">All four are the same vector</text>
+      <g stroke="var(--dia-hi)" stroke-width="2.4">
+        <line x1="30" y1="80" x2="90" y2="50" marker-end="url(#v1a)"/>
+        <line x1="120" y1="150" x2="180" y2="120" marker-end="url(#v1a)"/>
+        <line x1="60" y1="200" x2="120" y2="170" marker-end="url(#v1a)"/>
+        <line x1="200" y1="90" x2="260" y2="60" marker-end="url(#v1a)"/>
+      </g>
+      <text x="14" y="222" class="xs muted">same direction, same length — so the same arrow, wherever it is drawn</text>
+
+      <line x1="320" y1="30" x2="320" y2="210" class="grid" stroke-width="1" stroke-dasharray="4 4"/>
+
+      <text x="352" y="26" class="sm" font-weight="700">These are different vectors</text>
+      <g stroke="var(--note-bd)" stroke-width="2.4">
+        <line x1="400" y1="150" x2="520" y2="90" marker-end="url(#v1b)"/>
+        <line x1="400" y1="150" x2="460" y2="120" marker-end="url(#v1b)"/>
+        <line x1="400" y1="150" x2="440" y2="200" marker-end="url(#v1b)"/>
+      </g>
+      <circle cx="400" cy="150" r="3.5" class="fill-soft" stroke="var(--dia-ink)" stroke-width="1.2"/>
+      <text x="528" y="88" class="xs muted">longer</text>
+      <text x="466" y="118" class="xs muted">shorter</text>
+      <text x="446" y="206" class="xs muted">different direction</text>
+      <text x="352" y="222" class="xs muted">length or direction differs — so they are not the same vector</text>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 1.</span> Position is not part of a vector's identity. This is why
+      the same type describes a velocity, an offset, a surface normal and a direction to a light: all
+      of them are "which way and how much", none of them is "where".
+    </figcaption>
+  </figure>
+
+  <p>
+    Figure 1 makes the point by drawing the same vector four times in four different places. A
+    fair objection: we <em>do</em> want to talk about positions, and we will use the same type for
+    them. The reconciliation is that a position is a vector <em>from an agreed origin</em> — the
+    arrow that takes you from (0, 0) to the place you mean. That works, and it is what every engine
+    does, but it means the type is being used for two different ideas. Keeping them straight in your
+    head matters: adding two positions is meaningless, while adding a position and a displacement is
+    exactly how things move.
+  </p>
+
+  <h3 id="combining">2.2 Adding and stretching</h3>
+
+  <p>
+    Two operations, both defined by drawing rather than by arithmetic.
+  </p>
+
+  <p>
+    <strong>Adding</strong> is following one arrow and then the other. Put the tail of the second at
+    the tip of the first; the sum is the arrow from the original tail to the final tip. Walk three
+    metres east then four metres north, and the sum is the single arrow describing where you ended
+    up relative to where you started — which is emphatically <em>not</em> seven metres.
+  </p>
+
+  <p>
+    <strong>Scaling</strong> is stretching. Multiplying by 2 gives an arrow twice as long in the same
+    direction; by ½, half as long; by −1, the same length pointing the opposite way. Scaling changes
+    length and possibly reverses direction, but never turns an arrow to a new angle. Figure 2 shows
+    both operations.
+  </p>
+
+  <figure class="dia bleed">
+    <svg viewBox="0 0 660 240" role="img" aria-labelledby="f2-t f2-d">
+      <title id="f2-t">Adding vectors tip to tail, and scaling one</title>
+      <desc id="f2-d">On the left, an arrow labelled a runs right and up, and an arrow labelled b is
+        drawn starting at a's tip. The sum a plus b is the arrow from a's tail to b's tip, closing
+        the triangle. On the right, the same arrow a is shown scaled by two, by one half, and by
+        minus one: doubled, halved, and reversed, always along the same line.</desc>
+
+      <defs>
+        <marker id="v2a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+        <marker id="v2b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--note-bd)"/></marker>
+        <marker id="v2c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--ok-bd)"/></marker>
+      </defs>
+
+      <text x="14" y="26" class="sm" font-weight="700">Adding: tip to tail</text>
+      <line x1="40" y1="180" x2="160" y2="120" stroke="var(--dia-hi)" stroke-width="2.4" marker-end="url(#v2a)"/>
+      <text x="88" y="164" class="sm t-hi" font-weight="700">a</text>
+      <line x1="160" y1="120" x2="220" y2="60" stroke="var(--note-bd)" stroke-width="2.4" marker-end="url(#v2b)"/>
+      <text x="196" y="102" class="sm" font-weight="700">b</text>
+      <line x1="40" y1="180" x2="220" y2="60" stroke="var(--ok-bd)" stroke-width="2.4" marker-end="url(#v2c)"/>
+      <text x="120" y="106" class="sm t-ok" font-weight="700">a + b</text>
+      <text x="14" y="216" class="xs muted">follow a, then follow b — the sum is the single arrow</text>
+      <text x="14" y="230" class="xs muted">from where you started to where you ended</text>
+
+      <line x1="330" y1="30" x2="330" y2="215" class="grid" stroke-width="1" stroke-dasharray="4 4"/>
+
+      <text x="360" y="26" class="sm" font-weight="700">Scaling: stretching, never turning</text>
+      <line x1="380" y1="180" x2="620" y2="60" stroke="var(--dia-hi)" stroke-width="1.6" opacity="0.35"/>
+      <line x1="380" y1="180" x2="500" y2="120" stroke="var(--dia-hi)" stroke-width="2.4" marker-end="url(#v2a)"/>
+      <text x="452" y="164" class="sm t-hi" font-weight="700">a</text>
+      <line x1="380" y1="180" x2="620" y2="60" stroke="var(--note-bd)" stroke-width="1.8" marker-end="url(#v2b)"/>
+      <text x="596" y="86" class="xs" font-weight="700">2a</text>
+      <line x1="380" y1="180" x2="440" y2="150" stroke="var(--ok-bd)" stroke-width="2.4" marker-end="url(#v2c)"/>
+      <text x="430" y="142" class="xs t-ok" font-weight="700">½a</text>
+      <line x1="380" y1="180" x2="320" y2="210" stroke="var(--verify-bd)" stroke-width="2.4" marker-end="url(#v2a)"/>
+      <text x="300" y="224" class="xs t-bad" font-weight="700">−a</text>
+      <text x="360" y="230" class="xs muted">all four lie on one line through the tail</text>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 2.</span> Both operations are defined by drawing. When we introduce
+      components in §<a href="#components">3.1</a>, the component rules will turn out to
+      <em>agree</em> with these pictures — which is the point, and the reason they are worth
+      believing.
+    </figcaption>
+  </figure>
+
+  <p>
+    Notice we have defined two useful operations without writing down a single number. That is not a
+    stunt: it is the reason vectors survive the jump to three dimensions unchanged. The pictures are
+    identical in 3-D, so the rules are too, and Module 2 will get <code>vec3</code> almost for free.
+  </p>
+
+  <!-- ================= 4. THE THEORY ================= -->
+  <h2 id="theory"><span class="num">3</span>The Theory</h2>
+
+  <h3 id="components">3.1 Components, at last</h3>
+
+  <p>
+    To compute with arrows we have to describe them numerically, and the way to do that is to pick
+    two reference directions — <strong>x</strong> and <strong>y</strong> — and ask: how far along
+    each does this arrow reach?
+  </p>
+
+  <p>
+    Those two answers are the arrow's <strong>components</strong>. An arrow reaching 3 units along x
+    and 4 along y is written <code>(3, 4)</code>. Nothing has changed about the arrow; we have only
+    chosen a way to write it down.
+  </p>
+
+  <div class="callout note">
+    <span class="label">The components depend on the axes, and the vector does not</span>
+    <p style="margin-bottom:0">
+      Turn the axes and the same arrow gets different numbers. That is worth holding onto, because it
+      is exactly what the whole of Module 2 is about: a "coordinate space" is a choice of axes, and
+      moving a vector between spaces means recomputing its components while the arrow itself sits
+      still. The arrow is the reality; the components are a description relative to a frame.
+    </p>
+  </div>
+
+  <p>
+    With components, §<a href="#combining">2.2</a>'s two pictures become arithmetic. Adding tip to
+    tail means the x-reaches add and the y-reaches add. Scaling stretches both reaches equally:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/math/vec2.hpp — the pictures, as code</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">[[nodiscard]] constexpr vec2 operator+(vec2 a, vec2 b) { return {a.x + b.x, a.y + b.y}; }
+[[nodiscard]] constexpr vec2 operator-(vec2 a, vec2 b) { return {a.x - b.x, a.y - b.y}; }
+[[nodiscard]] constexpr vec2 operator*(vec2 v, float s) { return {v.x * s, v.y * s}; }</code></pre>
+  </figure>
+
+  <p>
+    These rules are <em>derived</em> from the geometry, not decreed alongside it. That distinction
+    matters when you meet an operation whose component form looks arbitrary — the dot product is
+    about to be exactly that — because the honest response is to go back to the picture.
+  </p>
+
+  <h3 id="length">3.2 Length, and the unit vector</h3>
+
+  <p>
+    An arrow reaching 3 along x and 4 along y forms a right-angled triangle with those two reaches as
+    its sides. Pythagoras gives the arrow itself:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">length, from a right-angled triangle</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">length(v) = sqrt(v.x * v.x + v.y * v.y);</code></pre>
+  </figure>
+
+  <p>
+    So <code>(3, 4)</code> has length <code>√(9 + 16) = √25 = 5</code>. And <code>(1, −1)</code>, our
+    diagonal input, has length <code>√(1 + 1) = √2 ≈ 1.41421</code> — there is the 41.4%, and it was
+    never mysterious. We scaled an arrow of length 1.414 by <code>speed</code> and expected to move
+    at <code>speed</code>.
+  </p>
+
+  <p>
+    The fix follows immediately. If the problem is that the arrow's length is not 1, make it 1. Divide
+    an arrow by its own length and the direction is untouched while the length becomes exactly 1 — a
+    <strong>unit vector</strong>. The operation is called <strong>normalisation</strong>, and Figure 3
+    shows it applied to the diagonal that has been troubling us.
+  </p>
+
+  <figure class="dia bleed">
+    <svg viewBox="0 0 660 260" role="img" aria-labelledby="f3-t f3-d">
+      <title id="f3-t">The diagonal input, before and after normalisation</title>
+      <desc id="f3-d">A unit square is drawn with arrows of length one along its bottom and left
+        edges. The diagonal of the square, the vector one comma one, runs from the same corner and
+        is longer — its length is the square root of two, about 1.414. A shorter arrow along the
+        same diagonal is the normalised version, of length exactly one, and its tip lies on a
+        quarter circle drawn through the tips of the two axis arrows.</desc>
+
+      <defs>
+        <marker id="v3a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+        <marker id="v3b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--verify-bd)"/></marker>
+        <marker id="v3c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--ok-bd)"/></marker>
+      </defs>
+
+      <g class="grid" stroke-width="1">
+        <line x1="120" y1="40" x2="120" y2="238"/>
+        <line x1="40" y1="205" x2="330" y2="205"/>
+      </g>
+      <text x="336" y="209" class="xs muted">x</text>
+      <text x="116" y="34" class="xs muted" text-anchor="end">y</text>
+
+      <!-- the unit square -->
+      <path d="M120,205 L200,205 L200,125 L120,125 Z"
+            fill="var(--dia-fill)" stroke="var(--dia-ink-soft)" stroke-width="1"/>
+
+      <!-- the unit circle, through both axis tips -->
+      <path d="M200,205 A80,80 0 0,1 120,125"
+            fill="none" stroke="var(--dia-ink-soft)" stroke-width="1.2" stroke-dasharray="4 3"/>
+
+      <!-- the two axis unit arrows -->
+      <line x1="120" y1="205" x2="200" y2="205" stroke="var(--dia-ink)" stroke-width="2" marker-end="url(#v3a)"/>
+      <line x1="120" y1="205" x2="120" y2="125" stroke="var(--dia-ink)" stroke-width="2" marker-end="url(#v3a)"/>
+      <text x="160" y="221" class="xs muted" text-anchor="middle">1</text>
+      <text x="110" y="165" class="xs muted" text-anchor="end">1</text>
+
+      <!-- the raw diagonal, and the normalised one -->
+      <line x1="120" y1="205" x2="200" y2="125" stroke="var(--verify-bd)" stroke-width="2.6" marker-end="url(#v3b)"/>
+      <line x1="120" y1="205" x2="176.6" y2="148.4" stroke="var(--ok-bd)" stroke-width="3" marker-end="url(#v3c)"/>
+
+      <text x="212" y="123" class="xs t-bad" font-weight="700">(1, 1)</text>
+      <text x="212" y="137" class="xs t-bad">length √2 ≈ 1.414</text>
+      <text x="191" y="170" class="xs t-ok" font-weight="700">normalised</text>
+      <text x="191" y="184" class="xs t-ok">length exactly 1</text>
+
+      <!-- the arithmetic -->
+      <rect x="368" y="46" width="278" height="164" rx="8" class="fill-soft"/>
+      <text x="384" y="70" class="xs" font-weight="700">Dividing by the length</text>
+      <text x="384" y="94" class="xs mono">v      = (1, 1)</text>
+      <text x="384" y="112" class="xs mono">|v|    = √(1² + 1²) = √2 = 1.41421</text>
+      <text x="384" y="136" class="xs mono t-ok">v/|v|  = (0.70711, 0.70711)</text>
+      <text x="384" y="154" class="xs mono">check  = √(0.5 + 0.5) = 1  ✓</text>
+      <text x="384" y="180" class="xs muted">Both components shrank by the same factor,</text>
+      <text x="384" y="194" class="xs muted">so the arrow still points along the diagonal.</text>
+
+      <text x="40" y="252" class="xs muted">A unit vector answers "which way", with the "how much" removed — which is exactly what a movement input should be.</text>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 3.</span> Normalisation is division by the arrow's own length. Both
+      components shrink by the same factor, so the direction survives untouched while the length
+      becomes 1 — and the tip lands on the unit circle, which is what "unit vector" means.
+    </figcaption>
+  </figure>
+
+  <div class="worked">
+    <span class="label">Worked example — the five-lesson-old bug, closed</span>
+    <p>Holding <kbd>W</kbd> and <kbd>D</kbd> at a speed of 90 px/s:</p>
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th></th><th>Direction used</th><th>Step per second</th><th>Distance covered</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Before</strong></td><td><code>(1, −1)</code>, length 1.41421</td><td><code>(90, −90)</code></td><td><strong>127.28 px</strong> — 41.4% too far</td></tr>
+          <tr><td><strong>After</strong></td><td><code>(0.70711, −0.70711)</code>, length 1</td><td><code>(63.64, −63.64)</code></td><td><strong>90.00 px</strong> ✓</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="margin-bottom:0">
+      And single-axis movement is unaffected, because <code>(1, 0)</code> already has length 1 and
+      normalising it changes nothing. That is the sign of a fix rather than a fudge: it corrects the
+      broken case and provably leaves the working case alone.
+    </p>
+  </div>
+
+  <div class="callout warn">
+    <span class="label">The one input that breaks it</span>
+    <p style="margin-bottom:0">
+      No keys held means <code>(0, 0)</code>, whose length is zero — and dividing by it is
+      <code>0/0</code>, which is <code>NaN</code>. From Lesson 1.3 §3.5 you already know what happens
+      next: <code>NaN</code> spreads through every arithmetic operation it touches, silently, until
+      the whole scene disappears several frames later. There is no mathematically correct answer to
+      "which way does a zero-length arrow point", so the code must decide. Ours returns
+      <code>(0, 0)</code> — a frame with no input means no movement — with a
+      <code>normalised_or()</code> variant for cases that genuinely need some direction.
+    </p>
+  </div>
+
+  <h3 id="shadow">3.3 The dot product, as a shadow</h3>
+
+  <p>
+    Now the operation this lesson is really for. Forget any formula you have seen; we are going to
+    build it from a picture.
+  </p>
+
+  <p>
+    Take two arrows, <strong>a</strong> and <strong>b</strong>, starting from the same point. Shine a
+    light straight down onto <strong>b</strong> — rays perpendicular to it — so that
+    <strong>a</strong> casts a <strong>shadow</strong> on the line along <strong>b</strong>.
+  </p>
+
+  <p>
+    That shadow has a length, and it answers a genuinely useful question: <em>how much of
+    <strong>a</strong> points along <strong>b</strong>?</em> If the two arrows point the same way the
+    shadow is as long as <strong>a</strong> itself. As <strong>a</strong> swings away, the shadow
+    shortens. When <strong>a</strong> is exactly perpendicular the shadow has no length at all — none
+    of <strong>a</strong> goes in <strong>b</strong>'s direction. Swing further and the shadow falls
+    on the far side, pointing backwards.
+  </p>
+
+  <figure class="dia bleed">
+    <svg viewBox="0 0 660 268" role="img" aria-labelledby="f4-t f4-d">
+      <title id="f4-t">Vector a casting a shadow onto vector b</title>
+      <desc id="f4-d">Two arrows a and b start at the same origin, with a pointing up and to the
+        right more steeply than b. A perpendicular ray drops from a's tip onto b's line, marking
+        where a's shadow ends. The shadow is measured by a separate bar drawn parallel to b and
+        offset below it, so both remain visible: the shadow has length 4.8 while b has length 5, a
+        has length 5, and the angle between them is 16.26 degrees.</desc>
+
+      <defs>
+        <marker id="v4a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--note-bd)"/></marker>
+        <marker id="v4b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+      </defs>
+
+      <g class="grid" stroke-width="1">
+        <line x1="150" y1="34" x2="150" y2="238"/>
+        <line x1="60" y1="200" x2="420" y2="200"/>
+      </g>
+
+      <!-- b's line, extended past the arrow -->
+      <line x1="150" y1="200" x2="390" y2="20" stroke="var(--dia-ink-soft)" stroke-width="1" stroke-dasharray="3 3" opacity="0.45"/>
+
+      <!-- b -->
+      <line x1="150" y1="200" x2="270" y2="110" stroke="var(--dia-hi)" stroke-width="2.6" marker-end="url(#v4b)"/>
+      <text x="280" y="106" class="sm t-hi" font-weight="700">b</text>
+      <text x="280" y="120" class="xs muted">|b| = 5</text>
+
+      <!-- a -->
+      <line x1="150" y1="200" x2="240" y2="80" stroke="var(--note-bd)" stroke-width="2.6" marker-end="url(#v4a)"/>
+      <text x="232" y="70" class="sm" font-weight="700">a</text>
+      <text x="196" y="58" class="xs muted">|a| = 5</text>
+
+      <!-- the perpendicular ray from a's tip down onto b's line -->
+      <line x1="240" y1="80" x2="265.2" y2="113.6" class="ink" stroke-width="1.3" stroke-dasharray="3 3"/>
+      <path d="M256.6,104.6 L250.6,109.1 L254.6,114.4" fill="none" class="ink" stroke-width="1"/>
+      <circle cx="265.2" cy="113.6" r="3" fill="var(--ok-bd)"/>
+
+      <!-- the shadow, measured on its own bar so it does not hide b -->
+      <line x1="157.8" y1="210.4" x2="273.0" y2="124.0"
+            stroke="var(--ok-bd)" stroke-width="5"/>
+      <line x1="150" y1="200" x2="157.8" y2="210.4" stroke="var(--ok-bd)" stroke-width="1" opacity="0.7"/>
+      <line x1="265.2" y1="113.6" x2="273.0" y2="124.0" stroke="var(--ok-bd)" stroke-width="1" opacity="0.7"/>
+      <text x="256" y="170" class="xs t-ok" font-weight="700">a's shadow on b</text>
+      <text x="256" y="184" class="xs t-ok">length 4.8</text>
+
+      <!-- the angle -->
+      <path d="M186,187 A38,38 0 0,0 178,172" fill="none" class="ink" stroke-width="1.2"/>
+      <line x1="128" y1="172" x2="176" y2="180" class="ink-soft" stroke-width="1"/>
+      <text x="122" y="169" class="xs" text-anchor="end">θ = 16.26°</text>
+
+      <!-- the arithmetic panel -->
+      <rect x="430" y="46" width="216" height="176" rx="8" class="fill-soft"/>
+      <text x="446" y="70" class="xs" font-weight="700">The shadow's length</text>
+      <text x="446" y="94" class="xs mono">|a| cos θ = 5 × 0.96</text>
+      <text x="446" y="112" class="xs mono t-ok">          = 4.8</text>
+      <text x="446" y="142" class="xs" font-weight="700">The dot product</text>
+      <text x="446" y="166" class="xs mono">shadow × |b|</text>
+      <text x="446" y="184" class="xs mono">= 4.8 × 5</text>
+      <text x="446" y="202" class="xs mono t-hi" font-weight="700">= 24</text>
+
+      <text x="60" y="258" class="xs muted">The shadow measures how much of a points along b. Multiplying by |b| makes the result symmetric — see below.</text>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 4.</span> The shadow is the whole idea. Its length is
+      <code>|a| cos θ</code>, which is largest when the arrows agree, zero when they are
+      perpendicular, and negative when they disagree.
+    </figcaption>
+  </figure>
+
+  <p>
+    The shadow's length is <code>|a| cos θ</code>, where θ is the angle between the arrows — that is
+    just the definition of cosine applied to the right-angled triangle in the figure. And the
+    <strong>dot product</strong> is that shadow multiplied by <strong>b</strong>'s length:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">the dot product, geometrically</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">dot(a, b) = length(a) * length(b) * cos(theta)</code></pre>
+  </figure>
+
+  <div class="callout note">
+    <span class="label">Why multiply by <code>|b|</code>? That step looks arbitrary.</span>
+    <p>
+      It does, and it deserves an answer rather than a shrug. The shadow alone —
+      <code>|a| cos θ</code> — is a perfectly good quantity, called the <em>scalar projection</em>,
+      and we use it directly in §<a href="#implementation">4</a>. But it is lopsided: it treats
+      <strong>a</strong> and <strong>b</strong> differently, so projecting <strong>a</strong> onto
+      <strong>b</strong> gives a different number from projecting <strong>b</strong> onto
+      <strong>a</strong>.
+    </p>
+    <p style="margin-bottom:0">
+      Multiplying by <code>|b|</code> makes it <strong>symmetric</strong> —
+      <code>dot(a,b) = dot(b,a)</code> — and that symmetry is what makes the operation behave
+      algebraically, which is what makes §<a href="#derive">3.4</a>'s derivation possible at all. It
+      also matches physics: the work done by a force is <code>|F| |d| cos θ</code>, force times
+      distance-moved-along-the-force. The symmetric version is the one that turned out to be worth
+      naming.
+    </p>
+  </div>
+
+  <p>
+    Drag the arrow below and watch the shadow, the angle and the number move together. It is worth a
+    minute: the sign flipping as the arrow crosses perpendicular is the single most useful fact in
+    this lesson.
+  </p>
+
+  <div class="widget" id="dot-widget">
+    <svg id="dot-svg" viewBox="0 0 620 300" role="img" aria-label="Interactive: drag vector a and watch its shadow on b, and the dot product, change" style="touch-action:none; cursor:crosshair">
+      <g id="dot-grid"></g>
+      <line id="dot-bline" stroke="var(--dia-ink-soft)" stroke-width="1" stroke-dasharray="3 3" opacity="0.5"/>
+      <line id="dot-shadow" stroke="var(--ok-bd)" stroke-width="6" opacity="0.5"/>
+      <line id="dot-perp" stroke="var(--dia-ink)" stroke-width="1.2" stroke-dasharray="3 3"/>
+      <line id="dot-b" stroke="var(--dia-hi)" stroke-width="2.6"/>
+      <line id="dot-a" stroke="var(--note-bd)" stroke-width="2.6"/>
+      <circle id="dot-handle" r="7" fill="var(--note-bd)" opacity="0.9"/>
+      <g id="dot-labels"></g>
+    </svg>
+    <div class="widget-controls">
+      <span>Drag the blue tip.</span>
+      <span class="widget-readout" id="dot-out">a · b = 0</span>
+      <span class="widget-readout" id="dot-angle">θ = 0°</span>
+      <span class="widget-readout" id="dot-verdict">side-on</span>
+    </div>
+    <p style="margin:0.7rem 0 0; font-size:0.82rem; color:var(--text-muted)">
+      <span style="color:var(--dia-hi)">Amber</span> is <strong>b</strong>, fixed.
+      <span style="color:var(--note-bd)">Blue</span> is <strong>a</strong>, which you drag.
+      <span style="color:var(--ok-bd)">Green</span> is a's shadow on b. Watch the shadow vanish, and
+      the number pass through zero, exactly when the arrows are perpendicular.
+    </p>
+  </div>
+
+  <h3 id="derive">3.4 Deriving the formula</h3>
+
+  <p>
+    We have a geometric definition involving an angle and two lengths. The form you will actually
+    write in code has neither:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/math/vec2.hpp — the dot product in components</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">[[nodiscard]] constexpr float dot(vec2 a, vec2 b) { return a.x * b.x + a.y * b.y; }</code></pre>
+  </figure>
+
+  <p>
+    Multiply the x's, multiply the y's, add. Where did the angle go? Most texts assert these two are
+    the same and move on. Let us actually connect them, using only things we have already
+    established.
+  </p>
+
+  <p>
+    <strong>Step one: shadows add.</strong> If you lay one arrow after another, tip to tail, the
+    shadow of the combined arrow is the shadow of the first plus the shadow of the second. Figure 5
+    shows why: the shadows fall on the same line, end to end, exactly as the arrows do. In symbols:
+    <code>dot(u + v, b) = dot(u, b) + dot(v, b)</code>.
+  </p>
+
+  <figure class="dia bleed">
+    <svg viewBox="0 0 660 250" role="img" aria-labelledby="f5-t f5-d">
+      <title id="f5-t">Shadows add: the projection of a sum is the sum of the projections</title>
+      <desc id="f5-d">An arrow u runs from the origin, and an arrow v continues from u's tip, so
+        their sum runs from the origin to v's tip. Perpendicular rays drop from each tip onto a
+        horizontal reference line. The shadow of u occupies the first segment of that line and the
+        shadow of v the next, so the shadow of the sum is exactly the two laid end to end.</desc>
+
+      <line x1="60" y1="200" x2="620" y2="200" class="ink-soft" stroke-width="1.4"/>
+      <text x="628" y="204" class="xs t-hi" font-weight="700">b</text>
+
+      <defs>
+        <marker id="v5a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--note-bd)"/></marker>
+        <marker id="v5b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--verify-bd)"/></marker>
+        <marker id="v5c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--ok-bd)"/></marker>
+      </defs>
+
+      <line x1="80" y1="200" x2="260" y2="110" stroke="var(--note-bd)" stroke-width="2.4" marker-end="url(#v5a)"/>
+      <text x="160" y="140" class="sm" font-weight="700">u</text>
+      <line x1="260" y1="110" x2="440" y2="60" stroke="var(--verify-bd)" stroke-width="2.4" marker-end="url(#v5b)"/>
+      <text x="350" y="76" class="sm t-bad" font-weight="700">v</text>
+      <line x1="80" y1="200" x2="440" y2="60" stroke="var(--ok-bd)" stroke-width="2.4" marker-end="url(#v5c)"/>
+      <text x="250" y="176" class="sm t-ok" font-weight="700">u + v</text>
+
+      <line x1="260" y1="110" x2="260" y2="200" class="ink" stroke-width="1.2" stroke-dasharray="3 3"/>
+      <line x1="440" y1="60" x2="440" y2="200" class="ink" stroke-width="1.2" stroke-dasharray="3 3"/>
+
+      <line x1="80" y1="216" x2="260" y2="216" stroke="var(--note-bd)" stroke-width="5" opacity="0.6"/>
+      <line x1="260" y1="216" x2="440" y2="216" stroke="var(--verify-bd)" stroke-width="5" opacity="0.6"/>
+      <text x="170" y="234" class="xs" text-anchor="middle" font-weight="700">shadow of u</text>
+      <text x="350" y="234" class="xs t-bad" text-anchor="middle" font-weight="700">shadow of v</text>
+      <text x="530" y="216" class="xs t-ok" font-weight="700">…and together they are</text>
+      <text x="530" y="230" class="xs t-ok" font-weight="700">the shadow of u + v</text>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 5.</span> The one property the derivation needs, and it is visible
+      rather than algebraic: projection is <em>linear</em>. Break an arrow into pieces, project each
+      piece, add the results — you get the same answer as projecting the whole.
+    </figcaption>
+  </figure>
+
+  <p>
+    <strong>Step two: every arrow is a sum of its components.</strong> By definition,
+    <code>a = ax·x̂ + ay·ŷ</code>, where <code>x̂</code> and <code>ŷ</code> are unit arrows along the
+    two axes. That is literally what "reaches 3 along x and 4 along y" says.
+  </p>
+
+  <p>
+    Put those together and the dot product splits apart:
+  </p>
+
+  <div class="worked">
+    <span class="label">The derivation, in three lines</span>
+    <p>Start from the geometric definition and use step one to break <strong>a</strong> apart:</p>
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>Step</th><th>Reason</th></tr></thead>
+        <tbody>
+          <tr><td><code>a · b = (ax·x̂ + ay·ŷ) · b</code></td><td>Step two: write <strong>a</strong> as its components.</td></tr>
+          <tr><td><code>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;= ax (x̂ · b) + ay (ŷ · b)</code></td><td>Step one: shadows add, and scaling an arrow scales its shadow.</td></tr>
+          <tr><td><code>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;= ax · bx + ay · by</code></td><td>Because <code>x̂ · b</code> <em>is</em> <code>bx</code> — see below.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      The last line is the one worth pausing on. What is <code>x̂ · b</code>? By the geometric
+      definition it is <code>|x̂| |b| cos α</code>, where α is the angle between the x axis and
+      <strong>b</strong>. But <code>|x̂| = 1</code>, so it is <code>|b| cos α</code> — which is
+      <em>the shadow of <strong>b</strong> on the x axis</em>. And the shadow of an arrow on the x
+      axis is precisely what we called its x component in §<a href="#components">3.1</a>.
+    </p>
+    <p style="margin-bottom:0">
+      <strong>Components are projections onto the axes.</strong> That is why the formula looks the way
+      it does: <code>ax·bx + ay·by</code> is not a coincidence of algebra, it is "project onto each
+      axis and add up", which is the shadow picture applied twice.
+    </p>
+  </div>
+
+  <div class="worked">
+    <span class="label">Worked example — both routes to the same number</span>
+    <p>Take <code>a = (3, 4)</code> and <code>b = (4, 3)</code>, the arrows in Figure 4.</p>
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>Via components</th><th>Via geometry</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>3 × 4 + 4 × 3</code></td>
+            <td><code>|a| = √(9+16) = 5</code>, <code>|b| = √(16+9) = 5</code></td>
+          </tr>
+          <tr>
+            <td><code>= 12 + 12</code></td>
+            <td><code>cos θ = 24 / 25 = 0.96</code> → <code>θ = 16.26°</code></td>
+          </tr>
+          <tr>
+            <td><code>= <strong>24</strong></code></td>
+            <td>shadow <code>= 5 × 0.96 = 4.8</code>; <code>4.8 × 5 = <strong>24</strong></code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="margin-bottom:0">
+      Same answer, arrived at from opposite ends. The component route needs two multiplications and
+      an addition; the geometric route needs two square roots and an inverse cosine. In code we
+      always use the first — but we <em>think</em> in the second, which is why the derivation was
+      worth doing.
+    </p>
+  </div>
+
+  <h3 id="sign">3.5 Reading the sign</h3>
+
+  <p>
+    Because <code>|a|</code> and <code>|b|</code> are never negative, the sign of the dot product is
+    the sign of <code>cos θ</code> — and that makes it an instant, trigonometry-free answer to
+    "roughly which way is that?"
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>Angle between them</th><th><code>cos θ</code></th><th><code>dot(a, b)</code></th><th>Reads as</th></tr></thead>
+      <tbody>
+        <tr><td>0° — identical directions</td><td>1</td><td>Largest possible, <code>|a||b|</code></td><td>Same way</td></tr>
+        <tr><td>Less than 90°</td><td>Positive</td><td><strong>&gt; 0</strong></td><td>Broadly agree — <em>in front</em></td></tr>
+        <tr><td>Exactly 90°</td><td>0</td><td><strong>= 0</strong></td><td>Perpendicular — <em>side-on</em></td></tr>
+        <tr><td>More than 90°</td><td>Negative</td><td><strong>&lt; 0</strong></td><td>Broadly disagree — <em>behind</em></td></tr>
+        <tr><td>180° — opposite</td><td>−1</td><td>Most negative, <code>−|a||b|</code></td><td>Directly away</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="worked">
+    <span class="label">Worked example — the sign, against <code>a = (3, 4)</code></span>
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th><strong>b</strong></th><th><code>dot</code></th><th>Angle</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><code>(6, 8)</code></td><td><code>18 + 32 = 50</code></td><td>0°</td><td>Same direction, twice as long</td></tr>
+          <tr><td><code>(−4, 3)</code></td><td><code>−12 + 12 = <strong>0</strong></code></td><td>90°</td><td>Exactly perpendicular</td></tr>
+          <tr><td><code>(−5, 1)</code></td><td><code>−15 + 4 = −11</code></td><td>115.6°</td><td>Behind, but not directly</td></tr>
+          <tr><td><code>(−3, −4)</code></td><td><code>−9 − 16 = −25</code></td><td>180°</td><td>Directly opposite</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="margin-bottom:0">
+      Note the second row: two multiplications and an addition told us the arrows are exactly
+      perpendicular, with no angles computed and no square roots taken. That is the dot product's
+      real value in a renderer.
+    </p>
+  </div>
+
+  <p>
+    Which turns into an idiom you will write hundreds of times:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">questions the dot product answers directly</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// Is the enemy in front of me?
+if (dot(facing, enemy_position - my_position) &gt; 0.0f) { … }
+
+// Is this surface facing the light? (Module 3's Lambert shading, in one line)
+const float brightness = std::max(0.0f, dot(surface_normal, direction_to_light));
+
+// Is this triangle facing away from the camera? (Module 3's back-face culling)
+if (dot(triangle_normal, view_direction) &gt;= 0.0f) { skip_it(); }</code></pre>
+  </figure>
+
+  <p>
+    That middle line is worth staring at, because it is the whole of diffuse lighting. A surface
+    pointing straight at a light is fully lit; one at a glancing angle catches less; one facing away
+    catches none, which is what the <code>max</code> is for. Lambert's law <em>is</em> a dot product,
+    and Module 3 derives it properly — but you can already read it.
+  </p>
+
+  <!-- ================= 5. IMPLEMENTATION ================= -->
+  <h2 id="implementation"><span class="num">4</span>Implementation: vec2</h2>
+
+  <p>
+    The engine gains <code>src/math/</code>, and the file is a header with no <code>.cpp</code> beside
+    it. That is deliberate.
+  </p>
+
+  <div class="callout cpp">
+    <span class="label">C++ in place — why this one is header-only</span>
+    <p>
+      Every other subsystem so far has been a <code>.hpp</code> declaring and a <code>.cpp</code>
+      defining, so that changing an implementation recompiles one translation unit instead of all of
+      them. <code>vec2</code> breaks that pattern for a specific reason.
+    </p>
+    <p>
+      These functions are two or three lines each and are called thousands of times per frame. A
+      function defined in another translation unit generally cannot be inlined — the compiler cannot
+      see its body — so every <code>a + b</code> would be a real function call: arguments pushed, a
+      jump, a return, for an operation that should be two machine instructions. Putting the bodies in
+      the header lets the compiler inline them everywhere, and a vector add becomes what it should be.
+    </p>
+    <p style="margin-bottom:0">
+      The trade is real: change one line and everything that includes it recompiles. That is
+      acceptable for code which is <em>small, hot, and stable</em> — a vector type is all three. It
+      is not acceptable for a renderer, and this is not a licence to make everything header-only.
+      When Module 5 draws the public API boundary, this distinction becomes a design rule rather than
+      a judgement call.
+    </p>
+  </div>
+
+  <h3>4.1 A struct, passed by value</h3>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/math/vec2.hpp — the type (excerpt)</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">struct vec2
+{
+    float x = 0.0f;
+    float y = 0.0f;
+};</code></pre>
+  </figure>
+
+  <p>
+    Public members and no constructor. There is nothing to encapsulate — a vector <em>is</em> its two
+    components, there is no invariant to protect, and hiding them behind <code>get_x()</code> would
+    add ceremony and subtract clarity. The default member initialisers mean <code>vec2 v;</code> is
+    the origin rather than two floats of whatever was in that memory.
+  </p>
+
+  <p>
+    Everything takes and returns <code>vec2</code> <strong>by value</strong>, not by
+    <code>const&amp;</code>. The type is eight bytes — measured, not assumed — which fits in a
+    register. Passing by reference would mean handing over an address the callee must then
+    dereference: more work, not less. The rule this sets for the course: <strong>pass small value
+    types by value; reach for a reference when the object is large or must be mutated in
+    place.</strong>
+  </p>
+
+  <h3>4.2 length_squared, and the square root you did not need</h3>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/math/vec2.hpp — two lengths (excerpt)</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">[[nodiscard]] constexpr float length_squared(vec2 v) { return dot(v, v); }
+[[nodiscard]] inline float length(vec2 v) { return std::sqrt(length_squared(v)); }</code></pre>
+  </figure>
+
+  <p>
+    Two things here. First, <code>length_squared</code> is <code>dot(v, v)</code> — the dot product of
+    an arrow with itself is <code>|v||v|cos 0 = |v|²</code>, since a vector is perfectly aligned with
+    itself. A pleasing consistency check on §<a href="#derive">3.4</a>'s formula, and a genuine reuse.
+  </p>
+
+  <p>
+    Second, and more practically: <strong>prefer <code>length_squared</code> whenever you are only
+    comparing.</strong> Square root is monotonic, so <code>|a| &lt; |b|</code> exactly when
+    <code>|a|² &lt; |b|²</code>. Every "which is nearest", "is this within range", "sort by distance"
+    gives the identical answer without it.
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">the habit worth forming</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// Wasteful: computes a square root only to throw the precision away in a comparison.
+if (length(enemy_pos - player_pos) &lt; attack_range) { … }
+
+// Same answer, no square root.
+if (length_squared(enemy_pos - player_pos) &lt; attack_range * attack_range) { … }</code></pre>
+  </figure>
+
+  <p>
+    One square root is not expensive. A square root per enemy per frame, or per pixel, is a
+    measurable cost buying nothing — and Lesson 1.5 showed how quickly per-element work adds up when
+    the element count is large.
+  </p>
+
+  <h3>4.3 The zero-vector guard</h3>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/math/vec2.hpp — normalisation (excerpt)</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">[[nodiscard]] inline vec2 normalised(vec2 v)
+{
+    const float len_sq = length_squared(v);
+    if (len_sq &lt;= 0.0f)
+    {
+        return {0.0f, 0.0f};
+    }
+    return v / std::sqrt(len_sq);
+}</code></pre>
+  </figure>
+
+  <p>
+    The guard tests <code>length_squared</code> rather than <code>length</code>, which avoids a square
+    root on the path that is about to take one anyway — and, more importantly, tests the quantity we
+    are about to divide by.
+  </p>
+
+  <p>
+    Returning <code>(0, 0)</code> is a choice, and it is worth being clear that it is one. A
+    zero-length arrow genuinely has no direction; there is no correct answer to return. What we can
+    choose is a <em>safe</em> answer, and "no input means no movement" is the behaviour that keeps
+    the demo sane. Where some direction must exist — a facing that has to point somewhere even when
+    the player stands still — <code>normalised_or()</code> takes an explicit fallback, which forces
+    the caller to decide rather than inheriting ours by accident.
+  </p>
+
+  <h3>4.4 The demo, in two halves</h3>
+
+  <p>
+    The upper panel is Figure 4, live: <strong>b</strong> fixed, <strong>a</strong> following your
+    mouse, the shadow drawn along <strong>b</strong>, and the numbers updating. The mouse position
+    arrives in window pixels and has to become framebuffer pixels, which is itself a small vector
+    operation:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/main.cpp — window to framebuffer (excerpt)</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">const engine::vec2 mouse_fb{
+    in.mouse_x() * static_cast&lt;float&gt;(k_fb_width) / static_cast&lt;float&gt;(window_w),
+    in.mouse_y() * static_cast&lt;float&gt;(k_fb_height) / static_cast&lt;float&gt;(window_h)};
+
+const engine::vec2 a = mouse_fb - k_dot_origin;   // arrow to the cursor</code></pre>
+  </figure>
+
+  <p>
+    Note that second line. "The arrow from the origin to the cursor" is <code>tip − tail</code>, and
+    that subtraction is a thing we can now <em>write</em>. Before this lesson it would have been two
+    lines that did not say what they meant.
+  </p>
+
+  <p>
+    The lower panel races two squares driven by the same keys:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/main.cpp — the bug and its fix, side by side (excerpt)</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">const engine::vec2 raw_step = input * (k_speed * h);
+const engine::vec2 unit_step = engine::normalised(input) * (k_speed * h);</code></pre>
+  </figure>
+
+  <p>
+    One line apart. The demo tracks the distance each has travelled and prints the ratio, which sits
+    at 1.000 while you hold a single key and climbs towards 1.414 the longer you hold a diagonal.
+  </p>
+
+  <div class="callout note">
+    <span class="label">The line drawing is borrowed from an exercise</span>
+    <p style="margin-bottom:0">
+      Drawing arrows needs lines, and we do not have them. <code>main.cpp</code> gains a local
+      <code>draw_line</code> — the naive "step whichever axis changes more" version that Exercise
+      1.5.4 asked you to write. It is deliberately not in the engine: Lesson 2.1 derives it properly
+      (it has a name, DDA), shows why Bresenham replaced it, and puts the result in
+      <code>gfx/</code>. Borrowing it here rather than waiting is the right call for a lesson that
+      needs to draw arrows, and saying so keeps the debt visible.
+    </p>
+  </div>
+
+  <!-- ================= 6. COMPLETE CODE LISTINGS ================= -->
+  <h2 id="listings"><span class="num">5</span>Complete Code Listings</h2>
+
+  <div class="tbl-scroll">
+    <table class="manifest">
+      <thead><tr><th>Path</th><th>Status</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td>src/math/vec2.hpp</td><td><span class="badge new">new</span></td><td>The vector type: arithmetic, length, normalisation, dot product, projection. Header-only.</td></tr>
+        <tr><td>src/main.cpp</td><td><span class="badge mod">modified</span></td><td>The dot-product visualiser and the normalisation race, plus a local line drawer.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    <code>CMakeLists.txt</code> is <strong>unchanged</strong> — a header-only addition needs no new
+    translation unit, which is the build-system half of §<a href="#implementation">4</a>'s argument.
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/math/vec2.hpp</span>
+      <span class="tag new">new</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// src/math/vec2.hpp — the first piece of the maths library.
+//
+// A vector is an arrow: a direction and a length, with no position of its own.
+// Everything here follows from that sentence, and everything in Modules 2 and 3
+// is built on top of it.
+//
+// Header-only, and deliberately so. These functions are two or three lines each
+// and are called thousands of times per frame; putting them where the compiler
+// can inline them at every call site is worth more than the tidiness of a .cpp.
+// That trade only holds for small, hot, stable code — which is exactly what a
+// vector type is, and is not what most of the engine is.
+
+#pragma once
+
+#include &lt;cmath&gt;
+
+namespace engine {
+
+/// A 2-D vector: an arrow with components along x and y.
+///
+/// A plain struct with public members, passed and returned **by value**. Eight
+/// bytes fit in a register, so a `const vec2&amp;` would mean passing an address the
+/// callee must then dereference — more work, not less. The rule of thumb this
+/// establishes: pass small value types by value, and reach for a reference only
+/// when the object is large or must be mutated in place.
+struct vec2
+{
+    float x = 0.0f;
+    float y = 0.0f;
+};
+
+// ---- Arithmetic -------------------------------------------------------------
+// Adding arrows is tip-to-tail; scaling stretches without turning. Both are
+// component-wise, which is the payoff for choosing components in the first place.
+
+[[nodiscard]] constexpr vec2 operator+(vec2 a, vec2 b) { return {a.x + b.x, a.y + b.y}; }
+[[nodiscard]] constexpr vec2 operator-(vec2 a, vec2 b) { return {a.x - b.x, a.y - b.y}; }
+[[nodiscard]] constexpr vec2 operator-(vec2 v)         { return {-v.x, -v.y}; }
+
+[[nodiscard]] constexpr vec2 operator*(vec2 v, float s) { return {v.x * s, v.y * s}; }
+[[nodiscard]] constexpr vec2 operator*(float s, vec2 v) { return {v.x * s, v.y * s}; }
+[[nodiscard]] constexpr vec2 operator/(vec2 v, float s) { return {v.x / s, v.y / s}; }
+
+constexpr vec2&amp; operator+=(vec2&amp; a, vec2 b) { a.x += b.x; a.y += b.y; return a; }
+constexpr vec2&amp; operator-=(vec2&amp; a, vec2 b) { a.x -= b.x; a.y -= b.y; return a; }
+constexpr vec2&amp; operator*=(vec2&amp; v, float s) { v.x *= s; v.y *= s; return v; }
+constexpr vec2&amp; operator/=(vec2&amp; v, float s) { v.x /= s; v.y /= s; return v; }
+
+[[nodiscard]] constexpr bool operator==(vec2 a, vec2 b) { return a.x == b.x &amp;&amp; a.y == b.y; }
+[[nodiscard]] constexpr bool operator!=(vec2 a, vec2 b) { return !(a == b); }
+
+// ---- The dot product --------------------------------------------------------
+
+/// The dot product: how much of `a` points along `b`, times how long `b` is.
+///
+/// Geometrically it is `|a| |b| cos(theta)`, and the component form below is not
+/// a separate definition — it is that same quantity, worked out by projecting `a`
+/// onto each axis in turn. Lesson 1.7 §3.4 does the derivation.
+///
+/// The sign alone answers a question that comes up constantly:
+///   &gt; 0  the two arrows broadly agree      (less than a quarter turn apart)
+///   = 0  they are exactly perpendicular
+///   &lt; 0  they broadly disagree             (more than a quarter turn apart)
+///
+/// "Is that enemy in front of me?" is `dot(facing, to_enemy) &gt; 0` — no angles, no
+/// trigonometry, one multiply-add.
+[[nodiscard]] constexpr float dot(vec2 a, vec2 b) { return a.x * b.x + a.y * b.y; }
+
+// ---- Length -----------------------------------------------------------------
+
+/// The squared length. **Prefer this whenever you are only comparing.**
+///
+/// `sqrt` is monotonic, so `|a| &lt; |b|` exactly when `|a|² &lt; |b|²`. Any comparison
+/// of lengths — nearest enemy, inside this radius, sort by distance — gives the
+/// identical answer without it. The habit is worth forming now: a square root in
+/// an inner loop is a real cost, and it is very often buying nothing.
+[[nodiscard]] constexpr float length_squared(vec2 v) { return dot(v, v); }
+
+/// The length of the arrow, by Pythagoras. Only call it when you need the number
+/// itself rather than a comparison.
+[[nodiscard]] inline float length(vec2 v) { return std::sqrt(length_squared(v)); }
+
+[[nodiscard]] constexpr float distance_squared(vec2 a, vec2 b) { return length_squared(b - a); }
+[[nodiscard]] inline float distance(vec2 a, vec2 b) { return length(b - a); }
+
+// ---- Direction --------------------------------------------------------------
+
+/// The same direction, with length exactly 1 — a *unit* vector.
+///
+/// Dividing an arrow by its own length leaves the direction untouched and makes
+/// the length 1, which is what lets speed and direction be chosen independently:
+/// `position += normalised(input) * speed * dt` moves at `speed` whichever way
+/// the arrow points. Without it, a diagonal input travels sqrt(2) times too far —
+/// the bug Exercise 1.2.3 left standing five lessons ago.
+///
+/// **A zero-length vector has no direction**, and dividing by its length would be
+/// 0/0, which is NaN — and NaN spreads silently through every later calculation
+/// (Lesson 1.3 §3.5). There is no mathematically correct answer to "which way does
+/// a zero-length arrow point", so this returns the zero vector: it keeps a
+/// no-input frame meaning "no movement" rather than "movement in a broken
+/// direction". Use normalised_or() where a specific fallback direction matters.
+[[nodiscard]] inline vec2 normalised(vec2 v)
+{
+    const float len_sq = length_squared(v);
+    if (len_sq &lt;= 0.0f)
+    {
+        return {0.0f, 0.0f};
+    }
+    return v / std::sqrt(len_sq);
+}
+
+/// As normalised(), but a zero-length input yields `fallback` — for the cases
+/// where some direction must be produced, such as a facing that must point
+/// somewhere even when the player is standing still.
+[[nodiscard]] inline vec2 normalised_or(vec2 v, vec2 fallback)
+{
+    const float len_sq = length_squared(v);
+    if (len_sq &lt;= 0.0f)
+    {
+        return fallback;
+    }
+    return v / std::sqrt(len_sq);
+}
+
+/// Rotated a quarter turn. Useful for "the direction to my left", for surface
+/// normals in 2-D, and for the separating axes of Module 7's collision work.
+///
+/// Which way it turns depends on which way your y axis points, so the answer is
+/// only meaningful once that is pinned down — in framebuffer coordinates, where
+/// +y is down, this turns clockwise on screen. Dot it with the original and you
+/// get zero, which is the check worth remembering.
+[[nodiscard]] constexpr vec2 perpendicular(vec2 v) { return {-v.y, v.x}; }
+
+/// Straight-line interpolation between two vectors, component by component.
+/// Same operation as Lesson 1.4's scalar lerp, one dimension wider.
+[[nodiscard]] constexpr vec2 lerp(vec2 a, vec2 b, float t) { return a + (b - a) * t; }
+
+/// The component of `a` that lies along `b` — the *shadow* of `a` on `b`, as a
+/// vector rather than a length.
+///
+/// This is the geometric picture the dot product came from, reassembled: scale
+/// b's direction by how far a's shadow reaches along it. Lesson 1.7 §3.3.
+[[nodiscard]] inline vec2 project_onto(vec2 a, vec2 b)
+{
+    const float len_sq = length_squared(b);
+    if (len_sq &lt;= 0.0f)
+    {
+        return {0.0f, 0.0f};   // no direction to project onto
+    }
+    return b * (dot(a, b) / len_sq);
+}
+
+} // namespace engine</code></pre>
+  </figure>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/main.cpp</span>
+      <span class="tag modified">modified</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// src/main.cpp — the engine's entry point.
+//
+// The loop is the one settled in Lesson 1.4 and does not change again:
+//
+//     drain events -&gt; tick clock -&gt; update input -&gt; N fixed steps -&gt; render
+//
+// Lesson 1.7 gives the engine vectors, and the demo is in two halves. Above: the
+// dot product as a shadow — drag the mouse and watch one arrow's projection onto
+// another, with the number that describes it. Below: two squares driven by the
+// same keys, one moving by a raw input vector and one by a normalised one, so the
+// 41% diagonal error from Exercise 1.2.3 is finally visible and finally fixed.
+
+#include "core/clock.hpp"
+#include "core/fixed_step.hpp"
+#include "core/input.hpp"
+#include "gfx/colour.hpp"
+#include "gfx/framebuffer.hpp"
+#include "math/vec2.hpp"
+
+#include &lt;SDL3/SDL.h&gt;
+#include &lt;SDL3/SDL_main.h&gt;   // Provides the cross-platform entry point. NOTE:
+                             // &lt;SDL3/SDL.h&gt; deliberately does NOT include this,
+                             // so we include it explicitly, exactly once, here.
+
+#include &lt;algorithm&gt;
+#include &lt;cmath&gt;
+#include &lt;cstring&gt;
+
+namespace {
+
+constexpr int k_fb_width = 320;
+constexpr int k_fb_height = 180;
+
+// ---- Panel A: the dot product ----------------------------------------------
+constexpr engine::vec2 k_dot_origin{86.0f, 46.0f};
+constexpr engine::vec2 k_reference{62.0f, 0.0f};   // the arrow we project onto
+
+// ---- Panel B: the normalisation race ---------------------------------------
+constexpr float k_speed = 55.0f;          // pixels per second
+constexpr float k_square = 8.0f;
+constexpr float k_panel_top = 108.0f;
+constexpr float k_panel_bottom = 172.0f;
+constexpr float k_start_x = 24.0f;
+
+constexpr Uint32 k_throttle_ms = 50;
+
+struct sim_state
+{
+    engine::vec2 raw{k_start_x, 126.0f};      // moved by the input vector as-is
+    engine::vec2 unit{k_start_x, 150.0f};     // moved by the normalised input
+    float raw_travelled = 0.0f;
+    float unit_travelled = 0.0f;
+};
+
+/// Advance both squares using the same input direction, one normalised and one not.
+void step_simulation(sim_state&amp; s, engine::vec2 input, float h)
+{
+    // The bug, kept side by side with its fix. `input` is whatever the keys add up
+    // to: (1,0) for one key, (1,-1) for two. Its length is 1 in the first case and
+    // sqrt(2) in the second, so scaling it directly by speed makes diagonals
+    // travel 41.4% further per second.
+    const engine::vec2 raw_step = input * (k_speed * h);
+
+    // The fix: take the direction only, then choose the speed separately.
+    const engine::vec2 unit_step = engine::normalised(input) * (k_speed * h);
+
+    s.raw += raw_step;
+    s.unit += unit_step;
+    s.raw_travelled += engine::length(raw_step);
+    s.unit_travelled += engine::length(unit_step);
+
+    const float max_x = static_cast&lt;float&gt;(k_fb_width) - k_square;
+    s.raw.x = std::clamp(s.raw.x, 0.0f, max_x);
+    s.unit.x = std::clamp(s.unit.x, 0.0f, max_x);
+    s.raw.y = std::clamp(s.raw.y, k_panel_top, k_panel_bottom - k_square);
+    s.unit.y = std::clamp(s.unit.y, k_panel_top, k_panel_bottom - k_square);
+}
+
+/// The naive line from Exercise 1.5.4: step whichever axis changes more.
+///
+/// Lesson 2.1 derives this properly (it is called DDA), shows why Bresenham
+/// replaced it, and moves the result into the engine. It lives here, local to the
+/// demo, because a lesson about vectors needs to draw arrows and it would be
+/// silly to wait.
+void draw_line(engine::framebuffer&amp; fb, engine::vec2 a, engine::vec2 b, Uint32 colour)
+{
+    const float dx = b.x - a.x;
+    const float dy = b.y - a.y;
+    const int steps = static_cast&lt;int&gt;(std::max(std::fabs(dx), std::fabs(dy)));
+
+    if (steps &lt;= 0)
+    {
+        fb.put_pixel(static_cast&lt;int&gt;(a.x), static_cast&lt;int&gt;(a.y), colour);
+        return;
+    }
+
+    const float step_x = dx / static_cast&lt;float&gt;(steps);
+    const float step_y = dy / static_cast&lt;float&gt;(steps);
+    engine::vec2 p = a;
+
+    for (int i = 0; i &lt;= steps; ++i)
+    {
+        fb.put_pixel(static_cast&lt;int&gt;(p.x + 0.5f), static_cast&lt;int&gt;(p.y + 0.5f), colour);
+        p.x += step_x;
+        p.y += step_y;
+    }
+}
+
+/// A line with gaps, for construction lines that should not compete with the
+/// arrows they annotate.
+void draw_dashed(engine::framebuffer&amp; fb, engine::vec2 a, engine::vec2 b, Uint32 colour)
+{
+    const float dx = b.x - a.x;
+    const float dy = b.y - a.y;
+    const int steps = static_cast&lt;int&gt;(std::max(std::fabs(dx), std::fabs(dy)));
+    if (steps &lt;= 0) { return; }
+
+    const float step_x = dx / static_cast&lt;float&gt;(steps);
+    const float step_y = dy / static_cast&lt;float&gt;(steps);
+    engine::vec2 p = a;
+
+    for (int i = 0; i &lt;= steps; ++i)
+    {
+        if ((i / 3) % 2 == 0)
+        {
+            fb.put_pixel(static_cast&lt;int&gt;(p.x + 0.5f), static_cast&lt;int&gt;(p.y + 0.5f), colour);
+        }
+        p.x += step_x;
+        p.y += step_y;
+    }
+}
+
+/// An arrow: a line with a small solid block at the tip.
+void draw_arrow(engine::framebuffer&amp; fb, engine::vec2 from, engine::vec2 to, Uint32 colour)
+{
+    draw_line(fb, from, to, colour);
+    fb.fill_rect(static_cast&lt;int&gt;(to.x) - 1, static_cast&lt;int&gt;(to.y) - 1, 3, 3, colour);
+}
+
+[[nodiscard]] bool upload(SDL_Texture* texture, const engine::framebuffer&amp; fb)
+{
+    void* dst_pixels = nullptr;
+    int dst_pitch = 0;
+
+    if (!SDL_LockTexture(texture, nullptr, &amp;dst_pixels, &amp;dst_pitch))
+    {
+        return false;
+    }
+
+    Uint8* const dst = static_cast&lt;Uint8*&gt;(dst_pixels);
+    const int row_bytes = fb.pitch();
+
+    for (int y = 0; y &lt; fb.height(); ++y)
+    {
+        std::memcpy(dst + static_cast&lt;std::size_t&gt;(y) * static_cast&lt;std::size_t&gt;(dst_pitch),
+                    fb.row(y),
+                    static_cast&lt;std::size_t&gt;(row_bytes));
+    }
+
+    SDL_UnlockTexture(texture);
+    return true;
+}
+
+} // namespace
+
+int main(int argc, char* argv[])
+{
+    (void)argc;
+    (void)argv;
+
+    if (!SDL_Init(SDL_INIT_VIDEO))
+    {
+        SDL_Log("SDL_Init failed: %s", SDL_GetError());
+        return 1;
+    }
+
+    const int sdl_version = SDL_GetVersion();
+    SDL_Log("Engine starting — SDL %d.%d.%d",
+            SDL_VERSIONNUM_MAJOR(sdl_version),
+            SDL_VERSIONNUM_MINOR(sdl_version),
+            SDL_VERSIONNUM_MICRO(sdl_version));
+
+    SDL_Window* window = SDL_CreateWindow("Engine", 1280, 720, SDL_WINDOW_RESIZABLE);
+    if (window == nullptr)
+    {
+        SDL_Log("SDL_CreateWindow failed: %s", SDL_GetError());
+        SDL_Quit();
+        return 1;
+    }
+
+    SDL_Renderer* renderer = SDL_CreateRenderer(window, nullptr);
+    if (renderer == nullptr)
+    {
+        SDL_Log("SDL_CreateRenderer failed: %s", SDL_GetError());
+        SDL_DestroyWindow(window);
+        SDL_Quit();
+        return 1;
+    }
+
+    int vsync = SDL_RENDERER_VSYNC_DISABLED;
+    SDL_SetRenderVSync(renderer, vsync);
+
+    engine::framebuffer fb(k_fb_width, k_fb_height);
+
+    SDL_Texture* screen_texture = SDL_CreateTexture(renderer,
+                                                    SDL_PIXELFORMAT_ARGB8888,
+                                                    SDL_TEXTUREACCESS_STREAMING,
+                                                    k_fb_width, k_fb_height);
+    if (screen_texture == nullptr)
+    {
+        SDL_Log("SDL_CreateTexture failed: %s", SDL_GetError());
+        SDL_DestroyRenderer(renderer);
+        SDL_DestroyWindow(window);
+        SDL_Quit();
+        return 1;
+    }
+
+    SDL_SetTextureScaleMode(screen_texture, SDL_SCALEMODE_NEAREST);
+
+    engine::clock clk;
+    engine::input in;
+    engine::fixed_step stepper(60.0f);
+
+    sim_state previous;
+    sim_state current;
+
+    const Uint32 k_bg = engine::pack_argb(14, 14, 22);
+    const Uint32 k_axis = engine::pack_argb(70, 70, 90);
+    const Uint32 k_ref_colour = engine::pack_argb(226, 196, 110);   // b, the reference
+    const Uint32 k_arrow_colour = engine::pack_argb(126, 162, 236); // a, to the mouse
+    const Uint32 k_shadow_colour = engine::pack_argb(122, 196, 152);
+    const Uint32 k_raw_colour = engine::pack_argb(236, 122, 92);
+    const Uint32 k_unit_colour = engine::pack_argb(122, 196, 152);
+
+    SDL_Log("Move the mouse over the top panel; drive the squares with WASD or the arrows.");
+    SDL_Log("Controls: [R] reset · [1-4] sim rate · [V] vsync · [T] throttle · [Esc] quit");
+
+    bool running = true;
+    while (running)
+    {
+        SDL_Event event;
+        while (SDL_PollEvent(&amp;event))
+        {
+            in.feed_event(event);
+
+            switch (event.type)
+            {
+            case SDL_EVENT_QUIT:
+                SDL_Log("Quit requested");
+                running = false;
+                break;
+
+            case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
+                SDL_Log("Window %u close requested", static_cast&lt;unsigned&gt;(event.window.windowID));
+                running = false;
+                break;
+
+            default:
+                break;
+            }
+        }
+
+        clk.tick();
+        in.update();
+
+        if (in.key_pressed(SDL_SCANCODE_ESCAPE)) { running = false; }
+        if (in.key_pressed(SDL_SCANCODE_1)) { stepper.set_rate(10.0f); }
+        if (in.key_pressed(SDL_SCANCODE_2)) { stepper.set_rate(30.0f); }
+        if (in.key_pressed(SDL_SCANCODE_3)) { stepper.set_rate(60.0f); }
+        if (in.key_pressed(SDL_SCANCODE_4)) { stepper.set_rate(120.0f); }
+
+        if (in.key_pressed(SDL_SCANCODE_V))
+        {
+            vsync = (vsync == SDL_RENDERER_VSYNC_DISABLED) ? 1 : SDL_RENDERER_VSYNC_DISABLED;
+            if (!SDL_SetRenderVSync(renderer, vsync))
+            {
+                SDL_Log("SDL_SetRenderVSync(%d) failed: %s", vsync, SDL_GetError());
+            }
+        }
+
+        if (in.key_pressed(SDL_SCANCODE_R))
+        {
+            previous = sim_state{};
+            current = sim_state{};
+        }
+
+        // --- Gather the input as a VECTOR, not as two independent numbers ------
+        // This is the shape the rest of the engine will use: one arrow describing
+        // "which way", separate from "how fast".
+        engine::vec2 input{0.0f, 0.0f};
+        if (in.key_down(SDL_SCANCODE_A) || in.key_down(SDL_SCANCODE_LEFT))  { input.x -= 1.0f; }
+        if (in.key_down(SDL_SCANCODE_D) || in.key_down(SDL_SCANCODE_RIGHT)) { input.x += 1.0f; }
+        if (in.key_down(SDL_SCANCODE_W) || in.key_down(SDL_SCANCODE_UP))    { input.y -= 1.0f; }
+        if (in.key_down(SDL_SCANCODE_S) || in.key_down(SDL_SCANCODE_DOWN))  { input.y += 1.0f; }
+
+        stepper.begin_frame(clk.dt());
+        while (stepper.next_step())
+        {
+            previous = current;
+            step_simulation(current, input, stepper.h());
+        }
+
+        const float alpha = stepper.alpha();
+
+        // --- Where is the mouse, in framebuffer pixels? -----------------------
+        // The framebuffer is stretched over the whole window, so converting is a
+        // ratio of widths. Doing it as a vector keeps the two axes together.
+        int window_w = 1280;
+        int window_h = 720;
+        SDL_GetWindowSize(window, &amp;window_w, &amp;window_h);
+
+        const engine::vec2 mouse_fb{
+            in.mouse_x() * static_cast&lt;float&gt;(k_fb_width) / static_cast&lt;float&gt;(window_w),
+            in.mouse_y() * static_cast&lt;float&gt;(k_fb_height) / static_cast&lt;float&gt;(window_h)};
+
+        // --- The dot product, as geometry -------------------------------------
+        const engine::vec2 a = mouse_fb - k_dot_origin;   // arrow to the cursor
+        const engine::vec2 b = k_reference;               // arrow we project onto
+        const float a_dot_b = engine::dot(a, b);
+        const float len_a = engine::length(a);
+        const float len_b = engine::length(b);
+        const engine::vec2 shadow = engine::project_onto(a, b);
+        const float cos_theta = (len_a &gt; 0.0f) ? a_dot_b / (len_a * len_b) : 0.0f;
+
+        // --- Draw --------------------------------------------------------------
+        fb.clear(k_bg);
+
+        // Panel A: a horizontal guide through the origin, so the projection has a
+        // visible line to fall on even when it runs backwards.
+        draw_line(fb, {4.0f, k_dot_origin.y}, {static_cast&lt;float&gt;(k_fb_width) - 4.0f, k_dot_origin.y}, k_axis);
+
+        // The shadow, drawn first so the arrows sit on top of it.
+        draw_line(fb, k_dot_origin, k_dot_origin + shadow, k_shadow_colour);
+        draw_dashed(fb, mouse_fb, k_dot_origin + shadow, k_axis);
+
+        draw_arrow(fb, k_dot_origin, k_dot_origin + b, k_ref_colour);
+        draw_arrow(fb, k_dot_origin, mouse_fb, k_arrow_colour);
+
+        // Panel B: the divider, then the two squares.
+        fb.fill_rect(0, static_cast&lt;int&gt;(k_panel_top) - 6, k_fb_width, 1, k_axis);
+
+        const engine::vec2 raw_pos = engine::lerp(previous.raw, current.raw, alpha);
+        const engine::vec2 unit_pos = engine::lerp(previous.unit, current.unit, alpha);
+
+        fb.fill_rect(static_cast&lt;int&gt;(raw_pos.x), static_cast&lt;int&gt;(raw_pos.y),
+                     static_cast&lt;int&gt;(k_square), static_cast&lt;int&gt;(k_square), k_raw_colour);
+        fb.fill_rect(static_cast&lt;int&gt;(unit_pos.x), static_cast&lt;int&gt;(unit_pos.y),
+                     static_cast&lt;int&gt;(k_square), static_cast&lt;int&gt;(k_square), k_unit_colour);
+
+        if (!upload(screen_texture, fb))
+        {
+            SDL_Log("SDL_LockTexture failed: %s", SDL_GetError());
+        }
+
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+        SDL_RenderClear(renderer);
+        SDL_RenderTexture(renderer, screen_texture, nullptr, nullptr);
+
+        // Labels. A text coordinate is exactly twice a framebuffer coordinate:
+        // 2x text scale over a 4x framebuffer scale.
+        const float ratio = (current.unit_travelled &gt; 0.01f)
+            ? current.raw_travelled / current.unit_travelled
+            : 1.0f;
+
+        SDL_SetRenderScale(renderer, 2.0f, 2.0f);
+        SDL_SetRenderDrawColor(renderer, 225, 225, 215, 255);
+        SDL_RenderDebugTextFormat(renderer, 6.0f, 6.0f,
+                                  "a . b = %8.1f    |a| = %6.1f  |b| = %5.1f    cos = %+5.2f   %s",
+                                  static_cast&lt;double&gt;(a_dot_b),
+                                  static_cast&lt;double&gt;(len_a),
+                                  static_cast&lt;double&gt;(len_b),
+                                  static_cast&lt;double&gt;(cos_theta),
+                                  a_dot_b &gt; 0.0f ? "in front" : (a_dot_b &lt; 0.0f ? "behind" : "exactly side-on"));
+        SDL_RenderDebugText(renderer, 6.0f, 20.0f,
+                            "blue = a (to the mouse)   amber = b   green = a's shadow on b");
+        SDL_RenderDebugTextFormat(renderer, 6.0f, 210.0f,
+                                  "coral: input used raw      travelled %7.1f px",
+                                  static_cast&lt;double&gt;(current.raw_travelled));
+        SDL_RenderDebugTextFormat(renderer, 6.0f, 224.0f,
+                                  "green: input normalised    travelled %7.1f px",
+                                  static_cast&lt;double&gt;(current.unit_travelled));
+        SDL_RenderDebugTextFormat(renderer, 6.0f, 238.0f,
+                                  "ratio %5.3f  (hold a diagonal and watch it approach 1.414)   [R] reset  [Esc] quit",
+                                  static_cast&lt;double&gt;(ratio));
+        SDL_SetRenderScale(renderer, 1.0f, 1.0f);
+
+        SDL_RenderPresent(renderer);
+
+        if (in.key_down(SDL_SCANCODE_T))
+        {
+            SDL_Delay(k_throttle_ms);
+        }
+    }
+
+    SDL_DestroyTexture(screen_texture);
+    SDL_DestroyRenderer(renderer);
+    SDL_DestroyWindow(window);
+    SDL_Quit();
+    return 0;
+}</code></pre>
+  </figure>
+
+  <!-- ================= 7. BUILD & RUN ================= -->
+  <h2 id="build"><span class="num">6</span>Build &amp; Run</h2>
+
+  <figure class="listing shell">
+    <figcaption>
+      <span class="path">Linux and macOS</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash">cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+cmake --build build
+./build/engine</code></pre>
+  </figure>
+
+  <figure class="listing shell">
+    <figcaption>
+      <span class="path">Windows (MSVC)</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash">cmake -S . -B build
+cmake --build build --config Debug
+.\build\Debug\engine.exe</code></pre>
+  </figure>
+
+  <h3>What you should see</h3>
+
+  <ol>
+    <li>
+      <strong>Move the mouse across the top panel.</strong> The blue arrow follows it; the green
+      shadow slides along the amber arrow. Watch <code>a · b</code> in the readout as you swing the
+      cursor around — largest when the arrows agree, and it passes through <strong>exactly zero</strong>
+      as you cross perpendicular.
+    </li>
+    <li>
+      <strong>Move the cursor to the far side.</strong> The shadow now falls behind the origin and
+      the dot product is negative, with the readout saying "behind". Nothing computed an angle.
+    </li>
+    <li>
+      <strong>Hold <kbd>D</kbd>.</strong> Both squares move right at the same speed, and the ratio
+      readout stays at 1.000.
+    </li>
+    <li>
+      <strong>Now hold <kbd>W</kbd> and <kbd>D</kbd> together.</strong> The coral square pulls ahead
+      of the green one, visibly, and the ratio climbs towards <strong>1.414</strong>. That gap is the
+      bug Exercise 1.2.3 identified, drawn to scale.
+    </li>
+    <li>
+      <strong>Release everything.</strong> Nothing moves, nothing disappears, and no
+      <code>NaN</code> appears — the zero-vector guard doing its silent job.
+    </li>
+  </ol>
+
+  <div class="callout ok">
+    <span class="label">Checkpoint — verified before publishing</span>
+    <p>
+      Built warning-clean at <code>-Wall -Wextra</code> with Apple Clang; runs and shuts down
+      cleanly. <code>vec2</code> was driven through a 34-assertion harness, including:
+    </p>
+    <ul>
+      <li>Arithmetic verified at <strong>compile time</strong> with <code>static_assert</code> — the
+        operators really are <code>constexpr</code>, not merely labelled so.</li>
+      <li>On the 3-4-5 triangle: <code>length_squared = 25</code>, <code>length = 5</code>.</li>
+      <li>The dot product reached both ways: components give 24; and
+        <code>|a| cos θ × |b| = 4.8 × 5 = 24</code>, with <code>θ = 16.2602°</code>. The derivation of
+        §<a href="#derive">3.4</a>, checked numerically.</li>
+      <li>Sign behaviour: positive for agreement, <strong>exactly</strong> 0 for
+        <code>(3,4)·(−4,3)</code>, <code>−25</code> for the直 opposite; and
+        <code>dot(v, perpendicular(v)) == 0</code> for the rotate-a-quarter-turn helper.</li>
+      <li>The diagonal: <code>|(1,−1)| = 1.41421</code>; a raw step of length
+        <strong>127.27922</strong> against a normalised step of exactly <strong>90.00000</strong>;
+        and <code>normalised(1,0)</code> unchanged, confirming the fix leaves the working case alone.</li>
+      <li><code>normalised({0,0})</code> returns <code>(0,0)</code> and <strong>not</strong>
+        <code>NaN</code> — with the naive <code>0/√0</code> confirmed to be <code>NaN</code> in the
+        same test, so the guard is demonstrably earning its keep.</li>
+      <li><code>project_onto</code> reproduces the shadow, and the leftover <code>a − proj</code> is
+        perpendicular to <code>b</code> to within 1e-4.</li>
+      <li><code>sizeof(vec2) == 8</code>, which is the measurement behind the pass-by-value rule.</li>
+    </ul>
+    <p style="margin-bottom:0">
+      Every figure was computed independently in Python first, then reproduced by the C++.
+    </p>
+  </div>
+
+  <!-- ================= 8. PITFALLS ================= -->
+  <h2 id="pitfalls"><span class="num">7</span>Common Pitfalls &amp; Debugging</h2>
+
+  <div class="pitfalls">
+    <details class="pitfall-item">
+      <summary>Everything vanishes when the player stands still — <span class="sym">NaN from a zero vector</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>The scene disappears, or a position reads <code>nan</code> in the debugger, the instant no movement keys are held. Often it survives a while and then breaks, because the value spreads before anything draws it.</dd>
+          <dt>Cause</dt>
+          <dd>Normalising <code>(0, 0)</code>: dividing zero by a zero length is <code>0/0</code>, which is <code>NaN</code> (§<a href="#length">3.2</a>).</dd>
+          <dt>Fix</dt>
+          <dd>Guard on <code>length_squared(v) &lt;= 0</code> before dividing. When hunting one of these, remember from Lesson 1.3 that the crash site is never where the <code>NaN</code> was born — test <code>std::isnan</code> at a few checkpoints and bisect.</dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>Diagonal movement is still too fast — <span class="sym">normalisation applied to the wrong thing</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>You added <code>normalised()</code> and the diagonal is still faster, or is now the wrong speed entirely.</dd>
+          <dt>Cause</dt>
+          <dd>Normalising after scaling — <code>normalised(input * speed * dt)</code> — which throws the speed away and yields a step of length 1. Or normalising the <em>position</em> rather than the direction, which teleports the object to the unit circle around the origin.</dd>
+          <dt>Fix</dt>
+          <dd>Normalise the direction, <em>then</em> scale: <code>normalised(input) * speed * dt</code>. The order is the whole point — direction first, magnitude second, which is what separating them buys you.</dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>A square root in a hot loop — <span class="sym">a profiler points at length()</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>Distance checks show up in a profile, in a loop over many objects or pixels.</dd>
+          <dt>Cause</dt>
+          <dd><code>length()</code> used where only a comparison was needed. The square root is computed and then immediately discarded by a <code>&lt;</code>.</dd>
+          <dt>Fix</dt>
+          <dd><code>length_squared(delta) &lt; range * range</code>. Square the constant once, outside the loop, rather than rooting the variable every iteration (§<a href="#implementation">4.2</a>).</dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>The dot product's sign is backwards — <span class="sym">"in front" reports enemies behind you</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>Facing checks are inverted, or a lighting term is brightest where it should be dark.</dd>
+          <dt>Cause</dt>
+          <dd>One of the two arrows points the other way from what you assumed. The classic pair: <code>enemy − me</code> versus <code>me − enemy</code>, and a light <em>direction</em> versus the direction <em>to</em> the light.</dd>
+          <dt>Fix</dt>
+          <dd>Name the variables for what they are — <code>to_enemy</code>, <code>to_light</code> — rather than <code>delta</code> or <code>dir</code>. Most sign bugs in vector code are naming failures, and they survive review precisely because <code>dir</code> looks fine.</dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>Comparing vectors with <code>==</code> never matches — <span class="sym">a position that should be exact isn't</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>A check like <code>if (pos == target)</code> never fires, even though the values look identical when printed.</dd>
+          <dt>Cause</dt>
+          <dd>Floating-point equality. Two routes to the "same" position — accumulated addition versus a single computation — rarely produce bit-identical floats, and printing rounds the difference away.</dd>
+          <dt>Fix</dt>
+          <dd>Compare a distance against a tolerance: <code>length_squared(pos - target) &lt; epsilon * epsilon</code>. <code>operator==</code> exists on our <code>vec2</code> because it is genuinely useful in tests and for detecting an unchanged value, not because it is the right way to ask "are these two points in the same place".</dd>
+        </dl>
+      </div>
+    </details>
+  </div>
+
+  <!-- ================= 9. EXERCISES ================= -->
+  <h2 id="exercises"><span class="num">8</span>Exercises</h2>
+
+  <div class="exercise">
+    <h3><span class="xnum">1.7.1</span>Watch the ratio converge<span class="difficulty">warm-up</span></h3>
+    <p>
+      Run the demo, press <kbd>R</kbd>, then hold <kbd>W</kbd>+<kbd>D</kbd> without releasing. Watch
+      the ratio readout. What does it approach, and why does it start at 1.000 rather than jumping
+      straight there?
+    </p>
+    <details>
+      <summary>Solution</summary>
+      <p>
+        It approaches <code>√2 = 1.41421</code>. It starts at 1.000 because the ratio is over
+        <em>total distance travelled</em>, so any straight-line movement you did earlier is still in
+        the numerator and denominator equally. Hold a pure diagonal from a reset and it climbs
+        steadily; mix in some horizontal movement and it settles somewhere between 1 and 1.414.
+      </p>
+      <p style="margin-bottom:0">
+        That is worth noticing in its own right: the error is not a constant, it depends on the path.
+        A player who moves only in straight lines never sees the bug, while one who strafes
+        diagonally gets a permanent 41% advantage — which is exactly why this shipped in real games
+        and became a speedrunning technique rather than a bug report.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3><span class="xnum">1.7.2</span>Find perpendicular by hand<span class="difficulty">warm-up</span></h3>
+    <p>
+      In the demo, move the mouse until <code>a · b</code> reads as close to zero as you can get it.
+      Now look at the shadow. Then check the claim in code: pick any vector, call
+      <code>perpendicular()</code> on it, and print the dot product of the two.
+    </p>
+    <details>
+      <summary>Solution</summary>
+      <p>
+        The shadow shrinks to nothing — a perpendicular arrow contributes nothing along
+        <strong>b</strong>. And <code>dot(v, perpendicular(v))</code> is exactly <code>0.0f</code>,
+        not approximately: <code>perpendicular({x,y})</code> is <code>{−y, x}</code>, so the dot
+        product is <code>x(−y) + yx</code>, which cancels identically before any rounding can occur.
+      </p>
+      <p style="margin-bottom:0">
+        Exact zeros are rare in floating-point work and worth recognising when they appear. This one
+        holds because the two products are the same magnitude with opposite signs, so the subtraction
+        is exact regardless of the values.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3><span class="xnum">1.7.3</span>Make the squares chase the mouse<span class="difficulty">guided</span></h3>
+    <p>
+      Replace the keyboard input with "move towards the cursor": compute the vector from the square
+      to the mouse, normalise it, and step along it at <code>k_speed</code>. What happens when the
+      square arrives, and how would you stop it?
+    </p>
+    <details>
+      <summary>Hint</summary>
+      <p>
+        The direction is <code>mouse_fb - position</code>. Think about what that vector's length does
+        as the square gets close, and what <code>normalised()</code> does to it.
+      </p>
+    </details>
+    <details>
+      <summary>Solution</summary>
+      <p>
+        The square jitters around the cursor. Each step is a full <code>speed × h</code> regardless
+        of how close it is, so it overshoots, turns around, overshoots again — the normalisation that
+        made movement consistent is now preventing it from ever slowing down.
+      </p>
+      <p style="margin-bottom:0">
+        Two standard fixes, and both are worth implementing. Stop when
+        <code>length_squared(to_target) &lt; arrival_radius²</code> — note the squared comparison from
+        §<a href="#implementation">4.2</a> doing real work. Or clamp the step to the remaining
+        distance: <code>step = min(speed * h, length(to_target))</code>, so the last step lands
+        exactly on the target. The second is what most engines do, and it is the seed of the
+        "arrive" steering behaviour.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3><span class="xnum">1.7.4</span>Reflect a bouncing ball off any wall<span class="difficulty">guided</span></h3>
+    <p>
+      Our bounces have always been axis-aligned: flip <code>vy</code> and carry on. Using the dot
+      product, work out how to bounce a velocity <code>v</code> off a surface with unit normal
+      <code>n</code> at any angle. Implement <code>reflect(v, n)</code> and test it against the
+      axis-aligned case.
+    </p>
+    <details>
+      <summary>Hint</summary>
+      <p>
+        Split <code>v</code> into the part along <code>n</code> and the part along the surface. Which
+        one should a bounce reverse, and which should it leave alone? §<a href="#shadow">3.3</a>'s
+        projection gives you the first part.
+      </p>
+    </details>
+    <details>
+      <summary>Solution</summary>
+      <p>
+        The component along the normal is <code>dot(v, n) * n</code> (with <code>n</code> a unit
+        vector). A bounce reverses that and keeps the rest, so you subtract it twice:
+      </p>
+      <figure class="listing" style="margin:0.8rem 0">
+        <figcaption><span class="path">reflection</span><span class="lang" data-lang="cpp">C++</span></figcaption>
+        <pre><code class="lang-cpp">[[nodiscard]] inline vec2 reflect(vec2 v, vec2 n)
+{
+    return v - n * (2.0f * dot(v, n));
+}</code></pre>
+      </figure>
+      <p style="margin-bottom:0">
+        Check it against what we had: for a floor, <code>n = (0, −1)</code>, so
+        <code>dot(v, n) = −vy</code> and the result is <code>(vx, −vy)</code> — exactly the flip we
+        have been hard-coding since Lesson 1.3, now as a special case of the general rule. That is
+        the payoff of the geometric route: the axis-aligned version was never a different idea, only
+        a simpler instance. This same function appears again in Module 6 for mirror reflections and
+        in Module 7 for collision response.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3><span class="xnum">1.7.5</span>Design vec3 before you write it<span class="difficulty">open</span></h3>
+    <p>
+      Module 2 needs a three-dimensional version. Go through <code>vec2.hpp</code> function by
+      function and decide, for each: does it carry over unchanged, does it need a new definition, or
+      does it not exist in 3-D at all? Then find the one operation that exists in 3-D and has no
+      2-D counterpart.
+    </p>
+    <details>
+      <summary>Solution sketch</summary>
+      <p>
+        Almost everything carries over with one more component: addition, scaling, dot product
+        (<code>ax·bx + ay·by + az·bz</code>), length, normalisation, projection, lerp. That is the
+        dividend from defining them geometrically — none of the <em>pictures</em> changed, so none of
+        the definitions did.
+      </p>
+      <p>
+        <code>perpendicular()</code> is the interesting failure. In 2-D there are exactly two
+        perpendicular directions and picking one is a convention. In 3-D there is a whole plane of
+        them, so "the perpendicular" is meaningless and the function cannot survive.
+      </p>
+      <p style="margin-bottom:0">
+        And the operation with no 2-D counterpart is the <strong>cross product</strong>: given two
+        arrows in 3-D it produces one perpendicular to both, which is only a well-posed request
+        because 3-D has a third direction to escape into. It is how Module 3 computes surface normals
+        and does back-face culling. Worth predicting now, so it arrives as an answer to a question
+        you already asked.
+      </p>
+    </details>
+  </div>
+
+  <!-- ================= 10. RECAP ================= -->
+  <h2 id="recap"><span class="num">9</span>Recap &amp; Next</h2>
+
+  <div class="recap">
+    <h2>What the engine can do now that it could not before</h2>
+    <ul>
+      <li>
+        <strong>It has a name for "which way and how much".</strong> <code>src/math/</code> exists,
+        and <code>vec2</code> is the first piece of a maths library that will carry the rest of the
+        course.
+      </li>
+      <li>
+        <strong>Movement is honest in every direction.</strong> Direction and speed are chosen
+        separately, so a diagonal travels exactly as fast as an axis — the bug Exercise 1.2.3 spotted
+        five lessons ago is closed, and you can watch the gap.
+      </li>
+      <li>
+        <strong>It can ask geometric questions.</strong> "How much of this points along that?" is one
+        multiply-add, and its sign answers "in front or behind?" without a single trigonometric
+        function.
+      </li>
+      <li>
+        <strong>You derived the dot product rather than memorising it.</strong>
+        <code>ax·bx + ay·by</code> came out of projecting onto the axes and adding — so when it turns
+        up in Lambert shading, in back-face culling and in the Separating Axis Theorem, it will be
+        the same idea rather than a new one.
+      </li>
+    </ul>
+    <p>
+      The idea to carry forward: <strong>a vector is an arrow, and its components are its shadows on
+      the axes.</strong> Everything else in this lesson — the length formula, the dot product, even
+      the reason normalisation works — follows from taking that picture seriously.
+    </p>
+    <p>
+      <strong>Next:</strong> <a href="01-08-pong.html">1.8 — Checkpoint: Pong</a>. Module 1 has given
+      us an event loop, an input system, an honest clock, a fixed timestep with interpolation, a
+      framebuffer we own, a colour module and now vectors. Time to prove it holds together by
+      building something small and complete: a game with a ball, two paddles, a score and a way to
+      lose — the first thing in this course that another person can play.
+    </p>
+  </div>
+
+  <!-- ================= 11. FURTHER READING ================= -->
+  <h2 id="reading"><span class="num">10</span>Further Reading</h2>
+
+  <ul class="reading">
+    <li>
+      <span class="src">Video</span>
+      <strong><a href="https://www.3blue1brown.com/topics/linear-algebra">3Blue1Brown, <em>Essence of Linear Algebra</em></a></strong> —
+      chapters 1, 2 and 9 cover vectors, span and the dot product with the best animations anywhere.
+      Grant Sanderson's framing — that the dot product's connection to projection is "one of the most
+      beautiful bits of maths" — is the one this lesson is built on.
+    </li>
+    <li>
+      <span class="src">Reference</span>
+      <strong><a href="https://gamemath.com/book/vectors.html">Fletcher Dunn &amp; Ian Parberry, <em>3D Math Primer for Graphics and Game Development</em></a></strong> —
+      free online, and the vectors chapter is the standard reference for exactly this material with a
+      games slant. Read it after this lesson to see the same ideas stated more formally.
+    </li>
+    <li>
+      <span class="src">Article</span>
+      <strong><a href="https://www.scratchapixel.com/lessons/mathematics-physics-for-computer-graphics/geometry/math-operations-on-points-and-vectors.html">Scratchapixel: Points and Vectors</a></strong> —
+      particularly good on the distinction §<a href="#arrow">2.1</a> raised and then set aside: why
+      points and vectors are different ideas even when they share a type, and what goes wrong when
+      you forget.
+    </li>
+    <li>
+      <span class="src">Article</span>
+      <strong><a href="https://www.gamedeveloper.com/programming/understanding-steering-behaviors-seek">Understanding Steering Behaviors</a></strong> —
+      where Exercise 1.7.3 leads. Seek, arrive, flee and pursue are all a few lines of vector maths,
+      and they are a good way to build fluency before the geometry gets harder.
+    </li>
+    <li>
+      <span class="src">Book</span>
+      <strong>Eric Lengyel, <em>Foundations of Game Engine Development, Volume 1: Mathematics</em></strong> —
+      the rigorous treatment, for when you want the algebra behind the pictures. Chapter 1 covers
+      this lesson; the rest of the book covers most of Modules 2 and 7.
+    </li>
+  </ul>
+
+  <!-- ================= 12. STATE ================= -->
+  <details class="state">
+    <summary>STATE — resume key</summary>
+<pre>course: Build a Professional 3D Game Engine (SDL3 + C++20)
+version: 1.0
+
+conventions:
+  world: right-handed, Y-up, -Z forward
+  clip: left-handed, +Y up, z in [0,1] (SDL_GPU-fixed; projection absorbs the flip)
+  sw-rasterizer: targets SDL_GPU's exact NDC (Module 4 port = API change, not maths change)
+  matrices: column vectors, v' = M*v, column-major storage
+  winding: CCW = front, cull back (per-pipeline state; set explicitly every time)
+  units: 1 unit = 1 metre; radians internally; linear colour in renderer
+  axis colours: x/y/z = red/green/blue
+  sdl3: FetchContent, pinned release-3.4.12; target SDL3::SDL3; SDL_TEST_LIBRARY OFF
+  sdl3-api: bool SDL_Init/PollEvent; SDL_CreateWindow(title,w,h,flags) no x/y;
+            SDL_CreateRenderer(window,name); event.key.key; &lt;SDL3/SDL_main.h&gt; separate;
+            SDL_GetWindowSize(window, &amp;w, &amp;h) for the window-to-framebuffer ratio
+  sdl3-input: const bool *SDL_GetKeyboardState(int*) — bool, NOT SDL2's Uint8;
+            SDL_SCANCODE_COUNT = 512; wheel is event-only; SDL_PollEvent pumps;
+            focus loss -&gt; SDL_ResetKeyboard() sends key-UP events
+  sdl3-time: SDL_GetTicksNS() is monotonic; SDL_Delay waits AT LEAST the requested time;
+            SDL_SetRenderVSync; SDL_RenderDebugText/Format = 8x8 ASCII font
+  sdl3-pixels: STREAMING texture + SDL_LockTexture (WRITE-ONLY, prior contents UNDEFINED,
+            returned pitch MAY EXCEED width*4 -&gt; copy ROW BY ROW).
+            SDL_RenderTexture(r,tex,NULL,NULL): NULL dst = whole target.
+            SDL_SetTextureScaleMode(..., SDL_SCALEMODE_NEAREST).
+            "8888" names = packed native-endian integer (ARGB8888 = 0xAARRGGBB);
+            "32" names = byte order. On little-endian: RGBA32 == ABGR8888.
+  framebuffer: row-major, index = y*width + x. An x past width lands on the NEXT ROW.
+            put_pixel is bounds-checked; row(y) is the fast path; fill_rect CLIPS ONCE.
+            Measured: put_pixel vs row pointer 5.1x (-O0) / 14.8x (-O2); rows-outer vs
+            columns-outer 10.9x @320x180 -&gt; 48.8x @4K.
+  colour: stored values are sRGB-ENCODED, not light. 128 emits 21.6%; half the light is
+            stored as 188. Exact piecewise transform; 256-entry decode LUT only.
+            ALPHA IS COVERAGE, NOT LIGHT — never transfer-function it.
+            WRONG on stored values: mix, fade, average, downscale, add light, AA edges.
+            NOT YET LINEAR: converts per-operation; Module 6 does the HDR pipeline.
+  vec2: an ARROW — direction and length, NO position. Components are its SHADOWS on the
+            axes, which is why dot(a,b) = ax*bx + ay*by (derive it: shadows add, and
+            x_hat . b = |b|cos(alpha) = bx). VERIFIED: (3,4).(4,3) = 24 both ways, with
+            |a|=|b|=5, cos=0.96, theta=16.2602 deg, shadow 4.8, 4.8*5 = 24.
+            SIGN: >0 in front, ==0 perpendicular, <0 behind — no trigonometry needed.
+            dot(v,v) == length_squared(v). PREFER length_squared for comparisons (sqrt is
+            monotonic) — square the constant, do not root the variable.
+            NORMALISE the direction THEN scale by speed, never the other way.
+            |(1,-1)| = 1.41421, so a raw diagonal step is 127.279 vs 90.000 — the 41.4%
+            of Exercise 1.2.3, now closed.
+            normalised({0,0}) MUST NOT be 0/0 = NaN; ours returns (0,0), with
+            normalised_or(v, fallback) where a direction must exist.
+            perpendicular({x,y}) = {-y,x}; dot(v, perpendicular(v)) is EXACTLY 0.
+            sizeof(vec2) == 8, so PASS BY VALUE, not const&amp;.
+            HEADER-ONLY on purpose: small, hot, stable code the compiler must inline.
+            Does not generalise to 3-D: perpendicular() (a whole plane of them); the
+            cross product is the 3-D-only operation Module 2 adds.
+  time-model: absolute time = Uint64 ns; dt() clamped 0.25 s; fps() display only
+  loop: THE loop, settled as of 1.4 and not changing again:
+            drain -&gt; clk.tick() -&gt; in.update() -&gt; stepper.begin_frame(clk.dt())
+            -&gt; while (stepper.next_step()) { previous = current; simulate(current, h); }
+            -&gt; alpha = stepper.alpha() -&gt; draw into framebuffer -&gt; upload -&gt; present
+  fixed-step: h = 1/60 default; invariant 0 &lt;= accumulator &lt; h so alpha in [0,1);
+            previous = current INSIDE the loop; simulate() gets h, never clk.dt();
+            interpolation renders at exactly T - h; spiral guarded by dt clamp + step cap;
+            never interpolate across a teleport
+  input-model: poll levels, DERIVE edges; COPY SDL's array, never alias;
+            scancodes for positions, keycodes for symbols
+  shaders: HLSL -&gt; SDL_shadercross (3.0.0-preview) -&gt; SPIR-V/DXIL/MSL  [Module 4+]
+  cpp: C++20, no exceptions/RTTI in core, snake_case, private members trailing _,
+       .hpp + #pragma once, [[nodiscard]], anonymous namespace for TU-local helpers,
+       never `using namespace` at file scope, -Wall -Wextra//W4 all fixed.
+       Header dependency direction: framebuffer -&gt; colour, never the reverse.
+       Owning containers (std::vector) over new/delete. SDL handles still manually
+       managed in main.cpp on purpose; Module 5 wraps them.
+       Header-only is for small/hot/stable code (vec2), NOT a general licence.
+  build: CMake >= 3.24, out-of-source (build/); sources listed explicitly (never GLOB);
+         target_include_directories(engine PRIVATE src). A header-only addition needs
+         no CMake change at all.
+  docs-tooling: shared &lt;style&gt; AND trailing &lt;script&gt; propagated by
+         docs/_template/apply-shared.py — never by hand. Marker regions
+         SHARED-CSS:BEGIN/END and SHARED-SCRIPT:BEGIN/END; widget JS goes OUTSIDE them.
+         Run `apply-shared.py --check` before committing docs/.
+
+curriculum: 94 lessons, ~433 h, 9 modules
+  M0:6  M1:8  M2:12  M3:10  M4:9  M5:10  M6:15  M7:13  M8:11
+
+completed:
+  - MODULE 0 COMPLETE (0.1 … 0.6)
+  - 1.1 Events, Properly
+  - 1.2 Input: State vs Events
+  - 1.3 Frames, Delta Time, and Why Naive Loops Lie
+  - 1.4 The Fixed Timestep with Interpolation, Derived
+  - 1.5 The Framebuffer: Your First Owned Pixels
+  - 1.6 Colour, and an Honest Teaser of sRGB
+  - 1.7 2D Vectors, Geometrically
+
+capabilities:
+  - portable CMake build, six translation units; FetchContent SDL3 (release-3.4.12)
+  - window + event dispatch; input, clock and fixed_step subsystems
+  - THE loop: fixed-timestep simulation with render interpolation, spiral-guarded
+  - framebuffer subsystem: 320x180 ARGB8888 CPU buffer, streaming-texture presentation
+  - colour subsystem: exact sRGB transfer functions, mix_encoded vs mix_linear
+  - maths: src/math/vec2.hpp — arithmetic, length/length_squared, normalised(+_or),
+    dot, perpendicular, project_onto, lerp, distance. Header-only.
+  - demo: a live dot-product visualiser driven by the mouse, and two squares racing to
+    show the 41.4% diagonal error and its fix
+  - known-and-deliberate: line drawing is a local naive DDA in main.cpp (Lesson 2.1
+    derives it properly and moves it into gfx/); colour still converts per-operation
+
+files:
+  /: CLAUDE.md, README.md, ARCHITECTURE.md, LEARNINGS.md, PROMPT.md, LICENSE,
+     .gitignore, CMakeLists.txt, STATE.md
+  src/: main.cpp
+  src/core/: input.hpp, input.cpp, clock.hpp, clock.cpp, fixed_step.hpp, fixed_step.cpp
+  src/gfx/: colour.hpp, colour.cpp, framebuffer.hpp, framebuffer.cpp
+  src/math/: vec2.hpp
+  docs/: index.html, conventions.html, math-toolbox.html, cpp-style.html
+  docs/lessons/: 00-01..00-06, 01-01-events-properly.html,
+                 01-02-input-state-vs-events.html, 01-03-delta-time.html,
+                 01-04-fixed-timestep.html, 01-05-framebuffer.html, 01-06-colour.html,
+                 01-07-vectors-2d.html
+  docs/_template/: lesson-template.html, README.md, apply-shared.py
+  memory/: 2026-07-16.md, 2026-07-18.md
+
+next: 1.8 — Checkpoint: Pong</pre>
+  </details>
+
+  <nav class="lesson-nav" aria-label="Lesson navigation (bottom)">
+    <a class="prev-l" href="01-06-colour.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">1.6 — Colour, and an Honest Teaser of sRGB</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="01-08-pong.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">1.8 — Checkpoint: Pong</span>
+    </a>
+  </nav>
+
+  <footer class="foot">
+    <p>
+      Build a Professional 3D Game Engine ·
+      <a href="../index.html">Contents</a> ·
+      <a href="../conventions.html">Conventions</a> ·
+      <a href="../math-toolbox.html">Math Toolbox</a> ·
+      <a href="../cpp-style.html">C++ Style</a>
+    </p>
+    <p>MIT licensed. Copyright © 2026 digster.</p>
+  </footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  // Interactive: drag vector a and watch its shadow on b. Same arithmetic as
+  // engine::dot and engine::project_onto, in the same geometry as Figure 4.
+  var svg = document.getElementById("dot-svg");
+  if (!svg) { return; }
+
+  var OX = 200, OY = 200, U = 30;              // origin and pixels-per-unit
+  var B = { x: 4, y: 3 };                      // the fixed reference arrow
+  var A = { x: 3, y: 4 };                      // the draggable one
+
+  var px = function (v) { return OX + v.x * U; };
+  var py = function (v) { return OY - v.y * U; };   // +y up, as on paper
+
+  var elGrid = document.getElementById("dot-grid");
+  var elBLine = document.getElementById("dot-bline");
+  var elShadow = document.getElementById("dot-shadow");
+  var elPerp = document.getElementById("dot-perp");
+  var elB = document.getElementById("dot-b");
+  var elA = document.getElementById("dot-a");
+  var elHandle = document.getElementById("dot-handle");
+  var elLabels = document.getElementById("dot-labels");
+  var outDot = document.getElementById("dot-out");
+  var outAngle = document.getElementById("dot-angle");
+  var outVerdict = document.getElementById("dot-verdict");
+
+  // static grid
+  (function () {
+    var g = "";
+    for (var i = -6; i <= 13; i++) {
+      g += '<line x1="' + (OX + i*U) + '" y1="20" x2="' + (OX + i*U)
+         + '" y2="290" stroke="var(--rule)" stroke-width="1"/>';
+    }
+    for (var j = -3; j <= 6; j++) {
+      g += '<line x1="20" y1="' + (OY - j*U) + '" x2="600" y2="' + (OY - j*U)
+         + '" stroke="var(--rule)" stroke-width="1"/>';
+    }
+    g += '<line x1="20" y1="' + OY + '" x2="600" y2="' + OY + '" stroke="var(--dia-ink-soft)" stroke-width="1.4"/>';
+    g += '<line x1="' + OX + '" y1="20" x2="' + OX + '" y2="290" stroke="var(--dia-ink-soft)" stroke-width="1.4"/>';
+    elGrid.innerHTML = g;
+  })();
+
+  function render() {
+    var dot = A.x * B.x + A.y * B.y;
+    var lenA = Math.sqrt(A.x*A.x + A.y*A.y);
+    var lenB = Math.sqrt(B.x*B.x + B.y*B.y);
+    var s = dot / (lenB * lenB);                 // project_onto scale
+    var proj = { x: B.x * s, y: B.y * s };
+
+    // b's infinite line, so a negative projection has something to fall on
+    elBLine.setAttribute("x1", px({x: -B.x*1.6, y: -B.y*1.6}));
+    elBLine.setAttribute("y1", py({x: -B.x*1.6, y: -B.y*1.6}));
+    elBLine.setAttribute("x2", px({x: B.x*2.2, y: B.y*2.2}));
+    elBLine.setAttribute("y2", py({x: B.x*2.2, y: B.y*2.2}));
+
+    elShadow.setAttribute("x1", OX); elShadow.setAttribute("y1", OY);
+    elShadow.setAttribute("x2", px(proj)); elShadow.setAttribute("y2", py(proj));
+
+    elPerp.setAttribute("x1", px(A)); elPerp.setAttribute("y1", py(A));
+    elPerp.setAttribute("x2", px(proj)); elPerp.setAttribute("y2", py(proj));
+
+    elB.setAttribute("x1", OX); elB.setAttribute("y1", OY);
+    elB.setAttribute("x2", px(B)); elB.setAttribute("y2", py(B));
+
+    elA.setAttribute("x1", OX); elA.setAttribute("y1", OY);
+    elA.setAttribute("x2", px(A)); elA.setAttribute("y2", py(A));
+
+    elHandle.setAttribute("cx", px(A)); elHandle.setAttribute("cy", py(A));
+
+    // Colours go in the `style` property rather than a `fill=` attribute: a
+    // presentation attribute loses to any stylesheet rule, whereas an inline
+    // style wins. (It also keeps the repo's SVG lint happy, which exists for
+    // exactly that reason — see LEARNINGS.)
+    var base = "font-family:var(--font-ui);font-weight:700;font-size:11px;fill:";
+    elLabels.innerHTML =
+        '<text x="' + (px(B) + 8) + '" y="' + (py(B) + 4) + '" style="' + base + 'var(--dia-hi)">b</text>'
+      + '<text x="' + (px(A) + 10) + '" y="' + (py(A) + 4) + '" style="' + base + 'var(--note-bd)">a</text>'
+      + '<text x="' + (px(proj) - 6) + '" y="' + (py(proj) + 20)
+      + '" style="font-family:var(--font-ui);font-size:9.5px;fill:var(--ok-bd)">shadow</text>';
+
+    var cos = (lenA > 0.001) ? dot / (lenA * lenB) : 0;
+    cos = Math.max(-1, Math.min(1, cos));
+    outDot.textContent = "a · b = " + dot.toFixed(1);
+    outAngle.textContent = "θ = " + (Math.acos(cos) * 180 / Math.PI).toFixed(1) + "°";
+    outVerdict.textContent = dot > 0.05 ? "in front" : (dot < -0.05 ? "behind" : "side-on");
+    outVerdict.style.color = dot > 0.05 ? "var(--ok-bd)" : (dot < -0.05 ? "var(--verify-bd)" : "var(--text-muted)");
+  }
+
+  function pointerToUnits(e) {
+    var r = svg.getBoundingClientRect();
+    var vx = (e.clientX - r.left) / r.width * 620;
+    var vy = (e.clientY - r.top) / r.height * 300;
+    return { x: (vx - OX) / U, y: (OY - vy) / U };
+  }
+
+  var dragging = false;
+  svg.addEventListener("pointerdown", function (e) {
+    dragging = true;
+    svg.setPointerCapture(e.pointerId);
+    A = pointerToUnits(e);
+    render();
+  });
+  svg.addEventListener("pointermove", function (e) {
+    if (!dragging) { return; }
+    e.preventDefault();
+    A = pointerToUnits(e);
+    render();
+  });
+  svg.addEventListener("pointerup", function (e) {
+    dragging = false;
+    svg.releasePointerCapture(e.pointerId);
+  });
+
+  render();
+})();
+</script>
+
+<!-- SHARED-SCRIPT:BEGIN -->
+<script>
+(function () {
+  "use strict";
+
+  /* ---- Theme toggle: OS default, with a manual override in localStorage ---- */
+  var root = document.documentElement;
+  var KEY = "engine-course-theme";
+  try {
+    var saved = localStorage.getItem(KEY);
+    if (saved) { root.setAttribute("data-theme", saved); root.style.colorScheme = saved; }
+  } catch (e) { /* private mode — fall back to the OS preference */ }
+
+  var btn = document.getElementById("theme-toggle");
+  if (btn) {
+    btn.addEventListener("click", function () {
+      var cur = root.getAttribute("data-theme");
+      if (!cur) {
+        cur = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      }
+      var next = cur === "dark" ? "light" : "dark";
+      root.setAttribute("data-theme", next);
+      root.style.colorScheme = next;
+      try { localStorage.setItem(KEY, next); } catch (e) {}
+    });
+  }
+
+  /* ---- Syntax highlighting -------------------------------------------------
+     A deliberately small tokeniser for C++/HLSL, CMake, and shell. It reads
+     textContent and rebuilds escaped HTML, so it can never execute page content
+     or mangle a listing — worst case a token is mis-coloured.
+
+     Why not highlight.js from a CDN? Because a lesson must render from a bare
+     filesystem with no network, and colour is not worth a dependency that can
+     be absent. This is ~60 lines and always there.
+
+     Keyword vs type matters: `kw` is consulted before `ty`, so a word listed in
+     both lands in .tok-k. Fundamental types (bool, char, int, …) belong in
+     CPP_TYPES only — putting them in CPP_KEYWORDS would silently recolour every
+     declaration in the course.
+     -------------------------------------------------------------------------- */
+  var CPP_KEYWORDS = ("alignas alignof and asm auto break case catch class concept const consteval "
+    + "constexpr constinit const_cast continue co_await co_return co_yield decltype default defined "
+    + "delete do dynamic_cast else enum explicit export extern false final for friend goto if inline "
+    + "mutable namespace new noexcept not nullptr operator or override private protected public "
+    + "register reinterpret_cast requires return sizeof static static_assert static_cast struct "
+    + "switch template this thread_local throw true try typedef typeid typename union using virtual "
+    + "volatile while cbuffer register_space numthreads in out inout").split(" ");
+
+  var CPP_TYPES = ("bool char char8_t char16_t char32_t double float int long short signed unsigned "
+    + "void wchar_t size_t uint8_t uint16_t uint32_t uint64_t int8_t int16_t int32_t int64_t "
+    + "Uint8 Uint16 Uint32 Uint64 Sint8 Sint16 Sint32 Sint64 "
+    + "float2 float3 float4 float4x4 float3x3 half int2 int3 int4 uint uint2 uint3 uint4 matrix "
+    + "Texture2D TextureCube SamplerState StructuredBuffer").split(" ");
+
+  var kw = Object.create(null), ty = Object.create(null);
+  CPP_KEYWORDS.forEach(function (w) { kw[w] = 1; });
+  CPP_TYPES.forEach(function (w) { ty[w] = 1; });
+
+  function esc(s) {
+    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+  function span(cls, s) { return '<span class="tok-' + cls + '">' + esc(s) + "</span>"; }
+
+  // One regex, alternation ordered so longer/greedier forms win.
+  var RE = new RegExp([
+    "(\\/\\*[\\s\\S]*?\\*\\/|\\/\\/[^\\n]*|#[^\\n]*)",       // 1 comment / preprocessor
+    '("(?:\\\\.|[^"\\\\])*"|\'(?:\\\\.|[^\'\\\\])*\')',      // 2 string / char
+    "(\\b\\d[\\w.]*\\b)",                                     // 3 number
+    "([A-Za-z_]\\w*)(?=\\s*\\()",                             // 4 call site
+    "([A-Za-z_]\\w*)",                                        // 5 identifier
+    "([{}()\\[\\];,.<>+\\-*/%=!&|^~?:]+)"                     // 6 punctuation
+  ].join("|"), "g");
+
+  function highlightCLike(src) {
+    var out = "", last = 0, m;
+    RE.lastIndex = 0;
+    while ((m = RE.exec(src)) !== null) {
+      if (m.index > last) out += esc(src.slice(last, m.index));
+      if (m[1])      out += span(m[1].charAt(0) === "#" ? "p" : "c", m[1]);
+      else if (m[2]) out += span("s", m[2]);
+      else if (m[3]) out += span("n", m[3]);
+      else if (m[4]) out += kw[m[4]] ? span("k", m[4]) : span("f", m[4]);
+      else if (m[5]) out += kw[m[5]] ? span("k", m[5])
+                          : ty[m[5]] ? span("t", m[5])
+                          : esc(m[5]);
+      else if (m[6]) out += span("o", m[6]);
+      last = RE.lastIndex;
+    }
+    out += esc(src.slice(last));
+    return out;
+  }
+
+  // Shell: `#` comments anywhere, plus Windows-batch `::` comments — but only at
+  // the start of a line, because `::` is also a namespace separator and a CMake
+  // target separator (`SDL3::SDL3`), which do appear mid-line in shell listings.
+  var SH_RE = /(^|\n)(\s*)(::[^\n]*)|(#[^\n]*)|("(?:\\.|[^"\\])*"|'[^']*')|(^|\n)(\s*)([\w.\/\\-]+)/g;
+  function highlightShell(src) {
+    var out = "", last = 0, m;
+    SH_RE.lastIndex = 0;
+    while ((m = SH_RE.exec(src)) !== null) {
+      if (m.index > last) out += esc(src.slice(last, m.index));
+      if (m[3])      out += esc(m[1] || "") + esc(m[2] || "") + span("c", m[3]);
+      else if (m[4]) out += span("c", m[4]);
+      else if (m[5]) out += span("s", m[5]);
+      else           out += esc(m[6] || "") + esc(m[7] || "") + span("f", m[8]);
+      last = SH_RE.lastIndex;
+    }
+    out += esc(src.slice(last));
+    return out;
+  }
+
+  // CMake: comments, strings, ${vars}, and command names (word before "(").
+  var CMAKE_RE = /(#[^\n]*)|("(?:\\.|[^"\\])*")|(\$\{[^}]*\})|(^|\n)(\s*)([A-Za-z_]\w*)(?=\s*\()/g;
+  function highlightCMake(src) {
+    var out = "", last = 0, m;
+    CMAKE_RE.lastIndex = 0;
+    while ((m = CMAKE_RE.exec(src)) !== null) {
+      if (m.index > last) out += esc(src.slice(last, m.index));
+      if (m[1])      out += span("c", m[1]);
+      else if (m[2]) out += span("s", m[2]);
+      else if (m[3]) out += span("n", m[3]);
+      else           out += esc(m[4] || "") + esc(m[5] || "") + span("f", m[6]);
+      last = CMAKE_RE.lastIndex;
+    }
+    out += esc(src.slice(last));
+    return out;
+  }
+
+  var DISPATCH = {
+    "lang-cpp": highlightCLike, "lang-hlsl": highlightCLike, "lang-c": highlightCLike,
+    "lang-bash": highlightShell, "lang-sh": highlightShell,
+    "lang-cmake": highlightCMake
+  };
+  document.querySelectorAll(".listing pre code").forEach(function (el) {
+    for (var cls in DISPATCH) {
+      if (el.classList.contains(cls)) {
+        el.innerHTML = DISPATCH[cls](el.textContent);
+        return;
+      }
+    }
+  });
+})();
+</script>
+<!-- SHARED-SCRIPT:END -->
+</body>
+</html>

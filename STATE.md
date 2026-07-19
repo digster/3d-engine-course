@@ -7,7 +7,7 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-07-18 (after Lesson 1.6 — Module 1: 6 of 8)
+updated: 2026-07-18 (after Lesson 1.7 — Module 1: 7 of 8)
 
 conventions:
   world: right-handed, Y-up, -Z forward
@@ -131,6 +131,26 @@ conventions:
             Fingerprints: red/blue swapped + green fine = channel order, NOT gamma;
             muddy fades / early-dying fades / darkening mipmaps / fringed text = gamma;
             washed-out milky = the conversion applied twice or backwards.
+  vec2: an ARROW — direction and length, NO position. Components are its SHADOWS on
+            the axes, which is WHY dot(a,b) = ax*bx + ay*by. Derivation needs only
+            "shadows add" + "x_hat . b = |b|cos(alpha) = bx" — NO law of cosines
+            (the course assumes no trig beyond basics).
+            VERIFIED: (3,4).(4,3) = 24 both ways; |a|=|b|=5, cos=0.96, theta=16.2602 deg,
+            shadow 4.8, 4.8*5 = 24. Signs: (6,8)->50 front, (-4,3)->0 perpendicular,
+            (-3,-4)->-25 opposite.
+            dot(v,v) == length_squared(v). PREFER length_squared for comparisons (sqrt is
+            monotonic): square the constant, never root the variable.
+            NORMALISE the direction THEN scale — normalised(input)*speed*dt, never
+            normalised(input*speed*dt). |(1,-1)| = 1.41421 so a raw diagonal step is
+            127.27922 vs 90.00000: Exercise 1.2.3's 41.4%, now closed.
+            normalised({0,0}) MUST NOT be 0/0 = NaN; ours returns (0,0), with
+            normalised_or(v, fallback) where a direction must exist.
+            perpendicular({x,y}) = {-y,x}; dot(v, perpendicular(v)) is EXACTLY 0.
+            sizeof(vec2) == 8 -> PASS BY VALUE, never const&.
+            HEADER-ONLY on purpose (small/hot/stable, must inline) — and a header-only
+            addition needs NO CMakeLists change. Not a general licence.
+            Does NOT generalise to 3-D: perpendicular() (a whole plane of them in 3-D);
+            the cross product is the 3-D-only operation Module 2 adds.
   shaders: HLSL -> SDL_shadercross (3.0.0-preview) -> SPIR-V/DXIL/MSL  [Module 4+]
   cpp: C++20, no exceptions/RTTI in core, snake_case, private members trailing _,
        .hpp + #pragma once, [[nodiscard]], -Wall -Wextra // /W4, all warnings fixed
@@ -174,6 +194,7 @@ completed:
   - 1.4  The Fixed Timestep with Interpolation, Derived
   - 1.5  The Framebuffer: Your First Owned Pixels
   - 1.6  Colour, and an Honest Teaser of sRGB
+  - 1.7  2D Vectors, Geometrically
 
 capabilities:
   - verified C++20 toolchain (MSVC / GCC / Clang), 64-bit
@@ -203,10 +224,15 @@ capabilities:
   - demo: a comparison board — black-white and red-green ramps mixed both ways, drawn
     TOUCHING so the seam shows the error — plus the bouncing ball, whose trail fade rule
     switches with [M]
+  - maths: src/math/vec2.hpp (header-only) — arithmetic, length/length_squared,
+    normalised(+_or), dot, perpendicular, project_onto, lerp, distance
+  - demo: a live dot-product visualiser driven by the mouse (shadow, angle, sign) and
+    two squares racing to show the 41.4% diagonal error beside its fix
   - known-and-deliberate: explicit Euler still gains energy — but identically everywhere,
     at a rate set by h, which is ours to choose (Module 7 fixes the integrator);
     colour converts per-operation rather than at the pipeline edges (Module 6);
-    the debug-text overlay is the only thing on screen SDL still draws for us
+    line drawing is a local naive DDA in main.cpp (Lesson 2.1 derives it and moves it
+    into gfx/); the debug-text overlay is the only thing on screen SDL still draws
   - skills: reading SDL headers as source of truth; debugging with lldb/gdb/VS
 
 decisions:
@@ -221,17 +247,19 @@ files:
   src/core/: input.hpp, input.cpp, clock.hpp, clock.cpp,
             fixed_step.hpp, fixed_step.cpp
   src/gfx/: colour.hpp, colour.cpp, framebuffer.hpp, framebuffer.cpp
+  src/math/: vec2.hpp
   docs/: index.html, conventions.html, math-toolbox.html, cpp-style.html
   docs/lessons/: 00-01-what-is-an-engine.html, 00-02-how-this-course-works.html,
                  00-03-toolchain.html, 00-04-cmake-from-zero.html,
                  00-05-first-window.html, 00-06-headers-and-debugger.html,
                  01-01-events-properly.html, 01-02-input-state-vs-events.html,
                  01-03-delta-time.html, 01-04-fixed-timestep.html,
-                 01-05-framebuffer.html, 01-06-colour.html
+                 01-05-framebuffer.html, 01-06-colour.html,
+                 01-07-vectors-2d.html
   docs/_template/: lesson-template.html, README.md, apply-shared.py
   memory/: 2026-07-16.md, 2026-07-18.md
   (retired: hello.cpp)
 
-next: 1.7 — 2D Vectors, Geometrically
-      (planned filename: docs/lessons/01-07-vectors-2d.html — 1.6 already links to it)
+next: 1.8 — Checkpoint: Pong  (LAST LESSON OF MODULE 1)
+      (planned filename: docs/lessons/01-08-pong.html — 1.7 already links to it)
 ```

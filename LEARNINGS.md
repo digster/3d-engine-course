@@ -332,6 +332,58 @@ order, never gamma. Muddy cross-fades, fades that fall off a cliff, darkening mi
 anti-aliased text = gamma. Washed-out milky output = the conversion applied twice or in the wrong
 direction.
 
+### Vectors (Lesson 1.7) — derived, then verified
+
+**A vector is an arrow: direction and length, no position.** Components are its **shadows on the
+axes**, and that single fact is what makes the dot product's component formula derivable rather than
+memorised:
+
+```
+a . b = (ax*x_hat + ay*y_hat) . b        write a as its components
+      = ax*(x_hat . b) + ay*(y_hat . b)  shadows add (projection is linear)
+      = ax*bx + ay*by                    because x_hat . b = |b|cos(alpha) = bx
+```
+
+That route needs only "shadows add" and "components are projections" — **no law of cosines**, which
+matters given the course assumes no trigonometry beyond the basics.
+
+Verified numerically (Python first, then the C++ harness), with 3-4-5 triangles throughout:
+
+| Claim | Value |
+|---|---|
+| `(3,4) · (4,3)` by components | `12 + 12 = 24` |
+| …and geometrically | `|a|=|b|=5`, `cos θ = 0.96`, `θ = 16.2602°`, shadow `= 4.8`, `4.8 × 5 = 24` |
+| Sign table | `(6,8) → 50` (front) · `(−4,3) → 0` (perpendicular) · `(−5,1) → −11` · `(−3,−4) → −25` (opposite) |
+| The diagonal bug | `|(1,−1)| = 1.41421`; raw step **127.27922** vs normalised **90.00000** — the 41.4% of Exercise 1.2.3 |
+
+**`dot(v, v) == length_squared(v)`**, since a vector is perfectly aligned with itself — a free
+consistency check on the formula, and a genuine reuse in the implementation.
+
+**Prefer `length_squared` for every comparison.** `sqrt` is monotonic, so `|a| < |b|` exactly when
+`|a|² < |b|²`. Square the constant once outside the loop; do not root the variable inside it.
+
+**Normalise the direction, THEN scale by speed.** `normalised(input) * speed * dt`, never
+`normalised(input * speed * dt)` — the latter throws the speed away and yields a step of length 1.
+
+**`normalised({0,0})` must not be `0/0`.** That is `NaN`, which spreads silently (1.3 §3.5). There is
+no correct answer for "which way does a zero-length arrow point", so ours returns `(0,0)` — no input
+means no movement — with `normalised_or(v, fallback)` where a direction must exist. The harness
+confirms the naive version really does produce `NaN`, so the guard is demonstrably earning its keep.
+
+**`dot(v, perpendicular(v))` is EXACTLY 0**, not approximately: `perpendicular({x,y}) = {-y,x}`, so
+the products are equal and opposite and cancel before rounding can occur. Exact zeros are rare in
+float work and worth recognising.
+
+**`sizeof(vec2) == 8`** — measured — which is why everything passes by value. A `const vec2&` would
+hand over an address to dereference.
+
+**Header-only, deliberately.** Small, hot, stable code the compiler must be able to inline; a
+definition in another TU generally cannot be. Not a general licence. A header-only addition also
+needs **no CMake change at all**.
+
+**Does not generalise to 3-D:** `perpendicular()` (in 3-D there is a whole plane of them). The
+operation that exists only in 3-D is the **cross product** — Module 2.
+
 **Loop model:** we use classic `int main` + our own `while` loop, NOT SDL3's callback model
 (`SDL_MAIN_USE_CALLBACKS` with `SDL_AppInit`/`SDL_AppIterate`/`SDL_AppEvent`/`SDL_AppQuit`), because
 the engine owns its loop (0.1 thesis). The callback model exists and is fine for simple apps; it is
@@ -480,6 +532,28 @@ scaling resamples the pattern.
 figure is a claim about those exact numbers. Checked that they stay literal in both themes — the
 usual "never hard-code colours in diagrams" rule has this one principled exception, and it is worth
 flagging in the source so nobody "fixes" it later.
+
+**A figure whose two quantities nearly coincide needs a dimension line, not an overlay.** 1.7's
+shadow figure drew a's projection (4.8) directly on top of b (5.0) — 96% overlap, so it read as one
+two-tone line. Redrawing the shadow as a separate bar offset perpendicular to b, with short
+connector ticks at each end, made it legible without changing the numbers. Standard technical-drawing
+practice, and worth reaching for whenever a measurement lies along the thing being measured.
+
+**Check a diagram's scale against the space it occupies.** The same lesson's normalisation figure
+was drawn at 30 px per unit inside a 340×190 region, so the whole construction huddled in one corner
+while the annotation panel took the rest. Raising it to 80 px per unit fixed it. Symptom to watch
+for: arrows overlapping each other and labels with nowhere to go.
+
+**The SVG-lint applies to widget JavaScript too.** 1.7's drag widget generated labels with
+`fill="var(--dia-hi)"` and tripped `apply-shared.py`'s inline-fill lint. The fix is not to suppress
+it: use `style="fill:…"` instead, which is an inline *style* rather than a presentation attribute and
+therefore beats any stylesheet rule — the exact problem the lint exists to prevent. Lint clean and
+more correct.
+
+**Count figure references excluding the caption.** A `Figure N` search hits the `fignum` caption too,
+so a count of 1 means the figure is captioned and **never referenced from the prose** — which the
+style guide forbids. Four of 1.7's five figures were in that state on the first pass. Search for
+mentions *outside* `.fignum`, or expect a count of at least 2.
 
 **Watch the working directory when a session mixes `cd` and scripts.** A `cd docs && python3 -m
 http.server` left the shell in `docs/`, and the next repo-root-relative script failed with a
