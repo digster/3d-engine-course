@@ -2005,8 +2005,11 @@ td code { font-size: 0.82em; }
       <!-- the imaginary curved paddle -->
       <path class="ink-soft" d="M150,40 Q214,150 150,260" fill="none" stroke-width="1.5"
             stroke-dasharray="5 4"/>
-      <text x="196" y="152" class="xs muted">the curve we</text>
-      <text x="196" y="165" class="xs muted">are pretending to have</text>
+      <!-- Moved up into the clear band between the top and upper-mid arrows, still alongside the
+           curve. It cannot go below the centre arrow instead: the second line is 104 units wide
+           and would butt straight into the speed note at x=300. -->
+      <text x="196" y="80" class="xs muted">the curve we</text>
+      <text x="196" y="93" class="xs muted">are pretending to have</text>
 
       <!-- the real paddle -->
       <rect x="126" y="40" width="24" height="220" rx="3" fill="var(--axis-y)" opacity="0.45"/>

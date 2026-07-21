@@ -267,3 +267,23 @@ on the sawtooth), and running it over the back catalogue found ten pre-existing 
 (1.5 ×2, 1.6 ×3, 1.7 ×4, conventions ×1) — reported, not silently folded into this lesson's scope.
 Two false positives are designed out of it: `<defs>` arrowhead paths, and `.grid` graph paper
 (whose class sits on the wrapping `<g>`, so `getAttribute` on the `<path>` returns null).
+
+---
+
+## Session — Clearing the back-catalogue diagram defects (2026-07-21, later)
+
+**Prompt:** Fix the ten pre-existing text-on-shape defects that `docs/_template/check-page.js`
+(added in 2.1) found in already-published lesson pages — each a label sitting on a line or curve.
+Reproduce by serving `docs/` and running the checker in real Chromium (Playwright, not the preview
+pane); require `pass: true` on `svgTextOnShape`. Fix by moving labels into clear space, adding a
+short leader where a label must stay near what it annotates (see 2.1 Figure 1 for the pattern);
+prefer the empty quadrant per `_template/README.md`. Do not move diagram geometry, hard-code
+colours, or put `fill=` on an SVG `<text>`. Re-run `apply-shared.py --check`, re-verify each page,
+and eyeball a screenshot of each edited figure — the checker cannot see a label on a filled
+`<rect>`. Do not renumber or restructure any lesson.
+
+**Outcome:** all eleven defects fixed (ten text-on-shape + conventions' `+y`/`up` overlap) across
+`conventions.html`, 1.5, 1.6, 1.7 and 1.8. Diff is label coordinates, explanatory comments, and one
+leader line. All six pages `pass: true`; `apply-shared.py --check` clean; every edited figure
+eyeballed in light and dark. A full 19-page sweep surfaced further pre-existing defects (0.3, 0.6,
+1.2 text-on-shape; 0.1/0.2 duplicated KaTeX block) — reported, not folded into this scope.

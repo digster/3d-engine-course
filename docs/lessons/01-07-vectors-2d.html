@@ -1088,7 +1088,10 @@ y += dy * speed * dt;</code></pre>
       </g>
       <circle cx="400" cy="150" r="3.5" class="fill-soft" stroke="var(--dia-ink)" stroke-width="1.2"/>
       <text x="528" y="88" class="xs muted">longer</text>
-      <text x="466" y="118" class="xs muted">shorter</text>
+      <!-- The short arrow is collinear with the long one (both slope −0.5) — that is the point of
+           the pair — so this label has to sit off to one side of the shared direction rather than
+           along it. Below-right of the short tip is the perpendicular offset. -->
+      <text x="466" y="142" class="xs muted">shorter</text>
       <text x="446" y="206" class="xs muted">different direction</text>
       <text x="352" y="222" class="xs muted">length or direction differs — so they are not the same vector</text>
     </svg>
@@ -1306,8 +1309,10 @@ y += dy * speed * dt;</code></pre>
 
       <text x="212" y="123" class="xs t-bad" font-weight="700">(1, 1)</text>
       <text x="212" y="137" class="xs t-bad">length √2 ≈ 1.414</text>
-      <text x="191" y="170" class="xs t-ok" font-weight="700">normalised</text>
-      <text x="191" y="184" class="xs t-ok">length exactly 1</text>
+      <!-- Left-aligned with the red labels above at x=212, which also clears the unit square's
+           right edge (x=200) that these two used to straddle. -->
+      <text x="212" y="170" class="xs t-ok" font-weight="700">normalised</text>
+      <text x="212" y="184" class="xs t-ok">length exactly 1</text>
 
       <!-- the arithmetic -->
       <rect x="368" y="46" width="278" height="164" rx="8" class="fill-soft"/>
@@ -1571,7 +1576,9 @@ y += dy * speed * dt;</code></pre>
       <line x1="260" y1="110" x2="440" y2="60" stroke="var(--verify-bd)" stroke-width="2.4" marker-end="url(#v5b)"/>
       <text x="350" y="76" class="sm t-bad" font-weight="700">v</text>
       <line x1="80" y1="200" x2="440" y2="60" stroke="var(--ok-bd)" stroke-width="2.4" marker-end="url(#v5c)"/>
-      <text x="250" y="176" class="sm t-ok" font-weight="700">u + v</text>
+      <!-- Just past the x=260 drop-line, in the open wedge under the green arrow. The arrow's
+           midpoint is x=260, so the natural label spot and the drop-line want the same pixel. -->
+      <text x="300" y="150" class="sm t-ok" font-weight="700">u + v</text>
 
       <line x1="260" y1="110" x2="260" y2="200" class="ink" stroke-width="1.2" stroke-dasharray="3 3"/>
       <line x1="440" y1="60" x2="440" y2="200" class="ink" stroke-width="1.2" stroke-dasharray="3 3"/>

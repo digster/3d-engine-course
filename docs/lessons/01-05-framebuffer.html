@@ -1301,8 +1301,12 @@ td code { font-size: 0.82em; }
         <text x="52" y="174" text-anchor="end">3</text>
         <text x="52" y="211" text-anchor="end">4</text>
       </g>
-      <text x="356" y="106" class="xs t-ok" text-anchor="end" font-weight="700">these 2 fit</text>
-      <text x="150" y="211" class="xs t-bad" font-weight="700">…and these 2 wrapped</text>
+      <!-- Labels sit in the clear band below the grid, each column-aligned with the run it
+           names (cols 0–1 left, cols 6–7 right). Inside the grid is not an option: a cell is
+           37 units wide and the shortest label is 50, so any in-grid placement straddles a
+           cell border and the text becomes hard to read. -->
+      <text x="356" y="239" class="xs t-ok" text-anchor="end" font-weight="700">these 2 fit</text>
+      <text x="60" y="239" class="xs t-bad" font-weight="700">…and these 2 wrapped</text>
 
       <!-- right panel: what it looks like at scale -->
       <text x="410" y="24" class="sm t-bad" font-weight="700">At real size</text>

@@ -743,6 +743,37 @@ Running it over the back catalogue immediately found ten pre-existing text-on-sh
 drop-line running straight through its `u + v` label. **A check written after the fact will find
 history.** Budget for that, and do not let it silently expand the current lesson's scope.
 
+**All ten are now fixed** (plus conventions' `+y`/`up` text-vs-text overlap), by moving label
+coordinates only — no diagram geometry was touched. Four things learned doing it:
+
+- **Measure in viewBox units before choosing coordinates.** Invert the SVG's `getScreenCTM()` and
+  print every `<text>`'s client rect back in viewBox space; the numbers then paste straight into
+  the `x=`/`y=` attributes. Guessing from the source is hopeless because **`y` is the baseline, not
+  the top** — conventions' `+y` at `y=58` in a bold face occupies `40.8…61.6`, so the 16-unit gap
+  the author left above it was smaller than the glyph box, and the collision was invisible in the
+  markup.
+- **A label wider than the cell it sits in cannot be fixed by nudging.** 1.5's Figure 2 has 37-unit
+  grid cells and a 50-unit shortest label, so *every* in-grid placement straddles a border. Check
+  that ratio first: if the label does not fit, the only fix is to leave the artwork entirely. The
+  replacement — a row of labels below the grid, each column-aligned with the run it names and
+  already colour-coded to it — needs no leader at all. **Alignment and colour are cheaper pointers
+  than a leader line**, and a leader dragged across the artwork is worse than the original defect.
+- **The checker's 2-unit threshold hides near misses.** The obvious fix for 1.8's Figure 6 put a
+  104-unit label's right edge 0.1 units from the neighbouring note — `pass: true`, and it would
+  have shipped looking broken. Do not treat clearing the checker as clearing the figure; compute
+  the gap to the *nearest* neighbour, not just the overlapping one.
+- **The fills confirm what the checker cannot see.** 1.7's Figure 3 labels straddled the unit
+  square's *fill* as well as its stroke — the stroke is what got flagged, but the dark-mode
+  screenshot is what proved the move fixed both. Screenshot in **both** themes: `--dia-fill` is
+  near-invisible in light mode and obvious in dark.
+
+The same sweep also surfaced defects on pages outside that original count, left unfixed and
+reported rather than folded in: **0.3** Figure 1 (`C++ standard library`, `+ C runtime` on a `hi`
+line), **0.6** Figure 2 (`observe`), **1.2** Figure 1 (`SDL_EVENT_KEY_DOWN`), and — a different
+class entirely — **0.1 and 0.2 carry four `script[src*="katex"]` tags instead of two**, i.e. a
+duplicated KaTeX block that double-renders. That last one is the failure the KaTeX entry above
+predicted, still live on two pages.
+
 **Verify a renderer by its positive signal.** See the KaTeX entry above: checking "no console
 errors" passed for six lessons while the maths renderer was entirely absent. The check that works
 is `document.querySelectorAll('.katex').length === document.querySelectorAll('.eq').length`, plus

@@ -1342,7 +1342,9 @@ b = (0 + 0)   / 2 = 0        // -> (128, 128, 0)</code></pre>
 
       <!-- naive assumption -->
       <line x1="70" y1="250" x2="550" y2="50" stroke="var(--verify-bd)" stroke-width="1.8" stroke-dasharray="5 4"/>
-      <text x="404" y="104" class="xs t-bad" font-weight="700">what we assumed</text>
+      <!-- Sits in the empty triangle above the dashed line, offset parallel to it — the same
+           treatment as "what actually happens" below the curve. The colour does the pointing. -->
+      <text x="330" y="88" class="xs t-bad" font-weight="700">what we assumed</text>
 
       <!-- the real curve -->
       <polyline fill="none" stroke="var(--ok-bd)" stroke-width="2.4"
@@ -1353,13 +1355,17 @@ b = (0 + 0)   / 2 = 0        // -> (128, 128, 0)</code></pre>
       <line x1="310" y1="250" x2="310" y2="207" class="ink" stroke-width="1.2" stroke-dasharray="3 3"/>
       <line x1="70" y1="207" x2="310" y2="207" class="ink" stroke-width="1.2" stroke-dasharray="3 3"/>
       <circle cx="310" cy="207" r="4" fill="var(--ok-bd)"/>
-      <text x="318" y="200" class="xs" font-weight="700">128 → 21.6%</text>
+      <!-- Below the curve, in clear space, with a short leader back to the marker. -->
+      <line class="ink" x1="313" y1="212" x2="320" y2="219" stroke-width="1"/>
+      <text x="320" y="230" class="xs" font-weight="700">128 → 21.6%</text>
 
       <!-- 188 marker -->
       <line x1="424" y1="250" x2="424" y2="150" class="hi" stroke-width="1.2" stroke-dasharray="3 3"/>
       <line x1="70" y1="150" x2="424" y2="150" class="hi" stroke-width="1.2" stroke-dasharray="3 3"/>
       <circle cx="424" cy="150" r="4" fill="var(--dia-hi)"/>
-      <text x="432" y="143" class="xs t-hi" font-weight="700">188 → 50%</text>
+      <!-- Below and right of the marker: the wedge between the curve and the vertical guide is
+           the only clear space near this point — above it the curve and the dashed line converge. -->
+      <text x="432" y="175" class="xs t-hi" font-weight="700">188 → 50%</text>
       <text x="424" y="264" class="xs t-hi" text-anchor="middle" font-weight="700">188</text>
     </svg>
     <figcaption>
