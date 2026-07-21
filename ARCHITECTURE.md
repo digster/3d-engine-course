@@ -65,7 +65,9 @@ inventing one — but without paying framework ceremony before it buys anything.
 │   │   ├── colour.hpp      # pack/unpack, sRGB transfer functions   [EXISTS from 1.6]
 │   │   ├── colour.cpp
 │   │   ├── framebuffer.hpp # CPU pixel buffer, ARGB8888, row-major   [EXISTS from 1.5]
-│   │   └── framebuffer.cpp
+│   │   ├── framebuffer.cpp
+│   │   ├── raster.hpp      # which pixels a SHAPE is made of         [EXISTS from 2.1]
+│   │   └── raster.cpp      # lines now; triangles from 2.2
 │   ├── game/               # NOT engine — game code, see §2.1.1        [EXISTS from 1.8]
 │   │   ├── pong.hpp        # the Module 1 checkpoint game
 │   │   └── pong.cpp
@@ -211,6 +213,27 @@ fallback where some direction must exist.
 
 Note that a header-only addition needs **no `CMakeLists.txt` change at all**, which is the build
 system agreeing with the design.
+
+**The rasterizer, as of Lesson 2.1.** `framebuffer` knows how to set *one pixel*; `raster` knows
+which pixels a *shape* is made of. Everything added to `gfx/` for the rest of Modules 2 and 3
+answers that same question about a more interesting shape, so the split is worth stating: a
+routine belongs in `raster` if it decides *which* pixels, and in `framebuffer` if it decides
+*how* to write them.
+
+`raster.hpp` forward-declares `engine::framebuffer` rather than including it — every function
+takes it by reference and none needs its layout (see §2.1.1 for why this matters).
+
+Three line routines exist and only one is meant to be called. `draw_line_naive` and
+`draw_line_dda` are kept because Lesson 2.1 is an *argument*, and the demo switches between them
+at run time so the failure mode can be reproduced rather than described — the same reasoning that
+keeps Pong's naive collision test in the shipped code.
+
+**The choice of Bresenham is deliberate and is not about speed.** Measured on an M4 Pro at `-O2`,
+DDA is ~2.2× *faster* than the compact all-octant Bresenham; the cost is Bresenham's two
+data-dependent branches, not its arithmetic. We ship the slower one for exactness — integer
+decisions are bit-identical across compilers and architectures, which floating-point ones are not
+— and because its error term is the direct ancestor of Lesson 2.2's edge function. The numbers are
+in LEARNINGS.md so the decision can be revisited with evidence rather than deference.
 
 #### 2.1.1 `src/game/` — the boundary, three modules early
 

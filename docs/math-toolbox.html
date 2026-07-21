@@ -1333,6 +1333,63 @@ td code { font-size: 0.82em; }
     </div>
   </div>
 
+  <div class="tool">
+    <h3>The error-term technique <span class="from">Lesson 2.1</span></h3>
+    <div class="eq">
+      <span>\[ e \mathrel{+}= m \ \text{ each step};\qquad \text{if } e \ge \tfrac12:\ \text{step},\ e \mathrel{-}= 1 \]</span>
+      <span class="eq-plain">each step: e += m;  if e >= 0.5 then step the minor axis and e -= 1</span>
+    </div>
+    <p>
+      <strong>To walk a slope without ever evaluating it, accumulate a difference and discharge it
+      when it crosses a threshold.</strong> The error <code>e</code> is how far the ideal thing has
+      drifted from the discrete thing you have drawn so far; when the drift reaches half a step you
+      take a step and subtract it back out. No multiply, no division, nothing to re-derive per
+      iteration.
+    </p>
+    <p>
+      The result is a bounded sawtooth — it can never run away, because crossing the threshold costs
+      more than one increment can add. That is the same argument as the accumulator in
+      <a href="lessons/01-04-fixed-timestep.html">Lesson 1.4</a>, which is this technique applied to
+      time instead of space.
+    </p>
+    <div class="callout ok">
+      <span class="label">Scale away the fractions</span>
+      <p>
+        If a quantity's <em>only</em> uses are order-preserving — comparisons and additions — you may
+        multiply it by any positive constant without changing a single decision. Choose the constant
+        that clears the denominators and the whole computation becomes integral:
+      </p>
+      <div class="eq">
+        <span>\[ E = 2\,dx \cdot e \;\Longrightarrow\; E \mathrel{+}= 2\,dy,\quad E \ge dx,\quad E \mathrel{-}= 2\,dx \]</span>
+        <span class="eq-plain">E = 2*dx*e  =>  E += 2*dy;  test E >= dx;  E -= 2*dx</span>
+      </div>
+      <p>
+        Integers do not round, so nothing accumulates and the answer is identical on every machine —
+        a stronger property than being fast, and the reason the course prefers Bresenham even though
+        it measured <em>slower</em> than the floating-point alternative. Reappears as fixed-point
+        sub-pixel precision in real rasterizers and as depth encoding in Module 3.
+      </p>
+    </div>
+    <div class="worked">
+      <span class="label">Worked example — <code>(2,2) → (12,8)</code></span>
+      <p>
+        <code>dx = 10</code>, <code>dy = 6</code>. Constants: add <code>2dy = 12</code>, threshold
+        <code>dx = 10</code>, payback <code>2dx = 20</code>. Starting <code>E = 0</code>:
+      </p>
+      <ul>
+        <li><code>E</code> runs 12, 4, 16, 8, 20, 12, 4, 16, 8, 20 — stepping the minor axis whenever it reaches 10.</li>
+        <li>Pixels: <code>(2,2) (3,3) (4,3) (5,4) (6,4) (7,5) (8,6) (9,6) (10,7) (11,7) (12,8)</code></li>
+        <li>Every one is the nearest row to the true line — <code>y = 2 + 0.6(x−2)</code> — computed without evaluating it.</li>
+      </ul>
+    </div>
+    <p>
+      <strong>Ties.</strong> With major extent <code>M</code>, minor <code>n</code> and
+      <code>p = M / gcd(M, n)</code>, the walk lands exactly on a half-step — a genuine tie between
+      two pixels — <strong>if and only if <code>p</code> is even</strong>. Those, and only those,
+      lines rasterise differently depending on which end you start from.
+    </p>
+  </div>
+
   <h2 id="coming"><span class="num">5</span>Coming as the course proceeds</h2>
 
   <p>

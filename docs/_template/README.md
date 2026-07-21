@@ -287,10 +287,42 @@ inter-page link resolves.
 reports computed styles that the page cannot actually produce, so a broken theme or a dead
 highlighter can look fine there. Serve over HTTP and drive Chromium.
 
-A good highlighter check is a *round-trip* rather than an eyeball: for every
-`.listing pre code`, the live `textContent` after highlighting must equal the `textContent` of
-the same element parsed with `DOMParser` (which never runs scripts). Any difference means the
-tokeniser corrupted a listing.
+Then run **`check-page.js`** in that browser — it is the accumulated set of checks that have
+each caught a real defect:
+
+```js
+// in the page's console, or via Playwright's evaluate()
+fetch('/_template/check-page.js').then(r => r.text()).then(src => eval(src))
+// => { …, pass: true }
+```
+
+It returns `pass: true` only when every array is empty. What it covers, and why each check is
+there:
+
+| Check | Catches | Learned from |
+|---|---|---|
+| Highlighter round-trip | The tokeniser corrupting a listing — silent, since the page still renders | 1.2 |
+| KaTeX **positive** signal (`.katex` count == `.eq` count, exactly 2 script tags) | A missing maths renderer, which looks exactly like the documented CDN-unreachable fallback | 1.8 |
+| SVG spill (viewBox) | A label outside its own figure | 1.2 |
+| SVG text-vs-text | Two labels stacked | 1.2 |
+| SVG **text-vs-shape** | A label sitting on a line or curve | 1.3, 2.1 |
+| Horizontal page scroll, wrapped listings | Layout regressions | — |
+
+Three traps are baked into that script, all of which cost real time before they were understood:
+
+- **`getBoundingClientRect()`, never `getBBox()`.** `getBBox` is in *local* coordinates, so any
+  `<text>` inside a `<g transform>` is compared against the wrong origin and reports a confident
+  false positive.
+- **Skip `<defs>`.** An arrowhead's `<path>` lives there, is never painted at its own
+  coordinates, and still answers `getTotalLength()` and `getScreenCTM()`.
+- **Skip `.grid` via `closest()`, not `getAttribute()`.** Graph paper is *meant* to sit under
+  labels, and the class is set on the wrapping `<g>` — reading the attribute off the `<path>`
+  itself returns null and every gridline reads as an unclassed stroke.
+
+**It still cannot see everything.** A label on a filled `<rect>`, or a line drawn through the
+wrong row of a stacked diagram, need eyes — 1.2's Figure 1 had its comparison ramp drawn straight
+through the event-tick timeline and only a screenshot revealed it. When a diagram has stacked
+rows, compute the path coordinates and check the extremes land inside their band.
 
 ## 14. The shared CSS and script regions
 

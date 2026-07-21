@@ -51,6 +51,7 @@ add_executable(engine
     src/game/pong.cpp
     src/gfx/colour.cpp
     src/gfx/framebuffer.cpp
+    src/gfx/raster.cpp
 )
 
 # Make `src/` a root for our own includes, so a file says

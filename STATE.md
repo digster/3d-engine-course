@@ -7,7 +7,7 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-07-18 (after Lesson 1.8 — MODULE 1 COMPLETE, 14 of 94 lessons)
+updated: 2026-07-21 (after Lesson 2.1 — Module 2: 1 of 12, 15 of 94 lessons)
 
 conventions:
   world: right-handed, Y-up, -Z forward
@@ -178,6 +178,23 @@ conventions:
             this unchanged? game -> engine only, never back. Enforced by discipline today, by
             the compiler in Module 5. pong.hpp FORWARD-DECLARES engine::framebuffer rather than
             including it (include what you use, forward declare what you mention).
+  lines: endpoint-INCLUSIVE at BOTH ends (so a rectangle's corners close). Bresenham,
+            integer, all 8 octants. Ties break toward NE (E >= dx, not >).
+            Derivation: e = y_true - y_plotted; e += m each step; e >= 1/2 -> step minor,
+            e -= 1. Scale by 2*dx to clear denominators (comparisons survive multiplication
+            by a positive constant): E += 2dy, test E >= dx, E -= 2dx. All integers, E=0.
+            TERMINATION PROOF: with dx=|Dx|>=0, dy=-|Dy|<=0, both tests failing needs
+            dx < 2*err < dy <= 0 <= dx, i.e. dx < dx. So one always fires.
+            TIE THEOREM: with p = major/gcd(major,minor), an exact tie exists IFF p is even
+            — and EXACTLY those lines are asymmetric under endpoint swap (verified over
+            23103 lines, 7692 asymmetric, zero disagreements). Slope 1/2 ties constantly;
+            3/5 and 45 degrees never do. This is WHY 2.2 needs a fill rule.
+            BENCHMARK (M4 Pro, clang 21, -O2, ns/px, stepping only): Bresenham compact 1.32,
+            Bresenham major-axis 0.74, DDA lround 0.60, DDA trunc 0.65. DDA IS FASTER —
+            the folklore is inverted. Cost is the two data-dependent BRANCHES, not floats
+            (swapping lround for truncation changes nothing). We ship Bresenham for
+            EXACTNESS (integers are bit-identical everywhere; 1.8 showed floats are not)
+            and because its error term IS 2.2's edge function. Lines are not the hot path.
   shaders: HLSL -> SDL_shadercross (3.0.0-preview) -> SPIR-V/DXIL/MSL  [Module 4+]
   cpp: C++20, no exceptions/RTTI in core, snake_case, private members trailing _,
        .hpp + #pragma once, [[nodiscard]], -Wall -Wextra // /W4, all warnings fixed
@@ -239,6 +256,7 @@ completed:
   - 1.7  2D Vectors, Geometrically
   - 1.8  Checkpoint: Pong
   ===> MODULE 1 COMPLETE <===
+  - 2.1  Lines: DDA, then Bresenham
 
 capabilities:
   - verified C++20 toolchain (MSVC / GCC / Clang), 64-bit
@@ -278,7 +296,20 @@ capabilities:
     rally 61 hits, ball reaches the 260 px/s cap, never leaves the court in 300k steps.
   - main.cpp is now a HOST only: window, framebuffer, loop, input->intent, upload, HUD.
     The rules of Pong are not in it and could not be.
-  - known-and-deliberate: explicit Euler still gains energy — but identically everywhere,
+  - RASTERIZER (src/gfx/raster) — framebuffer sets ONE pixel; raster decides WHICH pixels
+    a SHAPE is made of. draw_line = integer Bresenham, all 8 octants, endpoint-inclusive,
+    VERIFIED pixel-identical to a reflect-in/out first-octant midpoint reference over
+    1600 lines. draw_line_dda and draw_line_naive kept so the argument can be reproduced.
+  - demo: rotating 32-spoke fan (crosses every octant; steep=coral, shallow=green) +
+    an 8x magnified pixel inspector that reads back the REAL routine's output, algorithm
+    switchable [1][2][3], live pixel count and per-fan timing. Naive lights 1483 px where
+    DDA/Bresenham light 2081. Pong preserved on [Tab].
+  - known-and-deliberate: no line clipping — put_pixel discards out-of-range writes, so an
+    off-screen line still costs a full walk (Exercise 2.1.4; Module 3 makes clipping
+    mandatory for CORRECTNESS, not speed). No anti-aliasing (Ex 2.1.5, Module 6).
+    Two demos in one executable is deliberately awkward — it is the argument for Module 5's
+    demos/ split, accumulating where it can be felt;
+    explicit Euler still gains energy — but identically everywhere,
     at a rate set by h, which is ours to choose (Module 7 fixes the integrator);
     colour converts per-operation rather than at the pipeline edges (Module 6);
     the debug-text overlay is the only thing on screen SDL still draws;
@@ -293,6 +324,10 @@ decisions:
     Module 5 refactor. Recorded in ARCHITECTURE.md §2.1.
   - src/game/ created in 1.8, three modules before the Module 5 refactor needs it. The
     boundary costs nothing now and decides how hard that refactor is. ARCHITECTURE.md §2.1.1.
+  - src/gfx/raster.hpp forward-declares engine::framebuffer rather than including it —
+    the physical-design habit from 1.8, now applied by default in gfx/.
+  - draw_line stays Bresenham despite MEASURING SLOWER than DDA. Reasons recorded above
+    and in the lesson; revisit with evidence, not deference.
   - the naive collision test is KEPT in the shipped code behind state::swept_collision
     rather than deleted, so the failure can be reproduced on demand (pedagogy §5:
     show the artifact). It is dead weight only if you think a bug you can summon is
@@ -304,7 +339,8 @@ files:
   src/: main.cpp
   src/core/: input.hpp, input.cpp, clock.hpp, clock.cpp,
             fixed_step.hpp, fixed_step.cpp
-  src/gfx/: colour.hpp, colour.cpp, framebuffer.hpp, framebuffer.cpp
+  src/gfx/: colour.hpp, colour.cpp, framebuffer.hpp, framebuffer.cpp,
+            raster.hpp, raster.cpp
   src/math/: vec2.hpp
   src/game/: pong.hpp, pong.cpp
   docs/: index.html, conventions.html, math-toolbox.html, cpp-style.html
@@ -314,14 +350,18 @@ files:
                  01-01-events-properly.html, 01-02-input-state-vs-events.html,
                  01-03-delta-time.html, 01-04-fixed-timestep.html,
                  01-05-framebuffer.html, 01-06-colour.html,
-                 01-07-vectors-2d.html, 01-08-pong.html
-  docs/_template/: lesson-template.html, README.md, apply-shared.py
+                 01-07-vectors-2d.html, 01-08-pong.html,
+                 02-01-lines.html
+  docs/_template/: lesson-template.html, README.md, apply-shared.py, check-page.js
   memory/: 2026-07-16.md, 2026-07-18.md
   (retired: hello.cpp)
 
-next: 2.1 — Lines: DDA, then Bresenham  (FIRST LESSON OF MODULE 2)
-      (planned filename: docs/lessons/02-01-lines.html — 1.8 already links to it)
-      Opens by paying a debt: the naive DDA that lived in main.cpp through 1.7 is
-      derived properly, weighed against Bresenham (integers, error terms, what the
-      machine finds cheap), and moved into src/gfx/ as the rasterizer's first routine.
+next: 2.2 — The Triangle: Edge Functions
+      (planned filename: docs/lessons/02-02-triangle-edge-functions.html — 2.1 links to it)
+      A line divides the plane; Bresenham's error term has been answering "which side?"
+      all along. Ask it for three edges at once and a point is inside iff all three agree
+      — which is a filled-shape rasterizer, and is how GPUs actually do it. Also resolves
+      2.1's loose end: edge functions come from the edge's GEOMETRY, not a traversal, so
+      the tie-breaking that makes Bresenham asymmetric becomes a FILL RULE that two
+      adjacent triangles cannot disagree about.
 ```

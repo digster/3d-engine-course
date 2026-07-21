@@ -81,19 +81,25 @@ cmake --build build
 ```
 
 The code in `src/` is the state of the engine as of the most recently published lesson (see
-[STATE.md](STATE.md)). Running it today gives you the **Module 1 checkpoint: a complete, playable
-game of Pong**, drawn entirely into a CPU framebuffer we own pixel by pixel:
+[STATE.md](STATE.md)). Running it today gives you **Lesson 2.1's line demo** — a rotating fan of
+32 spokes covering all eight octants, beside an 8× magnified view of the pixels one line is
+actually made of, drawn entirely into a CPU framebuffer we own pixel by pixel:
 
 ```sh
 ./build/engine            # macOS / Linux
 .\build\Debug\engine.exe  # Windows
 ```
 
-Left paddle <kbd>W</kbd>/<kbd>S</kbd>, right paddle <kbd>↑</kbd>/<kbd>↓</kbd> (<kbd>C</kbd> swaps
-the AI for a second player). Press <kbd>K</kbd> then <kbd>1</kbd> to switch to a naive collision
-test at 10 Hz and watch the ball tunnel straight through a paddle — that failure, and why a
-60 Hz machine can never show it to you, is what
-[Lesson 1.8](docs/lessons/01-08-pong.html) is about.
+Press <kbd>1</kbd> to switch to the naive `y = mx + b` line routine and watch every spoke steeper
+than 45° fall apart into dots; <kbd>3</kbd> puts it back. Why that happens, and why the famous
+reason for preferring Bresenham over DDA turns out to be *inverted* on modern hardware, is
+[Lesson 2.1](docs/lessons/02-01-lines.html).
+
+<kbd>Tab</kbd> switches to the **Module 1 checkpoint: a complete, playable game of Pong**. Left
+paddle <kbd>W</kbd>/<kbd>S</kbd>, right paddle <kbd>↑</kbd>/<kbd>↓</kbd> (<kbd>C</kbd> swaps the
+AI for a second player). Press <kbd>K</kbd> there to switch to a naive collision test and watch
+the ball tunnel straight through a paddle — that failure, and why a 60 Hz machine can never show
+it to you, is [Lesson 1.8](docs/lessons/01-08-pong.html).
 
 ### Prerequisites
 

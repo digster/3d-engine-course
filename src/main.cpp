@@ -1,15 +1,14 @@
 // src/main.cpp — the engine's entry point.
 //
-// Notice how little is left here. Everything this file does is host work: open a
-// window, own a framebuffer, run the loop, hand the game its inputs, put the
-// resulting pixels on screen. The rules of Pong are not in this file and could
-// not be — they live in src/game/pong.cpp, and the only things crossing the
-// boundary are a state struct, an intent struct, and two function calls.
+// Module 2 begins, and with it the software rasterizer. This file hosts the
+// current lesson's demo: a fan of lines covering all eight octants, drawn by
+// whichever of the three algorithms you choose, beside a magnified view of the
+// pixels one line is actually made of.
 //
-// That shape is the point of the checkpoint. Module 5 turns this arrangement
-// into a static library and a demo executable; the work of that refactor is
-// mostly deleting the word "src" from some include paths, precisely because the
-// separation was maintained from here on.
+// Lesson 1.8's Pong is still here and still reachable with [Tab]. Two demos in
+// one executable is already slightly awkward; by Module 5 it would be absurd,
+// which is exactly why Module 5 opens by splitting the tree into a static
+// library and a demos/ directory. The awkwardness is the argument.
 //
 // The loop is the one settled in Lesson 1.4 and does not change again:
 //
@@ -21,6 +20,7 @@
 #include "game/pong.hpp"
 #include "gfx/colour.hpp"
 #include "gfx/framebuffer.hpp"
+#include "gfx/raster.hpp"
 #include "math/vec2.hpp"
 
 #include <SDL3/SDL.h>
@@ -33,13 +33,159 @@
 
 namespace {
 
-// The framebuffer is exactly the court. Two constants that must agree would
-// eventually stop agreeing, so there is only one of each — game::court owns them
-// and this file derives its buffer size from there.
-constexpr int k_fb_width = static_cast<int>(game::court::width);
-constexpr int k_fb_height = static_cast<int>(game::court::height);
+constexpr int k_fb_width = 320;
+constexpr int k_fb_height = 180;
 
 constexpr Uint32 k_throttle_ms = 50;
+
+// ---- The line demo ---------------------------------------------------------
+
+/// Which routine the fan is drawn with. The three are interchangeable by
+/// signature precisely so the demo can swap them and change nothing else — the
+/// same discipline as Lesson 1.6's mixing comparison: two paths must differ in
+/// exactly one thing or you are comparing code, not ideas.
+enum class algorithm
+{
+    naive,      ///< y = mx + b, stepping x. Falls apart above 45 degrees.
+    dda,        ///< step the major axis, accumulate the minor in a float.
+    bresenham   ///< integer error term. The one draw_line uses.
+};
+
+using line_fn = void (*)(engine::framebuffer&, int, int, int, int, Uint32);
+
+[[nodiscard]] line_fn function_for(algorithm a)
+{
+    switch (a)
+    {
+    case algorithm::naive:     return engine::draw_line_naive;
+    case algorithm::dda:       return engine::draw_line_dda;
+    case algorithm::bresenham: return engine::draw_line;
+    }
+    return engine::draw_line;
+}
+
+[[nodiscard]] const char* name_of(algorithm a)
+{
+    switch (a)
+    {
+    case algorithm::naive:     return "naive y=mx+b";
+    case algorithm::dda:       return "DDA (float)";
+    case algorithm::bresenham: return "Bresenham (int)";
+    }
+    return "?";
+}
+
+constexpr int k_spokes = 32;
+constexpr engine::vec2 k_fan_centre{88.0f, 88.0f};
+constexpr float k_fan_radius = 74.0f;
+
+/// The octant test. A fan of evenly spaced spokes crosses every one of the
+/// eight octants, so a routine that is wrong in any of them is wrong on screen
+/// rather than wrong in theory — the naive one loses its four steep octants
+/// completely, which is the whole point of drawing it this way.
+void draw_fan(engine::framebuffer& fb, line_fn draw, float phase)
+{
+    for (int i = 0; i < k_spokes; ++i)
+    {
+        const float angle = phase + static_cast<float>(i) * 6.28318531f
+                                    / static_cast<float>(k_spokes);
+        const engine::vec2 tip{k_fan_centre.x + std::cos(angle) * k_fan_radius,
+                               k_fan_centre.y + std::sin(angle) * k_fan_radius};
+
+        // Colour by octant, so the four the naive routine cannot draw are
+        // identifiable at a glance rather than by counting.
+        const bool steep = std::fabs(std::sin(angle)) > std::fabs(std::cos(angle));
+        const Uint32 colour = steep ? engine::pack_argb(236, 122, 92)
+                                    : engine::pack_argb(122, 196, 152);
+
+        draw(fb, static_cast<int>(k_fan_centre.x), static_cast<int>(k_fan_centre.y),
+             static_cast<int>(tip.x), static_cast<int>(tip.y), colour);
+    }
+}
+
+constexpr int k_zoom = 8;          ///< magnification of the pixel inspector
+constexpr int k_zoom_cols = 15;
+constexpr int k_zoom_rows = 13;
+constexpr int k_zoom_x = 184;      ///< top-left of the inspector, in framebuffer pixels
+constexpr int k_zoom_y = 30;
+
+/// A magnified view of the pixels one short line is made of.
+///
+/// This is the point of the whole lesson made visible: the ideal line is a thin
+/// straight thing, and what we can actually draw is a staircase of whole
+/// pixels. Which staircase is exactly what the three algorithms disagree about.
+void draw_inspector(engine::framebuffer& fb, line_fn draw, float phase, bool show_grid)
+{
+    const Uint32 grid = engine::pack_argb(44, 48, 60);
+    const Uint32 lit = engine::pack_argb(226, 196, 110);
+    const Uint32 ideal = engine::pack_argb(126, 162, 236);
+
+    // The little grid gets its own tiny framebuffer, so "which pixels did the
+    // algorithm choose" is answered by reading them back rather than by
+    // reimplementing the algorithm. The demo asks the same code the engine uses.
+    engine::framebuffer cell(k_zoom_cols, k_zoom_rows);
+    cell.clear(0u);
+
+    const int cx = k_zoom_cols / 2;
+    const int cy = k_zoom_rows / 2;
+    const int tx = cx + static_cast<int>(std::lround(std::cos(phase) * 6.0));
+    const int ty = cy + static_cast<int>(std::lround(std::sin(phase) * 6.0));
+
+    draw(cell, cx, cy, tx, ty, 0xFFFFFFFFu);
+
+    if (show_grid)
+    {
+        for (int r = 0; r <= k_zoom_rows; ++r)
+        {
+            fb.fill_rect(k_zoom_x, k_zoom_y + r * k_zoom, k_zoom_cols * k_zoom + 1, 1, grid);
+        }
+        for (int c = 0; c <= k_zoom_cols; ++c)
+        {
+            fb.fill_rect(k_zoom_x + c * k_zoom, k_zoom_y, 1, k_zoom_rows * k_zoom + 1, grid);
+        }
+    }
+
+    // Every lit cell as a filled square, inset by one so the grid stays visible.
+    for (int r = 0; r < k_zoom_rows; ++r)
+    {
+        for (int c = 0; c < k_zoom_cols; ++c)
+        {
+            if (cell.pixel_at(c, r) != 0u)
+            {
+                fb.fill_rect(k_zoom_x + c * k_zoom + 1, k_zoom_y + r * k_zoom + 1,
+                             k_zoom - 1, k_zoom - 1, lit);
+            }
+        }
+    }
+
+    // The ideal line, drawn through the CENTRES of the end cells at magnified
+    // resolution. It is itself rasterised, of course — there is no other way to
+    // put anything on a screen — but at eight times the scale its own staircase
+    // is far below the size of the squares underneath it.
+    engine::draw_line(fb,
+                      k_zoom_x + cx * k_zoom + k_zoom / 2,
+                      k_zoom_y + cy * k_zoom + k_zoom / 2,
+                      k_zoom_x + tx * k_zoom + k_zoom / 2,
+                      k_zoom_y + ty * k_zoom + k_zoom / 2,
+                      ideal);
+}
+
+/// Count the lit pixels of a fan — the number that makes the naive routine's
+/// failure quantitative rather than merely visible.
+[[nodiscard]] int count_lit(const engine::framebuffer& fb)
+{
+    int lit = 0;
+    for (int y = 0; y < fb.height(); ++y)
+    {
+        for (int x = 0; x < fb.width(); ++x)
+        {
+            if (fb.pixel_at(x, y) != 0u) { lit += 1; }
+        }
+    }
+    return lit;
+}
+
+// ---- Presentation ----------------------------------------------------------
 
 /// Copy the framebuffer into a streaming texture, row by row.
 ///
@@ -71,20 +217,12 @@ constexpr Uint32 k_throttle_ms = 50;
     return true;
 }
 
-/// Turn the keyboard into the two numbers the simulation actually wants.
-///
-/// This is the whole of the translation layer between hardware and gameplay, and
-/// it is worth seeing how thin it is. The game is never told about scancodes; it
-/// is told "the left player wants to go up". Module 5 generalises this into an
-/// input-mapping system with named actions, and the reason that refactor is easy
-/// is that the seam already exists here.
+/// Turn the keyboard into the two numbers Pong's simulation wants.
 [[nodiscard]] game::intent read_intent(const engine::input& in, bool right_is_ai)
 {
     game::intent wanted;
     wanted.right_is_ai = right_is_ai;
 
-    // Levels, not edges: movement continues for as long as the key is held.
-    // Lesson 1.2's distinction, and the reason both queries exist.
     if (in.key_down(SDL_SCANCODE_W)) { wanted.left -= 1.0f; }
     if (in.key_down(SDL_SCANCODE_S)) { wanted.left += 1.0f; }
 
@@ -113,8 +251,7 @@ int main(int argc, char* argv[])
             SDL_VERSIONNUM_MINOR(sdl_version),
             SDL_VERSIONNUM_MICRO(sdl_version));
 
-    SDL_Window* window = SDL_CreateWindow("Pong — Module 1 Checkpoint", 1280, 720,
-                                          SDL_WINDOW_RESIZABLE);
+    SDL_Window* window = SDL_CreateWindow("Lines — Module 2", 1280, 720, SDL_WINDOW_RESIZABLE);
     if (window == nullptr)
     {
         SDL_Log("SDL_CreateWindow failed: %s", SDL_GetError());
@@ -160,20 +297,24 @@ int main(int argc, char* argv[])
     engine::input in;
     engine::fixed_step stepper(60.0f);
 
-    // The seed is an INPUT to the simulation, not a hidden detail of it. Taking
-    // it from the clock gives a different game each run; logging it means any
-    // particular game can be replayed exactly by passing the same number back.
-    // That is the practical form of Lesson 1.4's determinism claim.
+    // ---- Demo state --------------------------------------------------------
+    bool show_pong = false;
+    algorithm algo = algorithm::bresenham;
+    bool spinning = true;
+    bool show_grid = true;
+    float phase = 0.35f;
+    int lit_pixels = 0;
+    double fan_ns_avg = 0.0;
+
     const Uint32 seed = static_cast<Uint32>(SDL_GetTicksNS() & 0xFFFFFFFFu);
-    SDL_Log("Match seed: %u  (same seed + same inputs = the same match)", seed);
+    game::state pong_current = game::make_state(seed);
+    game::state pong_previous = pong_current;
+    bool pong_right_is_ai = true;
 
-    game::state current = game::make_state(seed);
-    game::state previous = current;
+    const Uint32 k_bg = engine::pack_argb(12, 14, 20);
 
-    bool right_is_ai = true;
-
-    SDL_Log("Left paddle: [W]/[S].  Right paddle: [Up]/[Down] (press [C] for a human).");
-    SDL_Log("[K] collision rule · [1-4] sim rate · [V] vsync · [T] throttle · [R] reset · [Esc] quit");
+    SDL_Log("Lines demo: [1] naive  [2] DDA  [3] Bresenham · [Space] spin · [G] grid");
+    SDL_Log("[Tab] switches to Lesson 1.8's Pong · [V] vsync · [T] throttle · [Esc] quit");
 
     bool running = true;
     while (running)
@@ -203,22 +344,13 @@ int main(int argc, char* argv[])
         clk.tick();
         in.update();
 
-        // --- Commands: edges, because each should happen once per press --------
         if (in.key_pressed(SDL_SCANCODE_ESCAPE)) { running = false; }
-        if (in.key_pressed(SDL_SCANCODE_1)) { stepper.set_rate(10.0f); }
-        if (in.key_pressed(SDL_SCANCODE_2)) { stepper.set_rate(30.0f); }
-        if (in.key_pressed(SDL_SCANCODE_3)) { stepper.set_rate(60.0f); }
-        if (in.key_pressed(SDL_SCANCODE_4)) { stepper.set_rate(120.0f); }
 
-        if (in.key_pressed(SDL_SCANCODE_C)) { right_is_ai = !right_is_ai; }
-
-        if (in.key_pressed(SDL_SCANCODE_K))
+        if (in.key_pressed(SDL_SCANCODE_TAB))
         {
-            current.swept_collision = !current.swept_collision;
-            previous.swept_collision = current.swept_collision;
-            SDL_Log("Collision rule: %s",
-                    current.swept_collision ? "swept (asks about the path)"
-                                            : "naive (asks only where the ball ended up)");
+            show_pong = !show_pong;
+            SDL_SetWindowTitle(window, show_pong ? "Pong — Module 1 Checkpoint"
+                                                 : "Lines — Module 2");
         }
 
         if (in.key_pressed(SDL_SCANCODE_V))
@@ -230,33 +362,72 @@ int main(int argc, char* argv[])
             }
         }
 
-        if (in.key_pressed(SDL_SCANCODE_R))
-        {
-            const bool keep_swept = current.swept_collision;
-            current = game::make_state(seed);
-            current.swept_collision = keep_swept;
-            previous = current;
-        }
-
-        const game::intent wanted = read_intent(in, right_is_ai);
-
-        // --- Simulate: zero or more fixed steps, never a partial one -----------
         stepper.begin_frame(clk.dt());
-        while (stepper.next_step())
+
+        if (show_pong)
         {
-            previous = current;
-            game::step(current, wanted, stepper.h());
+            // ---- Lesson 1.8's game, unchanged --------------------------------
+            if (in.key_pressed(SDL_SCANCODE_C)) { pong_right_is_ai = !pong_right_is_ai; }
+            if (in.key_pressed(SDL_SCANCODE_K))
+            {
+                pong_current.swept_collision = !pong_current.swept_collision;
+                pong_previous.swept_collision = pong_current.swept_collision;
+                SDL_Log("Collision rule: %s",
+                        pong_current.swept_collision ? "swept" : "naive");
+            }
+            if (in.key_pressed(SDL_SCANCODE_R))
+            {
+                const bool keep = pong_current.swept_collision;
+                pong_current = game::make_state(seed);
+                pong_current.swept_collision = keep;
+                pong_previous = pong_current;
+            }
 
-            // The one exception to interpolation. A ball that was teleported to
-            // the centre after a point has no meaningful "in between", and
-            // lerping to it would draw a streak across the court at a speed the
-            // ball never had. Snapping the history forward makes this frame's
-            // lerp a no-op. Lesson 1.4 §5.4.
-            if (current.teleported) { previous = current; }
+            const game::intent wanted = read_intent(in, pong_right_is_ai);
+            while (stepper.next_step())
+            {
+                pong_previous = pong_current;
+                game::step(pong_current, wanted, stepper.h());
+                if (pong_current.teleported) { pong_previous = pong_current; }
+            }
+            game::draw(fb, pong_previous, pong_current, stepper.alpha());
         }
+        else
+        {
+            // ---- The line demo ------------------------------------------------
+            if (in.key_pressed(SDL_SCANCODE_1)) { algo = algorithm::naive; }
+            if (in.key_pressed(SDL_SCANCODE_2)) { algo = algorithm::dda; }
+            if (in.key_pressed(SDL_SCANCODE_3)) { algo = algorithm::bresenham; }
+            if (in.key_pressed(SDL_SCANCODE_SPACE)) { spinning = !spinning; }
+            if (in.key_pressed(SDL_SCANCODE_G)) { show_grid = !show_grid; }
 
-        // --- Draw -------------------------------------------------------------
-        game::draw(fb, previous, current, stepper.alpha());
+            while (stepper.next_step())
+            {
+                if (spinning) { phase += 0.12f * stepper.h(); }
+            }
+
+            const line_fn draw = function_for(algo);
+
+            fb.clear(k_bg);
+
+            // Time the fan alone, so the number on screen is about the line
+            // routine rather than about the clear and the upload around it.
+            const Uint64 t0 = SDL_GetTicksNS();
+            draw_fan(fb, draw, phase);
+            const Uint64 t1 = SDL_GetTicksNS();
+
+            // The count is taken before the inspector draws, so it measures the
+            // fan and nothing else — this is the number that exposes the naive
+            // routine's missing pixels.
+            lit_pixels = count_lit(fb);
+
+            // A rolling average, because a single frame's timing at this scale
+            // is mostly noise. Display only, exactly like clock::fps().
+            const double ns = static_cast<double>(t1 - t0);
+            fan_ns_avg = (fan_ns_avg <= 0.0) ? ns : (fan_ns_avg * 0.95 + ns * 0.05);
+
+            draw_inspector(fb, draw, phase, show_grid);
+        }
 
         if (!upload(screen_texture, fb))
         {
@@ -267,49 +438,49 @@ int main(int argc, char* argv[])
         SDL_RenderClear(renderer);
         SDL_RenderTexture(renderer, screen_texture, nullptr, nullptr);
 
-        // --- The debug overlay -------------------------------------------------
-        // Still SDL's built-in font rather than ours: this is developer
-        // instrumentation, not part of the game, and it is the only thing on
-        // screen we did not rasterise ourselves. A text coordinate here is twice
-        // a framebuffer coordinate — 2x text scale over a 4x framebuffer scale.
-        const float ball_speed = engine::length(current.ball_vel);
-
+        // A text coordinate is exactly twice a framebuffer coordinate: 2x text
+        // scale over a 4x framebuffer scale.
         SDL_SetRenderScale(renderer, 2.0f, 2.0f);
-        SDL_SetRenderDrawColor(renderer, 210, 212, 220, 255);
-        SDL_RenderDebugTextFormat(renderer, 6.0f, 6.0f,
-                                  "sim %5.1f Hz   fps %6.1f   alpha %4.2f   ball %5.1f px/s   rally %d",
-                                  static_cast<double>(stepper.rate_hz()),
-                                  static_cast<double>(clk.fps()),
-                                  static_cast<double>(stepper.alpha()),
-                                  static_cast<double>(ball_speed),
-                                  current.rally_hits);
 
-        // The step budget the naive test has to fit inside: a ball whose
-        // HORIZONTAL motion in one step exceeds the width of the overlap window
-        // can step clean over it. Note it is |vx| and not the speed — a ball
-        // moving steeply is crossing the window slowly whatever its speed says.
-        // Printing it beside the actual per-step motion turns §3.3's arithmetic
-        // into something you can watch cross over.
-        const float per_step = std::fabs(current.ball_vel.x) * stepper.h();
-        const float budget = game::court::paddle_w + game::court::ball_size;
+        if (show_pong)
+        {
+            SDL_SetRenderDrawColor(renderer, 210, 212, 220, 255);
+            SDL_RenderDebugTextFormat(renderer, 6.0f, 6.0f,
+                                      "PONG (Lesson 1.8)   collision: %-6s   rally %d",
+                                      pong_current.swept_collision ? "swept" : "naive",
+                                      pong_current.rally_hits);
+            SDL_RenderDebugText(renderer, 6.0f, 328.0f,
+                                "[Tab] back to lines   [W]/[S]   [C] 2P   [K] collision   [R] reset   [Esc] quit");
+        }
+        else
+        {
+            const bool is_naive = (algo == algorithm::naive);
 
-        SDL_SetRenderDrawColor(renderer,
-                               (per_step > budget && !current.swept_collision) ? 236 : 150,
-                               (per_step > budget && !current.swept_collision) ? 122 : 152,
-                               (per_step > budget && !current.swept_collision) ? 92 : 170,
-                               255);
-        SDL_RenderDebugTextFormat(renderer, 6.0f, 20.0f,
-                                  "[K] collision: %-6s   ball moves %5.2f px/step, naive test needs < %.0f",
-                                  current.swept_collision ? "swept" : "naive",
-                                  static_cast<double>(per_step),
-                                  static_cast<double>(budget));
+            SDL_SetRenderDrawColor(renderer, 210, 212, 220, 255);
+            SDL_RenderDebugTextFormat(renderer, 6.0f, 6.0f,
+                                      "%-16s  %d spokes   %5d px lit   %6.1f us/fan   fps %5.1f",
+                                      name_of(algo), k_spokes, lit_pixels,
+                                      fan_ns_avg / 1000.0,
+                                      static_cast<double>(clk.fps()));
 
-        SDL_SetRenderDrawColor(renderer, 150, 152, 170, 255);
-        SDL_RenderDebugTextFormat(renderer, 6.0f, 328.0f,
-                                  "left [W]/[S]   right %s   [C] swap   [1-4] sim rate   [V] vsync   [T] throttle   [R] reset",
-                                  right_is_ai ? "= AI" : "[Up]/[Down]");
+            // The line that turns the artifact into a diagnosis.
+            SDL_SetRenderDrawColor(renderer,
+                                   is_naive ? 236 : 150,
+                                   is_naive ? 122 : 152,
+                                   is_naive ? 92 : 170, 255);
+            SDL_RenderDebugText(renderer, 6.0f, 20.0f,
+                                is_naive
+                                    ? "one pixel per COLUMN: the coral (steep) spokes are dotted -- 1483 px lit where the others light 2081"
+                                    : "one pixel per step of the MAJOR axis: every spoke solid, in all eight octants");
+
+            SDL_SetRenderDrawColor(renderer, 150, 152, 170, 255);
+            SDL_RenderDebugText(renderer, 6.0f, 328.0f,
+                                "[1] naive  [2] DDA  [3] Bresenham   [Space] spin   [G] grid   [Tab] Pong   [V] vsync   [Esc] quit");
+            SDL_RenderDebugText(renderer, 368.0f, 40.0f, "the pixels,");
+            SDL_RenderDebugText(renderer, 368.0f, 52.0f, "magnified 8x");
+        }
+
         SDL_SetRenderScale(renderer, 1.0f, 1.0f);
-
         SDL_RenderPresent(renderer);
 
         if (in.key_down(SDL_SCANCODE_T))

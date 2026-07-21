@@ -384,6 +384,70 @@ needs **no CMake change at all**.
 **Does not generalise to 3-D:** `perpendicular()` (in 3-D there is a whole plane of them). The
 operation that exists only in 3-D is the **cross product** — Module 2.
 
+### Line rasterisation (Lesson 2.1) — derived, verified, and benchmarked
+
+**`y = mx + b` is the wrong tool, in two independent ways.** It lights one pixel per *column*, so
+any line steeper than 45° comes apart into disconnected dots (measured: a line spanning 101 rows
+and 21 columns lights **21** pixels, every one of them disconnected; a correct routine lights
+101). And it cannot represent a vertical line at all — there is no `m` for which `y = mx + b`
+describes `x = 5`. Any formulation needing an `if` to survive one of its own inputs is suspect.
+
+**The fix is one line: `steps = max(|dx|, |dy|)`.** The major axis then advances exactly ±1 per
+step and the minor by at most 1, so a gap becomes *impossible* rather than unlikely. It also
+disposes of the vertical case — we never form `dy/dx`, only `dy/max(...)`, whose denominator is
+zero only for a zero-length line. The special case stops existing rather than being handled.
+
+**Bresenham, derived rather than pasted.** Error `e = y_true − y_plotted`; each step `e += m`; when
+`e ≥ ½`, step the minor axis and `e −= 1`. Then the key move: `e`'s only uses are a comparison
+against ½ and additions, and **comparisons survive multiplication by a positive constant**, so
+scale by `2·dx` to clear every denominator:
+
+```
+E = 2*dx*e   ->   E += 2*dy ;   test E >= dx ;   E -= 2*dx      (all integers, E starts 0)
+```
+
+VERIFIED `(2,2)->(12,8)`: pixels `(2,2)(3,3)(4,3)(5,4)(6,4)(7,5)(8,6)(9,6)(10,7)(11,7)(12,8)`, and
+every one is the nearest row to the true line `y = 2 + 0.6(x−2)` — computed without ever evaluating
+it. The general "scale an order-preserving quantity until the fractions vanish" technique reappears
+as fixed-point sub-pixel precision and as depth encoding.
+
+**The compact all-octant form terminates, provably.** With `dx = |Δx| ≥ 0` and `dy = −|Δy| ≤ 0`,
+both tests failing would need `dx < 2·err < dy ≤ 0 ≤ dx`, i.e. `dx < dx`. So at least one test
+fires every iteration. VERIFIED pixel-identical to a reflect-in/reflect-out first-octant reference
+over 1600 lines in all eight octants.
+
+**Ties, and a theorem worth keeping.** With major extent `M`, minor `n`, and `p = M/gcd(M,n)`:
+an exact tie (the line passing precisely through a midpoint) occurs **iff `p` is even**. Proof:
+a tie needs `2kq = (2j+1)p` with `q = n/gcd` coprime to `p`; if `p` is odd the left side is even
+and the right odd — impossible; if `p` is even, `k = p/2` works. **Exactly those lines are
+asymmetric under endpoint swap** — VERIFIED exhaustively over 23,103 lines, 7,692 asymmetric,
+zero disagreements with the prediction in either direction. Slope 1/2 ties constantly; slope 3/5
+and a 45° diagonal never do. This is why filled shapes need a **fill rule** (2.2): adjacent
+triangles traverse a shared edge in opposite directions, and a third of all edges would disagree.
+
+**BENCHMARK — the folklore is inverted on modern hardware.** ns/pixel, stepping only (framebuffer
+write excluded), M4 Pro, Apple clang 21, `-O2`, 3000 reps × 360 lines:
+
+| | all octants | shallow | steep | 45° |
+|---|---|---|---|---|
+| Bresenham, compact (2 branches) | 1.320 | 1.247 | 1.251 | 1.248 |
+| Bresenham, major-axis (1 branch) | 0.738 | 0.781 | 0.776 | 0.788 |
+| DDA (`lround`) | **0.595** | **0.648** | **0.643** | 0.660 |
+| DDA (`+0.5`, truncate) | 0.645 | 0.667 | 0.667 | **0.630** |
+
+**DDA is ~2.2× faster than the compact Bresenham and ~1.2× faster than the best Bresenham.** The
+floats were never the problem — swapping `lround` for truncation changes almost nothing. The
+**branches** are: Bresenham asks a data-dependent question per pixel that the predictor cannot
+learn, and restructuring to one branch instead of two nearly halves the cost with identical
+arithmetic. Through `put_pixel` the whole-routine ratio is ~1.5×, i.e. the store is nearly free
+here because the loop is branch-bound rather than memory-bound.
+
+**We ship Bresenham anyway, and the reasons are not speed:** (1) exactness — integers have no
+rounding modes, no FMA contraction, no accumulation, so the pixel set is identical on every
+machine, which 1.8 established that floats cannot promise; (2) its error term *is* 2.2's edge
+function; (3) lines are not the hot path, and optimising them would be 1.5's benchmark trap again.
+Record the measurement, choose deliberately, and let the reader disagree.
+
 ### Collision and reflection (Lesson 1.8) — all numbers verified in a scratch harness
 
 **`reflect(v, n̂) = v − 2 (v·n̂) n̂`**, derived by splitting `v` into its shadow on the normal plus
@@ -657,6 +721,27 @@ returns coordinates in the element's *local* space, so every `<text>` inside a
 confident false positives ("11 px above the top edge") for labels that were correctly placed.
 `getBoundingClientRect()` accounts for the full transform chain and needs no viewBox arithmetic:
 compare each text's rect against the `<svg>`'s own rect.
+
+**The checks now live in `docs/_template/check-page.js`** — run it in Chromium and require
+`pass: true`. Added in 2.1, after the text-vs-shape defect shipped for a second time (1.3's Euler
+figure, then 2.1's Figure 4, where the threshold label sat on the rising sawtooth). It samples
+points along every stroke and tests them against text boxes, which is the only one of the three
+SVG checks that can see that class of bug.
+
+Two false positives are designed out of it, and both are worth knowing about because they will
+recur in anything similar:
+
+- **Skip `<defs>` / `<marker>`.** An arrowhead's `<path>` is never painted at its own coordinates
+  but still answers `getTotalLength()` and `getScreenCTM()`, so it reports collisions wherever the
+  marker template happens to sit.
+- **Skip `.grid` with `closest()`, not `getAttribute()`.** Graph paper is *meant* to sit under
+  labels. The class is on the wrapping `<g>`, so reading it off the `<path>` returns null and
+  every single gridline reads as an unclassed stroke crossing every label near it.
+
+Running it over the back catalogue immediately found ten pre-existing text-on-shape defects
+(1.5 ×2, 1.6 ×3, 1.7 ×4, conventions ×1) — cosmetic, but real: 1.7's Figure 5 has a dashed
+drop-line running straight through its `u + v` label. **A check written after the fact will find
+history.** Budget for that, and do not let it silently expand the current lesson's scope.
 
 **Verify a renderer by its positive signal.** See the KaTeX entry above: checking "no console
 errors" passed for six lessons while the maths renderer was entirely absent. The check that works
