@@ -287,3 +287,38 @@ and eyeball a screenshot of each edited figure — the checker cannot see a labe
 leader line. All six pages `pass: true`; `apply-shared.py --check` clean; every edited figure
 eyeballed in light and dark. A full 19-page sweep surfaced further pre-existing defects (0.3, 0.6,
 1.2 text-on-shape; 0.1/0.2 duplicated KaTeX block) — reported, not folded into this scope.
+
+---
+
+## 2026-07-21 — Lesson 2.2
+
+> next
+
+**Response:** Lesson 2.2 — The Triangle: Edge Functions. `edge_function` and `fill_triangle`
+added to `src/gfx/raster`, a demo with a half-plane view and a coverage counter, and the
+lesson page with five SVG diagrams. Also fixed a duplicate KaTeX loader in lessons 0.1 and
+0.2 that my 2.1 change had created.
+
+**Decisions made in this session:**
+
+| Decision | Choice | Rationale |
+|---|---|---|
+| Framing | Not "how to fill a triangle" but **"inside = three independent yes/no questions"** | The independence is the whole point — it is why edge functions beat scanline filling, why this parallelises, and why GPUs do it. Stated up front in §1 and paid off in the exercises. |
+| `fill_triangle` and winding | **Accepts either**; measures the area once and orients the test | Module 2 rasterises in framebuffer space where the y-flip reverses the sign relative to `CCW = front`. A fill that silently dropped backwards triangles would be indistinguishable from a bug. Culling is 3.4's, in NDC. |
+| The sign convention | **Measured, then stated**, with the NDC-vs-screen reconciliation spelled out | `(5,0),(0,10),(10,10)` → −100. This is the single most likely place to ruin someone's next six months, and it is the exact case the master prompt §10 says to pin down rather than assume. Also recorded in conventions.html. |
+| Showing the fill rule | A **coverage counter**, not colours | A pixel drawn twice looks identical to one drawn once — the defect is invisible *because* the second write lands on the first. Count the operation instead of inspecting the result. Generalised into a callout. |
+| The demo's quad | **Axis-aligned, split by its 45° diagonal** — after the rotated version showed only 3 red pixels | Double-draws only hit pixels whose centres are exactly on the seam. A rotated seam loses 2–3 stray pixels (dismissible as noise); a 45° one loses all 40. And axis-aligned splits are what real geometry is made of, so the catastrophic case is the common case. Written up as a warning rather than hidden. |
+| The all-important check | Not "it looks right" but **exactly-once coverage**, plus a half-open boundary of exactly 73 px | 37 + 37 − 1. When a harness assertion failed I checked which was wrong — it was my assertion ("the rule never drops a pixel"), not the code. The correct property is more informative than the one I first wrote. |
+| Scope | Barycentric coordinates **foreshadowed, not taught** | They fall out of §3.3's area reading, and the sum-to-total identity is given as a debug assertion — but normalising them and taking the consequences seriously is 2.3's whole job. |
+
+**Continuity note.** `main.cpp` was rewritten again, so `[Tab]` now cycles three demos rather than
+two. Lesson 2.1's listing of `main.cpp` remains the correct snapshot *as of 2.1* — the codebase is
+a single evolving tree and each lesson's listings are its historical record (ARCHITECTURE §1). The
+growing awkwardness of three demos in one binary is deliberate and is called out in the lesson as
+the accumulating argument for Module 5's `demos/` split.
+
+**Bug fixed along the way.** Lessons 0.1 and 0.2 carried their own standalone KaTeX loader below
+the `SHARED-SCRIPT:END` marker, so after 2.1 moved the loader *inside* the shared region they had
+two — loading KaTeX twice and running `renderMathInElement` twice over the same body. Found by the
+background task's sweep, fixed the same way as `conventions.html` and `math-toolbox.html`. All 20
+pages now carry exactly one.

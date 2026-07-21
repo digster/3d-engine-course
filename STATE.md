@@ -7,7 +7,7 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-07-21 (after Lesson 2.1 — Module 2: 1 of 12, 15 of 94 lessons)
+updated: 2026-07-21 (after Lesson 2.2 — Module 2: 2 of 12, 16 of 94 lessons)
 
 conventions:
   world: right-handed, Y-up, -Z forward
@@ -195,6 +195,38 @@ conventions:
             (swapping lround for truncation changes nothing). We ship Bresenham for
             EXACTNESS (integers are bit-identical everywhere; 1.8 showed floats are not)
             and because its error term IS 2.2's edge function. Lines are not the hot path.
+  triangles: edge_function(a,b,p) = (bx-ax)(py-ay) - (by-ay)(px-ax) = z of the 2-D
+            cross product = dot(P-A, perpendicular(B-A)). SIGN = which side (0 = exactly
+            on the line); MAGNITUDE = 2 * area of triangle ABP.
+            The three edge functions SUM to the total area, for points INSIDE AND OUTSIDE
+            — verified; a superb debug assertion, and 2.3's barycentric weights unnormalised.
+            AFFINE in the pixel, so stepping is constant: dE/dx = ay-by, dE/dy = bx-ax.
+            fill = bbox (clipped) + incremental stepping + top-left rule. MEASURED 75x
+            faster than direct full-buffer evaluation (5763 ms -> 77 ms), and pixel-identical
+            to it over 144 triangles incl. many straddling the buffer edge.
+            Inner loop writes through fb.row(y) — safe because the bbox was clipped first.
+            edge_function OVERFLOWS int32 past ~+-16000 coords. Signed overflow is UB, so
+            this is documented in the header; Module 3's clipping keeps us inside it.
+  winding-screen: "CCW = front" is an NDC statement. In the FRAMEBUFFER (+y down) the
+            viewport flip reverses it: screen-CCW has NEGATIVE signed area. MEASURED:
+            (5,0),(0,10),(10,10) -> -100; reversed -> +100. fill_triangle accepts EITHER
+            winding (measures area once, swaps two vertices if negative) so nothing
+            vanishes; culling by sign is Lesson 3.4's job, in its own space.
+            Zero area = collinear = draws nothing. That check is LOAD-BEARING: the fill
+            rule's proof needs a non-degenerate edge.
+  fill-rule: top-left. For a triangle oriented to POSITIVE area:
+            top edge = (dy == 0 && dx > 0); left edge = (dy < 0). Bias -1 on the others,
+            folded into the loop's starting value, so it costs NOTHING per pixel.
+            WHY IT WORKS WITHOUT COORDINATION: two triangles share an edge by traversing
+            it OPPOSITELY, so any rule phrased on edge direction answers oppositely.
+            VERIFIED: quad + 12-triangle fan, 0 px drawn twice, 0 interior gaps; with the
+            rule off the same quad double-draws its whole seam.
+            COVERAGE BECOMES HALF-OPEN — a lone 37x37 quad loses exactly 73 px (bottom row
+            + right column - shared corner = 37+37-1). Nothing else dropped, nothing added.
+            That is the [start, end) trade: half-open tiles, closed cannot.
+            Double-draws only hit pixels whose centres are EXACTLY on the seam, so an
+            axis-aligned or 45-degree edge fails TOTALLY (40 px on a 40 px seam) while a
+            rotated one loses 2-3 stray pixels. Common geometry is the catastrophic case.
   shaders: HLSL -> SDL_shadercross (3.0.0-preview) -> SPIR-V/DXIL/MSL  [Module 4+]
   cpp: C++20, no exceptions/RTTI in core, snake_case, private members trailing _,
        .hpp + #pragma once, [[nodiscard]], -Wall -Wextra // /W4, all warnings fixed
@@ -257,6 +289,7 @@ completed:
   - 1.8  Checkpoint: Pong
   ===> MODULE 1 COMPLETE <===
   - 2.1  Lines: DDA, then Bresenham
+  - 2.2  The Triangle: Edge Functions
 
 capabilities:
   - verified C++20 toolchain (MSVC / GCC / Clang), 64-bit
@@ -300,11 +333,21 @@ capabilities:
     a SHAPE is made of. draw_line = integer Bresenham, all 8 octants, endpoint-inclusive,
     VERIFIED pixel-identical to a reflect-in/out first-octant midpoint reference over
     1600 lines. draw_line_dda and draw_line_naive kept so the argument can be reproduced.
+  - raster: edge_function (constexpr), fill_triangle (bbox + incremental + top-left rule,
+    either winding, degenerate- and offscreen-safe), draw_triangle (wireframe)
+  - demo: [Tab] now CYCLES THREE demos. Triangles (2.2): a rotating triangle in filled /
+    wireframe / HALF-PLANE view (colour by how many of the three edge tests a pixel passes
+    — Figure 1 rendered live from the shipped code), plus a coverage COUNTER proving the
+    fill rule: an axis-aligned square split by its diagonal, green = drawn once, red =
+    twice, [R] toggles the rule (0 px -> 40 px).
+    Three demos in one binary is now visibly too many: that IS the Module 5 argument.
   - demo: rotating 32-spoke fan (crosses every octant; steep=coral, shallow=green) +
     an 8x magnified pixel inspector that reads back the REAL routine's output, algorithm
     switchable [1][2][3], live pixel count and per-fan timing. Naive lights 1483 px where
     DDA/Bresenham light 2081. Pong preserved on [Tab].
-  - known-and-deliberate: no line clipping — put_pixel discards out-of-range writes, so an
+  - known-and-deliberate: no interpolation across a triangle yet — the weights exist but
+    are thrown away (2.3 normalises them, 2.4 carries attributes);
+    no line clipping — put_pixel discards out-of-range writes, so an
     off-screen line still costs a full walk (Exercise 2.1.4; Module 3 makes clipping
     mandatory for CORRECTNESS, not speed). No anti-aliasing (Ex 2.1.5, Module 6).
     Two demos in one executable is deliberately awkward — it is the argument for Module 5's
@@ -324,6 +367,12 @@ decisions:
     Module 5 refactor. Recorded in ARCHITECTURE.md §2.1.
   - src/game/ created in 1.8, three modules before the Module 5 refactor needs it. The
     boundary costs nothing now and decides how hard that refactor is. ARCHITECTURE.md §2.1.1.
+  - fill_triangle does NOT cull by winding, deliberately. Module 2 rasterises in
+    framebuffer space where the sign is flipped relative to the NDC convention, and a
+    fill that silently dropped "backwards" triangles would be indistinguishable from a
+    bug. Culling is Lesson 3.4's, made in NDC where "CCW = front" actually means something.
+  - the fill rule's -1 bias is folded into the loop's starting value rather than tested
+    per pixel, so correctness here costs zero instructions in the inner loop.
   - src/gfx/raster.hpp forward-declares engine::framebuffer rather than including it —
     the physical-design habit from 1.8, now applied by default in gfx/.
   - draw_line stays Bresenham despite MEASURING SLOWER than DDA. Reasons recorded above
@@ -356,12 +405,14 @@ files:
   memory/: 2026-07-16.md, 2026-07-18.md
   (retired: hello.cpp)
 
-next: 2.2 — The Triangle: Edge Functions
-      (planned filename: docs/lessons/02-02-triangle-edge-functions.html — 2.1 links to it)
-      A line divides the plane; Bresenham's error term has been answering "which side?"
-      all along. Ask it for three edges at once and a point is inside iff all three agree
-      — which is a filled-shape rasterizer, and is how GPUs actually do it. Also resolves
-      2.1's loose end: edge functions come from the edge's GEOMETRY, not a traversal, so
-      the tie-breaking that makes Bresenham asymmetric becomes a FILL RULE that two
-      adjacent triangles cannot disagree about.
+next: 2.3 — Barycentric Coordinates from Signed Areas
+      (planned filename: docs/lessons/02-03-barycentric.html — 2.2 already links to it)
+      fill_triangle already computes three numbers proportional to the areas of three
+      sub-triangles, and they sum to the whole (verified in 2.2). Divide by that total and
+      they become three fractions summing to 1 — a coordinate system describing WHERE
+      inside a triangle a point is, with no reference to x or y. Nothing new is computed;
+      2.3 normalises what the inside test already produced and takes it seriously.
+      These weights then carry colour (2.4), depth (3.1), texture (3.7) and normals (3.6).
+      NOTE for 2.3: use UNBIASED edge values for interpolation — the fill rule's -1 bias
+      perturbs the weights by a fraction of a pixel. Bias is for the inside test only.
 ```

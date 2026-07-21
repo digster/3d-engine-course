@@ -1590,6 +1590,26 @@ td code { font-size: 0.82em; }
   </p>
 
   <!-- ===================================================================== -->
+  <div class="callout warn">
+    <span class="label">In the framebuffer, the sign is reversed — and that is not a contradiction</span>
+    <p>
+      "CCW = front" is a statement about <strong>NDC</strong>, where +y points up. The viewport
+      transform flips y on the way to pixels (&sect;4), and flipping one axis reverses orientation.
+      So in <strong>framebuffer coordinates a triangle that looks counter-clockwise on screen has a
+      negative signed area</strong>, by the usual cross-product formula.
+    </p>
+    <p>
+      Measured, not assumed: the vertices <code>(5,0) &rarr; (0,10) &rarr; (10,10)</code>, which
+      trace counter-clockwise on screen, give <code>&minus;100</code>; reversed they give
+      <code>+100</code>.
+    </p>
+    <p>
+      Module 2's software rasterizer therefore does <em>not</em> cull by winding —
+      <code>fill_triangle</code> accepts either and orients its test to match. Culling is a
+      decision made in a specific space for a specific reason, and Lesson 3.4 makes it there.
+    </p>
+  </div>
+
   <h2 id="units"><span class="num">8</span>Units and angles</h2>
 
   <div class="tbl-scroll">

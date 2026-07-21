@@ -54,4 +54,61 @@ void draw_line_dda(framebuffer& fb, int x0, int y0, int x1, int y1, Uint32 colou
 /// them. Never call this for real work.
 void draw_line_naive(framebuffer& fb, int x0, int y0, int x1, int y1, Uint32 colour);
 
+// ---- Triangles --------------------------------------------------------------
+
+/// Which side of the directed line A→B does P lie on?
+///
+/// This is the z component of the 2-D cross product `(B−A) × (P−A)`, and it is
+/// the single most useful number in rasterization. Two readings, both exact:
+///
+///   **Sign** — which side. Zero means P is exactly on the line.
+///   **Magnitude** — twice the area of triangle ABP.
+///
+/// The sign convention is worth stating precisely, because getting it backwards
+/// is invisible until something is culled that should not be. In **framebuffer
+/// coordinates, where +y points down**, a triangle whose vertices appear
+/// **counter-clockwise on screen** has a **negative** value here. That is not a
+/// quirk of this formula — it is the y-flip: the same vertices in a y-up space
+/// give the opposite sign. Lesson 2.11's viewport transform is where the flip
+/// formally happens, and Lesson 3.4 is where the sign starts deciding whether a
+/// face is visible. Until then `fill_triangle` accepts either winding.
+///
+/// Integer, and therefore exact — no accumulation, no rounding, identical on
+/// every machine (the argument from Lesson 2.1 §3.7, applied to a second thing).
+///
+/// **Range.** The products overflow a 32-bit int if coordinates exceed roughly
+/// ±16000. Every framebuffer in this course is far inside that; a renderer that
+/// clips before rasterising, which Module 3 builds, keeps it that way.
+[[nodiscard]] constexpr int edge_function(int ax, int ay, int bx, int by, int px, int py)
+{
+    return (bx - ax) * (py - ay) - (by - ay) * (px - ax);
+}
+
+/// Fill a triangle, given three corners in pixel coordinates.
+///
+/// A pixel is inside when it is on the same side of all three edges — three
+/// half-planes intersected, which is what a triangle *is*. Accepts either
+/// winding: the sign of the total area is measured once up front and the test
+/// is oriented to match, so a "backwards" triangle fills rather than vanishing.
+/// A degenerate triangle (three collinear points, zero area) draws nothing.
+///
+/// Boundary pixels follow the **top-left rule**, so two triangles sharing an
+/// edge cover every pixel of that edge exactly once — no cracks, no
+/// double-drawing. Lesson 2.2 §3.6 derives it, and the demo shows what happens
+/// without it. This is what fixes the asymmetry Lesson 2.1 §3.6 found in
+/// `draw_line`: a fill rule depends only on an edge's geometry, never on which
+/// direction it happens to be traversed.
+void fill_triangle(framebuffer& fb,
+                   int x0, int y0, int x1, int y1, int x2, int y2,
+                   Uint32 colour);
+
+/// The outline only — three calls to draw_line.
+///
+/// Note that this does **not** light the same pixels as the boundary of
+/// fill_triangle, and cannot: an outline wants both endpoints of every edge,
+/// while a fill wants each shared edge counted once. Two different questions.
+void draw_triangle(framebuffer& fb,
+                   int x0, int y0, int x1, int y1, int x2, int y2,
+                   Uint32 colour);
+
 } // namespace engine

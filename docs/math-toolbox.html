@@ -1185,6 +1185,62 @@ td code { font-size: 0.82em; }
   </div>
 
   <div class="tool">
+    <h3>The edge function <span class="from">Lesson 2.2</span></h3>
+    <div class="eq">
+      <span>\[ E_{AB}(\mathbf{P}) = (B_x - A_x)(P_y - A_y) - (B_y - A_y)(P_x - A_x) \]</span>
+      <span class="eq-plain">E_AB(P) = (Bx - Ax)*(Py - Ay) - (By - Ay)*(Px - Ax)</span>
+    </div>
+    <p>
+      <strong>Which side of the directed line A&rarr;B does P lie on?</strong> It is the dot
+      product of <code>P &minus; A</code> with the edge turned a quarter turn — Lesson 1.7's
+      <code>perpendicular()</code> and <code>dot()</code>, combined — and equivalently the
+      <em>z</em> component of the 2-D cross product <code>(B&minus;A) &times; (P&minus;A)</code>.
+    </p>
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>Reading</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Sign</strong></td><td>Which side. Zero means exactly on the line.</td></tr>
+          <tr><td><strong>Magnitude</strong></td><td>Twice the area of triangle <code>ABP</code>.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      <strong>Inside a triangle</strong> means all three edge functions agree in sign — the
+      intersection of three half-planes. And the three values <strong>sum to the total
+      area</strong>, for points inside <em>and</em> outside, which makes an excellent assertion:
+      if they do not sum, one edge has its vertices in the wrong order.
+    </p>
+    <div class="callout warn">
+      <span class="label">Sign depends on which way y points</span>
+      <p>
+        In a <strong>y-down framebuffer</strong>, a triangle that appears <em>counter-clockwise on
+        screen</em> has a <strong>negative</strong> signed area. In a y-up space it is positive.
+        Both describe the same triangle; the viewport transform's y-flip is what reverses it. See
+        <a href="conventions.html#ndc">Conventions &sect;4</a>.
+      </p>
+    </div>
+    <p>
+      <strong>It is affine in the pixel</strong>, so stepping is constant and needs no multiply:
+      <code>dE/dx = A<sub>y</sub> &minus; B<sub>y</sub></code> and
+      <code>dE/dy = B<sub>x</sub> &minus; A<sub>x</sub></code>. Evaluate once at a corner, then
+      add — the same technique as Lesson 2.1's error term.
+    </p>
+    <div class="worked">
+      <span class="label">Worked example</span>
+      <p>
+        <code>A = (2,2)</code>, <code>B = (10,4)</code>, <code>C = (4,10)</code>. Total:
+        <code>E<sub>AB</sub>(C) = 8&middot;8 &minus; 2&middot;2 = 60</code>, so the area is 30 and
+        the winding is clockwise on screen.
+      </p>
+      <ul>
+        <li>At <code>P = (5,5)</code>: <code>18, 24, 18</code> — all positive, so <strong>inside</strong>. Sum <code>= 60</code> &check;</li>
+        <li>At <code>Q = (9,9)</code>: <code>42, &minus;24, 42</code> — one negative, so <strong>outside</strong>. Sum still <code>= 60</code> &check;</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="tool">
     <h3>Cross product <span class="from">Lesson 3.4</span></h3>
     <div class="eq">
       <span>\[ \mathbf{a} \times \mathbf{b} = \begin{pmatrix} a_y b_z - a_z b_y \\ a_z b_x - a_x b_z \\ a_x b_y - a_y b_x \end{pmatrix} \]</span>

@@ -448,6 +448,80 @@ machine, which 1.8 established that floats cannot promise; (2) its error term *i
 function; (3) lines are not the hot path, and optimising them would be 1.5's benchmark trap again.
 Record the measurement, choose deliberately, and let the reader disagree.
 
+### Triangles and edge functions (Lesson 2.2) — verified in a scratch harness
+
+**The edge function** `E(A,B,P) = (Bx-Ax)(Py-Ay) - (By-Ay)(Px-Ax)` is
+`dot(P - A, perpendicular(B - A))` — Lesson 1.7's parts — and equivalently the z component of the
+2-D cross product. **Sign** = which side (0 = exactly on the line). **Magnitude** = twice the area
+of triangle ABP. Inside a triangle = all three agree in sign = three half-planes intersected.
+
+**The three edge functions SUM to the total area** — for points inside *and* outside. VERIFIED:
+A(2,2) B(10,4) C(4,10), total 60; at P(5,5) they are 18/24/18 (sum 60, inside); at Q(9,9) they are
+42/−24/42 (sum 60, outside). The P terms cancel algebraically, so the sum is independent of P.
+**Leave this as a debug assertion** — if the three do not sum to the area, one edge has its
+vertices in the wrong order, and you find out at the bug rather than three lessons later when a
+texture looks skewed. These are 2.3's barycentric weights before normalisation.
+
+**Sign convention, MEASURED not assumed.** In a y-down framebuffer, a triangle that appears
+**counter-clockwise on screen has NEGATIVE signed area**: `(5,0),(0,10),(10,10)` → `−100`, reversed
+→ `+100`. That does not contradict the course's `CCW = front`, which is an **NDC** statement —
+the viewport transform's y-flip reverses orientation on the way to pixels. Two true statements
+about one triangle in two spaces; knowing which space you are in is the whole skill.
+
+**So `fill_triangle` does not cull.** It measures the area once and swaps two vertices if negative,
+which flips all three edge functions at once and lets the per-pixel test be a plain `>= 0`. A fill
+that silently dropped backwards triangles would be indistinguishable from a bug. Culling is 3.4's,
+made in NDC.
+
+**Affine in the pixel**, so stepping is constant and multiply-free: `dE/dx = Ay − By`,
+`dE/dy = Bx − Ax`. Evaluate once at a bounding-box corner, then three adds per pixel. Same
+technique as 2.1's error term, for the same reason: the tracked quantity is affine in the stepped
+one.
+
+**MEASURED: bounding box + incremental stepping is 75× faster** than direct evaluation over the
+whole buffer (5763 ms → 77 ms; 200 triangles, 512×512, 400 reps, M4 Pro, clang 21, −O2) — and
+**pixel-identical** to it across 144 triangles including many straddling the buffer edge. Most of
+the win is the bounding box; the stepping tightens what is left. Clipping the *search box* is
+exact and is not clipping the *geometry* — that distinction is three lines here and a whole lesson
+in Module 3.
+
+**Clipping the box first is what licenses `fb.row(y)`** in the inner loop: every visited pixel is
+in bounds by construction, so `put_pixel`'s per-pixel check and index multiply can go.
+
+**`edge_function` overflows int32 past roughly ±16000 coordinates.** Signed overflow is UB — not a
+wrapped number but a licence for the optimiser to assume it cannot happen — so this is documented
+in the header rather than left to be found. Module 3's clipping is what keeps us inside it.
+
+**THE TOP-LEFT FILL RULE.** For a triangle oriented to positive area: a **top** edge is
+`dy == 0 && dx > 0`; a **left** edge is `dy < 0`. Bias `−1` on all others, folded into the loop's
+starting value so it costs **nothing per pixel**.
+
+Why it needs no coordination between triangles: two triangles share an edge *by traversing it in
+opposite directions*, so any rule phrased on edge direction necessarily answers oppositely for the
+two of them. Proof sketch: for a non-horizontal edge `dy` flips sign, so exactly one direction has
+`dy < 0`; for a horizontal edge `dy == 0` both ways and `dx` flips, so exactly one has `dx > 0` —
+**provided `dx ≠ 0`, which is guaranteed only because zero-area triangles were rejected up front.**
+That degeneracy check is load-bearing for the rule's correctness, not housekeeping.
+
+VERIFIED: a quad and a 12-triangle fan both give **0 px drawn twice, 0 interior gaps**; with the
+rule off the same quad double-draws its entire seam.
+
+**Coverage becomes HALF-OPEN**, and that is the intended trade. A lone 37×37 quad loses exactly
+**73 px** = bottom row (37) + right column (37) − shared corner (1). Nothing else is dropped and
+nothing is ever added. Same reasoning as `[start, end)` ranges: half-open tiles, closed cannot.
+A lone triangle therefore renders one pixel short of its wireframe on the bottom and right — not a
+bug.
+
+**Double-draws only hit pixels whose centres are EXACTLY on the seam.** So an axis-aligned or 45°
+shared edge fails *totally* (40 px of a 40 px seam) while a rotated one loses 2–3 stray pixels that
+read as noise. Since quads-split-into-triangles, terrain grids and UI rectangles are overwhelmingly
+axis-aligned, **the catastrophic case is also the common case** — the same shape as 1.8's
+tunnelling, which was unreachable at 60 Hz and certain at 10.
+
+**To see an idempotent defect, instrument the operation rather than inspecting the result.** A
+pixel drawn twice looks exactly like one drawn once, so no amount of looking finds it. Draw into a
+per-pixel *counter* and colour by the count, and the seam lights up instantly. The demo does this.
+
 ### Collision and reflection (Lesson 1.8) — all numbers verified in a scratch harness
 
 **`reflect(v, n̂) = v − 2 (v·n̂) n̂`**, derived by splitting `v` into its shadow on the normal plus

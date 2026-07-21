@@ -149,4 +149,139 @@ void draw_line(framebuffer& fb, int x0, int y0, int x1, int y1, Uint32 colour)
     // clipped for reasons of correctness rather than speed.
 }
 
+// ---- 4. Triangles: three half-planes ---------------------------------------
+
+namespace {
+
+/// Is the directed edge A→B a "top" or a "left" edge of its triangle?
+///
+/// Assumes the triangle has already been oriented so that its signed area is
+/// **positive** — which in framebuffer coordinates (+y down) means its vertices
+/// run clockwise on screen. Under that orientation:
+///
+///   - a **top** edge is horizontal and travels rightwards (`dy == 0, dx > 0`);
+///   - a **left** edge is any edge travelling upwards (`dy < 0`).
+///
+/// Both are geometric properties of the edge, which is the entire point. Two
+/// triangles that share an edge traverse it in opposite directions, so exactly
+/// one of them sees it as top-or-left and claims the pixels lying exactly on it.
+/// Neither triangle needs to know the other exists. Lesson 2.2 §3.6.
+[[nodiscard]] constexpr bool is_top_left(int ax, int ay, int bx, int by)
+{
+    const int dx = bx - ax;
+    const int dy = by - ay;
+    return (dy == 0 && dx > 0) || (dy < 0);
+}
+
+} // namespace
+
+void fill_triangle(framebuffer& fb,
+                   int x0, int y0, int x1, int y1, int x2, int y2,
+                   Uint32 colour)
+{
+    // Twice the signed area. One number that answers two questions: is this
+    // triangle degenerate, and which way round is it?
+    int area = edge_function(x0, y0, x1, y1, x2, y2);
+
+    // Three collinear points enclose nothing. Returning here is not just an
+    // optimisation — every test below would be simultaneously satisfiable only
+    // on the line itself, and the top-left rule's orientation assumption would
+    // have no meaning. A "sliver" triangle of zero area is a real thing to hit
+    // once meshes arrive, so it is handled rather than assumed away.
+    if (area == 0) { return; }
+
+    // Orient to positive area by swapping two vertices, which flips the sign of
+    // every edge function at once. Doing this once, here, is what lets the
+    // inside test below be a plain `>= 0` rather than "same sign as the area"
+    // evaluated per pixel.
+    if (area < 0)
+    {
+        std::swap(x1, x2);
+        std::swap(y1, y2);
+        area = -area;
+    }
+
+    // The bounding box, clipped to the framebuffer. Two jobs: it bounds the
+    // search (a triangle covering 1% of the screen should not cost a full-screen
+    // scan), and clipping it here means the inner loop never needs a bounds
+    // check — which is why this can write through row() instead of put_pixel.
+    const int min_x = std::max(0, std::min({x0, x1, x2}));
+    const int min_y = std::max(0, std::min({y0, y1, y2}));
+    const int max_x = std::min(fb.width() - 1, std::max({x0, x1, x2}));
+    const int max_y = std::min(fb.height() - 1, std::max({y0, y1, y2}));
+
+    if (min_x > max_x || min_y > max_y) { return; }   // entirely off-screen
+
+    // The top-left rule as an integer bias. An edge function is zero exactly on
+    // the edge, so testing `w >= 0` includes boundary pixels and `w - 1 >= 0`
+    // excludes them. Folding the -1 into the starting value costs nothing per
+    // pixel — the test stays a single comparison against zero.
+    const int bias0 = is_top_left(x1, y1, x2, y2) ? 0 : -1;   // edge opposite v0
+    const int bias1 = is_top_left(x2, y2, x0, y0) ? 0 : -1;   // edge opposite v1
+    const int bias2 = is_top_left(x0, y0, x1, y1) ? 0 : -1;   // edge opposite v2
+
+    // An edge function is *affine* in the pixel position, so its value at the
+    // next pixel differs from this one by a constant. Evaluating it once at the
+    // corner and then adding is the same trick as Lesson 2.1's error term, and
+    // it turns two multiplies per edge per pixel into one add.
+    //
+    //   E(x+1, y) - E(x, y) = -(By - Ay) = Ay - By
+    //   E(x, y+1) - E(x, y) =  (Bx - Ax)
+    const int step_x0 = y1 - y2, step_y0 = x2 - x1;
+    const int step_x1 = y2 - y0, step_y1 = x0 - x2;
+    const int step_x2 = y0 - y1, step_y2 = x1 - x0;
+
+    int row_w0 = edge_function(x1, y1, x2, y2, min_x, min_y) + bias0;
+    int row_w1 = edge_function(x2, y2, x0, y0, min_x, min_y) + bias1;
+    int row_w2 = edge_function(x0, y0, x1, y1, min_x, min_y) + bias2;
+
+    for (int y = min_y; y <= max_y; ++y)
+    {
+        int w0 = row_w0;
+        int w1 = row_w1;
+        int w2 = row_w2;
+
+        // The whole row is in bounds by construction, so this takes the
+        // documented fast path from Lesson 1.5 and skips put_pixel's per-pixel
+        // bounds check and index multiply.
+        Uint32* const row = fb.row(y);
+
+        for (int x = min_x; x <= max_x; ++x)
+        {
+            // Inside all three half-planes at once. That is the entire test,
+            // and it is the same three numbers for every pixel — only their
+            // values change.
+            //
+            // Worth knowing: `(w0 | w1 | w2) >= 0` is exactly equivalent and
+            // costs one comparison instead of three. A negative int has its top
+            // bit set, OR keeps any bit that any operand has, so the result is
+            // negative precisely when some input was. C++20 guarantees signed
+            // integers are two's complement, which is what makes that a
+            // portable claim rather than a lucky one. Written the long way here
+            // because you should be able to read this line without knowing that.
+            if (w0 >= 0 && w1 >= 0 && w2 >= 0)
+            {
+                row[x] = colour;
+            }
+
+            w0 += step_x0;
+            w1 += step_x1;
+            w2 += step_x2;
+        }
+
+        row_w0 += step_y0;
+        row_w1 += step_y1;
+        row_w2 += step_y2;
+    }
+}
+
+void draw_triangle(framebuffer& fb,
+                   int x0, int y0, int x1, int y1, int x2, int y2,
+                   Uint32 colour)
+{
+    draw_line(fb, x0, y0, x1, y1, colour);
+    draw_line(fb, x1, y1, x2, y2, colour);
+    draw_line(fb, x2, y2, x0, y0, colour);
+}
+
 } // namespace engine

@@ -67,7 +67,7 @@ inventing one — but without paying framework ceremony before it buys anything.
 │   │   ├── framebuffer.hpp # CPU pixel buffer, ARGB8888, row-major   [EXISTS from 1.5]
 │   │   ├── framebuffer.cpp
 │   │   ├── raster.hpp      # which pixels a SHAPE is made of         [EXISTS from 2.1]
-│   │   └── raster.cpp      # lines now; triangles from 2.2
+│   │   └── raster.cpp      # lines (2.1) + triangles (2.2)
 │   ├── game/               # NOT engine — game code, see §2.1.1        [EXISTS from 1.8]
 │   │   ├── pong.hpp        # the Module 1 checkpoint game
 │   │   └── pong.cpp
@@ -222,6 +222,27 @@ routine belongs in `raster` if it decides *which* pixels, and in `framebuffer` i
 
 `raster.hpp` forward-declares `engine::framebuffer` rather than including it — every function
 takes it by reference and none needs its layout (see §2.1.1 for why this matters).
+
+**Triangles, as of Lesson 2.2.** `fill_triangle` is the shape of every rasterizer that follows,
+so its structure is worth stating: measure the signed area once (which also detects degeneracy),
+orient the winding, clip a bounding box, fold the fill rule into the loop's starting values, then
+step three affine edge functions with three adds per pixel. Measured **75× faster** than
+evaluating the edge functions directly over the whole buffer.
+
+Two decisions there are load-bearing rather than incidental:
+
+- **It does not cull by winding.** Module 2 rasterises in framebuffer space, where the viewport
+  y-flip reverses the sign relative to the `CCW = front` convention. A fill that silently dropped
+  "backwards" triangles would be indistinguishable from a bug, so it accepts either and orients
+  its test to match. Culling is Lesson 3.4's, made in NDC where the convention means something.
+- **The zero-area check is not housekeeping.** The fill rule's correctness proof requires a
+  non-degenerate edge, so rejecting collinear triangles up front is what makes exactly-once
+  coverage true rather than usually-true.
+
+`edge_function` is `constexpr` in the header for the same reason `vec2` is header-only: three
+arithmetic operations that every caller wants inlined. Its documented limit — coordinates within
+about ±16000 before the products overflow `int32` — is a real constraint, not a formality, because
+signed overflow is UB and Module 3's clipping is what keeps us inside it.
 
 Three line routines exist and only one is meant to be called. `draw_line_naive` and
 `draw_line_dda` are kept because Lesson 2.1 is an *argument*, and the demo switches between them
