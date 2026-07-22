@@ -267,6 +267,31 @@ Two consequences worth stating because they will govern `mat3` and `mat4` in Les
   `framebuffer::put_pixel` — the rule is *check where the input can actually be wrong*, and a 2×2's
   indices are literals at every call site.
 
+**Homogeneous coordinates, as of Lesson 2.7.** The fourth component of a `vec4` is not padding: it
+records **what kind of thing the vector is**. `w = 1` marks a position, so a transform's translation
+column is added in full; `w = 0` marks a direction, so it is skipped. That is one number doing the
+work a type system would otherwise need two types for, and the engine makes the choice visible at
+every call site with `point()` and `direction()` rather than a bare `to_vec4(v, 1.0f)`.
+
+Two consequences run through everything built after this point:
+
+- **Every transform before the projection is affine** — a bottom row of `(0, 0, 0, 1)`. That is what
+  makes `w_out = w_in`, exactly, and the property is closed under composition, so a chain of any
+  depth still returns positions as positions. `affine()` and `translation()` exist so matrices are
+  built rather than filled in, which is what keeps the invariant true.
+- **`xyz()` drops `w` rather than dividing by it**, deliberately. Correct while everything is
+  affine; wrong the moment a projection joins the chain. The perspective divide belongs to
+  Lesson 2.10 under its own name rather than hiding inside an accessor — and a bug caused by a
+  silent divide is far harder to find than one caused by a missing, named step.
+
+The design decision worth recording is what we did *not* do. Distinct `position` and `direction`
+types would make the "transform a normal as a position" bug a compile error, and some engines take
+that route. We use named constructors instead: the type-safe version roughly doubles the maths
+library's surface (every operation must state which combinations it accepts), and the distinction
+has to collapse at the GPU boundary regardless, where a shader receives four floats and no types.
+This is a genuine trade rather than an obvious call, and Lesson 2.7's Exercise 2.7.5 argues the
+other side.
+
 **The maths library in three dimensions, as of Lesson 2.6.** `vec3`, `vec4`, `mat3` and `mat4`
 join the header-only `src/math/`, and the notable thing is how little had to be decided. Lesson
 2.5's derivations never counted the axes, so every rule carried over and the new types are the

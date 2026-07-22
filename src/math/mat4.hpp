@@ -1,21 +1,20 @@
-// src/math/mat4.hpp — a 3x3 in the corner, and one column that does nothing yet.
-//
-// Read the header of this file before the code, because the code is going to
-// look anticlimactic and that is deliberate.
+// src/math/mat4.hpp — a 3x3 in the corner, and a fourth column that now works.
 //
 // Lesson 2.5 proved that no matrix can translate: every linear transformation
-// sends the origin to the origin, and a translation does not. Lesson 2.6 builds
-// mat3 and finds the same hole for the same reason. So we make the matrix bigger.
+// sends the origin to the origin. Lesson 2.6 built this file, put a translation
+// in the fourth column, and watched it do absolutely nothing.
 //
-// It does not help. Not yet. A 4x4 applied to a 4-vector is exactly a 3x3 applied
-// to the first three components, PLUS the fourth column scaled by the fourth
-// component — and with nothing sensible to put in that fourth component, the
-// column contributes zero and the 4x4 is a 3x3 in a larger coat.
+// Lesson 2.7 fixed that, and it is worth being precise about HOW, because the
+// answer is not what people expect: **not one line of arithmetic in this file
+// changed.** `operator*` below is byte for byte the function Lesson 2.6 wrote.
+// What changed is the fourth component of the vectors handed to it.
 //
-// That is the honest state of affairs at the end of Lesson 2.6, and this file
-// says so rather than quietly doing something clever. Lesson 2.7 works out what
-// the fourth component should be and why, and at that moment every line here
-// becomes useful without changing.
+//     w = 1   a POSITION  -> the fourth column is added in full  -> it translates
+//     w = 0   a DIRECTION -> the fourth column is multiplied by 0 -> it does not
+//
+// Both are correct, and neither is a special case: translation should move a
+// position and should not move a direction, and one number in the input selects
+// between them. Lesson 2.7 §3.2.
 
 #pragma once
 
@@ -57,9 +56,12 @@ struct mat4
 /// Put a 3x3 in the top-left corner and leave the rest as the identity.
 ///
 /// The three original columns gain a fourth component of 0, and a fourth column
-/// arrives as `(0, 0, 0, 1)`. Both of those choices are the only ones that make
-/// this a faithful embedding — anything else would change what the matrix does to
-/// the first three components — and neither of them is yet doing any work.
+/// arrives as `(0, 0, 0, 1)`. Both are forced: any other fourth component on the
+/// first three columns would corrupt `w` as a side effect of rotating, and any
+/// other fourth column would translate when we asked only to rotate.
+///
+/// That bottom row of `(0, 0, 0, 1)` is what makes `w` survive the trip — see
+/// `affine()` below, and Lesson 2.7 §3.3.
 [[nodiscard]] constexpr mat4 to_mat4(const mat3& m)
 {
     return {to_vec4(m.c0, 0.0f),
@@ -72,15 +74,19 @@ struct mat4
 
 /// Transform a vector: the same recipe, one term wider again.
 ///
-/// Look carefully at the last term. `c3` is multiplied by `v.w` — so if `v.w` is
-/// zero, the fourth column contributes **nothing at all**, whatever is in it. You
-/// can write any translation you like into `c3` and this function will ignore it.
+/// Look carefully at the last term. `c3` is multiplied by `v.w`, and that single
+/// multiplication is the whole of homogeneous coordinates:
 ///
-/// That is not a bug and it is not a limitation of the implementation. It is the
-/// arithmetic being honest: a matrix multiplies things, and to *add* a constant it
-/// would need a component of the input that is always the same number. Lesson 2.6
-/// §3.6 demonstrates the failure; Lesson 2.7 is where the fourth component stops
-/// being a passenger.
+///   - a **position** carries `w = 1`, so `c3 * 1` adds the fourth column in
+///     full — which is exactly "add a constant offset", i.e. a translation;
+///   - a **direction** carries `w = 0`, so `c3 * 0` contributes nothing and the
+///     direction is rotated and scaled but never moved.
+///
+/// One function, no branch, no special case. The type of the thing being
+/// transformed is carried *in the thing itself*, and the arithmetic reads it.
+///
+/// **This function is unchanged since Lesson 2.6.** It was always correct; what
+/// was missing was a reason for `w` to be anything in particular.
 [[nodiscard]] constexpr vec4 operator*(const mat4& m, vec4 v)
 {
     return m.c0 * v.x + m.c1 * v.y + m.c2 * v.z + m.c3 * v.w;
@@ -100,6 +106,51 @@ struct mat4
     return a.c0 == b.c0 && a.c1 == b.c1 && a.c2 == b.c2 && a.c3 == b.c3;
 }
 [[nodiscard]] constexpr bool operator!=(const mat4& a, const mat4& b) { return !(a == b); }
+
+// ---- Affine transformations ------------------------------------------------------
+
+/// Move everything by `t`. The transformation Lessons 2.5 and 2.6 could not express.
+///
+/// The linear part is the identity — nothing is rotated or scaled — and the offset
+/// sits in the fourth column, where it is multiplied by `w`. Applied to a position
+/// it adds `t`; applied to a direction it does nothing at all.
+[[nodiscard]] constexpr mat4 translation(vec3 t)
+{
+    return {{1.0f, 0.0f, 0.0f, 0.0f},
+            {0.0f, 1.0f, 0.0f, 0.0f},
+            {0.0f, 0.0f, 1.0f, 0.0f},
+            to_vec4(t, 1.0f)};
+}
+
+/// A linear transformation followed by a translation — a full **affine** transform.
+///
+/// This is the shape of essentially every transform in a scene: rotate and scale
+/// the model, then put it where it belongs. Building it as
+/// `translation(t) * to_mat4(linear)` gives the same answer; this spells it out so
+/// the structure is visible, and so nobody has to remember which order those two
+/// go in.
+///
+/// **The bottom row stays `(0, 0, 0, 1)`, and that is load-bearing.** It is what
+/// makes the transformed `w` equal the original `w` — the last component of the
+/// result is `0*x + 0*y + 0*z + 1*w`. So a position comes out as a position, a
+/// direction comes out as a direction, and this survives any amount of composing:
+/// multiply two matrices with that bottom row and the product has it too.
+/// Lesson 2.7 §3.3 proves it; a matrix that breaks it is a projection, and that is
+/// Lesson 2.10.
+[[nodiscard]] constexpr mat4 affine(const mat3& linear, vec3 t)
+{
+    return {to_vec4(linear.c0, 0.0f),
+            to_vec4(linear.c1, 0.0f),
+            to_vec4(linear.c2, 0.0f),
+            to_vec4(t, 1.0f)};
+}
+
+/// The offset an affine transform applies — i.e. where it sends the origin.
+///
+/// Reading it back out is a one-liner because it is simply the fourth column, and
+/// it is worth having a name for: "where does this transform put the origin" is
+/// the question you ask when a scene graph has gone wrong.
+[[nodiscard]] constexpr vec3 translation_of(const mat4& m) { return xyz(m.c3); }
 
 // There is deliberately no `determinant` or `inverse` here.
 //

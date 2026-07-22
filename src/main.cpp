@@ -678,7 +678,7 @@ enum class spin
 }
 
 constexpr engine::vec2 k_cube_origin{96.0f, 92.0f};
-constexpr float k_cube_unit = 46.0f;   ///< framebuffer pixels per unit
+constexpr float k_cube_unit = 30.0f;   ///< framebuffer pixels per unit
 
 /// 3-D maths space -> framebuffer pixels, by **dropping z**.
 ///
@@ -727,10 +727,19 @@ constexpr int k_cube_e[12][2] = {
 /// wireframe cube is a genuinely ambiguous picture: your eye flips between two
 /// interpretations, because orthographic projection has discarded the only
 /// information that could settle it.
-void draw_cube(engine::framebuffer& fb, const engine::mat3& m, engine::vec3 offset)
+/// @param point_w  the fourth component the corners are sent with. 1 is correct;
+///                  0 reproduces Lesson 2.6, where every translation is ignored.
+void draw_cube(engine::framebuffer& fb, const engine::mat4& m, float point_w)
 {
     engine::vec3 p[8];
-    for (int i = 0; i < 8; ++i) { p[i] = m * k_cube_v[i] + offset; }
+    for (int i = 0; i < 8; ++i)
+    {
+        // The one line this whole lesson is about. A corner is a POSITION, so it
+        // goes through as w = 1 and the matrix's fourth column — the translation —
+        // is added in full. Send it as w = 0 and the corner is still rotated and
+        // scaled correctly, but never moved: Lesson 2.6's cube, back again.
+        p[i] = engine::xyz(m * engine::to_vec4(k_cube_v[i], point_w));
+    }
 
     for (const auto& e : k_cube_e)
     {
@@ -745,16 +754,26 @@ void draw_cube(engine::framebuffer& fb, const engine::mat3& m, engine::vec3 offs
 ///
 /// Exactly Lesson 2.5's picture with a third arrow: the columns of the matrix,
 /// drawn. Whatever the cube is doing, these three arrows are why.
-void draw_axes3(engine::framebuffer& fb, const engine::mat3& m, engine::vec3 offset)
+/// @param dir_w  the fourth component the AXES are sent with. 0 is correct — they
+///               are directions. 1 translates them, which is the classic
+///               transform-a-normal-as-a-point bug, drawn.
+void draw_axes3(engine::framebuffer& fb, const engine::mat4& m, float point_w, float dir_w)
 {
     const Uint32 col[3] = {engine::pack_argb(236, 92, 92),     // x
                            engine::pack_argb(122, 196, 152),   // y
                            engine::pack_argb(126, 162, 236)};  // z
-    const engine::vec3 c[3] = {m.c0, m.c1, m.c2};
+    const engine::vec3 basis[3] = {{1.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}};
+
+    // Where the object actually is. A position, so w = 1.
+    const engine::vec3 origin = engine::xyz(m * engine::to_vec4(engine::vec3{}, point_w));
 
     for (int i = 0; i < 3; ++i)
     {
-        const engine::vec3 tip = c[i] * 0.9f + offset;
+        // …and the arrows are DIRECTIONS, so w = 0. They must be rotated by the
+        // matrix and not moved by it — we place them ourselves, at the object.
+        const engine::vec3 d = engine::xyz(m * engine::to_vec4(basis[i], dir_w));
+        const engine::vec3 tip = origin + d * 0.75f;
+        const engine::vec3 offset = origin;
         line3(fb, offset, tip, col[i]);
 
         // A small head, built by rotating the arrow's own direction — the same
@@ -1081,7 +1100,7 @@ int main(int argc, char* argv[])
             SDL_VERSIONNUM_MINOR(sdl_version),
             SDL_VERSIONNUM_MICRO(sdl_version));
 
-    SDL_Window* window = SDL_CreateWindow("3-D: mat3 and mat4 — Module 2", 1280, 720,
+    SDL_Window* window = SDL_CreateWindow("Homogeneous Coordinates — Module 2", 1280, 720,
                                           SDL_WINDOW_RESIZABLE);
     if (window == nullptr)
     {
@@ -1133,9 +1152,11 @@ int main(int argc, char* argv[])
     spin cube_mode = spin::tumble_xy;   ///< Lesson 2.6
     float cube_t = 0.6f;
     bool cube_animating = true;
-    bool cube_try_translate = false;    ///< stuff a translation into the 4x4's c3
+    float cube_point_w = 1.0f;          ///< 1 = positions (correct); 0 = Lesson 2.6
+    float cube_dir_w = 0.0f;            ///< 0 = directions (correct); 1 = the normal bug
     engine::mat3 cube_m;
-    engine::vec3 cube_moved_by;         ///< what the fourth column actually achieved
+    engine::vec3 cube_centre_a;         ///< where each cube actually ended up
+    engine::vec3 cube_centre_b;
     xform basis_mode = xform::rotate;   ///< Lesson 2.5
     float basis_t = 0.6f;               ///< the one parameter every mode reads
     bool basis_animating = false;
@@ -1171,8 +1192,8 @@ int main(int argc, char* argv[])
     SDL_Log("  [4]/[5] follow the mouse: the three sub-triangles ARE the three weights. [R] fill rule.");
     SDL_Log("  [6] Gouraud (three corner colours) [7] uv checker — [M] switches blend space");
     SDL_Log("Basis (2.5): [Z] transform  [,] [.] adjust  [0] reset  [Space] animate");
-    SDL_Log("Cube (2.6): [Z] rotation  [,] [.] adjust  [Space] spin  [T] try translating via the 4x4");
-    SDL_Log("[Tab] cycles demos: cube (2.6) -> basis (2.5) -> triangles -> lines -> Pong");
+    SDL_Log("Scene (2.7): [Z] rotation  [,] [.] adjust  [Space] spin  [W] corner w  [N] axis w");
+    SDL_Log("[Tab] cycles demos: scene (2.6-2.7) -> basis (2.5) -> triangles -> lines -> Pong");
     SDL_Log("[V] vsync · [T] throttle · [Esc] quit");
 
     bool running = true;
@@ -1209,7 +1230,7 @@ int main(int argc, char* argv[])
         {
             which = next_demo(which);
             SDL_SetWindowTitle(window,
-                which == demo::cube      ? "3-D: mat3 and mat4 — Module 2"
+                which == demo::cube      ? "Homogeneous Coordinates — Module 2"
               : which == demo::basis     ? "Basis Transforms — Module 2"
               : which == demo::triangles ? "Triangles — Module 2"
               : which == demo::lines     ? "Lines — Module 2"
@@ -1233,7 +1254,8 @@ int main(int argc, char* argv[])
             if (in.key_pressed(SDL_SCANCODE_Z)) { cube_mode = next_spin(cube_mode); }
             if (in.key_pressed(SDL_SCANCODE_SPACE)) { cube_animating = !cube_animating; }
             if (in.key_pressed(SDL_SCANCODE_0)) { cube_t = 0.0f; }
-            if (in.key_pressed(SDL_SCANCODE_T)) { cube_try_translate = !cube_try_translate; }
+            if (in.key_pressed(SDL_SCANCODE_W)) { cube_point_w = (cube_point_w == 1.0f) ? 0.0f : 1.0f; }
+            if (in.key_pressed(SDL_SCANCODE_N)) { cube_dir_w = (cube_dir_w == 0.0f) ? 1.0f : 0.0f; }
 
             while (stepper.next_step())
             {
@@ -1244,23 +1266,37 @@ int main(int argc, char* argv[])
 
             cube_m = build_spin(cube_mode, cube_t);
 
-            // The demonstration this lesson is built around. Embed the rotation in
-            // a 4x4, write a translation into the fourth column — the place a
-            // translation obviously belongs — and see what it does. Our vectors
-            // carry w = 0, so the fourth column is multiplied by zero and the
-            // answer is: nothing. The offset below is MEASURED from the result
-            // rather than assumed, so the HUD cannot lie about it.
-            engine::mat4 m4 = engine::to_mat4(cube_m);
-            if (cube_try_translate) { m4.c3 = engine::vec4{1.2f, 0.0f, 0.0f, 1.0f}; }
+            // Two cubes, same rotation, same offset — composed in opposite orders.
+            // This is Lesson 2.5 §3.6's "order matters" with a translation finally
+            // in play, and it is also Exercise 2.5.3 answered: putting the
+            // translation on the LEFT rotates the cube about its own centre and
+            // then places it, so it spins where it stands.
+            const engine::vec3 place{1.7f, 0.0f, 0.0f};
+            const engine::mat4 R = engine::to_mat4(cube_m);
 
-            const engine::vec3 probe{0.5f, 0.5f, 0.5f};
-            const engine::vec3 via_mat3 = cube_m * probe;
-            const engine::vec3 via_mat4 = engine::xyz(m4 * engine::to_vec4(probe, 0.0f));
-            cube_moved_by = via_mat4 - via_mat3;
+            const engine::mat4 spins_in_place = engine::translation(-place) * R;
+            const engine::mat4 orbits_origin  = R * engine::translation(place);
+
+            // Read the world centres back out rather than assuming them, so the
+            // HUD reports what was drawn. With w = 0 both collapse to the origin,
+            // which is exactly Lesson 2.6's behaviour returning.
+            cube_centre_a = engine::xyz(spins_in_place
+                                      * engine::to_vec4(engine::vec3{}, cube_point_w));
+            cube_centre_b = engine::xyz(orbits_origin
+                                      * engine::to_vec4(engine::vec3{}, cube_point_w));
 
             fb.clear(k_bg);
-            draw_cube(fb, cube_m, cube_moved_by);
-            draw_axes3(fb, cube_m, cube_moved_by);
+
+            // A marker at the world origin, so "spins in place" and "orbits the
+            // origin" are distinguishable in a still frame rather than only in
+            // motion.
+            line3(fb, {-0.22f, 0.0f, 0.0f}, {0.22f, 0.0f, 0.0f}, engine::pack_argb(90, 94, 118));
+            line3(fb, {0.0f, -0.22f, 0.0f}, {0.0f, 0.22f, 0.0f}, engine::pack_argb(90, 94, 118));
+
+            draw_cube(fb, spins_in_place, cube_point_w);
+            draw_axes3(fb, spins_in_place, cube_point_w, cube_dir_w);
+            draw_cube(fb, orbits_origin, cube_point_w);
+            draw_axes3(fb, orbits_origin, cube_point_w, cube_dir_w);
         }
         else if (which == demo::basis)
         {
@@ -1478,7 +1514,7 @@ int main(int argc, char* argv[])
 
             SDL_SetRenderDrawColor(renderer, 210, 212, 220, 255);
             SDL_RenderDebugTextFormat(renderer, 6.0f, 6.0f,
-                                      "CUBE (3-D)   %-28s  t = %+.2f",
+                                      "SCENE (3-D affine)   %-28s  t = %+.2f",
                                       name_of(cube_mode), static_cast<double>(cube_t));
 
             SDL_RenderDebugText(renderer, 380.0f, 40.0f, "the mat3, as written:");
@@ -1498,25 +1534,33 @@ int main(int argc, char* argv[])
             SDL_RenderDebugText(renderer, 380.0f, 150.0f, "the three columns, drawn.");
 
             // The lesson's punchline, on screen and measured.
-            SDL_SetRenderDrawColor(renderer, cube_try_translate ? 236 : 150,
-                                             cube_try_translate ? 92 : 152,
-                                             cube_try_translate ? 92 : 170, 255);
+            SDL_SetRenderDrawColor(renderer, cube_point_w == 1.0f ? 122 : 236,
+                                             cube_point_w == 1.0f ? 196 : 92,
+                                             cube_point_w == 1.0f ? 152 : 92, 255);
             SDL_RenderDebugTextFormat(renderer, 380.0f, 178.0f,
-                                      "[T] 4x4 c3 = (1.2, 0, 0): %s", cube_try_translate ? "SET" : "off");
+                                      "[W] corner w = %.0f  %s", static_cast<double>(cube_point_w),
+                                      cube_point_w == 1.0f ? "(positions)" : "(Lesson 2.6!)");
             SDL_RenderDebugTextFormat(renderer, 380.0f, 192.0f,
-                                      "cube actually moved by %.2f px",
-                                      static_cast<double>(engine::length(cube_moved_by)) * 46.0);
-            if (cube_try_translate)
+                                      "  cube A centre x = %+.2f", static_cast<double>(cube_centre_a.x));
+            SDL_RenderDebugTextFormat(renderer, 380.0f, 206.0f,
+                                      "  cube B centre x = %+.2f", static_cast<double>(cube_centre_b.x));
+            if (cube_point_w == 0.0f)
             {
-                SDL_RenderDebugText(renderer, 380.0f, 212.0f, "a translation is sitting in");
-                SDL_RenderDebugText(renderer, 380.0f, 226.0f, "the matrix doing nothing.");
-                SDL_RenderDebugText(renderer, 380.0f, 240.0f, "our w is 0, so column 3 is");
-                SDL_RenderDebugText(renderer, 380.0f, 254.0f, "multiplied by 0.  -> 2.7");
+                SDL_RenderDebugText(renderer, 380.0f, 224.0f, "both translations ignored;");
+                SDL_RenderDebugText(renderer, 380.0f, 238.0f, "the cubes collapse onto");
+                SDL_RenderDebugText(renderer, 380.0f, 252.0f, "each other at the origin.");
             }
+
+            SDL_SetRenderDrawColor(renderer, cube_dir_w == 0.0f ? 150 : 236,
+                                             cube_dir_w == 0.0f ? 152 : 92,
+                                             cube_dir_w == 0.0f ? 170 : 92, 255);
+            SDL_RenderDebugTextFormat(renderer, 380.0f, 276.0f,
+                                      "[N] axis w = %.0f  %s", static_cast<double>(cube_dir_w),
+                                      cube_dir_w == 0.0f ? "(directions)" : "(translated!)");
 
             SDL_SetRenderDrawColor(renderer, 210, 212, 220, 255);
             SDL_RenderDebugText(renderer, 6.0f, 328.0f,
-                                "[Z] rotation  [,] [.] adjust  [0] reset  [Space] spin  [T] translate  [Tab] demo");
+                                "[Z] rotation  [,] [.] adjust  [Space] spin  [W] corner w  [N] axis w  [Tab] demo");
         }
         else if (which == demo::basis)
         {

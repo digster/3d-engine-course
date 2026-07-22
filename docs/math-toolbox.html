@@ -1586,6 +1586,86 @@ td code { font-size: 0.82em; }
   </div>
 
   <div class="tool">
+    <h3>Homogeneous coordinates: what w means <span class="from">Lesson 2.7</span></h3>
+    <div class="eq">
+      <span>\[ M\mathbf{v} = \mathbf{c_0}x + \mathbf{c_1}y + \mathbf{c_2}z + \mathbf{c_3}w \]</span>
+      <span class="eq-plain">M*v = c0*x + c1*y + c2*z + c3*w, where c3 is the translation and w decides whether it applies</span>
+    </div>
+    <p>
+      <strong><code>w</code> says what kind of thing this is.</strong> The fourth column holds the
+      translation and is multiplied by <code>w</code>, so:
+    </p>
+    <ul>
+      <li><code>w = 1</code> — a <strong>position</strong>. The translation is added in full.</li>
+      <li><code>w = 0</code> — a <strong>direction</strong>. The translation is skipped entirely,
+        which is <em>correct</em>: moving the world does not change which way is north.</li>
+    </ul>
+    <p>
+      1 is not a convention. It is the multiplier that applies the offset exactly once — measured,
+      <code>w</code> of 0 / 0.5 / 1 / 2 applies none / half / one / two of it. And this is why no
+      purely linear map could translate: it had no input component that was always the same number.
+    </p>
+    <div class="callout warn">
+      <span class="label">Directions must carry 0 — the error scales with distance</span>
+      <p>
+        A normal or velocity sent as a position has the translation added to it, so
+        <strong>the error equals the translation</strong>: measured at 10.77, then 107.70, then
+        1077.03 as the object moves ×1, ×10, ×100 from the origin. Invisible in a test scene at the
+        origin, ruinous in a large level — the worst possible detection profile.
+      </p>
+      <p>
+        Cheapest test: a unit direction through a rotation must come back <strong>unit
+        length</strong>. If it comes back with the magnitude of your translation, this is the bug.
+      </p>
+    </div>
+    <div class="callout note">
+      <span class="label">The bottom row <code>(0,0,0,1)</code> is load-bearing</span>
+      <p>
+        It makes <code>w_out = 0x + 0y + 0z + 1w = w</code>, so a position stays a position and a
+        direction stays a direction — exactly, not approximately. And the product of two matrices
+        with that bottom row has it too, so the guarantee survives any depth of composition
+        (verified exactly after 40 compositions). Such a matrix is called <strong>affine</strong>:
+        linear plus a translation.
+      </p>
+    </div>
+    <p>
+      <strong>The payoff.</strong> Ordinary matrix multiplication now produces the affine
+      composition rule by itself:
+    </p>
+    <div class="eq">
+      <span>\[ \text{affine}(A, t_a)\cdot\text{affine}(B, t_b) = \text{affine}(AB,\ At_b + t_a) \]</span>
+      <span class="eq-plain">affine(A,ta) * affine(B,tb) = affine(A*B, A*tb + ta)</span>
+    </div>
+    <p>
+      So rotation about any pivot is a <em>single matrix</em>:
+      <code>T(c) · R · T(−c)</code> — bring the pivot to the origin, rotate, put it back. Verified:
+      the pivot is a fixed point and distances from it are preserved.
+    </p>
+    <p>
+      <strong>Why "homogeneous".</strong> To read a position out of a 4-vector you divide by
+      <code>w</code>, so <code>(2,4,6,2)</code> denotes the same point as <code>(1,2,3,1)</code> —
+      the representation is defined only up to overall scale. With <code>w = 1</code> the divide is
+      invisible. A direction has <code>w = 0</code>, so its position is undefined: classically, a
+      point at infinity.
+    </p>
+    <div class="callout warn">
+      <span class="label">When <code>w</code> is neither 0 nor 1 — the door to perspective</span>
+      <p>
+        Break the bottom row and <code>w</code> becomes a function of the input. With
+        <code>(0,0,−1,0)</code> it becomes <code>−z</code>, the distance in front of the camera, and
+        <code>x/w</code> then shrinks with distance: measured 1.0, 0.5, 0.2, 0.1 at
+        <code>z = −1, −2, −5, −10</code>. <strong>That is perspective</strong>, and dividing by
+        <code>w</code> is the <em>perspective divide</em> (Lesson 2.10).
+      </p>
+      <p>
+        Its two failure cases are why clipping exists (Lesson 3.3): at <code>z = 0</code> the divide
+        is undefined, and behind the camera <code>w</code> goes negative and geometry appears
+        mirrored on screen.
+      </p>
+    </div>
+  </div>
+
+  <div class="tool">
     <h3>Determinant <span class="from">Lesson 2.5</span></h3>
     <div class="eq">
       <span>\[ \det M = c_{0x}c_{1y} - c_{1x}c_{0y} \]</span>

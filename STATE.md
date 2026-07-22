@@ -7,7 +7,7 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-07-25 (after Lesson 2.6 — Module 2: 6 of 12, 20 of 94 lessons)
+updated: 2026-07-26 (after Lesson 2.7 — Module 2: 7 of 12, 21 of 94 lessons)
 
 conventions:
   world: right-handed, Y-up, -Z forward
@@ -29,6 +29,43 @@ conventions:
         A*B means B FIRST. Forced by (A*B)v == A(Bv), not a convention to look
         up. Row-vector codebases (v' = v*M) read the other way; mixing the two
         gives code that is transposed AND backwards.
+  homogeneous: w SAYS WHAT KIND OF THING THIS IS.
+        w = 1  a POSITION  -> the translation column is added in full
+        w = 0  a DIRECTION -> the translation column is multiplied by 0
+        NOT a flag and NOT arbitrary: w is the MULTIPLIER ON THE TRANSLATION
+        COLUMN, so 1 is the value that applies t exactly once. MEASURED: w of
+        0 / 0.5 / 1 / 2 applies none / half / one / two of the offset. This is
+        also WHY no purely linear map could translate — it had no input component
+        that was always the same number.
+        DIRECTIONS MUST CARRY 0. Sent as a position, a direction has the
+        translation added, so THE ERROR EQUALS THE TRANSLATION and scales with
+        distance from the origin: measured 10.77 / 107.70 / 1077.03 at x1 / x10 /
+        x100. Invisible at the origin, ruinous far away — the worst possible
+        detection profile. CHEAPEST TEST: a unit direction through a rotation must
+        come back UNIT LENGTH (1.00, not 10.82).
+        THE BOTTOM ROW (0,0,0,1) IS LOAD-BEARING. w_out = 0x+0y+0z+1w = w, so a
+        position stays a position EXACTLY. The product of two matrices with that
+        bottom row has it too, so the guarantee survives ANY depth of composition.
+        VERIFIED: after 40 affine compositions the bottom row is EXACTLY
+        (0,0,0,1) and w returns exactly 1.0 / 0.0. Such a matrix is AFFINE.
+        THE PAYOFF: affine(A,ta) * affine(B,tb) == affine(A*B, A*tb + ta),
+        verified. Exercise 2.5.3's hand-carried bookkeeping is ABSORBED into
+        ordinary matrix multiply. Rotation about any pivot is now ONE matrix:
+        T(c) * R * T(-c) — pivot fixed, distances preserved, both verified.
+        "HOMOGENEOUS" = the representation is defined only up to overall scale,
+        because you DIVIDE BY w to read a position out: (2,4,6,2) is the same
+        point as (1,2,3,1). With w = 1 the divide is invisible, which is why
+        xyz() DROPS w rather than dividing — deliberately, so 2.10 introduces the
+        perspective divide under its own name instead of it turning out to have
+        been hiding inside an accessor.
+        A direction has w = 0 so its position is undefined — a point at infinity.
+        W CAN BE NEITHER 0 NOR 1. Bottom row (0,0,-1,0) gives w_out = -z = the
+        distance in front of the camera, and x/w then SHRINKS WITH DISTANCE:
+        measured 1.0, 0.5, 0.2, 0.1 at z = -1, -2, -5, -10. THAT IS PERSPECTIVE.
+        2.10 derives it from similar triangles — do not derive it early. Its two
+        failure cases (z = 0 -> w = 0, undefined; z > 0 -> w negative and geometry
+        from BEHIND the camera appears mirrored on screen) are why CLIPPING exists
+        and are Lesson 3.3's. Clipping is not an optimisation.
   winding: CCW = front, cull back (per-pipeline state; set explicitly every time)
   units: 1 unit = 1 metre; radians internally; linear colour in the renderer
   axis colours: x/y/z = red/green/blue (every diagram, no exceptions)
@@ -449,6 +486,7 @@ completed:
   - 2.4  Interpolating Attributes Across a Triangle
   - 2.5  Matrices as Basis Transforms
   - 2.6  Building mat4 by Hand
+  - 2.7  Homogeneous Coordinates and What w Really Means
 
 capabilities:
   - verified C++20 toolchain (MSVC / GCC / Clang), 64-bit
@@ -480,6 +518,14 @@ capabilities:
     switches with [M]
   - maths: src/math/vec2.hpp (header-only) — arithmetic, length/length_squared,
     normalised(+_or), dot, perpendicular, project_onto, reflect, lerp, distance
+  - maths 2.7: vec4 gains point(v) [w=1] and direction(v) [w=0] as NAMED
+    CONSTRUCTORS — prefer them over to_vec4 everywhere; a literal 1.0f is a magic
+    number and magic numbers get changed by whoever is making something compile.
+    mat4 gains translation(t), affine(linear, t), translation_of(m).
+    ***operator*(mat4, vec4) IS UNCHANGED FROM 2.6, BYTE FOR BYTE.*** The whole
+    lesson was a change of MEANING, not machinery — the fix for "my 4x4 does not
+    translate" was in what the CALLER said about the data, which is why the code
+    you stare at was correct the whole time.
   - maths: src/math/vec3.hpp, vec4.hpp, mat3.hpp, mat4.hpp (header-only, NEW in
     2.6). vec3 = vec2 with a z; every 1.7 idea carries over untouched. NO cross
     product and NO perpendicular() — in 3-D there is a whole PLANE of
@@ -573,6 +619,18 @@ capabilities:
     disagreeing cells ringed and counted, band count swept with [ and ] so the count
     visibly jumps between 0 and 15 for one unchanging error. The sweep IS the lesson;
     a fixed impressive number would have taught the wrong thing.
+  - demo 2.7: the cube view becomes a SCENE — TWO cubes built from the same
+    rotation and offset composed in OPPOSITE ORDERS. translation(-p)*R spins in
+    place; R*translation(p) orbits the origin. That is Exercise 2.5.3 answered on
+    screen, and Lesson 2.5's "order matters" with translation finally in play. A
+    faint cross marks the world origin so the difference reads in a still frame.
+    [W] sets corner w to 0 -> BOTH CUBES COLLAPSE ONTO THE ORIGIN, one exactly on
+    top of the other. That is Lesson 2.6 reproduced with one keystroke.
+    [N] sets the axis-arrow w to 1 -> the direction arrows get TRANSLATED and skew
+    off, while the cubes stay perfectly correct. THAT ASYMMETRY IS THE POINT: it
+    is why the normal-as-a-position bug survives code review.
+    World centres are read back out of the transformed result, so the HUD reports
+    what was drawn rather than what we believe was drawn.
   - demo 2.6: [Tab] now cycles FIVE demos — cube (2.6) / basis (2.5) / triangles /
     lines / Pong. main.cpp is past 1,600 lines. This is no longer merely awkward
     and IT IS THE MODULE 5 ARGUMENT — do not fix it early, but do point at it (the
@@ -668,6 +726,25 @@ decisions:
     (< 0.4 levels for 4096 entries), written down, and deferred — optimising a 232 us
     cost inside a 16.6 ms budget would be optimising by reflex, which is precisely what
     Module 3's profiling lesson teaches against.
+  - point()/direction() named constructors instead of SEPARATE TYPES. The
+    type-safe design (position and direction as distinct types) does eliminate the
+    bug at compile time and some engines do it. Rejected because it roughly doubles
+    the maths library's surface — every operation must state which combinations it
+    accepts, and some answers are fiddly (position - position = direction;
+    position + position is meaningless) — and because the distinction collapses at
+    the GPU boundary anyway, where a shader sees four floats and no types. Named
+    constructors buy most of the safety for a twentieth of the machinery.
+    Exercise 2.7.5 argues the other side honestly; it is a real trade, not a
+    settled question.
+  - affine(linear, t) provided ALONGSIDE translation(t) * to_mat4(linear). Same
+    matrix; the first says WHAT, the second says HOW, and writing the product out
+    is one more chance to get the order backwards.
+  - xyz() still DROPS w rather than dividing, deliberately, with a comment saying
+    exactly when that stops being correct. The perspective divide must appear in
+    2.10 under its own name, not turn out to have been hiding inside an accessor.
+  - the demo keeps BOTH ways of getting w wrong on keys ([W] and [N]). Fourth time
+    this bargain has been made (draw_line_naive 2.1, pong swept_collision 1.8,
+    blend_space::encoded 2.4).
   - identity() moved to a STATIC MEMBER on every matrix type. FORCED: a free
     identity() takes no arguments, so mat2's and mat3's could differ only by return
     type. Everything else survived — transpose/inverse/determinant overload on the
@@ -732,36 +809,37 @@ files:
                  01-07-vectors-2d.html, 01-08-pong.html,
                  02-01-lines.html, 02-02-triangle-edge-functions.html,
                  02-03-barycentric.html, 02-04-attribute-interpolation.html,
-                 02-05-matrices.html, 02-06-mat4.html
+                 02-05-matrices.html, 02-06-mat4.html,
+                 02-07-homogeneous.html
   docs/_template/: lesson-template.html, README.md, apply-shared.py, check-page.js
   memory/: 2026-07-16.md, 2026-07-18.md, 2026-07-21.md, 2026-07-22.md,
-           2026-07-23.md, 2026-07-24.md, 2026-07-25.md
+           2026-07-23.md, 2026-07-24.md, 2026-07-25.md, 2026-07-26.md
   (retired: hello.cpp)
 
-next: 2.7 — Homogeneous Coordinates and What w Really Means
-      (planned filename: docs/lessons/02-07-homogeneous.html — 2.6 links to it)
-      THE PAYOFF LESSON. 2.5 proved no matrix can translate; 2.6 built the 4x4 and
-      showed its fourth column sitting inert. Now spend the fourth component.
-      OPEN with 2.6's diagnosis verbatim: a matrix can only scale each column by a
-      component of the input and add them up, so adding a CONSTANT needs a
-      component that is always the same number. Then: let w be that number.
-      FOUR QUESTIONS the lesson must answer — Exercise 2.6.4 sets them up and they
-      are the spine:
-        1. Why 1? What justifies it beyond "the arithmetic works"?
-        2. Should a DIRECTION (normal, velocity) also carry 1? NO — w=0 for
-           directions is precisely why translation must not affect them, and that
-           is a FEATURE. This is where 2.6's w=0 pays off rather than being a
-           placeholder.
-        3. What is w after composing two matrices and applying? Is 1 preserved?
-           Yes for affine transforms — show WHY the bottom row (0,0,0,1) is what
-           guarantees it.
-        4. Can w be something OTHER than 0 or 1, and what would that mean?
-           -> the door to perspective. Open it, NAME the perspective divide, hand
-           it to 2.10. Do NOT derive projection here.
-      POINTS VS DIRECTIONS is the through-line: one type, one number, two meanings.
-      Then translation(vec3) and the affine composition Exercise 2.5.3 wanted, so
-      (M2*M1, M2*t1 + t2) disappears into a single multiply.
-      MILESTONE: the demo already has the failing case on [T]. It should START
-      WORKING with no change to mat4.hpp at all — only to the w the caller passes.
-      Make that the milestone and call back to 2.6's 0.00 px readout.
+next: 2.8 — The Space Chain: Model to World
+      (planned filename: docs/lessons/02-08-space-chain.html — 2.7 links to it)
+      The machinery is finished; 2.8 starts USING it, and its real subject is a
+      DISCIPLINE rather than a new formula: ALWAYS KNOW WHICH SPACE A COORDINATE
+      IS IN. Nearly every transform bug in graphics is a coordinate used in the
+      wrong space, and careful naming makes that class of bug nearly impossible.
+      Build the first two links of model -> world -> view -> clip -> NDC -> screen:
+        - MODEL space: the coordinates the artist modelled in. Why models are
+          centred on their own origin (2.6's cube already is, and 2.7's demo shows
+          exactly why it matters — rotation is always about the origin).
+        - WORLD space: one shared frame. The model matrix is affine =
+          translation * rotation * scale, and THE ORDER IS WORTH DERIVING rather
+          than asserting: scale first, then rotate, then translate. Anything else
+          scales along already-rotated axes or rotates an already-displaced object
+          — and 2.7's demo can already show the second failure on screen.
+      Introduce a TRANSFORM struct (position, rotation, scale) that produces a
+      mat4, because that is what every engine actually exposes, and note that it is
+      the seed of Module 5's transform component.
+      NUMERIC WALKTHROUGH IS MANDATORY: carry ONE concrete vertex through
+      model -> world by hand with real numbers, as 2.5-2.7 all did.
+      DIAGRAM GENRE REQUIRED by CLAUDE.md §7: the coordinate-space chain
+      ANNOTATED WITH ACTUAL NUMBERS.
+      Module 2 still owes: 2.9 view matrix (and it wants a mat4 inverse for a
+      STRUCTURED form — cheap to write directly, unlike the general case),
+      2.10 perspective from similar triangles, 2.11 viewport, 2.12 the
+      spinning-wireframe-mesh milestone.
 ```

@@ -454,3 +454,36 @@ in written notation first, fixing the class rather than the instance; the `M*inv
 caught it immediately. And Figure 1's vector walk was drawn collinear with the x axis in dim grey,
 making it invisible — the third lesson running where `check-page.js` was green over a diagram that
 failed to make its argument. Both now in LEARNINGS.md.
+
+---
+
+## 2026-07-26 — Lesson 2.7
+
+> next
+
+Resumed from `STATE.md` → `next: 2.7 — Homogeneous Coordinates and What w Really Means`, which
+specified the spine precisely: open with 2.6's diagnosis verbatim, answer four questions (set up by
+Exercise 2.6.4), keep points-vs-directions as the through-line, and make the milestone "2.6's demo
+starts working with no change to `mat4.hpp`".
+
+### Judgement calls
+
+| Question | Decision | Why |
+|---|---|---|
+| How to justify `w = 1` | **As the multiplier on the translation column** | "Because the arithmetic works" is not an argument. Measuring what other values do — `w` of 0/0.5/1/2 applies none/half/one/two of the offset — shows 1 is *forced*: it is the only value that applies `t` exactly once. That reframes `w` from a convention to a quantity. |
+| How to sell `w = 0` for directions | **Show the error scaling with distance** | 10.77 → 107.70 → 1077.03 as the object moves ×1/×10/×100. The error *equals* the translation, so the bug is invisible at the origin and ruinous in a real level — the worst possible detection profile, and a much stronger argument than "directions are different". |
+| How far to go on perspective | **Name it, show four numbers, stop** | Bottom row `(0,0,−1,0)` gives `x/w` = 1.0, 0.5, 0.2, 0.1 at increasing depth. That is enough to show `w` is not bookkeeping. Deriving projection here would spend 2.10's lesson and skip the similar-triangles argument that makes it inevitable. |
+| Named constructors vs separate types | **`point()` / `direction()`, not two types** | The type-safe design does eliminate the bug at compile time, but roughly doubles the maths library's surface and collapses at the GPU boundary anyway. Exercise 2.7.5 argues the other side properly rather than the lesson pretending it is settled. |
+| What the demo should show | **Two cubes, opposite composition orders** | `translation(-p)*R` spins in place; `R*translation(p)` orbits. That is Exercise 2.5.3 answered on screen *and* Lesson 2.5's "order matters" with translation finally in play. `[W]` collapses both onto the origin — 2.6 reproduced in one keystroke — and `[N]` breaks only the direction arrows while leaving the cubes perfect, which is why that bug survives review. |
+
+### Verification
+
+Five harness sections, all passing, supplied every number: the `w` multiplier table, the direction
+error scaling, 40 affine compositions leaving the bottom row exactly `(0,0,0,1)`, 2.6's failing case
+now moving exactly 1.2, and rotate-about-a-pivot preserving the pivot and distances.
+
+**A diagram defect, for the third lesson running.** Figure 1 drew a room before and after moving,
+with a lamp that should move and an arrow that should not — but both rooms were drawn identically,
+so relative to the room nothing changed and the reader had to trust the labels. `check-page.js` was
+green. Fixed with an identical ruler under both copies. Generalised in LEARNINGS.md: a before/after
+figure needs something in it that provably did not change.

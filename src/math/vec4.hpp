@@ -4,16 +4,21 @@
 // something, and that something has four components. Everything below is the
 // obvious extension of vec3.
 //
-// The fourth component is called `w`, because that is what everyone calls it and
-// pretending otherwise would only make this course harder to read alongside every
-// other reference. But **we are not yet saying what it means.** Lesson 2.6 builds
-// the 4x4 machinery and discovers that its fourth column does nothing useful; the
-// question of what `w` should be, and why, is Lesson 2.7's — and it is a much
-// better lesson if you arrive at it having already watched the column sit there
-// doing nothing.
+// The fourth component is called `w`, and as of Lesson 2.7 it has a job. It says
+// WHAT KIND OF THING this is:
 //
-// If you have met homogeneous coordinates before: yes, you know where this is
-// going. Resist skipping ahead; the derivation is the part worth having.
+//     w = 1   a POSITION.  Somewhere in space. Translation moves it.
+//     w = 0   a DIRECTION. Which way, how far — but not "where".
+//                          Translation must NOT move it.
+//
+// That is one number carrying a distinction the type system would otherwise need
+// two types for, and it is not a trick: it falls out of asking what translation
+// should do to each. Moving the world two metres east moves every position two
+// metres east. It leaves every direction exactly as it was — "north" is still
+// north. Lesson 2.7 §3.2.
+//
+// A third case exists — w being neither 0 nor 1 — and it is what perspective
+// projection produces. Lesson 2.10.
 
 #pragma once
 
@@ -34,21 +39,44 @@ struct vec4
 
 // ---- Building and unpacking --------------------------------------------------
 
-/// A vec3 with a fourth component bolted on.
+/// A **position**: somewhere in space. Carries `w = 1`, so translation moves it.
 ///
-/// Spelled out as a named function rather than an implicit conversion, because
-/// an implicit one would let a 3-D vector silently acquire a `w` of zero at a
-/// call site — and "silently acquires a value nobody chose" is the exact shape
-/// of the bug Lesson 2.7 is about to spend a lesson on.
+/// Prefer this and `direction()` over `to_vec4` at every call site. The whole
+/// point of Lesson 2.7 is that `w` is not a padding byte — it is the difference
+/// between "the lamp is at (3,0,4)" and "the light points that way" — and a call
+/// that says `point(p)` cannot be misread, where one that says `to_vec4(p, 1.0f)`
+/// invites somebody to change the 1 to a 0 to make a compile error go away.
+[[nodiscard]] constexpr vec4 point(vec3 p) { return {p.x, p.y, p.z, 1.0f}; }
+
+/// A **direction**: which way and how far, but not where. Carries `w = 0`, so
+/// translation leaves it alone — which is correct rather than a limitation.
+///
+/// Surface normals, velocities, "the direction to the light", the axis a door
+/// swings about. Move the whole world two metres east and none of them change.
+/// Lesson 3.6's lighting depends on this being right; a normal that has been
+/// translated is no longer a normal, and the resulting shading is wrong in a way
+/// that gets worse the further the object is from the origin.
+[[nodiscard]] constexpr vec4 direction(vec3 d) { return {d.x, d.y, d.z, 0.0f}; }
+
+/// A vec3 with an arbitrary fourth component.
+///
+/// Spelled out as a named function rather than an implicit conversion, because an
+/// implicit one would let a 3-D vector silently acquire a `w` nobody chose. Reach
+/// for `point()` or `direction()` unless you genuinely mean some other value —
+/// which, before Lesson 2.10's projection, you almost certainly do not.
 [[nodiscard]] constexpr vec4 to_vec4(vec3 v, float w) { return {v.x, v.y, v.z, w}; }
 
 /// The first three components, with the fourth simply dropped.
 ///
-/// **Dropped, not divided by.** There is a version of this that divides by `w`
-/// and it is the single most important operation in the whole projection
-/// pipeline — but it belongs to Lesson 2.10, it has a name (the perspective
-/// divide), and doing it here silently would be indefensible. Today `w` is a
-/// number we carry and ignore.
+/// **Dropped, not divided by.** Correct for everything in Module 2: an affine
+/// transformation leaves `w` exactly as it found it (Lesson 2.7 §3.3), so a
+/// position comes back with `w = 1` and dividing by it would be a no-op.
+///
+/// It stops being correct the moment a projection matrix is in the chain, because
+/// those deliberately produce a `w` that is neither 0 nor 1. Dividing by it is
+/// called the **perspective divide**, it is the single most important operation
+/// in the projection pipeline, and it gets its own treatment in Lesson 2.10
+/// rather than happening quietly inside an accessor.
 [[nodiscard]] constexpr vec3 xyz(vec4 v) { return {v.x, v.y, v.z}; }
 
 // ---- Arithmetic -------------------------------------------------------------

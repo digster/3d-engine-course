@@ -1133,3 +1133,54 @@ pass is now a fixed part of the workflow rather than something to remember, and 
 recurring failure is worth naming: **a diagram element drawn collinear with, or underneath,
 something else is invisible even when it is geometrically correct.** Draw it brighter, thicker, or
 offset — or accept that it is not communicating.
+
+## When machinery looks incomplete, check whether it is missing an *input* (Lesson 2.7)
+
+Lesson 2.6 built a 4×4, put a translation in its fourth column, and demonstrated that it moved a
+point by exactly `(0,0,0)`. The natural conclusion is that the matrix code is missing something.
+
+It was not. `operator*(mat4, vec4)` in Lesson 2.7 is **byte for byte** the function 2.6 wrote:
+
+```cpp
+return m.c0 * v.x + m.c1 * v.y + m.c2 * v.z + m.c3 * v.w;
+```
+
+What was missing was a reason for `v.w` to be anything in particular. Supplying that reason — 1 for
+a position, 0 for a direction — made the whole thing work with no change to the arithmetic at all.
+
+This is a recurring shape and worth recognising: **the code you are staring at is correct, and the
+defect is in what the caller is saying about the data.** It is unusually hard to debug because
+reading the implementation more carefully cannot help. The tell is that the implementation is
+simple and obviously right, and the behaviour is still wrong.
+
+## A magic literal at a call site is a bug waiting for a hurried reader (Lesson 2.7)
+
+`to_vec4(n, 0.0f)` and `direction(n)` compile to identical code. They are not equally good.
+
+The first is a magic number, and magic numbers get changed by whoever is trying to make something
+compile — flipping `0.0f` to `1.0f` looks like a harmless adjustment. The second states an
+intention, and changing `direction(n)` to `point(n)` is visibly a claim about what the vector *is*.
+
+The bug that distinction prevents is the worst-shaped one in this module: a direction transformed as
+a position has the translation added to it, so **the error equals the translation** — measured at
+10.77, then 107.70, then 1077.03 as the object moves ×1, ×10, ×100 from the origin. It is invisible
+in a test scene at the origin and ruinous in a real level, which is exactly backwards from how you
+would like a bug to behave.
+
+Cheapest test for it: a unit direction through a rotation must come back **unit length**. If it
+comes back with the magnitude of your translation, that is this bug.
+
+## Show a difference against a fixed reference, or you have shown nothing (Lesson 2.7)
+
+Figure 1 of Lesson 2.7 drew a room twice — before and after being moved — with a lamp inside it and
+an arrow. The lamp was supposed to move and the arrow was supposed not to. Both rooms were drawn
+identically, so *relative to the room* nothing had changed and the reader had to take the labels'
+word for it. `check-page.js` was green.
+
+The fix was to draw an identical ruler under both copies and a dashed line from the lamp down to it:
+now the lamp is visibly above tick 3 and then above tick 5, while the arrow is visibly the same
+arrow. The claim became checkable by looking.
+
+Generalising, and this is now three lessons of diagram defects in a row: **a before/after figure
+needs something in it that provably did not change.** Without a fixed reference, "this moved and
+that did not" is a caption rather than a picture.
