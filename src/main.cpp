@@ -25,6 +25,8 @@
 #include "gfx/framebuffer.hpp"
 #include "gfx/raster.hpp"
 #include "math/mat2.hpp"
+#include "math/mat3.hpp"
+#include "math/mat4.hpp"
 #include "math/vec2.hpp"
 
 #include <SDL3/SDL.h>
@@ -47,7 +49,8 @@ constexpr Uint32 k_throttle_ms = 50;
 /// Which lesson's demo is on screen. [Tab] cycles.
 enum class demo
 {
-    basis,       ///< Lesson 2.5 — this lesson
+    cube,        ///< Lesson 2.6 — this lesson
+    basis,       ///< Lesson 2.5
     triangles,   ///< Lessons 2.2 – 2.4
     lines,       ///< Lesson 2.1
     pong         ///< Lesson 1.8
@@ -57,12 +60,13 @@ enum class demo
 {
     switch (d)
     {
+    case demo::cube:      return demo::basis;
     case demo::basis:     return demo::triangles;
     case demo::triangles: return demo::lines;
     case demo::lines:     return demo::pong;
-    case demo::pong:      return demo::basis;
+    case demo::pong:      return demo::cube;
     }
-    return demo::basis;
+    return demo::cube;
 }
 
 // ===========================================================================
@@ -619,6 +623,158 @@ int draw_coverage(engine::framebuffer& fb, bool use_rule)
 }
 
 // ===========================================================================
+// Lesson 2.6 — mat3, mat4, and the first three-dimensional thing we have drawn
+// ===========================================================================
+
+/// Which rotation the cube view is showing. [Z] cycles.
+enum class spin
+{
+    about_x,
+    about_y,
+    about_z,
+    tumble_xy,   ///< Rx * Ry — y first
+    tumble_yx    ///< Ry * Rx — x first
+};
+
+[[nodiscard]] const char* name_of(spin s)
+{
+    switch (s)
+    {
+    case spin::about_x:   return "rotation_x(t)";
+    case spin::about_y:   return "rotation_y(t)";
+    case spin::about_z:   return "rotation_z(t)";
+    case spin::tumble_xy: return "Rx(t) * Ry(1.1)   [y first]";
+    case spin::tumble_yx: return "Ry(1.1) * Rx(t)   [x first]";
+    }
+    return "?";
+}
+
+[[nodiscard]] spin next_spin(spin s)
+{
+    switch (s)
+    {
+    case spin::about_x:   return spin::about_y;
+    case spin::about_y:   return spin::about_z;
+    case spin::about_z:   return spin::tumble_xy;
+    case spin::tumble_xy: return spin::tumble_yx;
+    case spin::tumble_yx: return spin::about_x;
+    }
+    return spin::about_x;
+}
+
+[[nodiscard]] engine::mat3 build_spin(spin s, float t)
+{
+    // The two tumble modes share both ingredients and differ ONLY in which
+    // rotation is applied first — the 3-D restatement of Lesson 2.5 §3.6.
+    switch (s)
+    {
+    case spin::about_x:   return engine::rotation_x(t);
+    case spin::about_y:   return engine::rotation_y(t);
+    case spin::about_z:   return engine::rotation_z(t);
+    case spin::tumble_xy: return engine::rotation_x(t) * engine::rotation_y(1.1f);
+    case spin::tumble_yx: return engine::rotation_y(1.1f) * engine::rotation_x(t);
+    }
+    return engine::mat3::identity();
+}
+
+constexpr engine::vec2 k_cube_origin{96.0f, 92.0f};
+constexpr float k_cube_unit = 46.0f;   ///< framebuffer pixels per unit
+
+/// 3-D maths space -> framebuffer pixels, by **dropping z**.
+///
+/// This is an orthographic projection, and it is the crudest one there is: throw
+/// the depth away and keep x and y. It is enough to see that the transformations
+/// are working, and it is deliberately not enough to look right — parallel edges
+/// of the cube stay exactly parallel on screen, so the far face is drawn the same
+/// size as the near one and the picture is ambiguous about which is which.
+///
+/// Making distant things smaller is what a PERSPECTIVE projection does, and it is
+/// Lesson 2.10's whole subject. The y negation is the same one Lesson 2.5's demo
+/// needed, for the same reason, in the same one place.
+[[nodiscard]] engine::vec2 to_screen3(engine::vec3 v)
+{
+    return {k_cube_origin.x + v.x * k_cube_unit,
+            k_cube_origin.y - v.y * k_cube_unit};
+}
+
+void line3(engine::framebuffer& fb, engine::vec3 a, engine::vec3 b, Uint32 colour)
+{
+    const engine::vec2 pa = to_screen3(a);
+    const engine::vec2 pb = to_screen3(b);
+    engine::draw_line(fb,
+        static_cast<int>(std::lround(pa.x)), static_cast<int>(std::lround(pa.y)),
+        static_cast<int>(std::lround(pb.x)), static_cast<int>(std::lround(pb.y)), colour);
+}
+
+// A unit cube centred on the origin, and the twelve edges joining its corners.
+// Centred rather than corner-at-origin so that rotation — which is always about
+// the origin (Lesson 2.5 §3.8) — spins it in place rather than swinging it round.
+constexpr engine::vec3 k_cube_v[8] = {
+    {-0.5f, -0.5f, -0.5f}, {+0.5f, -0.5f, -0.5f}, {+0.5f, +0.5f, -0.5f}, {-0.5f, +0.5f, -0.5f},
+    {-0.5f, -0.5f, +0.5f}, {+0.5f, -0.5f, +0.5f}, {+0.5f, +0.5f, +0.5f}, {-0.5f, +0.5f, +0.5f},
+};
+constexpr int k_cube_e[12][2] = {
+    {0,1},{1,2},{2,3},{3,0},   // back face
+    {4,5},{5,6},{6,7},{7,4},   // front face
+    {0,4},{1,5},{2,6},{3,7},   // the four struts joining them
+};
+
+/// Draw the cube, with edge brightness standing in for depth.
+///
+/// The brightness is a **cue, not a calculation** — there is no depth buffer yet
+/// (Lesson 3.1) and no lighting (Lesson 3.6), so this is simply "edges further
+/// away are dimmer" so the wireframe can be read at all. Without it a rotating
+/// wireframe cube is a genuinely ambiguous picture: your eye flips between two
+/// interpretations, because orthographic projection has discarded the only
+/// information that could settle it.
+void draw_cube(engine::framebuffer& fb, const engine::mat3& m, engine::vec3 offset)
+{
+    engine::vec3 p[8];
+    for (int i = 0; i < 8; ++i) { p[i] = m * k_cube_v[i] + offset; }
+
+    for (const auto& e : k_cube_e)
+    {
+        const float mid_z = 0.5f * (p[e[0]].z + p[e[1]].z);
+        const float t = std::clamp(mid_z + 0.5f, 0.0f, 1.0f);   // -0.5..0.5 -> 0..1
+        const Uint8 v = static_cast<Uint8>(70.0f + 165.0f * t);
+        line3(fb, p[e[0]], p[e[1]], engine::pack_argb(v, v, static_cast<Uint8>(v * 0.94f)));
+    }
+}
+
+/// The three transformed basis vectors, in the course's axis colours.
+///
+/// Exactly Lesson 2.5's picture with a third arrow: the columns of the matrix,
+/// drawn. Whatever the cube is doing, these three arrows are why.
+void draw_axes3(engine::framebuffer& fb, const engine::mat3& m, engine::vec3 offset)
+{
+    const Uint32 col[3] = {engine::pack_argb(236, 92, 92),     // x
+                           engine::pack_argb(122, 196, 152),   // y
+                           engine::pack_argb(126, 162, 236)};  // z
+    const engine::vec3 c[3] = {m.c0, m.c1, m.c2};
+
+    for (int i = 0; i < 3; ++i)
+    {
+        const engine::vec3 tip = c[i] * 0.9f + offset;
+        line3(fb, offset, tip, col[i]);
+
+        // A small head, built by rotating the arrow's own direction — the same
+        // trick as 2.5's, now in the plane of the screen because that is where
+        // the head has to be legible.
+        const engine::vec2 a = to_screen3(offset);
+        const engine::vec2 b = to_screen3(tip);
+        const engine::vec2 back = engine::normalised(a - b) * 5.0f;
+        if (engine::length_squared(back) > 0.0f)
+        {
+            const engine::vec2 h1 = b + engine::rotation(0.5f) * back;
+            const engine::vec2 h2 = b + engine::rotation(-0.5f) * back;
+            auto ix = [](float f) { return static_cast<int>(std::lround(f)); };
+            engine::draw_line(fb, ix(b.x), ix(b.y), ix(h1.x), ix(h1.y), col[i]);
+            engine::draw_line(fb, ix(b.x), ix(b.y), ix(h2.x), ix(h2.y), col[i]);
+        }
+    }
+}
+
+// ===========================================================================
 // Lesson 2.5 — matrices as basis transforms
 // ===========================================================================
 
@@ -669,7 +825,7 @@ constexpr engine::mat2 k_compose_scale = engine::scale(1.6f, 0.7f);
 {
     switch (x)
     {
-    case xform::identity:          return engine::identity();
+    case xform::identity:          return engine::mat2::identity();
     case xform::rotate:            return engine::rotation(t);
     case xform::scale_xy:          return engine::scale(1.0f + t, 1.0f - 0.6f * t);
     case xform::shear_x:           return engine::shear(t, 0.0f);
@@ -680,7 +836,7 @@ constexpr engine::mat2 k_compose_scale = engine::scale(1.6f, 0.7f);
     case xform::scale_then_rotate: return engine::rotation(t) * k_compose_scale;
     case xform::rotate_then_scale: return k_compose_scale * engine::rotation(t);
     }
-    return engine::identity();
+    return engine::mat2::identity();
 }
 
 /// The other order, for the modes where order is the subject. Returns identity
@@ -689,7 +845,7 @@ constexpr engine::mat2 k_compose_scale = engine::scale(1.6f, 0.7f);
 {
     if (x == xform::scale_then_rotate) { return k_compose_scale * engine::rotation(t); }
     if (x == xform::rotate_then_scale) { return engine::rotation(t) * k_compose_scale; }
-    return engine::identity();
+    return engine::mat2::identity();
 }
 
 constexpr engine::vec2 k_basis_origin{100.0f, 118.0f};
@@ -925,7 +1081,7 @@ int main(int argc, char* argv[])
             SDL_VERSIONNUM_MINOR(sdl_version),
             SDL_VERSIONNUM_MICRO(sdl_version));
 
-    SDL_Window* window = SDL_CreateWindow("Basis Transforms — Module 2", 1280, 720,
+    SDL_Window* window = SDL_CreateWindow("3-D: mat3 and mat4 — Module 2", 1280, 720,
                                           SDL_WINDOW_RESIZABLE);
     if (window == nullptr)
     {
@@ -973,7 +1129,13 @@ int main(int argc, char* argv[])
     engine::fixed_step stepper(60.0f);
 
     // ---- Demo state --------------------------------------------------------
-    demo which = demo::basis;
+    demo which = demo::cube;
+    spin cube_mode = spin::tumble_xy;   ///< Lesson 2.6
+    float cube_t = 0.6f;
+    bool cube_animating = true;
+    bool cube_try_translate = false;    ///< stuff a translation into the 4x4's c3
+    engine::mat3 cube_m;
+    engine::vec3 cube_moved_by;         ///< what the fourth column actually achieved
     xform basis_mode = xform::rotate;   ///< Lesson 2.5
     float basis_t = 0.6f;               ///< the one parameter every mode reads
     bool basis_animating = false;
@@ -1009,7 +1171,8 @@ int main(int argc, char* argv[])
     SDL_Log("  [4]/[5] follow the mouse: the three sub-triangles ARE the three weights. [R] fill rule.");
     SDL_Log("  [6] Gouraud (three corner colours) [7] uv checker — [M] switches blend space");
     SDL_Log("Basis (2.5): [Z] transform  [,] [.] adjust  [0] reset  [Space] animate");
-    SDL_Log("[Tab] cycles demos: basis (2.5) -> triangles (2.2-2.4) -> lines (2.1) -> Pong (1.8)");
+    SDL_Log("Cube (2.6): [Z] rotation  [,] [.] adjust  [Space] spin  [T] try translating via the 4x4");
+    SDL_Log("[Tab] cycles demos: cube (2.6) -> basis (2.5) -> triangles -> lines -> Pong");
     SDL_Log("[V] vsync · [T] throttle · [Esc] quit");
 
     bool running = true;
@@ -1046,7 +1209,8 @@ int main(int argc, char* argv[])
         {
             which = next_demo(which);
             SDL_SetWindowTitle(window,
-                which == demo::basis     ? "Basis Transforms — Module 2"
+                which == demo::cube      ? "3-D: mat3 and mat4 — Module 2"
+              : which == demo::basis     ? "Basis Transforms — Module 2"
               : which == demo::triangles ? "Triangles — Module 2"
               : which == demo::lines     ? "Lines — Module 2"
                                          : "Pong — Module 1 Checkpoint");
@@ -1063,7 +1227,42 @@ int main(int argc, char* argv[])
 
         stepper.begin_frame(clk.dt());
 
-        if (which == demo::basis)
+        if (which == demo::cube)
+        {
+            // ---- Lesson 2.6's cube --------------------------------------------
+            if (in.key_pressed(SDL_SCANCODE_Z)) { cube_mode = next_spin(cube_mode); }
+            if (in.key_pressed(SDL_SCANCODE_SPACE)) { cube_animating = !cube_animating; }
+            if (in.key_pressed(SDL_SCANCODE_0)) { cube_t = 0.0f; }
+            if (in.key_pressed(SDL_SCANCODE_T)) { cube_try_translate = !cube_try_translate; }
+
+            while (stepper.next_step())
+            {
+                if (cube_animating) { cube_t += 0.7f * stepper.h(); }
+                if (in.key_down(SDL_SCANCODE_COMMA))  { cube_t -= 1.2f * stepper.h(); }
+                if (in.key_down(SDL_SCANCODE_PERIOD)) { cube_t += 1.2f * stepper.h(); }
+            }
+
+            cube_m = build_spin(cube_mode, cube_t);
+
+            // The demonstration this lesson is built around. Embed the rotation in
+            // a 4x4, write a translation into the fourth column — the place a
+            // translation obviously belongs — and see what it does. Our vectors
+            // carry w = 0, so the fourth column is multiplied by zero and the
+            // answer is: nothing. The offset below is MEASURED from the result
+            // rather than assumed, so the HUD cannot lie about it.
+            engine::mat4 m4 = engine::to_mat4(cube_m);
+            if (cube_try_translate) { m4.c3 = engine::vec4{1.2f, 0.0f, 0.0f, 1.0f}; }
+
+            const engine::vec3 probe{0.5f, 0.5f, 0.5f};
+            const engine::vec3 via_mat3 = cube_m * probe;
+            const engine::vec3 via_mat4 = engine::xyz(m4 * engine::to_vec4(probe, 0.0f));
+            cube_moved_by = via_mat4 - via_mat3;
+
+            fb.clear(k_bg);
+            draw_cube(fb, cube_m, cube_moved_by);
+            draw_axes3(fb, cube_m, cube_moved_by);
+        }
+        else if (which == demo::basis)
         {
             // ---- Lesson 2.5's basis transform ---------------------------------
             if (in.key_pressed(SDL_SCANCODE_Z)) { basis_mode = next_xform(basis_mode); }
@@ -1273,7 +1472,53 @@ int main(int argc, char* argv[])
         // scale over a 4x framebuffer scale.
         SDL_SetRenderScale(renderer, 2.0f, 2.0f);
 
-        if (which == demo::basis)
+        if (which == demo::cube)
+        {
+            const float det = engine::determinant(cube_m);
+
+            SDL_SetRenderDrawColor(renderer, 210, 212, 220, 255);
+            SDL_RenderDebugTextFormat(renderer, 6.0f, 6.0f,
+                                      "CUBE (3-D)   %-28s  t = %+.2f",
+                                      name_of(cube_mode), static_cast<double>(cube_t));
+
+            SDL_RenderDebugText(renderer, 380.0f, 40.0f, "the mat3, as written:");
+            for (int r = 0; r < 3; ++r)
+            {
+                SDL_RenderDebugTextFormat(renderer, 380.0f, 56.0f + 14.0f * static_cast<float>(r),
+                                          "| %+.3f %+.3f %+.3f |",
+                                          static_cast<double>(cube_m.at(r, 0)),
+                                          static_cast<double>(cube_m.at(r, 1)),
+                                          static_cast<double>(cube_m.at(r, 2)));
+            }
+
+            SDL_SetRenderDrawColor(renderer, 150, 152, 170, 255);
+            SDL_RenderDebugTextFormat(renderer, 380.0f, 116.0f,
+                                      "det = %+.4f  (volume factor)", static_cast<double>(det));
+            SDL_RenderDebugText(renderer, 380.0f, 136.0f, "red/green/blue arrows are");
+            SDL_RenderDebugText(renderer, 380.0f, 150.0f, "the three columns, drawn.");
+
+            // The lesson's punchline, on screen and measured.
+            SDL_SetRenderDrawColor(renderer, cube_try_translate ? 236 : 150,
+                                             cube_try_translate ? 92 : 152,
+                                             cube_try_translate ? 92 : 170, 255);
+            SDL_RenderDebugTextFormat(renderer, 380.0f, 178.0f,
+                                      "[T] 4x4 c3 = (1.2, 0, 0): %s", cube_try_translate ? "SET" : "off");
+            SDL_RenderDebugTextFormat(renderer, 380.0f, 192.0f,
+                                      "cube actually moved by %.2f px",
+                                      static_cast<double>(engine::length(cube_moved_by)) * 46.0);
+            if (cube_try_translate)
+            {
+                SDL_RenderDebugText(renderer, 380.0f, 212.0f, "a translation is sitting in");
+                SDL_RenderDebugText(renderer, 380.0f, 226.0f, "the matrix doing nothing.");
+                SDL_RenderDebugText(renderer, 380.0f, 240.0f, "our w is 0, so column 3 is");
+                SDL_RenderDebugText(renderer, 380.0f, 254.0f, "multiplied by 0.  -> 2.7");
+            }
+
+            SDL_SetRenderDrawColor(renderer, 210, 212, 220, 255);
+            SDL_RenderDebugText(renderer, 6.0f, 328.0f,
+                                "[Z] rotation  [,] [.] adjust  [0] reset  [Space] spin  [T] translate  [Tab] demo");
+        }
+        else if (which == demo::basis)
         {
             // Lesson 2.5's readout. The matrix is printed the way it is WRITTEN —
             // rows across — while the struct stores columns; showing both side by

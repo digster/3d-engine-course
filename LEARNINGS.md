@@ -1074,3 +1074,62 @@ Worth generalising: a discrete measurement of a continuous quantity is always bi
 way and how fast the bias vanishes before you use the measurement as evidence, or you will
 eventually mistake a sampling artifact for a bug in the mathematics — or, worse, tune the
 mathematics until the artifact goes away.
+
+## A zero-argument function cannot be overloaded (Lesson 2.6)
+
+Adding `mat3` broke exactly one thing in `mat2`'s published API: the free function
+
+```cpp
+[[nodiscard]] constexpr mat2 identity() { return {}; }
+```
+
+A `mat3` version would take the same arguments — none — and differ only in return type, and C++
+does not overload on return type. Not "should not": cannot, because at the point of decision the
+compiler may have nothing to tell it which was wanted (`auto x = identity();`).
+
+Everything else in the file survived, and the pattern of what survived is the useful part.
+`transpose`, `inverse` and `determinant` overload on the parameter type. `rotation` versus
+`rotation_x/y/z` differ by name. `scale(sx, sy)` versus `scale(sx, sy, sz)` differ by arity. The
+only casualty was the function with **nothing at the call site to disambiguate it**.
+
+Fix: a static member, `mat2::identity()`, which names the type at the call site and scales to as
+many matrix types as we like. The general rule worth carrying: *if a zero-argument function will
+ever need a per-type version, give it a type scope or a distinct name now, while that is still
+free.* The uniform `scale(float)` overload went at the same time — unused, and it would have become
+a trap the moment somebody wanted a uniform 3-D scale.
+
+## Transcribe formulas in the notation they were derived in (Lesson 2.6)
+
+The first `mat3::inverse` was written directly in terms of `c0.x`, `c1.y` and so on, transcribing
+the adjugate straight into column-stored members. Two of its nine cofactors used the wrong
+component. It compiled, it looked entirely plausible, and it was wrong.
+
+The rewrite names the elements in **written** notation first:
+
+```cpp
+const float m00 = m.c0.x, m01 = m.c1.x, m02 = m.c2.x;
+const float m10 = m.c0.y, m11 = m.c1.y, m12 = m.c2.y;
+const float m20 = m.c0.z, m21 = m.c1.z, m22 = m.c2.z;
+```
+
+Nine extra lines, and now every subsequent expression can be compared against any textbook
+derivation without translating between row and column indexing in your head. That fixes the
+*class* of error rather than the instance.
+
+The check that caught it is worth stating too: `M * inverse(M) == I` over 300 assorted matrices is
+not something you can pass by accident. When a formula is too long to verify by reading, verify it
+by its defining property instead.
+
+## Two lessons running, the same class of diagram defect
+
+2.4's Figure 4 had iso-lines sprawling outside their triangle. 2.5's lattice was missing its centre
+lines. 2.6's Figure 1 had the first leg of a vector walk drawn exactly along the x axis in a dim
+dashed grey, where it was simply invisible — so the "a vector is a recipe" picture did not visibly
+build the vector.
+
+`check-page.js` returned `pass: true` for all three. It checks that labels do not collide, spill or
+sit on strokes; it has no way to evaluate whether the picture makes its argument. The screenshot
+pass is now a fixed part of the workflow rather than something to remember, and the specific
+recurring failure is worth naming: **a diagram element drawn collinear with, or underneath,
+something else is invisible even when it is geometrically correct.** Draw it brighter, thicker, or
+offset — or accept that it is not communicating.

@@ -418,3 +418,39 @@ inputs land on one line), and reflection reversing signed area. The demo was ren
 unit square appeared not to line up with the grid — the exact opposite of what the figure argues.
 `check-page.js` was green. Found by screenshotting the view. Now recorded in LEARNINGS.md as a
 standing budget item rather than a thing to remember.
+
+---
+
+## 2026-07-25 — Lesson 2.6
+
+> next
+
+Resumed from `STATE.md` → `next: 2.6 — Building mat4 by Hand`, with its two standing instructions:
+build `mat3` first so the idea carries over with nothing new to learn, and build `mat4` as "a `mat3`
+plus a spare column", show the spare column does nothing, and **stop** — 2.7 is where `w` earns its
+keep, and the payoff dies if the gap closes early.
+
+### Judgement calls
+
+| Question | Decision | Why |
+|---|---|---|
+| How much to re-derive in 3-D | **Almost nothing** | Lesson 2.5's argument never counted the axes, so every rule held. The lesson says so explicitly and spends its length on the two things that *are* new: rotation needing an axis, and the inert fourth column. Re-deriving would have implied the 2.5 proof was weaker than it is. |
+| How to teach the three rotations | **From the cycle x → y → z → x** | Rotating about an axis turns the next two, one toward the other. That is why `R_y`'s minus sign sits below the diagonal while the other two have it above — the cycle wraps, but the matrix lists x's row above z's. Deriving it takes thirty seconds and is right; copying the shape of the other two is faster and wrong. |
+| How to show non-commutativity | **Use a point lying on one of the axes** | `(1,0,0)` is unmoved by `R_x`, so doing `R_x` first provably wastes it and only the second rotation acts. One of the four steps doing literally nothing makes the asymmetry obvious rather than arithmetic. |
+| How to verify "volume factor" | **Count lattice points inside the transformed unit cube** | The 3-D analogue of 2.5's pixel counting, and much tighter (0.00–0.01% at 120 steps/unit, since that is millions of samples). It also gave `inverse(mat3)` a real job — a point is inside iff `M⁻¹p ∈ [0,1)³`. |
+| Whether to explain `w` | **No — diagnose and stop** | The lesson ends on the precise diagnosis: a matrix can only scale each column by a component of the input and add, so adding a *constant* needs a component that is always the same number. Naming the mechanism without assigning the value keeps 2.7's four questions (Exercise 2.6.4) intact. |
+| Where to put the cube demo | **In `main.cpp`, making it five demos and 1,600+ lines** | STATE said the accumulating awkwardness *is* the Module 5 argument and should stay loud. The lesson now points at the file explicitly, so the listing's length is evidence rather than an accident. |
+
+### Verification
+
+A harness covering six areas, all passing, supplied every number: the worked example,
+`rotation_z`'s top-left 2×2 matching `mat2` over 121 angles, the lattice-counted volumes,
+`M * inverse(M) == I` over 300 matrices, the 4×4's exactly-zero displacement, and 500 matrices none
+of which moved the origin.
+
+**Two real defects.** `mat3::inverse` was wrong on first writing — transcribed straight into
+column-stored members, two of nine cofactors used the wrong component. The rewrite names elements
+in written notation first, fixing the class rather than the instance; the `M*inverse(M)==I` check
+caught it immediately. And Figure 1's vector walk was drawn collinear with the x axis in dim grey,
+making it invisible — the third lesson running where `check-page.js` was green over a diagram that
+failed to make its argument. Both now in LEARNINGS.md.

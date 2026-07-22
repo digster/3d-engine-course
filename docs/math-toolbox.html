@@ -1527,6 +1527,65 @@ td code { font-size: 0.82em; }
   </div>
 
   <div class="tool">
+    <h3>The same thing in 3-D <span class="from">Lesson 2.6</span></h3>
+    <div class="eq">
+      <span>\[ M\mathbf{v} = x\,\mathbf{c_0} + y\,\mathbf{c_1} + z\,\mathbf{c_2} \]</span>
+      <span class="eq-plain">M*v = x*c0 + y*c1 + z*c2</span>
+    </div>
+    <p>
+      Three basis vectors, three answers, three columns. Every argument in Lesson 2.5 was made
+      without counting the axes, so all of them hold unchanged — apply, compose, order,
+      determinant. <code>mat3</code> and <code>mat4</code> have the same shape as <code>mat2</code>:
+      N columns of <code>vecN</code>, stored column-major, with <code>identity()</code> as a static
+      member on each.
+    </p>
+    <div class="callout warn">
+      <span class="label">Rotation now needs an axis — and the cycle fixes the signs</span>
+      <p>
+        In 2-D there is one plane to turn in. In 3-D you must say <em>about what</em>: a rotation
+        fixes a line and turns everything else around it. Each axis rotation is Lesson 2.5's 2-D
+        rotation acting in the plane of the <strong>other two</strong>, in the order given by the
+        cycle <strong>x → y → z → x</strong>.
+      </p>
+      <div class="eq">
+        <span>\[ R_x = \begin{pmatrix} 1 &amp; 0 &amp; 0 \\ 0 &amp; c &amp; -s \\ 0 &amp; s &amp; c \end{pmatrix} \quad R_y = \begin{pmatrix} c &amp; 0 &amp; s \\ 0 &amp; 1 &amp; 0 \\ -s &amp; 0 &amp; c \end{pmatrix} \quad R_z = \begin{pmatrix} c &amp; -s &amp; 0 \\ s &amp; c &amp; 0 \\ 0 &amp; 0 &amp; 1 \end{pmatrix} \]</span>
+        <span class="eq-plain">Rx = |1,0,0; 0,c,-s; 0,s,c|;  Ry = |c,0,s; 0,1,0; -s,0,c|;  Rz = |c,-s,0; s,c,0; 0,0,1|</span>
+      </div>
+      <p>
+        <strong><code>R<sub>y</sub></code>'s minus sign is below the diagonal, not above.</strong>
+        Rotating about y turns z toward x — the cycle wraps — but the matrix lists x's row above
+        z's, so the pair appears in the opposite order and the minus lands mirrored. Derive it from
+        the cycle; do not copy the shape of the other two. This is one of the most common sign
+        errors in graphics.
+      </p>
+    </div>
+    <p>
+      <strong>Rotations about different axes do not commute</strong> — genuinely new in 3-D, where
+      in 2-D any two rotations always did. About the <em>same</em> axis they still add. The clearest
+      demonstration uses a point lying <em>on</em> one of the axes, so one rotation provably does
+      nothing: <code>(1,0,0)</code> under <code>R<sub>x</sub>(0.6)</code> and
+      <code>R<sub>y</sub>(0.8)</code> gives <code>(0.6967, 0, −0.7174)</code> x-first and
+      <code>(0.6967, 0.4050, −0.5921)</code> y-first. This is the seed of gimbal lock (Module 7).
+    </p>
+    <p>
+      The determinant becomes a <strong>volume</strong> factor, and its sign is
+      <strong>handedness</strong> rather than orientation-in-a-plane — so a model scaled by
+      <code>(−1,1,1)</code> renders inside-out once back-face culling exists (Lesson 3.4). Measured
+      by counting lattice points inside the transformed unit cube: agreement to within 0.01%.
+    </p>
+    <div class="callout note">
+      <span class="label">A 4×4 still cannot translate</span>
+      <p>
+        Every linear transformation fixes the origin, whatever its size. Embedding a 3×3 in a 4×4
+        and writing a translation into the fourth column achieves exactly nothing, because that
+        column is multiplied by the input's fourth component and ours is <code>0</code>. Verified:
+        the displacement is <code>(0, 0, 0)</code> exactly. Lesson 2.7 is where the fourth component
+        gets a job.
+      </p>
+    </div>
+  </div>
+
+  <div class="tool">
     <h3>Determinant <span class="from">Lesson 2.5</span></h3>
     <div class="eq">
       <span>\[ \det M = c_{0x}c_{1y} - c_{1x}c_{0y} \]</span>

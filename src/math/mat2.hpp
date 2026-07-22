@@ -48,6 +48,15 @@ struct mat2
     vec2 c0{1.0f, 0.0f};   ///< where (1,0) lands — the left column
     vec2 c1{0.0f, 1.0f};   ///< where (0,1) lands — the right column
 
+    /// The transformation that does nothing.
+    ///
+    /// A **static member** rather than a free function, and Lesson 2.6 is why:
+    /// once `mat3` existed, a free `identity()` taking no arguments could only be
+    /// distinguished by return type, which C++ cannot overload on. Naming the
+    /// type at the call site — `mat2::identity()` — turned out to read better
+    /// than the free function ever did.
+    [[nodiscard]] static constexpr mat2 identity() { return {}; }
+
     /// Element in written notation: `at(row, col)`, both 0-based.
     ///
     /// The bridge between the two views. `at(0,1)` is the top-right element as
@@ -111,9 +120,6 @@ struct mat2
 // Each one is built by answering the same question and reading off the answer.
 // No trigonometric identities are needed anywhere below.
 
-/// The transformation that does nothing.
-[[nodiscard]] constexpr mat2 identity() { return {}; }
-
 /// Rotation by `radians`.
 ///
 /// Derived, not looked up. Put `(1,0)` on the unit circle and turn it by theta:
@@ -142,9 +148,6 @@ struct mat2
 /// factor is a reflection, and it is worth noticing that the machinery does not
 /// treat it as a special case — it simply sends a basis vector backwards.
 [[nodiscard]] constexpr mat2 scale(float sx, float sy) { return {{sx, 0.0f}, {0.0f, sy}}; }
-
-/// Uniform scale — the same factor on both axes.
-[[nodiscard]] constexpr mat2 scale(float s) { return scale(s, s); }
 
 /// Shear: slide x by `kx` per unit of y, and y by `ky` per unit of x.
 ///

@@ -7,16 +7,20 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-07-24 (after Lesson 2.5 — Module 2: 5 of 12, 19 of 94 lessons)
+updated: 2026-07-25 (after Lesson 2.6 — Module 2: 6 of 12, 20 of 94 lessons)
 
 conventions:
   world: right-handed, Y-up, -Z forward
   clip: left-handed, +Y up, z in [0,1] (SDL_GPU-fixed; projection absorbs the flip)
   sw-rasterizer: targets SDL_GPU's exact NDC (Module 4 port = API change, not maths change)
   matrices: column vectors, v' = M*v, COLUMN-MAJOR storage.
-        A matrix IS the pair of answers to "where do the basis vectors land":
-        c0 = image of (1,0), c1 = image of (0,1). Everything else is a
-        consequence, not a rule to memorise.
+        A matrix IS the set of answers to "where do the basis vectors land":
+        c0 = image of (1,0,..), c1 = image of (0,1,..), and so on. Everything else
+        is a consequence, not a rule to memorise.
+        mat2 / mat3 / mat4 ALL HAVE THE SAME SHAPE: N columns of vecN, and
+        identity() as a STATIC MEMBER on each (a free identity() became impossible
+        the moment mat3 existed — no arguments, so it could differ only by return
+        type, which C++ cannot overload on).
         WRITTEN IN ROWS, STORED IN COLUMNS. The first two floats in memory are
         the LEFT COLUMN read downwards, NOT the top row. Getting this backwards
         transposes the matrix, which turns a rotation into the opposite rotation
@@ -350,6 +354,34 @@ conventions:
         transpose == inverse ONLY for a rotation (orthonormal). VERIFIED false for
         scale(2,0.5). Using transpose as a cheap inverse is the worst kind of wrong
         — it looks almost right. 3.6 meets this properly with normals.
+        --- 3-D (Lesson 2.6) ---
+        EVERY ARGUMENT ABOVE SURVIVES UNCHANGED, because none of them counted the
+        axes. Three basis vectors, three columns; the proofs are identical.
+        ROTATION NOW NEEDS AN AXIS. Each axis rotation is the 2-D rotation acting
+        in the plane of the OTHER TWO, in the order given by the cycle
+        x -> y -> z -> x, with its own column left alone.
+        Ry's MINUS SIGN IS BELOW THE DIAGONAL, mirrored relative to Rx and Rz,
+        because the cycle wraps (z -> x) while the matrix lists x's row above z's.
+        THE #1 SIGN ERROR IN GRAPHICS — derive from the cycle, never recall the
+        shape. Test: rotation_y(t) * (0,0,1) == (sin t, 0, cos t).
+        VERIFIED: rotation_z's top-left 2x2 == mat2's rotation over 121 angles, 0
+        mismatches; each rotation fixes its own axis, has det 1, preserves length,
+        and transpose == inverse.
+        ROTATIONS ABOUT DIFFERENT AXES DO NOT COMMUTE — new in 3-D; in 2-D any two
+        rotations always did. Same-axis rotations still add. SHARPEST DEMO: pick a
+        point ON one of the axes so one rotation provably does nothing.
+        (1,0,0) with Rx(0.6), Ry(0.8): x-first -> (0.6967, 0.0000, -0.7174);
+        y-first -> (0.6967, 0.4050, -0.5921). Seed of gimbal lock (Module 7).
+        det becomes a VOLUME factor; its sign is HANDEDNESS, so det<0 renders a
+        model inside-out once 3.4's culling exists. MEASURED by counting lattice
+        points inside the transformed unit cube (120 steps/unit, inside iff
+        inverse(M)*p in [0,1)^3): identity 0.00%, rotation_y(0.7) -0.01%,
+        scale(1.6,.8,1.3) 0.00%, Rx*Ry*scale -0.00%.
+        THE 4x4's FOURTH COLUMN IS INERT while w = 0. A correct translation written
+        into c3 moves a point by EXACTLY (0,0,0) — measured, not approximated.
+        DIAGNOSIS (2.7's opening): a matrix can only scale each column by a
+        component of the input and add them up, so adding a CONSTANT needs a
+        component that is always the same number. DO NOT PRE-EMPT THIS.
   shaders: HLSL -> SDL_shadercross (3.0.0-preview) -> SPIR-V/DXIL/MSL  [Module 4+]
   cpp: C++20, no exceptions/RTTI in core, snake_case, private members trailing _,
        .hpp + #pragma once, [[nodiscard]], -Wall -Wextra // /W4, all warnings fixed
@@ -416,6 +448,7 @@ completed:
   - 2.3  Barycentric Coordinates from Signed Areas
   - 2.4  Interpolating Attributes Across a Triangle
   - 2.5  Matrices as Basis Transforms
+  - 2.6  Building mat4 by Hand
 
 capabilities:
   - verified C++20 toolchain (MSVC / GCC / Clang), 64-bit
@@ -447,6 +480,22 @@ capabilities:
     switches with [M]
   - maths: src/math/vec2.hpp (header-only) — arithmetic, length/length_squared,
     normalised(+_or), dot, perpendicular, project_onto, reflect, lerp, distance
+  - maths: src/math/vec3.hpp, vec4.hpp, mat3.hpp, mat4.hpp (header-only, NEW in
+    2.6). vec3 = vec2 with a z; every 1.7 idea carries over untouched. NO cross
+    product and NO perpendicular() — in 3-D there is a whole PLANE of
+    perpendiculars, so the 2-D function has no honest generalisation, and getting
+    a specific one needs a second vector, which is exactly what cross takes and
+    exactly why 3.4 introduces it when a triangle supplies one.
+    vec4 exists so a 4x4 has something to have columns of; its fourth component is
+    called w and is NOT yet given a meaning. to_vec4(v, w) is an EXPLICIT named
+    function, never an implicit conversion, so w is always something somebody
+    chose. xyz(v) DROPS w rather than dividing by it (the divide is 2.10's).
+    mat3: three vec3 columns; apply, compose, rotation_x/y/z, scale(sx,sy,sz),
+    determinant (cofactor expansion along the top row), transpose, inverse.
+    mat4: four vec4 columns, to_mat4(mat3) (VERIFIED faithful AND
+    composition-preserving), apply, compose. NO 4x4 determinant or inverse — 2.9
+    needs one only for a structured form whose inverse is far cheaper to write
+    directly.
   - maths: src/math/mat2.hpp (header-only, NEW in 2.5) — two vec2 COLUMNS, so
     column-major layout is a CONSEQUENCE of naming the right things rather than a
     convention to enforce. Verified: raw floats come out 2,0,1,3 and sizeof is
@@ -524,6 +573,23 @@ capabilities:
     disagreeing cells ringed and counted, band count swept with [ and ] so the count
     visibly jumps between 0 and 15 for one unchanging error. The sweep IS the lesson;
     a fixed impressive number would have taught the wrong thing.
+  - demo 2.6: [Tab] now cycles FIVE demos — cube (2.6) / basis (2.5) / triangles /
+    lines / Pong. main.cpp is past 1,600 lines. This is no longer merely awkward
+    and IT IS THE MODULE 5 ARGUMENT — do not fix it early, but do point at it (the
+    lesson does, explicitly).
+    Cube view: orthographic wireframe (literally drop z), depth-brightness CUE only
+    (no z-buffer, no lighting), the three mat3 columns drawn as red/green/blue
+    arrows, cube CENTRED on the origin so rotation spins it in place rather than
+    orbiting. [Z] cycles rotation_x / _y / _z / Rx*Ry / Ry*Rx — the last two share
+    both ingredients and differ ONLY in order. [,] [.] adjust, [0] reset,
+    [Space] spin.
+    [T] writes (1.2,0,0) into the 4x4's c3 and the cube MOVES BY 0.00 px. The
+    displacement is MEASURED (mat4 result minus mat3 result) so the HUD cannot lie.
+    That readout is the whole lesson, and it should START WORKING in 2.7 with no
+    change to mat4.hpp — only to what w the caller passes.
+    The wireframe is a genuinely ambiguous NECKER CUBE: orthographic projection
+    discards the information that would settle it, and perspective (2.10) is what
+    puts it back. Worth saying that perspective is not cosmetic.
   - demo 2.5: [Tab] now cycles FOUR demos — basis (2.5) / triangles (2.2-2.4) /
     lines (2.1) / Pong (1.8). Four in one binary is well past awkward; that IS the
     Module 5 argument and it is now loud.
@@ -602,6 +668,25 @@ decisions:
     (< 0.4 levels for 4096 entries), written down, and deferred — optimising a 232 us
     cost inside a 16.6 ms budget would be optimising by reflex, which is precisely what
     Module 3's profiling lesson teaches against.
+  - identity() moved to a STATIC MEMBER on every matrix type. FORCED: a free
+    identity() takes no arguments, so mat2's and mat3's could differ only by return
+    type. Everything else survived — transpose/inverse/determinant overload on the
+    parameter, rotation vs rotation_x/y/z differ by name, scale differs by arity.
+    The function with NOTHING to disambiguate it was the one that broke. General
+    rule: a zero-argument function cannot be overloaded at all, so make it a static
+    member or give it a distinct name while that is still free.
+  - mat2's uniform scale(float) REMOVED. Unused, and it would have become a trap
+    the moment someone wanted a uniform 3-D scale: scale(2.0f) silently meaning
+    "the 2-D one". Component counts are explicit now.
+  - mat3::inverse names its elements in WRITTEN notation (m00..m22) BEFORE doing
+    anything. The first draft transcribed the adjugate straight into column members
+    and had two cofactors using the wrong component — plausible-looking and wrong.
+    The rewrite fixes the CLASS of error, not the instance. M*inverse(M)==I over
+    300 matrices is what caught it.
+  - the demo cube is CENTRED on the origin. Rotation is always about the origin, so
+    a corner-at-origin cube would orbit rather than spin. That is the "choose
+    coordinates where the pivot is already the origin" workaround — what asset
+    pipelines really do, and the cheap half of Exercise 2.5.3.
   - mat2 stores two vec2 COLUMNS rather than float[4]. The columns are the images
     of the basis vectors — the whole lesson — so the type makes the idea structural
     and gets column-major layout for free rather than by decree.
@@ -635,7 +720,7 @@ files:
             fixed_step.hpp, fixed_step.cpp
   src/gfx/: colour.hpp, colour.cpp, framebuffer.hpp, framebuffer.cpp,
             raster.hpp, raster.cpp
-  src/math/: vec2.hpp, mat2.hpp
+  src/math/: vec2.hpp, vec3.hpp, vec4.hpp, mat2.hpp, mat3.hpp, mat4.hpp
   src/game/: pong.hpp, pong.cpp
   docs/: index.html, conventions.html, math-toolbox.html, cpp-style.html
   docs/lessons/: 00-01-what-is-an-engine.html, 00-02-how-this-course-works.html,
@@ -647,27 +732,36 @@ files:
                  01-07-vectors-2d.html, 01-08-pong.html,
                  02-01-lines.html, 02-02-triangle-edge-functions.html,
                  02-03-barycentric.html, 02-04-attribute-interpolation.html,
-                 02-05-matrices.html
+                 02-05-matrices.html, 02-06-mat4.html
   docs/_template/: lesson-template.html, README.md, apply-shared.py, check-page.js
   memory/: 2026-07-16.md, 2026-07-18.md, 2026-07-21.md, 2026-07-22.md,
-           2026-07-23.md, 2026-07-24.md
+           2026-07-23.md, 2026-07-24.md, 2026-07-25.md
   (retired: hello.cpp)
 
-next: 2.6 — Building mat4 by Hand
-      (planned filename: docs/lessons/02-06-mat4.html — 2.5 links to it)
-      The same question in 3-D: where do THREE basis vectors land? Build mat3 first
-      so the idea carries over with nothing new to learn — rotation about each axis
-      derived the same way (each is a 2-D rotation acting in the plane of the OTHER
-      two axes, with the third column left alone), scale, and the determinant as a
-      VOLUME factor.
-      THEN the fourth column and row — but WITHOUT explaining w. Build mat4 as
-      "a mat3 in the top-left corner plus a spare column", show that the spare
-      column does nothing useful under the rules we have so far, and STOP. 2.7 is
-      where w earns its keep. The temptation to explain homogeneous coordinates
-      early is strong: RESIST IT. 2.5 deliberately left translation broken and the
-      payoff depends on the gap staying open one more lesson.
-      Storage stays column-major: mat4 = four vec4 columns, same shape as mat2 and
-      the same "columns are where the basis vectors land" reading.
-      Exercise 2.5.3 (rotate about a point, done the painful way) is the setup —
-      2.6 should reference it and 2.7 should resolve it.
+next: 2.7 — Homogeneous Coordinates and What w Really Means
+      (planned filename: docs/lessons/02-07-homogeneous.html — 2.6 links to it)
+      THE PAYOFF LESSON. 2.5 proved no matrix can translate; 2.6 built the 4x4 and
+      showed its fourth column sitting inert. Now spend the fourth component.
+      OPEN with 2.6's diagnosis verbatim: a matrix can only scale each column by a
+      component of the input and add them up, so adding a CONSTANT needs a
+      component that is always the same number. Then: let w be that number.
+      FOUR QUESTIONS the lesson must answer — Exercise 2.6.4 sets them up and they
+      are the spine:
+        1. Why 1? What justifies it beyond "the arithmetic works"?
+        2. Should a DIRECTION (normal, velocity) also carry 1? NO — w=0 for
+           directions is precisely why translation must not affect them, and that
+           is a FEATURE. This is where 2.6's w=0 pays off rather than being a
+           placeholder.
+        3. What is w after composing two matrices and applying? Is 1 preserved?
+           Yes for affine transforms — show WHY the bottom row (0,0,0,1) is what
+           guarantees it.
+        4. Can w be something OTHER than 0 or 1, and what would that mean?
+           -> the door to perspective. Open it, NAME the perspective divide, hand
+           it to 2.10. Do NOT derive projection here.
+      POINTS VS DIRECTIONS is the through-line: one type, one number, two meanings.
+      Then translation(vec3) and the affine composition Exercise 2.5.3 wanted, so
+      (M2*M1, M2*t1 + t2) disappears into a single multiply.
+      MILESTONE: the demo already has the failing case on [T]. It should START
+      WORKING with no change to mat4.hpp at all — only to the w the caller passes.
+      Make that the milestone and call back to 2.6's 0.00 px readout.
 ```

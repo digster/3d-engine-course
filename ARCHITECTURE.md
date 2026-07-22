@@ -267,6 +267,36 @@ Two consequences worth stating because they will govern `mat3` and `mat4` in Les
   `framebuffer::put_pixel` — the rule is *check where the input can actually be wrong*, and a 2×2's
   indices are literals at every call site.
 
+**The maths library in three dimensions, as of Lesson 2.6.** `vec3`, `vec4`, `mat3` and `mat4`
+join the header-only `src/math/`, and the notable thing is how little had to be decided. Lesson
+2.5's derivations never counted the axes, so every rule carried over and the new types are the
+same shape as the old ones: N columns of `vecN`, column-major, arithmetic written as its own
+derivation.
+
+Three decisions are worth recording because they will govern the directory as it grows:
+
+- **`identity()` is a static member on every matrix type.** Adding `mat3` made a free `identity()`
+  impossible — it takes no arguments, so the `mat2` and `mat3` versions could differ only by return
+  type, which C++ cannot overload on. Everything else survived (`transpose`, `inverse` and
+  `determinant` overload on the parameter; `rotation` versus `rotation_x/y/z` differ by name;
+  `scale` differs by arity), which localises the general rule: **a zero-argument function cannot be
+  overloaded at all**, so it needs a distinct name or a type scope from the start.
+- **Nothing speculative ships.** There is no cross product on `vec3` (Lesson 3.4 derives it when a
+  triangle supplies the second vector a specific perpendicular requires), no `perpendicular` (in 3-D
+  there is a plane of them, so the 2-D function has no honest generalisation), and no 4×4
+  determinant or inverse (Lesson 2.9 needs one only for a structured form whose inverse is far
+  cheaper written directly). Every function in `src/math/` exists because a lesson needed it, which
+  is why every one has a derivation to point at.
+- **Conversions between vector widths are explicit.** `to_vec4(v, w)` is a named function rather
+  than an implicit conversion, so a 3-D vector can never silently acquire a fourth component nobody
+  chose — and `xyz(v)` *drops* the fourth rather than dividing by it, because that divide is the
+  perspective divide and belongs to Lesson 2.10 under its own name.
+
+`mat4` is deliberately not yet more capable than `mat3`: with `w = 0` its fourth column is
+multiplied by zero and contributes nothing, which Lesson 2.6 demonstrates rather than papers over.
+Its layout is already the one SDL_GPU and HLSL constant buffers expect, so Module 4 uploads one
+with a plain `memcpy`.
+
 **Attributes, as of Lesson 2.4.** The rasterizer now carries values from the corners into the
 interior, and three structural decisions came out of it.
 
