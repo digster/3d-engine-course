@@ -60,6 +60,38 @@ namespace engine {
 /// Linear light -> encoded 8-bit channel, clamped and rounded.
 [[nodiscard]] Uint8 linear_to_srgb_u8(float linear);
 
+// ---- Linear-light colour ----------------------------------------------------
+
+/// A colour as the three quantities of light it represents, each in [0,1].
+///
+/// This is the form to do **arithmetic** in. A `Uint32` is a *storage* format:
+/// its channels have been through the transfer function above, so adding or
+/// scaling them does not add or scale light. Every operation that models light —
+/// interpolating a colour across a triangle (Lesson 2.4), summing the
+/// contributions of several lamps (Module 3), multiplying by a material's
+/// reflectance (Module 6) — belongs in this type, and the conversion happens at
+/// the edges of the calculation rather than inside it.
+///
+/// Values are allowed to exceed 1.0. That is what "brighter than white" means,
+/// and Module 6's HDR pipeline treats it as signal; `to_encoded` clamps only
+/// because an 8-bit pixel has nowhere to put the excess.
+struct linear_rgb
+{
+    float r = 0.0f;
+    float g = 0.0f;
+    float b = 0.0f;
+};
+
+/// Decode a stored pixel into the light it represents.
+///
+/// Alpha is dropped, deliberately: alpha is a coverage fraction rather than a
+/// quantity of light, so it does not belong in a type whose whole purpose is to
+/// be linear in light. Carry it separately if you need it.
+[[nodiscard]] linear_rgb to_linear(Uint32 encoded);
+
+/// Encode light back into a stored pixel — clamped to [0,1], alpha 255.
+[[nodiscard]] Uint32 to_encoded(linear_rgb light);
+
 // ---- Mixing -----------------------------------------------------------------
 
 /// Mix two colours by interpolating their **stored values** directly.

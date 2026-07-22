@@ -67,7 +67,7 @@ inventing one — but without paying framework ceremony before it buys anything.
 │   │   ├── framebuffer.hpp # CPU pixel buffer, ARGB8888, row-major   [EXISTS from 1.5]
 │   │   ├── framebuffer.cpp
 │   │   ├── raster.hpp      # which pixels a SHAPE is made of         [EXISTS from 2.1]
-│   │   └── raster.cpp      # lines (2.1) + triangles (2.2)
+│   │   └── raster.cpp      # lines (2.1) + triangles (2.2) + shading (2.4)
 │   ├── game/               # NOT engine — game code, see §2.1.1        [EXISTS from 1.8]
 │   │   ├── pong.hpp        # the Module 1 checkpoint game
 │   │   └── pong.cpp
@@ -238,6 +238,36 @@ Two decisions there are load-bearing rather than incidental:
 - **The zero-area check is not housekeeping.** The fill rule's correctness proof requires a
   non-degenerate edge, so rejecting collinear triangles up front is what makes exactly-once
   coverage true rather than usually-true.
+
+**Attributes, as of Lesson 2.4.** The rasterizer now carries values from the corners into the
+interior, and three structural decisions came out of it.
+
+- **`struct vertex` bundles a position with what that corner carries** — position *and* colour in
+  one object. This is a correctness decision, not a tidiness one. `fill_triangle` reorients a
+  backwards triangle by swapping two vertices; swapping loose coordinates while leaving loose
+  attributes behind yields a triangle of exactly the right shape, in the right place, shaded one
+  corner out of step. It fires for one winding only, so a spinning triangle looks correct half the
+  time and a static scene may never show it. One `std::swap` on a struct makes it unwritable, and
+  every attribute Module 3 adds inherits the fix for free.
+- **`fill_setup` / `prepare_fill` hold the shared preparation** — clipped bounding box, three
+  fill-rule biases, six per-pixel steps, three starting values — because there are now two fills
+  and Module 3 brings more. The rule being followed is not "never repeat yourself" but *never
+  repeat something subtle*: a bias wrong in one fill and right in another produces a crack visible
+  only where those two kinds of triangle meet. **Orientation is deliberately excluded** from the
+  helper and left to the caller, because orienting moves vertices and only the caller knows what a
+  vertex carries.
+- **Coverage and interpolation read the same accumulators differently.** The accumulator holds
+  `E(x,y) + bias`; the coverage test wants the bias (that *is* the top-left rule) and interpolation
+  must subtract it back out. Left in, it translates the whole attribute field by `1/‖e‖` pixels
+  perpendicular to the opposite edge — invisible on a smooth attribute, whole wrong pixels on a
+  quantised one. `is_top_left` moved to the header for this reason: once anything has to *undo* the
+  bias, the rule producing it is part of how the rasterizer's numbers are to be read, and a rule
+  you cannot inspect is a rule you cannot check.
+
+Colour interpolation happens in **linear light** via `colour.hpp`'s `linear_rgb`. That type exists
+so the distinction lives in a function signature rather than a comment; `raster.cpp` keeps a
+private `rgb3` for the "whatever space we are averaging in" case, because a type named
+`linear_rgb` holding encoded 0–255 values would be a lie that compiles.
 
 `edge_function` is `constexpr` in the header for the same reason `vec2` is header-only: three
 arithmetic operations that every caller wants inlined. Its documented limit — coordinates within

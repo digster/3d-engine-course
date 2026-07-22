@@ -11,6 +11,8 @@
 
 #pragma once
 
+#include "gfx/colour.hpp"   // linear_rgb: the space vertex colours are combined in
+
 #include <SDL3/SDL.h>
 
 // Forward declaration, not an include: every function below takes a
@@ -84,6 +86,32 @@ void draw_line_naive(framebuffer& fb, int x0, int y0, int x1, int y1, Uint32 col
     return (bx - ax) * (py - ay) - (by - ay) * (px - ax);
 }
 
+/// Is the directed edge A→B a "top" or a "left" edge of its triangle?
+///
+/// Assumes the triangle has already been oriented so that its signed area is
+/// **positive** — which in framebuffer coordinates (+y down) means its vertices
+/// run clockwise on screen. Under that orientation:
+///
+///   - a **top** edge is horizontal and travels rightwards (`dy == 0, dx > 0`);
+///   - a **left** edge is any edge travelling upwards (`dy < 0`).
+///
+/// Both are geometric properties of the edge, which is the entire point. Two
+/// triangles that share an edge traverse it in opposite directions, so exactly
+/// one of them sees it as top-or-left and claims the pixels lying exactly on it.
+/// Neither triangle needs to know the other exists. Lesson 2.2 §3.6.
+///
+/// This was private to raster.cpp until Lesson 2.4. It is public now because the
+/// bias it produces is no longer only a coverage decision: 2.4 has to *undo* it
+/// before interpolating, and a rule you cannot inspect is a rule you cannot
+/// check. The demo reproduces the fill loop with and without the bias, and it
+/// must ask the same question the engine asks, not a re-typed approximation.
+[[nodiscard]] constexpr bool is_top_left(int ax, int ay, int bx, int by)
+{
+    const int dx = bx - ax;
+    const int dy = by - ay;
+    return (dy == 0 && dx > 0) || (dy < 0);
+}
+
 /// Where a point sits inside a triangle, as three fractions that sum to 1.
 ///
 /// These are **barycentric coordinates**, and they are the triangle's own
@@ -135,6 +163,71 @@ struct barycentric
 void fill_triangle(framebuffer& fb,
                    int x0, int y0, int x1, int y1, int x2, int y2,
                    Uint32 colour);
+
+// ---- Attributes: things a vertex knows and the interior does not -------------
+
+/// A triangle corner as the rasterizer sees it: a pixel position, plus whatever
+/// that corner happens to know.
+///
+/// Bundling the position with the attributes is not tidiness, it is
+/// correctness. `fill_triangle` reorients a backwards triangle by swapping two
+/// vertices, and every attribute must move with the position it belongs to. Six
+/// loose ints and three loose colours make it possible — easy, in fact — to swap
+/// the coordinates and forget the colours, which produces a triangle whose
+/// shading is rotated by one corner and whose geometry is perfect. One `struct`
+/// and one `std::swap` make that bug unwritable. Lesson 2.4 §4.2.
+///
+/// It carries only a colour today because only a colour is needed today.
+/// Module 3 adds depth (`z`), texture coordinates (`u`, `v`) and normals as the
+/// lessons that need them arrive — each one three more lines in the same loop,
+/// which is exactly the point Lesson 2.4 §3.6 makes.
+struct vertex
+{
+    int x = 0;                       ///< pixel column
+    int y = 0;                       ///< pixel row
+    Uint32 colour = 0xFFFFFFFFu;     ///< ARGB8888 as stored — i.e. sRGB-encoded
+};
+
+/// Which space three vertex colours are combined in.
+///
+/// This is a real choice with a visibly different answer, not a tuning knob.
+/// See Lesson 2.4 §3.4: the centre of a red/green/blue triangle comes out as
+/// mid-grey 156 in linear light and as a murky 85 in encoded space, because
+/// averaging stored values does not average light.
+enum class blend_space
+{
+    /// Decode to light, interpolate, re-encode. **The correct one**, and the
+    /// default. What Gouraud shading has always meant.
+    linear,
+
+    /// Interpolate the stored values directly. **Wrong**, and kept anyway — the
+    /// same bargain as `draw_line_naive` and Pong's naive collision test. A
+    /// failure you can summon with one keystroke teaches more than a paragraph
+    /// describing it, and this particular failure is responsible for the muddy
+    /// band down the middle of a great many gradients.
+    encoded
+};
+
+/// Fill a triangle whose corners carry their own colours — **Gouraud shading**.
+///
+/// Every interior pixel gets the barycentric-weighted average of the three
+/// corner colours, which is the unique affine function agreeing with them
+/// (Lesson 2.3 §3.7). Two details that are easy to get wrong and invisible when
+/// you do:
+///
+///   - the weights used here are **unbiased**. The top-left rule's `-1` decides
+///     *coverage*, and feeding it into an attribute displaces the whole field by
+///     `1 / edge_length` pixels and breaks the sum-to-one identity. Lesson 2.4
+///     §3.5.
+///   - the blend happens in **linear light** by default, because a colour is a
+///     quantity of light and averaging encoded values does not average light.
+///
+/// Same coverage as the flat `fill_triangle` — identical bounding box, identical
+/// fill rule, identical pixels — so the two can be swapped without a seam
+/// appearing anywhere.
+void fill_triangle(framebuffer& fb,
+                   const vertex& a, const vertex& b, const vertex& c,
+                   blend_space space = blend_space::linear);
 
 /// The outline only — three calls to draw_line.
 ///

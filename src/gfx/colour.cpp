@@ -84,6 +84,29 @@ Uint8 linear_to_srgb_u8(float linear)
     return static_cast<Uint8>(encoded * 255.0f + 0.5f);
 }
 
+linear_rgb to_linear(Uint32 encoded)
+{
+    // Three table loads. The table is the reason this is cheap enough to call
+    // per vertex — or, if you must, per pixel.
+    return {srgb_to_linear_u8(red_of(encoded)),
+            srgb_to_linear_u8(green_of(encoded)),
+            srgb_to_linear_u8(blue_of(encoded))};
+}
+
+Uint32 to_encoded(linear_rgb light)
+{
+    // The expensive direction, and it is worth knowing why the asymmetry
+    // exists. Decoding has 256 possible inputs, so it fits in a table. Encoding
+    // takes a continuous float, so it runs the real `pow` — around thirty times
+    // the cost of a load. Lesson 2.4 §3.7 measures what that means when it
+    // happens once per pixel, and Exercise 2.4.3 builds the table that removes
+    // it, with the error bound worked out rather than hoped for.
+    return pack_argb(linear_to_srgb_u8(light.r),
+                     linear_to_srgb_u8(light.g),
+                     linear_to_srgb_u8(light.b),
+                     255);
+}
+
 Uint32 mix_encoded(Uint32 a, Uint32 b, float t)
 {
     return pack_argb(mix_channel_encoded(red_of(a), red_of(b), t),

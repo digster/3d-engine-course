@@ -1310,6 +1310,61 @@ td code { font-size: 0.82em; }
   </div>
 
   <div class="tool">
+    <h3>Attribute interpolation <span class="from">Lesson 2.4</span></h3>
+    <div class="eq">
+      <span>\[ a(P) = w_0 a_0 + w_1 a_1 + w_2 a_2 \]</span>
+      <span class="eq-plain">a(P) = w0*a0 + w1*a1 + w2*a2</span>
+    </div>
+    <p>
+      <strong>The unique affine function through three corner values</strong> — not merely a
+      reasonable blend. An affine function of two variables has three coefficients; three corners
+      give three conditions; a non-degenerate triangle makes the system solvable exactly once. The
+      barycentric form <em>is</em> that solution, because each weight is itself affine and equals 1
+      at its own vertex and 0 at the others.
+    </p>
+    <p>
+      It works for any payload you can scale and add: colour, depth, texture coordinates, normals.
+      The rasterizer never learns which — which is also why it will hand you an interpolated normal
+      that is no longer unit length.
+    </p>
+    <div class="worked">
+      <span class="label">Worked example</span>
+      <p>
+        Same triangle as above, <code>w = (0.4, 0.3, 0.3)</code>, carrying altitudes 10, 40, 70:
+        <code>0.4(10) + 0.3(40) + 0.3(70) = 4 + 12 + 21 = 37</code>.
+      </p>
+    </div>
+    <div class="callout warn">
+      <span class="label">Two silent ways to get it wrong</span>
+      <p>
+        <strong>1 — biased weights.</strong> The top-left rule&rsquo;s <code>-1</code> is a coverage
+        decision. Left in the accumulators when you divide, it translates the entire attribute field
+        by
+      </p>
+      <div class="eq">
+        <span>\[ \text{displacement} = \frac{1}{\lVert \mathbf{e} \rVert} \ \text{pixels} \]</span>
+        <span class="eq-plain">displacement = 1 / |e| pixels, perpendicular to the opposite edge</span>
+      </div>
+      <p>
+        where <code>&#8214;e&#8214;</code> is the length of the edge opposite that weight&rsquo;s
+        vertex — the area cancels. So the bug lives in <em>small</em> triangles, and it is invisible
+        on a smooth attribute but flips whole pixels on a quantised one. Subtract the bias before
+        dividing; it is one exact integer operation.
+      </p>
+      <p>
+        <strong>2 — averaging codes instead of light.</strong> A stored channel value is a code for
+        a quantity of light, not the quantity itself. Decode to linear, interpolate, encode once.
+        The centre of a red/green/blue triangle is <code>(156,156,156)</code> done properly and
+        <code>(85,85,85)</code> done naively — a factor of 3.66 in emitted light.
+      </p>
+    </div>
+    <p>
+      All of this is affine <em>in screen space</em>, which is exact for a flat triangle and wrong
+      the moment depth varies across one. Lesson 3.2 corrects it with the <code>1/w</code> trick.
+    </p>
+  </div>
+
+  <div class="tool">
     <h3>Cross product <span class="from">Lesson 3.4</span></h3>
     <div class="eq">
       <span>\[ \mathbf{a} \times \mathbf{b} = \begin{pmatrix} a_y b_z - a_z b_y \\ a_z b_x - a_x b_z \\ a_x b_y - a_y b_x \end{pmatrix} \]</span>

@@ -934,3 +934,91 @@ prefers the definition in the object file over the one in `libSDL3.dylib`, so ke
 fully drivable with no changes to the production code. This is how 1.2's six-frame edge table was
 verified value-for-value rather than asserted. Keep such harnesses in the scratchpad — they are
 authoring-time verification, not course content, until Module 8's testing lesson.
+
+## Sub-pixel errors have a damage profile you cannot sample (Lesson 2.4)
+
+The top-left rule's `-1` bias, left in the accumulators when they are divided into barycentric
+weights, does **not** distort the attribute field. It *translates* it, rigidly, by
+
+```
+displacement = 1 / ‖e‖   pixels, perpendicular to the edge opposite that weight's vertex
+```
+
+The area cancels — which is the whole result. A triangle with a 100-pixel edge is off by 1/100 of
+a pixel; a triangle with a 4-pixel edge is off by a quarter of one. **The bug therefore lives in
+small triangles**, i.e. dense meshes, which is exactly the geometry nobody inspects individually.
+
+The part worth internalising is what happened when we tried to demonstrate it. On a *smooth*
+attribute the shift changes a channel by a fraction of one level out of 256 — undetectable. On a
+*quantised* attribute (texel index, stripe, checker cell) it flips whole pixels. Sweeping the
+stripe frequency over one fixed triangle with one fixed 0.088-pixel error:
+
+| bands | 2.00 | 2.50 | 3.00 | 3.50 | 4.00 | 5.00 |
+|---|---|---|---|---|---|---|
+| wrong pixels (of 52) | 4 | 0 | 0 | **15** | 4 | 0 |
+
+Nothing about the error changed across that row. Only where the thresholds happened to fall did.
+So "it looked fine when I tried it" is a sample of one from a distribution containing both 0 and
+15, and the discipline is to **derive the magnitude of a sub-pixel error rather than look for it**
+— `1/‖e‖` is computable in your head, and the fix is one exact integer subtraction, so there is no
+decision left to make once you know the number.
+
+This also settled how to build the demo: the band count is swept live with `[` and `]` precisely
+so the count jumps around. A panel showing one impressive fixed number would have taught that the
+bug is visible, which is the opposite of true.
+
+## Do not oversell a real principle with a fake symptom (Lesson 2.4)
+
+I expected to find that stepping barycentric weights as floats drifts visibly, and to use that as
+the argument for integer accumulators. Measured on a hostile 4000×900 triangle:
+
+| method | worst error | in 8-bit colour levels |
+|---|---|---|
+| integer accumulator, then divide | **0** (bit-exact) | 0 |
+| float weight, 4,000 adds along one row | 4.94 × 10⁻⁶ | 0.0013 |
+| float weight, never reset across 900 rows | 4.26 × 10⁻⁵ | 0.011 |
+
+One eight-hundredth of a colour level. The scary version of the claim is simply false at this
+scale, and the honest argument is narrower and still sufficient: **integers are exact,
+reproducible, and cost the same, so take the exact option and stop having to reason about its
+error.** Where float accumulation genuinely bites is where comparisons are against tiny
+differences — z-buffer tests in Module 3, which this table now feeds into.
+
+Lesson learned about the course itself: an overstated principle backed by a symptom the student
+cannot reproduce teaches them to distrust the principle. Measure first, then decide how strong a
+claim the measurement supports.
+
+## Name a type after what it is, not what it is shaped like (Lesson 2.4)
+
+`linear_rgb` and the rasterizer-private `rgb3` have identical layout — three floats — and reusing
+one for both was tempting. It would have been a lie that compiles: under `blend_space::encoded`
+the numbers are stored 0–255 channel values, and a variable named `linear_rgb` holding those is
+precisely the confusion Lesson 1.6 exists to prevent. Two structs, one distinction, zero runtime
+cost.
+
+The same instinct produced `struct vertex`. Bundling a position with the attributes that corner
+carries is not tidiness — it makes "swap the coordinates, forget the colours" *unwritable*, and
+that bug has no geometric symptom at all: right shape, right place, shading rotated by one corner,
+and only for one winding.
+
+## What correct colour actually costs in a software rasterizer (Lesson 2.4)
+
+Measured on a 20,760-pixel triangle, 400 iterations, release build:
+
+| fill | per triangle | per pixel | relative |
+|---|---|---|---|
+| flat `fill_triangle` | 20.2 µs | 0.97 ns | 1.0× |
+| shaded, encoded blend (wrong) | 57.9 µs | 2.8 ns | 2.9× |
+| shaded, linear blend (correct) | 232.0 µs | 11.2 ns | **11.5×** |
+
+Nearly all of the gap is `std::pow` inside `linear_to_srgb`, three times per pixel. Note the
+asymmetry that causes it: **decode has 256 possible inputs and fits in a table; encode takes a
+continuous float and does not.** A 4096-entry encode table is under 0.4 stored levels of error
+everywhere — the bound comes from the curve's steepest slope, `12.92 × 255 ≈ 3295` levels per unit
+of light near black, so one table step moves the output ~0.8 levels and nearest-entry rounding
+halves it. Left undone deliberately: 232 µs inside a 16.6 ms budget is not a problem we have, and
+the entire cost disappears in Module 4 where the GPU encodes sRGB on write for free.
+
+Hoisting matters more than micro-optimisation here. Decoding the three corner colours *once per
+triangle* rather than per pixel, and taking one reciprocal instead of 20,760 divisions, are what
+make the correct path affordable at all.

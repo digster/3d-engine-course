@@ -7,7 +7,7 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-07-22 (after Lesson 2.3 — Module 2: 3 of 12, 17 of 94 lessons)
+updated: 2026-07-23 (after Lesson 2.4 — Module 2: 4 of 12, 18 of 94 lessons)
 
 conventions:
   world: right-handed, Y-up, -Z forward
@@ -255,6 +255,55 @@ conventions:
             carry both sets.
             Degenerate (collinear) triangle -> all zeros, the one case where the weights
             do not sum to 1. Documented in the header; a NaN here would spread silently.
+  interpolation: a(P) = w0*a0 + w1*a1 + w2*a2. The UNIQUE affine function through the
+            three corners — 3 coefficients, 3 conditions, one solution — so there is
+            nothing to tune and no better scheme to find. Works for ANY payload you can
+            scale and add; the rasterizer never learns what it carries, which is also why
+            it returns an interpolated NORMAL that is no longer unit length (renormalise
+            per pixel, 3.6) and a DEPTH that is not perspective-correct (3.2).
+            VERIFIED: an attribute that is itself affine in position (3x - 2y + 7)
+            reproduces itself over 3721 points, worst error 3.05e-5 on values up to 120.
+            UNBIAS BEFORE INTERPOLATING — the single silent trap of 2.4. The top-left
+            rule's -1 is a COVERAGE decision. Left in the accumulators when you divide it
+            (a) breaks sum-to-one by (b0+b1+b2)/2A, and EXACTLY one or two of the three
+            biases is -1, never zero of them and never all three — because the three
+            directed edges' dy sum to 0 and cannot all be 0, so at least one is negative
+            (a left edge, bias 0) and at least one positive (bias -1). Brute-forced over
+            all 495,648 non-degenerate triangles in a 9x9 grid: 247,824 sum to -1,
+            247,824 to -2, none to anything else.
+            (b) TRANSLATES the whole attribute field — rigidly, not tilted — by
+                displacement = 1 / |edge opposite that weight's vertex|, in PIXELS,
+                perpendicular to that edge. The area CANCELS. Derived from
+                |grad w0| = |e| / 2A; both verified numerically.
+            So the bug lives in SMALL triangles, i.e. dense meshes. On a smooth attribute
+            it is a fraction of one colour level and invisible. On a QUANTISED one (texel
+            index, stripe, checker cell) a sub-pixel shift at a threshold flips WHOLE
+            pixels: measured 0 to 15 wrong out of 52 on ONE triangle with ONE fixed
+            0.088 px error, depending only on where the thresholds happened to fall.
+            THEREFORE: derive the magnitude of a sub-pixel error, never look for it.
+            "It looked fine when I tried it" is a sample of one from a distribution
+            containing both 0 and 15.
+            The fix is one exact integer subtraction: the accumulator holds E + bias and
+            bias is a known constant, so E = accumulator - bias, with no drift to unwind.
+            Coverage keeps using the BIASED value in the same loop, one line above.
+  colour-interpolation: DECODE TO LINEAR, INTERPOLATE, ENCODE ONCE. A stored channel is
+            a CODE for a quantity of light, not the quantity. MEASURED on an R/G/B
+            triangle: centre pixel (156,156,156) in linear light vs (85,85,85) on stored
+            values — 0.3325 vs 0.0908 of white's light, a factor of 3.66, so the naive
+            blend emits 27% of what it claims. R/G edge midpoint 188 vs 128, matching
+            Lesson 1.6 exactly (same arithmetic, arriving through a triangle).
+            At w=(0.4,0.3,0.3): (170,149,149) correct vs (102,77,77) naive.
+            HONEST EXCEPTION: an artist's UI-gradient swatches may genuinely mean the
+            encoded blend. Our vertex colours become LIGHTING RESULTS in 3.6, and a
+            quantity of light is averaged as light. Ask what the number measures.
+  stepping-precision: integer accumulators are BIT-EXACT against direct evaluation
+            (worst difference 0 over 4000 steps). Float-stepped weights drift only
+            4.94e-6 over 4000 adds = 0.0013 of an 8-bit colour level = 0.020 texels of a
+            4096 texture; carried across 900 rows without a reset, 4.26e-5 = 0.011 levels.
+            SO DO NOT OVERSELL IT: the case for integers is exactness, reproducibility
+            and zero cost — NOT a visible artifact. Overselling a real principle with a
+            fake symptom teaches students to distrust the principle. Where it WILL matter
+            is z-buffer comparisons against tiny differences (3.1).
   shaders: HLSL -> SDL_shadercross (3.0.0-preview) -> SPIR-V/DXIL/MSL  [Module 4+]
   cpp: C++20, no exceptions/RTTI in core, snake_case, private members trailing _,
        .hpp + #pragma once, [[nodiscard]], -Wall -Wextra // /W4, all warnings fixed
@@ -319,6 +368,7 @@ completed:
   - 2.1  Lines: DDA, then Bresenham
   - 2.2  The Triangle: Edge Functions
   - 2.3  Barycentric Coordinates from Signed Areas
+  - 2.4  Interpolating Attributes Across a Triangle
 
 capabilities:
   - verified C++20 toolchain (MSVC / GCC / Clang), 64-bit
@@ -365,6 +415,33 @@ capabilities:
   - raster: edge_function (constexpr), fill_triangle (bbox + incremental + top-left rule,
     either winding, degenerate- and offscreen-safe), draw_triangle (wireframe),
     struct barycentric + barycentric_at (one reciprocal, three multiplies)
+  - raster 2.4: is_top_left is now PUBLIC (interpolation has to UNDO the bias, so the
+    rule producing it must be inspectable — and the demo must ask the engine's question,
+    not a re-typed copy of it). struct vertex {x, y, colour} — bundling position with
+    attributes is CORRECTNESS, not tidiness: reorientation does std::swap(v1,v2) and the
+    colour moves with the position it belongs to. enum class blend_space {linear,
+    encoded}, defaulting to linear. fill_triangle OVERLOAD taking three vertices =
+    Gouraud shading, unbiased weights, linear light. VERIFIED: identical coverage to the
+    flat fill over 400 random triangles (0 mismatches), and identical output for both
+    windings over 200 (0 differing pixels).
+  - raster internals: fill_setup + prepare_fill — bbox, biases, steps and starting values
+    extracted so two fills (and Module 3's more) share ONE copy of the subtle part.
+    ORIENTATION IS DELIBERATELY LEFT TO THE CALLER: only the caller knows what a vertex
+    carries. Private rgb3 + corner_in/pixel_from: NOT linear_rgb, because under
+    blend_space::encoded the numbers are 0..255 stored values and a type called
+    linear_rgb holding those is a lie that compiles.
+  - colour 2.4: struct linear_rgb + to_linear / to_encoded — the type that keeps light
+    arithmetic out of stored values. No alpha in it, deliberately (coverage is not light).
+    Values above 1.0 permitted; to_encoded clamps only because 8 bits has nowhere to put
+    the excess (Module 6 HDR depends on that not being an error).
+  - COST, measured on a 20,760-px triangle x400, release: flat fill 20.2 us, encoded
+    blend 57.9 us, linear blend 232.0 us = 11.2 ns/px = 11.5x the flat fill. Nearly all
+    of it is pow() in linear_to_srgb; decode is a 256-entry table, encode has no obvious
+    one. Corner colours decoded ONCE per triangle and 1/area hoisted — without those it
+    is worse for no gain. A 4096-entry encode LUT is under 0.4 levels of error everywhere
+    (slope 12.92*255 = 3295 levels per unit of light near black) — Exercise 2.4.3.
+    NOT done on purpose: 232 us of a 16,600 us budget is not a problem we have, and the
+    whole cost vanishes in Module 4 where the GPU encodes sRGB on write for free.
   - demo: [Tab] now CYCLES THREE demos. Triangles (2.2): a rotating triangle in filled /
     wireframe / HALF-PLANE view (colour by how many of the three edge tests a pixel passes
     — Figure 1 rendered live from the shipped code), plus a coverage COUNTER proving the
@@ -380,10 +457,23 @@ capabilities:
     an 8x magnified pixel inspector that reads back the REAL routine's output, algorithm
     switchable [1][2][3], live pixel count and per-fan timing. Naive lights 1483 px where
     DDA/Bresenham light 2081. Pong preserved on [Tab].
-  - known-and-deliberate: the weights are computed per pixel via barycentric_at rather
-    than stepped incrementally — 2.4 folds them into the fill loop and must keep biased
-    (coverage) and unbiased (interpolation) values apart; nothing is interpolated across
-    a triangle yet (2.4);
+  - demo 2.4: [6] GOURAUD — R/G/B corners, [M] switches blend space, and the centre pixel
+    is READ BACK out of the framebuffer and printed (156 vs 85), so the HUD reports what
+    was drawn rather than what we believe was drawn. [7] UV CHECKER — the same loop
+    carrying (u,v) instead, written out longhand in main.cpp so it can be compared line
+    for line against the engine's, and so the by-hand attribute swap on reorientation is
+    visible. Right panel is view-dependent: 2.2's coverage counter for [1]-[5], 2.4's
+    BIAS MAGNIFIER for [6]/[7] — one 11-px triangle drawn twice at 5x, unbiased vs biased,
+    disagreeing cells ringed and counted, band count swept with [ and ] so the count
+    visibly jumps between 0 and 15 for one unchanging error. The sweep IS the lesson;
+    a fixed impressive number would have taught the wrong thing.
+  - known-and-deliberate: no perspective correction — everything is affine in SCREEN
+    space, exact for a flat triangle and wrong the moment depth varies (3.2, and the
+    artifact is swimming textures); no depth buffer (3.1);
+    the encode pow is NOT tabulated (Ex 2.4.3), number written down instead;
+    the demo's uv loop is a SECOND copy of the fill loop — deliberate pressure, resolved
+    in stages: Module 3 grows `vertex` as attributes earn their place, Module 4 hands it
+    to GPU varyings. Two copies is not yet evidence; four would be;
     no line clipping — put_pixel discards out-of-range writes, so an
     off-screen line still costs a full walk (Exercise 2.1.4; Module 3 makes clipping
     mandatory for CORRECTNESS, not speed). No anti-aliasing (Ex 2.1.5, Module 6).
@@ -414,6 +504,30 @@ decisions:
     the physical-design habit from 1.8, now applied by default in gfx/.
   - draw_line stays Bresenham despite MEASURING SLOWER than DDA. Reasons recorded above
     and in the lesson; revisit with evidence, not deference.
+  - struct vertex bundles position WITH attributes so that reorientation cannot leave
+    them behind. Chosen for correctness, not tidiness: swapping loose coordinates and
+    forgetting loose colours produces a triangle of exactly the right shape, in the right
+    place, shaded one corner out of step — and it fires for only ONE winding, so a
+    spinning triangle looks right half the time and a static test scene may never show it.
+  - prepare_fill does NOT orient the triangle, by design. Orientation moves vertices and
+    a vertex carries attributes, so only the caller can do it. Everything AFTER
+    orientation is mechanical and identical for every fill — that is what gets shared.
+    Rule applied: not "never repeat yourself" but NEVER REPEAT SOMETHING SUBTLE.
+  - is_top_left promoted from raster.cpp's anonymous namespace to the header. The bias is
+    no longer an internal coverage detail once interpolation must undo it; and a rule you
+    cannot inspect is a rule you cannot check (the magnifier would otherwise be comparing
+    the demo against itself). Same discipline as 2.1's pixel inspector.
+  - blend_space::encoded SHIPS, defaulting off. Third time this bargain has been made
+    (draw_line_naive 2.1, pong swept_collision 1.8): a failure you can summon with one
+    keystroke teaches more than a paragraph describing it. The WRONG option must be
+    asked for by name; the right one is what you get by not thinking.
+  - rgb3 is a separate type from linear_rgb despite identical layout. Name a type after
+    what it IS, not what it is shaped like — reusing linear_rgb for encoded 0..255 values
+    would be exactly the confusion Lesson 1.6 exists to prevent.
+  - the encode pow is NOT replaced with a LUT yet. Measured (11.2 ns/px), bounded
+    (< 0.4 levels for 4096 entries), written down, and deferred — optimising a 232 us
+    cost inside a 16.6 ms budget would be optimising by reflex, which is precisely what
+    Module 3's profiling lesson teaches against.
   - the naive collision test is KEPT in the shipped code behind state::swept_collision
     rather than deleted, so the failure can be reproduced on demand (pedagogy §5:
     show the artifact). It is dead weight only if you think a bug you can summon is
@@ -437,22 +551,25 @@ files:
                  01-03-delta-time.html, 01-04-fixed-timestep.html,
                  01-05-framebuffer.html, 01-06-colour.html,
                  01-07-vectors-2d.html, 01-08-pong.html,
-                 02-01-lines.html
+                 02-01-lines.html, 02-02-triangle-edge-functions.html,
+                 02-03-barycentric.html, 02-04-attribute-interpolation.html
   docs/_template/: lesson-template.html, README.md, apply-shared.py, check-page.js
-  memory/: 2026-07-16.md, 2026-07-18.md
+  memory/: 2026-07-16.md, 2026-07-18.md, 2026-07-21.md, 2026-07-22.md, 2026-07-23.md
   (retired: hello.cpp)
 
-next: 2.4 — Interpolating Attributes Across a Triangle
-      (planned filename: docs/lessons/02-04-attribute-interpolation.html — 2.3 links to it)
-      Hang things on the weights. Colour first, which is where Lesson 1.6's linear-light
-      argument stops being theoretical: blending three vertex colours is EXACTLY the
-      operation that goes wrong when you average sRGB values, so mix_linear finally has a
-      real use. Then texture coordinates, then the realisation that the machinery does not
-      care what it carries.
-      TWO THINGS 2.4 MUST GET RIGHT:
-        1. Fold the weights into fill_triangle's incremental loop while keeping BIASED
-           values (coverage / top-left rule) apart from UNBIASED ones (interpolation).
-        2. Blend in LINEAR LIGHT (1.6's mix_linear), not on stored sRGB values.
-      Exercise 2.3.3 already asks the student to try the incremental version and to
-      measure whether stepping floats drifts across a wide triangle.
+next: 2.5 — Matrices as Basis Transforms
+      (planned filename: docs/lessons/02-05-matrices.html — 2.4 links to it)
+      Module 2 has spent four lessons INSIDE a triangle. 2.5 turns to where triangles come
+      from, and it is the pivot from 2-D to 3-D.
+      A matrix is NOT introduced as a grid of numbers with a multiplication rule. It is
+      introduced as the answer to ONE question: WHERE DO THE BASIS VECTORS LAND? Build a
+      2x2 by asking where (1,0) and (0,1) go, read the columns straight off the answer,
+      and let the multiplication rule FALL OUT rather than be declared.
+      Rotation, scale and shear as three answers to the same question. Composition as
+      "do this, then that", and why the order is what it is. Numeric walkthrough of an
+      actual vector through an actual matrix, by hand, as always.
+      DO NOT introduce homogeneous coordinates yet. 2.7 has to EARN the fourth component
+      by showing what a 3x3 cannot do (translation), and that only lands if 2.5 and 2.6
+      have made the limitation felt first. Resist explaining w early.
+      Convention reminder for the code: column vectors, v' = M*v, column-major storage.
 ```

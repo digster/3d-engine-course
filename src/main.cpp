@@ -1,9 +1,10 @@
 // src/main.cpp — the engine's entry point.
 //
-// This file hosts the current lesson's demo. As of Lesson 2.2 that is triangles:
-// a rotating filled triangle you can view as three intersecting half-planes,
-// beside a coverage counter that shows exactly what the top-left fill rule is
-// for.
+// This file hosts the current lesson's demo. As of Lesson 2.4 that is a rotating
+// triangle with seven views: filled, wireframe, the three half-planes, a weight
+// ramp, the barycentric iso-line grid, Gouraud-shaded corners, and a checker
+// mapped from interpolated (u, v). The right-hand panel changes with the view —
+// 2.2's coverage counter, or 2.4's bias magnifier.
 //
 // [Tab] now CYCLES three demos — triangles (2.2), lines (2.1), and Pong (1.8) —
 // because deleting a working demo to make room would be a regression. Three is
@@ -72,7 +73,9 @@ enum class tri_mode
     wireframe,   ///< draw_triangle: three lines, for comparison
     halfplanes,  ///< colour every pixel by WHICH edge tests it passes
     weights,     ///< Lesson 2.3: w0 as a ramp, with a live probe
-    isolines     ///< Lesson 2.3: contours of constant weight
+    isolines,    ///< Lesson 2.3: contours of constant weight
+    gouraud,     ///< Lesson 2.4: three corner colours, interpolated
+    checker      ///< Lesson 2.4: the same loop carrying (u,v) instead
 };
 
 [[nodiscard]] const char* name_of(tri_mode m)
@@ -84,8 +87,16 @@ enum class tri_mode
     case tri_mode::halfplanes: return "half-planes";
     case tri_mode::weights:    return "weights (w0)";
     case tri_mode::isolines:   return "iso-lines";
+    case tri_mode::gouraud:    return "gouraud";
+    case tri_mode::checker:    return "uv checker";
     }
     return "?";
+}
+
+/// True for the two Lesson 2.4 views, which share a right-hand panel.
+[[nodiscard]] bool is_attribute_view(tri_mode m)
+{
+    return m == tri_mode::gouraud || m == tri_mode::checker;
 }
 
 /// Paint the three edge functions' signs across the triangle's bounding box.
@@ -264,6 +275,222 @@ void draw_probe(engine::framebuffer& fb,
     }
 
     fb.fill_rect(px - 1, py - 1, 3, 3, engine::pack_argb(250, 250, 240));
+}
+
+// ---------------------------------------------------------------------------
+// Lesson 2.4 — a second attribute, and the bias made visible
+// ---------------------------------------------------------------------------
+
+/// The engine's shaded fill, with `(u, v)` carried instead of a colour.
+///
+/// Written out longhand on purpose. Compare it line for line against
+/// `fill_triangle` in raster.cpp: the setup is the same, the walk is the same,
+/// the unbias-and-divide is the same. The *only* difference is what the three
+/// weighted sums add up — two floats here instead of three, and a procedural
+/// checker instead of a colour blend at the end.
+///
+/// That is the lesson's claim made concrete: the machinery does not care what it
+/// carries. It is also, honestly, the argument for not writing it this way. A
+/// third copy of this loop is where a rasterizer starts to rot, and the engine's
+/// answer arrives in stages — Module 3 grows `vertex` as each attribute earns
+/// its place, and Module 4 hands the whole problem to the GPU, where these are
+/// called *varyings* and the hardware interpolates them for you.
+void fill_triangle_uv(engine::framebuffer& fb,
+                      int x0, int y0, int x1, int y1, int x2, int y2,
+                      bool biased_weights)
+{
+    // (u,v) at the three corners: a unit right-triangle's worth of texture
+    // space, which is what an OBJ file will hand us in Lesson 3.5.
+    float u[3] = {0.0f, 1.0f, 0.0f};
+    float v[3] = {0.0f, 0.0f, 1.0f};
+
+    int area = engine::edge_function(x0, y0, x1, y1, x2, y2);
+    if (area == 0) { return; }
+    if (area < 0)
+    {
+        // Reorienting moves vertex 1 to slot 2 — so the attributes move too.
+        // Exactly the bug `struct vertex` exists to prevent, here where it has
+        // to be done by hand.
+        std::swap(x1, x2); std::swap(y1, y2);
+        std::swap(u[1], u[2]); std::swap(v[1], v[2]);
+        area = -area;
+    }
+
+    const int min_x = std::max(0, std::min({x0, x1, x2}));
+    const int min_y = std::max(0, std::min({y0, y1, y2}));
+    const int max_x = std::min(fb.width() - 1, std::max({x0, x1, x2}));
+    const int max_y = std::min(fb.height() - 1, std::max({y0, y1, y2}));
+    if (min_x > max_x || min_y > max_y) { return; }
+
+    const int bias0 = engine::is_top_left(x1, y1, x2, y2) ? 0 : -1;
+    const int bias1 = engine::is_top_left(x2, y2, x0, y0) ? 0 : -1;
+    const int bias2 = engine::is_top_left(x0, y0, x1, y1) ? 0 : -1;
+
+    const int step_x0 = y1 - y2, step_y0 = x2 - x1;
+    const int step_x1 = y2 - y0, step_y1 = x0 - x2;
+    const int step_x2 = y0 - y1, step_y2 = x1 - x0;
+
+    int row_w0 = engine::edge_function(x1, y1, x2, y2, min_x, min_y) + bias0;
+    int row_w1 = engine::edge_function(x2, y2, x0, y0, min_x, min_y) + bias1;
+    int row_w2 = engine::edge_function(x0, y0, x1, y1, min_x, min_y) + bias2;
+
+    const float inv_area = 1.0f / static_cast<float>(area);
+
+    for (int y = min_y; y <= max_y; ++y)
+    {
+        int w0 = row_w0, w1 = row_w1, w2 = row_w2;
+        Uint32* const row = fb.row(y);
+
+        for (int x = min_x; x <= max_x; ++x)
+        {
+            if (w0 >= 0 && w1 >= 0 && w2 >= 0)
+            {
+                const float f0 = static_cast<float>(biased_weights ? w0 : w0 - bias0) * inv_area;
+                const float f1 = static_cast<float>(biased_weights ? w1 : w1 - bias1) * inv_area;
+                const float f2 = static_cast<float>(biased_weights ? w2 : w2 - bias2) * inv_area;
+
+                const float uu = f0 * u[0] + f1 * u[1] + f2 * u[2];
+                const float vv = f0 * v[0] + f1 * v[1] + f2 * v[2];
+
+                // A procedural texture: no image, no sampler, no filtering —
+                // just a rule evaluated at (u,v). Lesson 3.7 replaces the rule
+                // with a lookup, and nothing else about this loop changes.
+                constexpr float cells = 8.0f;
+                const int cu = static_cast<int>(uu * cells);
+                const int cv = static_cast<int>(vv * cells);
+                row[x] = ((cu + cv) & 1) ? engine::pack_argb(232, 226, 214)
+                                         : engine::pack_argb(58, 64, 88);
+            }
+
+            w0 += step_x0; w1 += step_x1; w2 += step_x2;
+        }
+
+        row_w0 += step_y0; row_w1 += step_y1; row_w2 += step_y2;
+    }
+}
+
+// The bias magnifier. A triangle small enough that the fill rule's -1 is a
+// meaningful fraction of its area, drawn twice — once with the weights
+// unbiased, once with the bias left in — and blown up so single pixels are
+// legible. Numbers verified by the Lesson 2.4 harness: 2A = 112, the edge
+// opposite v0 is 11.314 px long, so the attribute field is displaced by
+// 1/11.314 = 0.088 px, perpendicular to that edge.
+constexpr int k_mag_w = 14;      ///< the small triangle's own grid
+constexpr int k_mag_h = 14;
+constexpr int k_mag_zoom = 5;
+constexpr int k_mag_x = 172;     ///< where the pair lands in the framebuffer
+constexpr int k_mag_y = 40;
+
+constexpr int k_mag_x0 = 1,  k_mag_y0 = 1;
+constexpr int k_mag_x1 = 12, k_mag_y1 = 4;
+constexpr int k_mag_x2 = 4,  k_mag_y2 = 12;
+
+/// Fill the small triangle with a **striped scalar attribute**, into a grid.
+///
+/// Stripes rather than a smooth ramp, because that is the whole point. The bias
+/// displaces the attribute field by a tenth of a pixel, which on a smooth ramp
+/// changes a colour by a fraction of a level and is invisible. Quantise the
+/// attribute — a stripe, a checker cell, a texel index — and a tenth of a pixel
+/// at a threshold flips whole pixels to the wrong side.
+///
+/// The band count is adjustable at runtime ( `[` and `]` ) and that is the most
+/// important thing about this demo. The displacement is a fixed 0.088 px, but
+/// how many *pixels* it ruins depends entirely on where the band thresholds
+/// happen to fall relative to it. Sweep the frequency and the count jumps
+/// around — 0, then 15, then 4, then 0 again — which is the honest lesson: a
+/// sub-pixel error in a quantised attribute cannot be tested away by trying one
+/// setting and seeing nothing.
+///
+/// @return -1 for uncovered cells, 0 or 1 for the stripe parity.
+void fill_striped(std::vector<int>& out, bool biased_weights, float bands)
+{
+    // s = 0 at v0 and 1 at both other corners, so s = 1 - w0: a scalar that
+    // sweeps the triangle from one vertex to the opposite edge.
+    const float s_at[3] = {0.0f, 1.0f, 1.0f};
+
+    int x0 = k_mag_x0, y0 = k_mag_y0;
+    int x1 = k_mag_x1, y1 = k_mag_y1;
+    int x2 = k_mag_x2, y2 = k_mag_y2;
+
+    int area = engine::edge_function(x0, y0, x1, y1, x2, y2);
+    if (area == 0) { return; }
+    if (area < 0) { std::swap(x1, x2); std::swap(y1, y2); area = -area; }
+
+    const int bias0 = engine::is_top_left(x1, y1, x2, y2) ? 0 : -1;
+    const int bias1 = engine::is_top_left(x2, y2, x0, y0) ? 0 : -1;
+    const int bias2 = engine::is_top_left(x0, y0, x1, y1) ? 0 : -1;
+
+    const float inv_area = 1.0f / static_cast<float>(area);
+
+    for (int y = 0; y < k_mag_h; ++y)
+    {
+        for (int x = 0; x < k_mag_w; ++x)
+        {
+            const int w0 = engine::edge_function(x1, y1, x2, y2, x, y) + bias0;
+            const int w1 = engine::edge_function(x2, y2, x0, y0, x, y) + bias1;
+            const int w2 = engine::edge_function(x0, y0, x1, y1, x, y) + bias2;
+            if (w0 < 0 || w1 < 0 || w2 < 0) { continue; }
+
+            // Coverage used the biased values above — that part is correct and
+            // is identical in both passes. Only the INTERPOLATION differs.
+            const float f0 = static_cast<float>(biased_weights ? w0 : w0 - bias0) * inv_area;
+            const float f1 = static_cast<float>(biased_weights ? w1 : w1 - bias1) * inv_area;
+            const float f2 = static_cast<float>(biased_weights ? w2 : w2 - bias2) * inv_area;
+
+            const float s = f0 * s_at[0] + f1 * s_at[1] + f2 * s_at[2];
+            out[static_cast<std::size_t>(y * k_mag_w + x)] =
+                static_cast<int>(std::floor(s * bands)) & 1;
+        }
+    }
+}
+
+/// Draw both versions side by side, ringing every cell where they disagree.
+///
+/// @return the number of covered cells whose stripe came out different.
+int draw_bias_magnifier(engine::framebuffer& fb, float bands)
+{
+    std::vector<int> good(static_cast<std::size_t>(k_mag_w * k_mag_h), -1);
+    std::vector<int> bad(static_cast<std::size_t>(k_mag_w * k_mag_h), -1);
+    fill_striped(good, false, bands);
+    fill_striped(bad, true, bands);
+
+    const Uint32 k_empty = engine::pack_argb(18, 20, 28);
+    const Uint32 k_dark = engine::pack_argb(58, 64, 88);
+    const Uint32 k_light = engine::pack_argb(232, 226, 214);
+    const Uint32 k_wrong = engine::pack_argb(236, 92, 92);
+
+    int differ = 0;
+    for (int panel = 0; panel < 2; ++panel)
+    {
+        const std::vector<int>& src = (panel == 0) ? good : bad;
+        const int ox = k_mag_x + panel * (k_mag_w * k_mag_zoom + 6);
+
+        for (int y = 0; y < k_mag_h; ++y)
+        {
+            for (int x = 0; x < k_mag_w; ++x)
+            {
+                const std::size_t i = static_cast<std::size_t>(y * k_mag_w + x);
+                const int cell = src[i];
+                const Uint32 c = (cell < 0) ? k_empty : (cell == 0 ? k_dark : k_light);
+
+                fb.fill_rect(ox + x * k_mag_zoom, k_mag_y + y * k_mag_zoom,
+                             k_mag_zoom, k_mag_zoom, c);
+
+                if (good[i] != bad[i])
+                {
+                    if (panel == 0) { ++differ; }
+                    // A ring, not a fill: the wrong VALUE still needs to be
+                    // readable underneath the mark that says it is wrong.
+                    engine::draw_triangle(fb,
+                        ox + x * k_mag_zoom, k_mag_y + y * k_mag_zoom,
+                        ox + x * k_mag_zoom + k_mag_zoom - 1, k_mag_y + y * k_mag_zoom,
+                        ox + x * k_mag_zoom, k_mag_y + y * k_mag_zoom + k_mag_zoom - 1,
+                        k_wrong);
+                }
+            }
+        }
+    }
+    return differ;
 }
 
 /// The fill rule, disabled — every boundary pixel claimed by every triangle.
@@ -540,7 +767,11 @@ int main(int argc, char* argv[])
     bool spinning = true;
     float phase = 0.6f;
 
+    bool linear_blend = true;      ///< Lesson 2.4: which space corner colours mix in
+    float stripe_bands = 3.5f;     ///< magnifier band count — [ and ] sweep it
     int doubled_px = 0;
+    int bias_differ = 0;           ///< magnifier cells the fill-rule bias gets wrong
+    Uint32 centroid_px = 0;        ///< the shaded triangle's centre pixel, read back
     double tri_ns_avg = 0.0;
 
     engine::barycentric probe;
@@ -559,6 +790,7 @@ int main(int argc, char* argv[])
 
     SDL_Log("Triangles: [1] filled [2] wireframe [3] half-planes [4] weights [5] iso-lines");
     SDL_Log("  [4]/[5] follow the mouse: the three sub-triangles ARE the three weights. [R] fill rule.");
+    SDL_Log("  [6] Gouraud (three corner colours) [7] uv checker — [M] switches blend space");
     SDL_Log("[Tab] cycles demos: triangles (2.2) -> lines (2.1) -> Pong (1.8)");
     SDL_Log("[V] vsync · [T] throttle · [Esc] quit");
 
@@ -655,6 +887,17 @@ int main(int argc, char* argv[])
             if (in.key_pressed(SDL_SCANCODE_3)) { mode = tri_mode::halfplanes; }
             if (in.key_pressed(SDL_SCANCODE_4)) { mode = tri_mode::weights; }
             if (in.key_pressed(SDL_SCANCODE_5)) { mode = tri_mode::isolines; }
+            if (in.key_pressed(SDL_SCANCODE_6)) { mode = tri_mode::gouraud; }
+            if (in.key_pressed(SDL_SCANCODE_7)) { mode = tri_mode::checker; }
+            if (in.key_pressed(SDL_SCANCODE_M)) { linear_blend = !linear_blend; }
+            if (in.key_pressed(SDL_SCANCODE_LEFTBRACKET))
+            {
+                stripe_bands = std::max(1.0f, stripe_bands - 0.25f);
+            }
+            if (in.key_pressed(SDL_SCANCODE_RIGHTBRACKET))
+            {
+                stripe_bands = std::min(12.0f, stripe_bands + 0.25f);
+            }
             if (in.key_pressed(SDL_SCANCODE_R)) { use_fill_rule = !use_fill_rule; }
             if (in.key_pressed(SDL_SCANCODE_SPACE)) { spinning = !spinning; }
 
@@ -700,6 +943,20 @@ int main(int argc, char* argv[])
                 engine::draw_triangle(fb, vx[0], vy[0], vx[1], vy[1], vx[2], vy[2],
                                       engine::pack_argb(210, 212, 220));
                 break;
+            case tri_mode::gouraud:
+                // Red, green and blue at the corners — the classic, and chosen
+                // because the three primaries are exactly where the encoded
+                // blend goes most obviously wrong. [M] switches the space.
+                engine::fill_triangle(fb,
+                    engine::vertex{vx[0], vy[0], engine::pack_argb(255, 0, 0)},
+                    engine::vertex{vx[1], vy[1], engine::pack_argb(0, 255, 0)},
+                    engine::vertex{vx[2], vy[2], engine::pack_argb(0, 0, 255)},
+                    linear_blend ? engine::blend_space::linear
+                                 : engine::blend_space::encoded);
+                break;
+            case tri_mode::checker:
+                fill_triangle_uv(fb, vx[0], vy[0], vx[1], vy[1], vx[2], vy[2], false);
+                break;
             }
 
             // In the two Lesson 2.3 views the cursor is a probe: it draws the
@@ -725,7 +982,15 @@ int main(int argc, char* argv[])
             const double ns = static_cast<double>(t1 - t0);
             tri_ns_avg = (tri_ns_avg <= 0.0) ? ns : (tri_ns_avg * 0.95 + ns * 0.05);
 
-            doubled_px = draw_coverage(fb, use_fill_rule);
+            // Read the centre pixel back out of the framebuffer rather than
+            // recomputing it. The HUD then reports what was actually drawn, so
+            // it cannot agree with a fill that has drifted from the formula.
+            centroid_px = fb.pixel_at((vx[0] + vx[1] + vx[2]) / 3,
+                                      (vy[0] + vy[1] + vy[2]) / 3);
+
+            // The right-hand panel belongs to whichever lesson the view is from.
+            if (is_attribute_view(mode)) { bias_differ = draw_bias_magnifier(fb, stripe_bands); }
+            else                         { doubled_px = draw_coverage(fb, use_fill_rule); }
         }
 
         if (!upload(screen_texture, fb))
@@ -769,14 +1034,32 @@ int main(int argc, char* argv[])
                                       name_of(mode), tri_ns_avg / 1000.0,
                                       static_cast<double>(clk.fps()));
 
-            // The line that turns the coverage picture into a diagnosis.
-            SDL_SetRenderDrawColor(renderer,
-                                   doubled_px > 0 ? 236 : 150,
-                                   doubled_px > 0 ? 92 : 152,
-                                   doubled_px > 0 ? 92 : 170, 255);
-            SDL_RenderDebugTextFormat(renderer, 6.0f, 20.0f,
-                                      "[R] fill rule: %-3s    shared edge drawn twice on %d px",
-                                      use_fill_rule ? "ON" : "OFF", doubled_px);
+            if (is_attribute_view(mode))
+            {
+                // Lesson 2.4's readout. The centre pixel is the number the
+                // linear-vs-encoded argument turns on: 156 against 85.
+                SDL_SetRenderDrawColor(renderer,
+                                       linear_blend ? 150 : 236,
+                                       linear_blend ? 152 : 92,
+                                       linear_blend ? 170 : 92, 255);
+                SDL_RenderDebugTextFormat(renderer, 6.0f, 20.0f,
+                                          "[M] blend space: %-8s   centre pixel (%3u,%3u,%3u)",
+                                          linear_blend ? "LINEAR" : "encoded",
+                                          engine::red_of(centroid_px),
+                                          engine::green_of(centroid_px),
+                                          engine::blue_of(centroid_px));
+            }
+            else
+            {
+                // The line that turns the coverage picture into a diagnosis.
+                SDL_SetRenderDrawColor(renderer,
+                                       doubled_px > 0 ? 236 : 150,
+                                       doubled_px > 0 ? 92 : 152,
+                                       doubled_px > 0 ? 92 : 170, 255);
+                SDL_RenderDebugTextFormat(renderer, 6.0f, 20.0f,
+                                          "[R] fill rule: %-3s    shared edge drawn twice on %d px",
+                                          use_fill_rule ? "ON" : "OFF", doubled_px);
+            }
 
             // Lesson 2.3's readout: the three weights, and the sum that must
             // be 1. Printed to four places because the interesting thing is how
@@ -795,13 +1078,45 @@ int main(int argc, char* argv[])
                                     "move the mouse: each sub-triangle's AREA is the weight of the vertex it faces");
             }
 
-            SDL_SetRenderDrawColor(renderer, 150, 152, 170, 255);
-            SDL_RenderDebugText(renderer, 400.0f, 40.0f, "two triangles,");
-            SDL_RenderDebugText(renderer, 400.0f, 52.0f, "one shared edge");
-            SDL_RenderDebugText(renderer, 400.0f, 68.0f, "green = drawn once");
-            SDL_RenderDebugText(renderer, 400.0f, 80.0f, "red   = drawn twice");
+            // Text coordinates are exactly twice framebuffer coordinates (2x
+            // text scale over a 4x framebuffer scale), so the magnifier at
+            // framebuffer y 40..110 occupies text rows 80..220. Everything
+            // below is placed against that, not by eye.
+            if (is_attribute_view(mode))
+            {
+                SDL_SetRenderDrawColor(renderer, 150, 152, 170, 255);
+                SDL_RenderDebugTextFormat(renderer, 344.0f, 64.0f,
+                                          "a 12-px triangle, %.2f bands",
+                                          static_cast<double>(stripe_bands));
+                SDL_RenderDebugText(renderer, 344.0f, 228.0f, "left:  unbiased (correct)");
+                SDL_RenderDebugText(renderer, 344.0f, 240.0f, "right: fill-rule bias left in");
+
+                SDL_SetRenderDrawColor(renderer, bias_differ > 0 ? 236 : 122,
+                                                 bias_differ > 0 ? 92 : 196,
+                                                 bias_differ > 0 ? 92 : 152, 255);
+                SDL_RenderDebugTextFormat(renderer, 344.0f, 256.0f,
+                                          "%d px differ (field moves 0.088 px)", bias_differ);
+
+                SDL_SetRenderDrawColor(renderer, 150, 152, 170, 255);
+                SDL_RenderDebugText(renderer, 344.0f, 272.0f,
+                                    "[ and ] resweep: the count jumps");
+                SDL_RenderDebugText(renderer, 344.0f, 284.0f,
+                                    "between 0 and 15 for one fixed error");
+            }
+            else
+            {
+                SDL_SetRenderDrawColor(renderer, 150, 152, 170, 255);
+                SDL_RenderDebugText(renderer, 400.0f, 40.0f, "two triangles,");
+                SDL_RenderDebugText(renderer, 400.0f, 52.0f, "one shared edge");
+                SDL_RenderDebugText(renderer, 400.0f, 68.0f, "green = drawn once");
+                SDL_RenderDebugText(renderer, 400.0f, 80.0f, "red   = drawn twice");
+            }
+
+            SDL_SetRenderDrawColor(renderer, 210, 212, 220, 255);
+            SDL_RenderDebugText(renderer, 6.0f, 316.0f,
+                                "[1] fill [2] wire [3] planes [4] weights [5] iso [6] gouraud [7] uv");
             SDL_RenderDebugText(renderer, 6.0f, 328.0f,
-                                "[1] fill [2] wire [3] half-planes [4] weights [5] iso-lines   [R] fill rule  [Space] spin  [Tab] demo");
+                                "[M] blend  [ ] bands  [R] rule  [Space] spin  [Tab] demo  [Esc] quit");
         }
 
         SDL_SetRenderScale(renderer, 1.0f, 1.0f);

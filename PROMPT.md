@@ -349,3 +349,37 @@ with a mouse probe, and the lesson page with three SVG diagrams.
 overrides the attribute. And `check-page.js` caught two Figure 2 labels sitting on the sub-triangle
 boundaries; fixed by computing each region's **centroid** from its vertices rather than placing the
 labels by eye, which is the same discipline 2.2's Figure 1 needed.
+
+---
+
+## 2026-07-23 — Lesson 2.4
+
+> Based on the STATE and the project's claude instructions, work on the next.
+
+Resumed from `STATE.md` → `next: 2.4 — Interpolating Attributes Across a Triangle`, with the two
+requirements 2.3 recorded: fold the weights into the fill loop while keeping **biased** (coverage)
+and **unbiased** (interpolation) values apart, and blend in **linear light**.
+
+### Judgement calls
+
+| Question | Decision | Why |
+|---|---|---|
+| How to keep biased and unbiased weights apart | **One set of accumulators, one integer subtraction** | The bias is a known constant per edge (0 or −1) sitting in an *exact* integer, so `E = accumulator − bias` recovers the true value with no second walk, no re-evaluation and no drift to unwind. Coverage and interpolation then read the same three numbers one line apart, which is the clearest possible statement that they are different questions. |
+| How to demonstrate the bias | **Derive its magnitude; show that the damage is unsamplable** | The displacement is `1/‖e‖` px — 0.088 on the demo triangle. Sweeping the stripe frequency gave wrong-pixel counts of 4, 0, 0, **15**, 4, 0 with the error never changing. So the demo sweeps the band count live rather than showing one fixed impressive number, and the lesson teaches *derive the magnitude, do not look for it*. |
+| The float-drift argument | **Walked back after measuring** | I expected float-stepped weights to drift visibly. Measured 4.94e-6 over 4,000 adds = 0.0013 of a colour level. The honest case for integers is exactness, reproducibility and equal cost — not an artifact. Recorded in LEARNINGS.md: overselling a real principle with a symptom the student cannot reproduce teaches them to distrust the principle. |
+| Where to put the attributes | **`struct vertex`, for correctness** | Reorientation swaps two vertices; swapping loose coordinates and forgetting loose colours yields the right shape in the right place shaded one corner out of step, for one winding only. A struct plus `std::swap` makes it unwritable rather than documented. |
+| Shipping the wrong blend | **`blend_space::encoded`, defaulting off** | Third time this bargain has been made (2.1's `draw_line_naive`, 1.8's naive collision). The wrong option must be asked for by name; the right one is what you get by not thinking. |
+| Generalising the loop | **Deliberately not yet** | The demo's uv fill is a second copy of the loop. Two copies is not evidence; four would be. Module 3 grows `vertex` as attributes earn their place, Module 4 hands it to GPU varyings — a general mechanism written now would be designed against guesses and deleted unread. |
+| The `pow` cost | **Measured, bounded, deferred** | 232 µs/triangle = 11.2 ns/px = 11.5× the flat fill, nearly all in `linear_to_srgb`. A 4096-entry table is under 0.4 levels of error everywhere. Left as Exercise 2.4.3 — optimising 232 µs inside a 16.6 ms budget is optimising by reflex, which Module 3's profiling lesson exists to teach against. |
+
+### Verification
+
+A scratch harness produced every number in the lesson (18 checks, all passing), and the demo was
+rendered **headlessly** by `#include`-ing `main.cpp` into a scratch translation unit — its helpers
+live in an anonymous namespace — so the screenshots came from the shipped code. It printed the
+predicted 156 and 85 before any of the prose was written.
+
+Two mistakes `check-page.js` could not see, both caught by actually looking at the figures:
+Figure 4's iso-lines sprawled outside the triangle (the exact defect 2.3's demo had to fix), and
+Figure 1's value label crossed a dashed bar. Fixed by computing the iso-line endpoints **on the
+triangle's edges** instead of eyeballing them.

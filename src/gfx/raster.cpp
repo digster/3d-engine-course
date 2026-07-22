@@ -153,24 +153,129 @@ void draw_line(framebuffer& fb, int x0, int y0, int x1, int y1, Uint32 colour)
 
 namespace {
 
-/// Is the directed edge A→B a "top" or a "left" edge of its triangle?
+/// Everything a triangle fill works out before it touches a pixel.
 ///
-/// Assumes the triangle has already been oriented so that its signed area is
-/// **positive** — which in framebuffer coordinates (+y down) means its vertices
-/// run clockwise on screen. Under that orientation:
+/// This was inline in `fill_triangle` until Lesson 2.4 gave the file a second
+/// fill, and Module 3 will give it more. The bookkeeping here — the clipped
+/// bounding box, the three fill-rule biases, the six per-pixel steps, the three
+/// starting values — is short, and every line of it is subtle. Duplicating it
+/// would not be a style problem; it would be three places for one bias to be
+/// wrong, producing a crack visible only where two particular triangles meet.
 ///
-///   - a **top** edge is horizontal and travels rightwards (`dy == 0, dx > 0`);
-///   - a **left** edge is any edge travelling upwards (`dy < 0`).
-///
-/// Both are geometric properties of the edge, which is the entire point. Two
-/// triangles that share an edge traverse it in opposite directions, so exactly
-/// one of them sees it as top-or-left and claims the pixels lying exactly on it.
-/// Neither triangle needs to know the other exists. Lesson 2.2 §3.6.
-[[nodiscard]] constexpr bool is_top_left(int ax, int ay, int bx, int by)
+/// The rule this follows is not "never repeat yourself". It is *never repeat
+/// something subtle* — a duplicated `x + 1` costs nothing, a duplicated
+/// top-left rule costs an afternoon.
+struct fill_setup
 {
-    const int dx = bx - ax;
-    const int dy = by - ay;
-    return (dy == 0 && dx > 0) || (dy < 0);
+    int min_x = 0, min_y = 0, max_x = -1, max_y = -1;
+
+    /// 0 for a top-or-left edge, -1 otherwise. Folded into the starting values
+    /// below, so the coverage test stays a single comparison against zero — and
+    /// therefore **subtracted back out** by anything that interpolates.
+    int bias0 = 0, bias1 = 0, bias2 = 0;
+
+    int step_x0 = 0, step_y0 = 0;
+    int step_x1 = 0, step_y1 = 0;
+    int step_x2 = 0, step_y2 = 0;
+
+    int row_w0 = 0, row_w1 = 0, row_w2 = 0;
+
+    [[nodiscard]] bool empty() const { return min_x > max_x || min_y > max_y; }
+};
+
+/// Prepare a fill for a triangle that is **already oriented to positive area**.
+///
+/// Orientation is deliberately not done here. Reorienting means swapping two
+/// vertices, and from Lesson 2.4 a vertex carries attributes that must swap with
+/// it — so the caller, which is the only code that knows what a vertex holds,
+/// owns that step. Everything after it is mechanical and identical for every
+/// fill, which is exactly what belongs in a shared helper.
+[[nodiscard]] fill_setup prepare_fill(const framebuffer& fb,
+                                      int x0, int y0, int x1, int y1, int x2, int y2)
+{
+    fill_setup s;
+
+    // The bounding box, clipped to the framebuffer. Two jobs: it bounds the
+    // search (a triangle covering 1% of the screen should not cost a full-screen
+    // scan), and clipping it here means the inner loop never needs a bounds
+    // check — which is why a fill can write through row() instead of put_pixel.
+    s.min_x = std::max(0, std::min({x0, x1, x2}));
+    s.min_y = std::max(0, std::min({y0, y1, y2}));
+    s.max_x = std::min(fb.width() - 1, std::max({x0, x1, x2}));
+    s.max_y = std::min(fb.height() - 1, std::max({y0, y1, y2}));
+
+    if (s.empty()) { return s; }   // entirely off-screen
+
+    // The top-left rule as an integer bias. An edge function is zero exactly on
+    // the edge, so testing `w >= 0` includes boundary pixels and `w - 1 >= 0`
+    // excludes them. Folding the -1 into the starting value costs nothing per
+    // pixel — the test stays a single comparison against zero.
+    s.bias0 = is_top_left(x1, y1, x2, y2) ? 0 : -1;   // edge opposite v0
+    s.bias1 = is_top_left(x2, y2, x0, y0) ? 0 : -1;   // edge opposite v1
+    s.bias2 = is_top_left(x0, y0, x1, y1) ? 0 : -1;   // edge opposite v2
+
+    // An edge function is *affine* in the pixel position, so its value at the
+    // next pixel differs from this one by a constant. Evaluating it once at the
+    // corner and then adding is the same trick as Lesson 2.1's error term, and
+    // it turns two multiplies per edge per pixel into one add.
+    //
+    //   E(x+1, y) - E(x, y) = -(By - Ay) = Ay - By
+    //   E(x, y+1) - E(x, y) =  (Bx - Ax)
+    s.step_x0 = y1 - y2; s.step_y0 = x2 - x1;
+    s.step_x1 = y2 - y0; s.step_y1 = x0 - x2;
+    s.step_x2 = y0 - y1; s.step_y2 = x1 - x0;
+
+    s.row_w0 = edge_function(x1, y1, x2, y2, s.min_x, s.min_y) + s.bias0;
+    s.row_w1 = edge_function(x2, y2, x0, y0, s.min_x, s.min_y) + s.bias1;
+    s.row_w2 = edge_function(x0, y0, x1, y1, s.min_x, s.min_y) + s.bias2;
+
+    return s;
+}
+
+/// Three floats at a triangle corner, waiting to be averaged.
+///
+/// Deliberately *not* `linear_rgb`. What these numbers mean depends on the blend
+/// space in force — light in [0,1] under `blend_space::linear`, stored channel
+/// values in [0,255] under `blend_space::encoded` — and a type called
+/// `linear_rgb` holding encoded values would be a lie that compiles. Naming a
+/// type after what it contains rather than what it is used for is how units get
+/// mixed up, and mixing up these particular units is the entire subject of
+/// Lesson 1.6.
+struct rgb3
+{
+    float r = 0.0f;
+    float g = 0.0f;
+    float b = 0.0f;
+};
+
+/// A corner colour, converted into whatever space we are about to average in.
+[[nodiscard]] rgb3 corner_in(Uint32 colour, blend_space space)
+{
+    if (space == blend_space::linear)
+    {
+        const linear_rgb light = to_linear(colour);
+        return {light.r, light.g, light.b};
+    }
+    return {static_cast<float>(red_of(colour)),
+            static_cast<float>(green_of(colour)),
+            static_cast<float>(blue_of(colour))};
+}
+
+/// The weighted average, back to a storable pixel.
+[[nodiscard]] Uint32 pixel_from(rgb3 mixed, blend_space space)
+{
+    if (space == blend_space::linear)
+    {
+        return to_encoded({mixed.r, mixed.g, mixed.b});
+    }
+
+    // Already in stored units, so there is nothing to encode — which is exactly
+    // what makes this path cheap, and exactly what makes it wrong. The +0.5
+    // rounds to nearest; the weights sum to 1 to within 2.4e-7, so the result
+    // cannot exceed 255.5 and the cast cannot wrap.
+    return pack_argb(static_cast<Uint8>(mixed.r + 0.5f),
+                     static_cast<Uint8>(mixed.g + 0.5f),
+                     static_cast<Uint8>(mixed.b + 0.5f));
 }
 
 } // namespace
@@ -226,41 +331,14 @@ void fill_triangle(framebuffer& fb,
         area = -area;
     }
 
-    // The bounding box, clipped to the framebuffer. Two jobs: it bounds the
-    // search (a triangle covering 1% of the screen should not cost a full-screen
-    // scan), and clipping it here means the inner loop never needs a bounds
-    // check — which is why this can write through row() instead of put_pixel.
-    const int min_x = std::max(0, std::min({x0, x1, x2}));
-    const int min_y = std::max(0, std::min({y0, y1, y2}));
-    const int max_x = std::min(fb.width() - 1, std::max({x0, x1, x2}));
-    const int max_y = std::min(fb.height() - 1, std::max({y0, y1, y2}));
+    const fill_setup s = prepare_fill(fb, x0, y0, x1, y1, x2, y2);
+    if (s.empty()) { return; }
 
-    if (min_x > max_x || min_y > max_y) { return; }   // entirely off-screen
+    int row_w0 = s.row_w0;
+    int row_w1 = s.row_w1;
+    int row_w2 = s.row_w2;
 
-    // The top-left rule as an integer bias. An edge function is zero exactly on
-    // the edge, so testing `w >= 0` includes boundary pixels and `w - 1 >= 0`
-    // excludes them. Folding the -1 into the starting value costs nothing per
-    // pixel — the test stays a single comparison against zero.
-    const int bias0 = is_top_left(x1, y1, x2, y2) ? 0 : -1;   // edge opposite v0
-    const int bias1 = is_top_left(x2, y2, x0, y0) ? 0 : -1;   // edge opposite v1
-    const int bias2 = is_top_left(x0, y0, x1, y1) ? 0 : -1;   // edge opposite v2
-
-    // An edge function is *affine* in the pixel position, so its value at the
-    // next pixel differs from this one by a constant. Evaluating it once at the
-    // corner and then adding is the same trick as Lesson 2.1's error term, and
-    // it turns two multiplies per edge per pixel into one add.
-    //
-    //   E(x+1, y) - E(x, y) = -(By - Ay) = Ay - By
-    //   E(x, y+1) - E(x, y) =  (Bx - Ax)
-    const int step_x0 = y1 - y2, step_y0 = x2 - x1;
-    const int step_x1 = y2 - y0, step_y1 = x0 - x2;
-    const int step_x2 = y0 - y1, step_y2 = x1 - x0;
-
-    int row_w0 = edge_function(x1, y1, x2, y2, min_x, min_y) + bias0;
-    int row_w1 = edge_function(x2, y2, x0, y0, min_x, min_y) + bias1;
-    int row_w2 = edge_function(x0, y0, x1, y1, min_x, min_y) + bias2;
-
-    for (int y = min_y; y <= max_y; ++y)
+    for (int y = s.min_y; y <= s.max_y; ++y)
     {
         int w0 = row_w0;
         int w1 = row_w1;
@@ -271,7 +349,7 @@ void fill_triangle(framebuffer& fb,
         // bounds check and index multiply.
         Uint32* const row = fb.row(y);
 
-        for (int x = min_x; x <= max_x; ++x)
+        for (int x = s.min_x; x <= s.max_x; ++x)
         {
             // Inside all three half-planes at once. That is the entire test,
             // and it is the same three numbers for every pixel — only their
@@ -289,14 +367,108 @@ void fill_triangle(framebuffer& fb,
                 row[x] = colour;
             }
 
-            w0 += step_x0;
-            w1 += step_x1;
-            w2 += step_x2;
+            w0 += s.step_x0;
+            w1 += s.step_x1;
+            w2 += s.step_x2;
         }
 
-        row_w0 += step_y0;
-        row_w1 += step_y1;
-        row_w2 += step_y2;
+        row_w0 += s.step_y0;
+        row_w1 += s.step_y1;
+        row_w2 += s.step_y2;
+    }
+}
+
+void fill_triangle(framebuffer& fb,
+                   const vertex& a, const vertex& b, const vertex& c,
+                   blend_space space)
+{
+    // Local copies, because reorienting reorders the vertices — and this is the
+    // whole reason a vertex is a struct. `std::swap` on the struct moves the
+    // colour with the position it belongs to. Swapping loose coordinates and
+    // forgetting the loose colours is a bug with no geometric symptom at all:
+    // the triangle is the right shape, in the right place, shaded one corner
+    // out of step. Lesson 2.4 §4.2.
+    vertex v0 = a;
+    vertex v1 = b;
+    vertex v2 = c;
+
+    int area = edge_function(v0.x, v0.y, v1.x, v1.y, v2.x, v2.y);
+    if (area == 0) { return; }
+    if (area < 0)
+    {
+        std::swap(v1, v2);
+        area = -area;
+    }
+
+    const fill_setup s = prepare_fill(fb, v0.x, v0.y, v1.x, v1.y, v2.x, v2.y);
+    if (s.empty()) { return; }
+
+    // One reciprocal for the whole triangle. The weights are edge values over
+    // the total area, and the total area does not vary across a triangle — so
+    // the division that turns "twice an area" into "a fraction" is hoisted, and
+    // the inner loop pays a multiply instead. Lesson 2.3 §4.
+    const float inv_area = 1.0f / static_cast<float>(area);
+
+    // Convert the corners **once per triangle**, not once per pixel. Three
+    // conversions for a triangle covering eight thousand pixels; the interior is
+    // then pure arithmetic. This hoist is the reason the correct path is
+    // affordable at all — see §3.7 for what it costs when you forget it.
+    const rgb3 c0 = corner_in(v0.colour, space);
+    const rgb3 c1 = corner_in(v1.colour, space);
+    const rgb3 c2 = corner_in(v2.colour, space);
+
+    int row_w0 = s.row_w0;
+    int row_w1 = s.row_w1;
+    int row_w2 = s.row_w2;
+
+    for (int y = s.min_y; y <= s.max_y; ++y)
+    {
+        int w0 = row_w0;
+        int w1 = row_w1;
+        int w2 = row_w2;
+
+        Uint32* const row = fb.row(y);
+
+        for (int x = s.min_x; x <= s.max_x; ++x)
+        {
+            if (w0 >= 0 && w1 >= 0 && w2 >= 0)
+            {
+                // **Unbias, then divide.** The accumulators carry the top-left
+                // rule's -1 on any edge that is not top-or-left; that -1 is a
+                // statement about who owns a boundary pixel, and it is not a
+                // statement about where the pixel is. Left in, it displaces the
+                // whole attribute field by 1/edge_length of a pixel and stops
+                // the three weights summing to 1. Taking it back out is one
+                // integer subtraction against a value that is *exact* — these
+                // are the stepped integers, so there is no accumulated drift to
+                // undo, only a known constant. Lesson 2.4 §3.5.
+                const float f0 = static_cast<float>(w0 - s.bias0) * inv_area;
+                const float f1 = static_cast<float>(w1 - s.bias1) * inv_area;
+                const float f2 = static_cast<float>(w2 - s.bias2) * inv_area;
+
+                // Three multiply-adds per channel. This is the interpolation,
+                // and it is the same three lines whatever the attribute turns
+                // out to be — depth in Lesson 3.1, texture coordinates in 3.7,
+                // normals in 3.6. The rasterizer never learns what it carries.
+                const rgb3 mixed{f0 * c0.r + f1 * c1.r + f2 * c2.r,
+                                 f0 * c0.g + f1 * c1.g + f2 * c2.g,
+                                 f0 * c0.b + f1 * c1.b + f2 * c2.b};
+
+                // One branch per pixel on a value that is constant for the whole
+                // triangle. A branch predictor eats this for free; hoisting it
+                // would mean two copies of the loop, which is a worse trade at
+                // this size. Measured either way in §3.7.
+                row[x] = pixel_from(mixed, space);
+            }
+
+            w0 += s.step_x0;
+            w1 += s.step_x1;
+            w2 += s.step_x2;
+        }
+
+        row_w0 += s.step_y0;
+        row_w1 += s.step_y1;
+        row_w2 += s.step_y2;
     }
 }
 
