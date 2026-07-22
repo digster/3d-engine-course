@@ -322,3 +322,30 @@ the `SHARED-SCRIPT:END` marker, so after 2.1 moved the loader *inside* the share
 two — loading KaTeX twice and running `renderMathInElement` twice over the same body. Found by the
 background task's sweep, fixed the same way as `conventions.html` and `math-toolbox.html`. All 20
 pages now carry exactly one.
+
+---
+
+## 2026-07-22 — Lesson 2.3
+
+> next
+
+**Response:** Lesson 2.3 — Barycentric Coordinates from Signed Areas. `struct barycentric` and
+`barycentric_at` added to `src/gfx/raster`, two new triangle views (weight ramp, iso-line grid)
+with a mouse probe, and the lesson page with three SVG diagrams.
+
+**Decisions made in this session:**
+
+| Decision | Choice | Rationale |
+|---|---|---|
+| Framing | **"Derived, not defined"** — the rasterizer already computes these numbers and throws two thirds of the information away | Matches the curriculum's own blurb, and it is true: 2.2 uses the edge functions' signs and discards their magnitudes, which were areas. The lesson adds one division, not a computation. |
+| The property to teach as central | **Reconstruction**, not sum-to-1 | A rotated pairing still sums to 1 — verified, it reconstructs (5.2, 5.8) instead of (5, 5). So the sum has almost no diagnostic power while reconstruction has complete power. Generalised into a habit: prefer the invariant that *determines* the answer over one that *constrains* it. |
+| Scope against 2.4 | Coordinates only; **attributes deferred** | 2.4 owns "colour, then UVs, then anything". So 2.3's demo visualises the *coordinate* (a w0 ramp, an iso-line grid) rather than blending three vertex colours, which would be 2.4's job and would need 1.6's linear-light care. |
+| Where the weights are computed | A standalone `barycentric_at`, **not** folded into the fill loop | Keeps 2.3 about the idea. Exercise 2.3.3 asks the student to make it incremental and to measure whether stepping floats drifts — which is 2.4's actual implementation problem, previewed. |
+| Uniqueness | Stated and proved (3 coefficients, 3 conditions) | Students otherwise file barycentric interpolation under "a reasonable blend". It is the *only* affine one, and saying so changes how the next four lessons read. |
+| Precision | **Measured, both halves reported** | Worst \|sum−1\| = 2.4e-7 *and* bitwise 1.0f only ~85% of the time. The first number alone would suggest "close enough to compare"; the second is why you must not. |
+
+**Two things caught by tooling, both worth noting.** `apply-shared.py`'s lint caught an inline
+`fill="var(--axis-z)"` on an SVG `<text>` — the exact trap LEARNINGS documents, where CSS silently
+overrides the attribute. And `check-page.js` caught two Figure 2 labels sitting on the sub-triangle
+boundaries; fixed by computing each region's **centroid** from its vertices rather than placing the
+labels by eye, which is the same discipline 2.2's Figure 1 needed.

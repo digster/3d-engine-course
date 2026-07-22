@@ -244,6 +244,25 @@ arithmetic operations that every caller wants inlined. Its documented limit — 
 about ±16000 before the products overflow `int32` — is a real constraint, not a formality, because
 signed overflow is UB and Module 3's clipping is what keeps us inside it.
 
+**Barycentric coordinates, as of Lesson 2.3.** `barycentric_at` adds no new computation — it is
+the three edge functions `fill_triangle` already evaluates, divided by the total area. The type is
+a named three-float struct rather than an array because `b.w0` at the call site documents the
+vertex pairing that `b[0]` invites you to get wrong.
+
+The pairing is the load-bearing detail: `w0` uses the edge **opposite** `v0`. A rotated pairing
+still produces weights in `[0,1]` that sum to 1, so the only check with diagnostic power is
+**reconstruction** — `w0·v0 + w1·v1 + w2·v2` must return the point. Verified in the harness across
+3,721 points spread well beyond the triangle.
+
+Two constraints propagate from here into Module 3:
+
+- **Interpolation must use *unbiased* edge values.** The top-left rule's `−1` bias decides
+  coverage and is not part of the geometry; using biased values shifts attributes by a fraction of
+  a pixel. Lesson 2.4 carries both sets through one loop.
+- **The weights are affine in *screen* space**, which stops being surface-correct once perspective
+  arrives. That is not a defect to fix here — without projection, screen-space is exactly right —
+  but it is why Lesson 3.2 exists.
+
 Three line routines exist and only one is meant to be called. `draw_line_naive` and
 `draw_line_dda` are kept because Lesson 2.1 is an *argument*, and the demo switches between them
 at run time so the failure mode can be reproduced rather than described — the same reasoning that

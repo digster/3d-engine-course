@@ -1,0 +1,3681 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>2.3 — Barycentric Coordinates from Signed Areas · Build a Professional 3D Game Engine</title>
+<meta name="description" content="The triangle's own coordinate system, discovered rather than defined: divide the three sub-triangle areas the rasterizer already computes by the total, and you have three weights that say where inside a triangle a point is.">
+
+<!-- ==========================================================================
+     SHARED COURSE STYLESHEET  —  v1.0
+     ==========================================================================
+     This block is IDENTICAL in every lesson file. It is duplicated rather than
+     linked because each lesson must be a fully self-contained document that
+     renders from a bare filesystem with no network and no build step.
+
+     Source of truth: docs/_template/lesson-template.html
+     Change it here first, then propagate. Never edit a lesson's copy alone.
+     ========================================================================== -->
+<!-- SHARED-CSS:BEGIN -->
+<style>
+/* ---- Design tokens ------------------------------------------------------- */
+:root {
+  color-scheme: light dark;
+
+  /* Page */
+  --bg:            #fdfdfb;
+  --bg-sunken:     #f4f4f0;
+  --bg-raised:     #ffffff;
+  --text:          #1c1c1a;
+  --text-muted:    #5f5f58;
+  --text-faint:    #8a8a80;
+  --rule:          #e2e2db;
+  --rule-strong:   #cfcfc6;
+
+  /* Accent — used for links, active nav, section marks */
+  --accent:        #b4530a;
+  --accent-soft:   #f5e6d8;
+  --accent-text:   #8f4108;
+
+  /* Callouts */
+  --note-bd:       #3a6ea5;   --note-bg:    #eaf2fb;
+  --warn-bd:       #b8860b;   --warn-bg:    #fdf5e2;
+  --verify-bd:     #a03030;   --verify-bg:  #fbecec;
+  --pitfall-bd:    #7a4fa3;   --pitfall-bg: #f4eefb;
+  --ok-bd:         #2f7d4f;   --ok-bg:      #e9f6ee;
+
+  /* Code — always dark, in both page themes */
+  --code-bg:       #1b1d23;
+  --code-bar:      #262932;
+  --code-text:     #dfe3ec;
+  --code-rule:     #363a45;
+
+  /* Syntax tokens */
+  --tok-comment:   #6d7789;
+  --tok-keyword:   #c98fdb;
+  --tok-type:      #6cc5d9;
+  --tok-string:    #a3cf85;
+  --tok-number:    #e8a978;
+  --tok-preproc:   #d9a05b;
+  --tok-func:      #79b6f2;
+  --tok-punct:     #9aa2b1;
+
+  /* Axis colours — COURSE-WIDE CONVENTION. x/y/z = red/green/blue.
+     Never override these in a diagram. See conventions.html. */
+  --axis-x:        #d1344a;
+  --axis-y:        #2f9e4f;
+  --axis-z:        #2b6fd4;
+  --axis-x-soft:   #f7d8dd;
+  --axis-y-soft:   #d8f0e0;
+  --axis-z-soft:   #d7e4fa;
+
+  /* Diagram neutrals */
+  --dia-bg:        #ffffff;
+  --dia-ink:       #33332e;
+  --dia-ink-soft:  #7a7a72;
+  --dia-grid:      #e8e8e2;
+  --dia-fill:      #f0f0ea;
+  --dia-hi:        #b4530a;
+
+  /* Typography */
+  --font-body: "Iowan Old Style", "Palatino Linotype", "Palatino", "Charter",
+               Georgia, Cambria, "Times New Roman", serif;
+  --font-ui:   -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+               "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "SFMono-Regular", "Cascadia Code",
+               "JetBrains Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  --measure: 42rem;          /* ~72 characters at this size — the reading column */
+  --measure-wide: 58rem;     /* diagrams & tables may breathe past the measure  */
+}
+
+/* Dark tokens.
+   Applied in two situations, which is why the block is written twice:
+     1. the OS asks for dark AND the reader has not overridden to light;
+     2. the reader explicitly chose dark via the toggle.
+   CSS has no mixins, so duplication is the price of supporting both an OS
+   default and a manual override. Keep the two blocks byte-identical. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg:          #15161a;
+    --bg-sunken:   #101115;
+    --bg-raised:   #1c1e24;
+    --text:        #e4e4e0;
+    --text-muted:  #a2a49e;
+    --text-faint:  #74766f;
+    --rule:        #2c2e35;
+    --rule-strong: #3d404a;
+
+    --accent:      #f0a06a;
+    --accent-soft: #33251a;
+    --accent-text: #f5b184;
+
+    --note-bd:     #5a8fc8;   --note-bg:    #16202c;
+    --warn-bd:     #c9a132;   --warn-bg:    #262013;
+    --verify-bd:   #d05555;   --verify-bg:  #2a1717;
+    --pitfall-bd:  #a077c8;   --pitfall-bg: #221a2c;
+    --ok-bd:       #4fa877;   --ok-bg:      #14231a;
+
+    --dia-bg:      #1a1c21;
+    --dia-ink:     #d8d8d2;
+    --dia-ink-soft:#8f918a;
+    --dia-grid:    #2b2d33;
+    --dia-fill:    #24262c;
+    --dia-hi:      #f0a06a;
+
+    --axis-x:      #f2647a;
+    --axis-y:      #5cc47e;
+    --axis-z:      #6b9ef0;
+    --axis-x-soft: #3a2027;
+    --axis-y-soft: #1c3325;
+    --axis-z-soft: #1e2a40;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg:          #15161a;
+  --bg-sunken:   #101115;
+  --bg-raised:   #1c1e24;
+  --text:        #e4e4e0;
+  --text-muted:  #a2a49e;
+  --text-faint:  #74766f;
+  --rule:        #2c2e35;
+  --rule-strong: #3d404a;
+
+  --accent:      #f0a06a;
+  --accent-soft: #33251a;
+  --accent-text: #f5b184;
+
+  --note-bd:     #5a8fc8;   --note-bg:    #16202c;
+  --warn-bd:     #c9a132;   --warn-bg:    #262013;
+  --verify-bd:   #d05555;   --verify-bg:  #2a1717;
+  --pitfall-bd:  #a077c8;   --pitfall-bg: #221a2c;
+  --ok-bd:       #4fa877;   --ok-bg:      #14231a;
+
+  --dia-bg:      #1a1c21;
+  --dia-ink:     #d8d8d2;
+  --dia-ink-soft:#8f918a;
+  --dia-grid:    #2b2d33;
+  --dia-fill:    #24262c;
+  --dia-hi:      #f0a06a;
+
+  --axis-x:      #f2647a;
+  --axis-y:      #5cc47e;
+  --axis-z:      #6b9ef0;
+  --axis-x-soft: #3a2027;
+  --axis-y-soft: #1c3325;
+  --axis-z-soft: #1e2a40;
+}
+
+/* ---- Reset & base -------------------------------------------------------- */
+*, *::before, *::after { box-sizing: border-box; }
+
+html {
+  font-size: 18px;
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
+  scroll-padding-top: 2rem;
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  line-height: 1.7;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* The reading column. Everything is centred on --measure; wide elements opt out. */
+.wrap {
+  max-width: var(--measure);
+  margin: 0 auto;
+  padding: 0 1.25rem;
+}
+.bleed {                       /* for diagrams/tables that need more room */
+  max-width: var(--measure-wide);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* ---- Typography ---------------------------------------------------------- */
+h1, h2, h3, h4 {
+  font-family: var(--font-ui);
+  line-height: 1.25;
+  letter-spacing: -0.015em;
+  margin: 0 0 0.6em;
+  scroll-margin-top: 1.5rem;
+}
+h1 { font-size: 2.15rem; font-weight: 700; margin-top: 0.2em; }
+h2 {
+  font-size: 1.5rem; font-weight: 650;
+  margin-top: 2.6em;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--rule);
+}
+h3 { font-size: 1.15rem; font-weight: 650; margin-top: 2em; }
+h4 { font-size: 1rem;    font-weight: 650; margin-top: 1.6em; color: var(--text-muted); }
+
+/* Section numbers rendered as a quiet prefix */
+h2 .num, h3 .num {
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  margin-right: 0.5em;
+  font-weight: 500;
+}
+
+p { margin: 0 0 1.15em; }
+
+a { color: var(--accent-text); text-decoration-color: var(--rule-strong); text-underline-offset: 2px; }
+a:hover { text-decoration-color: currentColor; }
+
+strong { font-weight: 650; }
+em { font-style: italic; }
+
+ul, ol { margin: 0 0 1.15em; padding-left: 1.5em; }
+li { margin-bottom: 0.4em; }
+li > ul, li > ol { margin-top: 0.4em; margin-bottom: 0.5em; }
+
+hr { border: 0; border-top: 1px solid var(--rule); margin: 2.5em 0; }
+
+blockquote {
+  margin: 1.5em 0;
+  padding: 0.1em 0 0.1em 1.2em;
+  border-left: 3px solid var(--rule-strong);
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* Inline code — light chip, distinct from the dark block listings */
+:not(pre) > code {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 0.08em 0.34em;
+  word-break: break-word;
+}
+
+/* ---- Masthead ------------------------------------------------------------ */
+.masthead {
+  background: var(--bg-sunken);
+  border-bottom: 1px solid var(--rule);
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+}
+.masthead-inner {
+  max-width: var(--measure-wide);
+  margin: 0 auto;
+  padding: 0.6rem 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.masthead .course {
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  text-decoration: none;
+}
+.masthead .spacer { flex: 1; }
+.masthead a { color: var(--text-muted); text-decoration: none; }
+.masthead a:hover { color: var(--accent-text); }
+
+.theme-toggle {
+  font: inherit;
+  font-size: 0.78rem;
+  background: var(--bg-raised);
+  color: var(--text-muted);
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  padding: 0.2rem 0.55rem;
+  cursor: pointer;
+}
+.theme-toggle:hover { border-color: var(--rule-strong); color: var(--text); }
+
+/* ---- Lesson nav (top & bottom) ------------------------------------------- */
+.lesson-nav {
+  display: flex;
+  align-items: stretch;
+  gap: 0.6rem;
+  font-family: var(--font-ui);
+  font-size: 0.82rem;
+  margin: 1.5rem auto;
+}
+.lesson-nav a, .lesson-nav span {
+  flex: 1;
+  padding: 0.55rem 0.8rem;
+  border: 1px solid var(--rule);
+  border-radius: 7px;
+  background: var(--bg-raised);
+  text-decoration: none;
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+.lesson-nav a:hover { border-color: var(--accent); }
+.lesson-nav span { opacity: 0.45; }        /* disabled edge (no prev / no next) */
+.lesson-nav .dir {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-faint);
+}
+.lesson-nav .ttl {
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-weight: 550;
+}
+.lesson-nav .next-l { text-align: right; }
+.lesson-nav .idx-l  { flex: 0 0 auto; justify-content: center; text-align: center; }
+@media (max-width: 34rem) {
+  .lesson-nav { flex-wrap: wrap; }
+  .lesson-nav .idx-l { order: 3; flex: 1 0 100%; }
+}
+
+/* ---- Lesson header block ------------------------------------------------- */
+.lesson-head { margin: 2rem 0 0; }
+.eyebrow {
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+  font-weight: 650;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 0.5rem;
+}
+.deck {
+  font-size: 1.12rem;
+  color: var(--text-muted);
+  margin-bottom: 1.5rem;
+}
+.meta {
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  padding: 1rem 1.15rem;
+  margin-bottom: 1.75rem;
+}
+.meta dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 0.4rem 1rem; }
+.meta dt {
+  color: var(--text-faint);
+  text-transform: uppercase;
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  padding-top: 0.28em;
+  white-space: nowrap;
+}
+.meta dd { margin: 0; }
+@media (max-width: 30rem) {
+  .meta dl { grid-template-columns: 1fr; gap: 0.15rem 0; }
+  .meta dd { margin-bottom: 0.6rem; }
+}
+
+/* Objectives — "you will be able to…" */
+.objectives {
+  border: 1px solid var(--accent);
+  background: var(--accent-soft);
+  border-radius: 9px;
+  padding: 1.1rem 1.25rem;
+  margin: 1.75rem 0;
+}
+.objectives h2 {
+  margin: 0 0 0.5rem;
+  border: 0; padding: 0;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--accent-text);
+}
+.objectives ul { margin: 0; padding-left: 1.25em; }
+.objectives li::marker { color: var(--accent); }
+
+/* ---- Table of contents --------------------------------------------------- */
+.toc {
+  font-family: var(--font-ui);
+  font-size: 0.88rem;
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  padding: 1rem 1.25rem;
+  margin: 2rem 0;
+}
+.toc > summary {
+  cursor: pointer;
+  font-weight: 650;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-muted);
+  list-style: none;
+}
+.toc > summary::-webkit-details-marker { display: none; }
+.toc > summary::before { content: "▸ "; color: var(--accent); }
+.toc[open] > summary::before { content: "▾ "; }
+.toc ol { list-style: none; margin: 0.85rem 0 0; padding: 0; counter-reset: toc; }
+.toc ol ol { margin: 0.3rem 0 0.5rem 1.1rem; }
+.toc li { margin: 0.28em 0; counter-increment: toc; }
+.toc a { text-decoration: none; color: var(--text); }
+.toc a:hover { color: var(--accent-text); text-decoration: underline; }
+.toc ol ol a { color: var(--text-muted); font-size: 0.94em; }
+
+/* ---- Callouts ------------------------------------------------------------ */
+.callout {
+  border-left: 3px solid var(--rule-strong);
+  background: var(--bg-sunken);
+  border-radius: 0 8px 8px 0;
+  padding: 0.9rem 1.1rem;
+  margin: 1.6em 0;
+  font-size: 0.95rem;
+}
+.callout > :first-child { margin-top: 0; }
+.callout > :last-child  { margin-bottom: 0; }
+.callout .label {
+  display: block;
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  margin-bottom: 0.35rem;
+}
+.callout.note    { border-color: var(--note-bd);    background: var(--note-bg); }
+.callout.note .label    { color: var(--note-bd); }
+.callout.warn    { border-color: var(--warn-bd);    background: var(--warn-bg); }
+.callout.warn .label    { color: var(--warn-bd); }
+.callout.verify  { border-color: var(--verify-bd);  background: var(--verify-bg); }
+.callout.verify .label  { color: var(--verify-bd); }
+.callout.pitfall { border-color: var(--pitfall-bd); background: var(--pitfall-bg); }
+.callout.pitfall .label { color: var(--pitfall-bd); }
+.callout.ok      { border-color: var(--ok-bd);      background: var(--ok-bg); }
+.callout.ok .label      { color: var(--ok-bd); }
+/* C++ explainers: a C++ feature taught in place, the first time it appears. */
+.callout.cpp     { border-color: var(--accent);     background: var(--accent-soft); }
+.callout.cpp .label     { color: var(--accent-text); }
+
+/* ---- Code listings ------------------------------------------------------- */
+.listing {
+  margin: 1.6em 0;
+  border-radius: 9px;
+  overflow: hidden;
+  border: 1px solid var(--code-rule);
+  background: var(--code-bg);
+}
+.listing figcaption {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: var(--code-bar);
+  border-bottom: 1px solid var(--code-rule);
+  padding: 0.45rem 0.85rem;
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  color: #aeb6c4;
+}
+.listing figcaption .path { font-weight: 600; color: #dfe3ec; }
+.listing figcaption .tag {
+  font-family: var(--font-ui);
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  background: #3a3f4c;
+  color: #c6cdd9;
+}
+.listing figcaption .tag.new      { background: #1f4433; color: #7fd6a5; }
+.listing figcaption .tag.modified { background: #453a1c; color: #e0be74; }
+.listing figcaption .lang { margin-left: auto; opacity: 0.65; }
+
+/* Horizontal scroll — NEVER wrap. Wrapped code lies about its structure. */
+.listing pre {
+  margin: 0;
+  padding: 0.9rem 1rem;
+  overflow-x: auto;
+  background: var(--code-bg);
+}
+.listing pre code {
+  font-family: var(--font-mono);
+  font-size: 0.79rem;
+  line-height: 1.62;
+  color: var(--code-text);
+  white-space: pre;
+  display: block;
+  tab-size: 4;
+}
+.listing pre::-webkit-scrollbar { height: 9px; }
+.listing pre::-webkit-scrollbar-track { background: var(--code-bar); }
+.listing pre::-webkit-scrollbar-thumb { background: #4a5060; border-radius: 5px; }
+.listing pre::-webkit-scrollbar-thumb:hover { background: #5d6478; }
+
+/* Syntax tokens, applied by the tiny highlighter at the foot of the page. */
+.tok-c { color: var(--tok-comment); font-style: italic; }
+.tok-k { color: var(--tok-keyword); }
+.tok-t { color: var(--tok-type); }
+.tok-s { color: var(--tok-string); }
+.tok-n { color: var(--tok-number); }
+.tok-p { color: var(--tok-preproc); }
+.tok-f { color: var(--tok-func); }
+.tok-o { color: var(--tok-punct); }
+
+/* Emphasised line inside a listing (the line this paragraph is about) */
+.listing .hl { background: rgba(180, 130, 60, 0.16); display: inline-block; width: 100%; }
+
+/* Shell transcripts get a lighter treatment than source files */
+.listing.shell figcaption .path::before { content: "$ "; opacity: 0.6; }
+
+/* ---- Figures & diagrams -------------------------------------------------- */
+figure.dia {
+  margin: 2em auto;
+  padding: 0;
+}
+figure.dia svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: var(--dia-bg);
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+}
+figure.dia figcaption,
+figure.tbl figcaption {
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: 0.65rem;
+  line-height: 1.55;
+}
+figure.dia figcaption .fignum,
+figure.tbl figcaption .fignum {
+  font-weight: 700;
+  color: var(--text);
+}
+/* SVG text inherits the theme so diagrams survive dark mode */
+figure.dia svg text { font-family: var(--font-ui); fill: var(--dia-ink); }
+figure.dia svg .lbl-x { fill: var(--axis-x); }
+figure.dia svg .lbl-y { fill: var(--axis-y); }
+figure.dia svg .lbl-z { fill: var(--axis-z); }
+figure.dia svg .ax-x  { stroke: var(--axis-x); }
+figure.dia svg .ax-y  { stroke: var(--axis-y); }
+figure.dia svg .ax-z  { stroke: var(--axis-z); }
+figure.dia svg .ink       { stroke: var(--dia-ink); }
+figure.dia svg .ink-soft  { stroke: var(--dia-ink-soft); }
+figure.dia svg .grid      { stroke: var(--dia-grid); }
+figure.dia svg .fill-soft { fill: var(--dia-fill); }
+figure.dia svg .hi        { stroke: var(--dia-hi); }
+figure.dia svg .mono      { font-family: var(--font-mono); }
+figure.dia svg .sm        { font-size: 11px; }
+figure.dia svg .xs        { font-size: 9.5px; }
+
+/* Text fills for <text> elements.
+   These MUST be classes, not fill="..." attributes: the `figure.dia svg text`
+   rule above is CSS, and CSS always beats an SVG presentation attribute — an
+   inline fill on a <text> is silently ignored. Class selectors outrank the bare
+   element selector, so these win. (Shapes are unaffected; the rule only targets
+   text, so fill="..." still works on rect/path/circle.) */
+figure.dia svg .muted     { fill: var(--dia-ink-soft); }
+figure.dia svg .t-hi      { fill: var(--dia-hi); }
+figure.dia svg .t-ok      { fill: var(--ok-bd); }
+figure.dia svg .t-bad     { fill: var(--verify-bd); }
+/* For labels sitting ON a saturated filled shape, where the theme ink would be
+   unreadable. Fixed white in both themes, because the shape under it is the
+   same saturated colour in both. */
+figure.dia svg .t-inv     { fill: #ffffff; }
+
+/* ---- Tables -------------------------------------------------------------- */
+.tbl-scroll { overflow-x: auto; margin: 1.6em 0; }
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+th, td {
+  text-align: left;
+  padding: 0.5rem 0.7rem;
+  border-bottom: 1px solid var(--rule);
+  vertical-align: top;
+}
+th {
+  font-weight: 650;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--rule-strong);
+  white-space: nowrap;
+}
+tbody tr:hover { background: var(--bg-sunken); }
+td code { font-size: 0.82em; }
+
+/* File-manifest table: path | new/modified | purpose */
+.manifest td:first-child { font-family: var(--font-mono); font-size: 0.78rem; white-space: nowrap; }
+.badge {
+  font-size: 0.62rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.06em; padding: 0.1rem 0.4rem; border-radius: 3px; white-space: nowrap;
+}
+.badge.new { background: var(--ok-bg); color: var(--ok-bd); border: 1px solid var(--ok-bd); }
+.badge.mod { background: var(--warn-bg); color: var(--warn-bd); border: 1px solid var(--warn-bd); }
+/* Curriculum status, used on index.html */
+.badge.done { background: var(--ok-bg); color: var(--ok-bd); border: 1px solid var(--ok-bd); }
+.badge.soon { background: var(--bg-sunken); color: var(--text-faint); border: 1px solid var(--rule-strong); }
+
+/* ---- Math ---------------------------------------------------------------- */
+/* KaTeX renders these when the CDN is reachable. When it is NOT, the raw TeX
+   stays visible — which is why every equation MUST also be stated in prose.
+   Never let an equation be the only carrier of a fact. */
+.eq {
+  margin: 1.4em 0;
+  padding: 0.9rem 1rem;
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  overflow-x: auto;
+  text-align: center;
+}
+.eq-plain {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  margin-top: 0.6rem;
+  padding-top: 0.6rem;
+  border-top: 1px dashed var(--rule-strong);
+  text-align: left;
+}
+.eq-plain::before {
+  content: "in plain text: ";
+  color: var(--text-faint);
+  font-family: var(--font-ui);
+  font-size: 0.72rem;
+}
+
+/* Worked numeric example — every formula gets one */
+.worked {
+  border: 1px solid var(--rule-strong);
+  border-radius: 9px;
+  padding: 1rem 1.2rem;
+  margin: 1.6em 0;
+  background: var(--bg-raised);
+}
+.worked > .label {
+  display: block;
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--accent);
+  margin-bottom: 0.5rem;
+}
+.worked > :last-child { margin-bottom: 0; }
+
+/* ---- Exercises ----------------------------------------------------------- */
+.exercise {
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 9px 9px 0;
+  padding: 1rem 1.2rem;
+  margin: 1.4em 0;
+  background: var(--bg-raised);
+}
+.exercise h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.98rem;
+}
+.exercise h3 .xnum {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--accent);
+  margin-right: 0.5em;
+}
+.difficulty {
+  font-family: var(--font-ui);
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-faint);
+  border: 1px solid var(--rule-strong);
+  border-radius: 3px;
+  padding: 0.05rem 0.35rem;
+  margin-left: 0.4em;
+  vertical-align: 0.15em;
+}
+.exercise details {
+  margin-top: 0.7rem;
+  border-top: 1px solid var(--rule);
+  padding-top: 0.6rem;
+}
+.exercise summary {
+  cursor: pointer;
+  font-family: var(--font-ui);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.exercise summary:hover { color: var(--accent-text); }
+.exercise details[open] summary { margin-bottom: 0.6rem; }
+
+/* ---- Pitfalls (symptom → cause → fix) ------------------------------------ */
+.pitfalls { margin: 1.5em 0; }
+.pitfall-item {
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  margin-bottom: 0.9rem;
+  overflow: hidden;
+}
+.pitfall-item > summary {
+  cursor: pointer;
+  padding: 0.7rem 1rem;
+  background: var(--bg-sunken);
+  font-family: var(--font-ui);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.pitfall-item > summary:hover { color: var(--accent-text); }
+.pitfall-item > summary .sym {
+  font-weight: 400;
+  color: var(--text-muted);
+  font-style: italic;
+}
+.pitfall-body { padding: 0.9rem 1rem; font-size: 0.94rem; }
+.pitfall-body > :first-child { margin-top: 0; }
+.pitfall-body > :last-child  { margin-bottom: 0; }
+.pitfall-body dt {
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+  margin-top: 0.7rem;
+}
+.pitfall-body dd { margin: 0.2rem 0 0; }
+
+/* ---- Recap / next -------------------------------------------------------- */
+.recap {
+  background: var(--ok-bg);
+  border: 1px solid var(--ok-bd);
+  border-radius: 9px;
+  padding: 1.1rem 1.25rem;
+  margin: 1.75rem 0;
+}
+.recap h2 { margin: 0 0 0.6rem; border: 0; padding: 0; font-size: 1.05rem; }
+.recap > :last-child { margin-bottom: 0; }
+
+/* ---- Further reading ----------------------------------------------------- */
+.reading { font-size: 0.92rem; }
+.reading li { margin-bottom: 0.6em; }
+.reading .src {
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+  margin-right: 0.4em;
+}
+
+/* ---- STATE block --------------------------------------------------------- */
+.state {
+  margin: 2.5em 0 1em;
+  border: 1px dashed var(--rule-strong);
+  border-radius: 9px;
+  background: var(--bg-sunken);
+  overflow: hidden;
+}
+.state > summary {
+  cursor: pointer;
+  padding: 0.6rem 1rem;
+  font-family: var(--font-ui);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-muted);
+}
+.state pre {
+  margin: 0;
+  padding: 0.9rem 1rem;
+  overflow-x: auto;
+  border-top: 1px solid var(--rule);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+  white-space: pre;
+}
+
+/* ---- Footer -------------------------------------------------------------- */
+.foot {
+  border-top: 1px solid var(--rule);
+  margin-top: 3rem;
+  padding: 1.5rem 0 3rem;
+  font-family: var(--font-ui);
+  font-size: 0.78rem;
+  color: var(--text-faint);
+}
+.foot a { color: var(--text-muted); }
+
+/* ---- Interactive widgets ------------------------------------------------- */
+.widget {
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  background: var(--bg-raised);
+  padding: 1rem;
+  margin: 2em 0;
+}
+.widget-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+  align-items: center;
+  margin-top: 0.8rem;
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+.widget-controls label { display: flex; align-items: center; gap: 0.4rem; }
+.widget-controls input[type="range"] { accent-color: var(--accent); }
+.widget-readout {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--text);
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 0.1rem 0.4rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Print --------------------------------------------------------------- */
+@media print {
+  .masthead, .lesson-nav, .theme-toggle { display: none; }
+  body { background: #fff; color: #000; font-size: 11pt; }
+  .listing { break-inside: avoid; }
+  figure.dia { break-inside: avoid; }
+  a::after { content: " (" attr(href) ")"; font-size: 0.7em; color: #666; }
+}
+</style>
+<!-- SHARED-CSS:END -->
+
+<!-- KaTeX (optional). If unreachable the raw TeX remains readable, and every
+     equation is also stated in prose + .eq-plain, so nothing is lost. -->
+<link rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css"
+      integrity="sha384-nB0miv6/jRmo5UMMR1wu3Gz6NLsoTkbqJghGIsx//Rlm+ZU03BU6SQNC66uf4l5+"
+      crossorigin="anonymous">
+</head>
+<body>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <a class="course" href="../index.html">Build a Professional 3D Game Engine</a>
+    <span class="spacer"></span>
+    <a href="../index.html">Contents</a>
+    <a href="../conventions.html">Conventions</a>
+    <a href="../math-toolbox.html">Math Toolbox</a>
+    <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Toggle colour theme">Theme</button>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="02-02-triangle-edge-functions.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">2.2 — The Triangle: Edge Functions</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="02-04-attribute-interpolation.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">2.4 — Interpolating Attributes Across a Triangle</span>
+    </a>
+  </nav>
+
+  <!-- ================= 1. HEADER BLOCK ================= -->
+  <div class="lesson-head">
+    <div class="eyebrow">Module 2 — Software Rasterizer I · Lesson 2.3</div>
+    <h1>Barycentric Coordinates from Signed Areas</h1>
+    <p class="deck">
+      Your rasterizer already computes three numbers per pixel and throws two thirds of the
+      information away. It uses their <em>signs</em> to decide inside-or-outside and discards their
+      magnitudes — which were areas, and which between them say exactly <em>where</em> in the
+      triangle the pixel is. One division recovers that. Everything the rest of this course draws
+      on a surface — colour, depth, texture, lighting — rides on the three fractions we build
+      today.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 5 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="02-02-triangle-edge-functions.html">2.2 — Edge Functions</a> (§3.3 and §3.4 especially),
+          <a href="01-07-vectors-2d.html">1.7 — 2D Vectors</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd>
+          <code>src/gfx/raster.hpp</code> (modified), <code>src/gfx/raster.cpp</code> (modified),
+          <code>src/main.cpp</code> (modified)
+        </dd>
+
+        <dt>Milestone</dt>
+        <dd>A live probe: move the mouse and watch the three sub-triangles whose areas are the three weights, with the numbers — and the barycentric grid drawn as three families of parallel lines.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…explain what a barycentric coordinate is by talking about balance and areas, before any algebra.</li>
+      <li>…derive the three weights from the sub-triangle areas your rasterizer already computes.</li>
+      <li>…state and use the <em>defining</em> property — that the weights reconstruct the point — and say why "they sum to 1" is not enough to catch a bug.</li>
+      <li>…pair each weight with the correct vertex, and recognise the failure when you do not.</li>
+      <li>…predict the weights at a vertex, on an edge, at the centroid, and outside the triangle.</li>
+      <li>…say why a constant weight traces a line parallel to the opposite edge.</li>
+      <li>…explain why interpolating with these weights is the <em>only</em> affine choice, not merely a reasonable one.</li>
+    </ul>
+  </section>
+
+  <details class="toc" open>
+    <summary>Contents</summary>
+    <ol>
+      <li><a href="#problem">The Problem</a></li>
+      <li><a href="#intuition">Building Intuition</a>
+        <ol>
+          <li><a href="#balance">Where a triangle balances</a></li>
+          <li><a href="#areas">Three sub-triangles that tile</a></li>
+        </ol>
+      </li>
+      <li><a href="#theory">The Theory</a>
+        <ol>
+          <li><a href="#definition">The definition, from areas</a></li>
+          <li><a href="#sum">Why they sum to one</a></li>
+          <li><a href="#reconstruct">The property that actually defines them</a></li>
+          <li><a href="#worked">A worked example</a></li>
+          <li><a href="#pairing">The pairing trap</a></li>
+          <li><a href="#geometry">Iso-lines, edges, and the outside</a></li>
+          <li><a href="#unique">Why this interpolation is the only one</a></li>
+          <li><a href="#precision">Precision, measured</a></li>
+        </ol>
+      </li>
+      <li><a href="#implementation">Implementation</a></li>
+      <li><a href="#listings">Complete Code Listings</a></li>
+      <li><a href="#build">Build &amp; Run</a></li>
+      <li><a href="#pitfalls">Common Pitfalls &amp; Debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; Next</a></li>
+      <li><a href="#reading">Further Reading</a></li>
+    </ol>
+  </details>
+
+  <!-- ================= 2. THE PROBLEM ================= -->
+  <h2 id="problem"><span class="num">1</span>The Problem</h2>
+
+  <p>
+    Lesson 2.2's <code>fill_triangle</code> paints every interior pixel the same colour. That is a
+    <em>silhouette</em> — a flat paper cutout. Every surface you actually want to render varies
+    across itself: a lit sphere is bright at one edge and dark at the other, a textured wall shows
+    a different texel at every pixel, and a depth-tested scene needs each pixel to know how far
+    away it is.
+  </p>
+
+  <p>
+    All of those are the same request. You know something at the three corners, and you need it at
+    every pixel in between. So you need to be able to say, for a given pixel: <strong>where in this
+    triangle am I?</strong>
+  </p>
+
+  <p>
+    And screen coordinates cannot answer that. A pixel at <code>(147, 92)</code> tells you where it
+    is on the <em>screen</em>, which is a fact about the framebuffer, not about the triangle. Move
+    the triangle and the answer should not change; move the pixel to the corresponding place in a
+    different triangle and it should be the same answer. What is needed is a coordinate system
+    <em>intrinsic to the triangle</em> — one that says "40% of the way toward this corner" rather
+    than "147 pixels from the left".
+  </p>
+
+  <div class="callout note">
+    <span class="label">The good news, before we start</span>
+    <p>
+      You are already computing it. Lesson 2.2 §3.3 noticed that each edge function's
+      <em>magnitude</em> is twice the area of a sub-triangle, and §3.4 noticed that the three of
+      them sum to the area of the whole. The rasterizer looks at their signs, decides
+      inside-or-outside, and throws the magnitudes away.
+    </p>
+    <p>
+      This lesson does not add a computation. It stops discarding one.
+    </p>
+  </div>
+
+  <!-- ================= 3. BUILDING INTUITION ================= -->
+  <h2 id="intuition"><span class="num">2</span>Building Intuition</h2>
+
+  <h3 id="balance">Where a triangle balances</h3>
+
+  <p>
+    The name comes from <em>barycentre</em> — centre of mass — and the original idea is worth
+    meeting first, because it makes the whole thing obvious.
+  </p>
+
+  <p>
+    Take a weightless triangular plate and put a lump of mass at each corner. The assembly balances
+    at one particular point, and where that point sits depends only on the ratio of the three
+    masses. Equal masses balance at the middle. Pile mass onto one corner and the balance point
+    slides toward it, reaching the corner itself in the limit where the other two are zero.
+  </p>
+
+  <p>
+    Now run that backwards, which is the move that turns an observation into a coordinate system.
+    <strong>Given a point inside the triangle, what three masses would balance there?</strong> There
+    is essentially one answer — one set of ratios — so the three masses <em>are</em> a way of
+    naming the point (Figure&nbsp;1). Scale them so they sum to 1 and the naming becomes unique.
+  </p>
+
+  <figure class="dia bleed">
+    <svg viewBox="0 0 680 330" role="img" aria-labelledby="fig1-t fig1-d">
+      <title id="fig1-t">Three masses at the corners balance at one point</title>
+      <desc id="fig1-d">A triangle with a differently sized disc at each corner representing a mass.
+        The balance point sits nearer the largest mass. A second smaller triangle shows equal masses
+        balancing at the centroid. The caption explains that the three masses, scaled to sum to one,
+        name the balance point.</desc>
+
+      <!-- main triangle -->
+      <path d="M300,60 L420,250 L120,250 z" fill="var(--dia-hi)" opacity="0.14"/>
+      <path d="M300,60 L420,250 L120,250 z" fill="none" class="ink" stroke-width="2"/>
+
+      <!-- masses: big at bottom-left -->
+      <circle cx="120" cy="250" r="17" fill="var(--dia-hi)" opacity="0.85"/>
+      <circle cx="420" cy="250" r="9"  fill="var(--dia-hi)" opacity="0.85"/>
+      <circle cx="300" cy="60"  r="7"  fill="var(--dia-hi)" opacity="0.85"/>
+
+      <text x="120" y="286" text-anchor="middle" class="xs muted">mass 0.55</text>
+      <text x="420" y="286" text-anchor="middle" class="xs muted">mass 0.30</text>
+      <text x="300" y="44"  text-anchor="middle" class="xs muted">mass 0.15</text>
+
+      <!-- balance point: 0.15*A + 0.30*B + 0.55*C -->
+      <!-- x = .15*300 + .30*420 + .55*120 = 45 + 126 + 66 = 237
+           y = .15*60  + .30*250 + .55*250 = 9 + 75 + 137.5 = 221.5 -->
+      <circle cx="237" cy="221" r="5" fill="var(--dia-ink)"/>
+      <line class="hi" x1="237" y1="221" x2="196" y2="180" stroke-width="1.2"/>
+      <text x="192" y="174" text-anchor="end" class="xs t-hi" font-weight="700">balances here</text>
+
+      <!-- equal-mass comparison -->
+      <path d="M580,90 L640,190 L490,190 z" fill="none" class="ink-soft" stroke-width="1.5"/>
+      <circle cx="580" cy="90"  r="7" fill="var(--dia-ink-soft)"/>
+      <circle cx="640" cy="190" r="7" fill="var(--dia-ink-soft)"/>
+      <circle cx="490" cy="190" r="7" fill="var(--dia-ink-soft)"/>
+      <!-- centroid: ((580+640+490)/3, (90+190+190)/3) = (570, 156.7) -->
+      <circle cx="570" cy="157" r="4" fill="var(--dia-ink)"/>
+      <text x="565" y="216" text-anchor="middle" class="xs muted">equal masses</text>
+      <text x="565" y="228" text-anchor="middle" class="xs muted">balance at the centroid</text>
+
+      <g transform="translate(60,300)">
+        <text x="0" y="0" class="xs muted">Read it backwards and it becomes a coordinate system: every point inside is the balance point of exactly one set of ratios.</text>
+        <text x="0" y="16" class="xs muted">Scale them to sum to 1 and the naming is unique. Those three numbers are the point's barycentric coordinates.</text>
+      </g>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 1.</span>
+      Möbius's 1827 idea, and the origin of the name. Three masses determine a balance point; read
+      backwards, a point determines three masses. That is what a barycentric coordinate is before
+      any algebra is involved.
+    </figcaption>
+  </figure>
+
+  <h3 id="areas">Three sub-triangles that tile</h3>
+
+  <p>
+    Masses are the origin story, but they are not how we will compute anything. For that, join your
+    point <code>P</code> to all three corners (Figure&nbsp;2). The triangle falls apart into three
+    smaller triangles, and — this is the whole lesson — <strong>they exactly tile the
+    original</strong>. No gaps, no overlap. So their three areas add up to the total.
+  </p>
+
+  <p>
+    Divide each by the total and you have three fractions that sum to 1. Slide <code>P</code>
+    toward a corner and the sub-triangle <em>opposite</em> that corner grows to fill everything,
+    while the other two shrink to nothing. Slide it onto an edge and the sub-triangle on the far
+    side of that edge collapses to zero area. The fractions behave exactly like the masses did —
+    because they <em>are</em> the masses.
+  </p>
+
+  <figure class="dia bleed">
+    <svg viewBox="0 0 680 340" role="img" aria-labelledby="fig2-t fig2-d">
+      <title id="fig2-t">A point splits a triangle into three sub-triangles that tile it</title>
+      <desc id="fig2-d">A triangle with vertices labelled v0, v1 and v2 and an interior point P
+        joined to all three corners, splitting it into three sub-triangles shaded in three
+        different colours. Each sub-triangle is labelled with the vertex it faces, and the caption
+        notes that its area divided by the total is that vertex's weight.</desc>
+
+      <!-- A = v0 apex (320,70); B = v1 (470,300); C = v2 (140,300); P (300,215) -->
+      <!-- sub-triangle opposite v0 = P,B,C -->
+      <path d="M300,215 L470,300 L140,300 z" fill="var(--verify-bd)" opacity="0.30"/>
+      <!-- opposite v1 = P,C,A -->
+      <path d="M300,215 L140,300 L320,70 z" fill="var(--ok-bd)" opacity="0.30"/>
+      <!-- opposite v2 = P,A,B -->
+      <path d="M300,215 L320,70 L470,300 z" fill="var(--axis-z)" opacity="0.30"/>
+
+      <!-- spokes -->
+      <g class="ink" stroke-width="1.4">
+        <line x1="300" y1="215" x2="320" y2="70"/>
+        <line x1="300" y1="215" x2="470" y2="300"/>
+        <line x1="300" y1="215" x2="140" y2="300"/>
+      </g>
+
+      <path d="M320,70 L470,300 L140,300 z" fill="none" class="ink" stroke-width="2.2"/>
+
+      <circle cx="320" cy="70"  r="4.5" fill="var(--dia-ink)"/>
+      <circle cx="470" cy="300" r="4.5" fill="var(--dia-ink)"/>
+      <circle cx="140" cy="300" r="4.5" fill="var(--dia-ink)"/>
+      <circle cx="300" cy="215" r="5" fill="var(--dia-hi)"/>
+
+      <text x="320" y="56"  text-anchor="middle" class="sm" font-weight="700">v0</text>
+      <text x="484" y="306" class="sm" font-weight="700">v1</text>
+      <text x="112" y="306" class="sm" font-weight="700">v2</text>
+      <text x="292" y="204" text-anchor="end" class="sm t-hi" font-weight="700">P</text>
+
+      <!-- Sub-triangle labels, placed at each region's CENTROID (computed from
+           the vertices, not eyeballed) so none of them lands on a spoke or an
+           edge — which is exactly what the first draft did. -->
+      <text x="303" y="274" text-anchor="middle" class="xs t-bad" font-weight="700">faces v0</text>
+      <text x="253" y="198" text-anchor="middle" class="xs t-ok" font-weight="700">faces v1</text>
+      <text x="363" y="198" text-anchor="middle" class="xs lbl-z" font-weight="700">faces v2</text>
+
+      <g transform="translate(506,80)">
+        <text x="0" y="0" class="sm" font-weight="700">The three weights</text>
+        <text x="0" y="26" class="xs muted">Each sub-triangle's area,</text>
+        <text x="0" y="40" class="xs muted">over the total area, is the</text>
+        <text x="0" y="54" class="xs muted">weight of the vertex it FACES</text>
+        <text x="0" y="68" class="xs muted">— the one it does not touch.</text>
+
+        <text x="0" y="96" class="xs t-hi" font-weight="700">They tile the original,</text>
+        <text x="0" y="110" class="xs t-hi" font-weight="700">so they sum to 1.</text>
+
+        <text x="0" y="138" class="xs muted">Push P toward a corner and</text>
+        <text x="0" y="152" class="xs muted">the region facing it swells to</text>
+        <text x="0" y="166" class="xs muted">fill everything; that weight</text>
+        <text x="0" y="180" class="xs muted">goes to 1, the others to 0.</text>
+
+        <text x="0" y="208" class="xs muted">Put P on an edge and the</text>
+        <text x="0" y="222" class="xs muted">region facing away collapses:</text>
+        <text x="0" y="236" class="xs muted">that weight is exactly 0.</text>
+      </g>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 2.</span>
+      Joining <code>P</code> to the three corners tiles the triangle with three sub-triangles. Each
+      one's area, as a fraction of the whole, is the weight of the vertex it <em>faces</em> — and
+      that pairing is the single most bug-prone detail in this lesson (§3.5).
+    </figcaption>
+  </figure>
+
+  <!-- ================= 4. THE THEORY ================= -->
+  <h2 id="theory"><span class="num">3</span>The Theory</h2>
+
+  <h3 id="definition">The definition, from areas</h3>
+
+  <p>
+    Write the triangle's vertices <code>v0</code>, <code>v1</code>, <code>v2</code>, and let
+    <code>P</code> be the point. Define three weights:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ w_0 = \frac{\operatorname{area}(P v_1 v_2)}{\operatorname{area}(v_0 v_1 v_2)}, \qquad w_1 = \frac{\operatorname{area}(P v_2 v_0)}{\operatorname{area}(v_0 v_1 v_2)}, \qquad w_2 = \frac{\operatorname{area}(P v_0 v_1)}{\operatorname{area}(v_0 v_1 v_2)} \]</span>
+    <span class="eq-plain">w0 = area(P v1 v2) / area(v0 v1 v2), and likewise w1, w2 — each using the sub-triangle OPPOSITE its vertex</span>
+  </div>
+
+  <p>
+    In prose: <em>each weight is the area of the sub-triangle opposite its vertex, divided by the
+    area of the whole.</em>
+  </p>
+
+  <p>
+    And we can already compute all four of those areas, because Lesson 2.2's edge function
+    <em>is</em> twice a signed area. The bottom of each fraction is
+    <code>edge_function(v0, v1, v2)</code>; the top of <code>w0</code> is
+    <code>edge_function(v1, v2, P)</code>. The factors of two cancel, and the signs cancel too —
+    which is why this works for either winding without a special case:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ w_0 = \frac{E_{12}(P)}{E_{01}(v_2)}, \qquad w_1 = \frac{E_{20}(P)}{E_{01}(v_2)}, \qquad w_2 = \frac{E_{01}(P)}{E_{01}(v_2)} \]</span>
+    <span class="eq-plain">w0 = edge_function(v1,v2,P) / area2,  w1 = edge_function(v2,v0,P) / area2,  w2 = edge_function(v0,v1,P) / area2</span>
+  </div>
+
+  <p>
+    Three integers you already have, one integer you compute once per triangle, and one division.
+    That is the entire implementation.
+  </p>
+
+  <h3 id="sum">Why they sum to one</h3>
+
+  <p>
+    Because the three sub-triangles tile the original, so their areas add to its area, so the three
+    fractions add to one. That is the geometric argument and it is complete for points inside.
+  </p>
+
+  <p>
+    But it is worth knowing something stronger, because it is what makes the weights useful
+    <em>outside</em> the triangle too. In terms of the edge functions the identity is:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ E_{12}(P) + E_{20}(P) + E_{01}(P) = E_{01}(v_2) \qquad \text{for every point } P \text{ in the plane} \]</span>
+    <span class="eq-plain">edge_function(v1,v2,P) + edge_function(v2,v0,P) + edge_function(v0,v1,P) = the total, for EVERY P</span>
+  </div>
+
+  <p>
+    Expand the three edge functions symbolically and every term containing <code>P</code> appears
+    once with each sign, so they all cancel; what survives does not mention <code>P</code> at all.
+    The sum is therefore the total area no matter where <code>P</code> is — inside, outside, or a
+    thousand pixels away, where one or two of the areas are <em>negative</em> and the cancellation
+    still works out.
+  </p>
+
+  <div class="callout ok">
+    <span class="label">Leave this in as an assertion</span>
+    <p>
+      In integers this identity is <strong>exact</strong>. If your three edge values ever fail to
+      sum to the area, one of them has its vertices in the wrong order — and you will find out at
+      the line that is wrong, rather than three lessons later when a texture looks sheared. It is
+      the cheapest correctness check in the rasterizer.
+    </p>
+  </div>
+
+  <h3 id="reconstruct">The property that actually defines them</h3>
+
+  <p>
+    Here is the one to remember, and the reason "they sum to 1" is not a sufficient test:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ w_0\,v_0 + w_1\,v_1 + w_2\,v_2 = P \]</span>
+    <span class="eq-plain">w0*v0 + w1*v1 + w2*v2 = P</span>
+  </div>
+
+  <p>
+    In prose: <em>the weights, applied to the three vertices, reconstruct the original point.</em>
+    This is the centre-of-mass statement from §2.1 written as arithmetic, and it is what
+    "barycentric coordinates" <em>means</em>. Everything else — summing to one, being 1 at a
+    vertex, going negative outside — follows from it.
+  </p>
+
+  <p>
+    It is also the check that catches real bugs, which the sum does not. A set of weights can sum
+    perfectly to 1 and still describe the wrong point (§3.5 shows exactly that). Reconstruction
+    cannot be fooled: if the weights are wrong, the point comes back wrong.
+  </p>
+
+  <h3 id="worked">A worked example</h3>
+
+  <div class="worked">
+    <span class="label">Worked example — the same triangle as Lesson 2.2</span>
+    <p>
+      <code>v0 = (2, 2)</code>, <code>v1 = (10, 4)</code>, <code>v2 = (4, 10)</code>, and the point
+      <code>P = (5, 5)</code>. Lesson 2.2 §3.4 already computed everything we need:
+    </p>
+    <ul>
+      <li>Total: <code>E<sub>01</sub>(v2) = 60</code>, so the triangle's area is 30.</li>
+      <li><code>E<sub>12</sub>(P) = 24</code> — the sub-triangle facing <code>v0</code></li>
+      <li><code>E<sub>20</sub>(P) = 18</code> — facing <code>v1</code></li>
+      <li><code>E<sub>01</sub>(P) = 18</code> — facing <code>v2</code></li>
+    </ul>
+    <p>Divide each by 60:</p>
+    <div class="eq">
+      <span class="katex-src">\[ w_0 = \tfrac{24}{60} = 0.4, \qquad w_1 = \tfrac{18}{60} = 0.3, \qquad w_2 = \tfrac{18}{60} = 0.3 \]</span>
+      <span class="eq-plain">w0 = 24/60 = 0.4,  w1 = 18/60 = 0.3,  w2 = 18/60 = 0.3</span>
+    </div>
+    <p>
+      They sum to 1.0 ✓. Now the check that matters — reconstruct <code>P</code>:
+    </p>
+    <ul>
+      <li><code>x = 0.4(2) + 0.3(10) + 0.3(4) = 0.8 + 3.0 + 1.2 = <strong>5.0</strong></code> ✓</li>
+      <li><code>y = 0.4(2) + 0.3(4) + 0.3(10) = 0.8 + 1.2 + 3.0 = <strong>5.0</strong></code> ✓</li>
+    </ul>
+    <p>
+      <code>(5, 5)</code>, which is where we started. These numbers are asserted in the verification
+      harness, so the lesson and the code cannot drift apart.
+    </p>
+  </div>
+
+  <h3 id="pairing">The pairing trap</h3>
+
+  <p>
+    <code>w0</code> uses the edge <code>v1→v2</code> — the edge that does <strong>not</strong> touch
+    <code>v0</code>. It is very natural to reach for <code>v0→v1</code> instead, because that edge
+    has <code>v0</code>'s name on it. Doing so produces weights that are all still in
+    <code>[0,1]</code>, still sum to exactly 1, and are simply <em>wrong</em>.
+  </p>
+
+  <div class="worked">
+    <span class="label">Worked example — what a wrong pairing costs</span>
+    <p>
+      Take the correct weights from above, <code>(0.4, 0.3, 0.3)</code>, and apply them to the
+      vertices rotated by one — the mistake you make by pairing each weight with the edge that
+      shares its name:
+    </p>
+    <ul>
+      <li><code>x = 0.3(2) + 0.3(10) + 0.4(4) = 0.6 + 3.0 + 1.6 = 5.2</code></li>
+      <li><code>y = 0.3(2) + 0.3(4) + 0.4(10) = 0.6 + 1.2 + 4.0 = 5.8</code></li>
+    </ul>
+    <p>
+      <code>(5.2, 5.8)</code> instead of <code>(5, 5)</code>. The sum is still 1. Every weight is
+      still a plausible fraction. The point is just… somewhere else.
+    </p>
+    <p>
+      In a rendered image this shows up as texture that is subtly rotated within each triangle, or
+      lighting that is brightest in the wrong corner — a defect that looks like a content problem
+      rather than a code one, which is what makes it expensive.
+    </p>
+  </div>
+
+  <div class="callout warn">
+    <span class="label">Test reconstruction, not the sum</span>
+    <p>
+      This is why §3.3 insists that reconstruction is the defining property. A sum check passes for
+      all three rotations of a wrong pairing. A reconstruction check passes for exactly one.
+    </p>
+    <p>
+      Verified across 3,721 points spread well beyond the triangle: worst reconstruction error
+      <strong>0.000015 px</strong>.
+    </p>
+  </div>
+
+  <h3 id="geometry">Iso-lines, edges, and the outside</h3>
+
+  <p>
+    A few facts fall straight out of the definition, and knowing them makes debugging much faster
+    because you can predict what a correct implementation should print.
+  </p>
+
+  <p>
+    <strong>At a vertex, that vertex's weight is 1 and the others are 0.</strong> Put <code>P</code>
+    on <code>v0</code> and the sub-triangle facing <code>v0</code> is the whole triangle, while the
+    other two are degenerate.
+  </p>
+
+  <p>
+    <strong>On an edge, the opposite vertex's weight is exactly 0.</strong> The sub-triangle facing
+    it has collapsed to a line.
+  </p>
+
+  <p>
+    <strong>At the centroid, all three are 1/3</strong> — the equal-masses case from Figure&nbsp;1.
+  </p>
+
+  <p>
+    <strong>A constant weight traces a line parallel to the opposite edge</strong>, and the lines
+    are evenly spaced (Figure&nbsp;3). This one deserves a moment. The weight <code>w0</code> is an
+    area divided by a constant, and the sub-triangle facing <code>v0</code> has a fixed base — the
+    edge <code>v1→v2</code>. Its area therefore depends only on its <em>height</em>: how far
+    <code>P</code> is from that edge. So "same <code>w0</code>" means "same distance from the
+    opposite edge", which is precisely a parallel line.
+  </p>
+
+  <figure class="dia bleed">
+    <svg viewBox="0 0 680 360" role="img" aria-labelledby="fig3-t fig3-d">
+      <title id="fig3-t">Lines of constant weight run parallel to the opposite edge</title>
+      <desc id="fig3-d">A triangle with four evenly spaced horizontal lines drawn inside it,
+        labelled with weights of 0, 0.25, 0.5 and 0.75 for the top vertex. The lines are parallel to
+        the bottom edge, which is the edge opposite that vertex, and converge to a point at the
+        apex where the weight reaches one.</desc>
+
+      <!-- A(320,70) apex = v0 ; B(470,300) ; C(140,300). Iso-line endpoints
+           computed from the geometry, not eyeballed. -->
+      <path d="M320,70 L470,300 L140,300 z" fill="var(--dia-hi)" opacity="0.10"/>
+
+      <g class="hi" stroke-width="1.6">
+        <line x1="140" y1="300" x2="470" y2="300"/>
+        <line x1="185" y1="242.5" x2="432.5" y2="242.5"/>
+        <line x1="230" y1="185" x2="395" y2="185"/>
+        <line x1="275" y1="127.5" x2="357.5" y2="127.5"/>
+      </g>
+
+      <path d="M320,70 L470,300 L140,300 z" fill="none" class="ink" stroke-width="2.2"/>
+
+      <circle cx="320" cy="70" r="4.5" fill="var(--dia-ink)"/>
+      <text x="320" y="56" text-anchor="middle" class="sm" font-weight="700">v0</text>
+
+      <text x="484" y="304" class="xs t-hi" font-weight="700">w0 = 0</text>
+      <text x="446" y="246" class="xs t-hi">w0 = 0.25</text>
+      <text x="408" y="189" class="xs t-hi">w0 = 0.5</text>
+      <text x="371" y="131" class="xs t-hi">w0 = 0.75</text>
+      <text x="336" y="76" class="xs t-hi" font-weight="700">w0 = 1</text>
+
+      <!-- height annotation -->
+      <line class="ink-soft" x1="120" y1="300" x2="120" y2="70" stroke-width="1.2"
+            stroke-dasharray="4 3"/>
+      <text x="112" y="190" text-anchor="end" class="xs muted">height</text>
+
+      <g transform="translate(520,110)">
+        <text x="0" y="0" class="sm" font-weight="700">Why parallel</text>
+        <text x="0" y="24" class="xs muted">The sub-triangle facing v0</text>
+        <text x="0" y="38" class="xs muted">has a FIXED base — the edge</text>
+        <text x="0" y="52" class="xs muted">v1→v2. So its area depends</text>
+        <text x="0" y="66" class="xs muted">only on its height.</text>
+        <text x="0" y="92" class="xs t-hi" font-weight="700">Same w0 = same distance</text>
+        <text x="0" y="106" class="xs t-hi" font-weight="700">from the opposite edge</text>
+        <text x="0" y="120" class="xs t-hi" font-weight="700">= a parallel line.</text>
+        <text x="0" y="148" class="xs muted">Evenly spaced, because area</text>
+        <text x="0" y="162" class="xs muted">grows linearly with height.</text>
+      </g>
+
+      <text x="60" y="342" class="xs muted">All three families exist at once — one per vertex — and together they form the triangle's own grid. Press [5] in the demo to see it.</text>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 3.</span>
+      Iso-lines of <code>w0</code>. Because the opposite edge is a fixed base, equal weight means
+      equal height, so the contours are parallel and evenly spaced. Measured in the harness:
+      <code>w0</code> varies by <strong>exactly zero</strong> along such a line.
+    </figcaption>
+  </figure>
+
+  <p>
+    <strong>Outside the triangle, at least one weight is negative</strong> — and the formula keeps
+    working. This is the same statement as Lesson 2.2's seven regions, in different units: "inside"
+    was "all three edge functions non-negative", and it is now "all three weights non-negative".
+    Same test, divided by a positive constant.
+  </p>
+
+  <div class="callout note">
+    <span class="label">Negative weights are a feature</span>
+    <p>
+      Because the weights are defined over the whole plane, the same machinery
+      <em>extrapolates</em> as well as interpolates. That is not idle: it is how a rasterizer
+      evaluates a triangle's attributes at a pixel centre that lies slightly outside the covered
+      area (needed for correct texture derivatives), and it is why conservative rasterization and
+      multisampling can reason about partially covered pixels at all.
+    </p>
+    <p>
+      Verified over 5,041 sample points: "all three weights non-negative" agrees with
+      <code>fill_triangle</code>'s inside test at <strong>every single one</strong>.
+    </p>
+  </div>
+
+  <h3 id="unique">Why this interpolation is the only one</h3>
+
+  <p>
+    Given some quantity known at the corners — call the values <code>f0</code>, <code>f1</code>,
+    <code>f2</code>, and let them be a colour, a depth, a texture coordinate, anything — the
+    barycentric weights blend them:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ f(P) = w_0 f_0 + w_1 f_1 + w_2 f_2 \]</span>
+    <span class="eq-plain">f(P) = w0*f0 + w1*f1 + w2*f2</span>
+  </div>
+
+  <p>
+    It is tempting to file this under "a reasonable way to blend three things". It is considerably
+    stronger than that: <strong>it is the only affine function of position that takes the right
+    values at the three corners.</strong> Not the best one, not the natural one — the only one.
+  </p>
+
+  <p>
+    The argument is short. An affine function of two variables, <code>f(x,y) = ax + by + c</code>,
+    has exactly three free coefficients. Requiring it to match a given value at each of three
+    non-collinear points imposes exactly three independent conditions. Three unknowns, three
+    independent equations, one solution. And the barycentric blend <em>is</em> affine in
+    <code>P</code> — because each <code>w<sub>i</sub></code> is an edge function over a constant,
+    and Lesson 2.2 §3.5 established those are affine. So it is <em>a</em> solution, and therefore
+    <em>the</em> solution.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">"Affine in screen space" is not "affine on the surface"</span>
+    <p>
+      That uniqueness is about the screen. Once a triangle is tilted away from a perspective
+      camera, equal steps across the screen are <em>not</em> equal steps across the surface — so
+      this blend, while still the unique affine screen-space interpolation, stops being the
+      physically correct one.
+    </p>
+    <p>
+      The artifact is famous and horrible: textures that swim and bend as the camera moves.
+      Lesson 3.2 shows it, explains it, and fixes it with the <code>1/w</code> trick. Until then
+      we have no perspective at all, so screen-space interpolation is exactly right — and it is
+      worth knowing now that the correction is coming and why.
+    </p>
+  </div>
+
+  <h3 id="precision">Precision, measured</h3>
+
+  <p>
+    The edge functions are integers and exact. The division is not. So how close to 1 does the sum
+    actually get?
+  </p>
+
+  <div class="worked">
+    <span class="label">Measured over 32,761 points</span>
+    <ul>
+      <li>Worst <code>|w0 + w1 + w2 − 1|</code>: <strong>2.4 × 10⁻⁷</strong> — about one float rounding, as expected.</li>
+      <li>Sum was bitwise exactly <code>1.0f</code> at <strong>27,876 of 32,761</strong> points — roughly 85%.</li>
+    </ul>
+    <p>
+      Both halves matter. The error is tiny <em>and bounded</em>, because the integer identity is
+      exact and only the final division rounds — there is no accumulation, unlike the running sums
+      Lesson 2.1 §3.1 warned about. But it is <em>not</em> exactly 1, 15% of the time.
+    </p>
+  </div>
+
+  <div class="callout warn">
+    <span class="label">Never compare weights for equality</span>
+    <p>
+      <code>if (w0 == 0.0f)</code> to test "on the edge" will miss most of the pixels that are on
+      the edge. <code>if (w0 + w1 + w2 == 1.0f)</code> as an assertion will fire spuriously about
+      one time in seven. Compare against a tolerance, or better, do the test on the
+      <strong>integer</strong> edge values before dividing — where it is exact.
+    </p>
+  </div>
+
+  <div class="callout note">
+    <span class="label">Use unbiased values for interpolation</span>
+    <p>
+      One trap that only exists because of Lesson 2.2. The top-left fill rule subtracts 1 from some
+      edge values to decide boundary ownership. That bias is correct for the <em>inside test</em>
+      and wrong for <em>interpolation</em> — it shifts the weights by a fraction of a pixel.
+    </p>
+    <p>
+      Keep them separate: bias the copies used for coverage, and interpolate with the unbiased
+      ones. Lesson 2.4 wires both into the same loop and has to be careful about exactly this.
+    </p>
+  </div>
+
+  <!-- ================= 5. IMPLEMENTATION ================= -->
+  <h2 id="implementation"><span class="num">4</span>Implementation</h2>
+
+  <p>
+    The type is three floats, and giving it a name rather than returning a bare array is worth the
+    six lines — <code>b.w0</code> at the call site is self-documenting where <code>b[0]</code> is
+    an invitation to the pairing bug:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/raster.hpp</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">struct barycentric
+{
+    float w0 = 0.0f;   ///&lt; weight of vertex 0 — 1 at v0, 0 on the edge v1→v2
+    float w1 = 0.0f;
+    float w2 = 0.0f;
+};</code></pre>
+  </figure>
+
+  <p>And the computation is six lines, of which three are the edge functions we already had:</p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/raster.cpp</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">const int area = edge_function(x0, y0, x1, y1, x2, y2);
+if (area == 0) { return {}; }   // collinear: no interior, so no answer
+
+const int e0 = edge_function(x1, y1, x2, y2, px, py);
+const int e1 = edge_function(x2, y2, x0, y0, px, py);
+const int e2 = edge_function(x0, y0, x1, y1, px, py);
+
+const float inv = 1.0f / static_cast&lt;float&gt;(area);
+return {static_cast&lt;float&gt;(e0) * inv,
+        static_cast&lt;float&gt;(e1) * inv,
+        static_cast&lt;float&gt;(e2) * inv};</code></pre>
+  </figure>
+
+  <p>
+    Two details are deliberate. The reciprocal is computed <strong>once</strong> and multiplied
+    three times, because division is markedly slower than multiplication and this is the shape the
+    per-pixel version in Lesson 2.4 will need. And the degenerate case returns all zeros rather
+    than dividing by zero — the one input for which the weights do not sum to 1, documented in the
+    header, because a silent <code>NaN</code> here would spread through every later calculation
+    exactly as <a href="01-03-delta-time.html">Lesson 1.3 §3.5</a> described.
+  </p>
+
+  <div class="callout cpp">
+    <span class="label">C++ in place — returning an aggregate by value</span>
+    <p>
+      <code>return {a, b, c};</code> constructs the <code>barycentric</code> in the caller's storage
+      directly — no temporary, no copy. That is <em>guaranteed</em> since C++17, not merely an
+      optimisation compilers usually manage.
+    </p>
+    <p>
+      Which is why "return a struct" costs nothing here and you should not contort the interface
+      into out-parameters to avoid it. Twelve bytes returned by value beats three
+      <code>float*</code> arguments the caller has to allocate and you have to trust.
+    </p>
+  </div>
+
+  <p>
+    The demo's two new views are where the abstraction becomes something you can look at. The
+    probe draws the three sub-triangles directly:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/main.cpp — the derivation, drawn live</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// Sub-triangle i is P with the edge OPPOSITE vertex i — the same pairing
+// barycentric_at uses, drawn so the two cannot drift apart.
+engine::draw_triangle(fb, px, py, x1, y1, x2, y2, tint[0]);
+engine::draw_triangle(fb, px, py, x2, y2, x0, y0, tint[1]);
+engine::draw_triangle(fb, px, py, x0, y0, x1, y1, tint[2]);</code></pre>
+  </figure>
+
+  <p>
+    Those three lines are Figure&nbsp;2, generated by the same pairing the maths uses. If someone
+    later changes the pairing in one place and not the other, the picture stops matching the
+    numbers — which is the kind of self-check a diagram drawn by hand can never give you.
+  </p>
+
+  <p>
+    The iso-line view needs one small idea. We want to draw a line where a weight crosses a
+    multiple of 0.1, but §3.8 just established that floats will essentially never land on such a
+    value exactly. So do not look for the value — look for the <em>crossing</em>:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/main.cpp — finding a contour without testing equality</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">const bool crosses =
+    std::floor(w[i] / step) != std::floor(wr[i] / step) ||
+    std::floor(w[i] / step) != std::floor(wd[i] / step);</code></pre>
+  </figure>
+
+  <p>
+    If this pixel and its right-hand or lower neighbour fall in different "bands" of width 0.1,
+    a contour passes between them. No equality test, no tolerance to tune, and it works for any
+    step size. This is a generally useful trick for drawing level sets of anything.
+  </p>
+
+  <!-- ================= 6. COMPLETE CODE LISTINGS ================= -->
+  <h2 id="listings"><span class="num">5</span>Complete Code Listings</h2>
+
+  <p>Every file this lesson touched, in full. Nothing elided.</p>
+
+  <figure class="tbl">
+    <div class="tbl-scroll">
+      <table class="manifest">
+        <thead>
+          <tr><th>Path</th><th>Status</th><th>Purpose</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>src/gfx/raster.hpp</td>
+            <td><span class="badge mod">modified</span></td>
+            <td>Added <code>struct barycentric</code> and <code>barycentric_at</code>.</td>
+          </tr>
+          <tr>
+            <td>src/gfx/raster.cpp</td>
+            <td><span class="badge mod">modified</span></td>
+            <td>The computation: three edge functions over the total, one reciprocal.</td>
+          </tr>
+          <tr>
+            <td>src/main.cpp</td>
+            <td><span class="badge mod">modified</span></td>
+            <td>Two new triangle views — weights and iso-lines — plus the mouse probe and readout.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <figcaption><span class="fignum">Manifest.</span> Files touched. <code>CMakeLists.txt</code> is unchanged — no new translation unit.</figcaption>
+  </figure>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/raster.hpp</span>
+      <span class="tag modified">modified</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// src/gfx/raster.hpp — turning shapes into pixels.
+//
+// The first file of the software rasterizer, and the beginning of Module 2. A
+// framebuffer knows how to set one pixel; this knows which pixels a shape is
+// made of. Everything from here to the end of Module 3 — triangles, depth,
+// texture — is that same question asked about a more interesting shape.
+//
+// Three line routines live here, and only one of them is meant to be used. The
+// other two are kept because Lesson 2.1 is an argument, and an argument needs
+// something to compare against.
+
+#pragma once
+
+#include &lt;SDL3/SDL.h&gt;
+
+// Forward declaration, not an include: every function below takes a
+// framebuffer by reference and none of them needs its layout. raster.cpp
+// includes the real header because it actually writes pixels. The habit is
+// from Lesson 1.8 §4.1 — in a header, include what you use and forward declare
+// what you merely mention.
+namespace engine { class framebuffer; }
+
+namespace engine {
+
+/// Draw a line between two pixel centres. **This is the one to call.**
+///
+/// Integer Bresenham, valid in all eight octants. The pixels chosen are exactly
+/// those a midpoint decision would choose (Lesson 2.1 §3.3), computed with no
+/// floating point at all: for a given four integers the output is exact,
+/// repeatable, and free of any accumulated drift.
+///
+/// Endpoints are inclusive — both `(x0,y0)` and `(x1,y1)` are lit — so a line
+/// from a point to itself lights that one pixel. Coordinates outside the
+/// framebuffer are dropped by put_pixel rather than clipped away up front; see
+/// the note in raster.cpp about what that costs and when it will need fixing.
+void draw_line(framebuffer&amp; fb, int x0, int y0, int x1, int y1, Uint32 colour);
+
+/// The same line, by DDA: step the major axis by one and accumulate the minor
+/// axis in a float.
+///
+/// **Kept for comparison, not for use.** It is the algorithm most people write
+/// first, it is correct, and Lesson 2.1 measures it against draw_line rather
+/// than asserting which is better. Its real defect is not speed but exactness:
+/// the position is a running float sum, so the pixels it picks depend on the
+/// order the additions happened in.
+void draw_line_dda(framebuffer&amp; fb, int x0, int y0, int x1, int y1, Uint32 colour);
+
+/// The broken one: walk x from x0 to x1 and evaluate y = mx + b at each step.
+///
+/// **Kept so it can be seen failing.** It is the most obvious possible reading
+/// of "a line is y = mx + b", and it produces a dotted line rather than a solid
+/// one whenever the line is steeper than 45°, because y then changes by more
+/// than one pixel per column. Lesson 2.1 §1 shows the gaps before explaining
+/// them. Never call this for real work.
+void draw_line_naive(framebuffer&amp; fb, int x0, int y0, int x1, int y1, Uint32 colour);
+
+// ---- Triangles --------------------------------------------------------------
+
+/// Which side of the directed line A→B does P lie on?
+///
+/// This is the z component of the 2-D cross product `(B−A) × (P−A)`, and it is
+/// the single most useful number in rasterization. Two readings, both exact:
+///
+///   **Sign** — which side. Zero means P is exactly on the line.
+///   **Magnitude** — twice the area of triangle ABP.
+///
+/// The sign convention is worth stating precisely, because getting it backwards
+/// is invisible until something is culled that should not be. In **framebuffer
+/// coordinates, where +y points down**, a triangle whose vertices appear
+/// **counter-clockwise on screen** has a **negative** value here. That is not a
+/// quirk of this formula — it is the y-flip: the same vertices in a y-up space
+/// give the opposite sign. Lesson 2.11's viewport transform is where the flip
+/// formally happens, and Lesson 3.4 is where the sign starts deciding whether a
+/// face is visible. Until then `fill_triangle` accepts either winding.
+///
+/// Integer, and therefore exact — no accumulation, no rounding, identical on
+/// every machine (the argument from Lesson 2.1 §3.7, applied to a second thing).
+///
+/// **Range.** The products overflow a 32-bit int if coordinates exceed roughly
+/// ±16000. Every framebuffer in this course is far inside that; a renderer that
+/// clips before rasterising, which Module 3 builds, keeps it that way.
+[[nodiscard]] constexpr int edge_function(int ax, int ay, int bx, int by, int px, int py)
+{
+    return (bx - ax) * (py - ay) - (by - ay) * (px - ax);
+}
+
+/// Where a point sits inside a triangle, as three fractions that sum to 1.
+///
+/// These are **barycentric coordinates**, and they are the triangle's own
+/// coordinate system: `w0` is 1 at vertex 0 and 0 along the opposite edge, and
+/// likewise for the other two. They say *where* in a triangle a point is without
+/// reference to x or y at all, which is what lets any quantity known at the
+/// corners be carried across the interior (Lesson 2.4 onwards: colour, then
+/// depth, then texture coordinates, then normals).
+struct barycentric
+{
+    float w0 = 0.0f;   ///&lt; weight of vertex 0 — 1 at v0, 0 on the edge v1→v2
+    float w1 = 0.0f;
+    float w2 = 0.0f;
+};
+
+/// The barycentric coordinates of `(px, py)` with respect to the triangle.
+///
+/// Each weight is the area of the sub-triangle **opposite** its vertex, divided
+/// by the whole. That pairing is the one thing to get right and the easiest
+/// thing to get wrong: `w0` uses the edge `v1→v2`, which is the edge that does
+/// *not* touch `v0`. Pair them the other way and the weights still sum to 1 and
+/// still look plausible — they simply describe a different point. Lesson 2.3 §3.5.
+///
+/// Weights are **negative outside** the triangle, and that is useful rather than
+/// a failure: the same formula extends smoothly over the whole plane, which is
+/// exactly why it can be used to extrapolate as well as interpolate.
+///
+/// **Degenerate triangles.** Three collinear points have zero area and no
+/// interior, so there is no answer; this returns all zeros, which is the one
+/// case where the weights do not sum to 1. Check the area yourself if your
+/// geometry can produce slivers.
+[[nodiscard]] barycentric barycentric_at(int x0, int y0, int x1, int y1, int x2, int y2,
+                                         int px, int py);
+
+/// Fill a triangle, given three corners in pixel coordinates.
+///
+/// A pixel is inside when it is on the same side of all three edges — three
+/// half-planes intersected, which is what a triangle *is*. Accepts either
+/// winding: the sign of the total area is measured once up front and the test
+/// is oriented to match, so a "backwards" triangle fills rather than vanishing.
+/// A degenerate triangle (three collinear points, zero area) draws nothing.
+///
+/// Boundary pixels follow the **top-left rule**, so two triangles sharing an
+/// edge cover every pixel of that edge exactly once — no cracks, no
+/// double-drawing. Lesson 2.2 §3.6 derives it, and the demo shows what happens
+/// without it. This is what fixes the asymmetry Lesson 2.1 §3.6 found in
+/// `draw_line`: a fill rule depends only on an edge's geometry, never on which
+/// direction it happens to be traversed.
+void fill_triangle(framebuffer&amp; fb,
+                   int x0, int y0, int x1, int y1, int x2, int y2,
+                   Uint32 colour);
+
+/// The outline only — three calls to draw_line.
+///
+/// Note that this does **not** light the same pixels as the boundary of
+/// fill_triangle, and cannot: an outline wants both endpoints of every edge,
+/// while a fill wants each shared edge counted once. Two different questions.
+void draw_triangle(framebuffer&amp; fb,
+                   int x0, int y0, int x1, int y1, int x2, int y2,
+                   Uint32 colour);
+
+} // namespace engine</code></pre>
+  </figure>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/raster.cpp</span>
+      <span class="tag modified">modified</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// src/gfx/raster.cpp — the three line algorithms of Lesson 2.1.
+//
+// Read them in the order they appear. Each one fixes something the one above it
+// got wrong, and the last one is the only one that should ever be called.
+
+#include "gfx/raster.hpp"
+
+#include "gfx/framebuffer.hpp"
+
+#include &lt;algorithm&gt;
+#include &lt;cmath&gt;
+#include &lt;cstdlib&gt;
+#include &lt;utility&gt;
+
+namespace engine {
+
+// ---- 1. The obvious one, which does not work -------------------------------
+
+void draw_line_naive(framebuffer&amp; fb, int x0, int y0, int x1, int y1, Uint32 colour)
+{
+    // "A line is y = mx + b" — so walk x and evaluate y. The trouble starts
+    // before the loop does.
+    //
+    // A vertical line has dx = 0, and its slope is not merely large, it does not
+    // exist: there is no m for which y = mx + b describes x = 5. That is not a
+    // rounding problem or a special case to patch, it is the equation being the
+    // wrong tool. Any formulation that needs an if-statement to survive one of
+    // its inputs is telling you something.
+    if (x0 == x1)
+    {
+        const int step = (y1 &gt;= y0) ? 1 : -1;
+        for (int y = y0; y != y1 + step; y += step) { fb.put_pixel(x0, y, colour); }
+        return;
+    }
+
+    // Walking x from left to right means the caller's endpoint order is lost;
+    // the pixels are the same set either way here, which is not true of the
+    // algorithms below.
+    if (x0 &gt; x1)
+    {
+        std::swap(x0, x1);
+        std::swap(y0, y1);
+    }
+
+    const float slope = static_cast&lt;float&gt;(y1 - y0) / static_cast&lt;float&gt;(x1 - x0);
+
+    for (int x = x0; x &lt;= x1; ++x)
+    {
+        // One pixel per COLUMN. That is the whole bug: if the line rises by more
+        // than one pixel per column — any line steeper than 45° — the pixels it
+        // lights are vertically separated, and the result is a dotted line with
+        // gaps that widen as the slope does. Lesson 2.1 §1.
+        const float y = static_cast&lt;float&gt;(y0) + slope * static_cast&lt;float&gt;(x - x0);
+        fb.put_pixel(x, static_cast&lt;int&gt;(std::lround(y)), colour);
+    }
+}
+
+// ---- 2. DDA: step the major axis ------------------------------------------
+
+void draw_line_dda(framebuffer&amp; fb, int x0, int y0, int x1, int y1, Uint32 colour)
+{
+    const int dx = x1 - x0;
+    const int dy = y1 - y0;
+
+    // The fix for the gaps, and it is one line. Step whichever axis changes
+    // MORE, so that axis advances by exactly one pixel per iteration and the
+    // other advances by at most one. No step can skip a row or a column, so the
+    // line cannot come apart.
+    const int steps = std::max(std::abs(dx), std::abs(dy));
+
+    if (steps == 0)
+    {
+        fb.put_pixel(x0, y0, colour);   // a line from a point to itself
+        return;
+    }
+
+    const float x_inc = static_cast&lt;float&gt;(dx) / static_cast&lt;float&gt;(steps);
+    const float y_inc = static_cast&lt;float&gt;(dy) / static_cast&lt;float&gt;(steps);
+
+    float x = static_cast&lt;float&gt;(x0);
+    float y = static_cast&lt;float&gt;(y0);
+
+    for (int i = 0; i &lt;= steps; ++i)
+    {
+        fb.put_pixel(static_cast&lt;int&gt;(std::lround(x)),
+                     static_cast&lt;int&gt;(std::lround(y)),
+                     colour);
+        // The defect worth naming, and it is NOT speed. This is a running sum:
+        // the value at step i is the result of i additions, each of which
+        // rounded. Two mathematically identical lines computed by different
+        // routes can therefore light different pixels, and the error grows with
+        // the length of the line. Bresenham's error term, below, is exact at
+        // every step because it never leaves the integers.
+        x += x_inc;
+        y += y_inc;
+    }
+}
+
+// ---- 3. Bresenham: the same decision, in integers --------------------------
+
+void draw_line(framebuffer&amp; fb, int x0, int y0, int x1, int y1, Uint32 colour)
+{
+    // Lesson 2.1 §3.3 derives this for the first octant, where it reads as:
+    // step x, add dy to an error term, and when the error passes half a pixel,
+    // step y and take a whole pixel back out. The form below is that algorithm
+    // with the octant bookkeeping folded in, and §3.5 checks the two produce
+    // identical pixels rather than asserting it.
+    //
+    // Two conventions make the folding work:
+    //   - dx is kept POSITIVE and dy NEGATIVE, so a single error term can be
+    //     compared against both without a second sign to track;
+    //   - sx and sy carry the direction, so the loop never needs to know which
+    //     octant it is in.
+    const int dx = std::abs(x1 - x0);
+    const int sx = (x0 &lt; x1) ? 1 : -1;
+    const int dy = -std::abs(y1 - y0);
+    const int sy = (y0 &lt; y1) ? 1 : -1;
+
+    // err is twice the signed distance from the ideal line to the pixel centre,
+    // scaled so it stays an integer — the doubling is what turns the "half a
+    // pixel" test of the derivation into a comparison with no fraction in it.
+    int err = dx + dy;
+
+    for (;;)
+    {
+        fb.put_pixel(x0, y0, colour);
+
+        // Tested after plotting, so both endpoints are lit and a zero-length
+        // line lights exactly one pixel.
+        if (x0 == x1 &amp;&amp; y0 == y1) { break; }
+
+        const int e2 = 2 * err;
+
+        // The two tests are INDEPENDENT, and that is the whole trick. A shallow
+        // line trips only the first most steps; a steep line trips only the
+        // second; a 45° line trips both every step and moves diagonally. One
+        // loop, eight octants, no cases.
+        if (e2 &gt;= dy) { err += dy; x0 += sx; }
+        if (e2 &lt;= dx) { err += dx; y0 += sy; }
+    }
+
+    // A note on what this does NOT do: a line whose endpoints are far outside
+    // the framebuffer is still walked pixel by pixel, and every one of those
+    // pixels is discarded by put_pixel's bounds check. The output is correct and
+    // the work is wasted — a line from (-100000, 0) to (100000, 0) costs 200001
+    // iterations to draw at most 320 pixels. Clipping the line to the viewport
+    // BEFORE walking it is the fix (Cohen–Sutherland; Exercise 2.1.4), and it
+    // becomes non-optional in Module 3, where geometry behind the camera must be
+    // clipped for reasons of correctness rather than speed.
+}
+
+// ---- 4. Triangles: three half-planes ---------------------------------------
+
+namespace {
+
+/// Is the directed edge A→B a "top" or a "left" edge of its triangle?
+///
+/// Assumes the triangle has already been oriented so that its signed area is
+/// **positive** — which in framebuffer coordinates (+y down) means its vertices
+/// run clockwise on screen. Under that orientation:
+///
+///   - a **top** edge is horizontal and travels rightwards (`dy == 0, dx &gt; 0`);
+///   - a **left** edge is any edge travelling upwards (`dy &lt; 0`).
+///
+/// Both are geometric properties of the edge, which is the entire point. Two
+/// triangles that share an edge traverse it in opposite directions, so exactly
+/// one of them sees it as top-or-left and claims the pixels lying exactly on it.
+/// Neither triangle needs to know the other exists. Lesson 2.2 §3.6.
+[[nodiscard]] constexpr bool is_top_left(int ax, int ay, int bx, int by)
+{
+    const int dx = bx - ax;
+    const int dy = by - ay;
+    return (dy == 0 &amp;&amp; dx &gt; 0) || (dy &lt; 0);
+}
+
+} // namespace
+
+barycentric barycentric_at(int x0, int y0, int x1, int y1, int x2, int y2,
+                           int px, int py)
+{
+    const int area = edge_function(x0, y0, x1, y1, x2, y2);
+    if (area == 0) { return {}; }   // collinear: no interior, so no answer
+
+    // Each weight comes from the sub-triangle OPPOSITE its vertex — the one
+    // that does not touch it. w0 therefore uses the edge v1-&gt;v2.
+    //
+    // These are the same three numbers fill_triangle already computes for its
+    // inside test. Nothing new is being calculated here; the only new thing is
+    // the division, which turns "twice an area" into "a fraction of the whole".
+    const int e0 = edge_function(x1, y1, x2, y2, px, py);
+    const int e1 = edge_function(x2, y2, x0, y0, px, py);
+    const int e2 = edge_function(x0, y0, x1, y1, px, py);
+
+    // e0 + e1 + e2 == area EXACTLY, in integers, for every point in the plane —
+    // inside or outside. The float sum below is therefore 1 up to one rounding,
+    // not up to accumulated drift.
+    const float inv = 1.0f / static_cast&lt;float&gt;(area);
+    return {static_cast&lt;float&gt;(e0) * inv,
+            static_cast&lt;float&gt;(e1) * inv,
+            static_cast&lt;float&gt;(e2) * inv};
+}
+
+void fill_triangle(framebuffer&amp; fb,
+                   int x0, int y0, int x1, int y1, int x2, int y2,
+                   Uint32 colour)
+{
+    // Twice the signed area. One number that answers two questions: is this
+    // triangle degenerate, and which way round is it?
+    int area = edge_function(x0, y0, x1, y1, x2, y2);
+
+    // Three collinear points enclose nothing. Returning here is not just an
+    // optimisation — every test below would be simultaneously satisfiable only
+    // on the line itself, and the top-left rule's orientation assumption would
+    // have no meaning. A "sliver" triangle of zero area is a real thing to hit
+    // once meshes arrive, so it is handled rather than assumed away.
+    if (area == 0) { return; }
+
+    // Orient to positive area by swapping two vertices, which flips the sign of
+    // every edge function at once. Doing this once, here, is what lets the
+    // inside test below be a plain `&gt;= 0` rather than "same sign as the area"
+    // evaluated per pixel.
+    if (area &lt; 0)
+    {
+        std::swap(x1, x2);
+        std::swap(y1, y2);
+        area = -area;
+    }
+
+    // The bounding box, clipped to the framebuffer. Two jobs: it bounds the
+    // search (a triangle covering 1% of the screen should not cost a full-screen
+    // scan), and clipping it here means the inner loop never needs a bounds
+    // check — which is why this can write through row() instead of put_pixel.
+    const int min_x = std::max(0, std::min({x0, x1, x2}));
+    const int min_y = std::max(0, std::min({y0, y1, y2}));
+    const int max_x = std::min(fb.width() - 1, std::max({x0, x1, x2}));
+    const int max_y = std::min(fb.height() - 1, std::max({y0, y1, y2}));
+
+    if (min_x &gt; max_x || min_y &gt; max_y) { return; }   // entirely off-screen
+
+    // The top-left rule as an integer bias. An edge function is zero exactly on
+    // the edge, so testing `w &gt;= 0` includes boundary pixels and `w - 1 &gt;= 0`
+    // excludes them. Folding the -1 into the starting value costs nothing per
+    // pixel — the test stays a single comparison against zero.
+    const int bias0 = is_top_left(x1, y1, x2, y2) ? 0 : -1;   // edge opposite v0
+    const int bias1 = is_top_left(x2, y2, x0, y0) ? 0 : -1;   // edge opposite v1
+    const int bias2 = is_top_left(x0, y0, x1, y1) ? 0 : -1;   // edge opposite v2
+
+    // An edge function is *affine* in the pixel position, so its value at the
+    // next pixel differs from this one by a constant. Evaluating it once at the
+    // corner and then adding is the same trick as Lesson 2.1's error term, and
+    // it turns two multiplies per edge per pixel into one add.
+    //
+    //   E(x+1, y) - E(x, y) = -(By - Ay) = Ay - By
+    //   E(x, y+1) - E(x, y) =  (Bx - Ax)
+    const int step_x0 = y1 - y2, step_y0 = x2 - x1;
+    const int step_x1 = y2 - y0, step_y1 = x0 - x2;
+    const int step_x2 = y0 - y1, step_y2 = x1 - x0;
+
+    int row_w0 = edge_function(x1, y1, x2, y2, min_x, min_y) + bias0;
+    int row_w1 = edge_function(x2, y2, x0, y0, min_x, min_y) + bias1;
+    int row_w2 = edge_function(x0, y0, x1, y1, min_x, min_y) + bias2;
+
+    for (int y = min_y; y &lt;= max_y; ++y)
+    {
+        int w0 = row_w0;
+        int w1 = row_w1;
+        int w2 = row_w2;
+
+        // The whole row is in bounds by construction, so this takes the
+        // documented fast path from Lesson 1.5 and skips put_pixel's per-pixel
+        // bounds check and index multiply.
+        Uint32* const row = fb.row(y);
+
+        for (int x = min_x; x &lt;= max_x; ++x)
+        {
+            // Inside all three half-planes at once. That is the entire test,
+            // and it is the same three numbers for every pixel — only their
+            // values change.
+            //
+            // Worth knowing: `(w0 | w1 | w2) &gt;= 0` is exactly equivalent and
+            // costs one comparison instead of three. A negative int has its top
+            // bit set, OR keeps any bit that any operand has, so the result is
+            // negative precisely when some input was. C++20 guarantees signed
+            // integers are two's complement, which is what makes that a
+            // portable claim rather than a lucky one. Written the long way here
+            // because you should be able to read this line without knowing that.
+            if (w0 &gt;= 0 &amp;&amp; w1 &gt;= 0 &amp;&amp; w2 &gt;= 0)
+            {
+                row[x] = colour;
+            }
+
+            w0 += step_x0;
+            w1 += step_x1;
+            w2 += step_x2;
+        }
+
+        row_w0 += step_y0;
+        row_w1 += step_y1;
+        row_w2 += step_y2;
+    }
+}
+
+void draw_triangle(framebuffer&amp; fb,
+                   int x0, int y0, int x1, int y1, int x2, int y2,
+                   Uint32 colour)
+{
+    draw_line(fb, x0, y0, x1, y1, colour);
+    draw_line(fb, x1, y1, x2, y2, colour);
+    draw_line(fb, x2, y2, x0, y0, colour);
+}
+
+} // namespace engine</code></pre>
+  </figure>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/main.cpp</span>
+      <span class="tag modified">modified</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// src/main.cpp — the engine's entry point.
+//
+// This file hosts the current lesson's demo. As of Lesson 2.2 that is triangles:
+// a rotating filled triangle you can view as three intersecting half-planes,
+// beside a coverage counter that shows exactly what the top-left fill rule is
+// for.
+//
+// [Tab] now CYCLES three demos — triangles (2.2), lines (2.1), and Pong (1.8) —
+// because deleting a working demo to make room would be a regression. Three is
+// already too many for one executable, and the next one will be worse. That is
+// not an oversight: Module 5 opens by splitting the tree into a static library
+// and a demos/ directory, and this file is where the argument for doing so
+// accumulates until it is impossible to ignore.
+//
+// The loop is the one settled in Lesson 1.4 and does not change again:
+//
+//     drain events -&gt; tick clock -&gt; update input -&gt; N fixed steps -&gt; render
+
+#include "core/clock.hpp"
+#include "core/fixed_step.hpp"
+#include "core/input.hpp"
+#include "game/pong.hpp"
+#include "gfx/colour.hpp"
+#include "gfx/framebuffer.hpp"
+#include "gfx/raster.hpp"
+#include "math/vec2.hpp"
+
+#include &lt;SDL3/SDL.h&gt;
+#include &lt;SDL3/SDL_main.h&gt;   // Provides the cross-platform entry point. NOTE:
+                             // &lt;SDL3/SDL.h&gt; deliberately does NOT include this,
+                             // so we include it explicitly, exactly once, here.
+
+#include &lt;algorithm&gt;
+#include &lt;cmath&gt;
+#include &lt;cstring&gt;
+#include &lt;vector&gt;
+
+namespace {
+
+constexpr int k_fb_width = 320;
+constexpr int k_fb_height = 180;
+
+constexpr Uint32 k_throttle_ms = 50;
+
+/// Which lesson's demo is on screen. [Tab] cycles.
+enum class demo
+{
+    triangles,   ///&lt; Lesson 2.2 — this lesson
+    lines,       ///&lt; Lesson 2.1
+    pong         ///&lt; Lesson 1.8
+};
+
+[[nodiscard]] demo next_demo(demo d)
+{
+    switch (d)
+    {
+    case demo::triangles: return demo::lines;
+    case demo::lines:     return demo::pong;
+    case demo::pong:      return demo::triangles;
+    }
+    return demo::triangles;
+}
+
+// ===========================================================================
+// Lesson 2.2 — triangles
+// ===========================================================================
+
+/// How the left panel draws its triangle.
+enum class tri_mode
+{
+    filled,      ///&lt; fill_triangle: the finished article
+    wireframe,   ///&lt; draw_triangle: three lines, for comparison
+    halfplanes,  ///&lt; colour every pixel by WHICH edge tests it passes
+    weights,     ///&lt; Lesson 2.3: w0 as a ramp, with a live probe
+    isolines     ///&lt; Lesson 2.3: contours of constant weight
+};
+
+[[nodiscard]] const char* name_of(tri_mode m)
+{
+    switch (m)
+    {
+    case tri_mode::filled:     return "filled";
+    case tri_mode::wireframe:  return "wireframe";
+    case tri_mode::halfplanes: return "half-planes";
+    case tri_mode::weights:    return "weights (w0)";
+    case tri_mode::isolines:   return "iso-lines";
+    }
+    return "?";
+}
+
+/// Paint the three edge functions' signs across the triangle's bounding box.
+///
+/// This is the lesson's central claim made visible: a triangle is the region
+/// where three half-planes overlap. A pixel passing all three tests is inside;
+/// one passing two is in the "wrong" part of two half-planes, and so on. Written
+/// with direct edge_function calls rather than the incremental form, because
+/// here the point is what is being computed, not how cheaply.
+void draw_halfplanes(engine::framebuffer&amp; fb,
+                     int x0, int y0, int x1, int y1, int x2, int y2)
+{
+    int area = engine::edge_function(x0, y0, x1, y1, x2, y2);
+    if (area == 0) { return; }
+    if (area &lt; 0) { std::swap(x1, x2); std::swap(y1, y2); }
+
+    const int min_x = std::max(0, std::min({x0, x1, x2}) - 14);
+    const int min_y = std::max(0, std::min({y0, y1, y2}) - 14);
+    const int max_x = std::min(fb.width() - 1, std::max({x0, x1, x2}) + 14);
+    const int max_y = std::min(fb.height() - 1, std::max({y0, y1, y2}) + 14);
+
+    for (int y = min_y; y &lt;= max_y; ++y)
+    {
+        for (int x = min_x; x &lt;= max_x; ++x)
+        {
+            const int w0 = engine::edge_function(x1, y1, x2, y2, x, y);
+            const int w1 = engine::edge_function(x2, y2, x0, y0, x, y);
+            const int w2 = engine::edge_function(x0, y0, x1, y1, x, y);
+
+            const int passes = (w0 &gt;= 0 ? 1 : 0) + (w1 &gt;= 0 ? 1 : 0) + (w2 &gt;= 0 ? 1 : 0);
+
+            // Three shades outside, one bright fill inside — so "inside" reads
+            // as a region rather than as a colour among colours.
+            Uint32 c = 0;
+            switch (passes)
+            {
+            case 3: c = engine::pack_argb(226, 196, 110); break;   // inside
+            case 2: c = engine::pack_argb(56, 62, 84); break;
+            case 1: c = engine::pack_argb(34, 38, 54); break;
+            default: c = engine::pack_argb(20, 22, 32); break;
+            }
+            fb.put_pixel(x, y, c);
+        }
+    }
+}
+
+/// Paint each pixel by its w0 — "how much of vertex 0 is here".
+///
+/// A ramp rather than three colours, because this view is about a single
+/// COORDINATE. Blending three vertex colours is interpolating an attribute,
+/// which is Lesson 2.4's subject and needs the linear-light care of Lesson 1.6.
+///
+/// Pixels outside the triangle are drawn too, in red, because w0 goes negative
+/// out there and that is worth seeing rather than hiding: the weights describe
+/// the whole plane, not just the interior.
+void draw_weights(engine::framebuffer&amp; fb,
+                  int x0, int y0, int x1, int y1, int x2, int y2)
+{
+    const int pad = 20;
+    const int min_x = std::max(0, std::min({x0, x1, x2}) - pad);
+    const int min_y = std::max(0, std::min({y0, y1, y2}) - pad);
+    const int max_x = std::min(fb.width() - 1, std::max({x0, x1, x2}) + pad);
+    const int max_y = std::min(fb.height() - 1, std::max({y0, y1, y2}) + pad);
+
+    for (int y = min_y; y &lt;= max_y; ++y)
+    {
+        for (int x = min_x; x &lt;= max_x; ++x)
+        {
+            const engine::barycentric b =
+                engine::barycentric_at(x0, y0, x1, y1, x2, y2, x, y);
+
+            if (b.w0 &lt; 0.0f)
+            {
+                // Negative: past the edge opposite v0. Deepen with distance.
+                const float m = std::min(1.0f, -b.w0);
+                const Uint8 r = static_cast&lt;Uint8&gt;(40.0f + 150.0f * m);
+                fb.put_pixel(x, y, engine::pack_argb(r, 30, 38));
+            }
+            else
+            {
+                const float m = std::min(1.0f, b.w0);
+                const Uint8 v = static_cast&lt;Uint8&gt;(24.0f + 220.0f * m);
+                fb.put_pixel(x, y, engine::pack_argb(v, v, static_cast&lt;Uint8&gt;(v * 0.72f)));
+            }
+        }
+    }
+}
+
+/// Draw contour lines where any weight crosses a multiple of 0.1.
+///
+/// The point of the picture: every contour of w0 is PARALLEL to the edge
+/// opposite v0, and they are evenly spaced. That is what "the triangle's own
+/// coordinate system" looks like — three families of parallel lines, one per
+/// vertex, and the weights are just how far along each family you are.
+void draw_isolines(engine::framebuffer&amp; fb,
+                   int x0, int y0, int x1, int y1, int x2, int y2)
+{
+    const int pad = 12;
+    const int min_x = std::max(0, std::min({x0, x1, x2}) - pad);
+    const int min_y = std::max(0, std::min({y0, y1, y2}) - pad);
+    const int max_x = std::min(fb.width() - 1, std::max({x0, x1, x2}) + pad);
+    const int max_y = std::min(fb.height() - 1, std::max({y0, y1, y2}) + pad);
+
+    const Uint32 tint[3] = {engine::pack_argb(236, 122, 92),
+                            engine::pack_argb(122, 196, 152),
+                            engine::pack_argb(126, 162, 236)};
+
+    for (int y = min_y; y &lt;= max_y; ++y)
+    {
+        for (int x = min_x; x &lt;= max_x; ++x)
+        {
+            const engine::barycentric b =
+                engine::barycentric_at(x0, y0, x1, y1, x2, y2, x, y);
+            const engine::barycentric br =
+                engine::barycentric_at(x0, y0, x1, y1, x2, y2, x + 1, y);
+            const engine::barycentric bd =
+                engine::barycentric_at(x0, y0, x1, y1, x2, y2, x, y + 1);
+
+            const float w[3]  = {b.w0, b.w1, b.w2};
+            const float wr[3] = {br.w0, br.w1, br.w2};
+            const float wd[3] = {bd.w0, bd.w1, bd.w2};
+
+            // A contour is "this pixel and its right/below neighbour fall either
+            // side of a multiple of 0.1". Comparing floor()s asks that without
+            // hunting for exact equality, which floats would never satisfy —
+            // §3.6 measured the sum landing on 1.0f only 85% of the time.
+            constexpr float step = 0.1f;
+            for (int i = 0; i &lt; 3; ++i)
+            {
+                const bool crosses =
+                    std::floor(w[i] / step) != std::floor(wr[i] / step) ||
+                    std::floor(w[i] / step) != std::floor(wd[i] / step);
+
+                // Only inside the triangle: the contours continue over the
+                // whole plane (they must — the weights are defined everywhere),
+                // but drawn unbounded they bury the shape they describe.
+                const bool inside = w[0] &gt;= 0.0f &amp;&amp; w[1] &gt;= 0.0f &amp;&amp; w[2] &gt;= 0.0f;
+                if (crosses &amp;&amp; inside)
+                {
+                    fb.put_pixel(x, y, tint[i]);
+                    break;
+                }
+            }
+        }
+    }
+}
+
+/// The mouse probe: the three sub-triangles whose areas ARE the weights.
+///
+/// This is the derivation drawn live. P is the cursor; each sub-triangle is
+/// P with one edge of the original, and each is tinted to match the vertex it
+/// is opposite — the vertex whose weight it supplies.
+void draw_probe(engine::framebuffer&amp; fb,
+                int x0, int y0, int x1, int y1, int x2, int y2,
+                int px, int py, engine::barycentric b)
+{
+    const Uint32 tint[3] = {engine::pack_argb(236, 122, 92),
+                            engine::pack_argb(122, 196, 152),
+                            engine::pack_argb(126, 162, 236)};
+
+    // Sub-triangle i is P with the edge OPPOSITE vertex i — the same pairing
+    // barycentric_at uses, drawn so the two cannot drift apart.
+    engine::draw_triangle(fb, px, py, x1, y1, x2, y2, tint[0]);
+    engine::draw_triangle(fb, px, py, x2, y2, x0, y0, tint[1]);
+    engine::draw_triangle(fb, px, py, x0, y0, x1, y1, tint[2]);
+
+    // Three bars, lengths proportional to the weights, in the same tints.
+    const int bar_x = 6;
+    const int bar_y = 150;
+    const float w[3] = {b.w0, b.w1, b.w2};
+    for (int i = 0; i &lt; 3; ++i)
+    {
+        const int len = static_cast&lt;int&gt;(std::lround(std::max(0.0f, w[i]) * 100.0f));
+        fb.fill_rect(bar_x, bar_y + i * 6, 100, 4, engine::pack_argb(30, 32, 42));
+        fb.fill_rect(bar_x, bar_y + i * 6, std::min(len, 100), 4, tint[i]);
+    }
+
+    fb.fill_rect(px - 1, py - 1, 3, 3, engine::pack_argb(250, 250, 240));
+}
+
+/// The fill rule, disabled — every boundary pixel claimed by every triangle.
+///
+/// Kept local to the demo rather than added to the engine, because it is not a
+/// thing the engine should be able to do. Written the direct way so the
+/// comparison against fill_triangle is a comparison of *rules*, not of loops.
+void fill_no_rule(std::vector&lt;int&gt;&amp; coverage, int w, int h,
+                  int x0, int y0, int x1, int y1, int x2, int y2)
+{
+    int area = engine::edge_function(x0, y0, x1, y1, x2, y2);
+    if (area == 0) { return; }
+    if (area &lt; 0) { std::swap(x1, x2); std::swap(y1, y2); }
+
+    const int min_x = std::max(0, std::min({x0, x1, x2}));
+    const int min_y = std::max(0, std::min({y0, y1, y2}));
+    const int max_x = std::min(w - 1, std::max({x0, x1, x2}));
+    const int max_y = std::min(h - 1, std::max({y0, y1, y2}));
+
+    for (int y = min_y; y &lt;= max_y; ++y)
+    {
+        for (int x = min_x; x &lt;= max_x; ++x)
+        {
+            const int w0 = engine::edge_function(x1, y1, x2, y2, x, y);
+            const int w1 = engine::edge_function(x2, y2, x0, y0, x, y);
+            const int w2 = engine::edge_function(x0, y0, x1, y1, x, y);
+            if (w0 &gt;= 0 &amp;&amp; w1 &gt;= 0 &amp;&amp; w2 &gt;= 0)
+            {
+                coverage[static_cast&lt;std::size_t&gt;(y * w + x)] += 1;
+            }
+        }
+    }
+}
+
+constexpr int k_cov_w = 52;    ///&lt; the coverage grid, in its own small pixels
+constexpr int k_cov_h = 52;
+constexpr int k_cov_zoom = 2;
+constexpr int k_cov_x = 196;   ///&lt; where it lands in the framebuffer
+constexpr int k_cov_y = 44;
+
+/// Draw two triangles that share an edge, counting how many times each pixel is
+/// written, then colour by that count.
+///
+/// This is the only honest way to show a fill rule working. With opaque colours
+/// a double-drawn pixel looks exactly like a correctly-drawn one — the defect is
+/// invisible precisely because the second write lands on top of the first. Count
+/// instead, and the seam lights up.
+///
+/// @return the number of pixels written more than once.
+int draw_coverage(engine::framebuffer&amp; fb, bool use_rule)
+{
+    std::vector&lt;int&gt; coverage(static_cast&lt;std::size_t&gt;(k_cov_w * k_cov_h), 0);
+
+    // An axis-aligned square split corner to corner — the single most common
+    // piece of geometry there is, and deliberately not a rotated one.
+    //
+    // The reason matters. A pixel is only ever at risk of being drawn twice if
+    // its centre lies EXACTLY on the shared edge, and for an edge of arbitrary
+    // slope almost no pixel centres do. Rotate this quad and the defect shrinks
+    // to two or three stray pixels — still wrong, but easy to dismiss as noise.
+    // A 45-degree diagonal passes through every pixel centre along it, so the
+    // whole seam doubles at once and the failure is impossible to miss.
+    //
+    // That is not a rigged demo, it is the realistic one: quads split into
+    // triangle pairs, terrain grids and UI rectangles are overwhelmingly
+    // axis-aligned, so the catastrophic case is also the common case.
+    const int lo = 6;
+    const int hi = k_cov_w - 7;
+
+    const int ax = lo, ay = lo;    // shared edge runs from here…
+    const int bx = hi, by = hi;    // …to here: slope exactly 1
+
+    const int rx = hi, ry = lo;    // upper-right corner
+    const int lx = lo, ly = hi;    // lower-left corner
+
+    if (use_rule)
+    {
+        // Count through the real engine routine, by drawing each triangle into
+        // its own buffer and reading it back. Slow, and it means the demo is
+        // measuring the shipped code rather than a copy of it.
+        for (int t = 0; t &lt; 2; ++t)
+        {
+            engine::framebuffer scratch(k_cov_w, k_cov_h);
+            scratch.clear(0u);
+            if (t == 0) { engine::fill_triangle(scratch, ax, ay, bx, by, lx, ly, 0xFFFFFFFFu); }
+            else        { engine::fill_triangle(scratch, ax, ay, rx, ry, bx, by, 0xFFFFFFFFu); }
+
+            for (int y = 0; y &lt; k_cov_h; ++y)
+            {
+                for (int x = 0; x &lt; k_cov_w; ++x)
+                {
+                    if (scratch.pixel_at(x, y) != 0u)
+                    {
+                        coverage[static_cast&lt;std::size_t&gt;(y * k_cov_w + x)] += 1;
+                    }
+                }
+            }
+        }
+    }
+    else
+    {
+        fill_no_rule(coverage, k_cov_w, k_cov_h, ax, ay, bx, by, lx, ly);
+        fill_no_rule(coverage, k_cov_w, k_cov_h, ax, ay, rx, ry, bx, by);
+    }
+
+    const Uint32 k_once = engine::pack_argb(122, 196, 152);   // correct
+    const Uint32 k_twice = engine::pack_argb(236, 92, 92);    // drawn twice
+    const Uint32 k_empty = engine::pack_argb(18, 20, 28);
+
+    int doubled = 0;
+    for (int y = 0; y &lt; k_cov_h; ++y)
+    {
+        for (int x = 0; x &lt; k_cov_w; ++x)
+        {
+            const int n = coverage[static_cast&lt;std::size_t&gt;(y * k_cov_w + x)];
+            if (n &gt; 1) { doubled += 1; }
+            const Uint32 c = (n == 0) ? k_empty : (n == 1 ? k_once : k_twice);
+            fb.fill_rect(k_cov_x + x * k_cov_zoom, k_cov_y + y * k_cov_zoom,
+                         k_cov_zoom, k_cov_zoom, c);
+        }
+    }
+    return doubled;
+}
+
+// ===========================================================================
+// Lesson 2.1 — lines
+// ===========================================================================
+
+using line_fn = void (*)(engine::framebuffer&amp;, int, int, int, int, Uint32);
+
+constexpr int k_spokes = 32;
+constexpr engine::vec2 k_fan_centre{88.0f, 88.0f};
+constexpr float k_fan_radius = 74.0f;
+
+/// A fan of spokes crosses every one of the eight octants, so a routine that is
+/// wrong in any of them is wrong on screen rather than wrong in theory.
+void draw_fan(engine::framebuffer&amp; fb, line_fn draw, float phase)
+{
+    for (int i = 0; i &lt; k_spokes; ++i)
+    {
+        const float angle = phase + static_cast&lt;float&gt;(i) * 6.28318531f
+                                    / static_cast&lt;float&gt;(k_spokes);
+        const engine::vec2 tip{k_fan_centre.x + std::cos(angle) * k_fan_radius,
+                               k_fan_centre.y + std::sin(angle) * k_fan_radius};
+
+        const bool steep = std::fabs(std::sin(angle)) &gt; std::fabs(std::cos(angle));
+        const Uint32 colour = steep ? engine::pack_argb(236, 122, 92)
+                                    : engine::pack_argb(122, 196, 152);
+
+        draw(fb, static_cast&lt;int&gt;(k_fan_centre.x), static_cast&lt;int&gt;(k_fan_centre.y),
+             static_cast&lt;int&gt;(tip.x), static_cast&lt;int&gt;(tip.y), colour);
+    }
+}
+
+// ===========================================================================
+// Presentation
+// ===========================================================================
+
+/// Copy the framebuffer into a streaming texture, row by row.
+///
+/// Row by row rather than one big memcpy because the pitch SDL hands back may
+/// exceed width*4 — some drivers pad each row — and copying as one block would
+/// shear the image diagonally on exactly the machines you do not own. Lesson 1.5
+/// §4.3.
+[[nodiscard]] bool upload(SDL_Texture* texture, const engine::framebuffer&amp; fb)
+{
+    void* dst_pixels = nullptr;
+    int dst_pitch = 0;
+
+    if (!SDL_LockTexture(texture, nullptr, &amp;dst_pixels, &amp;dst_pitch))
+    {
+        return false;
+    }
+
+    Uint8* const dst = static_cast&lt;Uint8*&gt;(dst_pixels);
+    const int row_bytes = fb.pitch();
+
+    for (int y = 0; y &lt; fb.height(); ++y)
+    {
+        std::memcpy(dst + static_cast&lt;std::size_t&gt;(y) * static_cast&lt;std::size_t&gt;(dst_pitch),
+                    fb.row(y),
+                    static_cast&lt;std::size_t&gt;(row_bytes));
+    }
+
+    SDL_UnlockTexture(texture);
+    return true;
+}
+
+/// Turn the keyboard into the two numbers Pong's simulation wants.
+[[nodiscard]] game::intent read_intent(const engine::input&amp; in, bool right_is_ai)
+{
+    game::intent wanted;
+    wanted.right_is_ai = right_is_ai;
+
+    if (in.key_down(SDL_SCANCODE_W)) { wanted.left -= 1.0f; }
+    if (in.key_down(SDL_SCANCODE_S)) { wanted.left += 1.0f; }
+
+    if (in.key_down(SDL_SCANCODE_UP))   { wanted.right -= 1.0f; }
+    if (in.key_down(SDL_SCANCODE_DOWN)) { wanted.right += 1.0f; }
+
+    return wanted;
+}
+
+} // namespace
+
+int main(int argc, char* argv[])
+{
+    (void)argc;
+    (void)argv;
+
+    if (!SDL_Init(SDL_INIT_VIDEO))
+    {
+        SDL_Log("SDL_Init failed: %s", SDL_GetError());
+        return 1;
+    }
+
+    const int sdl_version = SDL_GetVersion();
+    SDL_Log("Engine starting — SDL %d.%d.%d",
+            SDL_VERSIONNUM_MAJOR(sdl_version),
+            SDL_VERSIONNUM_MINOR(sdl_version),
+            SDL_VERSIONNUM_MICRO(sdl_version));
+
+    SDL_Window* window = SDL_CreateWindow("Triangles — Module 2", 1280, 720,
+                                          SDL_WINDOW_RESIZABLE);
+    if (window == nullptr)
+    {
+        SDL_Log("SDL_CreateWindow failed: %s", SDL_GetError());
+        SDL_Quit();
+        return 1;
+    }
+
+    SDL_Renderer* renderer = SDL_CreateRenderer(window, nullptr);
+    if (renderer == nullptr)
+    {
+        SDL_Log("SDL_CreateRenderer failed: %s", SDL_GetError());
+        SDL_DestroyWindow(window);
+        SDL_Quit();
+        return 1;
+    }
+
+    int vsync = 1;
+    if (!SDL_SetRenderVSync(renderer, vsync))
+    {
+        SDL_Log("SDL_SetRenderVSync(%d) failed: %s — continuing unsynchronised",
+                vsync, SDL_GetError());
+        vsync = SDL_RENDERER_VSYNC_DISABLED;
+    }
+
+    engine::framebuffer fb(k_fb_width, k_fb_height);
+
+    SDL_Texture* screen_texture = SDL_CreateTexture(renderer,
+                                                    SDL_PIXELFORMAT_ARGB8888,
+                                                    SDL_TEXTUREACCESS_STREAMING,
+                                                    k_fb_width, k_fb_height);
+    if (screen_texture == nullptr)
+    {
+        SDL_Log("SDL_CreateTexture failed: %s", SDL_GetError());
+        SDL_DestroyRenderer(renderer);
+        SDL_DestroyWindow(window);
+        SDL_Quit();
+        return 1;
+    }
+
+    SDL_SetTextureScaleMode(screen_texture, SDL_SCALEMODE_NEAREST);
+
+    engine::clock clk;
+    engine::input in;
+    engine::fixed_step stepper(60.0f);
+
+    // ---- Demo state --------------------------------------------------------
+    demo which = demo::triangles;
+    tri_mode mode = tri_mode::filled;
+    bool use_fill_rule = true;
+    bool spinning = true;
+    float phase = 0.6f;
+
+    int doubled_px = 0;
+    double tri_ns_avg = 0.0;
+
+    engine::barycentric probe;
+    int probe_x = 0;
+    int probe_y = 0;
+
+    line_fn line_algo = engine::draw_line;
+    const char* line_algo_name = "Bresenham (int)";
+
+    const Uint32 seed = static_cast&lt;Uint32&gt;(SDL_GetTicksNS() &amp; 0xFFFFFFFFu);
+    game::state pong_current = game::make_state(seed);
+    game::state pong_previous = pong_current;
+    bool pong_right_is_ai = true;
+
+    const Uint32 k_bg = engine::pack_argb(12, 14, 20);
+
+    SDL_Log("Triangles: [1] filled [2] wireframe [3] half-planes [4] weights [5] iso-lines");
+    SDL_Log("  [4]/[5] follow the mouse: the three sub-triangles ARE the three weights. [R] fill rule.");
+    SDL_Log("[Tab] cycles demos: triangles (2.2) -&gt; lines (2.1) -&gt; Pong (1.8)");
+    SDL_Log("[V] vsync · [T] throttle · [Esc] quit");
+
+    bool running = true;
+    while (running)
+    {
+        SDL_Event event;
+        while (SDL_PollEvent(&amp;event))
+        {
+            in.feed_event(event);
+
+            switch (event.type)
+            {
+            case SDL_EVENT_QUIT:
+                SDL_Log("Quit requested");
+                running = false;
+                break;
+
+            case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
+                SDL_Log("Window %u close requested", static_cast&lt;unsigned&gt;(event.window.windowID));
+                running = false;
+                break;
+
+            default:
+                break;
+            }
+        }
+
+        clk.tick();
+        in.update();
+
+        if (in.key_pressed(SDL_SCANCODE_ESCAPE)) { running = false; }
+
+        if (in.key_pressed(SDL_SCANCODE_TAB))
+        {
+            which = next_demo(which);
+            SDL_SetWindowTitle(window,
+                which == demo::triangles ? "Triangles — Module 2"
+              : which == demo::lines     ? "Lines — Module 2"
+                                         : "Pong — Module 1 Checkpoint");
+        }
+
+        if (in.key_pressed(SDL_SCANCODE_V))
+        {
+            vsync = (vsync == SDL_RENDERER_VSYNC_DISABLED) ? 1 : SDL_RENDERER_VSYNC_DISABLED;
+            if (!SDL_SetRenderVSync(renderer, vsync))
+            {
+                SDL_Log("SDL_SetRenderVSync(%d) failed: %s", vsync, SDL_GetError());
+            }
+        }
+
+        stepper.begin_frame(clk.dt());
+
+        if (which == demo::pong)
+        {
+            // ---- Lesson 1.8's game, unchanged --------------------------------
+            if (in.key_pressed(SDL_SCANCODE_C)) { pong_right_is_ai = !pong_right_is_ai; }
+            if (in.key_pressed(SDL_SCANCODE_K))
+            {
+                pong_current.swept_collision = !pong_current.swept_collision;
+                pong_previous.swept_collision = pong_current.swept_collision;
+            }
+
+            const game::intent wanted = read_intent(in, pong_right_is_ai);
+            while (stepper.next_step())
+            {
+                pong_previous = pong_current;
+                game::step(pong_current, wanted, stepper.h());
+                if (pong_current.teleported) { pong_previous = pong_current; }
+            }
+            game::draw(fb, pong_previous, pong_current, stepper.alpha());
+        }
+        else if (which == demo::lines)
+        {
+            // ---- Lesson 2.1's fan ---------------------------------------------
+            if (in.key_pressed(SDL_SCANCODE_1)) { line_algo = engine::draw_line_naive; line_algo_name = "naive y=mx+b"; }
+            if (in.key_pressed(SDL_SCANCODE_2)) { line_algo = engine::draw_line_dda;   line_algo_name = "DDA (float)"; }
+            if (in.key_pressed(SDL_SCANCODE_3)) { line_algo = engine::draw_line;       line_algo_name = "Bresenham (int)"; }
+            if (in.key_pressed(SDL_SCANCODE_SPACE)) { spinning = !spinning; }
+
+            while (stepper.next_step())
+            {
+                if (spinning) { phase += 0.12f * stepper.h(); }
+            }
+
+            fb.clear(k_bg);
+            draw_fan(fb, line_algo, phase);
+        }
+        else
+        {
+            // ---- Lesson 2.2's triangles ---------------------------------------
+            if (in.key_pressed(SDL_SCANCODE_1)) { mode = tri_mode::filled; }
+            if (in.key_pressed(SDL_SCANCODE_2)) { mode = tri_mode::wireframe; }
+            if (in.key_pressed(SDL_SCANCODE_3)) { mode = tri_mode::halfplanes; }
+            if (in.key_pressed(SDL_SCANCODE_4)) { mode = tri_mode::weights; }
+            if (in.key_pressed(SDL_SCANCODE_5)) { mode = tri_mode::isolines; }
+            if (in.key_pressed(SDL_SCANCODE_R)) { use_fill_rule = !use_fill_rule; }
+            if (in.key_pressed(SDL_SCANCODE_SPACE)) { spinning = !spinning; }
+
+            while (stepper.next_step())
+            {
+                if (spinning) { phase += 0.35f * stepper.h(); }
+            }
+
+            fb.clear(k_bg);
+
+            // The left panel: one triangle, spun so it passes through every
+            // orientation — including the two where its signed area changes sign.
+            const engine::vec2 centre{92.0f, 96.0f};
+            const float radius = 62.0f;
+            int vx[3];
+            int vy[3];
+            for (int i = 0; i &lt; 3; ++i)
+            {
+                const float a = phase + static_cast&lt;float&gt;(i) * 2.09439510f;   // 120 degrees
+                vx[i] = static_cast&lt;int&gt;(std::lround(centre.x + std::cos(a) * radius));
+                vy[i] = static_cast&lt;int&gt;(std::lround(centre.y + std::sin(a) * radius * 0.82f));
+            }
+
+            const Uint64 t0 = SDL_GetTicksNS();
+            switch (mode)
+            {
+            case tri_mode::filled:
+                engine::fill_triangle(fb, vx[0], vy[0], vx[1], vy[1], vx[2], vy[2],
+                                      engine::pack_argb(226, 196, 110));
+                break;
+            case tri_mode::wireframe:
+                engine::draw_triangle(fb, vx[0], vy[0], vx[1], vy[1], vx[2], vy[2],
+                                      engine::pack_argb(226, 196, 110));
+                break;
+            case tri_mode::halfplanes:
+                draw_halfplanes(fb, vx[0], vy[0], vx[1], vy[1], vx[2], vy[2]);
+                break;
+            case tri_mode::weights:
+                draw_weights(fb, vx[0], vy[0], vx[1], vy[1], vx[2], vy[2]);
+                break;
+            case tri_mode::isolines:
+                draw_isolines(fb, vx[0], vy[0], vx[1], vy[1], vx[2], vy[2]);
+                engine::draw_triangle(fb, vx[0], vy[0], vx[1], vy[1], vx[2], vy[2],
+                                      engine::pack_argb(210, 212, 220));
+                break;
+            }
+
+            // In the two Lesson 2.3 views the cursor is a probe: it draws the
+            // three sub-triangles whose areas ARE the weights, and reports them.
+            if (mode == tri_mode::weights || mode == tri_mode::isolines)
+            {
+                int win_w = 1280;
+                int win_h = 720;
+                SDL_GetWindowSize(window, &amp;win_w, &amp;win_h);
+
+                probe_x = static_cast&lt;int&gt;(std::lround(
+                    in.mouse_x() * static_cast&lt;float&gt;(k_fb_width) / static_cast&lt;float&gt;(win_w)));
+                probe_y = static_cast&lt;int&gt;(std::lround(
+                    in.mouse_y() * static_cast&lt;float&gt;(k_fb_height) / static_cast&lt;float&gt;(win_h)));
+
+                probe = engine::barycentric_at(vx[0], vy[0], vx[1], vy[1], vx[2], vy[2],
+                                               probe_x, probe_y);
+                draw_probe(fb, vx[0], vy[0], vx[1], vy[1], vx[2], vy[2],
+                           probe_x, probe_y, probe);
+            }
+            const Uint64 t1 = SDL_GetTicksNS();
+
+            const double ns = static_cast&lt;double&gt;(t1 - t0);
+            tri_ns_avg = (tri_ns_avg &lt;= 0.0) ? ns : (tri_ns_avg * 0.95 + ns * 0.05);
+
+            doubled_px = draw_coverage(fb, use_fill_rule);
+        }
+
+        if (!upload(screen_texture, fb))
+        {
+            SDL_Log("SDL_LockTexture failed: %s", SDL_GetError());
+        }
+
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+        SDL_RenderClear(renderer);
+        SDL_RenderTexture(renderer, screen_texture, nullptr, nullptr);
+
+        // A text coordinate is exactly twice a framebuffer coordinate: 2x text
+        // scale over a 4x framebuffer scale.
+        SDL_SetRenderScale(renderer, 2.0f, 2.0f);
+
+        if (which == demo::pong)
+        {
+            SDL_SetRenderDrawColor(renderer, 210, 212, 220, 255);
+            SDL_RenderDebugTextFormat(renderer, 6.0f, 6.0f,
+                                      "PONG (Lesson 1.8)   collision: %-6s   rally %d",
+                                      pong_current.swept_collision ? "swept" : "naive",
+                                      pong_current.rally_hits);
+            SDL_RenderDebugText(renderer, 6.0f, 328.0f,
+                                "[Tab] next demo   [W]/[S]   [C] 2P   [K] collision   [Esc] quit");
+        }
+        else if (which == demo::lines)
+        {
+            SDL_SetRenderDrawColor(renderer, 210, 212, 220, 255);
+            SDL_RenderDebugTextFormat(renderer, 6.0f, 6.0f,
+                                      "LINES (Lesson 2.1)   %-16s   %d spokes   fps %5.1f",
+                                      line_algo_name, k_spokes,
+                                      static_cast&lt;double&gt;(clk.fps()));
+            SDL_RenderDebugText(renderer, 6.0f, 328.0f,
+                                "[1] naive  [2] DDA  [3] Bresenham   [Space] spin   [Tab] next demo   [Esc] quit");
+        }
+        else
+        {
+            SDL_SetRenderDrawColor(renderer, 210, 212, 220, 255);
+            SDL_RenderDebugTextFormat(renderer, 6.0f, 6.0f,
+                                      "TRIANGLES   mode: %-12s   %6.1f us/triangle   fps %5.1f",
+                                      name_of(mode), tri_ns_avg / 1000.0,
+                                      static_cast&lt;double&gt;(clk.fps()));
+
+            // The line that turns the coverage picture into a diagnosis.
+            SDL_SetRenderDrawColor(renderer,
+                                   doubled_px &gt; 0 ? 236 : 150,
+                                   doubled_px &gt; 0 ? 92 : 152,
+                                   doubled_px &gt; 0 ? 92 : 170, 255);
+            SDL_RenderDebugTextFormat(renderer, 6.0f, 20.0f,
+                                      "[R] fill rule: %-3s    shared edge drawn twice on %d px",
+                                      use_fill_rule ? "ON" : "OFF", doubled_px);
+
+            // Lesson 2.3's readout: the three weights, and the sum that must
+            // be 1. Printed to four places because the interesting thing is how
+            // close to 1 it gets, not that it rounds there.
+            if (mode == tri_mode::weights || mode == tri_mode::isolines)
+            {
+                SDL_SetRenderDrawColor(renderer, 210, 212, 220, 255);
+                SDL_RenderDebugTextFormat(renderer, 6.0f, 292.0f,
+                                          "probe (%3d,%3d)   w0 %+.4f  w1 %+.4f  w2 %+.4f   sum %.6f",
+                                          probe_x, probe_y,
+                                          static_cast&lt;double&gt;(probe.w0),
+                                          static_cast&lt;double&gt;(probe.w1),
+                                          static_cast&lt;double&gt;(probe.w2),
+                                          static_cast&lt;double&gt;(probe.w0 + probe.w1 + probe.w2));
+                SDL_RenderDebugText(renderer, 6.0f, 306.0f,
+                                    "move the mouse: each sub-triangle's AREA is the weight of the vertex it faces");
+            }
+
+            SDL_SetRenderDrawColor(renderer, 150, 152, 170, 255);
+            SDL_RenderDebugText(renderer, 400.0f, 40.0f, "two triangles,");
+            SDL_RenderDebugText(renderer, 400.0f, 52.0f, "one shared edge");
+            SDL_RenderDebugText(renderer, 400.0f, 68.0f, "green = drawn once");
+            SDL_RenderDebugText(renderer, 400.0f, 80.0f, "red   = drawn twice");
+            SDL_RenderDebugText(renderer, 6.0f, 328.0f,
+                                "[1] fill [2] wire [3] half-planes [4] weights [5] iso-lines   [R] fill rule  [Space] spin  [Tab] demo");
+        }
+
+        SDL_SetRenderScale(renderer, 1.0f, 1.0f);
+        SDL_RenderPresent(renderer);
+
+        if (in.key_down(SDL_SCANCODE_T))
+        {
+            SDL_Delay(k_throttle_ms);
+        }
+    }
+
+    SDL_DestroyTexture(screen_texture);
+    SDL_DestroyRenderer(renderer);
+    SDL_DestroyWindow(window);
+    SDL_Quit();
+    return 0;
+}</code></pre>
+  </figure>
+
+  <!-- ================= 7. BUILD & RUN ================= -->
+  <h2 id="build"><span class="num">6</span>Build &amp; Run</h2>
+
+  <figure class="listing shell">
+    <figcaption>
+      <span class="path">all platforms</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash">cmake --build build
+
+# macOS / Linux
+./build/engine
+
+# Windows
+.\build\Debug\engine.exe</code></pre>
+  </figure>
+
+  <h3>What you should see</h3>
+
+  <p>
+    The triangles demo, now with two more views on <kbd>4</kbd> and <kbd>5</kbd>. Both follow the
+    mouse.
+  </p>
+
+  <p>
+    <strong>Press <kbd>4</kbd></strong> for the weight map. The triangle is filled with a ramp:
+    bright where <code>w0</code> is near 1 — at vertex 0 — fading to dark along the opposite edge
+    where it reaches 0. Beyond that edge the ramp continues into <strong>red</strong>, which is
+    <code>w0</code> going negative. The weights do not stop at the triangle's boundary, and this
+    view refuses to pretend they do.
+  </p>
+
+  <p>
+    <strong>Press <kbd>5</kbd></strong> for the iso-lines: three families of evenly spaced parallel
+    lines, one per vertex, each family parallel to that vertex's opposite edge. That lattice
+    <em>is</em> the triangle's coordinate system, and seeing all three at once is the clearest
+    picture of why three numbers are needed to name a point in two dimensions — they are not
+    independent, which is exactly what "they sum to 1" means.
+  </p>
+
+  <p>
+    In both views, <strong>move the mouse</strong>. Three coloured outlines follow it: the three
+    sub-triangles from Figure&nbsp;2, tinted to match the vertex each one faces. Three bars show
+    the weights, and the readout prints them with their sum.
+  </p>
+
+  <div class="callout ok">
+    <span class="label">Checkpoint — four things to verify by hand</span>
+    <ol>
+      <li>Put the cursor <strong>on a vertex</strong>: that vertex's weight reads 1.0000 and the other two 0.0000.</li>
+      <li>Put it <strong>on an edge</strong>: the weight of the vertex <em>opposite</em> that edge reads 0.0000.</li>
+      <li>Put it <strong>in the middle</strong>: all three read about 0.3333.</li>
+      <li>Move it <strong>outside</strong>: at least one weight goes negative — and the sum stays 1.000000.</li>
+    </ol>
+    <p>
+      That last one is the surprising one, and it is the whole content of §3.2: the identity is not
+      a property of being inside the triangle.
+    </p>
+  </div>
+
+  <p>
+    Watch the sum as you move around. It will read <code>1.000000</code> almost everywhere, and
+    that is the measured 2.4 × 10⁻⁷ worst case being invisible at six decimal places — not the
+    exactness of floating point. §3.8 has the numbers.
+  </p>
+
+  <!-- ================= 8. PITFALLS ================= -->
+  <h2 id="pitfalls"><span class="num">7</span>Common Pitfalls &amp; Debugging</h2>
+
+  <div class="pitfalls">
+    <details class="pitfall-item">
+      <summary>Interpolation is subtly rotated within each triangle — <span class="sym">the pairing bug</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>
+            Colours or textures are present and smooth but land in the wrong corners — as if each
+            triangle's content had been rotated by one vertex. Weights all look plausible and sum
+            to 1.
+          </dd>
+          <dt>Cause</dt>
+          <dd>
+            Each weight paired with the edge sharing its name rather than the edge
+            <em>opposite</em> it. <code>w0</code> must use <code>v1→v2</code>.
+          </dd>
+          <dt>Fix</dt>
+          <dd>
+            Test <strong>reconstruction</strong>, not the sum:
+            <code>w0·v0 + w1·v1 + w2·v2</code> must return the point you asked about. A sum check
+            passes for all three wrong rotations; reconstruction passes for exactly one. §3.5.
+          </dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>Everything is NaN after one bad triangle — <span class="sym">division by zero</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>
+            A mesh renders fine until one particular triangle, after which colours go black or
+            garbage — sometimes for the rest of the frame.
+          </dd>
+          <dt>Cause</dt>
+          <dd>
+            A degenerate triangle: three collinear vertices, zero area, dividing by zero. The
+            result is <code>NaN</code> or <code>±inf</code>, and <code>NaN</code> propagates through
+            every arithmetic operation it touches while comparing false to everything.
+          </dd>
+          <dt>Fix</dt>
+          <dd>
+            Check the area before dividing, as <code>barycentric_at</code> does. Degenerate
+            triangles are not exotic — they appear whenever geometry is scaled to zero, whenever
+            two vertices are welded, and routinely in imported meshes.
+          </dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>An "on the edge" test almost never fires — <span class="sym">comparing floats for equality</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>
+            <code>if (w0 == 0.0f)</code> to detect edge pixels catches almost none of them, or a
+            <code>sum == 1.0f</code> assertion fires on perfectly good input.
+          </dd>
+          <dt>Cause</dt>
+          <dd>
+            The division rounds. Measured: the sum is bitwise <code>1.0f</code> only about 85% of
+            the time, and the worst deviation is 2.4 × 10⁻⁷.
+          </dd>
+          <dt>Fix</dt>
+          <dd>
+            Use a tolerance — or better, do the test on the <strong>integer</strong> edge values
+            before dividing, where "exactly on the edge" really is exactly <code>== 0</code>. The
+            integers are the exact object; the floats are a convenience.
+          </dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>Interpolated values are off by a fraction of a pixel — <span class="sym">the fill-rule bias leaked in</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>
+            Everything looks nearly right, but attributes are consistently shifted a tiny amount
+            toward one edge — visible as a seam when two triangles meet.
+          </dd>
+          <dt>Cause</dt>
+          <dd>
+            Interpolating with the edge values that Lesson 2.2's top-left rule biased by −1. That
+            bias exists to decide <em>coverage</em>; it is not part of the geometry.
+          </dd>
+          <dt>Fix</dt>
+          <dd>
+            Keep two sets: biased for the inside test, unbiased for interpolation. Lesson 2.4 wires
+            both into one loop and this is the detail it has to get right.
+          </dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>Textures swim as the camera moves — <span class="sym">not a bug yet, but it will be</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>
+            Once perspective arrives, textures on triangles tilted away from the camera bend and
+            slide, especially along the diagonal where two triangles meet.
+          </dd>
+          <dt>Cause</dt>
+          <dd>
+            Screen-space barycentric interpolation is affine on the <em>screen</em>, and under
+            perspective that is not affine on the <em>surface</em>. §3.7.
+          </dd>
+          <dt>Fix</dt>
+          <dd>
+            Perspective-correct interpolation — interpolate <code>attribute/w</code> and
+            <code>1/w</code>, then divide. Lesson 3.2 shows the artifact first, then derives it.
+            Nothing to do now: without perspective, screen-space is exactly right.
+          </dd>
+        </dl>
+      </div>
+    </details>
+  </div>
+
+  <!-- ================= 9. EXERCISES ================= -->
+  <h2 id="exercises"><span class="num">8</span>Exercises</h2>
+
+  <div class="exercise">
+    <h3><span class="xnum">2.3.1</span>Break the pairing on purpose<span class="difficulty">warm-up</span></h3>
+    <p>
+      Rotate the pairing in <code>barycentric_at</code> — give <code>w0</code> the edge
+      <code>v0→v1</code> — and run the demo. Confirm the weights still sum to 1 and still look
+      reasonable. Then write a reconstruction check and watch it fail.
+    </p>
+    <details>
+      <summary>Hint</summary>
+      <p>
+        Reconstruction is three multiply-adds per axis. Assert it in a debug build for a few points
+        per triangle; the cost is nothing compared to the hours it saves.
+      </p>
+    </details>
+    <details>
+      <summary>Solution</summary>
+      <p>
+        With the pairing rotated, the point <code>(5,5)</code> reconstructs as <code>(5.2, 5.8)</code>
+        — the number from §3.5, which is what the harness asserts.
+      </p>
+      <p>
+        The transferable lesson is about choosing invariants. "Sums to 1" is an invariant that a
+        broken implementation satisfies, so it has almost no diagnostic power. Reconstruction is
+        satisfied by exactly one implementation. When picking something to assert, prefer the
+        property that <em>determines</em> the answer over one that merely constrains it.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3><span class="xnum">2.3.2</span>Predict, then check<span class="difficulty">warm-up</span></h3>
+    <p>
+      Before running anything, write down the weights you expect at: each vertex; the midpoint of
+      each edge; the centroid; a point reflected across an edge to just outside. Then use the demo's
+      probe to check.
+    </p>
+    <details>
+      <summary>Solution</summary>
+      <p>
+        Vertices <code>(1,0,0)</code> and rotations. Edge midpoints have the opposite weight 0 and
+        the other two 0.5 each. Centroid <code>(⅓,⅓,⅓)</code>. Just outside an edge, the opposite
+        weight is slightly negative and the other two sum to slightly more than 1.
+      </p>
+      <p>
+        The exercise is really about the last case: many people expect the weights to clamp or the
+        formula to break down outside, and it simply does not. That continuity is what makes
+        extrapolation work.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3><span class="xnum">2.3.3</span>Make the weights incremental<span class="difficulty">medium</span></h3>
+    <p>
+      Lesson 2.2 §3.5 made the edge functions incremental — constant steps per pixel, no multiplies.
+      The weights are those values times a constant, so they must be incremental too. Write a fill
+      loop that carries all three weights across a scanline by addition, and check it against
+      <code>barycentric_at</code> per pixel.
+    </p>
+    <details>
+      <summary>Hint</summary>
+      <p>
+        Multiply the integer steps by <code>inv_area</code> once, outside the loop, and step the
+        floats. Then ask the question that matters: does the float version drift across a wide
+        triangle? Compare against the exact integer version at the end of each row.
+      </p>
+    </details>
+    <details>
+      <summary>Solution sketch</summary>
+      <p>
+        It works, and it is what Lesson 2.4 does. The interesting finding is the drift: stepping
+        floats reintroduces exactly the accumulation Lesson 2.1 §3.1 objected to in DDA, where
+        computing from integers each time does not. For a 320-pixel-wide triangle the error is far
+        below a pixel and nobody cares; for a 4K-wide one it is worth stepping the
+        <em>integers</em> and doing one multiply per pixel instead.
+      </p>
+      <p>
+        Measure before choosing. The right answer depends on the triangle sizes you actually draw,
+        which is the recurring theme of this module.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3><span class="xnum">2.3.4</span>Barycentric coordinates for a tetrahedron<span class="difficulty">open</span></h3>
+    <p>
+      Everything here generalises: in 3-D, four points define a tetrahedron and a point inside gets
+      four weights from the four sub-tetrahedron <em>volumes</em>. Work out the formula, and say
+      what plays the role of the edge function.
+    </p>
+    <details>
+      <summary>Hint</summary>
+      <p>
+        Signed area came from the 2-D cross product. Signed volume comes from the
+        <em>scalar triple product</em> <code>a · (b × c)</code>, which is six times the volume of
+        the tetrahedron they span. Everything else is the same argument with one more index.
+      </p>
+    </details>
+    <details>
+      <summary>Solution sketch</summary>
+      <p>
+        Four weights, each a sub-volume over the total, summing to 1, reconstructing the point.
+        Useful in practice: it is how you locate a point inside a tetrahedral mesh, and it is the
+        basis of tetrahedral interpolation for colour lookup tables.
+      </p>
+      <p>
+        Doing this once is worth more than it looks, because it shows that "barycentric" is not a
+        triangle trick — it is what <em>affine combination</em> means in any dimension, and
+        triangles are simply the two-dimensional case we happen to rasterise.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3><span class="xnum">2.3.5</span>Point-in-triangle without a rasterizer<span class="difficulty">open</span></h3>
+    <p>
+      Use <code>barycentric_at</code> to write a picking routine: given a mouse position and a list
+      of triangles, find which one contains the cursor. Then extend it to return <em>where</em>
+      inside — which is what a real editor needs in order to know which part of a mesh you clicked.
+    </p>
+    <details>
+      <summary>Solution sketch</summary>
+      <p>
+        The containment test is "all three weights ≥ 0", and it comes back with the position for
+        free — that is the point of the exercise. Compare against what a scanline filler could have
+        told you: nothing, without re-rasterising the whole triangle.
+      </p>
+      <p>
+        This is also a first taste of Module 8's editor work, and of why the same three numbers
+        show up in ray-triangle intersection (the Möller–Trumbore algorithm returns barycentrics
+        directly, for exactly this reason).
+      </p>
+    </details>
+  </div>
+
+  <!-- ================= 10. RECAP & NEXT ================= -->
+  <h2 id="recap"><span class="num">9</span>Recap &amp; Next</h2>
+
+  <div class="recap">
+    <h2>What the engine can do now that it could not before</h2>
+    <ul>
+      <li><strong>It can say where a pixel is inside a triangle</strong>, as three fractions that
+        depend on the triangle rather than on the screen.</li>
+      <li><strong>Derived, not defined.</strong> The weights came out of the sub-triangle areas the
+        rasterizer was already computing and discarding; the only new operation is one division.</li>
+      <li><strong>The defining property is reconstruction</strong>, not the sum — and the difference
+        between those two is the difference between a check that catches the pairing bug and one
+        that does not.</li>
+      <li><strong>The geometry is predictable</strong>: 1 at a vertex, 0 on the opposite edge, ⅓ at
+        the centroid, negative outside, and constant along lines parallel to the opposite edge.</li>
+      <li><strong>The interpolation is unique</strong>, not merely reasonable: three coefficients,
+        three conditions, one affine solution.</li>
+      <li><strong>The precision is measured</strong>: exact in integers, one rounding in float, and
+        never to be compared for equality.</li>
+    </ul>
+    <p>
+      And a habit worth keeping: <em>when choosing an invariant to assert, prefer the property that
+      determines the answer over one that merely constrains it.</em> "Sums to 1" is satisfied by
+      three different wrong implementations. "Reconstructs the point" is satisfied by one.
+    </p>
+  </div>
+
+  <div class="recap">
+    <p>
+      <strong>Next:</strong>
+      <a href="02-04-attribute-interpolation.html">2.4 — Interpolating Attributes Across a
+      Triangle</a>. We have the weights; now we hang things on them. Colour first — where Lesson
+      1.6's linear-light argument stops being theoretical, because blending three vertex colours is
+      exactly the operation that goes wrong when you average sRGB values. Then texture coordinates,
+      and then the realisation that the machinery does not care what it is carrying.
+    </p>
+    <p>
+      It also folds the weights into <code>fill_triangle</code>'s incremental loop, which means
+      confronting the bias problem from §3.8: the same three numbers, biased for coverage and
+      unbiased for interpolation, computed side by side.
+    </p>
+  </div>
+
+  <!-- ================= 11. FURTHER READING ================= -->
+  <h2 id="reading"><span class="num">10</span>Further Reading</h2>
+
+  <ul class="reading">
+    <li><span class="src">A. F. Möbius (1827)</span> <em>Der barycentrische Calcul</em> — the
+      origin, and the source of the name. Worth knowing that this is two centuries old and was
+      invented for statics, not graphics.</li>
+    <li><span class="src">Fabian Giesen</span> <em>The barycentric conspiracy</em> — short, sharp,
+      and specifically about the rasterization use. Read it after this lesson.</li>
+    <li><span class="src">Real-Time Rendering</span> §22.8 on barycentric coordinates, and §23.1
+      for how hardware carries them through the pipeline.</li>
+    <li><span class="src">Möller &amp; Trumbore (1997)</span> <em>Fast, Minimum Storage
+      Ray/Triangle Intersection</em> — returns barycentrics directly, and shows the same three
+      numbers arriving from a completely different direction.</li>
+    <li><span class="src">Scratchapixel</span> <em>Rasterization: a Practical Implementation</em> —
+      covers this material alongside 2.2's, with a slower and more example-driven treatment.</li>
+  </ul>
+
+  <!-- ================= 12. STATE ================= -->
+  <details class="state">
+    <summary>STATE — resume key</summary>
+<pre>course: Build a Professional 3D Game Engine (SDL3 + C++20)
+version: 1.0
+
+conventions:
+  world: right-handed, Y-up, -Z forward
+  clip: left-handed, +Y up, z in [0,1] (SDL_GPU; projection absorbs the flip)
+  matrices: column vectors, v' = M*v, column-major storage
+  winding: CCW = front — an NDC statement. In the FRAMEBUFFER (+y down) the
+        viewport flip reverses it: screen-CCW has NEGATIVE signed area.
+  units: 1 unit = 1 metre; radians internally; linear colour in the renderer
+  axis colours: x/y/z = red/green/blue
+  framebuffer: row-major, index = y*width + x, +y is DOWN
+  lines: endpoint-INCLUSIVE both ends; Bresenham, integer, all eight octants
+  triangles: edge_function(a,b,p) = (bx-ax)(py-ay) - (by-ay)(px-ax). SIGN = side,
+        MAGNITUDE = 2 * area. Fill = bbox + incremental + top-left rule.
+  barycentric: w_i = area of the sub-triangle OPPOSITE v_i, over the total.
+        w0 uses the edge v1->v2. THE PAIRING IS THE BUG: a rotated pairing still
+        sums to 1 and still looks plausible — verified, it reconstructs (5.2,5.8)
+        instead of (5,5). ALWAYS test RECONSTRUCTION (w0*v0+w1*v1+w2*v2 == P),
+        never just the sum.
+        e0+e1+e2 == area EXACTLY in integers, for every P in the plane (inside or
+        out) — leave it in as an assertion.
+        Geometry: 1 at its vertex, 0 on the opposite edge, 1/3 at the centroid,
+        NEGATIVE outside (same test as 2.2's inside test, divided by a constant).
+        Constant weight = a line PARALLEL to the opposite edge, evenly spaced,
+        because that edge is a fixed base so equal area means equal height.
+        Interpolation with these weights is the UNIQUE affine function matching
+        the three corners (3 coefficients, 3 conditions) — not merely reasonable.
+        Affine in SCREEN space, which stops being surface-correct under
+        perspective: Lesson 3.2's 1/w trick.
+        PRECISION (measured, 32761 points): worst |sum-1| = 2.4e-7, and the sum is
+        bitwise 1.0f only ~85% of the time. NEVER compare weights for equality —
+        test the INTEGER edge values, where "on the edge" is exactly 0.
+        USE UNBIASED edge values for interpolation: the top-left rule's -1 bias is
+        for coverage only and shifts weights by a fraction of a pixel.
+
+completed:
+  - 0.1 … 0.6   ===&gt; MODULE 0 COMPLETE &lt;===
+  - 1.1 … 1.8   ===&gt; MODULE 1 COMPLETE &lt;===
+  - 2.1 Lines · 2.2 Edge Functions · 2.3 Barycentric Coordinates
+
+capabilities:
+  - portable CMake build, eight translation units, FetchContent SDL3 (release-3.4.12)
+  - core: clock, input, fixed_step · gfx: framebuffer, colour, raster · math: vec2
+  - raster: draw_line (+dda, +naive), edge_function, fill_triangle (bbox +
+    incremental + top-left rule, either winding, degenerate-safe), draw_triangle,
+    barycentric / barycentric_at
+  - game: Pong, complete
+  - demo: [Tab] cycles triangles / lines / Pong. Triangle views: [1] filled
+    [2] wireframe [3] half-planes [4] weight ramp (incl. NEGATIVE region in red)
+    [5] iso-line grid — [4] and [5] carry a mouse probe drawing the three
+    sub-triangles and printing the weights and their sum.
+  - known-and-deliberate: weights are computed per pixel via barycentric_at rather
+    than stepped incrementally (2.4 folds them into the fill loop); no perspective
+    correction (3.2); no clipping (Module 3); no anti-aliasing (Module 6)
+
+files:
+  /: CLAUDE.md, README.md, ARCHITECTURE.md, LEARNINGS.md, PROMPT.md, LICENSE,
+     .gitignore, CMakeLists.txt, STATE.md
+  src/: main.cpp
+  src/core/: clock.hpp/.cpp, fixed_step.hpp/.cpp, input.hpp/.cpp
+  src/gfx/: colour.hpp/.cpp, framebuffer.hpp/.cpp, raster.hpp/.cpp
+  src/math/: vec2.hpp
+  src/game/: pong.hpp, pong.cpp
+  docs/: index.html, conventions.html, math-toolbox.html, cpp-style.html
+  docs/lessons/: 00-01 … 00-06, 01-01 … 01-08, 02-01, 02-02, 02-03
+  docs/_template/: lesson-template.html, README.md, apply-shared.py, check-page.js
+
+next: 2.4 — Interpolating Attributes Across a Triangle</pre>
+  </details>
+
+  <nav class="lesson-nav" aria-label="Lesson navigation (bottom)">
+    <a class="prev-l" href="02-02-triangle-edge-functions.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">2.2 — The Triangle: Edge Functions</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="02-04-attribute-interpolation.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">2.4 — Interpolating Attributes Across a Triangle</span>
+    </a>
+  </nav>
+
+  <footer class="foot">
+    <p>
+      Build a Professional 3D Game Engine ·
+      <a href="../index.html">Contents</a> ·
+      <a href="../conventions.html">Conventions</a> ·
+      <a href="../math-toolbox.html">Math Toolbox</a> ·
+      <a href="../cpp-style.html">C++ Style</a>
+    </p>
+    <p>MIT licensed. Copyright © 2026 digster.</p>
+  </footer>
+</div>
+
+<!-- ==========================================================================
+     PAGE SCRIPTS
+     ========================================================================== -->
+<!-- SHARED-SCRIPT:BEGIN -->
+<script>
+(function () {
+  "use strict";
+
+  /* ---- Theme toggle: OS default, with a manual override in localStorage ---- */
+  var root = document.documentElement;
+  var KEY = "engine-course-theme";
+  try {
+    var saved = localStorage.getItem(KEY);
+    if (saved) { root.setAttribute("data-theme", saved); root.style.colorScheme = saved; }
+  } catch (e) { /* private mode — fall back to the OS preference */ }
+
+  var btn = document.getElementById("theme-toggle");
+  if (btn) {
+    btn.addEventListener("click", function () {
+      var cur = root.getAttribute("data-theme");
+      if (!cur) {
+        cur = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      }
+      var next = cur === "dark" ? "light" : "dark";
+      root.setAttribute("data-theme", next);
+      root.style.colorScheme = next;
+      try { localStorage.setItem(KEY, next); } catch (e) {}
+    });
+  }
+
+  /* ---- Syntax highlighting -------------------------------------------------
+     A deliberately small tokeniser for C++/HLSL, CMake, and shell. It reads
+     textContent and rebuilds escaped HTML, so it can never execute page content
+     or mangle a listing — worst case a token is mis-coloured.
+
+     Why not highlight.js from a CDN? Because a lesson must render from a bare
+     filesystem with no network, and colour is not worth a dependency that can
+     be absent. This is ~60 lines and always there.
+
+     Keyword vs type matters: `kw` is consulted before `ty`, so a word listed in
+     both lands in .tok-k. Fundamental types (bool, char, int, …) belong in
+     CPP_TYPES only — putting them in CPP_KEYWORDS would silently recolour every
+     declaration in the course.
+     -------------------------------------------------------------------------- */
+  var CPP_KEYWORDS = ("alignas alignof and asm auto break case catch class concept const consteval "
+    + "constexpr constinit const_cast continue co_await co_return co_yield decltype default defined "
+    + "delete do dynamic_cast else enum explicit export extern false final for friend goto if inline "
+    + "mutable namespace new noexcept not nullptr operator or override private protected public "
+    + "register reinterpret_cast requires return sizeof static static_assert static_cast struct "
+    + "switch template this thread_local throw true try typedef typeid typename union using virtual "
+    + "volatile while cbuffer register_space numthreads in out inout").split(" ");
+
+  var CPP_TYPES = ("bool char char8_t char16_t char32_t double float int long short signed unsigned "
+    + "void wchar_t size_t uint8_t uint16_t uint32_t uint64_t int8_t int16_t int32_t int64_t "
+    + "Uint8 Uint16 Uint32 Uint64 Sint8 Sint16 Sint32 Sint64 "
+    + "float2 float3 float4 float4x4 float3x3 half int2 int3 int4 uint uint2 uint3 uint4 matrix "
+    + "Texture2D TextureCube SamplerState StructuredBuffer").split(" ");
+
+  var kw = Object.create(null), ty = Object.create(null);
+  CPP_KEYWORDS.forEach(function (w) { kw[w] = 1; });
+  CPP_TYPES.forEach(function (w) { ty[w] = 1; });
+
+  function esc(s) {
+    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+  function span(cls, s) { return '<span class="tok-' + cls + '">' + esc(s) + "</span>"; }
+
+  // One regex, alternation ordered so longer/greedier forms win.
+  var RE = new RegExp([
+    "(\\/\\*[\\s\\S]*?\\*\\/|\\/\\/[^\\n]*|#[^\\n]*)",       // 1 comment / preprocessor
+    '("(?:\\\\.|[^"\\\\])*"|\'(?:\\\\.|[^\'\\\\])*\')',      // 2 string / char
+    "(\\b\\d[\\w.]*\\b)",                                     // 3 number
+    "([A-Za-z_]\\w*)(?=\\s*\\()",                             // 4 call site
+    "([A-Za-z_]\\w*)",                                        // 5 identifier
+    "([{}()\\[\\];,.<>+\\-*/%=!&|^~?:]+)"                     // 6 punctuation
+  ].join("|"), "g");
+
+  function highlightCLike(src) {
+    var out = "", last = 0, m;
+    RE.lastIndex = 0;
+    while ((m = RE.exec(src)) !== null) {
+      if (m.index > last) out += esc(src.slice(last, m.index));
+      if (m[1])      out += span(m[1].charAt(0) === "#" ? "p" : "c", m[1]);
+      else if (m[2]) out += span("s", m[2]);
+      else if (m[3]) out += span("n", m[3]);
+      else if (m[4]) out += kw[m[4]] ? span("k", m[4]) : span("f", m[4]);
+      else if (m[5]) out += kw[m[5]] ? span("k", m[5])
+                          : ty[m[5]] ? span("t", m[5])
+                          : esc(m[5]);
+      else if (m[6]) out += span("o", m[6]);
+      last = RE.lastIndex;
+    }
+    out += esc(src.slice(last));
+    return out;
+  }
+
+  // Shell: `#` comments anywhere, plus Windows-batch `::` comments — but only at
+  // the start of a line, because `::` is also a namespace separator and a CMake
+  // target separator (`SDL3::SDL3`), which do appear mid-line in shell listings.
+  var SH_RE = /(^|\n)(\s*)(::[^\n]*)|(#[^\n]*)|("(?:\\.|[^"\\])*"|'[^']*')|(^|\n)(\s*)([\w.\/\\-]+)/g;
+  function highlightShell(src) {
+    var out = "", last = 0, m;
+    SH_RE.lastIndex = 0;
+    while ((m = SH_RE.exec(src)) !== null) {
+      if (m.index > last) out += esc(src.slice(last, m.index));
+      if (m[3])      out += esc(m[1] || "") + esc(m[2] || "") + span("c", m[3]);
+      else if (m[4]) out += span("c", m[4]);
+      else if (m[5]) out += span("s", m[5]);
+      else           out += esc(m[6] || "") + esc(m[7] || "") + span("f", m[8]);
+      last = SH_RE.lastIndex;
+    }
+    out += esc(src.slice(last));
+    return out;
+  }
+
+  // CMake: comments, strings, ${vars}, and command names (word before "(").
+  var CMAKE_RE = /(#[^\n]*)|("(?:\\.|[^"\\])*")|(\$\{[^}]*\})|(^|\n)(\s*)([A-Za-z_]\w*)(?=\s*\()/g;
+  function highlightCMake(src) {
+    var out = "", last = 0, m;
+    CMAKE_RE.lastIndex = 0;
+    while ((m = CMAKE_RE.exec(src)) !== null) {
+      if (m.index > last) out += esc(src.slice(last, m.index));
+      if (m[1])      out += span("c", m[1]);
+      else if (m[2]) out += span("s", m[2]);
+      else if (m[3]) out += span("n", m[3]);
+      else           out += esc(m[4] || "") + esc(m[5] || "") + span("f", m[6]);
+      last = CMAKE_RE.lastIndex;
+    }
+    out += esc(src.slice(last));
+    return out;
+  }
+
+  var DISPATCH = {
+    "lang-cpp": highlightCLike, "lang-hlsl": highlightCLike, "lang-c": highlightCLike,
+    "lang-bash": highlightShell, "lang-sh": highlightShell,
+    "lang-cmake": highlightCMake
+  };
+  document.querySelectorAll(".listing pre code").forEach(function (el) {
+    for (var cls in DISPATCH) {
+      if (el.classList.contains(cls)) {
+        el.innerHTML = DISPATCH[cls](el.textContent);
+        return;
+      }
+    }
+  });
+})();
+</script>
+
+<!-- KaTeX auto-render. Loaded last, async, and entirely optional: if the CDN is
+     unreachable the raw TeX stays on the page and every equation is still stated
+     in prose and in its .eq-plain twin.
+
+     This lives INSIDE the shared region deliberately. It used to sit just below
+     the END marker, which meant apply-shared.py never propagated it: a new lesson
+     copied from this template silently shipped without a maths renderer, and the
+     symptom — raw TeX where an equation should be — looks so much like the
+     documented CDN-unreachable fallback that it reads as working-as-intended.
+     Lesson 1.8 was the first lesson with display math and the first to catch it.
+     Anything every page needs belongs between the markers. -->
+<script defer
+        src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"
+        integrity="sha384-7zkQWkzuo3B5mTepMUcHkMB5jZaolc2xDwL6VFqjFALcbeS9Ggm/Yr2r3Dy4lfFg"
+        crossorigin="anonymous"></script>
+<script defer
+        src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+        integrity="sha384-43gviWU0YVjaDtb/GhzOouOXtZMP/7XUzwPTstBeZFe/+rCMvRwr4yROQP43s0Xk"
+        crossorigin="anonymous"
+        onload="renderMathInElement(document.body, {
+          delimiters: [
+            {left: '\\[', right: '\\]', display: true},
+            {left: '\\(', right: '\\)', display: false}
+          ],
+          throwOnError: false
+        });"></script>
+<!-- SHARED-SCRIPT:END -->
+</body>
+</html>

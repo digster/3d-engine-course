@@ -175,6 +175,31 @@ namespace {
 
 } // namespace
 
+barycentric barycentric_at(int x0, int y0, int x1, int y1, int x2, int y2,
+                           int px, int py)
+{
+    const int area = edge_function(x0, y0, x1, y1, x2, y2);
+    if (area == 0) { return {}; }   // collinear: no interior, so no answer
+
+    // Each weight comes from the sub-triangle OPPOSITE its vertex — the one
+    // that does not touch it. w0 therefore uses the edge v1->v2.
+    //
+    // These are the same three numbers fill_triangle already computes for its
+    // inside test. Nothing new is being calculated here; the only new thing is
+    // the division, which turns "twice an area" into "a fraction of the whole".
+    const int e0 = edge_function(x1, y1, x2, y2, px, py);
+    const int e1 = edge_function(x2, y2, x0, y0, px, py);
+    const int e2 = edge_function(x0, y0, x1, y1, px, py);
+
+    // e0 + e1 + e2 == area EXACTLY, in integers, for every point in the plane —
+    // inside or outside. The float sum below is therefore 1 up to one rounding,
+    // not up to accumulated drift.
+    const float inv = 1.0f / static_cast<float>(area);
+    return {static_cast<float>(e0) * inv,
+            static_cast<float>(e1) * inv,
+            static_cast<float>(e2) * inv};
+}
+
 void fill_triangle(framebuffer& fb,
                    int x0, int y0, int x1, int y1, int x2, int y2,
                    Uint32 colour)

@@ -70,7 +70,9 @@ enum class tri_mode
 {
     filled,      ///< fill_triangle: the finished article
     wireframe,   ///< draw_triangle: three lines, for comparison
-    halfplanes   ///< colour every pixel by WHICH edge tests it passes
+    halfplanes,  ///< colour every pixel by WHICH edge tests it passes
+    weights,     ///< Lesson 2.3: w0 as a ramp, with a live probe
+    isolines     ///< Lesson 2.3: contours of constant weight
 };
 
 [[nodiscard]] const char* name_of(tri_mode m)
@@ -80,6 +82,8 @@ enum class tri_mode
     case tri_mode::filled:     return "filled";
     case tri_mode::wireframe:  return "wireframe";
     case tri_mode::halfplanes: return "half-planes";
+    case tri_mode::weights:    return "weights (w0)";
+    case tri_mode::isolines:   return "iso-lines";
     }
     return "?";
 }
@@ -126,6 +130,140 @@ void draw_halfplanes(engine::framebuffer& fb,
             fb.put_pixel(x, y, c);
         }
     }
+}
+
+/// Paint each pixel by its w0 — "how much of vertex 0 is here".
+///
+/// A ramp rather than three colours, because this view is about a single
+/// COORDINATE. Blending three vertex colours is interpolating an attribute,
+/// which is Lesson 2.4's subject and needs the linear-light care of Lesson 1.6.
+///
+/// Pixels outside the triangle are drawn too, in red, because w0 goes negative
+/// out there and that is worth seeing rather than hiding: the weights describe
+/// the whole plane, not just the interior.
+void draw_weights(engine::framebuffer& fb,
+                  int x0, int y0, int x1, int y1, int x2, int y2)
+{
+    const int pad = 20;
+    const int min_x = std::max(0, std::min({x0, x1, x2}) - pad);
+    const int min_y = std::max(0, std::min({y0, y1, y2}) - pad);
+    const int max_x = std::min(fb.width() - 1, std::max({x0, x1, x2}) + pad);
+    const int max_y = std::min(fb.height() - 1, std::max({y0, y1, y2}) + pad);
+
+    for (int y = min_y; y <= max_y; ++y)
+    {
+        for (int x = min_x; x <= max_x; ++x)
+        {
+            const engine::barycentric b =
+                engine::barycentric_at(x0, y0, x1, y1, x2, y2, x, y);
+
+            if (b.w0 < 0.0f)
+            {
+                // Negative: past the edge opposite v0. Deepen with distance.
+                const float m = std::min(1.0f, -b.w0);
+                const Uint8 r = static_cast<Uint8>(40.0f + 150.0f * m);
+                fb.put_pixel(x, y, engine::pack_argb(r, 30, 38));
+            }
+            else
+            {
+                const float m = std::min(1.0f, b.w0);
+                const Uint8 v = static_cast<Uint8>(24.0f + 220.0f * m);
+                fb.put_pixel(x, y, engine::pack_argb(v, v, static_cast<Uint8>(v * 0.72f)));
+            }
+        }
+    }
+}
+
+/// Draw contour lines where any weight crosses a multiple of 0.1.
+///
+/// The point of the picture: every contour of w0 is PARALLEL to the edge
+/// opposite v0, and they are evenly spaced. That is what "the triangle's own
+/// coordinate system" looks like — three families of parallel lines, one per
+/// vertex, and the weights are just how far along each family you are.
+void draw_isolines(engine::framebuffer& fb,
+                   int x0, int y0, int x1, int y1, int x2, int y2)
+{
+    const int pad = 12;
+    const int min_x = std::max(0, std::min({x0, x1, x2}) - pad);
+    const int min_y = std::max(0, std::min({y0, y1, y2}) - pad);
+    const int max_x = std::min(fb.width() - 1, std::max({x0, x1, x2}) + pad);
+    const int max_y = std::min(fb.height() - 1, std::max({y0, y1, y2}) + pad);
+
+    const Uint32 tint[3] = {engine::pack_argb(236, 122, 92),
+                            engine::pack_argb(122, 196, 152),
+                            engine::pack_argb(126, 162, 236)};
+
+    for (int y = min_y; y <= max_y; ++y)
+    {
+        for (int x = min_x; x <= max_x; ++x)
+        {
+            const engine::barycentric b =
+                engine::barycentric_at(x0, y0, x1, y1, x2, y2, x, y);
+            const engine::barycentric br =
+                engine::barycentric_at(x0, y0, x1, y1, x2, y2, x + 1, y);
+            const engine::barycentric bd =
+                engine::barycentric_at(x0, y0, x1, y1, x2, y2, x, y + 1);
+
+            const float w[3]  = {b.w0, b.w1, b.w2};
+            const float wr[3] = {br.w0, br.w1, br.w2};
+            const float wd[3] = {bd.w0, bd.w1, bd.w2};
+
+            // A contour is "this pixel and its right/below neighbour fall either
+            // side of a multiple of 0.1". Comparing floor()s asks that without
+            // hunting for exact equality, which floats would never satisfy —
+            // §3.6 measured the sum landing on 1.0f only 85% of the time.
+            constexpr float step = 0.1f;
+            for (int i = 0; i < 3; ++i)
+            {
+                const bool crosses =
+                    std::floor(w[i] / step) != std::floor(wr[i] / step) ||
+                    std::floor(w[i] / step) != std::floor(wd[i] / step);
+
+                // Only inside the triangle: the contours continue over the
+                // whole plane (they must — the weights are defined everywhere),
+                // but drawn unbounded they bury the shape they describe.
+                const bool inside = w[0] >= 0.0f && w[1] >= 0.0f && w[2] >= 0.0f;
+                if (crosses && inside)
+                {
+                    fb.put_pixel(x, y, tint[i]);
+                    break;
+                }
+            }
+        }
+    }
+}
+
+/// The mouse probe: the three sub-triangles whose areas ARE the weights.
+///
+/// This is the derivation drawn live. P is the cursor; each sub-triangle is
+/// P with one edge of the original, and each is tinted to match the vertex it
+/// is opposite — the vertex whose weight it supplies.
+void draw_probe(engine::framebuffer& fb,
+                int x0, int y0, int x1, int y1, int x2, int y2,
+                int px, int py, engine::barycentric b)
+{
+    const Uint32 tint[3] = {engine::pack_argb(236, 122, 92),
+                            engine::pack_argb(122, 196, 152),
+                            engine::pack_argb(126, 162, 236)};
+
+    // Sub-triangle i is P with the edge OPPOSITE vertex i — the same pairing
+    // barycentric_at uses, drawn so the two cannot drift apart.
+    engine::draw_triangle(fb, px, py, x1, y1, x2, y2, tint[0]);
+    engine::draw_triangle(fb, px, py, x2, y2, x0, y0, tint[1]);
+    engine::draw_triangle(fb, px, py, x0, y0, x1, y1, tint[2]);
+
+    // Three bars, lengths proportional to the weights, in the same tints.
+    const int bar_x = 6;
+    const int bar_y = 150;
+    const float w[3] = {b.w0, b.w1, b.w2};
+    for (int i = 0; i < 3; ++i)
+    {
+        const int len = static_cast<int>(std::lround(std::max(0.0f, w[i]) * 100.0f));
+        fb.fill_rect(bar_x, bar_y + i * 6, 100, 4, engine::pack_argb(30, 32, 42));
+        fb.fill_rect(bar_x, bar_y + i * 6, std::min(len, 100), 4, tint[i]);
+    }
+
+    fb.fill_rect(px - 1, py - 1, 3, 3, engine::pack_argb(250, 250, 240));
 }
 
 /// The fill rule, disabled — every boundary pixel claimed by every triangle.
@@ -405,6 +543,10 @@ int main(int argc, char* argv[])
     int doubled_px = 0;
     double tri_ns_avg = 0.0;
 
+    engine::barycentric probe;
+    int probe_x = 0;
+    int probe_y = 0;
+
     line_fn line_algo = engine::draw_line;
     const char* line_algo_name = "Bresenham (int)";
 
@@ -415,7 +557,8 @@ int main(int argc, char* argv[])
 
     const Uint32 k_bg = engine::pack_argb(12, 14, 20);
 
-    SDL_Log("Triangles: [1] filled  [2] wireframe  [3] half-planes · [R] fill rule · [Space] spin");
+    SDL_Log("Triangles: [1] filled [2] wireframe [3] half-planes [4] weights [5] iso-lines");
+    SDL_Log("  [4]/[5] follow the mouse: the three sub-triangles ARE the three weights. [R] fill rule.");
     SDL_Log("[Tab] cycles demos: triangles (2.2) -> lines (2.1) -> Pong (1.8)");
     SDL_Log("[V] vsync · [T] throttle · [Esc] quit");
 
@@ -510,6 +653,8 @@ int main(int argc, char* argv[])
             if (in.key_pressed(SDL_SCANCODE_1)) { mode = tri_mode::filled; }
             if (in.key_pressed(SDL_SCANCODE_2)) { mode = tri_mode::wireframe; }
             if (in.key_pressed(SDL_SCANCODE_3)) { mode = tri_mode::halfplanes; }
+            if (in.key_pressed(SDL_SCANCODE_4)) { mode = tri_mode::weights; }
+            if (in.key_pressed(SDL_SCANCODE_5)) { mode = tri_mode::isolines; }
             if (in.key_pressed(SDL_SCANCODE_R)) { use_fill_rule = !use_fill_rule; }
             if (in.key_pressed(SDL_SCANCODE_SPACE)) { spinning = !spinning; }
 
@@ -547,6 +692,33 @@ int main(int argc, char* argv[])
             case tri_mode::halfplanes:
                 draw_halfplanes(fb, vx[0], vy[0], vx[1], vy[1], vx[2], vy[2]);
                 break;
+            case tri_mode::weights:
+                draw_weights(fb, vx[0], vy[0], vx[1], vy[1], vx[2], vy[2]);
+                break;
+            case tri_mode::isolines:
+                draw_isolines(fb, vx[0], vy[0], vx[1], vy[1], vx[2], vy[2]);
+                engine::draw_triangle(fb, vx[0], vy[0], vx[1], vy[1], vx[2], vy[2],
+                                      engine::pack_argb(210, 212, 220));
+                break;
+            }
+
+            // In the two Lesson 2.3 views the cursor is a probe: it draws the
+            // three sub-triangles whose areas ARE the weights, and reports them.
+            if (mode == tri_mode::weights || mode == tri_mode::isolines)
+            {
+                int win_w = 1280;
+                int win_h = 720;
+                SDL_GetWindowSize(window, &win_w, &win_h);
+
+                probe_x = static_cast<int>(std::lround(
+                    in.mouse_x() * static_cast<float>(k_fb_width) / static_cast<float>(win_w)));
+                probe_y = static_cast<int>(std::lround(
+                    in.mouse_y() * static_cast<float>(k_fb_height) / static_cast<float>(win_h)));
+
+                probe = engine::barycentric_at(vx[0], vy[0], vx[1], vy[1], vx[2], vy[2],
+                                               probe_x, probe_y);
+                draw_probe(fb, vx[0], vy[0], vx[1], vy[1], vx[2], vy[2],
+                           probe_x, probe_y, probe);
             }
             const Uint64 t1 = SDL_GetTicksNS();
 
@@ -606,13 +778,30 @@ int main(int argc, char* argv[])
                                       "[R] fill rule: %-3s    shared edge drawn twice on %d px",
                                       use_fill_rule ? "ON" : "OFF", doubled_px);
 
+            // Lesson 2.3's readout: the three weights, and the sum that must
+            // be 1. Printed to four places because the interesting thing is how
+            // close to 1 it gets, not that it rounds there.
+            if (mode == tri_mode::weights || mode == tri_mode::isolines)
+            {
+                SDL_SetRenderDrawColor(renderer, 210, 212, 220, 255);
+                SDL_RenderDebugTextFormat(renderer, 6.0f, 292.0f,
+                                          "probe (%3d,%3d)   w0 %+.4f  w1 %+.4f  w2 %+.4f   sum %.6f",
+                                          probe_x, probe_y,
+                                          static_cast<double>(probe.w0),
+                                          static_cast<double>(probe.w1),
+                                          static_cast<double>(probe.w2),
+                                          static_cast<double>(probe.w0 + probe.w1 + probe.w2));
+                SDL_RenderDebugText(renderer, 6.0f, 306.0f,
+                                    "move the mouse: each sub-triangle's AREA is the weight of the vertex it faces");
+            }
+
             SDL_SetRenderDrawColor(renderer, 150, 152, 170, 255);
             SDL_RenderDebugText(renderer, 400.0f, 40.0f, "two triangles,");
             SDL_RenderDebugText(renderer, 400.0f, 52.0f, "one shared edge");
             SDL_RenderDebugText(renderer, 400.0f, 68.0f, "green = drawn once");
             SDL_RenderDebugText(renderer, 400.0f, 80.0f, "red   = drawn twice");
             SDL_RenderDebugText(renderer, 6.0f, 328.0f,
-                                "[1] filled  [2] wireframe  [3] half-planes   [R] fill rule   [Space] spin   [Tab] next demo");
+                                "[1] fill [2] wire [3] half-planes [4] weights [5] iso-lines   [R] fill rule  [Space] spin  [Tab] demo");
         }
 
         SDL_SetRenderScale(renderer, 1.0f, 1.0f);

@@ -7,7 +7,7 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-07-21 (after Lesson 2.2 — Module 2: 2 of 12, 16 of 94 lessons)
+updated: 2026-07-22 (after Lesson 2.3 — Module 2: 3 of 12, 17 of 94 lessons)
 
 conventions:
   world: right-handed, Y-up, -Z forward
@@ -227,6 +227,34 @@ conventions:
             Double-draws only hit pixels whose centres are EXACTLY on the seam, so an
             axis-aligned or 45-degree edge fails TOTALLY (40 px on a 40 px seam) while a
             rotated one loses 2-3 stray pixels. Common geometry is the catastrophic case.
+  barycentric: w_i = area of the sub-triangle OPPOSITE v_i, over the total.
+            w0 uses the edge v1->v2. THE PAIRING IS THE BUG: a rotated pairing still
+            sums to 1 and still looks plausible — VERIFIED, it reconstructs (5.2,5.8)
+            instead of (5,5) for the standard example. ALWAYS assert RECONSTRUCTION
+            (w0*v0 + w1*v1 + w2*v2 == P), never just the sum: the sum passes for all
+            three wrong rotations, reconstruction for exactly one.
+            e0+e1+e2 == area EXACTLY in integers, for EVERY P in the plane (inside or
+            outside) — the P terms cancel symbolically. Free assertion; leave it in.
+            Geometry: 1 at its own vertex, 0 on the opposite edge, 1/3 at the centroid,
+            NEGATIVE outside. "All three >= 0" IS 2.2's inside test divided by a
+            positive constant — verified identical over 5041 points.
+            Constant weight = a line PARALLEL to the opposite edge, evenly spaced,
+            because that edge is a fixed base so equal area means equal height.
+            MEASURED: w0 varies by EXACTLY 0 along such a line.
+            Interpolation with these weights is the UNIQUE affine function matching the
+            three corners (3 coefficients, 3 independent conditions) — not merely a
+            reasonable blend. Affine in SCREEN space, which stops being surface-correct
+            under perspective: that is Lesson 3.2's 1/w trick, and the artifact is
+            swimming textures.
+            PRECISION (measured over 32761 points): worst |sum-1| = 2.4e-7 — one
+            rounding, NOT accumulation, because only the final division is inexact.
+            But the sum is bitwise 1.0f only ~85% of the time. NEVER compare weights
+            for equality; test the INTEGER edge values, where "on the edge" is == 0.
+            USE UNBIASED edge values for interpolation — the top-left rule's -1 bias is
+            for coverage only and shifts weights by a fraction of a pixel. 2.4 must
+            carry both sets.
+            Degenerate (collinear) triangle -> all zeros, the one case where the weights
+            do not sum to 1. Documented in the header; a NaN here would spread silently.
   shaders: HLSL -> SDL_shadercross (3.0.0-preview) -> SPIR-V/DXIL/MSL  [Module 4+]
   cpp: C++20, no exceptions/RTTI in core, snake_case, private members trailing _,
        .hpp + #pragma once, [[nodiscard]], -Wall -Wextra // /W4, all warnings fixed
@@ -290,6 +318,7 @@ completed:
   ===> MODULE 1 COMPLETE <===
   - 2.1  Lines: DDA, then Bresenham
   - 2.2  The Triangle: Edge Functions
+  - 2.3  Barycentric Coordinates from Signed Areas
 
 capabilities:
   - verified C++20 toolchain (MSVC / GCC / Clang), 64-bit
@@ -334,19 +363,27 @@ capabilities:
     VERIFIED pixel-identical to a reflect-in/out first-octant midpoint reference over
     1600 lines. draw_line_dda and draw_line_naive kept so the argument can be reproduced.
   - raster: edge_function (constexpr), fill_triangle (bbox + incremental + top-left rule,
-    either winding, degenerate- and offscreen-safe), draw_triangle (wireframe)
+    either winding, degenerate- and offscreen-safe), draw_triangle (wireframe),
+    struct barycentric + barycentric_at (one reciprocal, three multiplies)
   - demo: [Tab] now CYCLES THREE demos. Triangles (2.2): a rotating triangle in filled /
     wireframe / HALF-PLANE view (colour by how many of the three edge tests a pixel passes
     — Figure 1 rendered live from the shipped code), plus a coverage COUNTER proving the
     fill rule: an axis-aligned square split by its diagonal, green = drawn once, red =
     twice, [R] toggles the rule (0 px -> 40 px).
     Three demos in one binary is now visibly too many: that IS the Module 5 argument.
+    Triangle views extended for 2.3: [4] w0 as a ramp INCLUDING the negative region
+    outside in red, [5] the iso-line grid (three families of parallel lines). Both
+    carry a mouse probe that draws the three sub-triangles — using the same pairing
+    barycentric_at uses, so the picture and the maths cannot drift — and prints the
+    three weights with their sum.
   - demo: rotating 32-spoke fan (crosses every octant; steep=coral, shallow=green) +
     an 8x magnified pixel inspector that reads back the REAL routine's output, algorithm
     switchable [1][2][3], live pixel count and per-fan timing. Naive lights 1483 px where
     DDA/Bresenham light 2081. Pong preserved on [Tab].
-  - known-and-deliberate: no interpolation across a triangle yet — the weights exist but
-    are thrown away (2.3 normalises them, 2.4 carries attributes);
+  - known-and-deliberate: the weights are computed per pixel via barycentric_at rather
+    than stepped incrementally — 2.4 folds them into the fill loop and must keep biased
+    (coverage) and unbiased (interpolation) values apart; nothing is interpolated across
+    a triangle yet (2.4);
     no line clipping — put_pixel discards out-of-range writes, so an
     off-screen line still costs a full walk (Exercise 2.1.4; Module 3 makes clipping
     mandatory for CORRECTNESS, not speed). No anti-aliasing (Ex 2.1.5, Module 6).
@@ -405,14 +442,17 @@ files:
   memory/: 2026-07-16.md, 2026-07-18.md
   (retired: hello.cpp)
 
-next: 2.3 — Barycentric Coordinates from Signed Areas
-      (planned filename: docs/lessons/02-03-barycentric.html — 2.2 already links to it)
-      fill_triangle already computes three numbers proportional to the areas of three
-      sub-triangles, and they sum to the whole (verified in 2.2). Divide by that total and
-      they become three fractions summing to 1 — a coordinate system describing WHERE
-      inside a triangle a point is, with no reference to x or y. Nothing new is computed;
-      2.3 normalises what the inside test already produced and takes it seriously.
-      These weights then carry colour (2.4), depth (3.1), texture (3.7) and normals (3.6).
-      NOTE for 2.3: use UNBIASED edge values for interpolation — the fill rule's -1 bias
-      perturbs the weights by a fraction of a pixel. Bias is for the inside test only.
+next: 2.4 — Interpolating Attributes Across a Triangle
+      (planned filename: docs/lessons/02-04-attribute-interpolation.html — 2.3 links to it)
+      Hang things on the weights. Colour first, which is where Lesson 1.6's linear-light
+      argument stops being theoretical: blending three vertex colours is EXACTLY the
+      operation that goes wrong when you average sRGB values, so mix_linear finally has a
+      real use. Then texture coordinates, then the realisation that the machinery does not
+      care what it carries.
+      TWO THINGS 2.4 MUST GET RIGHT:
+        1. Fold the weights into fill_triangle's incremental loop while keeping BIASED
+           values (coverage / top-left rule) apart from UNBIASED ones (interpolation).
+        2. Blend in LINEAR LIGHT (1.6's mix_linear), not on stored sRGB values.
+      Exercise 2.3.3 already asks the student to try the incremental version and to
+      measure whether stepping floats drifts across a wide triangle.
 ```

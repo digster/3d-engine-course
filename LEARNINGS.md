@@ -448,6 +448,67 @@ machine, which 1.8 established that floats cannot promise; (2) its error term *i
 function; (3) lines are not the hot path, and optimising them would be 1.5's benchmark trap again.
 Record the measurement, choose deliberately, and let the reader disagree.
 
+### Barycentric coordinates (Lesson 2.3) — verified in a scratch harness
+
+**Definition:** `w_i` = area of the sub-triangle **opposite** `v_i`, over the total. In practice
+the edge functions 2.2 already computes, divided by the total area — one reciprocal, three
+multiplies. No new computation, just one that stops being discarded.
+
+**THE PAIRING IS THE BUG.** `w0` uses the edge `v1→v2` — the edge that does *not* touch `v0`. It
+is very natural to reach for `v0→v1` instead. A rotated pairing produces weights that are all in
+`[0,1]`, **still sum to exactly 1**, and describe a different point. VERIFIED: for
+`v0(2,2) v1(10,4) v2(4,10)` and `P(5,5)`, the correct weights `(0.4,0.3,0.3)` reconstruct
+`(5.0,5.0)`; rotated by one they reconstruct `(5.2,5.8)`.
+
+**So assert RECONSTRUCTION, never the sum.** `w0·v0 + w1·v1 + w2·v2 == P` is the *defining*
+property; summing to 1 is a consequence that all three wrong rotations also satisfy. VERIFIED over
+3,721 points spread well beyond the triangle: worst reconstruction error **0.000015 px**.
+
+The general habit, which is bigger than this lesson: **when choosing an invariant to assert,
+prefer the property that *determines* the answer over one that merely *constrains* it.**
+
+**The sum identity is exact in integers, everywhere.** `e0 + e1 + e2 == area` holds for *every*
+point in the plane — inside or outside — because expanding the three edge functions cancels every
+term containing `P`. Free assertion, catches a mis-ordered edge at the line that is wrong.
+
+**Geometry worth memorising** (all verified): 1 at its own vertex, 0 on the opposite edge, 1/3 at
+the centroid, **negative outside**. "All three weights ≥ 0" *is* 2.2's inside test divided by a
+positive constant — checked identical over 5,041 points. Negative weights are a feature: the same
+formula extrapolates, which is what texture derivatives and conservative rasterization need.
+
+**A constant weight traces a line PARALLEL to the opposite edge**, evenly spaced — because that
+edge is a fixed base, so equal area means equal height. MEASURED: `w0` varies by **exactly 0.0**
+along such a line.
+
+**The interpolation is UNIQUE, not merely reasonable.** `f(P) = w0·f0 + w1·f1 + w2·f2` is the only
+affine function of position matching three values at three non-collinear points: an affine
+`ax + by + c` has three coefficients, three corners impose three independent conditions. Worth
+stating that way — students otherwise assume it is one blend among several.
+
+Affine in **screen** space, which is not surface-affine under perspective. That is Lesson 3.2's
+`1/w` correction, and the artifact is swimming textures. Without projection, screen-space is
+exactly right.
+
+**PRECISION, measured over 32,761 points:** worst `|sum − 1|` = **2.4 × 10⁻⁷**, i.e. one rounding
+— not accumulation, because the integer identity is exact and only the final division is inexact.
+But the sum is **bitwise `1.0f` only ~85% of the time**. So: **never compare weights for
+equality.** `if (w0 == 0.0f)` to find edge pixels misses most of them. Do such tests on the
+**integer** edge values, where "on the edge" really is `== 0`.
+
+**Use UNBIASED edge values for interpolation.** The top-left rule's `−1` bias decides coverage and
+is not part of the geometry; interpolating with biased values shifts attributes by a fraction of a
+pixel and shows up as a seam where two triangles meet. Lesson 2.4 carries both sets through one
+loop and this is the detail it has to get right.
+
+**Degenerate input returns all zeros** — the one case where the weights do not sum to 1 — rather
+than dividing by zero. A `NaN` here would spread through every later calculation while comparing
+false to everything (1.3 §3.5). Collinear triangles are not exotic: welded vertices and
+zero-scaled geometry produce them routinely.
+
+**Drawing a contour without testing equality:** a level set of anything is "this pixel and its
+neighbour fall in different bands", i.e. `floor(a/step) != floor(b/step)`. No tolerance to tune,
+works for any step, and sidesteps the equality problem above entirely.
+
 ### Triangles and edge functions (Lesson 2.2) — verified in a scratch harness
 
 **The edge function** `E(A,B,P) = (Bx-Ax)(Py-Ay) - (By-Ay)(Px-Ax)` is

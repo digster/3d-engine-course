@@ -84,6 +84,40 @@ void draw_line_naive(framebuffer& fb, int x0, int y0, int x1, int y1, Uint32 col
     return (bx - ax) * (py - ay) - (by - ay) * (px - ax);
 }
 
+/// Where a point sits inside a triangle, as three fractions that sum to 1.
+///
+/// These are **barycentric coordinates**, and they are the triangle's own
+/// coordinate system: `w0` is 1 at vertex 0 and 0 along the opposite edge, and
+/// likewise for the other two. They say *where* in a triangle a point is without
+/// reference to x or y at all, which is what lets any quantity known at the
+/// corners be carried across the interior (Lesson 2.4 onwards: colour, then
+/// depth, then texture coordinates, then normals).
+struct barycentric
+{
+    float w0 = 0.0f;   ///< weight of vertex 0 — 1 at v0, 0 on the edge v1→v2
+    float w1 = 0.0f;
+    float w2 = 0.0f;
+};
+
+/// The barycentric coordinates of `(px, py)` with respect to the triangle.
+///
+/// Each weight is the area of the sub-triangle **opposite** its vertex, divided
+/// by the whole. That pairing is the one thing to get right and the easiest
+/// thing to get wrong: `w0` uses the edge `v1→v2`, which is the edge that does
+/// *not* touch `v0`. Pair them the other way and the weights still sum to 1 and
+/// still look plausible — they simply describe a different point. Lesson 2.3 §3.5.
+///
+/// Weights are **negative outside** the triangle, and that is useful rather than
+/// a failure: the same formula extends smoothly over the whole plane, which is
+/// exactly why it can be used to extrapolate as well as interpolate.
+///
+/// **Degenerate triangles.** Three collinear points have zero area and no
+/// interior, so there is no answer; this returns all zeros, which is the one
+/// case where the weights do not sum to 1. Check the area yourself if your
+/// geometry can produce slivers.
+[[nodiscard]] barycentric barycentric_at(int x0, int y0, int x1, int y1, int x2, int y2,
+                                         int px, int py);
+
 /// Fill a triangle, given three corners in pixel coordinates.
 ///
 /// A pixel is inside when it is on the same side of all three edges — three
