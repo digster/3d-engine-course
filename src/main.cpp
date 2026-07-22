@@ -24,6 +24,7 @@
 #include "gfx/colour.hpp"
 #include "gfx/framebuffer.hpp"
 #include "gfx/raster.hpp"
+#include "math/mat2.hpp"
 #include "math/vec2.hpp"
 
 #include <SDL3/SDL.h>
@@ -46,7 +47,8 @@ constexpr Uint32 k_throttle_ms = 50;
 /// Which lesson's demo is on screen. [Tab] cycles.
 enum class demo
 {
-    triangles,   ///< Lesson 2.2 — this lesson
+    basis,       ///< Lesson 2.5 — this lesson
+    triangles,   ///< Lessons 2.2 – 2.4
     lines,       ///< Lesson 2.1
     pong         ///< Lesson 1.8
 };
@@ -55,11 +57,12 @@ enum class demo
 {
     switch (d)
     {
+    case demo::basis:     return demo::triangles;
     case demo::triangles: return demo::lines;
     case demo::lines:     return demo::pong;
-    case demo::pong:      return demo::triangles;
+    case demo::pong:      return demo::basis;
     }
-    return demo::triangles;
+    return demo::basis;
 }
 
 // ===========================================================================
@@ -616,6 +619,215 @@ int draw_coverage(engine::framebuffer& fb, bool use_rule)
 }
 
 // ===========================================================================
+// Lesson 2.5 — matrices as basis transforms
+// ===========================================================================
+
+/// Which transformation the basis view is showing. [Z] cycles.
+enum class xform
+{
+    identity,
+    rotate,
+    scale_xy,
+    shear_x,
+    scale_then_rotate,   ///< R * S — scale is applied FIRST
+    rotate_then_scale    ///< S * R — rotate is applied FIRST
+};
+
+[[nodiscard]] const char* name_of(xform x)
+{
+    switch (x)
+    {
+    case xform::identity:          return "identity";
+    case xform::rotate:            return "rotation(t)";
+    case xform::scale_xy:          return "scale(1+t, 1-0.6t)";
+    case xform::shear_x:           return "shear(t, 0)";
+    case xform::scale_then_rotate: return "R(t) * S   [scale first]";
+    case xform::rotate_then_scale: return "S * R(t)   [rotate first]";
+    }
+    return "?";
+}
+
+[[nodiscard]] xform next_xform(xform x)
+{
+    switch (x)
+    {
+    case xform::identity:          return xform::rotate;
+    case xform::rotate:            return xform::scale_xy;
+    case xform::scale_xy:          return xform::shear_x;
+    case xform::shear_x:           return xform::scale_then_rotate;
+    case xform::scale_then_rotate: return xform::rotate_then_scale;
+    case xform::rotate_then_scale: return xform::identity;
+    }
+    return xform::identity;
+}
+
+/// The fixed scale used by both composition modes, so the only difference
+/// between them is the ORDER.
+constexpr engine::mat2 k_compose_scale = engine::scale(1.6f, 0.7f);
+
+[[nodiscard]] engine::mat2 build(xform x, float t)
+{
+    switch (x)
+    {
+    case xform::identity:          return engine::identity();
+    case xform::rotate:            return engine::rotation(t);
+    case xform::scale_xy:          return engine::scale(1.0f + t, 1.0f - 0.6f * t);
+    case xform::shear_x:           return engine::shear(t, 0.0f);
+
+    // Read these the way operator* is documented: the RIGHT-hand factor is
+    // applied first. Both modes use the same two ingredients and differ only in
+    // which one goes first — which is the whole point of showing them.
+    case xform::scale_then_rotate: return engine::rotation(t) * k_compose_scale;
+    case xform::rotate_then_scale: return k_compose_scale * engine::rotation(t);
+    }
+    return engine::identity();
+}
+
+/// The other order, for the modes where order is the subject. Returns identity
+/// when the mode is not a composition, and the caller then draws no ghost.
+[[nodiscard]] engine::mat2 build_reversed(xform x, float t)
+{
+    if (x == xform::scale_then_rotate) { return k_compose_scale * engine::rotation(t); }
+    if (x == xform::rotate_then_scale) { return engine::rotation(t) * k_compose_scale; }
+    return engine::identity();
+}
+
+constexpr engine::vec2 k_basis_origin{100.0f, 118.0f};
+constexpr float k_basis_unit = 44.0f;   ///< framebuffer pixels per unit of maths space
+
+/// Maths space -> framebuffer pixels.
+///
+/// The y NEGATION is the whole of it, and it is worth naming because it is the
+/// first appearance of something Lesson 2.11 will formalise. mat2 works in the
+/// mathematical convention, +y up, where rotation(t) turns counter-clockwise.
+/// The framebuffer has +y DOWN. Nothing about the matrix changes; the picture is
+/// flipped at the moment of drawing, exactly here, in one place.
+[[nodiscard]] engine::vec2 to_screen(engine::vec2 v)
+{
+    return {k_basis_origin.x + v.x * k_basis_unit,
+            k_basis_origin.y - v.y * k_basis_unit};
+}
+
+void line_maths(engine::framebuffer& fb, engine::vec2 a, engine::vec2 b, Uint32 colour)
+{
+    const engine::vec2 pa = to_screen(a);
+    const engine::vec2 pb = to_screen(b);
+    engine::draw_line(fb,
+        static_cast<int>(std::lround(pa.x)), static_cast<int>(std::lround(pa.y)),
+        static_cast<int>(std::lround(pb.x)), static_cast<int>(std::lround(pb.y)), colour);
+}
+
+/// Draw the image of the integer lattice under `m`.
+///
+/// This is the picture that makes "linear" mean something you can see. The
+/// original grid is square; the transformed one is generally not — but its lines
+/// are still straight, still parallel within each family, and still evenly
+/// spaced. Any transformation that bent a line or bunched the spacing would not
+/// be a matrix, and no 2x2 can produce one.
+void draw_lattice(engine::framebuffer& fb, const engine::mat2& m)
+{
+    constexpr int k_reach = 3;
+    const Uint32 faint = engine::pack_argb(44, 48, 66);
+    const Uint32 centre = engine::pack_argb(74, 82, 112);
+
+    for (int i = -k_reach; i <= k_reach; ++i)
+    {
+        // i == 0 is drawn too, and slightly brighter. Leaving it out was a real
+        // bug in the first version of this demo: without the images of the lines
+        // x = 0 and y = 0, the cell containing the origin has no left or bottom
+        // edge, so it reads as twice the size it is and the unit square below
+        // looks as though it does not line up with the grid. The unit square IS
+        // one cell of this grid — that is the picture.
+        const Uint32 colour = (i == 0) ? centre : faint;
+        const float f = static_cast<float>(i);
+        const float e = static_cast<float>(k_reach);
+        line_maths(fb, m * engine::vec2{f, -e}, m * engine::vec2{f, e}, colour);
+        line_maths(fb, m * engine::vec2{-e, f}, m * engine::vec2{e, f}, colour);
+    }
+}
+
+/// An arrow from the origin, with a small head. Used for the two basis vectors.
+void draw_basis_arrow(engine::framebuffer& fb, engine::vec2 tip, Uint32 colour)
+{
+    line_maths(fb, {0.0f, 0.0f}, tip, colour);
+
+    // The head: two short lines swept back from the tip. Built with mat2 itself,
+    // because a rotation is exactly the tool for "the same arrow, turned a bit".
+    const float len = engine::length(tip);
+    if (len < 0.12f) { return; }          // too short to draw a head on
+
+    const engine::vec2 back = tip * (-0.22f / len);
+    line_maths(fb, tip, tip + engine::rotation(0.5f) * back, colour);
+    line_maths(fb, tip, tip + engine::rotation(-0.5f) * back, colour);
+}
+
+/// The transformed unit square, filled — the shape whose area IS the determinant.
+void fill_unit_square(engine::framebuffer& fb, const engine::mat2& m, Uint32 colour)
+{
+    const engine::vec2 a = to_screen({0.0f, 0.0f});
+    const engine::vec2 b = to_screen(m.c0);
+    const engine::vec2 c = to_screen(m.c0 + m.c1);
+    const engine::vec2 d = to_screen(m.c1);
+    auto ix = [](float f) { return static_cast<int>(std::lround(f)); };
+
+    engine::fill_triangle(fb, ix(a.x), ix(a.y), ix(b.x), ix(b.y), ix(c.x), ix(c.y), colour);
+    engine::fill_triangle(fb, ix(a.x), ix(a.y), ix(c.x), ix(c.y), ix(d.x), ix(d.y), colour);
+}
+
+/// The same square as an outline — used to ghost in the other composition order.
+void outline_unit_square(engine::framebuffer& fb, const engine::mat2& m, Uint32 colour)
+{
+    line_maths(fb, {0.0f, 0.0f}, m.c0, colour);
+    line_maths(fb, m.c0, m.c0 + m.c1, colour);
+    line_maths(fb, m.c0 + m.c1, m.c1, colour);
+    line_maths(fb, m.c1, {0.0f, 0.0f}, colour);
+}
+
+/// An asymmetric glyph, so a reflection is impossible to miss.
+///
+/// A blob would look identical mirrored; an F does not. Every point of it is put
+/// through the same matrix, which is the claim being demonstrated: ONE
+/// transformation applies to arbitrarily many vertices, and that is precisely
+/// what the per-vertex trigonometry of Lessons 2.2-2.4 could not do.
+void draw_glyph(engine::framebuffer& fb, const engine::mat2& m, Uint32 colour)
+{
+    static constexpr engine::vec2 k_f[] = {
+        {0.18f, 0.18f}, {0.18f, 0.82f}, {0.68f, 0.82f}, {0.68f, 0.66f},
+        {0.36f, 0.66f}, {0.36f, 0.55f}, {0.60f, 0.55f}, {0.60f, 0.39f},
+        {0.36f, 0.39f}, {0.36f, 0.18f},
+    };
+    constexpr int n = static_cast<int>(std::size(k_f));
+
+    for (int i = 0; i < n; ++i)
+    {
+        line_maths(fb, m * k_f[i], m * k_f[(i + 1) % n], colour);
+    }
+}
+
+/// Rasterise the transformed unit square off-screen and count the lit pixels.
+///
+/// The determinant claims to be an area factor. This checks the claim with the
+/// rasterizer we built in Lesson 2.2 rather than believing it: fill the shape,
+/// count what got covered, compare against `unit^2 * |det|`. Verified in the
+/// harness at better than 0.3% for every transformation in this demo.
+[[nodiscard]] int measure_area_px(const engine::mat2& m)
+{
+    engine::framebuffer scratch(k_fb_width, k_fb_height);
+    scratch.clear(0u);
+    fill_unit_square(scratch, m, 0xFFFFFFFFu);
+
+    int lit = 0;
+    for (int y = 0; y < k_fb_height; ++y)
+    {
+        for (int x = 0; x < k_fb_width; ++x)
+        {
+            if (scratch.pixel_at(x, y) != 0u) { ++lit; }
+        }
+    }
+    return lit;
+}
+
+// ===========================================================================
 // Lesson 2.1 — lines
 // ===========================================================================
 
@@ -713,7 +925,7 @@ int main(int argc, char* argv[])
             SDL_VERSIONNUM_MINOR(sdl_version),
             SDL_VERSIONNUM_MICRO(sdl_version));
 
-    SDL_Window* window = SDL_CreateWindow("Triangles — Module 2", 1280, 720,
+    SDL_Window* window = SDL_CreateWindow("Basis Transforms — Module 2", 1280, 720,
                                           SDL_WINDOW_RESIZABLE);
     if (window == nullptr)
     {
@@ -761,7 +973,12 @@ int main(int argc, char* argv[])
     engine::fixed_step stepper(60.0f);
 
     // ---- Demo state --------------------------------------------------------
-    demo which = demo::triangles;
+    demo which = demo::basis;
+    xform basis_mode = xform::rotate;   ///< Lesson 2.5
+    float basis_t = 0.6f;               ///< the one parameter every mode reads
+    bool basis_animating = false;
+    engine::mat2 basis_m;               ///< the matrix currently on screen
+    int basis_area_px = 0;              ///< its unit square, measured in pixels
     tri_mode mode = tri_mode::filled;
     bool use_fill_rule = true;
     bool spinning = true;
@@ -791,7 +1008,8 @@ int main(int argc, char* argv[])
     SDL_Log("Triangles: [1] filled [2] wireframe [3] half-planes [4] weights [5] iso-lines");
     SDL_Log("  [4]/[5] follow the mouse: the three sub-triangles ARE the three weights. [R] fill rule.");
     SDL_Log("  [6] Gouraud (three corner colours) [7] uv checker — [M] switches blend space");
-    SDL_Log("[Tab] cycles demos: triangles (2.2) -> lines (2.1) -> Pong (1.8)");
+    SDL_Log("Basis (2.5): [Z] transform  [,] [.] adjust  [0] reset  [Space] animate");
+    SDL_Log("[Tab] cycles demos: basis (2.5) -> triangles (2.2-2.4) -> lines (2.1) -> Pong (1.8)");
     SDL_Log("[V] vsync · [T] throttle · [Esc] quit");
 
     bool running = true;
@@ -828,7 +1046,8 @@ int main(int argc, char* argv[])
         {
             which = next_demo(which);
             SDL_SetWindowTitle(window,
-                which == demo::triangles ? "Triangles — Module 2"
+                which == demo::basis     ? "Basis Transforms — Module 2"
+              : which == demo::triangles ? "Triangles — Module 2"
               : which == demo::lines     ? "Lines — Module 2"
                                          : "Pong — Module 1 Checkpoint");
         }
@@ -844,7 +1063,55 @@ int main(int argc, char* argv[])
 
         stepper.begin_frame(clk.dt());
 
-        if (which == demo::pong)
+        if (which == demo::basis)
+        {
+            // ---- Lesson 2.5's basis transform ---------------------------------
+            if (in.key_pressed(SDL_SCANCODE_Z)) { basis_mode = next_xform(basis_mode); }
+            if (in.key_pressed(SDL_SCANCODE_SPACE)) { basis_animating = !basis_animating; }
+            if (in.key_pressed(SDL_SCANCODE_0)) { basis_t = 0.0f; }
+
+            while (stepper.next_step())
+            {
+                if (basis_animating) { basis_t += 0.6f * stepper.h(); }
+                if (in.key_down(SDL_SCANCODE_COMMA))  { basis_t -= 1.2f * stepper.h(); }
+                if (in.key_down(SDL_SCANCODE_PERIOD)) { basis_t += 1.2f * stepper.h(); }
+            }
+            basis_t = std::clamp(basis_t, -3.2f, 3.2f);
+
+            basis_m = build(basis_mode, basis_t);
+
+            fb.clear(k_bg);
+
+            draw_lattice(fb, basis_m);
+
+            // The transformed unit square first, so the arrows and the glyph read
+            // on top of it rather than under it.
+            fill_unit_square(fb, basis_m, engine::pack_argb(48, 58, 92));
+
+            // The other composition order, ghosted, in the two modes where the
+            // order is the subject. If the two outlines coincide the
+            // transformations commute; when they do not, you are looking at the
+            // reason matrix multiplication is not commutative.
+            const bool composing = (basis_mode == xform::scale_then_rotate
+                                 || basis_mode == xform::rotate_then_scale);
+            if (composing)
+            {
+                outline_unit_square(fb, build_reversed(basis_mode, basis_t),
+                                    engine::pack_argb(226, 196, 110));
+            }
+
+            // The ORIGINAL axes, faint, so the transformed basis has something to
+            // be measured against.
+            line_maths(fb, {-3.0f, 0.0f}, {3.0f, 0.0f}, engine::pack_argb(70, 74, 96));
+            line_maths(fb, {0.0f, -2.5f}, {0.0f, 2.5f}, engine::pack_argb(70, 74, 96));
+
+            draw_glyph(fb, basis_m, engine::pack_argb(232, 226, 214));
+            draw_basis_arrow(fb, basis_m.c0, engine::pack_argb(236, 92, 92));    // i-hat
+            draw_basis_arrow(fb, basis_m.c1, engine::pack_argb(122, 196, 152));  // j-hat
+
+            basis_area_px = measure_area_px(basis_m);
+        }
+        else if (which == demo::pong)
         {
             // ---- Lesson 1.8's game, unchanged --------------------------------
             if (in.key_pressed(SDL_SCANCODE_C)) { pong_right_is_ai = !pong_right_is_ai; }
@@ -1006,7 +1273,64 @@ int main(int argc, char* argv[])
         // scale over a 4x framebuffer scale.
         SDL_SetRenderScale(renderer, 2.0f, 2.0f);
 
-        if (which == demo::pong)
+        if (which == demo::basis)
+        {
+            // Lesson 2.5's readout. The matrix is printed the way it is WRITTEN —
+            // rows across — while the struct stores columns; showing both side by
+            // side is the point, because that mismatch is where transposed-matrix
+            // bugs come from.
+            const float det = engine::determinant(basis_m);
+            const float predicted = k_basis_unit * k_basis_unit * std::fabs(det);
+
+            SDL_SetRenderDrawColor(renderer, 210, 212, 220, 255);
+            SDL_RenderDebugTextFormat(renderer, 6.0f, 6.0f,
+                                      "BASIS TRANSFORM   %-26s  t = %+.2f",
+                                      name_of(basis_mode), static_cast<double>(basis_t));
+
+            SDL_RenderDebugTextFormat(renderer, 380.0f, 40.0f, "written:      stored:");
+            SDL_RenderDebugTextFormat(renderer, 380.0f, 54.0f, "| %+.3f %+.3f |   [%+.3f,",
+                                      static_cast<double>(basis_m.at(0, 0)),
+                                      static_cast<double>(basis_m.at(0, 1)),
+                                      static_cast<double>(basis_m.c0.x));
+            SDL_RenderDebugTextFormat(renderer, 380.0f, 68.0f, "| %+.3f %+.3f |    %+.3f,",
+                                      static_cast<double>(basis_m.at(1, 0)),
+                                      static_cast<double>(basis_m.at(1, 1)),
+                                      static_cast<double>(basis_m.c0.y));
+            SDL_RenderDebugTextFormat(renderer, 380.0f, 82.0f, "                  %+.3f,",
+                                      static_cast<double>(basis_m.c1.x));
+            SDL_RenderDebugTextFormat(renderer, 380.0f, 96.0f, "                  %+.3f]",
+                                      static_cast<double>(basis_m.c1.y));
+
+            SDL_SetRenderDrawColor(renderer, 150, 152, 170, 255);
+            SDL_RenderDebugText(renderer, 380.0f, 118.0f, "red = where (1,0) landed");
+            SDL_RenderDebugText(renderer, 380.0f, 132.0f, "green = where (0,1) landed");
+            SDL_RenderDebugText(renderer, 380.0f, 146.0f, "the columns, drawn.");
+
+            // The determinant, checked against the rasterizer rather than asserted.
+            SDL_SetRenderDrawColor(renderer, det < 0.0f ? 236 : 122,
+                                             det < 0.0f ? 92 : 196,
+                                             det < 0.0f ? 92 : 152, 255);
+            SDL_RenderDebugTextFormat(renderer, 380.0f, 170.0f, "det = %+.4f%s",
+                                      static_cast<double>(det),
+                                      det < 0.0f ? "  (flipped!)" : "");
+            SDL_RenderDebugTextFormat(renderer, 380.0f, 184.0f, "area: %d px measured",
+                                      basis_area_px);
+            SDL_RenderDebugTextFormat(renderer, 380.0f, 198.0f, "      %.0f px predicted",
+                                      static_cast<double>(predicted));
+
+            if (basis_mode == xform::scale_then_rotate || basis_mode == xform::rotate_then_scale)
+            {
+                SDL_SetRenderDrawColor(renderer, 226, 196, 110, 255);
+                SDL_RenderDebugText(renderer, 380.0f, 222.0f, "gold outline = the OTHER");
+                SDL_RenderDebugText(renderer, 380.0f, 236.0f, "order. Same det, different");
+                SDL_RenderDebugText(renderer, 380.0f, 250.0f, "shape.");
+            }
+
+            SDL_SetRenderDrawColor(renderer, 210, 212, 220, 255);
+            SDL_RenderDebugText(renderer, 6.0f, 328.0f,
+                                "[Z] transform  [,] [.] adjust t  [0] reset  [Space] animate  [Tab] demo");
+        }
+        else if (which == demo::pong)
         {
             SDL_SetRenderDrawColor(renderer, 210, 212, 220, 255);
             SDL_RenderDebugTextFormat(renderer, 6.0f, 6.0f,

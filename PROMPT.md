@@ -383,3 +383,38 @@ Two mistakes `check-page.js` could not see, both caught by actually looking at t
 Figure 4's iso-lines sprawled outside the triangle (the exact defect 2.3's demo had to fix), and
 Figure 1's value label crossed a dashed bar. Fixed by computing the iso-line endpoints **on the
 triangle's edges** instead of eyeballing them.
+
+---
+
+## 2026-07-24 — Lesson 2.5
+
+> next
+
+Resumed from `STATE.md` → `next: 2.5 — Matrices as Basis Transforms`, honouring the two standing
+instructions it recorded: derive the matrix from *where the basis vectors land*, and **do not**
+introduce homogeneous coordinates.
+
+### Judgement calls
+
+| Question | Decision | Why |
+|---|---|---|
+| How to store a `mat2` | **Two `vec2` columns**, not `float[4]` | The columns are the images of the basis vectors — the whole lesson — so the type makes the idea structural. Column-major layout then falls out for free (which is what SDL_GPU and HLSL want, so no transpose at the Module 4 boundary), and the arithmetic can be written as its own derivation: `c0*x + c1*y` and `{a*b.c0, a*b.c1}`. The row-times-column form compiles the same and cannot be checked by reading it. |
+| Whether to fix translation | **No — leave it broken, loudly** | `T(origin) = origin` falls out of the scaling rule with `c = 0`, so no 2×2 can translate. Stated, proved in one line, and left open on purpose: 2.7 earns the fourth component from this gap, and Exercise 2.5.3 has the student rotate about a point the painful way first. |
+| How to demonstrate non-commutativity | **Draw both orders at once** | The demo ghosts the reversed composition as a gold outline, so turning the angle makes the two shapes visibly separate. A mode you flip between would make the reader hold two pictures in memory; overlaying them makes the difference the thing you are looking at. |
+| Whether to trust the determinant | **Measure it with our own rasterizer** | Fill the transformed unit square with `fill_triangle`, count lit pixels, compare against `side²·|det|`. Identity/scale/shear exact, rotation −0.26%. Also forced an honest note about *why* the residual exists (pixel centres → error scales with perimeter → falls as ~1/side), which became Exercise 2.5.4. |
+| The demo glyph | **An F** | A blob or a circle is symmetric and cannot show a reflection — and reflection is the entire point of the determinant's sign. |
+| Where the y-flip lives | **One function, `to_screen`** | `mat2` is y-up (maths convention, rotation is CCW); the framebuffer is y-down. Baking the flip into the matrices would leave "which way does `rotation()` turn?" permanently ambiguous. One minus sign at the boundary, which 2.11 will name. |
+
+### Verification
+
+A scratch harness covered seven areas (all passing) and supplied every number in the lesson: the
+worked example, `R(a)R(b) == R(a+b)` over 1,716 pairs, `det ≡ edge_function` over 28,561 matrices,
+the pixel-counted areas, both composition orders, the zero-determinant collapse (all 1,681 sampled
+inputs land on one line), and reflection reversing signed area. The demo was rendered headlessly by
+`#include`-ing `main.cpp` into a scratch TU, so screenshots came from shipped code.
+
+**A defect the tooling could not see, for the second lesson running.** The lattice loop skipped
+`i == 0`, dropping the images of `x = 0` and `y = 0`, so the origin cell read as double size and the
+unit square appeared not to line up with the grid — the exact opposite of what the figure argues.
+`check-page.js` was green. Found by screenshotting the view. Now recorded in LEARNINGS.md as a
+standing budget item rather than a thing to remember.

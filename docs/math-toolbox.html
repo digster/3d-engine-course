@@ -938,6 +938,7 @@ td code { font-size: 0.82em; }
       <li><a href="#notation">Notation and conventions</a></li>
       <li><a href="#trig">Trigonometry, only what we need</a></li>
       <li><a href="#vectors">Vectors</a></li>
+      <li><a href="#matrices">Matrices</a></li>
       <li><a href="#intersection">Geometry and intersection</a></li>
       <li><a href="#coming">Coming as the course proceeds</a></li>
     </ol>
@@ -1442,7 +1443,144 @@ td code { font-size: 0.82em; }
   </div>
 
   <!-- ===================================================================== -->
-  <h2 id="intersection"><span class="num">4</span>Geometry and intersection</h2>
+  <h2 id="matrices"><span class="num">4</span>Matrices</h2>
+
+  <div class="tool">
+    <h3>A matrix is where the basis vectors land <span class="from">Lesson 2.5</span></h3>
+    <div class="eq">
+      <span>\[ M\mathbf{v} = x\,\mathbf{c_0} + y\,\mathbf{c_1} \]</span>
+      <span class="eq-plain">M*v = v.x * (first column) + v.y * (second column)</span>
+    </div>
+    <p>
+      <strong>The columns are the images of the basis vectors.</strong> <code>c0</code> is where
+      <code>(1,0)</code> goes, <code>c1</code> is where <code>(0,1)</code> goes, and that is the
+      whole definition — a matrix is two answers written side by side. Matrix–vector multiplication
+      is then just the recipe: any vector is <code>x·î + y·ĵ</code>, and a linear transformation
+      preserves the recipe.
+    </p>
+    <p>
+      A transformation is <em>linear</em> when <code>T(a+b) = T(a)+T(b)</code> and
+      <code>T(ca) = cT(a)</code>. Visually: straight lines stay straight, parallel lines stay
+      parallel and evenly spaced, and <strong>the origin never moves</strong> — put
+      <code>c = 0</code> in the second rule. That last one is why no 2×2 matrix can translate.
+    </p>
+    <div class="callout warn">
+      <span class="label">Written in rows, stored in columns</span>
+      <p>
+        On paper a matrix is read across in rows; in memory ours is stored column-first, so the
+        first two floats are the <em>left column read downwards</em>. Getting this backwards
+        transposes the matrix, which turns a rotation into the opposite rotation and a shear into
+        the wrong axis — plausible-looking, and wrong. If both break at once, it is one layout bug,
+        not two.
+      </p>
+    </div>
+  </div>
+
+  <div class="tool">
+    <h3>Rotation, scale, shear <span class="from">Lesson 2.5</span></h3>
+    <div class="eq">
+      <span>\[ R(\theta) = \begin{pmatrix} \cos\theta &amp; -\sin\theta \\ \sin\theta &amp; \cos\theta \end{pmatrix} \qquad S = \begin{pmatrix} s_x &amp; 0 \\ 0 &amp; s_y \end{pmatrix} \qquad H = \begin{pmatrix} 1 &amp; k \\ 0 &amp; 1 \end{pmatrix} \]</span>
+      <span class="eq-plain">R(t) = |cos t, -sin t; sin t, cos t|;  S = |sx,0; 0,sy|;  H = |1,k; 0,1|</span>
+    </div>
+    <p>
+      <strong>Do not memorise the rotation matrix — rebuild it.</strong> <code>î</code> starts at
+      <code>(1,0)</code> and lands one unit out at angle θ, which is <code>(cos θ, sin θ)</code>
+      because that is what sine and cosine mean. <code>ĵ</code> is a quarter turn ahead, so it lands
+      a quarter turn ahead: <code>(−sin θ, cos θ)</code>. Those are the columns, and the minus sign
+      is on the <em>second</em> column's first component. Fifteen seconds with a circle beats a
+      decade of remembering.
+    </p>
+    <p>
+      Counter-clockwise in a y-up space. In a y-down framebuffer the same numbers look clockwise —
+      the matrix has not changed, the picture is flipped.
+    </p>
+    <div class="worked">
+      <span class="label">Free bonus</span>
+      <p>
+        <code>R(a)·R(b)</code> must equal <code>R(a+b)</code>. Multiply it out and the
+        angle-addition formulas drop into your lap:
+        <code>cos(a+b) = cos a cos b − sin a sin b</code> and
+        <code>sin(a+b) = sin a cos b + cos a sin b</code>. Verified over 1,716 pairs, worst error
+        2.98 × 10⁻⁷.
+      </p>
+    </div>
+  </div>
+
+  <div class="tool">
+    <h3>Composition <span class="from">Lesson 2.5</span></h3>
+    <div class="eq">
+      <span>\[ (AB)\mathbf{v} = A(B\mathbf{v}) \quad\Rightarrow\quad \text{column } j \text{ of } AB = A\,\mathbf{b}_j \]</span>
+      <span class="eq-plain">(A*B)*v = A*(B*v), so column j of A*B is A applied to B's column j</span>
+    </div>
+    <p>
+      <strong><code>A·B</code> means B happens first.</strong> Read products right to left. This is
+      forced by writing vectors as columns and applying matrices on the left, not chosen — a row
+      vector convention (<code>v' = v·M</code>) reads the other way, and mixing the two gives code
+      that is transposed <em>and</em> backwards.
+    </p>
+    <p>
+      Composition is <strong>associative</strong> but <strong>not commutative</strong>. With
+      <code>R</code> a quarter turn and <code>S = scale(2,1)</code>: <code>R·S</code> sends
+      <code>(1,0)</code> to <code>(0,2)</code> while <code>S·R</code> sends it to <code>(0,1)</code>
+      — though both have determinant 2. A <em>uniform</em> scale does commute with rotation.
+    </p>
+  </div>
+
+  <div class="tool">
+    <h3>Determinant <span class="from">Lesson 2.5</span></h3>
+    <div class="eq">
+      <span>\[ \det M = c_{0x}c_{1y} - c_{1x}c_{0y} \]</span>
+      <span class="eq-plain">det M = c0.x*c1.y - c1.x*c0.y</span>
+    </div>
+    <p>
+      <strong>The factor by which areas change, with a sign.</strong> The unit square becomes the
+      parallelogram spanned by the two columns, and every region scales by the same factor.
+      <code>det &gt; 0</code> keeps orientation, <code>det &lt; 0</code> <em>flips</em> the plane
+      (so it reverses triangle winding — see back-face culling in Lesson 3.4), and
+      <code>det = 0</code> collapses the plane onto a line, which is exactly when no inverse exists.
+      Determinants multiply: <code>det(AB) = det(A)det(B)</code>.
+    </p>
+    <div class="callout note">
+      <span class="label">One expression, three names</span>
+      <p>
+        This is <a href="lessons/02-02-triangle-edge-functions.html">Lesson 2.2</a>'s
+        <code>edge_function</code> with its first point at the origin, which is also the 2-D cross
+        product from <a href="lessons/01-07-vectors-2d.html">Lesson 1.7</a>. Verified identical over
+        28,561 integer matrices. The rasterizer has been computing determinants since it learned to
+        draw a triangle.
+      </p>
+    </div>
+    <p>
+      Shear has determinant 1 — it slants a shape without changing its area, which is the entry
+      most likely to look wrong until you picture a pushed-over deck of cards.
+    </p>
+  </div>
+
+  <div class="tool">
+    <h3>Inverse and transpose <span class="from">Lesson 2.5</span></h3>
+    <div class="eq">
+      <span>\[ M^{-1} = \frac{1}{\det M}\begin{pmatrix} d &amp; -c \\ -b &amp; a \end{pmatrix} \quad \text{for} \quad M = \begin{pmatrix} a &amp; c \\ b &amp; d \end{pmatrix} \]</span>
+      <span class="eq-plain">for M = |a c; b d|, inverse = (1/det) * |d -c; -b a|</span>
+    </div>
+    <p>
+      Swap the diagonal, negate the other two, divide by the determinant. A zero determinant means
+      <strong>no inverse exists</strong> — and that is a statement about information, not
+      arithmetic: the plane has been folded onto a line, so many inputs share one output and nothing
+      could recover which.
+    </p>
+    <div class="callout warn">
+      <span class="label">transpose ≠ inverse</span>
+      <p>
+        <code>transpose(M) == inverse(M)</code> holds for <strong>rotations only</strong> (more
+        generally, orthonormal matrices). Using a transpose as a cheap inverse on anything that also
+        scales gives a result that looks almost right — the worst kind of wrong. Check it:
+        <code>transpose(M)·M</code> must be the identity.
+      </p>
+    </div>
+  </div>
+
+
+  <h2 id="intersection"><span class="num">5</span>Geometry and intersection</h2>
 
   <div class="tool">
     <h3>Axis-aligned box overlap <span class="from">Lesson 1.8</span></h3>
@@ -1570,7 +1708,7 @@ td code { font-size: 0.82em; }
     </p>
   </div>
 
-  <h2 id="coming"><span class="num">5</span>Coming as the course proceeds</h2>
+  <h2 id="coming"><span class="num">6</span>Coming as the course proceeds</h2>
 
   <p>
     This page is reissued at every module boundary. Each entry lands here only once its lesson

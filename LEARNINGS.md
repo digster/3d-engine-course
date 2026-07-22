@@ -1022,3 +1022,55 @@ the entire cost disappears in Module 4 where the GPU encodes sRGB on write for f
 Hoisting matters more than micro-optimisation here. Decoding the three corner colours *once per
 triangle* rather than per pixel, and taking one reciprocal instead of 20,760 divisions, are what
 make the correct path affordable at all.
+
+## A diagram can pass every automated check and still argue the wrong thing (Lesson 2.5)
+
+The basis-transform demo draws the image of the integer lattice under the current matrix. The first
+version skipped `i == 0` in the loop, reasoning that the axes were drawn separately — which left
+the images of the lines `x = 0` and `y = 0` missing. The cell containing the origin therefore had
+no left or bottom edge, appeared to be twice its true size, and the unit square drawn inside it
+looked as though it did not line up with the grid at all.
+
+Nothing failed. No check fired, no pixel was out of place, and the picture looked plausible. It
+simply undermined the one claim the figure exists to make — *the transformed unit square is one
+cell of the transformed grid*. It was found by rendering the view offscreen and looking at it.
+
+That is now two lessons running where `check-page.js` returned `pass: true` over a defective
+diagram (2.4's Figure 4 had iso-lines sprawling outside their triangle — itself a repeat of a
+defect 2.3's demo had to fix). The script catches labels that collide, spill or sit on strokes. It
+cannot evaluate whether the picture makes the argument. **Budget a pass where you screenshot every
+figure and ask what a reader would conclude from it**, and treat a repeat of a previously-fixed
+defect as a signal that the check belongs in the tooling or the authoring notes, not in memory.
+
+## Let the type carry the convention (Lesson 2.5)
+
+`mat2` stores two `vec2` columns rather than a `float[4]`. The payoff is larger than it looks:
+
+- **Column-major storage stops being a convention to enforce** and becomes a consequence of naming
+  the right things. Two adjacent `vec2`s are four adjacent floats in column order, which is what
+  SDL_GPU and HLSL want — so there is no transpose at the API boundary and no opportunity to apply
+  one twice or not at all.
+- **The arithmetic can be written as its own derivation.** `operator*(mat2, vec2)` is `c0*x + c1*y`;
+  `operator*(mat2, mat2)` is `{a * b.c0, a * b.c1}`. Compare with the row-times-column form, which
+  is four lines of indices and offers four chances to transpose something silently. Both compile to
+  the same code; only one can be verified by reading it.
+
+The general principle: when a convention is causing bugs, look for a type whose shape makes the
+convention automatic, rather than for a comment reminding people about it.
+
+## Verify a continuous claim with a discrete measurement — and know the bias (Lesson 2.5)
+
+The determinant claims to be an area factor, and we own a rasterizer, so the claim is testable:
+transform a square, fill it with `fill_triangle`, count lit pixels, compare with
+`side² × |det|`. At 140 px: identity, scale and shear exact; rotation −0.26%; `rotation · scale`
+−0.06%.
+
+The residual is not an error in the determinant. It is the fill rule counting pixel *centres*, so
+it scales with the **perimeter** while the total scales with the **area** — meaning the relative
+error falls as roughly `1/side`, and the demo at 44 px sees around 1%. Axis-aligned squares are
+exact at any size, because the top-left rule makes shared boundaries come out right.
+
+Worth generalising: a discrete measurement of a continuous quantity is always biased. Know which
+way and how fast the bias vanishes before you use the measurement as evidence, or you will
+eventually mistake a sampling artifact for a bug in the mathematics — or, worse, tune the
+mathematics until the artifact goes away.

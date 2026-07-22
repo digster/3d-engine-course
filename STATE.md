@@ -7,13 +7,24 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-07-23 (after Lesson 2.4 — Module 2: 4 of 12, 18 of 94 lessons)
+updated: 2026-07-24 (after Lesson 2.5 — Module 2: 5 of 12, 19 of 94 lessons)
 
 conventions:
   world: right-handed, Y-up, -Z forward
   clip: left-handed, +Y up, z in [0,1] (SDL_GPU-fixed; projection absorbs the flip)
   sw-rasterizer: targets SDL_GPU's exact NDC (Module 4 port = API change, not maths change)
-  matrices: column vectors, v' = M*v, column-major storage
+  matrices: column vectors, v' = M*v, COLUMN-MAJOR storage.
+        A matrix IS the pair of answers to "where do the basis vectors land":
+        c0 = image of (1,0), c1 = image of (0,1). Everything else is a
+        consequence, not a rule to memorise.
+        WRITTEN IN ROWS, STORED IN COLUMNS. The first two floats in memory are
+        the LEFT COLUMN read downwards, NOT the top row. Getting this backwards
+        transposes the matrix, which turns a rotation into the opposite rotation
+        AND a shear into the wrong axis — if both break at once it is ONE layout
+        bug, not two.
+        A*B means B FIRST. Forced by (A*B)v == A(Bv), not a convention to look
+        up. Row-vector codebases (v' = v*M) read the other way; mixing the two
+        gives code that is transposed AND backwards.
   winding: CCW = front, cull back (per-pipeline state; set explicitly every time)
   units: 1 unit = 1 metre; radians internally; linear colour in the renderer
   axis colours: x/y/z = red/green/blue (every diagram, no exceptions)
@@ -304,6 +315,41 @@ conventions:
             and zero cost — NOT a visible artifact. Overselling a real principle with a
             fake symptom teaches students to distrust the principle. Where it WILL matter
             is z-buffer comparisons against tiny differences (3.1).
+  linear-algebra: LINEAR means T(a+b)=T(a)+T(b) AND T(ca)=cT(a). Consequence:
+        T(v) = x*T(i) + y*T(j), so TWO ARROWS DETERMINE EVERYTHING — not
+        approximately, exactly. Grid picture: straight stays straight, parallel
+        stays parallel and evenly spaced, and THE ORIGIN NEVER MOVES (put c=0 in
+        the scaling rule). That last one is a one-line proof that NO 2x2 CAN
+        TRANSLATE. Left open ON PURPOSE — 2.7 earns the fourth component from it,
+        and the payoff dies if the gap is closed early.
+        ROTATION IS DERIVED, never looked up: i -> (cos,sin) because that is what
+        sin/cos MEAN; j is a quarter turn ahead so j -> (-sin,cos). The minus sign
+        lands on c1.x, the top-RIGHT element as written.
+        R(a)*R(b) == R(a+b) VERIFIED over 1716 pairs (worst 2.98e-7) — and
+        multiplying it out DERIVES the angle-addition formulas. Spot-checked:
+        top-left of R(.6)*R(.9) == cos(1.5) == 0.070737.
+        DETERMINANT = signed area factor = edge_function with its first point at
+        the ORIGIN = the 2-D cross product. VERIFIED identical over 28,561 integer
+        matrices, 0 mismatches. det>0 orientation kept; det<0 FLIPPED, so a
+        negative determinant turns every front face into a back face (3.4) —
+        verified: the standard triangle's doubled signed area goes +60 -> -60
+        under scale(-1,1), and a det of 1.0200 takes +60 -> +61.2, ratio exactly
+        1.0200. det==0 folds the plane onto a LINE: no inverse, and information is
+        genuinely gone (verified — (1,0) and (-1,1) both map to (2,1), and all
+        1681 sampled inputs land on the single line x = 2y).
+        det IS MULTIPLICATIVE. Shear has det 1 — it slants without changing area.
+        MEASURED against our own rasterizer (140-px square, fill + count pixels):
+        identity/scale/shear EXACT, rotation -0.26%, rot*scale -0.06%. The
+        residual is the fill rule counting pixel CENTRES, so it scales with
+        PERIMETER and falls as ~1/side (demo at 44 px sees ~1%). Axis-aligned is
+        exact at any size — the top-left rule paying off somewhere unexpected.
+        ORDER MATTERS: R*S and S*R map (1,0) to (0,2) vs (0,1) — but BOTH have
+        det 2. Same area factor, different shape; the determinant is a summary and
+        summaries lose information. Uniform scale DOES commute with rotation.
+        Composition is ALWAYS associative even though it never commutes.
+        transpose == inverse ONLY for a rotation (orthonormal). VERIFIED false for
+        scale(2,0.5). Using transpose as a cheap inverse is the worst kind of wrong
+        — it looks almost right. 3.6 meets this properly with normals.
   shaders: HLSL -> SDL_shadercross (3.0.0-preview) -> SPIR-V/DXIL/MSL  [Module 4+]
   cpp: C++20, no exceptions/RTTI in core, snake_case, private members trailing _,
        .hpp + #pragma once, [[nodiscard]], -Wall -Wextra // /W4, all warnings fixed
@@ -369,6 +415,7 @@ completed:
   - 2.2  The Triangle: Edge Functions
   - 2.3  Barycentric Coordinates from Signed Areas
   - 2.4  Interpolating Attributes Across a Triangle
+  - 2.5  Matrices as Basis Transforms
 
 capabilities:
   - verified C++20 toolchain (MSVC / GCC / Clang), 64-bit
@@ -400,6 +447,16 @@ capabilities:
     switches with [M]
   - maths: src/math/vec2.hpp (header-only) — arithmetic, length/length_squared,
     normalised(+_or), dot, perpendicular, project_onto, reflect, lerp, distance
+  - maths: src/math/mat2.hpp (header-only, NEW in 2.5) — two vec2 COLUMNS, so
+    column-major layout is a CONSEQUENCE of naming the right things rather than a
+    convention to enforce. Verified: raw floats come out 2,0,1,3 and sizeof is
+    exactly 4 floats with no padding. operator*(mat2,vec2) = c0*x + c1*y and
+    operator*(mat2,mat2) = {a*b.c0, a*b.c1} — both are their derivations
+    transcribed, two lines total, with nothing in them to get backwards.
+    at(row,col) bridges written notation and column storage (ROW first,
+    deliberately). identity / rotation / scale / shear / determinant / transpose /
+    inverse; inverse returns ZEROS when det==0, never NaN — same discipline as
+    normalised() and barycentric_at.
   - game: src/game/pong.{hpp,cpp} — a COMPLETE, WINNABLE Pong. Swept collision with a
     runtime toggle back to the naive test so tunnelling can be watched happening;
     angle-from-hit-position paddles; a beatable AI (0.82 speed, chase-only-when-incoming,
@@ -467,6 +524,23 @@ capabilities:
     disagreeing cells ringed and counted, band count swept with [ and ] so the count
     visibly jumps between 0 and 15 for one unchanging error. The sweep IS the lesson;
     a fixed impressive number would have taught the wrong thing.
+  - demo 2.5: [Tab] now cycles FOUR demos — basis (2.5) / triangles (2.2-2.4) /
+    lines (2.1) / Pong (1.8). Four in one binary is well past awkward; that IS the
+    Module 5 argument and it is now loud.
+    Basis view: the image of the integer lattice (the i==0 lines are drawn too and
+    BRIGHTER — omitting them was a real bug, see below), the transformed unit
+    square, the two basis vectors as red/green arrows, and an asymmetric F glyph.
+    [Z] cycles identity / rotation / scale / shear / R*S / S*R; [,] [.] adjust the
+    one parameter; [0] resets; [Space] animates. The two composition modes GHOST
+    THE OTHER ORDER as a gold outline, so non-commutativity is watched rather than
+    described. The readout prints the matrix BOTH as written and as stored, the
+    determinant, and the unit square's area MEASURED by rasterising into a scratch
+    buffer and counting pixels.
+  - known-and-deliberate: NO TRANSLATION — every linear map fixes the origin, so no
+    2x2 can express it. Left broken ON PURPOSE; 2.7 earns the fourth component from
+    exactly this gap, and Exercise 2.5.3 (rotate about a point, the painful way) is
+    the setup. No mat3/mat4 yet (2.6). rotation() is not constexpr because std::cos
+    is not until C++26.
   - known-and-deliberate: no perspective correction — everything is affine in SCREEN
     space, exact for a flat triangle and wrong the moment depth varies (3.2, and the
     artifact is swimming textures); no depth buffer (3.1);
@@ -528,6 +602,26 @@ decisions:
     (< 0.4 levels for 4096 entries), written down, and deferred — optimising a 232 us
     cost inside a 16.6 ms budget would be optimising by reflex, which is precisely what
     Module 3's profiling lesson teaches against.
+  - mat2 stores two vec2 COLUMNS rather than float[4]. The columns are the images
+    of the basis vectors — the whole lesson — so the type makes the idea structural
+    and gets column-major layout for free rather than by decree.
+  - no constructors on the maths types, deliberately: default member initialisers
+    give a safe default AND keep the struct an aggregate, preserving brace init,
+    constexpr, and a layout guaranteed to match what it looks like — which matters
+    the moment Module 4 uploads one as raw bytes.
+  - at(row,col) takes ROW first even though the lookup goes to the column first. It
+    exists so code can be read against a written derivation without transposing in
+    your head. No bounds check: indices are literals at every call site, a DIFFERENT
+    trade from put_pixel whose indices come from arithmetic that can genuinely go
+    out of range. The rule is not "always check" — it is "check where the input can
+    actually be wrong".
+  - the demo's y-flip lives in ONE function (to_screen). mat2 is +y up (maths
+    convention, rotation is CCW); the framebuffer is +y down. One minus sign at the
+    boundary — NOT negations sprinkled through drawing code, and NOT baked into the
+    matrices, which would leave "which way does rotation() turn?" permanently
+    ambiguous. 2.11 names that boundary.
+  - the demo glyph is an F, not a blob. A symmetric shape cannot show a reflection,
+    and the reflection case is the entire point of the determinant's sign.
   - the naive collision test is KEPT in the shipped code behind state::swept_collision
     rather than deleted, so the failure can be reproduced on demand (pedagogy §5:
     show the artifact). It is dead weight only if you think a bug you can summon is
@@ -541,7 +635,7 @@ files:
             fixed_step.hpp, fixed_step.cpp
   src/gfx/: colour.hpp, colour.cpp, framebuffer.hpp, framebuffer.cpp,
             raster.hpp, raster.cpp
-  src/math/: vec2.hpp
+  src/math/: vec2.hpp, mat2.hpp
   src/game/: pong.hpp, pong.cpp
   docs/: index.html, conventions.html, math-toolbox.html, cpp-style.html
   docs/lessons/: 00-01-what-is-an-engine.html, 00-02-how-this-course-works.html,
@@ -552,24 +646,28 @@ files:
                  01-05-framebuffer.html, 01-06-colour.html,
                  01-07-vectors-2d.html, 01-08-pong.html,
                  02-01-lines.html, 02-02-triangle-edge-functions.html,
-                 02-03-barycentric.html, 02-04-attribute-interpolation.html
+                 02-03-barycentric.html, 02-04-attribute-interpolation.html,
+                 02-05-matrices.html
   docs/_template/: lesson-template.html, README.md, apply-shared.py, check-page.js
-  memory/: 2026-07-16.md, 2026-07-18.md, 2026-07-21.md, 2026-07-22.md, 2026-07-23.md
+  memory/: 2026-07-16.md, 2026-07-18.md, 2026-07-21.md, 2026-07-22.md,
+           2026-07-23.md, 2026-07-24.md
   (retired: hello.cpp)
 
-next: 2.5 — Matrices as Basis Transforms
-      (planned filename: docs/lessons/02-05-matrices.html — 2.4 links to it)
-      Module 2 has spent four lessons INSIDE a triangle. 2.5 turns to where triangles come
-      from, and it is the pivot from 2-D to 3-D.
-      A matrix is NOT introduced as a grid of numbers with a multiplication rule. It is
-      introduced as the answer to ONE question: WHERE DO THE BASIS VECTORS LAND? Build a
-      2x2 by asking where (1,0) and (0,1) go, read the columns straight off the answer,
-      and let the multiplication rule FALL OUT rather than be declared.
-      Rotation, scale and shear as three answers to the same question. Composition as
-      "do this, then that", and why the order is what it is. Numeric walkthrough of an
-      actual vector through an actual matrix, by hand, as always.
-      DO NOT introduce homogeneous coordinates yet. 2.7 has to EARN the fourth component
-      by showing what a 3x3 cannot do (translation), and that only lands if 2.5 and 2.6
-      have made the limitation felt first. Resist explaining w early.
-      Convention reminder for the code: column vectors, v' = M*v, column-major storage.
+next: 2.6 — Building mat4 by Hand
+      (planned filename: docs/lessons/02-06-mat4.html — 2.5 links to it)
+      The same question in 3-D: where do THREE basis vectors land? Build mat3 first
+      so the idea carries over with nothing new to learn — rotation about each axis
+      derived the same way (each is a 2-D rotation acting in the plane of the OTHER
+      two axes, with the third column left alone), scale, and the determinant as a
+      VOLUME factor.
+      THEN the fourth column and row — but WITHOUT explaining w. Build mat4 as
+      "a mat3 in the top-left corner plus a spare column", show that the spare
+      column does nothing useful under the rules we have so far, and STOP. 2.7 is
+      where w earns its keep. The temptation to explain homogeneous coordinates
+      early is strong: RESIST IT. 2.5 deliberately left translation broken and the
+      payoff depends on the gap staying open one more lesson.
+      Storage stays column-major: mat4 = four vec4 columns, same shape as mat2 and
+      the same "columns are where the basis vectors land" reading.
+      Exercise 2.5.3 (rotate about a point, done the painful way) is the setup —
+      2.6 should reference it and 2.7 should resolve it.
 ```

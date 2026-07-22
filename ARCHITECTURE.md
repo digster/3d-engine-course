@@ -239,6 +239,34 @@ Two decisions there are load-bearing rather than incidental:
   non-degenerate edge, so rejecting collinear triangles up front is what makes exactly-once
   coverage true rather than usually-true.
 
+**The maths library, as of Lesson 2.5.** `src/math/` is header-only and stays that way: these
+types are small, hot and stable, which is exactly the case where inlining at every call site beats
+the tidiness of a `.cpp`. `vec2` (1.7) and `mat2` (2.5) are both plain aggregates with default
+member initialisers and **no constructors** — deliberately, because that combination keeps brace
+initialisation, `constexpr` evaluation, and a memory layout guaranteed to match what the
+declaration looks like. The last of those stops being a nicety in Module 4, when a matrix is
+uploaded to the GPU as raw bytes.
+
+`mat2` stores **two `vec2` columns** rather than a `float[4]`, and that is a design decision with
+teeth. The columns of a matrix are the images of the basis vectors — that is what a matrix *is* —
+so a type whose members are those two vectors makes the idea structural rather than commentary.
+Column-major storage then falls out for free: two adjacent `vec2`s are four adjacent floats in
+column order, which is what SDL_GPU and HLSL expect, so there is no transpose at the API boundary
+in Module 4. We did not choose the convention; we named the right things and the convention
+followed.
+
+Two consequences worth stating because they will govern `mat3` and `mat4` in Lesson 2.6:
+
+- **Multiplication is written as its derivation.** `operator*(mat2, vec2)` is `c0*x + c1*y`, and
+  `operator*(mat2, mat2)` is `{a * b.c0, a * b.c1}`. Both are one line, both read as the sentence
+  that defines them, and neither contains an index that could be transposed by accident. The
+  row-times-column form compiles to the same code and cannot be checked by reading it.
+- **`at(row, col)` exists to bridge notation and storage.** Matrices are written in rows and stored
+  in columns; the accessor takes the row first so that code can be read against a written
+  derivation without transposing in your head. It is unchecked, which is a different trade from
+  `framebuffer::put_pixel` — the rule is *check where the input can actually be wrong*, and a 2×2's
+  indices are literals at every call site.
+
 **Attributes, as of Lesson 2.4.** The rasterizer now carries values from the corners into the
 interior, and three structural decisions came out of it.
 
