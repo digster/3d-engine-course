@@ -7,7 +7,7 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-07-26 (after Lesson 2.7 — Module 2: 7 of 12, 21 of 94 lessons)
+updated: 2026-07-27 (after Lesson 2.8 — Module 2: 8 of 12, 22 of 94 lessons)
 
 conventions:
   world: right-handed, Y-up, -Z forward
@@ -66,6 +66,44 @@ conventions:
         failure cases (z = 0 -> w = 0, undefined; z > 0 -> w negative and geometry
         from BEHIND the camera appears mirrored on screen) are why CLIPPING exists
         and are Lesson 3.3's. Clipping is not an optimisation.
+  spaces: A COORDINATE IS THREE FLOATS AND A ROOM. vec3 is identical bytes in
+        model or world space; nothing in the type or the arithmetic distinguishes
+        them, and w CANNOT carry it (space does not change how a vector multiplies,
+        only what the answer means). So the defence is NAMING, not the type system.
+        MODEL space = the mesh's own room (k_cube_v: half a unit from the object's
+        OWN centre). WORLD space = the one shared frame everything agrees on.
+        NAME MATRICES a_from_b: produces space a FROM space b. Then a product's
+        adjacent labels must match — view_from_world * world_from_model — and a
+        wrong-ordered composition is a SPELLING mistake, visible before running.
+        Values too: v_model before the multiply, v_world after. (2.8 §3.1)
+  model-matrix: M = T * R * S. SCALE FIRST, ROTATE, TRANSLATE LAST — and the order
+        is DERIVED, not conventional (2.8 §3.2): scale is along the object's own
+        axes (so must act while coords are still the object's); rotation is about
+        the object's own origin (so must act before it is moved off the origin);
+        translation is a statement about the world (so it goes last). Written order
+        is the REVERSE of what happens, because A*B applies B first.
+        THE COLUMNS ARE THE OBJECT'S FRAME: c0/c1/c2 = the object's own x/y/z axis
+        in world space, each times its size along that axis; c3 = position. Read a
+        placed object straight off the matrix, no multiply. (2.8 §3.5, verified.)
+        TWO WRONG ORDERS, TWO FAILURES: T*S*R applies the scale after rotation
+        (along WORLD axes) so a non-uniform object SHEARS as it turns — a mesh
+        right angle opening to 157.99deg for a 1.8:0.35 slab at 45deg, |x axis|
+        sweeping 0.35..1.8 over a turn. R*T*S translates before rotating so the
+        object ORBITS the world origin instead of spinning (== Exercise 2.5.3's
+        "rotate about a point", correct for a moon/hinge). BOTH equal T*R*S when
+        the scale is UNIFORM or the rotation is IDENTITY — verified bit-for-bit
+        (worst diff 0.000e+00 over 360deg) — which is why the bug hides in most of
+        a scene and only the one rotating non-uniform object catches it.
+  transform: struct { vec3 position; mat3 rotation; vec3 scale{1,1,1}; }. The
+        AUTHORING interface — position/rotation/scale in the order a human thinks,
+        not the order applied. parent_from_local(t) is the ONLY place that knows
+        the T*R*S order. Named parent_from_local not world_from_local because
+        Module 5's hierarchy widens "parent" without changing a character. scale
+        defaults to (1,1,1) not (0,0,0): the do-nothing scale is one. Rotation is a
+        mat3 FOR NOW — 7.1 replaces it with a quaternion, touching one line.
+        Rebuilt from a scalar angle every frame, NEVER accumulated into (a running
+        matrix * small-delta drifts out of being a rotation — the SAME shear, by a
+        different route).
   winding: CCW = front, cull back (per-pipeline state; set explicitly every time)
   units: 1 unit = 1 metre; radians internally; linear colour in the renderer
   axis colours: x/y/z = red/green/blue (every diagram, no exceptions)
@@ -487,6 +525,7 @@ completed:
   - 2.5  Matrices as Basis Transforms
   - 2.6  Building mat4 by Hand
   - 2.7  Homogeneous Coordinates and What w Really Means
+  - 2.8  The Space Chain: Model to World
 
 capabilities:
   - verified C++20 toolchain (MSVC / GCC / Clang), 64-bit
@@ -518,6 +557,19 @@ capabilities:
     switches with [M]
   - maths: src/math/vec2.hpp (header-only) — arithmetic, length/length_squared,
     normalised(+_or), dot, perpendicular, project_onto, reflect, lerp, distance
+  - maths 2.8: src/math/transform.hpp (header-only, NEW) — struct transform
+    { position; rotation(mat3); scale{1,1,1}; } and parent_from_local(t) building
+    M = T*R*S as three scaled rotation columns fed to affine() (9 muls, not 27, and
+    it SAYS "column k = axis k times size k" instead of leaving it to be derived).
+    NO local_from_parent yet — cheap for this shape (S^-1 * R^T * T^-1) but left for
+    2.9's view matrix to derive rather than find written. First "scene": one mesh,
+    three transforms, a visible world (ground grid + origin triad). main.cpp:
+    to_screen3 gains an OBLIQUE z term (cabinet projection, k_scene_zx/zy) so the
+    ground plane no longer collapses to a line — a stopgap, real perspective is 2.10.
+    model_matrix(t, order) builds the two WRONG orders on [O] (fifth kept-broken
+    demo). Verified: worked vertex (0.5,0.5,-0.5) -> (2.5,1.25,-5.0); T*R*S keeps
+    corner 90.000 and |x|=sx at every angle; T*S*R reaches 157.99deg; uniform/still
+    controls bit-identical across 360deg.
   - maths 2.7: vec4 gains point(v) [w=1] and direction(v) [w=0] as NAMED
     CONSTRUCTORS — prefer them over to_vec4 everywhere; a literal 1.0f is a magic
     number and magic numbers get changed by whoever is making something compile.
@@ -797,7 +849,7 @@ files:
             fixed_step.hpp, fixed_step.cpp
   src/gfx/: colour.hpp, colour.cpp, framebuffer.hpp, framebuffer.cpp,
             raster.hpp, raster.cpp
-  src/math/: vec2.hpp, vec3.hpp, vec4.hpp, mat2.hpp, mat3.hpp, mat4.hpp
+  src/math/: vec2.hpp, vec3.hpp, vec4.hpp, mat2.hpp, mat3.hpp, mat4.hpp, transform.hpp
   src/game/: pong.hpp, pong.cpp
   docs/: index.html, conventions.html, math-toolbox.html, cpp-style.html
   docs/lessons/: 00-01-what-is-an-engine.html, 00-02-how-this-course-works.html,
@@ -810,36 +862,39 @@ files:
                  02-01-lines.html, 02-02-triangle-edge-functions.html,
                  02-03-barycentric.html, 02-04-attribute-interpolation.html,
                  02-05-matrices.html, 02-06-mat4.html,
-                 02-07-homogeneous.html
+                 02-07-homogeneous.html, 02-08-space-chain.html
   docs/_template/: lesson-template.html, README.md, apply-shared.py, check-page.js
   memory/: 2026-07-16.md, 2026-07-18.md, 2026-07-21.md, 2026-07-22.md,
-           2026-07-23.md, 2026-07-24.md, 2026-07-25.md, 2026-07-26.md
+           2026-07-23.md, 2026-07-24.md, 2026-07-25.md, 2026-07-26.md,
+           2026-07-27.md
   (retired: hello.cpp)
 
-next: 2.8 — The Space Chain: Model to World
-      (planned filename: docs/lessons/02-08-space-chain.html — 2.7 links to it)
-      The machinery is finished; 2.8 starts USING it, and its real subject is a
-      DISCIPLINE rather than a new formula: ALWAYS KNOW WHICH SPACE A COORDINATE
-      IS IN. Nearly every transform bug in graphics is a coordinate used in the
-      wrong space, and careful naming makes that class of bug nearly impossible.
-      Build the first two links of model -> world -> view -> clip -> NDC -> screen:
-        - MODEL space: the coordinates the artist modelled in. Why models are
-          centred on their own origin (2.6's cube already is, and 2.7's demo shows
-          exactly why it matters — rotation is always about the origin).
-        - WORLD space: one shared frame. The model matrix is affine =
-          translation * rotation * scale, and THE ORDER IS WORTH DERIVING rather
-          than asserting: scale first, then rotate, then translate. Anything else
-          scales along already-rotated axes or rotates an already-displaced object
-          — and 2.7's demo can already show the second failure on screen.
-      Introduce a TRANSFORM struct (position, rotation, scale) that produces a
-      mat4, because that is what every engine actually exposes, and note that it is
-      the seed of Module 5's transform component.
-      NUMERIC WALKTHROUGH IS MANDATORY: carry ONE concrete vertex through
-      model -> world by hand with real numbers, as 2.5-2.7 all did.
-      DIAGRAM GENRE REQUIRED by CLAUDE.md §7: the coordinate-space chain
-      ANNOTATED WITH ACTUAL NUMBERS.
-      Module 2 still owes: 2.9 view matrix (and it wants a mat4 inverse for a
-      STRUCTURED form — cheap to write directly, unlike the general case),
-      2.10 perspective from similar triangles, 2.11 viewport, 2.12 the
-      spinning-wireframe-mesh milestone.
+next: 2.9 — The View Matrix: Deriving Look-At
+      (planned filename: docs/lessons/02-09-view-matrix.html — 2.8 links to it)
+      A camera is just another object with a transform, and looking THROUGH it
+      means applying that transform BACKWARDS. Moving the camera left is moving the
+      world right — the view matrix is the INVERSE of the camera's model matrix.
+      So 2.9 finally needs an inverse, and the transform to invert has exactly the
+      STRUCTURED shape Exercise 2.8.3 just asked the student to work out:
+        - undoing T*R*S is S^-1 * R^T * T^-1 — no general 4x4 inversion. A
+          rotation's inverse is its transpose (2.5 §3.7); a scale's is the
+          reciprocals; and reversing a composition reverses the factors.
+        - DERIVE look-at from the intuition first: given eye, target and an up
+          hint, build the camera's own orthonormal basis (forward = normalise(
+          target - eye) or its negation per our -Z-forward convention; right =
+          normalise(cross(up_hint, forward)); true_up = cross(forward, right)) and
+          then INVERT the frame. This is where the cross product is finally FORCED —
+          but note 3.4 is the lesson that formally introduces it, so either derive
+          the specific cross needed here in place, or reorder. RESOLVE THAT before
+          writing: check whether look-at can be built without a general cross by
+          leaning on the basis being orthonormal.
+      NAMING PAYS OFF HERE: view_from_world = inverse(world_from_camera). The
+      a_from_b discipline from 2.8 §3.1 makes the inversion's direction legible.
+      NUMERIC WALKTHROUGH MANDATORY (as every 2.x lesson): put the camera at a
+      concrete eye looking at a concrete target and carry one world point into view
+      space by hand.
+      Module 2 still owes: 2.10 perspective from similar triangles (w becomes -z,
+      the perspective divide gets its name), 2.11 viewport (the y-flip boundary
+      to_screen3 already hides gets formalised), 2.12 the spinning-wireframe-mesh
+      milestone — the whole chain lit up end to end.
 ```

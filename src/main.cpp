@@ -1,17 +1,17 @@
 // src/main.cpp — the engine's entry point.
 //
-// This file hosts the current lesson's demo. As of Lesson 2.4 that is a rotating
-// triangle with seven views: filled, wireframe, the three half-planes, a weight
-// ramp, the barycentric iso-line grid, Gouraud-shaded corners, and a checker
-// mapped from interpolated (u, v). The right-hand panel changes with the view —
-// 2.2's coverage counter, or 2.4's bias magnifier.
+// This file hosts the current lesson's demo. As of Lesson 2.8 that is a SCENE: a
+// ground plane, a world origin, and three objects that all share one eight-vertex
+// mesh and differ only in their `transform`. [O] rebuilds the model matrix in the
+// wrong order — two different wrong orders — so the failures can be watched
+// rather than described.
 //
-// [Tab] now CYCLES three demos — triangles (2.2), lines (2.1), and Pong (1.8) —
-// because deleting a working demo to make room would be a regression. Three is
-// already too many for one executable, and the next one will be worse. That is
-// not an oversight: Module 5 opens by splitting the tree into a static library
-// and a demos/ directory, and this file is where the argument for doing so
-// accumulates until it is impossible to ignore.
+// [Tab] CYCLES five demos — scene (2.6-2.8), basis transforms (2.5), triangles
+// (2.2-2.4), lines (2.1), and Pong (1.8) — because deleting a working demo to
+// make room would be a regression. Five is far too many for one executable, and
+// the next one will be worse. That is not an oversight: Module 5 opens by
+// splitting the tree into a static library and a demos/ directory, and this file
+// is where the argument for doing so accumulates until it is impossible to ignore.
 //
 // The loop is the one settled in Lesson 1.4 and does not change again:
 //
@@ -27,6 +27,7 @@
 #include "math/mat2.hpp"
 #include "math/mat3.hpp"
 #include "math/mat4.hpp"
+#include "math/transform.hpp"
 #include "math/vec2.hpp"
 
 #include <SDL3/SDL.h>
@@ -49,7 +50,7 @@ constexpr Uint32 k_throttle_ms = 50;
 /// Which lesson's demo is on screen. [Tab] cycles.
 enum class demo
 {
-    cube,        ///< Lesson 2.6 — this lesson
+    scene,       ///< Lessons 2.6 – 2.8 — this lesson
     basis,       ///< Lesson 2.5
     triangles,   ///< Lessons 2.2 – 2.4
     lines,       ///< Lesson 2.1
@@ -60,13 +61,13 @@ enum class demo
 {
     switch (d)
     {
-    case demo::cube:      return demo::basis;
+    case demo::scene:     return demo::basis;
     case demo::basis:     return demo::triangles;
     case demo::triangles: return demo::lines;
     case demo::lines:     return demo::pong;
-    case demo::pong:      return demo::cube;
+    case demo::pong:      return demo::scene;
     }
-    return demo::cube;
+    return demo::scene;
 }
 
 // ===========================================================================
@@ -677,24 +678,33 @@ enum class spin
     return engine::mat3::identity();
 }
 
-constexpr engine::vec2 k_cube_origin{96.0f, 92.0f};
-constexpr float k_cube_unit = 30.0f;   ///< framebuffer pixels per unit
+constexpr engine::vec2 k_scene_origin{100.0f, 104.0f};
+constexpr float k_scene_unit = 22.0f;   ///< framebuffer pixels per world unit
 
-/// 3-D maths space -> framebuffer pixels, by **dropping z**.
+// How far a unit of +z slides the picture. Lesson 2.6's version simply DROPPED z,
+// which was fine while there was one object at the origin — but it collapses the
+// whole ground plane onto a single horizontal line, and Lesson 2.8 needs the
+// world to look like a room you can put things in.
+//
+// So z now leans down and to the left, matching the course convention that +z
+// points toward the viewer (see conventions.html). This is still an orthographic
+// projection — it is an *oblique* one, a cabinet projection — so parallel edges
+// stay parallel and distance still costs you nothing in size. It is a stopgap
+// with a known expiry date: Lesson 2.10 derives real perspective and this pair of
+// constants goes away.
+constexpr float k_scene_zx = -0.38f;   ///< world x units per unit of +z
+constexpr float k_scene_zy = -0.30f;   ///< world y units per unit of +z
+
+/// World space -> framebuffer pixels.
 ///
-/// This is an orthographic projection, and it is the crudest one there is: throw
-/// the depth away and keep x and y. It is enough to see that the transformations
-/// are working, and it is deliberately not enough to look right — parallel edges
-/// of the cube stay exactly parallel on screen, so the far face is drawn the same
-/// size as the near one and the picture is ambiguous about which is which.
-///
-/// Making distant things smaller is what a PERSPECTIVE projection does, and it is
-/// Lesson 2.10's whole subject. The y negation is the same one Lesson 2.5's demo
-/// needed, for the same reason, in the same one place.
+/// The y negation is the same one Lesson 2.5's demo needed, for the same reason,
+/// in the same one place: world space is +y up, the framebuffer is +y down, and
+/// exactly one function knows it. Lesson 2.11 gives that boundary its real name
+/// (the viewport transform) and its real home.
 [[nodiscard]] engine::vec2 to_screen3(engine::vec3 v)
 {
-    return {k_cube_origin.x + v.x * k_cube_unit,
-            k_cube_origin.y - v.y * k_cube_unit};
+    return {k_scene_origin.x + (v.x + k_scene_zx * v.z) * k_scene_unit,
+            k_scene_origin.y - (v.y + k_scene_zy * v.z) * k_scene_unit};
 }
 
 void line3(engine::framebuffer& fb, engine::vec3 a, engine::vec3 b, Uint32 colour)
@@ -706,7 +716,22 @@ void line3(engine::framebuffer& fb, engine::vec3 a, engine::vec3 b, Uint32 colou
         static_cast<int>(std::lround(pb.x)), static_cast<int>(std::lround(pb.y)), colour);
 }
 
-// A unit cube centred on the origin, and the twelve edges joining its corners.
+// ---------------------------------------------------------------------------
+// The mesh, in MODEL SPACE
+// ---------------------------------------------------------------------------
+//
+// These eight numbers are the whole of Lesson 2.8's first claim: this cube is not
+// anywhere. It is not at the left of the screen, it is not two metres from the
+// door, it is not big or small. It is a unit cube expressed in ITS OWN
+// coordinates — model space — and the only reason those coordinates mean anything
+// is that a model matrix is going to say where the space itself goes.
+//
+// One consequence is worth stating out loud, because it is where the lesson's
+// payoff comes from: this array is used by all three objects in the scene below.
+// Three different sizes, three orientations, three places, ONE mesh. That is not
+// a trick of the demo — it is what "model space" buys, and it is why a game can
+// ship one crate and place four hundred of them.
+//
 // Centred rather than corner-at-origin so that rotation — which is always about
 // the origin (Lesson 2.5 §3.8) — spins it in place rather than swinging it round.
 constexpr engine::vec3 k_cube_v[8] = {
@@ -753,7 +778,10 @@ void draw_cube(engine::framebuffer& fb, const engine::mat4& m, float point_w)
 /// The three transformed basis vectors, in the course's axis colours.
 ///
 /// Exactly Lesson 2.5's picture with a third arrow: the columns of the matrix,
-/// drawn. Whatever the cube is doing, these three arrows are why.
+/// drawn. Whatever the cube is doing, these three arrows are why — and as of
+/// Lesson 2.8 they have a name. Sending the model's basis vectors through the
+/// model matrix as DIRECTIONS returns its first three columns, so these arrows
+/// are the object's own axes, expressed in world space.
 /// @param dir_w  the fourth component the AXES are sent with. 0 is correct — they
 ///               are directions. 1 translates them, which is the classic
 ///               transform-a-normal-as-a-point bug, drawn.
@@ -791,6 +819,176 @@ void draw_axes3(engine::framebuffer& fb, const engine::mat4& m, float point_w, f
             engine::draw_line(fb, ix(b.x), ix(b.y), ix(h2.x), ix(h2.y), col[i]);
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Lesson 2.8 — model space, world space, and the order of T, R and S
+// ---------------------------------------------------------------------------
+
+/// Which order the model matrix is composed in. [O] cycles.
+///
+/// Only the first is right. The other two are here because they are the two
+/// mistakes people actually make, and because each one fails in a specific,
+/// nameable way that is far more instructive than being told the correct answer.
+enum class trs_order
+{
+    trs,   ///< T * R * S — scale, then rotate, then translate. Correct.
+    tsr,   ///< T * S * R — rotate first, then scale along WORLD axes. Deforms.
+    rts    ///< R * T * S — translate before rotating. Orbits the world origin.
+};
+
+[[nodiscard]] const char* name_of(trs_order o)
+{
+    switch (o)
+    {
+    case trs_order::trs: return "T * R * S   (correct)";
+    case trs_order::tsr: return "T * S * R   (scale last)";
+    case trs_order::rts: return "R * T * S   (rotate last)";
+    }
+    return "?";
+}
+
+[[nodiscard]] trs_order next_order(trs_order o)
+{
+    switch (o)
+    {
+    case trs_order::trs: return trs_order::tsr;
+    case trs_order::tsr: return trs_order::rts;
+    case trs_order::rts: return trs_order::trs;
+    }
+    return trs_order::trs;
+}
+
+/// Build a model matrix in a chosen — possibly wrong — order.
+///
+/// `parent_from_local()` in transform.hpp always builds T*R*S, because that is
+/// the only order an engine should ever offer. This function exists purely so the
+/// demo can put the wrong answers on screen next to the right one; it is the same
+/// bargain struck for `draw_line_naive` (2.1), Pong's unswept collision (1.8),
+/// `blend_space::encoded` (2.4) and the `w` toggles (2.7). A failure you can
+/// summon on a keypress teaches more than a paragraph describing it.
+[[nodiscard]] engine::mat4 model_matrix(const engine::transform& t, trs_order order)
+{
+    if (order == trs_order::trs) { return engine::parent_from_local(t); }
+
+    const engine::mat4 T = engine::translation(t.position);
+    const engine::mat4 R = engine::to_mat4(t.rotation);
+    const engine::mat4 S = engine::to_mat4(engine::scale(t.scale.x, t.scale.y, t.scale.z));
+
+    // Spelled out as three separate 4x4 factors rather than folded, so the source
+    // reads in the same order as the name printed on screen.
+    if (order == trs_order::tsr) { return T * S * R; }
+    return R * T * S;
+}
+
+/// The three objects in the world, and why each one is here.
+///
+/// Every object below is the SAME eight vertices (`k_cube_v`) — the difference
+/// between a slab, a post and a plinth is entirely in the transform. Their roles
+/// are deliberately different, because the interesting question is not "does the
+/// wrong order look wrong" but "when does it look right anyway":
+///
+///   slab    non-uniform scale, spinning.  The order matters, visibly and always.
+///   post    UNIFORM scale, spinning.      T*R*S and T*S*R are bit-identical.
+///   plinth  non-uniform scale, still.     Identity rotation, so likewise identical.
+///
+/// Two of the three are controls. That is the point: get the order wrong and two
+/// thirds of your scene still looks perfect, which is exactly how the bug ships.
+constexpr int k_scene_count = 3;
+
+[[nodiscard]] const char* scene_name(int i)
+{
+    switch (i)
+    {
+    case 0:  return "slab   (non-uniform, spinning)";
+    case 1:  return "post   (uniform, spinning)";
+    default: return "plinth (non-uniform, still)";
+    }
+}
+
+/// Rebuild the scene's transforms for the current time and rotation mode.
+///
+/// Rebuilt from scratch every frame rather than accumulated into, deliberately.
+/// Repeatedly multiplying a rotation by a small delta drifts — the matrix stops
+/// being a rotation, and the object slowly shears. Deriving the whole transform
+/// from one authoritative `t` cannot drift, and it is the pattern the engine keeps
+/// (Module 5's transform component stores the *inputs*, never a running matrix).
+void build_scene(engine::transform (&out)[k_scene_count], spin mode, float t)
+{
+    const engine::mat3 spinning = build_spin(mode, t);
+
+    out[0].scale    = {1.8f, 0.35f, 0.9f};
+    out[0].position = {-1.4f, 1.0f, 0.2f};
+    out[0].rotation = spinning;
+
+    out[1].scale    = {0.5f, 0.5f, 0.5f};
+    out[1].position = {1.5f, 0.5f, -0.9f};
+    out[1].rotation = spinning;
+
+    out[2].scale    = {1.2f, 0.25f, 1.2f};
+    out[2].position = {0.5f, 0.125f, 1.4f};
+    out[2].rotation = engine::mat3::identity();
+}
+
+/// Draw the world: a ground grid on y = 0 and a marked origin.
+///
+/// This exists so that "world space" is a place you can see rather than a claim.
+/// Until this lesson the demo drew one object at the origin, which made model
+/// space and world space indistinguishable — they had the same axes and the same
+/// origin, so nothing on screen could tell you which one you were looking at.
+void draw_world(engine::framebuffer& fb)
+{
+    constexpr float reach = 2.5f;
+    const Uint32 faint = engine::pack_argb(40, 44, 60);
+    const Uint32 axis_line = engine::pack_argb(70, 76, 100);
+
+    // Gridlines every half unit, with the two lines through the origin brighter
+    // so the world's own axes are readable inside the mesh of the floor.
+    for (int i = -5; i <= 5; ++i)
+    {
+        const float f = static_cast<float>(i) * 0.5f;
+        const Uint32 c = (i == 0) ? axis_line : faint;
+        line3(fb, {f, 0.0f, -reach}, {f, 0.0f, reach}, c);
+        line3(fb, {-reach, 0.0f, f}, {reach, 0.0f, f}, c);
+    }
+
+    // The world's own axis triad, at the world origin, in the course colours.
+    // Every object's position is measured from exactly this point.
+    line3(fb, {0.0f, 0.0f, 0.0f}, {0.9f, 0.0f, 0.0f}, engine::pack_argb(150, 66, 66));
+    line3(fb, {0.0f, 0.0f, 0.0f}, {0.0f, 0.9f, 0.0f}, engine::pack_argb(78, 130, 100));
+    line3(fb, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.9f}, engine::pack_argb(82, 108, 156));
+}
+
+/// The length of the model's x axis after `m`, in world units.
+///
+/// Under T*R*S this is `scale.x` at every orientation, because rotation does not
+/// change a length. Under T*S*R it is whatever the world-axis scale happens to do
+/// to whichever direction the model's x axis is currently pointing — so it
+/// breathes as the object turns. Measured from the matrix rather than predicted,
+/// so the HUD reports what was drawn.
+[[nodiscard]] float axis_length(const engine::mat4& m, engine::vec3 axis)
+{
+    return engine::length(engine::xyz(m * engine::direction(axis)));
+}
+
+/// The angle, in degrees, between two of the model's axes after `m`.
+///
+/// The model's x and y axes are at 90 degrees to each other by construction. A
+/// transform that keeps them there has moved the object; one that does not has
+/// DEFORMED it, and this number says which happened. 90.000 under T*R*S always;
+/// under T*S*R it opens as far as 157.99 degrees for this lesson's slab.
+[[nodiscard]] float axis_angle_deg(const engine::mat4& m, engine::vec3 a, engine::vec3 b)
+{
+    const engine::vec3 ta = engine::xyz(m * engine::direction(a));
+    const engine::vec3 tb = engine::xyz(m * engine::direction(b));
+    const float lengths = engine::length(ta) * engine::length(tb);
+    if (lengths <= 0.0f) { return 0.0f; }
+
+    // Clamped before acos: dot/(|a||b|) is mathematically in [-1, 1], but floats
+    // round, and acos(1.0000001) is NaN rather than 0. Cheap insurance in exactly
+    // the place — an exact axis alignment — the demo hits every few seconds.
+    const float c = std::clamp(engine::dot(ta, tb) / lengths, -1.0f, 1.0f);
+    return std::acos(c) * 180.0f / 3.14159265358979f;
 }
 
 // ===========================================================================
@@ -1100,7 +1298,7 @@ int main(int argc, char* argv[])
             SDL_VERSIONNUM_MINOR(sdl_version),
             SDL_VERSIONNUM_MICRO(sdl_version));
 
-    SDL_Window* window = SDL_CreateWindow("Homogeneous Coordinates — Module 2", 1280, 720,
+    SDL_Window* window = SDL_CreateWindow("Model to World — Module 2", 1280, 720,
                                           SDL_WINDOW_RESIZABLE);
     if (window == nullptr)
     {
@@ -1148,15 +1346,26 @@ int main(int argc, char* argv[])
     engine::fixed_step stepper(60.0f);
 
     // ---- Demo state --------------------------------------------------------
-    demo which = demo::cube;
-    spin cube_mode = spin::tumble_xy;   ///< Lesson 2.6
+    demo which = demo::scene;
+    spin cube_mode = spin::about_z;     ///< Lesson 2.6 — z shows 2.8's shear best
     float cube_t = 0.6f;
     bool cube_animating = true;
     float cube_point_w = 1.0f;          ///< 1 = positions (correct); 0 = Lesson 2.6
     float cube_dir_w = 0.0f;            ///< 0 = directions (correct); 1 = the normal bug
     engine::mat3 cube_m;
-    engine::vec3 cube_centre_a;         ///< where each cube actually ended up
-    engine::vec3 cube_centre_b;
+
+    // ---- Lesson 2.8's scene ------------------------------------------------
+    trs_order order = trs_order::trs;   ///< [O] — only the first is right
+    int selected = 0;                   ///< [X] — which object the HUD reports on
+    engine::transform scene[k_scene_count];
+    engine::mat4 selected_m;            ///< the selected object's model matrix
+    engine::vec3 selected_world;        ///< one model vertex, carried into world space
+    float selected_axis_len = 0.0f;     ///< |model x axis| in world units
+    float selected_corner = 0.0f;       ///< angle between model x and y, in degrees
+
+    /// The one vertex the HUD carries model -> world every frame. It is a corner
+    /// of the mesh, chosen to match the lesson's worked example.
+    constexpr engine::vec3 k_probe_vertex{0.5f, 0.5f, -0.5f};
     xform basis_mode = xform::rotate;   ///< Lesson 2.5
     float basis_t = 0.6f;               ///< the one parameter every mode reads
     bool basis_animating = false;
@@ -1192,8 +1401,9 @@ int main(int argc, char* argv[])
     SDL_Log("  [4]/[5] follow the mouse: the three sub-triangles ARE the three weights. [R] fill rule.");
     SDL_Log("  [6] Gouraud (three corner colours) [7] uv checker — [M] switches blend space");
     SDL_Log("Basis (2.5): [Z] transform  [,] [.] adjust  [0] reset  [Space] animate");
-    SDL_Log("Scene (2.7): [Z] rotation  [,] [.] adjust  [Space] spin  [W] corner w  [N] axis w");
-    SDL_Log("[Tab] cycles demos: scene (2.6-2.7) -> basis (2.5) -> triangles -> lines -> Pong");
+    SDL_Log("Scene (2.8): [O] composition order  [X] select object  [Z] rotation axis");
+    SDL_Log("  [,] [.] adjust t  [Space] spin  [W] corner w (2.7)  [N] axis w (2.7)");
+    SDL_Log("[Tab] cycles demos: scene (2.6-2.8) -> basis (2.5) -> triangles -> lines -> Pong");
     SDL_Log("[V] vsync · [T] throttle · [Esc] quit");
 
     bool running = true;
@@ -1230,7 +1440,7 @@ int main(int argc, char* argv[])
         {
             which = next_demo(which);
             SDL_SetWindowTitle(window,
-                which == demo::cube      ? "Homogeneous Coordinates — Module 2"
+                which == demo::scene     ? "Model to World — Module 2"
               : which == demo::basis     ? "Basis Transforms — Module 2"
               : which == demo::triangles ? "Triangles — Module 2"
               : which == demo::lines     ? "Lines — Module 2"
@@ -1248,10 +1458,12 @@ int main(int argc, char* argv[])
 
         stepper.begin_frame(clk.dt());
 
-        if (which == demo::cube)
+        if (which == demo::scene)
         {
-            // ---- Lesson 2.6's cube --------------------------------------------
+            // ---- Lesson 2.8's scene -------------------------------------------
             if (in.key_pressed(SDL_SCANCODE_Z)) { cube_mode = next_spin(cube_mode); }
+            if (in.key_pressed(SDL_SCANCODE_O)) { order = next_order(order); }
+            if (in.key_pressed(SDL_SCANCODE_X)) { selected = (selected + 1) % k_scene_count; }
             if (in.key_pressed(SDL_SCANCODE_SPACE)) { cube_animating = !cube_animating; }
             if (in.key_pressed(SDL_SCANCODE_0)) { cube_t = 0.0f; }
             if (in.key_pressed(SDL_SCANCODE_W)) { cube_point_w = (cube_point_w == 1.0f) ? 0.0f : 1.0f; }
@@ -1265,38 +1477,32 @@ int main(int argc, char* argv[])
             }
 
             cube_m = build_spin(cube_mode, cube_t);
-
-            // Two cubes, same rotation, same offset — composed in opposite orders.
-            // This is Lesson 2.5 §3.6's "order matters" with a translation finally
-            // in play, and it is also Exercise 2.5.3 answered: putting the
-            // translation on the LEFT rotates the cube about its own centre and
-            // then places it, so it spins where it stands.
-            const engine::vec3 place{1.7f, 0.0f, 0.0f};
-            const engine::mat4 R = engine::to_mat4(cube_m);
-
-            const engine::mat4 spins_in_place = engine::translation(-place) * R;
-            const engine::mat4 orbits_origin  = R * engine::translation(place);
-
-            // Read the world centres back out rather than assuming them, so the
-            // HUD reports what was drawn. With w = 0 both collapse to the origin,
-            // which is exactly Lesson 2.6's behaviour returning.
-            cube_centre_a = engine::xyz(spins_in_place
-                                      * engine::to_vec4(engine::vec3{}, cube_point_w));
-            cube_centre_b = engine::xyz(orbits_origin
-                                      * engine::to_vec4(engine::vec3{}, cube_point_w));
+            build_scene(scene, cube_mode, cube_t);
 
             fb.clear(k_bg);
 
-            // A marker at the world origin, so "spins in place" and "orbits the
-            // origin" are distinguishable in a still frame rather than only in
-            // motion.
-            line3(fb, {-0.22f, 0.0f, 0.0f}, {0.22f, 0.0f, 0.0f}, engine::pack_argb(90, 94, 118));
-            line3(fb, {0.0f, -0.22f, 0.0f}, {0.0f, 0.22f, 0.0f}, engine::pack_argb(90, 94, 118));
+            // The world FIRST, so every object is read against a floor and an
+            // origin rather than floating in a void.
+            draw_world(fb);
 
-            draw_cube(fb, spins_in_place, cube_point_w);
-            draw_axes3(fb, spins_in_place, cube_point_w, cube_dir_w);
-            draw_cube(fb, orbits_origin, cube_point_w);
-            draw_axes3(fb, orbits_origin, cube_point_w, cube_dir_w);
+            // One mesh, three transforms. Nothing in this loop knows what the
+            // objects are — it knows where each object's space goes, which is
+            // precisely what a model matrix is for.
+            for (int i = 0; i < k_scene_count; ++i)
+            {
+                const engine::mat4 world_from_model = model_matrix(scene[i], order);
+                draw_cube(fb, world_from_model, cube_point_w);
+                draw_axes3(fb, world_from_model, cube_point_w, cube_dir_w);
+            }
+
+            // Everything the HUD reports is read back out of the matrix that was
+            // actually used to draw, so the numbers cannot agree with a picture
+            // they did not produce.
+            selected_m = model_matrix(scene[selected], order);
+            selected_world = engine::xyz(selected_m
+                                       * engine::to_vec4(k_probe_vertex, cube_point_w));
+            selected_axis_len = axis_length(selected_m, {1.0f, 0.0f, 0.0f});
+            selected_corner = axis_angle_deg(selected_m, {1.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f});
         }
         else if (which == demo::basis)
         {
@@ -1508,59 +1714,128 @@ int main(int argc, char* argv[])
         // scale over a 4x framebuffer scale.
         SDL_SetRenderScale(renderer, 2.0f, 2.0f);
 
-        if (which == demo::cube)
+        if (which == demo::scene)
         {
-            const float det = engine::determinant(cube_m);
+            const bool correct_order = (order == trs_order::trs);
 
             SDL_SetRenderDrawColor(renderer, 210, 212, 220, 255);
             SDL_RenderDebugTextFormat(renderer, 6.0f, 6.0f,
-                                      "SCENE (3-D affine)   %-28s  t = %+.2f",
-                                      name_of(cube_mode), static_cast<double>(cube_t));
+                                      "SCENE   %-26s   t = %+.2f", name_of(cube_mode),
+                                      static_cast<double>(cube_t));
 
-            SDL_RenderDebugText(renderer, 380.0f, 40.0f, "the mat3, as written:");
-            for (int r = 0; r < 3; ++r)
-            {
-                SDL_RenderDebugTextFormat(renderer, 380.0f, 56.0f + 14.0f * static_cast<float>(r),
-                                          "| %+.3f %+.3f %+.3f |",
-                                          static_cast<double>(cube_m.at(r, 0)),
-                                          static_cast<double>(cube_m.at(r, 1)),
-                                          static_cast<double>(cube_m.at(r, 2)));
-            }
+            // The composition order, and what it is doing to the scene. Coloured,
+            // because two of the three settings are bugs.
+            SDL_SetRenderDrawColor(renderer, correct_order ? 122 : 236,
+                                             correct_order ? 196 : 92,
+                                             correct_order ? 152 : 92, 255);
+            SDL_RenderDebugTextFormat(renderer, 6.0f, 20.0f,
+                                      "[O] model matrix = %s", name_of(order));
+
+            // The selected object, and the model matrix that drew it — printed as
+            // FOUR COLUMNS with what each column means, because that is the whole
+            // of Lesson 2.8 §3.3. Columns rather than written rows here on purpose:
+            // it is the columns that carry the meaning.
+            SDL_SetRenderDrawColor(renderer, 210, 212, 220, 255);
+            SDL_RenderDebugTextFormat(renderer, 380.0f, 40.0f, "[X] %s", scene_name(selected));
 
             SDL_SetRenderDrawColor(renderer, 150, 152, 170, 255);
-            SDL_RenderDebugTextFormat(renderer, 380.0f, 116.0f,
-                                      "det = %+.4f  (volume factor)", static_cast<double>(det));
-            SDL_RenderDebugText(renderer, 380.0f, 136.0f, "red/green/blue arrows are");
-            SDL_RenderDebugText(renderer, 380.0f, 150.0f, "the three columns, drawn.");
+            SDL_RenderDebugText(renderer, 380.0f, 58.0f, "world_from_model, by column:");
 
-            // The lesson's punchline, on screen and measured.
-            SDL_SetRenderDrawColor(renderer, cube_point_w == 1.0f ? 122 : 236,
-                                             cube_point_w == 1.0f ? 196 : 92,
-                                             cube_point_w == 1.0f ? 152 : 92, 255);
-            SDL_RenderDebugTextFormat(renderer, 380.0f, 178.0f,
-                                      "[W] corner w = %.0f  %s", static_cast<double>(cube_point_w),
-                                      cube_point_w == 1.0f ? "(positions)" : "(Lesson 2.6!)");
-            SDL_RenderDebugTextFormat(renderer, 380.0f, 192.0f,
-                                      "  cube A centre x = %+.2f", static_cast<double>(cube_centre_a.x));
-            SDL_RenderDebugTextFormat(renderer, 380.0f, 206.0f,
-                                      "  cube B centre x = %+.2f", static_cast<double>(cube_centre_b.x));
-            if (cube_point_w == 0.0f)
+            const engine::vec4 cols[4] = {selected_m.c0, selected_m.c1,
+                                          selected_m.c2, selected_m.c3};
+            const char* col_meaning[4] = {"x axis * sx", "y axis * sy",
+                                          "z axis * sz", "origin  (= position)"};
+            const Uint8 col_rgb[4][3] = {{236, 92, 92}, {122, 196, 152},
+                                         {126, 162, 236}, {226, 196, 110}};
+            for (int c = 0; c < 4; ++c)
             {
-                SDL_RenderDebugText(renderer, 380.0f, 224.0f, "both translations ignored;");
-                SDL_RenderDebugText(renderer, 380.0f, 238.0f, "the cubes collapse onto");
-                SDL_RenderDebugText(renderer, 380.0f, 252.0f, "each other at the origin.");
+                SDL_SetRenderDrawColor(renderer, col_rgb[c][0], col_rgb[c][1], col_rgb[c][2], 255);
+                SDL_RenderDebugTextFormat(renderer, 380.0f, 74.0f + 14.0f * static_cast<float>(c),
+                                          "c%d (%+.2f %+.2f %+.2f %+.0f)  %s",
+                                          c,
+                                          static_cast<double>(cols[c].x),
+                                          static_cast<double>(cols[c].y),
+                                          static_cast<double>(cols[c].z),
+                                          static_cast<double>(cols[c].w),
+                                          col_meaning[c]);
             }
+
+            // The two measurements that decide whether the object was MOVED or
+            // DEFORMED. Both read off the matrix that drew the picture.
+            const float want_len = scene[selected].scale.x;
+            const bool rigid = std::fabs(selected_corner - 90.0f) < 0.01f
+                            && std::fabs(selected_axis_len - want_len) < 0.001f;
+
+            SDL_SetRenderDrawColor(renderer, rigid ? 122 : 236,
+                                             rigid ? 196 : 92,
+                                             rigid ? 152 : 92, 255);
+            SDL_RenderDebugTextFormat(renderer, 380.0f, 144.0f,
+                                      "|x axis| = %.4f   (scale.x = %.2f)",
+                                      static_cast<double>(selected_axis_len),
+                                      static_cast<double>(want_len));
+            SDL_RenderDebugTextFormat(renderer, 380.0f, 158.0f,
+                                      "x^y corner = %.3f deg %s",
+                                      static_cast<double>(selected_corner),
+                                      rigid ? "" : "  DEFORMED");
+
+            // One vertex, carried model -> world, named in both spaces. The
+            // discipline the lesson is really about, on screen.
+            SDL_SetRenderDrawColor(renderer, 150, 152, 170, 255);
+            SDL_RenderDebugTextFormat(renderer, 380.0f, 182.0f,
+                                      "v_model  (%+.2f %+.2f %+.2f)",
+                                      static_cast<double>(k_probe_vertex.x),
+                                      static_cast<double>(k_probe_vertex.y),
+                                      static_cast<double>(k_probe_vertex.z));
+            SDL_SetRenderDrawColor(renderer, 226, 196, 110, 255);
+            SDL_RenderDebugTextFormat(renderer, 380.0f, 196.0f,
+                                      "v_world  (%+.2f %+.2f %+.2f)",
+                                      static_cast<double>(selected_world.x),
+                                      static_cast<double>(selected_world.y),
+                                      static_cast<double>(selected_world.z));
+
+            // Lesson 2.7's two failure modes, still on their keys.
+            SDL_SetRenderDrawColor(renderer, cube_point_w == 1.0f ? 150 : 236,
+                                             cube_point_w == 1.0f ? 152 : 92,
+                                             cube_point_w == 1.0f ? 170 : 92, 255);
+            SDL_RenderDebugTextFormat(renderer, 380.0f, 220.0f,
+                                      "[W] corner w = %.0f  %s", static_cast<double>(cube_point_w),
+                                      cube_point_w == 1.0f ? "(positions)" : "(all at the origin!)");
 
             SDL_SetRenderDrawColor(renderer, cube_dir_w == 0.0f ? 150 : 236,
                                              cube_dir_w == 0.0f ? 152 : 92,
                                              cube_dir_w == 0.0f ? 170 : 92, 255);
-            SDL_RenderDebugTextFormat(renderer, 380.0f, 276.0f,
+            SDL_RenderDebugTextFormat(renderer, 380.0f, 234.0f,
                                       "[N] axis w = %.0f  %s", static_cast<double>(cube_dir_w),
                                       cube_dir_w == 0.0f ? "(directions)" : "(translated!)");
 
+            // What to look for in the current mode — the reading instructions for
+            // a picture that is otherwise easy to misread.
+            SDL_SetRenderDrawColor(renderer, 150, 152, 170, 255);
+            if (order == trs_order::tsr)
+            {
+                SDL_RenderDebugText(renderer, 380.0f, 258.0f, "scale applied along WORLD");
+                SDL_RenderDebugText(renderer, 380.0f, 272.0f, "axes: the slab shears as it");
+                SDL_RenderDebugText(renderer, 380.0f, 286.0f, "turns. Post and plinth are");
+                SDL_RenderDebugText(renderer, 380.0f, 300.0f, "untouched - that is the trap.");
+            }
+            else if (order == trs_order::rts)
+            {
+                SDL_RenderDebugText(renderer, 380.0f, 258.0f, "translation happens BEFORE");
+                SDL_RenderDebugText(renderer, 380.0f, 272.0f, "the rotation, so every object");
+                SDL_RenderDebugText(renderer, 380.0f, 286.0f, "orbits the world origin");
+                SDL_RenderDebugText(renderer, 380.0f, 300.0f, "instead of spinning in place.");
+            }
+            else
+            {
+                SDL_RenderDebugText(renderer, 380.0f, 258.0f, "one mesh, three transforms.");
+                SDL_RenderDebugText(renderer, 380.0f, 272.0f, "the arrows are each object's");
+                SDL_RenderDebugText(renderer, 380.0f, 286.0f, "own axes in world space -");
+                SDL_RenderDebugText(renderer, 380.0f, 300.0f, "columns 0-2, drawn.");
+            }
+
             SDL_SetRenderDrawColor(renderer, 210, 212, 220, 255);
             SDL_RenderDebugText(renderer, 6.0f, 328.0f,
-                                "[Z] rotation  [,] [.] adjust  [Space] spin  [W] corner w  [N] axis w  [Tab] demo");
+                                "[O] order  [X] object  [Z] rotation  [,] [.] t  [Space] spin  [Tab] demo");
         }
         else if (which == demo::basis)
         {

@@ -1152,6 +1152,26 @@ td code { font-size: 0.82em; }
     are the transposes of ours.
   </p>
 
+  <div class="callout note">
+    <span class="label">Naming the hops, and the model matrix's internal order</span>
+    <p>
+      In prose and diagrams we abbreviate the three matrices <code>M</code>, <code>V</code>,
+      <code>P</code>. In <em>code</em>, name each one <code>a_from_b</code> — the space it produces,
+      then the space it consumes: <code>world_from_model</code>, <code>view_from_world</code>,
+      <code>clip_from_view</code>. Then a product's adjacent labels must match
+      (<code>view_from_world · world_from_model</code>), so a wrong-ordered composition is a
+      spelling mistake you can see before running anything. This convention is introduced and
+      justified in <a href="lessons/02-08-space-chain.html">Lesson 2.8 §3.1</a>.
+    </p>
+    <p>
+      The model matrix itself is always <strong><code>M = T · R · S</code></strong> — scale first,
+      rotate, translate last. The order is <em>derived</em> (Lesson 2.8 §3.2), not conventional:
+      it is the only order that scales an object along its own axes and rotates it about its own
+      centre. Its columns are the object's own axes in world space, scaled by its size, with the
+      position in column 3.
+    </p>
+  </div>
+
   <!-- ===================================================================== -->
   <h2 id="ndc"><span class="num">4</span>Clip space and NDC — fixed by SDL_GPU</h2>
 

@@ -1184,3 +1184,51 @@ arrow. The claim became checkable by looking.
 Generalising, and this is now three lessons of diagram defects in a row: **a before/after figure
 needs something in it that provably did not change.** Without a fixed reference, "this moved and
 that did not" is a caption rather than a picture.
+
+
+## The nastiest transform bugs are invisible in the degenerate cases (Lesson 2.8)
+
+The wrong model-matrix order `T·S·R` shears a non-uniformly-scaled object as it turns. But it is
+*bit-for-bit correct* at θ = 0° and θ = 90° — the two orientations anybody types while testing — and
+it is *identical to the correct order* for any uniformly-scaled object or any object with no
+rotation. Verified: sweeping the uniformly-scaled demo post through 360° a degree at a time, the
+worst difference across all sixteen matrix elements against `T·R·S` is `0.000e+00`.
+
+A real scene is mostly uniform scales and mostly axis-aligned props, so a codebase with the order
+wrong renders almost everything perfectly and gets caught only by the one rotating,
+non-uniformly-scaled object added weeks later — by which point the wrong order is buried in a working
+renderer and the new asset is the obvious suspect.
+
+The lesson for authoring and for engine code alike: **a transform that is invisible in the
+degenerate cases and wrong everywhere else cannot be tested away by trying the easy cases.** The
+defence is to derive the thing once and write it down where it cannot be re-derived wrongly
+(`parent_from_local()` builds `T·R·S` and nothing else). This failure profile recurs — normal
+transforms under non-uniform scale (3.6), shadow bias — so it is worth recognising by shape now.
+
+
+## Prove "rigid" with a measurement, not a picture (Lesson 2.8)
+
+"Is the object deformed?" looks like a question you answer by eye, but the projection can lie about
+it — an oblique or perspective view distorts shapes on purpose, so a rigid object can *look* sheared
+and a sheared one can look fine. The reliable test is numeric and reads straight off the matrix:
+transform the model's `x̂` and `ŷ` **as directions** (`w = 0`, so translation cannot touch them) and
+check their dot product is zero and their lengths equal the intended scale. If so the object is rigid
+whatever it looks like. The demo's HUD does exactly this and prints `DEFORMED` only when the measured
+corner leaves 90°.
+
+Two traps embedded in that check, both real: send the axes as `point()` instead of `direction()` and
+you fold the object's *position* into what you think is its shape; and `acos` needs its argument
+clamped to `[−1, 1]` first, because `dot/(|a||b|)` rounds just past 1.0 at an exact axis alignment —
+which the demo hits every few seconds — and `acos(1.0000001)` is `NaN`, not 0.
+
+
+## Name for the code you are going to write, not the code you have (Lesson 2.8)
+
+`parent_from_local()`, not `world_from_local()`, even though in Module 2 the parent *is* the world.
+Module 5 adds a transform hierarchy where "parent" becomes another object, and at that point the
+function does not change by a character — only the meaning of the word widens. The alternative name
+would have forced either a rename touching every call site or a name that lies. This is *not*
+speculative generality (no parent pointer, no hierarchy machinery ships today); it is only declining
+to hard-code an assumption already known to be temporary, which costs nothing. The `a_from_b`
+convention is the same instinct applied to composition: the name is chosen so a wrong product is a
+spelling mistake.

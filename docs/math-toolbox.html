@@ -1666,6 +1666,50 @@ td code { font-size: 0.82em; }
   </div>
 
   <div class="tool">
+    <h3>The model matrix: <code>T · R · S</code> <span class="from">Lesson 2.8</span></h3>
+    <div class="eq">
+      <span>\[ M_{\text{world}\leftarrow\text{model}} = T \cdot R \cdot S = \begin{bmatrix} s_x R\hat{x} & s_y R\hat{y} & s_z R\hat{z} & \mathbf{t} \\ 0 & 0 & 0 & 1 \end{bmatrix} \]</span>
+      <span class="eq-plain">world_from_model = T*R*S ; columns = [ sx·(R x̂) | sy·(R ŷ) | sz·(R ẑ) | position ]</span>
+    </div>
+    <p>
+      <strong>Scale first, rotate, translate last.</strong> Because <code>A·B</code> applies
+      <code>B</code> first, the written order is the reverse of what happens. Each factor's place is
+      forced by what it means: scale is along the object's <em>own</em> axes (so it must act while
+      the coordinates are still the object's), rotation is about the object's <em>own</em> origin
+      (so it must act before the object is moved off the origin), and translation is a statement
+      about the world (so it goes last). Derived, not memorised — <a href="lessons/02-08-space-chain.html">Lesson 2.8 §3.2</a>.
+    </p>
+    <p>
+      <strong>The columns are the object's frame.</strong> Column <em>k</em> is the object's own
+      <em>k</em>-axis expressed in world space, times its size along that axis; column 3 is its
+      position. So you can read where a placed object is, which way it faces and how big it is
+      straight off the matrix, without multiplying anything — this is
+      <a href="lessons/02-05-matrices.html">Lesson 2.5</a>'s "columns are where the basis vectors
+      land" applied to an object's own axes.
+    </p>
+    <div class="callout warn">
+      <span class="label">Two wrong orders, two distinct failures</span>
+      <p>
+        <code>T·S·R</code> applies the scale after the rotation, so a non-uniform scale acts along
+        <em>world</em> axes and the object <strong>shears as it turns</strong> — a right angle of
+        the mesh opening to 157.99° for a 1.8:0.35 slab at 45°. <code>R·T·S</code> translates
+        before rotating, so the rotation turns the displacement too and the object
+        <strong>orbits the world origin</strong> instead of spinning in place (which is exactly
+        what you want for a moon, and Exercise 2.5.3 answered). Both are identical to <code>T·R·S</code>
+        when the scale is uniform or the rotation is identity — which is why the bug hides in most
+        of a scene.
+      </p>
+    </div>
+    <p>
+      <strong>Naming spaces:</strong> a matrix taking coordinates from space <em>b</em> to space
+      <em>a</em> is <code>a_from_b</code>, so <code>a_from_b · b_from_c</code> has matching inner
+      labels and a wrong-ordered product is a <em>spelling</em> mistake, visible before the program
+      runs. The first link of the chain
+      <code>model → world → view → clip → NDC → screen</code>; the rest arrive in Lessons 2.9–2.11.
+    </p>
+  </div>
+
+  <div class="tool">
     <h3>Determinant <span class="from">Lesson 2.5</span></h3>
     <div class="eq">
       <span>\[ \det M = c_{0x}c_{1y} - c_{1x}c_{0y} \]</span>

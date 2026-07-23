@@ -59,8 +59,10 @@ inventing one — but without paying framework ceremony before it buys anything.
 │   │   ├── clock.cpp
 │   │   ├── fixed_step.hpp  # simulation accumulator + alpha          [EXISTS from 1.4]
 │   │   └── fixed_step.cpp
-│   ├── math/               # vec2/3/4, mat3/4, quaternion — hand-rolled, no GLM
-│   │   └── vec2.hpp        # header-only; dot, normalise, reflect     [EXISTS from 1.7]
+│   ├── math/               # vec2/3/4, mat2/3/4, transform, quaternion — hand-rolled, no GLM
+│   │   ├── vec2.hpp        # header-only; dot, normalise, reflect     [EXISTS from 1.7]
+│   │   ├── vec3/4.hpp, mat2/3/4.hpp  # header-only 3-D maths          [EXISTS from 2.5–2.6]
+│   │   └── transform.hpp   # position/rotation/scale → model matrix   [EXISTS from 2.8]
 │   ├── gfx/                # framebuffer, software rasterizer → later SDL_GPU renderer
 │   │   ├── colour.hpp      # pack/unpack, sRGB transfer functions   [EXISTS from 1.6]
 │   │   ├── colour.cpp
@@ -291,6 +293,45 @@ library's surface (every operation must state which combinations it accepts), an
 has to collapse at the GPU boundary regardless, where a shader receives four floats and no types.
 This is a genuine trade rather than an obvious call, and Lesson 2.7's Exercise 2.7.5 argues the
 other side.
+
+**The transform, and the first scene, as of Lesson 2.8.** `src/math/transform.hpp` adds the first
+type in the library that knows what a *scene* is: a `transform` holds a `position`, a `rotation`
+(`mat3`) and a `scale`, and `parent_from_local(t)` turns those three authored quantities into the
+one `mat4` that carries a mesh from its own space into the shared world. This is the first link of
+the `model → world → view → clip → NDC → screen` chain the rest of Module 2 completes.
+
+Three architectural commitments are made here, each of which the later modules lean on:
+
+- **The model matrix is `T · R · S`, and the order is derived rather than conventional.** Scale acts
+  along the object's own axes, so it must run while the coordinates are still the object's; rotation
+  is about the object's own origin, so it must run before the object is displaced; translation is a
+  statement about the world, so it runs last. `parent_from_local()` is the *only* place that
+  encodes this — it builds the matrix as three rotation columns each scaled by one size component
+  (nine multiplies, and it states the "columns are the object's frame" property in code rather than
+  leaving it to be re-derived). Both wrong orders are reproducible in the demo on `[O]`: `T·S·R`
+  shears a non-uniformly-scaled object as it turns, `R·T·S` orbits it about the world origin. Both
+  are *identical* to the correct order when the scale is uniform or the rotation is identity, which
+  is exactly why a wrong order hides in most of a scene — the failure profile worth internalising
+  now because it recurs (normal transforms, shadow bias) for the rest of the course.
+- **Spaces are distinguished by naming, not by types.** A `vec3` is the same bytes in model space
+  and world space, and `w` cannot help because space does not change how a vector multiplies, only
+  what the answer means. The engine's defence is the `a_from_b` convention (`world_from_model`,
+  `view_from_world`): a product's adjacent labels must match, so a wrong-ordered composition is a
+  spelling mistake visible before the program runs. Exercise 2.8.5 argues the type-tagged
+  alternative (`vec3<World>`); we decline it for the same reason we declined position/direction
+  types — the tag multiplies every signature and evaporates at the GPU boundary — while noting it is
+  the strongest for *matrices* specifically, where a mistyped product is the most damaging error.
+- **`transform` stores inputs, never a running matrix.** The demo rebuilds every object's matrix
+  from one authoritative scalar angle each frame rather than multiplying last frame's matrix by a
+  small delta, because the latter drifts out of being a rotation — the same shear as a wrong `T·S·R`
+  order, arriving by accumulated rounding. This is the pattern Module 5's transform *component*
+  keeps, and the reason `rotation` is a `mat3` only *for now*: Lesson 7.1 replaces it with a
+  quaternion, which touches one line of `parent_from_local()` and nothing downstream, because
+  everything downstream asks the transform for a matrix rather than reaching into it.
+
+The demo's `to_screen3` also gained an *oblique* z term (a cabinet projection) so the new ground
+plane does not collapse onto a line — an honest stopgap with an expiry date, since Lesson 2.10
+replaces it with real perspective derived from similar triangles.
 
 **The maths library in three dimensions, as of Lesson 2.6.** `vec3`, `vec4`, `mat3` and `mat4`
 join the header-only `src/math/`, and the notable thing is how little had to be decided. Lesson

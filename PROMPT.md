@@ -487,3 +487,40 @@ with a lamp that should move and an arrow that should not — but both rooms wer
 so relative to the room nothing changed and the reader had to trust the labels. `check-page.js` was
 green. Fixed with an identical ruler under both copies. Generalised in LEARNINGS.md: a before/after
 figure needs something in it that provably did not change.
+
+
+## 2026-07-27 — Lesson 2.8
+
+> Based on the STATE and the project's claude instructions, work on the next.
+
+Resumed from `STATE.md` → `next: 2.8 — The Space Chain: Model to World`. STATE specified the spine:
+make the real subject a *discipline* (always know which space a coordinate is in), build the first
+`model → world` link, introduce a `transform` struct, derive the `T·R·S` order rather than assert
+it, and carry one vertex through by hand with a space-chain diagram annotated with real numbers.
+
+### Judgement calls
+
+| Question | Decision | Why |
+|---|---|---|
+| How to justify the T·R·S order | **Derive it from three sentences about meaning** | Scale is along the object's own axes, rotation about its own origin, translation is a world statement — each sentence forces one factor's position. A derivation the student can re-run beats a mnemonic they can transpose. |
+| How to prove "deformed" vs "moved" | **Measure the angle between transformed axes** | The projection can make a rigid object look sheared. Transforming `x̂`/`ŷ` as directions and checking the dot product is zero is a test that reads off the matrix and cannot be fooled by the view. |
+| Which objects to put in the scene | **One that breaks, two controls** | A uniform-scale post and an un-rotated plinth are *bit-identical* under the wrong order. Showing that two of three objects look perfect is the whole point: it is why the bug ships. |
+| `parent_from_local` vs `world_from_local` | **`parent_from_local`** | Module 5's hierarchy widens "parent" without changing a character; naming for the world today would force a rename or leave a lie. Not speculative generality — no hierarchy machinery ships, only the name declines a known-temporary assumption. |
+| How to write the model matrix | **Three scaled rotation columns, not `R*scale()`** | Identical floats, but it *states* "column k = axis k × size k" (Figure 5's claim) in code rather than leaving it to be re-derived — and it is 9 muls, not 27. |
+| The ground plane's projection | **An oblique-z cabinet projection, flagged as a stopgap** | Dropping z (2.6) collapses the floor to a line; real perspective is 2.10. Naming the expiry date is the honest ninety-percent move. |
+
+### Verification
+
+Two scratch harnesses supplied every number the page prints: the worked vertex `(0.5,0.5,-0.5) →
+(2.5,1.25,-5.0)`; T·R·S holding 90.000° and |x|=sx at all angles; T·S·R reaching 157.993° at 45°
+with |x| sweeping 0.35–1.8; R·T·S orbiting (same 5.099 distance, wrong place); uniform/still controls
+bit-identical over 360° (worst diff 0.000e+00); and a layout check confirming all three objects fit
+the framebuffer panel in every order. The interactive widget's numbers were checked against the
+harness in-browser at 45° and 90°.
+
+**Three SVG defects, caught by `check-page.js`, missed by the eye.** First render had a label
+spilling the right edge of Fig 1, a bottom-edge spill and colliding captions in Figs 2–3, and text
+sitting on connector curves in Fig 5. Fixed by repositioning, shortening, and removing Fig 5's
+connectors (colour already links each column to its axis). Re-ran to `pass: true` and verified both
+themes. New LEARNINGS entries: the degenerate-case invisibility of transform-order bugs, proving
+rigidity with a measurement rather than a picture, and naming for the code you are going to write.
