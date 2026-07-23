@@ -294,6 +294,30 @@ has to collapse at the GPU boundary regardless, where a shader receives four flo
 This is a genuine trade rather than an obvious call, and Lesson 2.7's Exercise 2.7.5 argues the
 other side.
 
+**The camera and the view matrix, as of Lesson 2.9.** A camera needs no new type: it is an object
+with a placement, and the view matrix is the *inverse* of that placement — `view_from_world =
+inverse(world_from_camera)`. That single sentence is why moving the camera one way moves the world
+the other, and it is the second link of the space chain. `look_at(eye, target, up_hint)` in
+`mat4.hpp` builds it, and two design points govern the directory going forward:
+
+- **No general 4×4 inverse — and there still is not one.** A camera has no scale, so its placement
+  is *rigid* (rotation + translation), and the inverse of a rigid transform is `transpose(R)` with
+  `−transpose(R)·eye` for the translation, because an orthonormal rotation's inverse is its
+  transpose. `look_at` writes that closed form directly. When the general inverse finally ships it
+  will be because something genuinely needs it, not because a view matrix nudged it in early —
+  exactly the discipline the missing cross product followed until 2.9.
+- **The cross product entered here.** Building the camera's `right` axis from a look direction and
+  an up hint is the first place the engine needs a vector perpendicular to two others, so `vec3`
+  gained `cross` in 2.9 rather than 3.4. The course's spiral then deepens it in 3.4 (a triangle
+  normal for back-face culling, and its tie to signed area). The old "deferred to 3.4" comment in
+  `vec3.hpp` was revised accordingly.
+
+The demo change is total but small: every object now draws through `view_from_model =
+view_from_world · world_from_model`, and `to_screen3` became a plain orthographic projection of
+*view* space — Lesson 2.8's oblique-projection hack is gone, because a real movable camera now
+supplies the third dimension. Dollying the camera is deliberately a no-op under orthographic (the
+HUD says so); making distance matter is the perspective divide, Lesson 2.10.
+
 **The transform, and the first scene, as of Lesson 2.8.** `src/math/transform.hpp` adds the first
 type in the library that knows what a *scene* is: a `transform` holds a `position`, a `rotation`
 (`mat3`) and a `scale`, and `parent_from_local(t)` turns those three authored quantities into the
@@ -347,12 +371,14 @@ Three decisions are worth recording because they will govern the directory as it
   `determinant` overload on the parameter; `rotation` versus `rotation_x/y/z` differ by name;
   `scale` differs by arity), which localises the general rule: **a zero-argument function cannot be
   overloaded at all**, so it needs a distinct name or a type scope from the start.
-- **Nothing speculative ships.** There is no cross product on `vec3` (Lesson 3.4 derives it when a
-  triangle supplies the second vector a specific perpendicular requires), no `perpendicular` (in 3-D
-  there is a plane of them, so the 2-D function has no honest generalisation), and no 4×4
-  determinant or inverse (Lesson 2.9 needs one only for a structured form whose inverse is far
-  cheaper written directly). Every function in `src/math/` exists because a lesson needed it, which
-  is why every one has a derivation to point at.
+- **Nothing speculative ships.** `vec3` gained a cross product only in Lesson 2.9, when the camera
+  first needed "a vector perpendicular to two others" (Lesson 3.4 revisits it for a triangle
+  normal); there is no `perpendicular` (in 3-D there is a plane of them, so the 2-D function has no
+  honest generalisation); and there is still no *general* 4×4 determinant or inverse. The view
+  matrix that Lesson 2.9 needs is the inverse of a *rigid* transform, whose closed form
+  (`transpose(R)`, `−transpose(R)·eye`) is far cheaper than the general formula, so `look_at`
+  writes it directly rather than inverting a matrix. Every function in `src/math/` exists because a
+  lesson needed it, which is why every one has a derivation to point at.
 - **Conversions between vector widths are explicit.** `to_vec4(v, w)` is a named function rather
   than an implicit conversion, so a 3-D vector can never silently acquire a fourth component nobody
   chose — and `xyz(v)` *drops* the fourth rather than dividing by it, because that divide is the

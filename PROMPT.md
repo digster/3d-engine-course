@@ -524,3 +524,38 @@ sitting on connector curves in Fig 5. Fixed by repositioning, shortening, and re
 connectors (colour already links each column to its axis). Re-ran to `pass: true` and verified both
 themes. New LEARNINGS entries: the degenerate-case invisibility of transform-order bugs, proving
 rigidity with a measurement rather than a picture, and naming for the code you are going to write.
+
+
+## 2026-07-28 — Lesson 2.9
+
+> next
+
+Resumed from `STATE.md` → `next: 2.9 — The View Matrix: Deriving Look-At`. STATE carried an explicit
+open question to settle first: look-at needs a cross product, but the course plan filed the cross
+product in Lesson 3.4.
+
+### Judgement calls
+
+| Question | Decision | Why |
+|---|---|---|
+| Cross product in 2.9 or 3.4? | **2.9** | There is no honest way to build an orthonormal camera basis without it, and hand-rolling it unnamed would violate "derive, don't decree". Introduced here; 3.4 still *deepens* it (triangle normal + signed area). Revised `vec3.hpp`'s deferral comment and the toolbox label. |
+| Add a general 4×4 inverse? | **No** | A camera is rigid (no scale), so `look_at` writes the closed-form inverse `Rᵀ, −Rᵀeye` directly. The general inverse still waits for a genuine need — same discipline the cross product followed until now. |
+| Where does `look_at` live? | **`mat4.hpp`** | It is a matrix factory taking eye/target/up, like `translation`/`affine` and (next lesson) `perspective` — not a `transform` operation, so not `transform.hpp`. |
+| What happens to the projection? | **`to_screen3` → plain orthographic of view space** | 2.8's oblique hack was a fake-3D stopgap; a real movable camera replaces it. Dolly (`[-]`/`[=]`) is a deliberate no-op under ortho, HUD-labelled — and it sets up 2.10's "distance must matter". |
+| Frame the camera how? | **Camera = object with a transform; view = inverse of placement** | Makes "move camera left = move world right" literally true, and reuses the whole `a_from_b` / rigid-inverse machinery instead of presenting look-at as a magic formula. |
+
+### Verification
+
+One scratch harness, every section passing, supplied every number: the cross product's algebra and
+area magnitude; the worked camera's orthonormal basis; eye→origin and target→(0,0,−d); the worked
+point `(0,3,0) → (0, 1.94, −7.76)`; **`V · world_from_camera == I`** (the inverse, confirmed by
+arithmetic); the "+2 eye → −2 view-x" see-saw; scene fit at five camera angles; and the
+look-straight-up singularity (degenerate `right`).
+
+**Six SVG defects across three figures, caught by `check-page.js`.** A spilling caption, a label
+overlap, and four labels sitting on vectors/lines — plus the interactive widget's readout clipping
+the viewBox edge. Fixed by moving labels off lines, splitting Fig 1's divider around the bridge
+label, and compacting the widget readout. Re-ran to `pass: true`, both themes verified in a real
+browser. New LEARNINGS: introduce math where first needed (not where a plan filed it); a projection
+can make a rigid thing look sheared, so verify frames numerically; and the left-handed-basis mirror
+trap from a swapped `cross` argument order.

@@ -1,12 +1,12 @@
 // src/main.cpp — the engine's entry point.
 //
-// This file hosts the current lesson's demo. As of Lesson 2.8 that is a SCENE: a
-// ground plane, a world origin, and three objects that all share one eight-vertex
-// mesh and differ only in their `transform`. [O] rebuilds the model matrix in the
-// wrong order — two different wrong orders — so the failures can be watched
-// rather than described.
+// This file hosts the current lesson's demo. As of Lesson 2.9 that is a SCENE seen
+// through a CAMERA: a ground plane, a world origin, and three objects sharing one
+// eight-vertex mesh, all viewed through a `look_at` view matrix that the arrow keys
+// orbit. [O] still rebuilds the model matrix in the wrong order (2.8's lesson), and
+// the HUD carries one vertex through model -> world -> view, named in every space.
 //
-// [Tab] CYCLES five demos — scene (2.6-2.8), basis transforms (2.5), triangles
+// [Tab] CYCLES five demos — scene (2.6-2.9), basis transforms (2.5), triangles
 // (2.2-2.4), lines (2.1), and Pong (1.8) — because deleting a working demo to
 // make room would be a regression. Five is far too many for one executable, and
 // the next one will be worse. That is not an oversight: Module 5 opens by
@@ -678,35 +678,31 @@ enum class spin
     return engine::mat3::identity();
 }
 
-constexpr engine::vec2 k_scene_origin{100.0f, 104.0f};
-constexpr float k_scene_unit = 22.0f;   ///< framebuffer pixels per world unit
+constexpr engine::vec2 k_scene_origin{100.0f, 96.0f};
+constexpr float k_scene_unit = 21.0f;   ///< framebuffer pixels per view-space unit
 
-// How far a unit of +z slides the picture. Lesson 2.6's version simply DROPPED z,
-// which was fine while there was one object at the origin — but it collapses the
-// whole ground plane onto a single horizontal line, and Lesson 2.8 needs the
-// world to look like a room you can put things in.
-//
-// So z now leans down and to the left, matching the course convention that +z
-// points toward the viewer (see conventions.html). This is still an orthographic
-// projection — it is an *oblique* one, a cabinet projection — so parallel edges
-// stay parallel and distance still costs you nothing in size. It is a stopgap
-// with a known expiry date: Lesson 2.10 derives real perspective and this pair of
-// constants goes away.
-constexpr float k_scene_zx = -0.38f;   ///< world x units per unit of +z
-constexpr float k_scene_zy = -0.30f;   ///< world y units per unit of +z
-
-/// World space -> framebuffer pixels.
+/// VIEW space -> framebuffer pixels. A straight orthographic projection: keep x
+/// and y, drop z.
 ///
-/// The y negation is the same one Lesson 2.5's demo needed, for the same reason,
-/// in the same one place: world space is +y up, the framebuffer is +y down, and
-/// exactly one function knows it. Lesson 2.11 gives that boundary its real name
-/// (the viewport transform) and its real home.
-[[nodiscard]] engine::vec2 to_screen3(engine::vec3 v)
+/// As of Lesson 2.9 this projects VIEW space, not world space. That is the whole
+/// change: the fake 3-D of Lesson 2.8's oblique projection is gone, because a real
+/// movable camera (`look_at`, computed each frame) now supplies the viewpoint.
+/// Everything drawn is first carried world -> view by the view matrix, so orbiting
+/// the camera turns the scene here for free.
+///
+/// It is STILL orthographic — depth is simply discarded, so distance costs nothing
+/// in size and two points that differ only in view-space z land on the same pixel.
+/// Making distant things smaller is the perspective divide, and that is Lesson
+/// 2.10. The y negation is the +y-up (world/view) to +y-down (framebuffer)
+/// boundary Lesson 2.5's demo first needed; Lesson 2.11 names it the viewport
+/// transform and gives it a real home.
+[[nodiscard]] engine::vec2 to_screen3(engine::vec3 v_view)
 {
-    return {k_scene_origin.x + (v.x + k_scene_zx * v.z) * k_scene_unit,
-            k_scene_origin.y - (v.y + k_scene_zy * v.z) * k_scene_unit};
+    return {k_scene_origin.x + v_view.x * k_scene_unit,
+            k_scene_origin.y - v_view.y * k_scene_unit};
 }
 
+/// Draw a line whose endpoints are already in VIEW space.
 void line3(engine::framebuffer& fb, engine::vec3 a, engine::vec3 b, Uint32 colour)
 {
     const engine::vec2 pa = to_screen3(a);
@@ -714,6 +710,14 @@ void line3(engine::framebuffer& fb, engine::vec3 a, engine::vec3 b, Uint32 colou
     engine::draw_line(fb,
         static_cast<int>(std::lround(pa.x)), static_cast<int>(std::lround(pa.y)),
         static_cast<int>(std::lround(pb.x)), static_cast<int>(std::lround(pb.y)), colour);
+}
+
+/// Draw a line given in WORLD space, through the view matrix. Convenience for the
+/// world grid and axes, whose endpoints are naturally world-space constants.
+void line3_world(engine::framebuffer& fb, const engine::mat4& view,
+                 engine::vec3 a, engine::vec3 b, Uint32 colour)
+{
+    line3(fb, engine::xyz(view * engine::point(a)), engine::xyz(view * engine::point(b)), colour);
 }
 
 // ---------------------------------------------------------------------------
@@ -768,8 +772,13 @@ void draw_cube(engine::framebuffer& fb, const engine::mat4& m, float point_w)
 
     for (const auto& e : k_cube_e)
     {
+        // Brightness stands in for depth, and now the depth is real: p[] is in
+        // VIEW space, where z is distance in front of the camera (negative, since
+        // the camera looks down -z). Nearer edges (z closer to 0) are brighter.
+        // The window -9..-5 is the scene's measured view-space z spread at the
+        // demo's camera radius; still a cue, not a z-buffer (that is Lesson 3.1).
         const float mid_z = 0.5f * (p[e[0]].z + p[e[1]].z);
-        const float t = std::clamp(mid_z + 0.5f, 0.0f, 1.0f);   // -0.5..0.5 -> 0..1
+        const float t = std::clamp((mid_z + 9.0f) / 4.0f, 0.0f, 1.0f);   // -9..-5 -> 0..1
         const Uint8 v = static_cast<Uint8>(70.0f + 165.0f * t);
         line3(fb, p[e[0]], p[e[1]], engine::pack_argb(v, v, static_cast<Uint8>(v * 0.94f)));
     }
@@ -930,13 +939,13 @@ void build_scene(engine::transform (&out)[k_scene_count], spin mode, float t)
     out[2].rotation = engine::mat3::identity();
 }
 
-/// Draw the world: a ground grid on y = 0 and a marked origin.
+/// Draw the world through the camera: a ground grid on y = 0 and a marked origin.
 ///
-/// This exists so that "world space" is a place you can see rather than a claim.
-/// Until this lesson the demo drew one object at the origin, which made model
-/// space and world space indistinguishable — they had the same axes and the same
-/// origin, so nothing on screen could tell you which one you were looking at.
-void draw_world(engine::framebuffer& fb)
+/// This exists so that "world space" is a place you can see rather than a claim,
+/// and as of Lesson 2.9 it is drawn THROUGH the view matrix — so the floor tilts
+/// and turns as the camera orbits, which is the whole demonstration. The grid is a
+/// fixed world-space thing; only the viewpoint changes.
+void draw_world(engine::framebuffer& fb, const engine::mat4& view)
 {
     constexpr float reach = 2.5f;
     const Uint32 faint = engine::pack_argb(40, 44, 60);
@@ -948,16 +957,50 @@ void draw_world(engine::framebuffer& fb)
     {
         const float f = static_cast<float>(i) * 0.5f;
         const Uint32 c = (i == 0) ? axis_line : faint;
-        line3(fb, {f, 0.0f, -reach}, {f, 0.0f, reach}, c);
-        line3(fb, {-reach, 0.0f, f}, {reach, 0.0f, f}, c);
+        line3_world(fb, view, {f, 0.0f, -reach}, {f, 0.0f, reach}, c);
+        line3_world(fb, view, {-reach, 0.0f, f}, {reach, 0.0f, f}, c);
     }
 
     // The world's own axis triad, at the world origin, in the course colours.
     // Every object's position is measured from exactly this point.
-    line3(fb, {0.0f, 0.0f, 0.0f}, {0.9f, 0.0f, 0.0f}, engine::pack_argb(150, 66, 66));
-    line3(fb, {0.0f, 0.0f, 0.0f}, {0.0f, 0.9f, 0.0f}, engine::pack_argb(78, 130, 100));
-    line3(fb, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.9f}, engine::pack_argb(82, 108, 156));
+    line3_world(fb, view, {0.0f, 0.0f, 0.0f}, {0.9f, 0.0f, 0.0f}, engine::pack_argb(150, 66, 66));
+    line3_world(fb, view, {0.0f, 0.0f, 0.0f}, {0.0f, 0.9f, 0.0f}, engine::pack_argb(78, 130, 100));
+    line3_world(fb, view, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.9f}, engine::pack_argb(82, 108, 156));
 }
+
+// ---------------------------------------------------------------------------
+// Lesson 2.9 — the camera, and the view matrix
+// ---------------------------------------------------------------------------
+
+/// The demo camera orbits a fixed target on a sphere: azimuth around, elevation
+/// up, radius out. This is not part of the engine — it is the demo's way of moving
+/// an `eye` around so `look_at` has something to chew on. A real camera (Module 5)
+/// stores a `transform`; this stores the three orbit angles because they are what
+/// two arrow keys map onto cleanly.
+struct orbit_camera
+{
+    engine::vec3 target{0.0f, 0.6f, 0.0f};
+    float radius = 7.0f;
+    float azimuth = 0.0f;     ///< radians; 0 looks down -z at the target
+    float elevation = 0.35f;  ///< radians above the ground plane
+
+    /// Where the eye sits, from the orbit angles. Standard spherical placement:
+    /// azimuth sweeps around y, elevation lifts toward +y.
+    [[nodiscard]] engine::vec3 eye() const
+    {
+        return target + engine::vec3{radius * std::cos(elevation) * std::sin(azimuth),
+                                     radius * std::sin(elevation),
+                                     radius * std::cos(elevation) * std::cos(azimuth)};
+    }
+
+    /// The view matrix for this camera. up_hint is world up; elevation is clamped
+    /// (below) so it never becomes parallel to the look direction, which would make
+    /// the `right = cross(up, backward)` degenerate.
+    [[nodiscard]] engine::mat4 view() const
+    {
+        return engine::look_at(eye(), target, {0.0f, 1.0f, 0.0f});
+    }
+};
 
 /// The length of the model's x axis after `m`, in world units.
 ///
@@ -1298,7 +1341,7 @@ int main(int argc, char* argv[])
             SDL_VERSIONNUM_MINOR(sdl_version),
             SDL_VERSIONNUM_MICRO(sdl_version));
 
-    SDL_Window* window = SDL_CreateWindow("Model to World — Module 2", 1280, 720,
+    SDL_Window* window = SDL_CreateWindow("The View Matrix — Module 2", 1280, 720,
                                           SDL_WINDOW_RESIZABLE);
     if (window == nullptr)
     {
@@ -1366,6 +1409,11 @@ int main(int argc, char* argv[])
     /// The one vertex the HUD carries model -> world every frame. It is a corner
     /// of the mesh, chosen to match the lesson's worked example.
     constexpr engine::vec3 k_probe_vertex{0.5f, 0.5f, -0.5f};
+
+    // ---- Lesson 2.9's camera -----------------------------------------------
+    orbit_camera cam;                   ///< arrow keys orbit; [-]/[=] dolly
+    engine::mat4 view_from_world;       ///< look_at(eye, target, up), rebuilt each frame
+    engine::vec3 selected_view;         ///< the probe vertex carried on into VIEW space
     xform basis_mode = xform::rotate;   ///< Lesson 2.5
     float basis_t = 0.6f;               ///< the one parameter every mode reads
     bool basis_animating = false;
@@ -1401,9 +1449,9 @@ int main(int argc, char* argv[])
     SDL_Log("  [4]/[5] follow the mouse: the three sub-triangles ARE the three weights. [R] fill rule.");
     SDL_Log("  [6] Gouraud (three corner colours) [7] uv checker — [M] switches blend space");
     SDL_Log("Basis (2.5): [Z] transform  [,] [.] adjust  [0] reset  [Space] animate");
-    SDL_Log("Scene (2.8): [O] composition order  [X] select object  [Z] rotation axis");
-    SDL_Log("  [,] [.] adjust t  [Space] spin  [W] corner w (2.7)  [N] axis w (2.7)");
-    SDL_Log("[Tab] cycles demos: scene (2.6-2.8) -> basis (2.5) -> triangles -> lines -> Pong");
+    SDL_Log("Scene (2.9): [arrows] orbit camera  [-]/[=] dolly  [O] model order  [X] object");
+    SDL_Log("  [Z] rotation axis  [,] [.] adjust t  [Space] spin  [W]/[N] the 2.7 w bugs");
+    SDL_Log("[Tab] cycles demos: scene (2.6-2.9) -> basis (2.5) -> triangles -> lines -> Pong");
     SDL_Log("[V] vsync · [T] throttle · [Esc] quit");
 
     bool running = true;
@@ -1440,7 +1488,7 @@ int main(int argc, char* argv[])
         {
             which = next_demo(which);
             SDL_SetWindowTitle(window,
-                which == demo::scene     ? "Model to World — Module 2"
+                which == demo::scene     ? "The View Matrix — Module 2"
               : which == demo::basis     ? "Basis Transforms — Module 2"
               : which == demo::triangles ? "Triangles — Module 2"
               : which == demo::lines     ? "Lines — Module 2"
@@ -1460,7 +1508,7 @@ int main(int argc, char* argv[])
 
         if (which == demo::scene)
         {
-            // ---- Lesson 2.8's scene -------------------------------------------
+            // ---- Lesson 2.8's scene, now seen through 2.9's camera ------------
             if (in.key_pressed(SDL_SCANCODE_Z)) { cube_mode = next_spin(cube_mode); }
             if (in.key_pressed(SDL_SCANCODE_O)) { order = next_order(order); }
             if (in.key_pressed(SDL_SCANCODE_X)) { selected = (selected + 1) % k_scene_count; }
@@ -1474,33 +1522,59 @@ int main(int argc, char* argv[])
                 if (cube_animating) { cube_t += 0.7f * stepper.h(); }
                 if (in.key_down(SDL_SCANCODE_COMMA))  { cube_t -= 1.2f * stepper.h(); }
                 if (in.key_down(SDL_SCANCODE_PERIOD)) { cube_t += 1.2f * stepper.h(); }
+
+                // Orbit the camera. Arrow keys are level-triggered so holding one
+                // sweeps smoothly; the elevation is CLAMPED short of straight up,
+                // because there the look direction meets the up hint and the view
+                // basis goes degenerate (§7 of the harness, a pitfall in the text).
+                constexpr float k_orbit = 1.4f;   // radians / second
+                if (in.key_down(SDL_SCANCODE_LEFT))  { cam.azimuth   -= k_orbit * stepper.h(); }
+                if (in.key_down(SDL_SCANCODE_RIGHT)) { cam.azimuth   += k_orbit * stepper.h(); }
+                if (in.key_down(SDL_SCANCODE_UP))    { cam.elevation += k_orbit * stepper.h(); }
+                if (in.key_down(SDL_SCANCODE_DOWN))  { cam.elevation -= k_orbit * stepper.h(); }
+                cam.elevation = std::clamp(cam.elevation, -1.45f, 1.45f);   // ~ +-83 degrees
+
+                // Dolly in and out. Under an orthographic projection this changes
+                // NOTHING on screen — which is exactly the point, and the HUD says
+                // so. Perspective (Lesson 2.10) is what finally makes it matter.
+                if (in.key_down(SDL_SCANCODE_MINUS))  { cam.radius += 4.0f * stepper.h(); }
+                if (in.key_down(SDL_SCANCODE_EQUALS)) { cam.radius -= 4.0f * stepper.h(); }
+                cam.radius = std::clamp(cam.radius, 3.0f, 14.0f);
             }
 
             cube_m = build_spin(cube_mode, cube_t);
             build_scene(scene, cube_mode, cube_t);
 
+            // The one matrix this lesson is about, rebuilt from the camera's eye,
+            // target and up every frame — never accumulated, for the same reason
+            // the model matrices are not (2.8).
+            view_from_world = cam.view();
+
             fb.clear(k_bg);
 
-            // The world FIRST, so every object is read against a floor and an
-            // origin rather than floating in a void.
-            draw_world(fb);
+            // The world FIRST, through the camera, so the floor and origin turn
+            // with the viewpoint and every object is read against them.
+            draw_world(fb, view_from_world);
 
-            // One mesh, three transforms. Nothing in this loop knows what the
-            // objects are — it knows where each object's space goes, which is
-            // precisely what a model matrix is for.
+            // One mesh, three transforms, one camera. The full chain so far:
+            //     view_from_model = view_from_world * world_from_model
+            // and the inner labels match (…world · world…), which is the naming
+            // discipline from 2.8 doing its job.
             for (int i = 0; i < k_scene_count; ++i)
             {
                 const engine::mat4 world_from_model = model_matrix(scene[i], order);
-                draw_cube(fb, world_from_model, cube_point_w);
-                draw_axes3(fb, world_from_model, cube_point_w, cube_dir_w);
+                const engine::mat4 view_from_model = view_from_world * world_from_model;
+                draw_cube(fb, view_from_model, cube_point_w);
+                draw_axes3(fb, view_from_model, cube_point_w, cube_dir_w);
             }
 
-            // Everything the HUD reports is read back out of the matrix that was
+            // Everything the HUD reports is read back out of the matrices that were
             // actually used to draw, so the numbers cannot agree with a picture
             // they did not produce.
             selected_m = model_matrix(scene[selected], order);
             selected_world = engine::xyz(selected_m
                                        * engine::to_vec4(k_probe_vertex, cube_point_w));
+            selected_view = engine::xyz(view_from_world * engine::point(selected_world));
             selected_axis_len = axis_length(selected_m, {1.0f, 0.0f, 0.0f});
             selected_corner = axis_angle_deg(selected_m, {1.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f});
         }
@@ -1723,119 +1797,113 @@ int main(int argc, char* argv[])
                                       "SCENE   %-26s   t = %+.2f", name_of(cube_mode),
                                       static_cast<double>(cube_t));
 
-            // The composition order, and what it is doing to the scene. Coloured,
-            // because two of the three settings are bugs.
+            // The composition order, coloured because two of the three are bugs.
             SDL_SetRenderDrawColor(renderer, correct_order ? 122 : 236,
                                              correct_order ? 196 : 92,
                                              correct_order ? 152 : 92, 255);
             SDL_RenderDebugTextFormat(renderer, 6.0f, 20.0f,
                                       "[O] model matrix = %s", name_of(order));
 
-            // The selected object, and the model matrix that drew it — printed as
-            // FOUR COLUMNS with what each column means, because that is the whole
-            // of Lesson 2.8 §3.3. Columns rather than written rows here on purpose:
-            // it is the columns that carry the meaning.
+            // The camera is the star of this lesson. Its axes are the ROWS of the
+            // view matrix — read them back out of the matrix that drew the frame,
+            // so the HUD reports what was actually used.
+            const engine::vec3 eye = cam.eye();
+            const engine::vec3 cam_right{view_from_world.at(0, 0), view_from_world.at(0, 1),
+                                         view_from_world.at(0, 2)};
+            const engine::vec3 cam_up{view_from_world.at(1, 0), view_from_world.at(1, 1),
+                                      view_from_world.at(1, 2)};
+            const engine::vec3 cam_back{view_from_world.at(2, 0), view_from_world.at(2, 1),
+                                        view_from_world.at(2, 2)};
+
             SDL_SetRenderDrawColor(renderer, 210, 212, 220, 255);
-            SDL_RenderDebugTextFormat(renderer, 380.0f, 40.0f, "[X] %s", scene_name(selected));
-
+            SDL_RenderDebugTextFormat(renderer, 380.0f, 40.0f,
+                                      "CAMERA   eye (%+.2f %+.2f %+.2f)",
+                                      static_cast<double>(eye.x), static_cast<double>(eye.y),
+                                      static_cast<double>(eye.z));
             SDL_SetRenderDrawColor(renderer, 150, 152, 170, 255);
-            SDL_RenderDebugText(renderer, 380.0f, 58.0f, "world_from_model, by column:");
+            SDL_RenderDebugTextFormat(renderer, 380.0f, 54.0f,
+                                      "azim %4.0f  elev %+3.0f deg  r %.1f",
+                                      static_cast<double>(cam.azimuth * 180.0f / 3.14159265f),
+                                      static_cast<double>(cam.elevation * 180.0f / 3.14159265f),
+                                      static_cast<double>(cam.radius));
+            SDL_SetRenderDrawColor(renderer, 226, 196, 110, 255);
+            SDL_RenderDebugText(renderer, 380.0f, 68.0f, "[-][=] distance: NO effect (ortho)");
 
-            const engine::vec4 cols[4] = {selected_m.c0, selected_m.c1,
-                                          selected_m.c2, selected_m.c3};
-            const char* col_meaning[4] = {"x axis * sx", "y axis * sy",
-                                          "z axis * sz", "origin  (= position)"};
-            const Uint8 col_rgb[4][3] = {{236, 92, 92}, {122, 196, 152},
-                                         {126, 162, 236}, {226, 196, 110}};
-            for (int c = 0; c < 4; ++c)
-            {
-                SDL_SetRenderDrawColor(renderer, col_rgb[c][0], col_rgb[c][1], col_rgb[c][2], 255);
-                SDL_RenderDebugTextFormat(renderer, 380.0f, 74.0f + 14.0f * static_cast<float>(c),
-                                          "c%d (%+.2f %+.2f %+.2f %+.0f)  %s",
-                                          c,
-                                          static_cast<double>(cols[c].x),
-                                          static_cast<double>(cols[c].y),
-                                          static_cast<double>(cols[c].z),
-                                          static_cast<double>(cols[c].w),
-                                          col_meaning[c]);
-            }
+            // The view matrix's rows ARE the camera's axes. Colour them x/y/z.
+            SDL_SetRenderDrawColor(renderer, 150, 152, 170, 255);
+            SDL_RenderDebugText(renderer, 380.0f, 90.0f, "view rows = the camera's axes:");
+            SDL_SetRenderDrawColor(renderer, 236, 92, 92, 255);
+            SDL_RenderDebugTextFormat(renderer, 380.0f, 104.0f, "right    (%+.2f %+.2f %+.2f)",
+                static_cast<double>(cam_right.x), static_cast<double>(cam_right.y),
+                static_cast<double>(cam_right.z));
+            SDL_SetRenderDrawColor(renderer, 122, 196, 152, 255);
+            SDL_RenderDebugTextFormat(renderer, 380.0f, 118.0f, "up       (%+.2f %+.2f %+.2f)",
+                static_cast<double>(cam_up.x), static_cast<double>(cam_up.y),
+                static_cast<double>(cam_up.z));
+            SDL_SetRenderDrawColor(renderer, 126, 162, 236, 255);
+            SDL_RenderDebugTextFormat(renderer, 380.0f, 132.0f, "backward (%+.2f %+.2f %+.2f)",
+                static_cast<double>(cam_back.x), static_cast<double>(cam_back.y),
+                static_cast<double>(cam_back.z));
 
-            // The two measurements that decide whether the object was MOVED or
-            // DEFORMED. Both read off the matrix that drew the picture.
+            // The lesson's spine, on screen: ONE vertex named in every space it
+            // passes through. v_view's z is negative — distance in front of the
+            // camera — which is the -z-forward convention made visible.
+            SDL_SetRenderDrawColor(renderer, 210, 212, 220, 255);
+            SDL_RenderDebugTextFormat(renderer, 380.0f, 154.0f, "[X] %s, one corner:",
+                                      scene_name(selected));
+            SDL_SetRenderDrawColor(renderer, 150, 152, 170, 255);
+            SDL_RenderDebugTextFormat(renderer, 380.0f, 168.0f, "v_model (%+.2f %+.2f %+.2f)",
+                static_cast<double>(k_probe_vertex.x), static_cast<double>(k_probe_vertex.y),
+                static_cast<double>(k_probe_vertex.z));
+            SDL_SetRenderDrawColor(renderer, 226, 196, 110, 255);
+            SDL_RenderDebugTextFormat(renderer, 380.0f, 182.0f, "v_world (%+.2f %+.2f %+.2f)",
+                static_cast<double>(selected_world.x), static_cast<double>(selected_world.y),
+                static_cast<double>(selected_world.z));
+            SDL_SetRenderDrawColor(renderer, 130, 190, 220, 255);
+            SDL_RenderDebugTextFormat(renderer, 380.0f, 196.0f, "v_view  (%+.2f %+.2f %+.2f)",
+                static_cast<double>(selected_view.x), static_cast<double>(selected_view.y),
+                static_cast<double>(selected_view.z));
+
+            // The deform/move check from 2.8, kept but compact.
             const float want_len = scene[selected].scale.x;
             const bool rigid = std::fabs(selected_corner - 90.0f) < 0.01f
                             && std::fabs(selected_axis_len - want_len) < 0.001f;
-
-            SDL_SetRenderDrawColor(renderer, rigid ? 122 : 236,
-                                             rigid ? 196 : 92,
-                                             rigid ? 152 : 92, 255);
-            SDL_RenderDebugTextFormat(renderer, 380.0f, 144.0f,
-                                      "|x axis| = %.4f   (scale.x = %.2f)",
+            SDL_SetRenderDrawColor(renderer, rigid ? 150 : 236, rigid ? 152 : 92,
+                                             rigid ? 170 : 92, 255);
+            SDL_RenderDebugTextFormat(renderer, 380.0f, 218.0f,
+                                      "|x|=%.2f  corner %.1f deg%s",
                                       static_cast<double>(selected_axis_len),
-                                      static_cast<double>(want_len));
-            SDL_RenderDebugTextFormat(renderer, 380.0f, 158.0f,
-                                      "x^y corner = %.3f deg %s",
                                       static_cast<double>(selected_corner),
                                       rigid ? "" : "  DEFORMED");
 
-            // One vertex, carried model -> world, named in both spaces. The
-            // discipline the lesson is really about, on screen.
-            SDL_SetRenderDrawColor(renderer, 150, 152, 170, 255);
-            SDL_RenderDebugTextFormat(renderer, 380.0f, 182.0f,
-                                      "v_model  (%+.2f %+.2f %+.2f)",
-                                      static_cast<double>(k_probe_vertex.x),
-                                      static_cast<double>(k_probe_vertex.y),
-                                      static_cast<double>(k_probe_vertex.z));
-            SDL_SetRenderDrawColor(renderer, 226, 196, 110, 255);
-            SDL_RenderDebugTextFormat(renderer, 380.0f, 196.0f,
-                                      "v_world  (%+.2f %+.2f %+.2f)",
-                                      static_cast<double>(selected_world.x),
-                                      static_cast<double>(selected_world.y),
-                                      static_cast<double>(selected_world.z));
-
-            // Lesson 2.7's two failure modes, still on their keys.
-            SDL_SetRenderDrawColor(renderer, cube_point_w == 1.0f ? 150 : 236,
-                                             cube_point_w == 1.0f ? 152 : 92,
-                                             cube_point_w == 1.0f ? 170 : 92, 255);
-            SDL_RenderDebugTextFormat(renderer, 380.0f, 220.0f,
-                                      "[W] corner w = %.0f  %s", static_cast<double>(cube_point_w),
-                                      cube_point_w == 1.0f ? "(positions)" : "(all at the origin!)");
-
-            SDL_SetRenderDrawColor(renderer, cube_dir_w == 0.0f ? 150 : 236,
-                                             cube_dir_w == 0.0f ? 152 : 92,
-                                             cube_dir_w == 0.0f ? 170 : 92, 255);
-            SDL_RenderDebugTextFormat(renderer, 380.0f, 234.0f,
-                                      "[N] axis w = %.0f  %s", static_cast<double>(cube_dir_w),
-                                      cube_dir_w == 0.0f ? "(directions)" : "(translated!)");
-
-            // What to look for in the current mode — the reading instructions for
-            // a picture that is otherwise easy to misread.
-            SDL_SetRenderDrawColor(renderer, 150, 152, 170, 255);
-            if (order == trs_order::tsr)
+            // Lesson 2.7's failure modes are still on [W]/[N]; surface them only
+            // when engaged, so the panel stays about the camera otherwise.
+            if (cube_point_w != 1.0f || cube_dir_w != 0.0f)
             {
-                SDL_RenderDebugText(renderer, 380.0f, 258.0f, "scale applied along WORLD");
-                SDL_RenderDebugText(renderer, 380.0f, 272.0f, "axes: the slab shears as it");
-                SDL_RenderDebugText(renderer, 380.0f, 286.0f, "turns. Post and plinth are");
-                SDL_RenderDebugText(renderer, 380.0f, 300.0f, "untouched - that is the trap.");
+                SDL_SetRenderDrawColor(renderer, 236, 92, 92, 255);
+                SDL_RenderDebugTextFormat(renderer, 380.0f, 236.0f, "[W]=%.0f [N]=%.0f  (2.7 bug on)",
+                    static_cast<double>(cube_point_w), static_cast<double>(cube_dir_w));
             }
-            else if (order == trs_order::rts)
+
+            // What to look for. The headline instruction is about the camera now.
+            SDL_SetRenderDrawColor(renderer, 150, 152, 170, 255);
+            if (order != trs_order::trs)
             {
-                SDL_RenderDebugText(renderer, 380.0f, 258.0f, "translation happens BEFORE");
-                SDL_RenderDebugText(renderer, 380.0f, 272.0f, "the rotation, so every object");
-                SDL_RenderDebugText(renderer, 380.0f, 286.0f, "orbits the world origin");
-                SDL_RenderDebugText(renderer, 380.0f, 300.0f, "instead of spinning in place.");
+                SDL_RenderDebugText(renderer, 380.0f, 258.0f, "wrong model order on [O] -");
+                SDL_RenderDebugText(renderer, 380.0f, 272.0f, order == trs_order::tsr
+                                    ? "the slab shears (2.8)." : "objects orbit origin (2.8).");
             }
             else
             {
-                SDL_RenderDebugText(renderer, 380.0f, 258.0f, "one mesh, three transforms.");
-                SDL_RenderDebugText(renderer, 380.0f, 272.0f, "the arrows are each object's");
-                SDL_RenderDebugText(renderer, 380.0f, 286.0f, "own axes in world space -");
-                SDL_RenderDebugText(renderer, 380.0f, 300.0f, "columns 0-2, drawn.");
+                SDL_RenderDebugText(renderer, 380.0f, 258.0f, "orbit with the arrows: the");
+                SDL_RenderDebugText(renderer, 380.0f, 272.0f, "world turns because moving the");
+                SDL_RenderDebugText(renderer, 380.0f, 286.0f, "camera IS moving the world the");
+                SDL_RenderDebugText(renderer, 380.0f, 300.0f, "other way (view = inverse).");
             }
 
             SDL_SetRenderDrawColor(renderer, 210, 212, 220, 255);
             SDL_RenderDebugText(renderer, 6.0f, 328.0f,
-                                "[O] order  [X] object  [Z] rotation  [,] [.] t  [Space] spin  [Tab] demo");
+                                "[arrows] orbit  [-][=] dolly  [O] order  [X] obj  [Z] spin  [Tab] demo");
         }
         else if (which == demo::basis)
         {

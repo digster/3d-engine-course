@@ -1232,3 +1232,38 @@ speculative generality (no parent pointer, no hierarchy machinery ships today); 
 to hard-code an assumption already known to be temporary, which costs nothing. The `a_from_b`
 convention is the same instinct applied to composition: the name is chosen so a wrong product is a
 spelling mistake.
+
+
+## Introduce math where it is first needed, not where a plan filed it (Lesson 2.9)
+
+`vec3.hpp` shipped from Lesson 2.5 with a comment promising the cross product would arrive in Lesson
+3.4, when back-face culling needed a surface normal. But Lesson 2.9's `look_at` needs a vector
+perpendicular to two others — the camera's `right` axis, from the look direction and an up hint —
+and there is *no honest way* to build an orthonormal basis without it. The options were: hand-roll
+the specific computation inline without naming it (dishonest — it *is* the cross product, and
+pretending otherwise breaks "the student should never type a line they couldn't explain"), or
+introduce the cross product here. We introduced it here, and revised the deferral comment.
+
+The general rule this reinforces: **a "just-in-time math" plan is a guess, and the first lesson that
+actually needs a tool wins over the lesson that expected to introduce it.** The course's spiral is
+undamaged — 2.9 introduces the cross product for a camera basis, 3.4 deepens it for a triangle
+normal and its tie to signed area. Introduced where used, deepened where it recurs. The cost of
+getting the plan "wrong" was one revised comment; honoring the plan would have cost a decreed
+formula in the middle of a derive-everything course.
+
+
+## A projection can make a rigid thing look sheared — verify frames numerically (Lesson 2.9)
+
+When the demo's camera orbits, the whole scene turns. Is it turning *rigidly*, or is the view
+matrix quietly shearing it? You cannot tell by eye, because the orthographic projection already
+distorts on purpose (and perspective, in 2.10, will distort more). The check is the same shape as
+Lesson 2.8's deform test, moved up a space: a correct view matrix is built from an **orthonormal**
+basis, so its three axis rows must stay mutually perpendicular unit vectors at every camera angle.
+The demo prints those rows and they read as a clean tripod throughout; the harness asserts
+`V · world_from_camera == I` (the definition of "inverse") to `1e−4` over many random cameras.
+
+The companion trap: a **left-handed** basis passes the orthonormality check and still mirrors the
+world. `cross` anticommutes, so a single swapped argument order (`cross(backward, up)` instead of
+`cross(up, backward)`) negates `right`, and the scene renders mirrored — invisible until text or
+winding reveals it. The cheap guard is a handedness assertion: for a right-handed frame,
+`cross(right, up)` must equal `backward` (i.e. `x × y = z`), not `−backward`.

@@ -1170,6 +1170,17 @@ td code { font-size: 0.82em; }
       centre. Its columns are the object's own axes in world space, scaled by its size, with the
       position in column 3.
     </p>
+    <p>
+      The <strong>view matrix</strong> (the <code>V</code> above) is
+      <code>view_from_world = inverse(world_from_camera)</code> — a camera is an object with a
+      placement, and looking through it is undoing that placement (Lesson 2.9). Because a camera has
+      no scale, its placement is rigid and the inverse is free:
+      <code>affine(transpose(R), −transpose(R)·eye)</code>, no general 4×4 inversion. Transposing
+      the orthonormal rotation puts the camera's <em>right, up, backward</em> axes into the view
+      matrix's <strong>rows</strong> — the fastest way to read a camera off its matrix. The camera
+      looks down its own <strong>−z</strong>, so its <code>backward</code> (+z) axis is
+      <code>eye − target</code>, consistent with the world-space −Z-forward convention above.
+    </p>
   </div>
 
   <!-- ===================================================================== -->

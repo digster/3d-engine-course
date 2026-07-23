@@ -7,7 +7,7 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-07-27 (after Lesson 2.8 — Module 2: 8 of 12, 22 of 94 lessons)
+updated: 2026-07-28 (after Lesson 2.9 — Module 2: 9 of 12, 23 of 94 lessons)
 
 conventions:
   world: right-handed, Y-up, -Z forward
@@ -104,6 +104,33 @@ conventions:
         Rebuilt from a scalar angle every frame, NEVER accumulated into (a running
         matrix * small-delta drifts out of being a rotation — the SAME shear, by a
         different route).
+  view-matrix: view_from_world = inverse(world_from_camera). A CAMERA IS AN
+        OBJECT WITH A TRANSFORM; looking through it is UNDOING that transform, so
+        moving the camera one way moves the world the other — exactly, not as a
+        mnemonic (slide eye +2 in x -> a fixed world point's view x drops 2,
+        verified). No general 4x4 inverse: a camera has no scale, so its placement
+        is RIGID and inverse(affine(R, eye)) = affine(transpose(R), -transpose(R)*
+        eye) — an orthonormal rotation's inverse is its transpose. Transposing puts
+        the camera's right/up/backward axes into the view matrix's ROWS (fastest
+        way to read a camera off its matrix). Last column of each row is -axis·eye.
+        BASIS from eye/target/up_hint (right-handed, -Z-forward): backward =
+        normalise(eye - target) [+z, because we look down -z]; right = normalise(
+        cross(up_hint, backward)); up = cross(backward, right) [already unit].
+        VERIFIED: eye -> origin, target -> (0,0,-d); V * world_from_camera == I;
+        worked point (0,3,0) with eye (0,3,8) -> view (0, 1.94, -7.76).
+        SINGULARITY: look straight up/down => look dir parallel to up_hint =>
+        cross is zero => right undefined. Demo CLAMPS elevation to ~+-83 deg. The
+        real fix (orientation with no preferred up axis) is the quaternion, 7.1 —
+        this is its motivation, met early.
+  cross-product: cross(a,b) = (a.y*b.z - a.z*b.y, a.z*b.x - a.x*b.z, a.x*b.y -
+        a.y*b.x). Perpendicular to both; |a x b| = |a||b|sin(theta) = the
+        PARALLELOGRAM AREA (the sin sibling of dot's cos). Zero for parallel
+        inputs (no area, no unique perpendicular). Right-handed: x cross y = z,
+        which IS our handedness. ANTICOMMUTES: cross(a,b) = -cross(b,a), so a
+        swapped argument order flips an axis (left-handed frame -> mirrored /
+        inside-out). INTRODUCED IN 2.9 (camera's right axis); 3.4 revisits it for
+        a triangle normal and connects it to signed area + determinant. This
+        REVISES vec3.hpp's old "deferred to 3.4" comment — it now lives in 2.9.
   winding: CCW = front, cull back (per-pipeline state; set explicitly every time)
   units: 1 unit = 1 metre; radians internally; linear colour in the renderer
   axis colours: x/y/z = red/green/blue (every diagram, no exceptions)
@@ -526,6 +553,7 @@ completed:
   - 2.6  Building mat4 by Hand
   - 2.7  Homogeneous Coordinates and What w Really Means
   - 2.8  The Space Chain: Model to World
+  - 2.9  The View Matrix: Deriving Look-At
 
 capabilities:
   - verified C++20 toolchain (MSVC / GCC / Clang), 64-bit
@@ -557,6 +585,19 @@ capabilities:
     switches with [M]
   - maths: src/math/vec2.hpp (header-only) — arithmetic, length/length_squared,
     normalised(+_or), dot, perpendicular, project_onto, reflect, lerp, distance
+  - maths 2.9: src/math/vec3.hpp gains cross(a,b) (constexpr; the deferral comment
+    is REVISED — cross now belongs to 2.9, not 3.4). src/math/mat4.hpp gains
+    look_at(eye, target, up_hint) = the view matrix, built as the inverse of a
+    rigid camera placement (transpose the orthonormal basis, -transpose(R)*eye in
+    the last column). NO general 4x4 inverse added — mat4 still has none. main.cpp:
+    an orbit_camera (target/radius/azimuth/elevation) drives look_at; the scene is
+    drawn through view_from_model = view_from_world * world_from_model; to_screen3
+    becomes a PLAIN orthographic projection of VIEW space (the 2.8 oblique hack is
+    gone — a real camera supplies the 3-D now). Arrows orbit, [-]/[=] dolly (does
+    nothing under ortho, on purpose — 2.10 makes it matter). HUD carries one vertex
+    model -> world -> view, named in every space, and shows the camera axes read
+    from the view matrix's rows. Depth-brightness cue remapped to view-space z
+    (window -9..-5, the scene's measured range at r=7).
   - maths 2.8: src/math/transform.hpp (header-only, NEW) — struct transform
     { position; rotation(mat3); scale{1,1,1}; } and parent_from_local(t) building
     M = T*R*S as three scaled rotation columns fed to affine() (9 muls, not 27, and
@@ -862,39 +903,40 @@ files:
                  02-01-lines.html, 02-02-triangle-edge-functions.html,
                  02-03-barycentric.html, 02-04-attribute-interpolation.html,
                  02-05-matrices.html, 02-06-mat4.html,
-                 02-07-homogeneous.html, 02-08-space-chain.html
+                 02-07-homogeneous.html, 02-08-space-chain.html,
+                 02-09-view-matrix.html
   docs/_template/: lesson-template.html, README.md, apply-shared.py, check-page.js
   memory/: 2026-07-16.md, 2026-07-18.md, 2026-07-21.md, 2026-07-22.md,
            2026-07-23.md, 2026-07-24.md, 2026-07-25.md, 2026-07-26.md,
-           2026-07-27.md
+           2026-07-27.md, 2026-07-28.md
   (retired: hello.cpp)
 
-next: 2.9 — The View Matrix: Deriving Look-At
-      (planned filename: docs/lessons/02-09-view-matrix.html — 2.8 links to it)
-      A camera is just another object with a transform, and looking THROUGH it
-      means applying that transform BACKWARDS. Moving the camera left is moving the
-      world right — the view matrix is the INVERSE of the camera's model matrix.
-      So 2.9 finally needs an inverse, and the transform to invert has exactly the
-      STRUCTURED shape Exercise 2.8.3 just asked the student to work out:
-        - undoing T*R*S is S^-1 * R^T * T^-1 — no general 4x4 inversion. A
-          rotation's inverse is its transpose (2.5 §3.7); a scale's is the
-          reciprocals; and reversing a composition reverses the factors.
-        - DERIVE look-at from the intuition first: given eye, target and an up
-          hint, build the camera's own orthonormal basis (forward = normalise(
-          target - eye) or its negation per our -Z-forward convention; right =
-          normalise(cross(up_hint, forward)); true_up = cross(forward, right)) and
-          then INVERT the frame. This is where the cross product is finally FORCED —
-          but note 3.4 is the lesson that formally introduces it, so either derive
-          the specific cross needed here in place, or reorder. RESOLVE THAT before
-          writing: check whether look-at can be built without a general cross by
-          leaning on the basis being orthonormal.
-      NAMING PAYS OFF HERE: view_from_world = inverse(world_from_camera). The
-      a_from_b discipline from 2.8 §3.1 makes the inversion's direction legible.
-      NUMERIC WALKTHROUGH MANDATORY (as every 2.x lesson): put the camera at a
-      concrete eye looking at a concrete target and carry one world point into view
-      space by hand.
-      Module 2 still owes: 2.10 perspective from similar triangles (w becomes -z,
-      the perspective divide gets its name), 2.11 viewport (the y-flip boundary
-      to_screen3 already hides gets formalised), 2.12 the spinning-wireframe-mesh
-      milestone — the whole chain lit up end to end.
+next: 2.10 — Perspective from Similar Triangles
+      (planned filename: docs/lessons/02-10-perspective.html — 2.9 links to it)
+      THE KEYSTONE LESSON of Module 2, and CLAUDE.md §4 is emphatic: derive
+      perspective FROM SIMILAR TRIANGLES AND A DIAGRAM before any matrix. The
+      failure to show first: the orthographic camera we just built makes a distant
+      crate exactly as big as a near one, and dollying does NOTHING (the demo's
+      [-]/[=] already proves it on screen — reuse that).
+        - SIMILAR TRIANGLES: a point at (x, y, z) in view space projects onto a
+          screen plane at distance n by x' = n*x/(-z), y' = n*y/(-z). That single
+          divide-by-(-z) is the whole of perspective. Push real numbers: at z=-2
+          vs z=-10 the same x halves then fifths, which is 2.7's w=-z table
+          arriving as geometry. WORK IT BY HAND.
+        - THEN package as a matrix. The projection matrix's job is to put -z (or a
+          function of it) into the w slot so the LATER perspective divide does the
+          shrink. This is where w STOPS BEING 1 — the third case 2.7 flagged and
+          xyz() deliberately still drops. NAME THE PERSPECTIVE DIVIDE here at last.
+        - HANDEDNESS FLIP happens INSIDE the projection matrix (conventions §5):
+          right-handed view space -> left-handed clip. Pin the exact clip-space
+          target (SDL_GPU: z in [0,1], +Y up) — but we are still in the software
+          rasterizer, so target that NDC now so the Module 4 port is an API change
+          only (the NDC-parity decision, LEARNINGS).
+      xyz() must FINALLY start dividing by w in the projected path — or introduce a
+      separate perspective_divide() so the drop-vs-divide distinction stays honest.
+      DECIDE and note it. NUMERIC WALKTHROUGH MANDATORY.
+      Module 2 still owes after 2.10: 2.11 viewport (the y-flip boundary to_screen3
+      hides gets its real name + z-to-[0,1] mapping), 2.12 the spinning-wireframe-
+      mesh milestone — the whole model->world->view->clip->NDC->screen chain lit up
+      end to end, every line explainable.
 ```

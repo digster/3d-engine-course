@@ -1366,15 +1366,16 @@ td code { font-size: 0.82em; }
   </div>
 
   <div class="tool">
-    <h3>Cross product <span class="from">Lesson 3.4</span></h3>
+    <h3>Cross product <span class="from">Lesson 2.9</span></h3>
     <div class="eq">
       <span>\[ \mathbf{a} \times \mathbf{b} = \begin{pmatrix} a_y b_z - a_z b_y \\ a_z b_x - a_x b_z \\ a_x b_y - a_y b_x \end{pmatrix} \]</span>
       <span class="eq-plain">cross(a,b) = (a.y*b.z - a.z*b.y,  a.z*b.x - a.x*b.z,  a.x*b.y - a.y*b.x)</span>
     </div>
     <p>
       <strong>The cross product finds the direction nothing else is pointing.</strong> Give it
-      two arrows and it returns one perpendicular to both — which is precisely how you get a
-      surface normal from two edges of a triangle.
+      two arrows and it returns one perpendicular to both. Introduced in Lesson 2.9 to build a
+      camera's <em>right</em> axis from its look direction and an up hint; Lesson 3.4 meets it again
+      as the way to get a surface normal from two edges of a triangle.
     </p>
     <p>Two properties do all the work:</p>
     <ul>
@@ -1707,6 +1708,45 @@ td code { font-size: 0.82em; }
       runs. The first link of the chain
       <code>model → world → view → clip → NDC → screen</code>; the rest arrive in Lessons 2.9–2.11.
     </p>
+  </div>
+
+  <div class="tool">
+    <h3>The view matrix: look-at <span class="from">Lesson 2.9</span></h3>
+    <div class="eq">
+      <span>\[ V = M_{\text{world}\leftarrow\text{camera}}^{-1} = \begin{bmatrix} r_x & r_y & r_z & -\mathbf{r}\cdot\mathbf{eye} \\ u_x & u_y & u_z & -\mathbf{u}\cdot\mathbf{eye} \\ b_x & b_y & b_z & -\mathbf{b}\cdot\mathbf{eye} \\ 0 & 0 & 0 & 1 \end{bmatrix} \]</span>
+      <span class="eq-plain">view_from_world = inverse(world_from_camera); rows are the camera axes r,u,b, last column = -axis·eye</span>
+    </div>
+    <p>
+      <strong>A camera is just an object with a placement, and the view matrix is the inverse of
+      that placement.</strong> <code>world_from_camera</code> carries camera-space to world-space;
+      its inverse, <code>view_from_world</code>, does the reverse — which is what "look through the
+      camera" means. This is why moving the camera one way moves the world the other: the two are
+      ends of one inverse.
+    </p>
+    <p>
+      <strong>Building the basis</strong> from an eye, a target and an up hint (right-handed,
+      −Z-forward):
+    </p>
+    <div class="eq">
+      <span>\[ \mathbf{b} = \widehat{\mathbf{eye}-\mathbf{target}}, \quad \mathbf{r} = \widehat{\mathbf{up}\times\mathbf{b}}, \quad \mathbf{u} = \mathbf{b}\times\mathbf{r} \]</span>
+      <span class="eq-plain">backward = normalise(eye-target); right = normalise(cross(up_hint, backward)); up = cross(backward, right)</span>
+    </div>
+    <p>
+      <strong>Inverting is free</strong> because a camera has no scale: its placement is
+      <em>rigid</em> (rotation + translation), and an orthonormal rotation's inverse is its
+      transpose. So <code>inverse(affine(R, eye)) = affine(transpose(R), −transpose(R)·eye)</code> —
+      no general 4×4 inversion. Transposing puts the camera axes into the matrix's <em>rows</em>,
+      which is the fastest way to read a camera off its view matrix.
+    </p>
+    <div class="callout warn">
+      <span class="label">The look-at singularity</span>
+      <p>
+        When the look direction is parallel to the up hint (camera straight up or down),
+        <code>cross(up_hint, backward)</code> is the cross of two parallel vectors — zero — and
+        <code>right</code> is undefined. Engines clamp the pitch short of vertical to avoid it; the
+        real fix, an orientation with no preferred up axis, is the quaternion (Lesson 7.1).
+      </p>
+    </div>
   </div>
 
   <div class="tool">

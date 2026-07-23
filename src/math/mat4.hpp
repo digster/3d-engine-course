@@ -152,6 +152,48 @@ struct mat4
 /// the question you ask when a scene graph has gone wrong.
 [[nodiscard]] constexpr vec3 translation_of(const mat4& m) { return xyz(m.c3); }
 
+// ---- The view matrix -------------------------------------------------------
+
+/// The view matrix for a camera at `eye`, looking at `target`, with `up_hint`
+/// telling it which way is up. Takes world-space coordinates to VIEW space, where
+/// the camera sits at the origin looking down its own −z axis.
+///
+/// This is `view_from_world`, and the one idea behind it (Lesson 2.9) is that a
+/// camera is just another object with a placement: it has a `world_from_camera`
+/// matrix like anything else, and looking *through* it means undoing that
+/// placement. **The view matrix is the inverse of the camera's model matrix.**
+///
+/// We never call a general 4×4 inverse, because a camera has no size — its
+/// placement is a rotation `R` (columns `right, up, backward`) plus a translation
+/// `eye`, and the inverse of such a rigid transform is written down directly:
+/// `R` is orthonormal, so its inverse is its transpose, and the whole inverse is
+/// `affine(transpose(R), −transpose(R)·eye)`. Spelling that out, row `k` of the
+/// result is camera-axis `k` followed by `−(axis · eye)` — which is exactly
+/// "measure the world point along each camera axis, relative to the eye". That is
+/// the construction below, stored column-major so the columns read as written.
+///
+/// The `−z forward` convention (conventions.html) is why `backward = eye − target`
+/// rather than the reverse: the camera looks down `−z`, so its `+z` axis points
+/// back toward the viewer. Lesson 2.9 §3.4 derives every sign.
+[[nodiscard]] inline mat4 look_at(vec3 eye, vec3 target, vec3 up_hint)
+{
+    // The camera's own axes, in world space. `backward` points from the target
+    // back to the eye; `right` is perpendicular to both up and backward; `up` is
+    // recomputed so the three are exactly orthonormal even if `up_hint` was not
+    // perpendicular to the look direction.
+    const vec3 backward = normalised(eye - target);
+    const vec3 right    = normalised(cross(up_hint, backward));
+    const vec3 up       = cross(backward, right);   // already unit; no normalise needed
+
+    // Stored column-major. The three rotation rows are the camera axes; the
+    // fourth column is −(axis · eye) per row, which is the −transpose(R)·eye that
+    // the rigid-inverse derivation produced.
+    return {{right.x, up.x, backward.x, 0.0f},
+            {right.y, up.y, backward.y, 0.0f},
+            {right.z, up.z, backward.z, 0.0f},
+            {-dot(right, eye), -dot(up, eye), -dot(backward, eye), 1.0f}};
+}
+
 // There is deliberately no `determinant` or `inverse` here.
 //
 // Both exist for 4x4 matrices and both are considerably more work than the 3x3

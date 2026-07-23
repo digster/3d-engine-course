@@ -6,10 +6,14 @@
 // in terms that never mentioned how many components a vector had. So they all
 // survive the move to 3-D unchanged, and this file is mostly vec2 with a `z`.
 //
-// The one genuinely 3-D operation, the CROSS PRODUCT, is deliberately absent.
-// It is not an oversight and it is not hard: it is waiting for Lesson 3.4, where
-// back-face culling needs a surface normal and the cross product can be derived
-// from that need rather than declared in advance. Nothing in Modules 2 uses it.
+// The one genuinely 3-D operation is the CROSS PRODUCT, at the bottom of this
+// file. It waited until Lesson 2.9 to be added, because that is where the engine
+// first NEEDED it: building a camera's orthonormal frame from a look direction and
+// an up hint is exactly the question "give me a vector perpendicular to these two",
+// and the cross product is its answer. Lesson 3.4 meets it again from the other
+// side — a triangle's surface normal for back-face culling — and connects it to
+// the signed area and the determinant. Introduced where used, deepened where it
+// recurs: the course's spiral, on a single function.
 
 #pragma once
 
@@ -91,10 +95,35 @@ constexpr vec3& operator/=(vec3& v, float s) { v.x /= s; v.y /= s; v.z /= s; ret
 // Note what is NOT here: `perpendicular`. In 2-D there is essentially one arrow
 // at right angles to a given one (up to sign), so `perpendicular(v)` was a
 // sensible function. In 3-D there is a whole *plane* of them, so the question
-// "what is perpendicular to this?" has no single answer and the 2-D routine has
-// no honest generalisation. Getting a specific perpendicular needs a second
-// vector to disambiguate — which is exactly what the cross product takes, and
-// exactly why Lesson 3.4 introduces it when a surface finally supplies that
-// second vector.
+// "what is perpendicular to this?" has no single answer. Getting a *specific*
+// perpendicular needs a SECOND vector to disambiguate — and given two vectors,
+// the cross product below is the arrow perpendicular to both.
+
+// ---- The cross product ------------------------------------------------------
+
+/// The vector perpendicular to both `a` and `b`, with the side fixed by the
+/// right-hand rule — which IS this course's handedness convention.
+///
+/// Two readings, both worth carrying (Lesson 2.9 §3.3):
+///
+///   - DIRECTION: perpendicular to the plane the two arrows span. Which of the
+///     two perpendicular directions you get is the right-hand rule: point the
+///     fingers along `a`, curl them toward `b`, and the thumb is `cross(a, b)`.
+///     This is why `cross(x, y) = z` exactly — it is the same right-handedness
+///     the world-space axes use (see conventions.html).
+///   - MAGNITUDE: `|a||b|sin(theta)`, the AREA of the parallelogram they span —
+///     the perpendicular sibling of the dot product's `|a||b|cos(theta)`. So the
+///     cross of two parallel vectors is zero (no area, no unique perpendicular),
+///     and the cross of two unit vectors at right angles is a unit vector.
+///
+/// The component formula is a determinant expansion; Lesson 3.4 shows the same
+/// number arriving as a signed area when a triangle needs a normal. Order and
+/// sign matter: `cross(a, b) == -cross(b, a)`.
+[[nodiscard]] constexpr vec3 cross(vec3 a, vec3 b)
+{
+    return {a.y * b.z - a.z * b.y,
+            a.z * b.x - a.x * b.z,
+            a.x * b.y - a.y * b.x};
+}
 
 } // namespace engine
