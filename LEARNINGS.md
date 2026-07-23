@@ -1267,3 +1267,47 @@ world. `cross` anticommutes, so a single swapped argument order (`cross(backward
 `cross(up, backward)`) negates `right`, and the scene renders mirrored — invisible until text or
 winding reveals it. The cheap guard is a handedness assertion: for a right-handed frame,
 `cross(right, up)` must equal `backward` (i.e. `x × y = z`), not `−backward`.
+
+
+## A matrix can't divide, so perspective defers the divide — that's why w exists (Lesson 2.10)
+
+The single most clarifying fact about the projection pipeline: a matrix is a *linear* map, and
+`x' = x/z` is not linear, so **no matrix can do perspective by itself.** What the projection matrix
+does instead is copy `−z` (the depth) into `w` via its bottom row `(0,0,−1,0)`, and a *separate*
+step — the perspective divide, `v/v.w` — does the actual shrink afterwards. Every piece of
+"projection jargon" falls out of that one deferral: `w` stops being 1 (this is the third case
+Lesson 2.7 flagged); "clip space" and "NDC" are just the before and after of the divide; and the
+reason clipping (Lesson 3.3) happens in clip space is that it is the last place an edge is still
+straight, before the non-linear divide bends it. If you remember one sentence about perspective,
+remember "the matrix can't divide, so it stashes the depth in `w` for later."
+
+Corollary that keeps the code honest: `xyz()` (drop `w`) and `perspective_divide()` (divide by `w`)
+are kept as **two separate named functions**, never one accessor with a mode. Before a projection is
+in the chain `w` is always 1 and the two agree; the moment one appears they diverge, and a silent
+wrong choice is a bug that looks like a tuning problem. Two names make the call site declare intent.
+
+
+## Perspective depth is 1/z-nonlinear, and the near plane is the master precision knob (Lesson 2.10)
+
+Because the projection divides by `−z`, depth does **not** map linearly into `[0,1]`. With
+`near = 1, far = 100`, a point at `z = −2` — one unit past the near plane — is already at
+`z_ndc = 0.5`: half the entire depth buffer's range is spent in the first 1% of the frustum, and the
+remaining 99 units share the other half. Consequences worth having as instinct: depth precision is
+lavish up close and starving far away; **z-fighting is a distant-geometry problem**; and the single
+highest-leverage fix is to **push the near plane out** (moving `near` from `0.01` to `0.5` buys back
+orders of magnitude of far precision), which costs nothing. This is why "set near as large as your
+scene tolerates" is standard advice, and it is the setup for reversed-Z (Exercise 2.10.5) and the
+z-buffer (Lesson 3.1). Made it a number in a harness so it is an instinct, not a warning.
+
+
+## The clean way to A/B two rendering modes is one matrix, one path (Lesson 2.10)
+
+The demo's `[P]` perspective/orthographic toggle changes **nothing** in the draw code — it selects
+which matrix `project()` receives. Both projections run the identical `clip = proj * v` →
+`perspective_divide` → viewport path; the orthographic matrix simply keeps `w = 1`, so the same
+divide harmlessly divides by one. This makes the comparison *honest*: the only variable between the
+two pictures is whether the matrix wrote depth into `w`, so anything that differs on screen is
+genuinely perspective and not an incidental difference in how the two modes are drawn. General rule
+for "show the artifact" toggles: route both sides through one code path and vary a single input, so
+the toggle isolates exactly the thing under study — the same discipline as 2.4's fill-rule coverage
+counter and 2.8's `[O]` order toggle.

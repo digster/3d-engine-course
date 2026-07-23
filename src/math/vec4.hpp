@@ -68,16 +68,37 @@ struct vec4
 
 /// The first three components, with the fourth simply dropped.
 ///
-/// **Dropped, not divided by.** Correct for everything in Module 2: an affine
-/// transformation leaves `w` exactly as it found it (Lesson 2.7 §3.3), so a
-/// position comes back with `w = 1` and dividing by it would be a no-op.
+/// **Dropped, not divided by.** Correct while `w` is 1: an affine transformation
+/// leaves `w` exactly as it found it (Lesson 2.7 §3.3), so a position comes back
+/// with `w = 1` and dividing by it would be a no-op.
 ///
 /// It stops being correct the moment a projection matrix is in the chain, because
-/// those deliberately produce a `w` that is neither 0 nor 1. Dividing by it is
-/// called the **perspective divide**, it is the single most important operation
-/// in the projection pipeline, and it gets its own treatment in Lesson 2.10
-/// rather than happening quietly inside an accessor.
+/// those deliberately produce a `w` that is neither 0 nor 1 (Lesson 2.10). There,
+/// you want `perspective_divide` below, not this — and the two are kept as
+/// separate named functions on purpose, so "drop `w`" and "divide by `w`" can
+/// never be confused for one another at a call site.
 [[nodiscard]] constexpr vec3 xyz(vec4 v) { return {v.x, v.y, v.z}; }
+
+/// The first three components, each **divided by** the fourth — the perspective
+/// divide, the single most important operation in the projection pipeline.
+///
+/// A projection matrix (Lesson 2.10) deliberately writes `-z` — the distance in
+/// front of the camera — into `w`. Dividing `x` and `y` by it is exactly the
+/// similar-triangles shrink that makes distant things smaller: at twice the depth,
+/// half the size. Dividing `z` by it lands depth in the `[0, 1]` range the GPU
+/// wants. Before this point in the course `w` was always 1 and this was a no-op;
+/// from here on it is where perspective actually happens.
+///
+/// **No guard on `w`.** A `w` of zero means a point exactly on the plane through
+/// the eye (Lesson 2.7's "point at infinity"), and a negative `w` means a point
+/// *behind* the camera — both are handled by clipping the geometry away *before*
+/// it reaches here, which is Lesson 3.3. Until then the demo keeps its vertices in
+/// front of the camera so `w` stays safely positive; dividing here is unconditional
+/// because the real fix is upstream, not a branch in an accessor.
+[[nodiscard]] constexpr vec3 perspective_divide(vec4 v)
+{
+    return {v.x / v.w, v.y / v.w, v.z / v.w};
+}
 
 // ---- Arithmetic -------------------------------------------------------------
 

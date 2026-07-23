@@ -281,10 +281,11 @@ Two consequences run through everything built after this point:
   makes `w_out = w_in`, exactly, and the property is closed under composition, so a chain of any
   depth still returns positions as positions. `affine()` and `translation()` exist so matrices are
   built rather than filled in, which is what keeps the invariant true.
-- **`xyz()` drops `w` rather than dividing by it**, deliberately. Correct while everything is
-  affine; wrong the moment a projection joins the chain. The perspective divide belongs to
-  Lesson 2.10 under its own name rather than hiding inside an accessor — and a bug caused by a
-  silent divide is far harder to find than one caused by a missing, named step.
+- **`xyz()` drops `w`; `perspective_divide()` divides by it — two separate named functions.** As of
+  Lesson 2.10 the divide has its own name (`perspective_divide`, in `vec4.hpp`) rather than hiding
+  inside `xyz()` or an implicit conversion. Keeping "drop `w`" and "divide by `w`" as distinct
+  functions means a call site states which it meant, and a bug caused by a silent divide — far
+  harder to find than a missing, named step — cannot happen.
 
 The design decision worth recording is what we did *not* do. Distinct `position` and `direction`
 types would make the "transform a normal as a position" bug a compile error, and some engines take
@@ -317,6 +318,34 @@ view_from_world · world_from_model`, and `to_screen3` became a plain orthograph
 *view* space — Lesson 2.8's oblique-projection hack is gone, because a real movable camera now
 supplies the third dimension. Dollying the camera is deliberately a no-op under orthographic (the
 HUD says so); making distance matter is the perspective divide, Lesson 2.10.
+
+**Perspective, as of Lesson 2.10 — the keystone.** `perspective(fovy, aspect, near, far)` in
+`mat4.hpp` is the third link of the chain and the one that finally makes the scene look 3-D. The
+architecture worth recording is the *shape of the trick*, because it explains several things that
+otherwise look like arbitrary jargon:
+
+- **A matrix can't divide, so the projection defers.** Perspective is `x' = f·x/(−z)` — divide by
+  depth — but a linear map cannot divide one coordinate by another. So the matrix copies `−z` into
+  `w` (its bottom row is `(0,0,−1,0)`), and a *separate* step, `perspective_divide`, divides
+  everything by `w` afterwards. This is why **`w` stops being 1 here** (the third case flagged back
+  in Lesson 2.7, finally cashed), and why the pipeline has both a "clip space" (the matrix's output,
+  pre-divide) and an "NDC" stage (post-divide): they are the two sides of the one divide the matrix
+  could not do. The rendering path in the demo is literally `clip = proj · view · model`, then
+  `perspective_divide`, then the viewport — three stages in one `project()` helper.
+- **The projection carries every convention that matters.** It targets SDL_GPU's clip space exactly
+  — depth in `[0,1]` (not OpenGL's `[−1,1]`), `+y` up — and it is the single place the right-handed
+  → left-handed handedness flip happens (Conventions §5). Getting this matrix right is what makes the
+  Module 4 GPU port a change of API and not of maths (the NDC-parity decision). It is marked with a
+  `⚠ VERIFY` in the lesson against the SDL wiki for exactly this reason.
+- **Depth is non-linear, by construction.** Because the matrix divides by `−z`, depth resolution is
+  concentrated near the camera; the near plane is the dominant control on precision, and this is where
+  z-fighting (Lesson 3.1) is born. The engine does not hide this — the lesson makes it a number
+  (`z = −2` already at `z_ndc = 0.5` for a 1..100 frustum).
+- **Orthographic stays demo-local for now.** The `[P]` toggle's orthographic matrix lives in
+  `main.cpp`, not the engine, because nothing beyond the comparison needs it yet and Lesson 2.11 owns
+  the viewport/ortho machinery. Both projections run the *same* `perspective_divide` (ortho keeps
+  `w = 1`, so it divides by one) — which is what makes the on-screen comparison honest: the only thing
+  that differs is whether the matrix put depth into `w`.
 
 **The transform, and the first scene, as of Lesson 2.8.** `src/math/transform.hpp` adds the first
 type in the library that knows what a *scene* is: a `transform` holds a `position`, a `rotation`
@@ -381,8 +410,8 @@ Three decisions are worth recording because they will govern the directory as it
   lesson needed it, which is why every one has a derivation to point at.
 - **Conversions between vector widths are explicit.** `to_vec4(v, w)` is a named function rather
   than an implicit conversion, so a 3-D vector can never silently acquire a fourth component nobody
-  chose — and `xyz(v)` *drops* the fourth rather than dividing by it, because that divide is the
-  perspective divide and belongs to Lesson 2.10 under its own name.
+  chose — and `xyz(v)` *drops* the fourth while `perspective_divide(v)` *divides* by it (Lesson
+  2.10), two separate names so a call site can never confuse the two.
 
 `mat4` is deliberately not yet more capable than `mat3`: with `w = 0` its fourth column is
 multiplied by zero and contributes nothing, which Lesson 2.6 demonstrates rather than papers over.

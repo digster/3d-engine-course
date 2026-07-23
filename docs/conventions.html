@@ -1181,6 +1181,17 @@ td code { font-size: 0.82em; }
       looks down its own <strong>−z</strong>, so its <code>backward</code> (+z) axis is
       <code>eye − target</code>, consistent with the world-space −Z-forward convention above.
     </p>
+    <p>
+      The <strong>projection matrix</strong> (the <code>P</code> above) is
+      <code>perspective(fovy, aspect, near, far)</code> (Lesson 2.10). It carries view space to clip
+      space, and its defining trick is that it writes <code>−z</code> — the depth — into
+      <code>w</code>, so the later <strong>perspective divide</strong> (÷<code>w</code>) shrinks
+      distant things. <strong>This is where <code>w</code> stops being 1</strong>, where clip space and
+      NDC become distinct (before and after the divide), and — per §5 below — where the right-handed →
+      left-handed handedness flip happens. It targets SDL_GPU's clip space exactly: <code>x, y</code>
+      in <code>[−1,1]</code> and depth in <code>[0,1]</code> (§4), so the software rasterizer and the
+      Module 4 GPU renderer share one projection.
+    </p>
   </div>
 
   <!-- ===================================================================== -->

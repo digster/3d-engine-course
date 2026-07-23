@@ -1,12 +1,14 @@
 // src/main.cpp — the engine's entry point.
 //
-// This file hosts the current lesson's demo. As of Lesson 2.9 that is a SCENE seen
-// through a CAMERA: a ground plane, a world origin, and three objects sharing one
-// eight-vertex mesh, all viewed through a `look_at` view matrix that the arrow keys
-// orbit. [O] still rebuilds the model matrix in the wrong order (2.8's lesson), and
-// the HUD carries one vertex through model -> world -> view, named in every space.
+// This file hosts the current lesson's demo. As of Lesson 2.10 that is a SCENE seen
+// through a CAMERA and a PROJECTION: a ground plane, a world origin, and three
+// objects sharing one eight-vertex mesh, viewed through look_at (2.9) and a
+// perspective projection (2.10) — so distant cubes shrink and the floor rails
+// converge. [P] swaps perspective for orthographic to show the difference. The HUD
+// carries one vertex the whole chain, model -> world -> view -> clip -> NDC, so you
+// can watch w stop being 1 at the projection step.
 //
-// [Tab] CYCLES five demos — scene (2.6-2.9), basis transforms (2.5), triangles
+// [Tab] CYCLES five demos — scene (2.6-2.10), basis transforms (2.5), triangles
 // (2.2-2.4), lines (2.1), and Pong (1.8) — because deleting a working demo to
 // make room would be a regression. Five is far too many for one executable, and
 // the next one will be worse. That is not an oversight: Module 5 opens by
@@ -678,46 +680,68 @@ enum class spin
     return engine::mat3::identity();
 }
 
-constexpr engine::vec2 k_scene_origin{100.0f, 96.0f};
-constexpr float k_scene_unit = 21.0f;   ///< framebuffer pixels per view-space unit
+// The viewport: the 3-D scene is drawn into a 16:9 rectangle in the left part of
+// the 320x180 framebuffer. NDC's [-1,1] x [-1,1] square maps onto it, and because
+// the projection matrix bakes the 16:9 aspect into x, the rectangle itself must be
+// 16:9 or the picture stretches. (This mapping is the VIEWPORT TRANSFORM, given
+// its own name and home in Lesson 2.11; here it is these three constants.)
+constexpr engine::vec2 k_vp_centre{92.0f, 90.0f};
+constexpr float k_vp_half_w = 86.0f;
+constexpr float k_vp_half_h = 86.0f * 9.0f / 16.0f;   ///< 48.375 — keeps 16:9
 
-/// VIEW space -> framebuffer pixels. A straight orthographic projection: keep x
-/// and y, drop z.
-///
-/// As of Lesson 2.9 this projects VIEW space, not world space. That is the whole
-/// change: the fake 3-D of Lesson 2.8's oblique projection is gone, because a real
-/// movable camera (`look_at`, computed each frame) now supplies the viewpoint.
-/// Everything drawn is first carried world -> view by the view matrix, so orbiting
-/// the camera turns the scene here for free.
-///
-/// It is STILL orthographic — depth is simply discarded, so distance costs nothing
-/// in size and two points that differ only in view-space z land on the same pixel.
-/// Making distant things smaller is the perspective divide, and that is Lesson
-/// 2.10. The y negation is the +y-up (world/view) to +y-down (framebuffer)
-/// boundary Lesson 2.5's demo first needed; Lesson 2.11 names it the viewport
-/// transform and gives it a real home.
-[[nodiscard]] engine::vec2 to_screen3(engine::vec3 v_view)
+/// A point projected to the screen, and whether it was in front of the camera.
+struct screen_point
 {
-    return {k_scene_origin.x + v_view.x * k_scene_unit,
-            k_scene_origin.y - v_view.y * k_scene_unit};
+    engine::vec2 xy;
+    bool visible;
+};
+
+/// VIEW space -> framebuffer pixels, through a projection matrix. These are the
+/// pipeline's final steps, and Lesson 2.10 is the middle one:
+///
+///   1. project:  clip = proj * point(v_view)   — the matrix writes -z into w
+///   2. divide:   ndc  = clip / clip.w           — THE PERSPECTIVE DIVIDE
+///   3. viewport: ndc [-1,1] -> framebuffer pixels (the +y-up to +y-down flip)
+///
+/// Passing the matrix in rather than baking one in is exactly what lets [P] swap a
+/// perspective projection for an orthographic one with nothing else changing: the
+/// difference between "distance shrinks things" and "it does not" lives entirely
+/// in this one matrix.
+[[nodiscard]] screen_point project(engine::vec3 v_view, const engine::mat4& proj)
+{
+    const engine::vec4 clip = proj * engine::point(v_view);
+
+    // Behind (or on) the near plane: clip.w = -z_view <= 0 means the point is at
+    // or behind the eye, and the divide would fling it to nonsense (Lesson 2.7's
+    // negative-w warning). We drop the whole line rather than clip it — proper
+    // near-plane clipping is Lesson 3.3, and the demo keeps its geometry in front
+    // so this guard almost never fires.
+    if (clip.w <= 0.05f) { return {{}, false}; }
+
+    const engine::vec3 ndc = engine::perspective_divide(clip);
+    return {{k_vp_centre.x + ndc.x * k_vp_half_w,
+             k_vp_centre.y - ndc.y * k_vp_half_h}, true};   // -ndc.y: +y up -> +y down
 }
 
-/// Draw a line whose endpoints are already in VIEW space.
-void line3(engine::framebuffer& fb, engine::vec3 a, engine::vec3 b, Uint32 colour)
+/// Draw a line whose endpoints are in VIEW space, through `proj`.
+void line3(engine::framebuffer& fb, engine::vec3 a, engine::vec3 b,
+           Uint32 colour, const engine::mat4& proj)
 {
-    const engine::vec2 pa = to_screen3(a);
-    const engine::vec2 pb = to_screen3(b);
+    const screen_point pa = project(a, proj);
+    const screen_point pb = project(b, proj);
+    if (!pa.visible || !pb.visible) { return; }   // crosses the near plane — 3.3 clips it properly
     engine::draw_line(fb,
-        static_cast<int>(std::lround(pa.x)), static_cast<int>(std::lround(pa.y)),
-        static_cast<int>(std::lround(pb.x)), static_cast<int>(std::lround(pb.y)), colour);
+        static_cast<int>(std::lround(pa.xy.x)), static_cast<int>(std::lround(pa.xy.y)),
+        static_cast<int>(std::lround(pb.xy.x)), static_cast<int>(std::lround(pb.xy.y)), colour);
 }
 
-/// Draw a line given in WORLD space, through the view matrix. Convenience for the
-/// world grid and axes, whose endpoints are naturally world-space constants.
-void line3_world(engine::framebuffer& fb, const engine::mat4& view,
+/// Draw a WORLD-space line through the view and projection matrices. Convenience
+/// for the world grid and axes, whose endpoints are natural world-space constants.
+void line3_world(engine::framebuffer& fb, const engine::mat4& view, const engine::mat4& proj,
                  engine::vec3 a, engine::vec3 b, Uint32 colour)
 {
-    line3(fb, engine::xyz(view * engine::point(a)), engine::xyz(view * engine::point(b)), colour);
+    line3(fb, engine::xyz(view * engine::point(a)),
+          engine::xyz(view * engine::point(b)), colour, proj);
 }
 
 // ---------------------------------------------------------------------------
@@ -748,39 +772,38 @@ constexpr int k_cube_e[12][2] = {
     {0,4},{1,5},{2,6},{3,7},   // the four struts joining them
 };
 
-/// Draw the cube, with edge brightness standing in for depth.
+/// Draw the cube, with edge brightness standing in for depth, through `proj`.
 ///
 /// The brightness is a **cue, not a calculation** — there is no depth buffer yet
 /// (Lesson 3.1) and no lighting (Lesson 3.6), so this is simply "edges further
 /// away are dimmer" so the wireframe can be read at all. Without it a rotating
 /// wireframe cube is a genuinely ambiguous picture: your eye flips between two
-/// interpretations, because orthographic projection has discarded the only
-/// information that could settle it.
+/// interpretations, because a wireframe has discarded the only information that
+/// could settle it.
 /// @param point_w  the fourth component the corners are sent with. 1 is correct;
 ///                  0 reproduces Lesson 2.6, where every translation is ignored.
-void draw_cube(engine::framebuffer& fb, const engine::mat4& m, float point_w)
+void draw_cube(engine::framebuffer& fb, const engine::mat4& m,
+               const engine::mat4& proj, float point_w)
 {
     engine::vec3 p[8];
     for (int i = 0; i < 8; ++i)
     {
-        // The one line this whole lesson is about. A corner is a POSITION, so it
-        // goes through as w = 1 and the matrix's fourth column — the translation —
-        // is added in full. Send it as w = 0 and the corner is still rotated and
-        // scaled correctly, but never moved: Lesson 2.6's cube, back again.
+        // A corner is a POSITION, so w = 1 and the model+view matrix's translation
+        // is added in full. p[] comes out in VIEW space — the projection to the
+        // screen happens later, inside line3, through `proj`.
         p[i] = engine::xyz(m * engine::to_vec4(k_cube_v[i], point_w));
     }
 
     for (const auto& e : k_cube_e)
     {
-        // Brightness stands in for depth, and now the depth is real: p[] is in
-        // VIEW space, where z is distance in front of the camera (negative, since
+        // Depth from view-space z (distance in front of the camera, negative since
         // the camera looks down -z). Nearer edges (z closer to 0) are brighter.
-        // The window -9..-5 is the scene's measured view-space z spread at the
-        // demo's camera radius; still a cue, not a z-buffer (that is Lesson 3.1).
+        // The window -13..-2 covers the scene's view-space z spread across the
+        // whole dolly range; still a cue, not a z-buffer (that is Lesson 3.1).
         const float mid_z = 0.5f * (p[e[0]].z + p[e[1]].z);
-        const float t = std::clamp((mid_z + 9.0f) / 4.0f, 0.0f, 1.0f);   // -9..-5 -> 0..1
+        const float t = std::clamp((mid_z + 13.0f) / 11.0f, 0.0f, 1.0f);   // -13..-2 -> 0..1
         const Uint8 v = static_cast<Uint8>(70.0f + 165.0f * t);
-        line3(fb, p[e[0]], p[e[1]], engine::pack_argb(v, v, static_cast<Uint8>(v * 0.94f)));
+        line3(fb, p[e[0]], p[e[1]], engine::pack_argb(v, v, static_cast<Uint8>(v * 0.94f)), proj);
     }
 }
 
@@ -794,7 +817,8 @@ void draw_cube(engine::framebuffer& fb, const engine::mat4& m, float point_w)
 /// @param dir_w  the fourth component the AXES are sent with. 0 is correct — they
 ///               are directions. 1 translates them, which is the classic
 ///               transform-a-normal-as-a-point bug, drawn.
-void draw_axes3(engine::framebuffer& fb, const engine::mat4& m, float point_w, float dir_w)
+void draw_axes3(engine::framebuffer& fb, const engine::mat4& m,
+                const engine::mat4& proj, float point_w, float dir_w)
 {
     const Uint32 col[3] = {engine::pack_argb(236, 92, 92),     // x
                            engine::pack_argb(122, 196, 152),   // y
@@ -811,21 +835,22 @@ void draw_axes3(engine::framebuffer& fb, const engine::mat4& m, float point_w, f
         const engine::vec3 d = engine::xyz(m * engine::to_vec4(basis[i], dir_w));
         const engine::vec3 tip = origin + d * 0.75f;
         const engine::vec3 offset = origin;
-        line3(fb, offset, tip, col[i]);
+        line3(fb, offset, tip, col[i], proj);
 
-        // A small head, built by rotating the arrow's own direction — the same
-        // trick as 2.5's, now in the plane of the screen because that is where
-        // the head has to be legible.
-        const engine::vec2 a = to_screen3(offset);
-        const engine::vec2 b = to_screen3(tip);
-        const engine::vec2 back = engine::normalised(a - b) * 5.0f;
+        // A small head, built in SCREEN space by rotating the projected arrow —
+        // the same trick as 2.5's, now after the projection because that is where
+        // the head has to be legible. Skip it if either end is off-screen.
+        const screen_point a = project(offset, proj);
+        const screen_point b = project(tip, proj);
+        if (!a.visible || !b.visible) { continue; }
+        const engine::vec2 back = engine::normalised(a.xy - b.xy) * 5.0f;
         if (engine::length_squared(back) > 0.0f)
         {
-            const engine::vec2 h1 = b + engine::rotation(0.5f) * back;
-            const engine::vec2 h2 = b + engine::rotation(-0.5f) * back;
+            const engine::vec2 h1 = b.xy + engine::rotation(0.5f) * back;
+            const engine::vec2 h2 = b.xy + engine::rotation(-0.5f) * back;
             auto ix = [](float f) { return static_cast<int>(std::lround(f)); };
-            engine::draw_line(fb, ix(b.x), ix(b.y), ix(h1.x), ix(h1.y), col[i]);
-            engine::draw_line(fb, ix(b.x), ix(b.y), ix(h2.x), ix(h2.y), col[i]);
+            engine::draw_line(fb, ix(b.xy.x), ix(b.xy.y), ix(h1.x), ix(h1.y), col[i]);
+            engine::draw_line(fb, ix(b.xy.x), ix(b.xy.y), ix(h2.x), ix(h2.y), col[i]);
         }
     }
 }
@@ -943,9 +968,10 @@ void build_scene(engine::transform (&out)[k_scene_count], spin mode, float t)
 ///
 /// This exists so that "world space" is a place you can see rather than a claim,
 /// and as of Lesson 2.9 it is drawn THROUGH the view matrix — so the floor tilts
-/// and turns as the camera orbits, which is the whole demonstration. The grid is a
-/// fixed world-space thing; only the viewpoint changes.
-void draw_world(engine::framebuffer& fb, const engine::mat4& view)
+/// and turns as the camera orbits. As of Lesson 2.10 it goes on through `proj`, so
+/// the far edge of the floor is smaller than the near edge: the floor's parallel
+/// rails now visibly converge, which is perspective made obvious.
+void draw_world(engine::framebuffer& fb, const engine::mat4& view, const engine::mat4& proj)
 {
     constexpr float reach = 2.5f;
     const Uint32 faint = engine::pack_argb(40, 44, 60);
@@ -957,15 +983,51 @@ void draw_world(engine::framebuffer& fb, const engine::mat4& view)
     {
         const float f = static_cast<float>(i) * 0.5f;
         const Uint32 c = (i == 0) ? axis_line : faint;
-        line3_world(fb, view, {f, 0.0f, -reach}, {f, 0.0f, reach}, c);
-        line3_world(fb, view, {-reach, 0.0f, f}, {reach, 0.0f, f}, c);
+        line3_world(fb, view, proj, {f, 0.0f, -reach}, {f, 0.0f, reach}, c);
+        line3_world(fb, view, proj, {-reach, 0.0f, f}, {reach, 0.0f, f}, c);
     }
 
     // The world's own axis triad, at the world origin, in the course colours.
     // Every object's position is measured from exactly this point.
-    line3_world(fb, view, {0.0f, 0.0f, 0.0f}, {0.9f, 0.0f, 0.0f}, engine::pack_argb(150, 66, 66));
-    line3_world(fb, view, {0.0f, 0.0f, 0.0f}, {0.0f, 0.9f, 0.0f}, engine::pack_argb(78, 130, 100));
-    line3_world(fb, view, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.9f}, engine::pack_argb(82, 108, 156));
+    line3_world(fb, view, proj, {0.0f, 0.0f, 0.0f}, {0.9f, 0.0f, 0.0f}, engine::pack_argb(150, 66, 66));
+    line3_world(fb, view, proj, {0.0f, 0.0f, 0.0f}, {0.0f, 0.9f, 0.0f}, engine::pack_argb(78, 130, 100));
+    line3_world(fb, view, proj, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.9f}, engine::pack_argb(82, 108, 156));
+}
+
+// ---------------------------------------------------------------------------
+// Lesson 2.10 — the projection matrices the scene is drawn with
+// ---------------------------------------------------------------------------
+
+// The scene's field of view and clip planes. The near plane is small (0.3) so the
+// orbiting/dollying camera never pushes a vertex behind it — verified: the closest
+// the scene's geometry comes to the eye across the whole dolly range is ~1.7 units.
+constexpr float k_scene_fovy = 55.0f * 3.14159265358979f / 180.0f;
+constexpr float k_scene_aspect = 16.0f / 9.0f;   // matches the viewport rectangle
+constexpr float k_scene_near = 0.3f;
+constexpr float k_scene_far = 100.0f;
+
+/// An ORTHOGRAPHIC projection matrix, for the [P] comparison — this is what the
+/// demo used before Lesson 2.10, expressed as a matrix so it drops into the same
+/// pipeline. It keeps `w = 1` (so the perspective divide is a harmless divide by
+/// one) and maps a fixed view-space box to NDC, so distance changes nothing.
+///
+/// The half-extents are chosen so the on-screen scale matches the perspective
+/// projection at the camera's default distance — that way pressing [P] swaps how
+/// depth is handled without jumping the overall size, and the difference you see is
+/// purely "near grows / far shrinks" versus "everything the same size".
+///
+/// A general `orthographic()` belongs in the engine eventually (2-D overlays,
+/// shadow maps); it is kept local here because nothing but this comparison needs it
+/// yet, and Lesson 2.11 is where the viewport/ortho machinery gets its real home.
+[[nodiscard]] engine::mat4 demo_orthographic()
+{
+    constexpr float half_w = 6.478f;                    // view-space units mapped to the viewport
+    constexpr float half_h = half_w / k_scene_aspect;   // keep the same 16:9 shape
+    constexpr float depth = k_scene_far - k_scene_near;
+    return {{1.0f / half_w, 0.0f, 0.0f, 0.0f},
+            {0.0f, 1.0f / half_h, 0.0f, 0.0f},
+            {0.0f, 0.0f, -1.0f / depth, 0.0f},
+            {0.0f, 0.0f, -k_scene_near / depth, 1.0f}};
 }
 
 // ---------------------------------------------------------------------------
@@ -1341,7 +1403,7 @@ int main(int argc, char* argv[])
             SDL_VERSIONNUM_MINOR(sdl_version),
             SDL_VERSIONNUM_MICRO(sdl_version));
 
-    SDL_Window* window = SDL_CreateWindow("The View Matrix — Module 2", 1280, 720,
+    SDL_Window* window = SDL_CreateWindow("Perspective Projection — Module 2", 1280, 720,
                                           SDL_WINDOW_RESIZABLE);
     if (window == nullptr)
     {
@@ -1414,6 +1476,16 @@ int main(int argc, char* argv[])
     orbit_camera cam;                   ///< arrow keys orbit; [-]/[=] dolly
     engine::mat4 view_from_world;       ///< look_at(eye, target, up), rebuilt each frame
     engine::vec3 selected_view;         ///< the probe vertex carried on into VIEW space
+    engine::vec4 selected_clip;         ///< …and on into CLIP space (before the divide)
+    engine::vec3 selected_ndc;          ///< …and finally NDC (after the perspective divide)
+
+    // Lesson 2.10's two projections. Perspective is the lesson's subject; the
+    // orthographic one is the pre-2.10 behaviour, kept on [P] so the difference
+    // can be toggled rather than described.
+    bool use_perspective = true;        ///< [P] toggles perspective vs orthographic
+    const engine::mat4 scene_perspective =
+        engine::perspective(k_scene_fovy, k_scene_aspect, k_scene_near, k_scene_far);
+    const engine::mat4 scene_orthographic = demo_orthographic();
     xform basis_mode = xform::rotate;   ///< Lesson 2.5
     float basis_t = 0.6f;               ///< the one parameter every mode reads
     bool basis_animating = false;
@@ -1449,9 +1521,9 @@ int main(int argc, char* argv[])
     SDL_Log("  [4]/[5] follow the mouse: the three sub-triangles ARE the three weights. [R] fill rule.");
     SDL_Log("  [6] Gouraud (three corner colours) [7] uv checker — [M] switches blend space");
     SDL_Log("Basis (2.5): [Z] transform  [,] [.] adjust  [0] reset  [Space] animate");
-    SDL_Log("Scene (2.9): [arrows] orbit camera  [-]/[=] dolly  [O] model order  [X] object");
-    SDL_Log("  [Z] rotation axis  [,] [.] adjust t  [Space] spin  [W]/[N] the 2.7 w bugs");
-    SDL_Log("[Tab] cycles demos: scene (2.6-2.9) -> basis (2.5) -> triangles -> lines -> Pong");
+    SDL_Log("Scene (2.10): [arrows] orbit  [-]/[=] dolly  [P] persp/ortho  [O] model order");
+    SDL_Log("  [X] object  [Z] rotation axis  [,] [.] t  [Space] spin  [W]/[N] the 2.7 w bugs");
+    SDL_Log("[Tab] cycles demos: scene (2.6-2.10) -> basis (2.5) -> triangles -> lines -> Pong");
     SDL_Log("[V] vsync · [T] throttle · [Esc] quit");
 
     bool running = true;
@@ -1488,7 +1560,7 @@ int main(int argc, char* argv[])
         {
             which = next_demo(which);
             SDL_SetWindowTitle(window,
-                which == demo::scene     ? "The View Matrix — Module 2"
+                which == demo::scene     ? "Perspective Projection — Module 2"
               : which == demo::basis     ? "Basis Transforms — Module 2"
               : which == demo::triangles ? "Triangles — Module 2"
               : which == demo::lines     ? "Lines — Module 2"
@@ -1508,10 +1580,11 @@ int main(int argc, char* argv[])
 
         if (which == demo::scene)
         {
-            // ---- Lesson 2.8's scene, now seen through 2.9's camera ------------
+            // ---- Lesson 2.8's scene, through 2.9's camera and 2.10's projection ---
             if (in.key_pressed(SDL_SCANCODE_Z)) { cube_mode = next_spin(cube_mode); }
             if (in.key_pressed(SDL_SCANCODE_O)) { order = next_order(order); }
             if (in.key_pressed(SDL_SCANCODE_X)) { selected = (selected + 1) % k_scene_count; }
+            if (in.key_pressed(SDL_SCANCODE_P)) { use_perspective = !use_perspective; }
             if (in.key_pressed(SDL_SCANCODE_SPACE)) { cube_animating = !cube_animating; }
             if (in.key_pressed(SDL_SCANCODE_0)) { cube_t = 0.0f; }
             if (in.key_pressed(SDL_SCANCODE_W)) { cube_point_w = (cube_point_w == 1.0f) ? 0.0f : 1.0f; }
@@ -1545,36 +1618,39 @@ int main(int argc, char* argv[])
             cube_m = build_spin(cube_mode, cube_t);
             build_scene(scene, cube_mode, cube_t);
 
-            // The one matrix this lesson is about, rebuilt from the camera's eye,
-            // target and up every frame — never accumulated, for the same reason
-            // the model matrices are not (2.8).
+            // The view matrix (2.9) and the projection matrix (2.10). The
+            // projection is [P]-selectable; everything downstream is identical, so
+            // the toggle isolates exactly what perspective changes.
             view_from_world = cam.view();
+            const engine::mat4& proj = use_perspective ? scene_perspective : scene_orthographic;
 
             fb.clear(k_bg);
 
-            // The world FIRST, through the camera, so the floor and origin turn
-            // with the viewpoint and every object is read against them.
-            draw_world(fb, view_from_world);
+            // The world FIRST, through the camera and projection, so the floor and
+            // origin turn with the viewpoint and its rails converge with distance.
+            draw_world(fb, view_from_world, proj);
 
-            // One mesh, three transforms, one camera. The full chain so far:
-            //     view_from_model = view_from_world * world_from_model
-            // and the inner labels match (…world · world…), which is the naming
-            // discipline from 2.8 doing its job.
+            // One mesh, three transforms, one camera, one projection. The full
+            // chain: clip = proj * view_from_world * world_from_model, and the
+            // perspective divide inside project() finishes the job.
             for (int i = 0; i < k_scene_count; ++i)
             {
                 const engine::mat4 world_from_model = model_matrix(scene[i], order);
                 const engine::mat4 view_from_model = view_from_world * world_from_model;
-                draw_cube(fb, view_from_model, cube_point_w);
-                draw_axes3(fb, view_from_model, cube_point_w, cube_dir_w);
+                draw_cube(fb, view_from_model, proj, cube_point_w);
+                draw_axes3(fb, view_from_model, proj, cube_point_w, cube_dir_w);
             }
 
             // Everything the HUD reports is read back out of the matrices that were
-            // actually used to draw, so the numbers cannot agree with a picture
-            // they did not produce.
+            // actually used to draw. The probe vertex is now carried the WHOLE chain
+            // — model -> world -> view -> clip -> NDC — so the HUD shows where w
+            // stops being 1 and the divide takes over.
             selected_m = model_matrix(scene[selected], order);
             selected_world = engine::xyz(selected_m
                                        * engine::to_vec4(k_probe_vertex, cube_point_w));
             selected_view = engine::xyz(view_from_world * engine::point(selected_world));
+            selected_clip = proj * engine::point(selected_view);
+            selected_ndc = engine::perspective_divide(selected_clip);
             selected_axis_len = axis_length(selected_m, {1.0f, 0.0f, 0.0f});
             selected_corner = axis_angle_deg(selected_m, {1.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f});
         }
@@ -1826,84 +1902,101 @@ int main(int argc, char* argv[])
                                       static_cast<double>(cam.azimuth * 180.0f / 3.14159265f),
                                       static_cast<double>(cam.elevation * 180.0f / 3.14159265f),
                                       static_cast<double>(cam.radius));
-            SDL_SetRenderDrawColor(renderer, 226, 196, 110, 255);
-            SDL_RenderDebugText(renderer, 380.0f, 68.0f, "[-][=] distance: NO effect (ortho)");
-
-            // The view matrix's rows ARE the camera's axes. Colour them x/y/z.
+            // The projection mode — this lesson's toggle. Coloured, and the line
+            // below says what distance does under it: the whole point of [P].
+            SDL_SetRenderDrawColor(renderer, use_perspective ? 122 : 226,
+                                             use_perspective ? 196 : 196,
+                                             use_perspective ? 152 : 110, 255);
+            SDL_RenderDebugTextFormat(renderer, 380.0f, 68.0f, "[P] projection = %s",
+                                      use_perspective ? "PERSPECTIVE" : "orthographic");
             SDL_SetRenderDrawColor(renderer, 150, 152, 170, 255);
-            SDL_RenderDebugText(renderer, 380.0f, 90.0f, "view rows = the camera's axes:");
+            SDL_RenderDebugText(renderer, 380.0f, 82.0f, use_perspective
+                                ? "  [-][=] dolly: far shrinks, near grows"
+                                : "  [-][=] dolly: NO effect on size");
+
+            // The camera's axes (view rows), compact.
             SDL_SetRenderDrawColor(renderer, 236, 92, 92, 255);
-            SDL_RenderDebugTextFormat(renderer, 380.0f, 104.0f, "right    (%+.2f %+.2f %+.2f)",
+            SDL_RenderDebugTextFormat(renderer, 380.0f, 100.0f, "R(%+.2f %+.2f %+.2f)",
                 static_cast<double>(cam_right.x), static_cast<double>(cam_right.y),
                 static_cast<double>(cam_right.z));
             SDL_SetRenderDrawColor(renderer, 122, 196, 152, 255);
-            SDL_RenderDebugTextFormat(renderer, 380.0f, 118.0f, "up       (%+.2f %+.2f %+.2f)",
+            SDL_RenderDebugTextFormat(renderer, 380.0f, 114.0f, "U(%+.2f %+.2f %+.2f)",
                 static_cast<double>(cam_up.x), static_cast<double>(cam_up.y),
                 static_cast<double>(cam_up.z));
             SDL_SetRenderDrawColor(renderer, 126, 162, 236, 255);
-            SDL_RenderDebugTextFormat(renderer, 380.0f, 132.0f, "backward (%+.2f %+.2f %+.2f)",
+            SDL_RenderDebugTextFormat(renderer, 380.0f, 128.0f, "B(%+.2f %+.2f %+.2f)  =view rows",
                 static_cast<double>(cam_back.x), static_cast<double>(cam_back.y),
                 static_cast<double>(cam_back.z));
 
-            // The lesson's spine, on screen: ONE vertex named in every space it
-            // passes through. v_view's z is negative — distance in front of the
-            // camera — which is the -z-forward convention made visible.
+            // THE LESSON'S SPINE: one corner, carried the whole chain, named in
+            // every space — and you can SEE w stop being 1 at the clip step.
             SDL_SetRenderDrawColor(renderer, 210, 212, 220, 255);
-            SDL_RenderDebugTextFormat(renderer, 380.0f, 154.0f, "[X] %s, one corner:",
+            SDL_RenderDebugTextFormat(renderer, 380.0f, 148.0f, "[X] %s, one corner:",
                                       scene_name(selected));
             SDL_SetRenderDrawColor(renderer, 150, 152, 170, 255);
-            SDL_RenderDebugTextFormat(renderer, 380.0f, 168.0f, "v_model (%+.2f %+.2f %+.2f)",
+            SDL_RenderDebugTextFormat(renderer, 380.0f, 162.0f, "model (%+.2f %+.2f %+.2f)",
                 static_cast<double>(k_probe_vertex.x), static_cast<double>(k_probe_vertex.y),
                 static_cast<double>(k_probe_vertex.z));
             SDL_SetRenderDrawColor(renderer, 226, 196, 110, 255);
-            SDL_RenderDebugTextFormat(renderer, 380.0f, 182.0f, "v_world (%+.2f %+.2f %+.2f)",
+            SDL_RenderDebugTextFormat(renderer, 380.0f, 176.0f, "world (%+.2f %+.2f %+.2f)",
                 static_cast<double>(selected_world.x), static_cast<double>(selected_world.y),
                 static_cast<double>(selected_world.z));
             SDL_SetRenderDrawColor(renderer, 130, 190, 220, 255);
-            SDL_RenderDebugTextFormat(renderer, 380.0f, 196.0f, "v_view  (%+.2f %+.2f %+.2f)",
+            SDL_RenderDebugTextFormat(renderer, 380.0f, 190.0f, "view  (%+.2f %+.2f %+.2f)",
                 static_cast<double>(selected_view.x), static_cast<double>(selected_view.y),
                 static_cast<double>(selected_view.z));
+            // The clip line: FOUR components, and w is the star — it is -z_view now,
+            // no longer 1. That is where perspective lives.
+            SDL_SetRenderDrawColor(renderer, 236, 196, 110, 255);
+            SDL_RenderDebugTextFormat(renderer, 380.0f, 204.0f, "clip  (%+.2f %+.2f %+.2f w=%.2f)",
+                static_cast<double>(selected_clip.x), static_cast<double>(selected_clip.y),
+                static_cast<double>(selected_clip.z), static_cast<double>(selected_clip.w));
+            SDL_SetRenderDrawColor(renderer, 150, 152, 170, 255);
+            SDL_RenderDebugTextFormat(renderer, 380.0f, 218.0f, "   w=%.2f %s",
+                static_cast<double>(selected_clip.w),
+                use_perspective ? "= -z_view  (was 1!)" : "= 1 (ortho keeps it)");
+            // NDC, after the perspective divide: xy in [-1,1], z in [0,1].
+            SDL_SetRenderDrawColor(renderer, 130, 220, 170, 255);
+            SDL_RenderDebugTextFormat(renderer, 380.0f, 232.0f, "ndc   (%+.3f %+.3f %+.3f) /w",
+                static_cast<double>(selected_ndc.x), static_cast<double>(selected_ndc.y),
+                static_cast<double>(selected_ndc.z));
 
-            // The deform/move check from 2.8, kept but compact.
+            // Deform/move check from 2.8, plus the 2.7 w-bug flag when engaged.
             const float want_len = scene[selected].scale.x;
             const bool rigid = std::fabs(selected_corner - 90.0f) < 0.01f
                             && std::fabs(selected_axis_len - want_len) < 0.001f;
-            SDL_SetRenderDrawColor(renderer, rigid ? 150 : 236, rigid ? 152 : 92,
-                                             rigid ? 170 : 92, 255);
-            SDL_RenderDebugTextFormat(renderer, 380.0f, 218.0f,
-                                      "|x|=%.2f  corner %.1f deg%s",
-                                      static_cast<double>(selected_axis_len),
-                                      static_cast<double>(selected_corner),
-                                      rigid ? "" : "  DEFORMED");
+            const bool w_bug = (cube_point_w != 1.0f || cube_dir_w != 0.0f);
+            SDL_SetRenderDrawColor(renderer, (rigid && !w_bug) ? 150 : 236,
+                                             (rigid && !w_bug) ? 152 : 92,
+                                             (rigid && !w_bug) ? 170 : 92, 255);
+            SDL_RenderDebugTextFormat(renderer, 380.0f, 252.0f, "|x|=%.2f corner %.0f%s%s",
+                static_cast<double>(selected_axis_len), static_cast<double>(selected_corner),
+                rigid ? "" : " DEFORM", w_bug ? "  [W/N bug]" : "");
 
-            // Lesson 2.7's failure modes are still on [W]/[N]; surface them only
-            // when engaged, so the panel stays about the camera otherwise.
-            if (cube_point_w != 1.0f || cube_dir_w != 0.0f)
-            {
-                SDL_SetRenderDrawColor(renderer, 236, 92, 92, 255);
-                SDL_RenderDebugTextFormat(renderer, 380.0f, 236.0f, "[W]=%.0f [N]=%.0f  (2.7 bug on)",
-                    static_cast<double>(cube_point_w), static_cast<double>(cube_dir_w));
-            }
-
-            // What to look for. The headline instruction is about the camera now.
+            // What to look for.
             SDL_SetRenderDrawColor(renderer, 150, 152, 170, 255);
             if (order != trs_order::trs)
             {
-                SDL_RenderDebugText(renderer, 380.0f, 258.0f, "wrong model order on [O] -");
-                SDL_RenderDebugText(renderer, 380.0f, 272.0f, order == trs_order::tsr
-                                    ? "the slab shears (2.8)." : "objects orbit origin (2.8).");
+                SDL_RenderDebugText(renderer, 380.0f, 272.0f, "wrong model order [O]: 2.8's");
+                SDL_RenderDebugText(renderer, 380.0f, 286.0f, order == trs_order::tsr
+                                    ? "shear is back." : "orbit-origin is back.");
+            }
+            else if (use_perspective)
+            {
+                SDL_RenderDebugText(renderer, 380.0f, 272.0f, "toggle [P]: perspective makes the");
+                SDL_RenderDebugText(renderer, 380.0f, 286.0f, "far cubes smaller and the floor");
+                SDL_RenderDebugText(renderer, 380.0f, 300.0f, "rails converge. Dolly now zooms.");
             }
             else
             {
-                SDL_RenderDebugText(renderer, 380.0f, 258.0f, "orbit with the arrows: the");
-                SDL_RenderDebugText(renderer, 380.0f, 272.0f, "world turns because moving the");
-                SDL_RenderDebugText(renderer, 380.0f, 286.0f, "camera IS moving the world the");
-                SDL_RenderDebugText(renderer, 380.0f, 300.0f, "other way (view = inverse).");
+                SDL_RenderDebugText(renderer, 380.0f, 272.0f, "orthographic: every cube the same");
+                SDL_RenderDebugText(renderer, 380.0f, 286.0f, "size, rails parallel, dolly inert.");
+                SDL_RenderDebugText(renderer, 380.0f, 300.0f, "[P] back to perspective.");
             }
 
             SDL_SetRenderDrawColor(renderer, 210, 212, 220, 255);
             SDL_RenderDebugText(renderer, 6.0f, 328.0f,
-                                "[arrows] orbit  [-][=] dolly  [O] order  [X] obj  [Z] spin  [Tab] demo");
+                                "[arrows] orbit  [-][=] dolly  [P] proj  [O] order  [X] obj  [Tab] demo");
         }
         else if (which == demo::basis)
         {

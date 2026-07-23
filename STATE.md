@@ -7,7 +7,7 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-07-28 (after Lesson 2.9 — Module 2: 9 of 12, 23 of 94 lessons)
+updated: 2026-07-29 (after Lesson 2.10 — Module 2: 10 of 12, 24 of 94 lessons)
 
 conventions:
   world: right-handed, Y-up, -Z forward
@@ -122,6 +122,24 @@ conventions:
         cross is zero => right undefined. Demo CLAMPS elevation to ~+-83 deg. The
         real fix (orientation with no preferred up axis) is the quaternion, 7.1 —
         this is its motivation, met early.
+  projection: perspective(fovy, aspect, near, far) -> CLIP space. PERSPECTIVE IS
+        ONE DIVIDE BY DEPTH, from similar triangles: x' = f*x/(-z), y' = f*y/(-z),
+        so distant things shrink. A matrix is LINEAR and CANNOT DIVIDE, so P writes
+        -z into w (the -1 in the bottom row) and a SEPARATE step divides by w. THAT
+        IS WHERE w STOPS BEING 1 (2.7's third case, finally cashed). The divide is
+        the PERSPECTIVE_DIVIDE, and it is why clip space (pre-divide) and NDC
+        (post-divide) are distinct spaces. Matrix (column-major), written as rows:
+          | f/aspect  0    0    0 |   f = cot(fovy/2)
+          |    0      f    0    0 |   A = -far/(far-near)
+          |    0      0    A    B |   B = -far*near/(far-near)
+          |    0      0   -1    0 |   bottom row copies -z into w
+        DEPTH maps near->0, far->1 (SDL_GPU range, NOT OpenGL's [-1,1]) and is
+        1/z-NONLINEAR: near=1,far=100 puts z=-2 already at z_ndc=0.5. Precision is
+        lavish near, starved far; PUSH THE NEAR PLANE OUT to fix z-fighting (3.1).
+        The HANDEDNESS FLIP (right-handed view -> left-handed clip, conventions §5)
+        happens INSIDE this matrix; +y stays up (the +y-down framebuffer flip is
+        the VIEWPORT's job, 2.11). VERIFIED: (2,1,-10) -> clip (1.949,1.732,9.091,
+        w=10) -> ndc (0.195,0.173,0.909); near->0, far->1 exactly.
   cross-product: cross(a,b) = (a.y*b.z - a.z*b.y, a.z*b.x - a.x*b.z, a.x*b.y -
         a.y*b.x). Perpendicular to both; |a x b| = |a||b|sin(theta) = the
         PARALLELOGRAM AREA (the sin sibling of dot's cos). Zero for parallel
@@ -554,6 +572,7 @@ completed:
   - 2.7  Homogeneous Coordinates and What w Really Means
   - 2.8  The Space Chain: Model to World
   - 2.9  The View Matrix: Deriving Look-At
+  - 2.10 Perspective from Similar Triangles
 
 capabilities:
   - verified C++20 toolchain (MSVC / GCC / Clang), 64-bit
@@ -585,6 +604,21 @@ capabilities:
     switches with [M]
   - maths: src/math/vec2.hpp (header-only) — arithmetic, length/length_squared,
     normalised(+_or), dot, perpendicular, project_onto, reflect, lerp, distance
+  - maths 2.10: src/math/vec4.hpp gains perspective_divide(v) = v/v.w — a SEPARATE
+    named function from xyz() (which still drops w), so drop-vs-divide can never be
+    confused. No w guard (behind-camera is clipped upstream, 3.3). src/math/mat4.hpp
+    gains perspective(fovy, aspect, near, far); needs <cmath> (added) for std::tan.
+    main.cpp: the projection pipeline — project(v_view, proj) does clip = proj*
+    point(v) then perspective_divide then viewport (k_vp_centre/half_w/half_h, a
+    16:9 rect; -ndc.y is the +y-up->+y-down flip). line3/line3_world/draw_cube/
+    draw_axes3/draw_world all take a const mat4& proj now. [P] toggles
+    scene_perspective vs scene_orthographic (a demo-local ortho matrix, w=1, kept
+    local until 2.11 owns viewport/ortho). Depth cue window retuned to view-z
+    [-13,-2]. HUD carries the probe the WHOLE chain model->world->view->clip->ndc
+    and shows w=-z_view on the clip line. Verified: default-frame probe
+    world(-0.76,1.65,-0.25)->view(-0.76,1.07,-6.87)->clip(-0.82,2.06,6.59,w=6.87)
+    ->ndc(-0.119,0.300,0.959); scene fits panel & stays in front (min w 1.74 > near
+    0.3) across the whole dolly range.
   - maths 2.9: src/math/vec3.hpp gains cross(a,b) (constexpr; the deferral comment
     is REVISED — cross now belongs to 2.9, not 3.4). src/math/mat4.hpp gains
     look_at(eye, target, up_hint) = the view matrix, built as the inverse of a
@@ -904,39 +938,35 @@ files:
                  02-03-barycentric.html, 02-04-attribute-interpolation.html,
                  02-05-matrices.html, 02-06-mat4.html,
                  02-07-homogeneous.html, 02-08-space-chain.html,
-                 02-09-view-matrix.html
+                 02-09-view-matrix.html, 02-10-perspective.html
   docs/_template/: lesson-template.html, README.md, apply-shared.py, check-page.js
   memory/: 2026-07-16.md, 2026-07-18.md, 2026-07-21.md, 2026-07-22.md,
            2026-07-23.md, 2026-07-24.md, 2026-07-25.md, 2026-07-26.md,
-           2026-07-27.md, 2026-07-28.md
+           2026-07-27.md, 2026-07-28.md, 2026-07-29.md
   (retired: hello.cpp)
 
-next: 2.10 — Perspective from Similar Triangles
-      (planned filename: docs/lessons/02-10-perspective.html — 2.9 links to it)
-      THE KEYSTONE LESSON of Module 2, and CLAUDE.md §4 is emphatic: derive
-      perspective FROM SIMILAR TRIANGLES AND A DIAGRAM before any matrix. The
-      failure to show first: the orthographic camera we just built makes a distant
-      crate exactly as big as a near one, and dollying does NOTHING (the demo's
-      [-]/[=] already proves it on screen — reuse that).
-        - SIMILAR TRIANGLES: a point at (x, y, z) in view space projects onto a
-          screen plane at distance n by x' = n*x/(-z), y' = n*y/(-z). That single
-          divide-by-(-z) is the whole of perspective. Push real numbers: at z=-2
-          vs z=-10 the same x halves then fifths, which is 2.7's w=-z table
-          arriving as geometry. WORK IT BY HAND.
-        - THEN package as a matrix. The projection matrix's job is to put -z (or a
-          function of it) into the w slot so the LATER perspective divide does the
-          shrink. This is where w STOPS BEING 1 — the third case 2.7 flagged and
-          xyz() deliberately still drops. NAME THE PERSPECTIVE DIVIDE here at last.
-        - HANDEDNESS FLIP happens INSIDE the projection matrix (conventions §5):
-          right-handed view space -> left-handed clip. Pin the exact clip-space
-          target (SDL_GPU: z in [0,1], +Y up) — but we are still in the software
-          rasterizer, so target that NDC now so the Module 4 port is an API change
-          only (the NDC-parity decision, LEARNINGS).
-      xyz() must FINALLY start dividing by w in the projected path — or introduce a
-      separate perspective_divide() so the drop-vs-divide distinction stays honest.
-      DECIDE and note it. NUMERIC WALKTHROUGH MANDATORY.
-      Module 2 still owes after 2.10: 2.11 viewport (the y-flip boundary to_screen3
-      hides gets its real name + z-to-[0,1] mapping), 2.12 the spinning-wireframe-
-      mesh milestone — the whole model->world->view->clip->NDC->screen chain lit up
-      end to end, every line explainable.
+next: 2.11 — The Viewport Transform
+      (planned filename: docs/lessons/02-11-viewport.html — 2.10 links to it)
+      The last link before the milestone. NDC -> framebuffer pixels, which the demo
+      has been doing all along with three hand-picked constants (k_vp_centre,
+      k_vp_half_w/half_h) and a -ndc.y flip inside project(). 2.11 DERIVES that step
+      and gives it its own home:
+        - THE AFFINE MAP from the [-1,1] NDC cube to a rectangle of pixels: an
+          x-scale/offset and a y-scale/offset. Work one point by hand.
+        - THE +Y-UP-TO-+Y-DOWN FLIP named properly at last. This boundary has been
+          a single minus sign since Lesson 2.5's to_screen (basis demo) and lived
+          in project()'s -ndc.y; 2.11 is where it stops being folklore. NDC +y is
+          up (SDL_GPU, conventions §4); the framebuffer/texture is +y down (§4's
+          "+Y up in NDC but +Y down in viewport" note). One flip, one place.
+        - DEPTH RANGE carried through: ndc.z in [0,1] maps to the z-buffer's range,
+          which 3.1 will actually store. Viewport also has a min/max depth (SDL_GPU
+          SDL_GPUViewport has min_depth/max_depth) — mention, target [0,1].
+      Likely lands a viewport() helper (or a small struct) that project() calls,
+      replacing the ad-hoc constants; DECIDE whether it goes in the engine now or
+      stays demo-local one more lesson (2.11 is literally its lesson, so probably
+      engine). NUMERIC WALKTHROUGH MANDATORY.
+      Then 2.12 is the MODULE MILESTONE: a spinning wireframe MESH (an actual OBJ,
+      or the cube grown up) with the whole model->world->view->clip->NDC->screen
+      chain lit end to end, every line explainable — the Stage-A payoff before
+      Module 3 adds the z-buffer, clipping, culling, textures and light.
 ```

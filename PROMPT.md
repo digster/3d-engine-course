@@ -559,3 +559,40 @@ label, and compacting the widget readout. Re-ran to `pass: true`, both themes ve
 browser. New LEARNINGS: introduce math where first needed (not where a plan filed it); a projection
 can make a rigid thing look sheared, so verify frames numerically; and the left-handed-basis mirror
 trap from a swapped `cross` argument order.
+
+
+## 2026-07-29 — Lesson 2.10 (the keystone)
+
+> next
+
+Resumed from `STATE.md` → `next: 2.10 — Perspective from Similar Triangles`, with STATE carrying an
+explicit open question: does `xyz()` start dividing, or does a separate `perspective_divide()` keep
+drop-vs-divide honest?
+
+### Judgement calls
+
+| Question | Decision | Why |
+|---|---|---|
+| `xyz()` divides, or a new function? | **Separate `perspective_divide()`** | Keeps 2.7's drop-vs-divide honesty; `xyz()` still drops. Two names mean a call site declares intent — a silent wrong choice is a bug that looks like a tuning problem. |
+| Derive before the matrix? | **Similar triangles + a pinhole diagram first** | CLAUDE.md §4 is emphatic. The matrix is decreed nowhere: `x' = n·x/(-z)` comes from a picture, then "a matrix can't divide" motivates every remaining entry. |
+| Show the artifact? | **A `[P]` perspective/orthographic toggle** | Reuses 2.9's now-orthographic demo as the "before". One matrix, one draw path, so the toggle isolates exactly what perspective adds — the same honesty as 2.4's coverage counter. |
+| Which NDC target? | **SDL_GPU: `z ∈ [0,1]`, `+y` up, flip inside P** | The NDC-parity decision: target the GPU's clip space now so the Module 4 port is API-only. Flagged `⚠ VERIFY` against the SDL wiki. |
+| Where does `perspective` live? | **`mat4.hpp`**, beside `look_at`/`translation`/`affine` | Matrix factories together. The orthographic comparison matrix stays demo-local — nothing else needs it until 2.11 owns viewport/ortho. |
+| Near plane value? | **0.3** | Verified the orbit+dolly range never pushes a vertex closer than ~1.7 units, so no geometry crosses near — sidesteps clipping (3.3) honestly rather than pretending. |
+
+### Verification
+
+One harness, every section passing, supplied every number: the similar-triangles table reconnecting
+to 2.7 (`1.0, 0.5, 0.2, 0.1`); the projection matrix entries (`f=√3`, `A=B=-1.0101`); depth
+near→0/far→1 and its non-linearity (`z=-2 → 0.505`); the worked point `(2,1,-10) → ndc
+(0.195,0.173,0.909)`; and the demo scene fitting the panel and staying in front (`min w = 1.74 >
+near 0.3`) across the whole camera range. The default-frame probe chain became the Expected Result
+HUD.
+
+**Tooling note worth keeping:** the in-app Browser pane reported `clientWidth: 0`, which made
+`check-page`'s layout checks fire ~17 false spills and a false `pageScrollsX`. Fix: `resize_window`
+to a real size *after* each `navigate` (it does not persist). The pane's screenshots came out blank
+(capture size ≠ DOM viewport), so real screenshots came from the **Playwright** MCP — consistent
+with the standing memory to verify with Playwright, not the preview pane. New LEARNINGS: the matrix
+can't divide so perspective defers (why `w` exists); depth is `1/z`-nonlinear and the near plane is
+the precision knob; and A/B toggles should route both sides through one path varying one input.

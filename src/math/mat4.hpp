@@ -21,6 +21,8 @@
 #include "math/mat3.hpp"
 #include "math/vec4.hpp"
 
+#include <cmath>   // std::tan, in perspective()
+
 namespace engine {
 
 /// A 4x4 matrix, stored as its four columns.
@@ -192,6 +194,62 @@ struct mat4
             {right.y, up.y, backward.y, 0.0f},
             {right.z, up.z, backward.z, 0.0f},
             {-dot(right, eye), -dot(up, eye), -dot(backward, eye), 1.0f}};
+}
+
+// ---- The projection matrix -------------------------------------------------
+
+/// A perspective projection. Takes view-space coordinates to CLIP space, where a
+/// later divide by `w` (the perspective divide, `perspective_divide` in vec4.hpp)
+/// produces normalized device coordinates.
+///
+/// This is the matrix Lesson 2.10 derives, and the derivation is entirely similar
+/// triangles: a point at view-space depth `-z` in front of the camera projects
+/// onto a plane by scaling with `1/(-z)`, so distant things shrink. The matrix
+/// does not do that divide — it cannot, a matrix is linear — it instead **writes
+/// `-z` into `w`**, and the divide happens afterwards. That is the whole trick,
+/// and it is why `w` finally stops being 1 here (Lesson 2.7's third case).
+///
+/// The output matches SDL_GPU's clip space exactly, verified against the
+/// Conventions page, so the Module 4 port is an API change and not a maths change:
+///
+///   - `x`, `y` land in `[-1, 1]` after the divide (`+y` up, no flip here — the
+///     framebuffer's `+y`-down flip is the viewport's job, Lesson 2.11);
+///   - `z` lands in `[0, 1]`, with `0` at the near plane and `1` at the far plane
+///     (this is the D3D/Vulkan/Metal depth range SDL_GPU uses, NOT OpenGL's
+///     `[-1, 1]`);
+///   - view space is right-handed and clip space is left-handed, and **this matrix
+///     is where that handedness flip happens** (Conventions §5).
+///
+/// @param fovy_radians  vertical field of view, top to bottom, in radians.
+/// @param aspect        viewport width / height. Bakes the wider-than-tall shape
+///                      into `x` so a square renders square on a 16:9 view.
+/// @param near_z        distance to the near plane, > 0. Depth `0` maps here.
+/// @param far_z         distance to the far plane, > near. Depth `1` maps here.
+[[nodiscard]] inline mat4 perspective(float fovy_radians, float aspect,
+                                      float near_z, float far_z)
+{
+    // f = cot(fovy/2): the "focal length". At the top edge of the frustum
+    // y/(-z) = tan(fovy/2), so f * that = 1, i.e. the edge lands exactly on the
+    // NDC boundary. Lesson 2.10 §3.3.
+    const float f = 1.0f / std::tan(fovy_radians * 0.5f);
+
+    // Depth remap. We need z_ndc = (A*z + B)/(-z) to be 0 at z = -near and 1 at
+    // z = -far; solving those two gives A and B. The range is negative because
+    // near < far, and both A and B carry that sign. Lesson 2.10 §3.5.
+    const float range = near_z - far_z;   // < 0
+    const float A = far_z / range;              // = -far / (far - near)
+    const float B = far_z * near_z / range;     // = -far*near / (far - near)
+
+    // Column-major, so each brace group is a COLUMN. Written as rows this is
+    //   | f/aspect   0    0    0 |
+    //   |    0       f    0    0 |
+    //   |    0       0    A    B |
+    //   |    0       0   -1    0 |
+    // and the -1 in the bottom row is what copies -z into w.
+    return {{f / aspect, 0.0f, 0.0f,  0.0f},
+            {0.0f,       f,    0.0f,  0.0f},
+            {0.0f,       0.0f, A,    -1.0f},
+            {0.0f,       0.0f, B,     0.0f}};
 }
 
 // There is deliberately no `determinant` or `inverse` here.

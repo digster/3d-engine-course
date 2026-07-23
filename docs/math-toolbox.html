@@ -1750,6 +1750,42 @@ td code { font-size: 0.82em; }
   </div>
 
   <div class="tool">
+    <h3>The projection matrix: perspective <span class="from">Lesson 2.10</span></h3>
+    <div class="eq">
+      <span>\[ P = \begin{bmatrix} f/\text{aspect} & 0 & 0 & 0 \\ 0 & f & 0 & 0 \\ 0 & 0 & A & B \\ 0 & 0 & -1 & 0 \end{bmatrix}, \quad f = \cot\!\tfrac{fovy}{2} \]</span>
+      <span class="eq-plain">P rows: [f/aspect,0,0,0], [0,f,0,0], [0,0,A,B], [0,0,-1,0];  f = cot(fovy/2)</span>
+    </div>
+    <p>
+      <strong>Perspective is one divide by depth.</strong> By similar triangles, a view-space point
+      at depth <code>-z</code> projects with <code>x' = f·x/(-z)</code>, <code>y' = f·y/(-z)</code>:
+      distant things shrink because you divide by how far away they are. A matrix is linear and
+      <em>cannot divide</em>, so <code>P</code> instead copies <code>-z</code> into <code>w</code>
+      (the <code>-1</code> in the bottom row), and a later step — the <strong>perspective divide</strong>
+      — divides everything by <code>w</code>. That is why <code>w</code> finally stops being 1 here,
+      and why the pipeline splits into clip space (before the divide) and NDC (after it).
+    </p>
+    <p>
+      <strong>Depth into <code>[0,1]</code>.</strong> The <code>A</code>, <code>B</code> entries map
+      the near plane to <code>0</code> and the far to <code>1</code> after the divide:
+    </p>
+    <div class="eq">
+      <span>\[ A = \frac{-\text{far}}{\text{far}-\text{near}}, \qquad B = \frac{-\text{far}\cdot\text{near}}{\text{far}-\text{near}} \]</span>
+      <span class="eq-plain">A = -far/(far-near);  B = -far*near/(far-near)   (SDL_GPU z in [0,1])</span>
+    </div>
+    <div class="callout warn">
+      <span class="label">Depth is non-linear, and the near plane is the knob</span>
+      <p>
+        Because you divide by <code>-z</code>, depth resolution is lavish near the camera and starved
+        far away — with <code>near = 1, far = 100</code>, a point at <code>z = -2</code> is already at
+        <code>z_ndc = 0.5</code>, half the buffer's range one unit in. This is where z-fighting comes
+        from (Lesson 3.1), and pushing the near plane <em>out</em> is the cheapest fix. This matrix
+        also performs the right-handed → left-handed handedness flip (Conventions §5); it targets
+        SDL_GPU's <code>[0,1]</code> depth, not OpenGL's <code>[-1,1]</code>.
+      </p>
+    </div>
+  </div>
+
+  <div class="tool">
     <h3>Determinant <span class="from">Lesson 2.5</span></h3>
     <div class="eq">
       <span>\[ \det M = c_{0x}c_{1y} - c_{1x}c_{0y} \]</span>
