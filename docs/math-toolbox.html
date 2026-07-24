@@ -1786,6 +1786,39 @@ td code { font-size: 0.82em; }
   </div>
 
   <div class="tool">
+    <h3>The viewport transform: NDC to pixels <span class="from">Lesson 2.11</span></h3>
+    <div class="eq">
+      <span>\[ x_s = v_x + \tfrac{x+1}{2}\,w, \qquad y_s = v_y + \left(1 - \tfrac{y+1}{2}\right) h, \qquad z_s = d_{min} + z\,(d_{max}-d_{min}) \]</span>
+      <span class="eq-plain">screen.x = vx + ((ndc.x+1)/2)*w;  screen.y = vy + (1-(ndc.y+1)/2)*h;  screen.z = min_depth + ndc.z*(max_depth-min_depth)</span>
+    </div>
+    <p>
+      <strong>Three independent affine maps</strong> — a scale and an offset per axis, nothing coupled,
+      no division. NDC is device-independent (always <code>[-1,1]</code> square, <code>+y</code> up);
+      the viewport is the one place the actual pixel rectangle enters, which is why split-screens,
+      minimaps and HUD layers are all "same scene, different viewport".
+    </p>
+    <div class="callout warn">
+      <span class="label">The y-flip — the course's most travelled minus sign</span>
+      <p>
+        NDC has <code>+y</code> <strong>up</strong>; a framebuffer counts rows <strong>down</strong>
+        from the top (row 0 is the top). So <code>y</code> — and only <code>y</code> — reverses:
+        the <code>(1 - t)</code> in the formula above. NDC's top edge (<code>y = +1</code>) must land on
+        the framebuffer's <em>smallest</em> <code>y</code>. Drop that reversal and the whole scene
+        renders <strong>upside down</strong> — the classic beginner bug. Keep it in exactly one
+        function (<code>viewport::to_screen</code>) and it cannot be gotten wrong in the eleventh place
+        that needs it.
+      </p>
+    </div>
+    <p>
+      <strong>Pixel centres:</strong> NDC <code>±1</code> maps to the viewport's <em>edges</em>, not to
+      pixel centres — pixel column <code>i</code>'s centre is at <code>ndc.x = (2i+1)/w - 1</code>. The
+      rasterizer samples centres at <code>(x+0.5, y+0.5)</code> (Lesson 2.2), and that half-pixel is
+      what keeps the two conventions consistent. The struct mirrors <code>SDL_GPUViewport</code>
+      (<code>x, y, w, h, min_depth, max_depth</code>), so Module 4 reuses the same numbers.
+    </p>
+  </div>
+
+  <div class="tool">
     <h3>Determinant <span class="from">Lesson 2.5</span></h3>
     <div class="eq">
       <span>\[ \det M = c_{0x}c_{1y} - c_{1x}c_{0y} \]</span>

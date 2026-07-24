@@ -1311,3 +1311,39 @@ genuinely perspective and not an incidental difference in how the two modes are 
 for "show the artifact" toggles: route both sides through one code path and vary a single input, so
 the toggle isolates exactly the thing under study — the same discipline as 2.4's fill-rule coverage
 counter and 2.8's `[O]` order toggle.
+
+
+## A convention that lives in twelve places will eventually be wrong in one (Lesson 2.11)
+
+The `+y`-up-to-`+y`-down flip appeared as a bare minus sign in Lesson 2.5's `to_screen`, again in
+2.6's cube demo, again in 2.8, again in 2.9, and finally inside 2.10's `project` — five copies, each
+with a comment gesturing at what it was for, none deriving it. Every copy was correct, and that is
+precisely the danger: nothing was broken, so nothing forced the question, and the sixth copy would
+have been written by someone who had only ever seen the fifth.
+
+Lesson 2.11 moved it into one function, `viewport::to_screen`, written as `(1 - t_y)` rather than
+`-ndc.y` so the code *states* that it is reversing a fraction instead of just looking negative.
+**The general rule: when the same non-obvious sign or constant appears in a third place, it is telling
+you a transform is missing a name.** Give it a type and one home. The tell is not that the copies are
+wrong — it is that each one needs a comment to justify itself.
+
+Corollary for refactors of this kind: **prove it moved nothing.** The harness swept an NDC grid
+through both the old constants and the new `viewport` and reported a worst difference of
+`0.000e+00`. For a "give this a name" refactor that is the whole acceptance test — if the picture
+changes, the refactor is a rewrite wearing a refactor's clothes.
+
+
+## Design your types to shadow the API you will port to (Lesson 2.11)
+
+`engine::viewport` has the same six fields, with the same names and meanings, as SDL's
+`SDL_GPUViewport` (`x, y, w, h, min_depth, max_depth`) — verified by reading the fetched
+`SDL3/SDL_gpu.h`, not assumed. That is deliberate: in Module 4 the conversion is a field-by-field
+copy rather than a translation, and any convention mismatch (origin top-left vs bottom-left, depth
+range) is forced into the open *now*, while the software rasterizer is the only consumer and a
+mistake costs minutes.
+
+This is the same bet already made twice: `mat4` is column-major because that is what HLSL constant
+buffers want (2.6), and the projection targets SDL_GPU's `[0,1]` NDC depth rather than OpenGL's
+`[-1,1]` (2.10, the NDC-parity decision). The pattern is worth naming — **match the destination
+early, port cheaply later** — with the caveat that "mirrors the C struct" is a claim about a header
+that can change, so it belongs behind a `⚠ VERIFY` and a real grep of the header, never memory.

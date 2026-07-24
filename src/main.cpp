@@ -1,14 +1,14 @@
 // src/main.cpp — the engine's entry point.
 //
-// This file hosts the current lesson's demo. As of Lesson 2.10 that is a SCENE seen
-// through a CAMERA and a PROJECTION: a ground plane, a world origin, and three
-// objects sharing one eight-vertex mesh, viewed through look_at (2.9) and a
-// perspective projection (2.10) — so distant cubes shrink and the floor rails
-// converge. [P] swaps perspective for orthographic to show the difference. The HUD
-// carries one vertex the whole chain, model -> world -> view -> clip -> NDC, so you
-// can watch w stop being 1 at the projection step.
+// This file hosts the current lesson's demo. As of Lesson 2.11 that is a SCENE
+// carried through the COMPLETE coordinate chain: a ground plane, a world origin,
+// and three objects sharing one eight-vertex mesh, taken model -> world (2.8) ->
+// view (2.9) -> clip (2.10) -> NDC -> SCREEN, the last hop being the viewport
+// transform (an engine::viewport, this lesson). [P] swaps perspective/orthographic;
+// the HUD carries one vertex through every one of those spaces, so you can watch w
+// stop being 1 at clip and the +y axis flip at screen.
 //
-// [Tab] CYCLES five demos — scene (2.6-2.10), basis transforms (2.5), triangles
+// [Tab] CYCLES five demos — scene (2.6-2.11), basis transforms (2.5), triangles
 // (2.2-2.4), lines (2.1), and Pong (1.8) — because deleting a working demo to
 // make room would be a regression. Five is far too many for one executable, and
 // the next one will be worse. That is not an oversight: Module 5 opens by
@@ -26,6 +26,7 @@
 #include "gfx/colour.hpp"
 #include "gfx/framebuffer.hpp"
 #include "gfx/raster.hpp"
+#include "gfx/viewport.hpp"
 #include "math/mat2.hpp"
 #include "math/mat3.hpp"
 #include "math/mat4.hpp"
@@ -683,11 +684,14 @@ enum class spin
 // The viewport: the 3-D scene is drawn into a 16:9 rectangle in the left part of
 // the 320x180 framebuffer. NDC's [-1,1] x [-1,1] square maps onto it, and because
 // the projection matrix bakes the 16:9 aspect into x, the rectangle itself must be
-// 16:9 or the picture stretches. (This mapping is the VIEWPORT TRANSFORM, given
-// its own name and home in Lesson 2.11; here it is these three constants.)
-constexpr engine::vec2 k_vp_centre{92.0f, 90.0f};
-constexpr float k_vp_half_w = 86.0f;
-constexpr float k_vp_half_h = 86.0f * 9.0f / 16.0f;   ///< 48.375 — keeps 16:9
+// 16:9 or the picture stretches.
+//
+// As of Lesson 2.11 this is an `engine::viewport` (mirroring SDL_GPUViewport)
+// rather than three loose constants: top-left (6, 41.625), 172 x 96.75 px (16:9),
+// depth [0, 1]. Its centre is (92, 90) and it produces exactly the same pixels the
+// old constants did — this lesson named and homed the transform, it did not move a
+// single vertex.
+constexpr engine::viewport k_scene_viewport{6.0f, 41.625f, 172.0f, 96.75f, 0.0f, 1.0f};
 
 /// A point projected to the screen, and whether it was in front of the camera.
 struct screen_point
@@ -696,17 +700,15 @@ struct screen_point
     bool visible;
 };
 
-/// VIEW space -> framebuffer pixels, through a projection matrix. These are the
-/// pipeline's final steps, and Lesson 2.10 is the middle one:
+/// VIEW space -> framebuffer pixels, the pipeline's final three steps:
 ///
-///   1. project:  clip = proj * point(v_view)   — the matrix writes -z into w
-///   2. divide:   ndc  = clip / clip.w           — THE PERSPECTIVE DIVIDE
-///   3. viewport: ndc [-1,1] -> framebuffer pixels (the +y-up to +y-down flip)
+///   1. project:  clip = proj * point(v_view)   — the matrix writes -z into w (2.10)
+///   2. divide:   ndc  = clip / clip.w           — the perspective divide (2.10)
+///   3. viewport: ndc [-1,1] -> framebuffer pixels + depth (2.11, the +y flip)
 ///
-/// Passing the matrix in rather than baking one in is exactly what lets [P] swap a
-/// perspective projection for an orthographic one with nothing else changing: the
-/// difference between "distance shrinks things" and "it does not" lives entirely
-/// in this one matrix.
+/// Passing the projection matrix in is what lets [P] swap perspective for
+/// orthographic with nothing else changing; the viewport is fixed (the window does
+/// not change), so it is a file-scope constant rather than a parameter.
 [[nodiscard]] screen_point project(engine::vec3 v_view, const engine::mat4& proj)
 {
     const engine::vec4 clip = proj * engine::point(v_view);
@@ -719,8 +721,13 @@ struct screen_point
     if (clip.w <= 0.05f) { return {{}, false}; }
 
     const engine::vec3 ndc = engine::perspective_divide(clip);
-    return {{k_vp_centre.x + ndc.x * k_vp_half_w,
-             k_vp_centre.y - ndc.y * k_vp_half_h}, true};   // -ndc.y: +y up -> +y down
+
+    // The viewport does the NDC -> pixel map AND the +y-up-to-+y-down flip. Its
+    // third output is the device depth (ndc.z mapped to [min_depth, max_depth]) —
+    // unused until Lesson 3.1 gives it a z-buffer to live in, but computed now
+    // because it is part of the same transform.
+    const engine::vec3 screen = k_scene_viewport.to_screen(ndc);
+    return {{screen.x, screen.y}, true};
 }
 
 /// Draw a line whose endpoints are in VIEW space, through `proj`.
@@ -1403,7 +1410,7 @@ int main(int argc, char* argv[])
             SDL_VERSIONNUM_MINOR(sdl_version),
             SDL_VERSIONNUM_MICRO(sdl_version));
 
-    SDL_Window* window = SDL_CreateWindow("Perspective Projection — Module 2", 1280, 720,
+    SDL_Window* window = SDL_CreateWindow("The Viewport Transform — Module 2", 1280, 720,
                                           SDL_WINDOW_RESIZABLE);
     if (window == nullptr)
     {
@@ -1477,7 +1484,8 @@ int main(int argc, char* argv[])
     engine::mat4 view_from_world;       ///< look_at(eye, target, up), rebuilt each frame
     engine::vec3 selected_view;         ///< the probe vertex carried on into VIEW space
     engine::vec4 selected_clip;         ///< …and on into CLIP space (before the divide)
-    engine::vec3 selected_ndc;          ///< …and finally NDC (after the perspective divide)
+    engine::vec3 selected_ndc;          ///< …then NDC (after the perspective divide)
+    engine::vec3 selected_screen;       ///< …and finally SCREEN pixels + depth (2.11's viewport)
 
     // Lesson 2.10's two projections. Perspective is the lesson's subject; the
     // orthographic one is the pre-2.10 behaviour, kept on [P] so the difference
@@ -1521,9 +1529,9 @@ int main(int argc, char* argv[])
     SDL_Log("  [4]/[5] follow the mouse: the three sub-triangles ARE the three weights. [R] fill rule.");
     SDL_Log("  [6] Gouraud (three corner colours) [7] uv checker — [M] switches blend space");
     SDL_Log("Basis (2.5): [Z] transform  [,] [.] adjust  [0] reset  [Space] animate");
-    SDL_Log("Scene (2.10): [arrows] orbit  [-]/[=] dolly  [P] persp/ortho  [O] model order");
+    SDL_Log("Scene (2.11): [arrows] orbit  [-]/[=] dolly  [P] persp/ortho  [O] model order");
     SDL_Log("  [X] object  [Z] rotation axis  [,] [.] t  [Space] spin  [W]/[N] the 2.7 w bugs");
-    SDL_Log("[Tab] cycles demos: scene (2.6-2.10) -> basis (2.5) -> triangles -> lines -> Pong");
+    SDL_Log("[Tab] cycles demos: scene (2.6-2.11) -> basis (2.5) -> triangles -> lines -> Pong");
     SDL_Log("[V] vsync · [T] throttle · [Esc] quit");
 
     bool running = true;
@@ -1560,7 +1568,7 @@ int main(int argc, char* argv[])
         {
             which = next_demo(which);
             SDL_SetWindowTitle(window,
-                which == demo::scene     ? "Perspective Projection — Module 2"
+                which == demo::scene     ? "The Viewport Transform — Module 2"
               : which == demo::basis     ? "Basis Transforms — Module 2"
               : which == demo::triangles ? "Triangles — Module 2"
               : which == demo::lines     ? "Lines — Module 2"
@@ -1651,6 +1659,7 @@ int main(int argc, char* argv[])
             selected_view = engine::xyz(view_from_world * engine::point(selected_world));
             selected_clip = proj * engine::point(selected_view);
             selected_ndc = engine::perspective_divide(selected_clip);
+            selected_screen = k_scene_viewport.to_screen(selected_ndc);
             selected_axis_len = axis_length(selected_m, {1.0f, 0.0f, 0.0f});
             selected_corner = axis_angle_deg(selected_m, {1.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f});
         }
@@ -1880,16 +1889,8 @@ int main(int argc, char* argv[])
             SDL_RenderDebugTextFormat(renderer, 6.0f, 20.0f,
                                       "[O] model matrix = %s", name_of(order));
 
-            // The camera is the star of this lesson. Its axes are the ROWS of the
-            // view matrix — read them back out of the matrix that drew the frame,
-            // so the HUD reports what was actually used.
+            // The camera identity (its axes are the view matrix's rows; 2.9).
             const engine::vec3 eye = cam.eye();
-            const engine::vec3 cam_right{view_from_world.at(0, 0), view_from_world.at(0, 1),
-                                         view_from_world.at(0, 2)};
-            const engine::vec3 cam_up{view_from_world.at(1, 0), view_from_world.at(1, 1),
-                                      view_from_world.at(1, 2)};
-            const engine::vec3 cam_back{view_from_world.at(2, 0), view_from_world.at(2, 1),
-                                        view_from_world.at(2, 2)};
 
             SDL_SetRenderDrawColor(renderer, 210, 212, 220, 255);
             SDL_RenderDebugTextFormat(renderer, 380.0f, 40.0f,
@@ -1902,8 +1903,7 @@ int main(int argc, char* argv[])
                                       static_cast<double>(cam.azimuth * 180.0f / 3.14159265f),
                                       static_cast<double>(cam.elevation * 180.0f / 3.14159265f),
                                       static_cast<double>(cam.radius));
-            // The projection mode — this lesson's toggle. Coloured, and the line
-            // below says what distance does under it: the whole point of [P].
+            // The projection mode — 2.10's toggle, and what distance does under it.
             SDL_SetRenderDrawColor(renderer, use_perspective ? 122 : 226,
                                              use_perspective ? 196 : 196,
                                              use_perspective ? 152 : 110, 255);
@@ -1914,52 +1914,45 @@ int main(int argc, char* argv[])
                                 ? "  [-][=] dolly: far shrinks, near grows"
                                 : "  [-][=] dolly: NO effect on size");
 
-            // The camera's axes (view rows), compact.
-            SDL_SetRenderDrawColor(renderer, 236, 92, 92, 255);
-            SDL_RenderDebugTextFormat(renderer, 380.0f, 100.0f, "R(%+.2f %+.2f %+.2f)",
-                static_cast<double>(cam_right.x), static_cast<double>(cam_right.y),
-                static_cast<double>(cam_right.z));
-            SDL_SetRenderDrawColor(renderer, 122, 196, 152, 255);
-            SDL_RenderDebugTextFormat(renderer, 380.0f, 114.0f, "U(%+.2f %+.2f %+.2f)",
-                static_cast<double>(cam_up.x), static_cast<double>(cam_up.y),
-                static_cast<double>(cam_up.z));
-            SDL_SetRenderDrawColor(renderer, 126, 162, 236, 255);
-            SDL_RenderDebugTextFormat(renderer, 380.0f, 128.0f, "B(%+.2f %+.2f %+.2f)  =view rows",
-                static_cast<double>(cam_back.x), static_cast<double>(cam_back.y),
-                static_cast<double>(cam_back.z));
-
-            // THE LESSON'S SPINE: one corner, carried the whole chain, named in
-            // every space — and you can SEE w stop being 1 at the clip step.
+            // THE LESSON'S SPINE, now complete: one corner carried through EVERY
+            // space in the chain — model -> world -> view -> clip -> NDC -> SCREEN.
+            // You can see w stop being 1 at clip, and the +y flip at screen.
             SDL_SetRenderDrawColor(renderer, 210, 212, 220, 255);
-            SDL_RenderDebugTextFormat(renderer, 380.0f, 148.0f, "[X] %s, one corner:",
+            SDL_RenderDebugTextFormat(renderer, 380.0f, 100.0f, "[X] %s, one corner:",
                                       scene_name(selected));
             SDL_SetRenderDrawColor(renderer, 150, 152, 170, 255);
-            SDL_RenderDebugTextFormat(renderer, 380.0f, 162.0f, "model (%+.2f %+.2f %+.2f)",
+            SDL_RenderDebugTextFormat(renderer, 380.0f, 114.0f, "model (%+.2f %+.2f %+.2f)",
                 static_cast<double>(k_probe_vertex.x), static_cast<double>(k_probe_vertex.y),
                 static_cast<double>(k_probe_vertex.z));
             SDL_SetRenderDrawColor(renderer, 226, 196, 110, 255);
-            SDL_RenderDebugTextFormat(renderer, 380.0f, 176.0f, "world (%+.2f %+.2f %+.2f)",
+            SDL_RenderDebugTextFormat(renderer, 380.0f, 128.0f, "world (%+.2f %+.2f %+.2f)",
                 static_cast<double>(selected_world.x), static_cast<double>(selected_world.y),
                 static_cast<double>(selected_world.z));
             SDL_SetRenderDrawColor(renderer, 130, 190, 220, 255);
-            SDL_RenderDebugTextFormat(renderer, 380.0f, 190.0f, "view  (%+.2f %+.2f %+.2f)",
+            SDL_RenderDebugTextFormat(renderer, 380.0f, 142.0f, "view  (%+.2f %+.2f %+.2f)",
                 static_cast<double>(selected_view.x), static_cast<double>(selected_view.y),
                 static_cast<double>(selected_view.z));
-            // The clip line: FOUR components, and w is the star — it is -z_view now,
-            // no longer 1. That is where perspective lives.
+            // clip: w is the star — it is -z_view now, no longer 1 (2.10).
             SDL_SetRenderDrawColor(renderer, 236, 196, 110, 255);
-            SDL_RenderDebugTextFormat(renderer, 380.0f, 204.0f, "clip  (%+.2f %+.2f %+.2f w=%.2f)",
+            SDL_RenderDebugTextFormat(renderer, 380.0f, 156.0f, "clip  (%+.2f %+.2f %+.2f w=%.2f)",
                 static_cast<double>(selected_clip.x), static_cast<double>(selected_clip.y),
                 static_cast<double>(selected_clip.z), static_cast<double>(selected_clip.w));
             SDL_SetRenderDrawColor(renderer, 150, 152, 170, 255);
-            SDL_RenderDebugTextFormat(renderer, 380.0f, 218.0f, "   w=%.2f %s",
+            SDL_RenderDebugTextFormat(renderer, 380.0f, 170.0f, "  w=%.2f %s",
                 static_cast<double>(selected_clip.w),
-                use_perspective ? "= -z_view  (was 1!)" : "= 1 (ortho keeps it)");
-            // NDC, after the perspective divide: xy in [-1,1], z in [0,1].
+                use_perspective ? "=-z_view (was 1!)" : "=1 (ortho keeps it)");
+            // ndc: after the perspective divide. xy in [-1,1], z in [0,1], +y UP.
             SDL_SetRenderDrawColor(renderer, 130, 220, 170, 255);
-            SDL_RenderDebugTextFormat(renderer, 380.0f, 232.0f, "ndc   (%+.3f %+.3f %+.3f) /w",
+            SDL_RenderDebugTextFormat(renderer, 380.0f, 184.0f, "ndc   (%+.3f %+.3f %+.3f) /w",
                 static_cast<double>(selected_ndc.x), static_cast<double>(selected_ndc.y),
                 static_cast<double>(selected_ndc.z));
+            // screen: THIS lesson's viewport transform. Pixels + device depth.
+            SDL_SetRenderDrawColor(renderer, 236, 210, 150, 255);
+            SDL_RenderDebugTextFormat(renderer, 380.0f, 198.0f, "scr   (%.1f %.1f  d=%.3f) px",
+                static_cast<double>(selected_screen.x), static_cast<double>(selected_screen.y),
+                static_cast<double>(selected_screen.z));
+            SDL_SetRenderDrawColor(renderer, 150, 152, 170, 255);
+            SDL_RenderDebugText(renderer, 380.0f, 212.0f, "  ndc +y UP -> screen +y DOWN (flip)");
 
             // Deform/move check from 2.8, plus the 2.7 w-bug flag when engaged.
             const float want_len = scene[selected].scale.x;
@@ -1969,7 +1962,7 @@ int main(int argc, char* argv[])
             SDL_SetRenderDrawColor(renderer, (rigid && !w_bug) ? 150 : 236,
                                              (rigid && !w_bug) ? 152 : 92,
                                              (rigid && !w_bug) ? 170 : 92, 255);
-            SDL_RenderDebugTextFormat(renderer, 380.0f, 252.0f, "|x|=%.2f corner %.0f%s%s",
+            SDL_RenderDebugTextFormat(renderer, 380.0f, 232.0f, "|x|=%.2f corner %.0f%s%s",
                 static_cast<double>(selected_axis_len), static_cast<double>(selected_corner),
                 rigid ? "" : " DEFORM", w_bug ? "  [W/N bug]" : "");
 
@@ -1977,21 +1970,21 @@ int main(int argc, char* argv[])
             SDL_SetRenderDrawColor(renderer, 150, 152, 170, 255);
             if (order != trs_order::trs)
             {
-                SDL_RenderDebugText(renderer, 380.0f, 272.0f, "wrong model order [O]: 2.8's");
-                SDL_RenderDebugText(renderer, 380.0f, 286.0f, order == trs_order::tsr
+                SDL_RenderDebugText(renderer, 380.0f, 252.0f, "wrong model order [O]: 2.8's");
+                SDL_RenderDebugText(renderer, 380.0f, 266.0f, order == trs_order::tsr
                                     ? "shear is back." : "orbit-origin is back.");
             }
             else if (use_perspective)
             {
-                SDL_RenderDebugText(renderer, 380.0f, 272.0f, "toggle [P]: perspective makes the");
-                SDL_RenderDebugText(renderer, 380.0f, 286.0f, "far cubes smaller and the floor");
-                SDL_RenderDebugText(renderer, 380.0f, 300.0f, "rails converge. Dolly now zooms.");
+                SDL_RenderDebugText(renderer, 380.0f, 252.0f, "the whole chain, one corner:");
+                SDL_RenderDebugText(renderer, 380.0f, 266.0f, "model->world->view->clip->ndc");
+                SDL_RenderDebugText(renderer, 380.0f, 280.0f, "->screen. [P] flattens it.");
             }
             else
             {
-                SDL_RenderDebugText(renderer, 380.0f, 272.0f, "orthographic: every cube the same");
-                SDL_RenderDebugText(renderer, 380.0f, 286.0f, "size, rails parallel, dolly inert.");
-                SDL_RenderDebugText(renderer, 380.0f, 300.0f, "[P] back to perspective.");
+                SDL_RenderDebugText(renderer, 380.0f, 252.0f, "orthographic: every cube the same");
+                SDL_RenderDebugText(renderer, 380.0f, 266.0f, "size, rails parallel, dolly inert.");
+                SDL_RenderDebugText(renderer, 380.0f, 280.0f, "[P] back to perspective.");
             }
 
             SDL_SetRenderDrawColor(renderer, 210, 212, 220, 255);

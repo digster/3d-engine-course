@@ -965,7 +965,7 @@ table.lessons .d { color: var(--text-muted); font-size: 0.95em; line-height: 1.4
     <div class="stat"><span class="n">94</span><span class="l">lessons</span></div>
     <div class="stat"><span class="n">9</span><span class="l">modules</span></div>
     <div class="stat"><span class="n">~433</span><span class="l">hours</span></div>
-    <div class="stat"><span class="n">24</span><span class="l">published</span></div>
+    <div class="stat"><span class="n">25</span><span class="l">published</span></div>
   </div>
 
   <p>
@@ -1253,7 +1253,7 @@ table.lessons .d { color: var(--text-muted); font-size: 0.95em; line-height: 1.4
             <tr><td class="id">2.8</td><td><span class="t"><a href="lessons/02-08-space-chain.html">The Space Chain: Model to World</a> <span class="badge done">published</span></span><span class="d">A coordinate is three floats and a room — and naming the room stops an entire class of bug. The model matrix is <code>T&nbsp;·&nbsp;R&nbsp;·&nbsp;S</code>, the order <em>derived</em> from what each transform means, and both wrong orders shown on screen: one deforms, one misplaces. One mesh becomes three objects in a visible world.</span></td><td class="hrs">4 h</td></tr>
             <tr><td class="id">2.9</td><td><span class="t"><a href="lessons/02-09-view-matrix.html">The View Matrix: Deriving Look-At</a> <span class="badge done">published</span></span><span class="d">A camera is just an object with a <code>transform</code>, and the view matrix is the <em>inverse</em> of its placement — so moving the camera left is moving the world right. Introduces the cross product where it is first needed, inverts a rigid transform for free, and flies an orbit camera around the scene.</span></td><td class="hrs">5 h</td></tr>
             <tr><td class="id">2.10</td><td><span class="t"><a href="lessons/02-10-perspective.html">Perspective from Similar Triangles</a> <span class="badge done">published</span></span><span class="d">The keystone. Perspective is one divide by depth, derived from similar triangles before any matrix — then packaged as the projection matrix that writes <code>-z</code> into <code>w</code>. Where <code>w</code> finally stops being 1, the perspective divide gets its name, and depth's non-linearity is made a number. A <code>[P]</code> toggle flips perspective/orthographic on screen.</span></td><td class="hrs">6 h</td></tr>
-            <tr><td class="id">2.11</td><td><span class="t">The Viewport Transform: NDC to Pixels</span><span class="d">The last hop, and where +Y stops pointing up. One sign, endlessly confusing until you see it once.</span></td><td class="hrs">3 h</td></tr>
+            <tr><td class="id">2.11</td><td><span class="t"><a href="lessons/02-11-viewport.html">The Viewport Transform</a> <span class="badge done">published</span></span><span class="d">The last hop: NDC to framebuffer pixels. Three affine maps and one flip — the <code>+y</code>-up-to-<code>+y</code>-down sign that has drifted through the course since Lesson 2.5, finally derived and given one home in an <code>engine::viewport</code> that mirrors <code>SDL_GPUViewport</code>. The coordinate chain is now complete.</span></td><td class="hrs">3 h</td></tr>
             <tr><td class="id">2.12</td><td><span class="t">Milestone: A Spinning Wireframe Mesh</span><span class="d">3D on screen — and every single line of it explicable by you.</span></td><td class="hrs">4 h</td></tr>
           </tbody>
         </table>

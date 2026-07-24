@@ -69,7 +69,8 @@ inventing one — but without paying framework ceremony before it buys anything.
 │   │   ├── framebuffer.hpp # CPU pixel buffer, ARGB8888, row-major   [EXISTS from 1.5]
 │   │   ├── framebuffer.cpp
 │   │   ├── raster.hpp      # which pixels a SHAPE is made of         [EXISTS from 2.1]
-│   │   └── raster.cpp      # lines (2.1) + triangles (2.2) + shading (2.4)
+│   │   ├── raster.cpp      # lines (2.1) + triangles (2.2) + shading (2.4)
+│   │   └── viewport.hpp    # NDC -> pixels + the y-flip           [EXISTS from 2.11]
 │   ├── game/               # NOT engine — game code, see §2.1.1        [EXISTS from 1.8]
 │   │   ├── pong.hpp        # the Module 1 checkpoint game
 │   │   └── pong.cpp
@@ -318,6 +319,29 @@ view_from_world · world_from_model`, and `to_screen3` became a plain orthograph
 *view* space — Lesson 2.8's oblique-projection hack is gone, because a real movable camera now
 supplies the third dimension. Dollying the camera is deliberately a no-op under orthographic (the
 HUD says so); making distance matter is the perspective divide, Lesson 2.10.
+
+**The viewport, as of Lesson 2.11 — the chain completed.** `src/gfx/viewport.hpp` holds the final
+transform: NDC to framebuffer pixels. It is three independent affine maps (a scale and an offset per
+axis), and architecturally it earns its own type for two reasons.
+
+- **It is the y-flip's one home.** NDC has `+y` up; a framebuffer counts rows downward from the top.
+  Exactly one axis reverses, and that reversal — the `(1 - t)` in `to_screen` — had previously drifted
+  through `to_screen` in the 2.5 basis demo, through every 3-D demo since, and through `project` in
+  2.10, each time as a bare minus sign with a comment. Collecting it into one function means the
+  convention cannot be gotten subtly wrong in the eleventh place that needs it, and it makes the
+  upside-down-render bug a one-line diagnosis. This is the same "one home for a convention" instinct
+  as `a_from_b` naming (2.8) — a fact scattered across a dozen call sites is a defect waiting to happen.
+- **It mirrors `SDL_GPUViewport` field-for-field** (`x, y, w, h, min_depth, max_depth`, verified
+  against `SDL3/SDL_gpu.h`), so Module 4 fills the GPU's struct by copying ours rather than translating.
+  Same instinct as `mat4` already being column-major like HLSL constant buffers (2.6): match the
+  destination early, port cheaply later. The `min_depth`/`max_depth` pair is not decoration — narrowing
+  it pins a HUD or gizmo in front of the world without an extra pass, and the depth output is computed
+  now so Lesson 3.1's z-buffer has something to store.
+
+The refactor moved no pixels: a harness sweeps an NDC grid through both the old ad-hoc constants and
+the new viewport and finds a worst difference of `0.000e+00`. With this, the geometry pipeline is
+**complete** — `model → world → view → clip → NDC → screen` — and Module 2's remaining lesson spends
+itself consolidating rather than adding.
 
 **Perspective, as of Lesson 2.10 — the keystone.** `perspective(fovy, aspect, near, far)` in
 `mat4.hpp` is the third link of the chain and the one that finally makes the scene look 3-D. The

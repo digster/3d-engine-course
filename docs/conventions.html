@@ -1192,6 +1192,17 @@ td code { font-size: 0.82em; }
       in <code>[−1,1]</code> and depth in <code>[0,1]</code> (§4), so the software rasterizer and the
       Module 4 GPU renderer share one projection.
     </p>
+    <p>
+      The <strong>viewport transform</strong> is the final hop, NDC → framebuffer pixels
+      (Lesson 2.11), and it is an <code>engine::viewport</code> mirroring
+      <code>SDL_GPUViewport</code> (<code>x, y, w, h, min_depth, max_depth</code>). It is three
+      independent affine maps — and it is <strong>where the <code>+y</code> flip lives</strong>. NDC's
+      <code>+y</code> points up; the framebuffer counts rows downward from the top (§4's
+      "<code>+Y</code> up in NDC, <code>+Y</code> down in viewport" note), so <code>y</code> — and only
+      <code>y</code> — reverses. That reversal belongs in exactly one function,
+      <code>viewport::to_screen</code>; a scene rendered upside down is almost always this sign,
+      missing or applied twice.
+    </p>
   </div>
 
   <!-- ===================================================================== -->

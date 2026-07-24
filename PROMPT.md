@@ -596,3 +596,36 @@ to a real size *after* each `navigate` (it does not persist). The pane's screens
 with the standing memory to verify with Playwright, not the preview pane. New LEARNINGS: the matrix
 can't divide so perspective defers (why `w` exists); depth is `1/z`-nonlinear and the near plane is
 the precision knob; and A/B toggles should route both sides through one path varying one input.
+
+
+## 2026-07-30 — Lesson 2.11
+
+> next
+
+Resumed from `STATE.md` → `next: 2.11 — The Viewport Transform`, which had already framed the job:
+the demo had been mapping NDC to pixels with three hand-picked constants and a `-ndc.y`, underived
+and homeless, and STATE left one decision open — engine type or demo-local for one more lesson.
+
+### Judgement calls
+
+| Question | Decision | Why |
+|---|---|---|
+| Engine type or demo-local? | **Engine — `src/gfx/viewport.hpp`** | 2.11 is literally the viewport's lesson, and the type is what gives the y-flip one home. Header-only, so no CMake churn (same precedent as `math/transform.hpp`). Placed in `gfx/` because it is the framebuffer boundary. |
+| Mirror `SDL_GPUViewport`? | **Yes, field-for-field** | Module 4 then copies fields rather than translating, and any convention mismatch surfaces now. **Verified against the fetched `SDL3/SDL_gpu.h`** (x/y are the left/top offset) rather than assumed, and flagged `⚠ VERIFY` in the text. |
+| How to write the flip? | **`(1 - t_y)`, not `-ndc.y`** | Algebraically identical; the first *states* that it reverses a fraction, the second just looks like a mysterious negative. The lesson's whole point is that this sign gets derived, not carried. |
+| HUD room for a sixth space? | **Drop 2.9's R/U/B camera-axis rows** | The panel was full. The complete six-space chain is the module's climax and earns the space; the camera is still identified by eye + orbit params. |
+| Should the picture change? | **No — and prove it** | Swept an NDC grid through both the old constants and the new viewport: worst difference `0.000e+00`. For a "give this a name" refactor, an unchanged image *is* the acceptance test. |
+
+### Verification
+
+The harness covered the teaching viewport (800×600: NDC top-left → pixel (0,0), centre → (400,300),
+worked point → (600,225,0.9)), the bit-identical refactor, the default probe's full chain to
+`screen(81.78, 75.47, d=0.959)` with y above centre because `ndc.y > 0`, and the min/max-depth
+pin-in-front trick. The interactive widget was checked in-browser at four NDC points.
+
+One real diagram defect caught by `check-page.js` (a caption line starting at x=392 spilled the
+viewBox); moved to the left margin, re-ran green. Two standing environment notes reconfirmed: the
+static server dies between turns, and the Playwright viewport must be resized to 1280×900 *after*
+each navigate or the layout checks fire false spills. New LEARNINGS: a convention living in twelve
+places will eventually be wrong in one (and the tell is that each copy needs a comment); and design
+types to shadow the API you will port to.

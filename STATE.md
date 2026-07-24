@@ -7,7 +7,7 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-07-29 (after Lesson 2.10 — Module 2: 10 of 12, 24 of 94 lessons)
+updated: 2026-07-30 (after Lesson 2.11 — Module 2: 11 of 12, 25 of 94 lessons)
 
 conventions:
   world: right-handed, Y-up, -Z forward
@@ -140,6 +140,31 @@ conventions:
         happens INSIDE this matrix; +y stays up (the +y-down framebuffer flip is
         the VIEWPORT's job, 2.11). VERIFIED: (2,1,-10) -> clip (1.949,1.732,9.091,
         w=10) -> ndc (0.195,0.173,0.909); near->0, far->1 exactly.
+  viewport: NDC -> framebuffer pixels + depth, the LAST hop of the chain (2.11).
+        THREE INDEPENDENT AFFINE MAPS (a scale and an offset each; no division,
+        nothing coupled):
+          t = (ndc + 1)/2                      remap [-1,1] -> [0,1]
+          screen.x = vx + t_x * w
+          screen.y = vy + (1 - t_y) * h        <-- THE FLIP, and only y flips
+          screen.z = min_depth + ndc.z*(max_depth - min_depth)
+        THE Y-FLIP IS THE POINT: NDC's +y is UP, the framebuffer counts rows DOWN
+        from the top (row 0 = top), so NDC's top edge (y=+1) must land on the
+        SMALLEST screen y. Drop the (1 - t) and the scene renders UPSIDE DOWN — the
+        classic beginner bug. This is the same lone minus sign that has drifted
+        through to_screen since 2.5's basis demo and through project() in 2.10; as
+        of 2.11 it lives in EXACTLY ONE function, viewport::to_screen, and nowhere
+        else. src/gfx/viewport.hpp (header-only, NEW) mirrors SDL_GPUViewport
+        FIELD-FOR-FIELD (x, y, w, h, min_depth, max_depth — VERIFIED against
+        SDL3/SDL_gpu.h; x/y are the LEFT/TOP offset), so Module 4 fills SDL's struct
+        by copying ours.
+        min/max depth are usually [0,1] but narrowing is a real trick: render a HUD
+        or gizmo at [0, 0.1] over a world at [0.1, 1] and it always wins the depth
+        test, no extra pass (Exercise 2.11.4).
+        PIXEL CENTRES: NDC +-1 maps to viewport EDGES, not pixel centres; column i's
+        centre is ndc.x = (2i+1)/w - 1. The rasterizer samples centres at (x+.5,y+.5)
+        (2.2) and that half-pixel is what keeps the two conventions consistent.
+        VERIFIED: the new viewport reproduces 2.10's ad-hoc constants EXACTLY (worst
+        diff 0.000e+00 over an NDC grid) — 2.11 moved no pixels, it named a transform.
   cross-product: cross(a,b) = (a.y*b.z - a.z*b.y, a.z*b.x - a.x*b.z, a.x*b.y -
         a.y*b.x). Perpendicular to both; |a x b| = |a||b|sin(theta) = the
         PARALLELOGRAM AREA (the sin sibling of dot's cos). Zero for parallel
@@ -573,6 +598,7 @@ completed:
   - 2.8  The Space Chain: Model to World
   - 2.9  The View Matrix: Deriving Look-At
   - 2.10 Perspective from Similar Triangles
+  - 2.11 The Viewport Transform
 
 capabilities:
   - verified C++20 toolchain (MSVC / GCC / Clang), 64-bit
@@ -604,6 +630,17 @@ capabilities:
     switches with [M]
   - maths: src/math/vec2.hpp (header-only) — arithmetic, length/length_squared,
     normalised(+_or), dot, perpendicular, project_onto, reflect, lerp, distance
+  - gfx 2.11: src/gfx/viewport.hpp (header-only, NEW) — struct viewport {x,y,w,h,
+    min_depth,max_depth} mirroring SDL_GPUViewport, with constexpr to_screen(ndc)
+    doing the three affine maps and the y flip. main.cpp: k_scene_viewport
+    {6, 41.625, 172, 96.75, 0, 1} (centre 92,90; 16:9 to match the projection's
+    aspect) REPLACES the loose k_vp_centre/half_w/half_h; project() ends by calling
+    to_screen; the HUD's probe now runs the FULL chain model->world->view->clip->
+    ndc->SCREEN (the 2.9 R/U/B camera-axis rows were dropped to make room — the
+    complete chain is the module's payoff). Depth output computed but unused until
+    3.1's z-buffer. Verified default probe ndc(-0.119,0.300,0.959) ->
+    screen(81.78, 75.47, d=0.959), inside the viewport, and y ABOVE centre 90
+    because ndc.y > 0 — the flip visible in the numbers.
   - maths 2.10: src/math/vec4.hpp gains perspective_divide(v) = v/v.w — a SEPARATE
     named function from xyz() (which still drops w), so drop-vs-divide can never be
     confused. No w guard (behind-camera is clipped upstream, 3.3). src/math/mat4.hpp
@@ -923,7 +960,7 @@ files:
   src/core/: input.hpp, input.cpp, clock.hpp, clock.cpp,
             fixed_step.hpp, fixed_step.cpp
   src/gfx/: colour.hpp, colour.cpp, framebuffer.hpp, framebuffer.cpp,
-            raster.hpp, raster.cpp
+            raster.hpp, raster.cpp, viewport.hpp
   src/math/: vec2.hpp, vec3.hpp, vec4.hpp, mat2.hpp, mat3.hpp, mat4.hpp, transform.hpp
   src/game/: pong.hpp, pong.cpp
   docs/: index.html, conventions.html, math-toolbox.html, cpp-style.html
@@ -938,35 +975,44 @@ files:
                  02-03-barycentric.html, 02-04-attribute-interpolation.html,
                  02-05-matrices.html, 02-06-mat4.html,
                  02-07-homogeneous.html, 02-08-space-chain.html,
-                 02-09-view-matrix.html, 02-10-perspective.html
+                 02-09-view-matrix.html, 02-10-perspective.html,
+                 02-11-viewport.html
   docs/_template/: lesson-template.html, README.md, apply-shared.py, check-page.js
   memory/: 2026-07-16.md, 2026-07-18.md, 2026-07-21.md, 2026-07-22.md,
            2026-07-23.md, 2026-07-24.md, 2026-07-25.md, 2026-07-26.md,
-           2026-07-27.md, 2026-07-28.md, 2026-07-29.md
+           2026-07-27.md, 2026-07-28.md, 2026-07-29.md, 2026-07-30.md
   (retired: hello.cpp)
 
-next: 2.11 — The Viewport Transform
-      (planned filename: docs/lessons/02-11-viewport.html — 2.10 links to it)
-      The last link before the milestone. NDC -> framebuffer pixels, which the demo
-      has been doing all along with three hand-picked constants (k_vp_centre,
-      k_vp_half_w/half_h) and a -ndc.y flip inside project(). 2.11 DERIVES that step
-      and gives it its own home:
-        - THE AFFINE MAP from the [-1,1] NDC cube to a rectangle of pixels: an
-          x-scale/offset and a y-scale/offset. Work one point by hand.
-        - THE +Y-UP-TO-+Y-DOWN FLIP named properly at last. This boundary has been
-          a single minus sign since Lesson 2.5's to_screen (basis demo) and lived
-          in project()'s -ndc.y; 2.11 is where it stops being folklore. NDC +y is
-          up (SDL_GPU, conventions §4); the framebuffer/texture is +y down (§4's
-          "+Y up in NDC but +Y down in viewport" note). One flip, one place.
-        - DEPTH RANGE carried through: ndc.z in [0,1] maps to the z-buffer's range,
-          which 3.1 will actually store. Viewport also has a min/max depth (SDL_GPU
-          SDL_GPUViewport has min_depth/max_depth) — mention, target [0,1].
-      Likely lands a viewport() helper (or a small struct) that project() calls,
-      replacing the ad-hoc constants; DECIDE whether it goes in the engine now or
-      stays demo-local one more lesson (2.11 is literally its lesson, so probably
-      engine). NUMERIC WALKTHROUGH MANDATORY.
-      Then 2.12 is the MODULE MILESTONE: a spinning wireframe MESH (an actual OBJ,
-      or the cube grown up) with the whole model->world->view->clip->NDC->screen
-      chain lit end to end, every line explainable — the Stage-A payoff before
-      Module 3 adds the z-buffer, clipping, culling, textures and light.
+next: 2.12 — Milestone: A Spinning Wireframe Mesh
+      (planned filename: docs/lessons/02-12-wireframe-mesh.html — 2.11 links to it)
+      THE MODULE 2 MILESTONE, and CLAUDE.md §5 names it: "wireframe 3D meshes
+      spinning on screen, every line of which the student can explain." Spend almost
+      NO length on new theory — spend it on lighting the whole chain end to end and
+      on consolidation. Every transform now exists; this is the payoff.
+        - A REAL MESH, more than the 8-vertex cube. Options: (a) hand-authored
+          vertex+index arrays for something with actual shape (an icosahedron is
+          20 faces / 12 verts and derivable from the golden ratio — nice, small,
+          and teaches indexed geometry); (b) a tiny generated mesh (UV sphere or
+          torus from two loops of trig) which also motivates index buffers. DO NOT
+          write the OBJ loader here — CLAUDE.md puts the hand-rolled OBJ parser in
+          Module 3 (3.5), and 2.12 should not steal it. PICK ONE and say why.
+        - INTRODUCE INDEXED GEOMETRY properly: a vertex array + an index array, and
+          why (shared vertices, one transform per vertex not per face). This is the
+          shape Module 4's vertex/index BUFFERS will take, so it is genuinely
+          load-bearing, not decoration.
+        - Probably a `mesh` type (src/gfx/mesh.hpp?) holding vertices + edges (still
+          wireframe; TRIANGLES with fills are Module 3). Keep it minimal.
+        - CONSOLIDATION IS THE CONTENT: one annotated walk of a single vertex
+          through all six spaces with the real numbers, a full-pipeline diagram
+          that ties every lesson 2.5-2.11 to its stage, and an honest list of what
+          is still missing (no z-buffer -> far edges draw over near ones; no
+          clipping -> geometry behind the camera is dropped whole, not trimmed; no
+          culling; no fills) — each pointing at the Module 3 lesson that fixes it.
+        - The demo already has camera + projection + viewport + the [P]/[O]/[X]
+          toggles; 2.12 mostly swaps the cube for the mesh and adds the
+          full-pipeline HUD/diagram. Consider retiring some older toggles if the
+          panel is too full.
+      Then MODULE 3 opens: z-buffer (3.1), perspective-correct interpolation (3.2),
+      near-plane clipping (3.3), back-face culling + cross product deepened (3.4),
+      OBJ loader (3.5), normals & shading (3.6), textures (3.7), profiling, capstone.
 ```
