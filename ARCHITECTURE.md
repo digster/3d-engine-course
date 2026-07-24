@@ -70,7 +70,8 @@ inventing one — but without paying framework ceremony before it buys anything.
 │   │   ├── framebuffer.cpp
 │   │   ├── raster.hpp      # which pixels a SHAPE is made of         [EXISTS from 2.1]
 │   │   ├── raster.cpp      # lines (2.1) + triangles (2.2) + shading (2.4)
-│   │   └── viewport.hpp    # NDC -> pixels + the y-flip           [EXISTS from 2.11]
+│   │   ├── viewport.hpp    # NDC -> pixels + the y-flip           [EXISTS from 2.11]
+│   │   └── mesh.hpp        # indexed geometry: verts + tri indices [EXISTS from 2.12]
 │   ├── game/               # NOT engine — game code, see §2.1.1        [EXISTS from 1.8]
 │   │   ├── pong.hpp        # the Module 1 checkpoint game
 │   │   └── pong.cpp
@@ -319,6 +320,33 @@ view_from_world · world_from_model`, and `to_screen3` became a plain orthograph
 *view* space — Lesson 2.8's oblique-projection hack is gone, because a real movable camera now
 supplies the third dimension. Dollying the camera is deliberately a no-op under orthographic (the
 HUD says so); making distance matter is the perspective divide, Lesson 2.10.
+
+**Meshes, as of Lesson 2.12 — Module 2's close.** `src/gfx/mesh.hpp` introduces the representation
+everything downstream assumes: a `mesh` is a vertex array plus an index array taken in triples, one
+triple per triangle. Three decisions govern it.
+
+- **Triangles, not edges — even for a wireframe.** A triangle list is what a mesh *is*: Module 3
+  fills these triangles, 3.4 culls them by winding, Module 4 uploads them. Storing edges would mean
+  discarding face information and rebuilding it two lessons later. The cost is that a wireframe draws
+  each shared edge twice (60 draws for the icosahedron's 30 edges); we name that waste rather than
+  hide it, and it vanishes the moment triangles are filled.
+- **`mesh` is two `std::span`s — a non-owning view.** Four words, trivially copied, and *cannot
+  outlive the arrays it points at*. Correct for geometry that is `inline constexpr` data with program
+  lifetime; incorrect the moment meshes are loaded at runtime, which is exactly the pressure that
+  produces Module 5's handle-based asset system. The `inline` on those arrays is not decoration: a
+  plain `constexpr` array in a header is a separate object per translation unit.
+- **Mesh data is validated, never trusted.** Sixty hand-typed indices is data, and data is wrong in
+  ways code cannot be. The harness checks Euler's `V − E + F = 2`, that every undirected edge belongs
+  to exactly two faces, that every *directed* edge appears exactly once (consistent winding), and that
+  each face's normal points away from the centre (outward winding). All faces are authored
+  counter-clockwise-from-outside even though nothing consumes winding until Lesson 3.4 — so the
+  meshes never need re-authoring. This is the same instinct as `put_pixel` bounds-checking while
+  `at(row, col)` does not (Lesson 2.5): check where the input can genuinely be wrong.
+
+The demo's `scene_object` (transform + mesh + name) is deliberately *not* a fatter
+`engine::transform`. A transform is a placement, not a thing; keeping geometry separate is the shape
+Module 5's ECS formalises, where an entity carries a transform component and a mesh component
+attached independently.
 
 **The viewport, as of Lesson 2.11 — the chain completed.** `src/gfx/viewport.hpp` holds the final
 transform: NDC to framebuffer pixels. It is three independent affine maps (a scale and an offset per

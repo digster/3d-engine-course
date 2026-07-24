@@ -1819,6 +1819,43 @@ td code { font-size: 0.82em; }
   </div>
 
   <div class="tool">
+    <h3>Meshes: indexed geometry and Euler's formula <span class="from">Lesson 2.12</span></h3>
+    <div class="eq">
+      <span>\[ V - E + F = 2 \]</span>
+      <span class="eq-plain">V - E + F = 2   (Euler's formula, for any closed surface without holes)</span>
+    </div>
+    <p>
+      <strong>A mesh is two arrays:</strong> a vertex array of positions, each stored once, and an
+      index array of whole numbers taken in <em>triples</em>, each triple naming a triangle. The
+      indirection exists because vertices are shared — an icosahedron's 12 corners serve 20 faces, so
+      unshared storage would need 60 positions and 60 matrix multiplies per frame instead of 12. This
+      is exactly the layout of Module 4's vertex and index buffers.
+    </p>
+    <p>
+      <strong>Validate mesh data; never trust it.</strong> Hand-authored or imported, geometry is data
+      and data is wrong in ways code cannot be. The checks, in increasing strength:
+    </p>
+    <ul>
+      <li><strong>Euler:</strong> <code>V − E + F = 2</code> for a closed solid (icosahedron: 12 − 30 + 20; triangulated cube: 8 − 18 + 12, the 18 because each square face gains a diagonal).</li>
+      <li><strong>Manifold:</strong> every <em>undirected</em> edge belongs to exactly two faces — one face means a hole, three means a pinch.</li>
+      <li><strong>Consistent winding:</strong> every <em>directed</em> edge appears exactly once, so adjacent faces traverse their shared edge in opposite directions.</li>
+      <li><strong>Outward winding:</strong> each face's <code>cross(b−a, c−a)</code> points away from the centre — this is what makes back-face culling (Lesson 3.4) keep the faces you can see.</li>
+    </ul>
+    <div class="callout note">
+      <span class="label">The icosahedron, and why φ is forced</span>
+      <p>
+        Three mutually perpendicular rectangles of width 2 and height 2<em>h</em> have 12 corners: the
+        cyclic permutations of <code>(0, ±1, ±h)</code>. Demanding that all 30 edges be equal gives
+        <code>2h² − 2h + 2 = 4</code>, i.e. <strong><code>h² = h + 1</code></strong> — the golden
+        ratio's defining equation, so <code>h = φ = 1.6180340</code>. Normalising by
+        <code>√(1+φ²) = 1.9021131</code> puts every vertex on the unit sphere and makes every edge
+        <code>2/1.9021131 = 1.0514622</code>. φ is not an aesthetic choice; it is the unique
+        proportion that makes the solid regular.
+      </p>
+    </div>
+  </div>
+
+  <div class="tool">
     <h3>Determinant <span class="from">Lesson 2.5</span></h3>
     <div class="eq">
       <span>\[ \det M = c_{0x}c_{1y} - c_{1x}c_{0y} \]</span>

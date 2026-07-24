@@ -1663,6 +1663,24 @@ td code { font-size: 0.82em; }
     </p>
   </div>
 
+  <h3>Mesh data: triangle indices, wound outward</h3>
+
+  <p>
+    Geometry is stored as a <strong>vertex array plus an index array</strong>, the indices taken in
+    triples, one triple per triangle (Lesson 2.12) — never as an edge list, because triangles are what
+    gets filled, culled and uploaded. Indices are <code>std::uint16_t</code>, which caps a mesh at
+    65,536 vertices; larger meshes need 32-bit indices, and choosing between them is an asset-pipeline
+    decision.
+  </p>
+
+  <p>
+    <strong>Every triangle is wound counter-clockwise as seen from outside the solid.</strong> Nothing
+    consumed that convention before Lesson 3.4, but the data is authored to it from the start so the
+    meshes never have to be re-authored. Mesh data is <em>validated</em>, not trusted: Euler's
+    <code>V − E + F = 2</code>, every undirected edge in exactly two faces, every directed edge exactly
+    once (consistent winding), and each face's normal pointing away from the centre (outward winding).
+  </p>
+
   <h2 id="units"><span class="num">8</span>Units and angles</h2>
 
   <div class="tbl-scroll">

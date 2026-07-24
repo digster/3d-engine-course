@@ -629,3 +629,41 @@ static server dies between turns, and the Playwright viewport must be resized to
 each navigate or the layout checks fire false spills. New LEARNINGS: a convention living in twelve
 places will eventually be wrong in one (and the tell is that each copy needs a comment); and design
 types to shadow the API you will port to.
+
+
+## 2026-07-31 — Lesson 2.12 (Module 2 milestone)
+
+> next
+
+Resumed from `STATE.md` → `next: 2.12 — Milestone: A Spinning Wireframe Mesh`, which had left the
+mesh choice explicitly open and warned off the OBJ loader (CLAUDE.md reserves it for 3.5).
+
+### Judgement calls
+
+| Question | Decision | Why |
+|---|---|---|
+| Which mesh? | **A hand-derived icosahedron** | Exactly derivable from φ, so "derive, don't decree" holds; tiny (12 verts / 20 faces); 5× vertex reuse makes indexed geometry concrete; and unlike a cube it is not axis-aligned, so rotation reads richly. A UV sphere would have been rote trig; the OBJ loader belongs to 3.5. |
+| Store triangles or edges? | **Triangle indices** | A triangle list is what a mesh *is* — 3.x fills them, 3.4 culls them, Module 4 uploads them. An edge list would discard face data and need rebuilding two lessons later. Cost: each shared edge drawn twice (60 draws / 30 edges), named honestly rather than hidden. |
+| Owning or non-owning? | **`std::span` — non-owning** | Correct for `inline constexpr` geometry with program lifetime, and *incorrect* the moment meshes load at runtime — which is exactly the pressure that justifies Module 5's asset system. Said so explicitly rather than pretending the design is final. |
+| Mesh inside `transform`? | **No — a separate `scene_object`** | A transform is a placement, not a thing. Keeping them separate is the shape Module 5's ECS formalises (transform component + mesh component, attached independently). |
+| How much new theory? | **Almost none; consolidation is the content** | It is a milestone. One new idea (indexed geometry), then the φ derivation, mesh validation, a six-space walk of one real vertex, and an honest "What Is Still Missing" section handing each gap to its Module 3 lesson. |
+
+### Verification
+
+The harness validated the shipped mesh data rather than trusting it: icosahedron `V=12, E=30, F=20`
+→ Euler 2, every undirected edge in exactly two faces, every *directed* edge exactly once, **all
+twenty faces wound outward**, degree uniformly 5, radius exactly `1.000000`, all thirty edges
+`1.051462` (= `2/√(1+φ²)`, as derived). The cube's `8 − 18 + 12 = 2` also checks out — 18 edges, not
+12, because triangulating each square face adds a diagonal. A camera sweep (az 0–360 × elevation
+±1.4 × radius 4/7/14) set the dolly minimum to 4.0, the point at which the whole scene stays inside
+the viewport. The in-page widget was confirmed to emit exactly 60 lines.
+
+`check-page.js` caught two Figure 2 labels sitting on the connector curves; moved clear and re-ran
+green. New LEARNINGS: hand-authored geometry is *data*, so validate it mechanically (and note that a
+winding error is **invisible** in a wireframe until 3.4 turns on culling — the cheapest moment to get
+a convention right is before it has a consumer); and the saving from indexed geometry is *work*, not
+bytes, which is why the loop order (transform all vertices, then walk indices) is the load-bearing
+part.
+
+**Module 2 is complete** — the geometry pipeline is finished and every hop derived.
+

@@ -7,7 +7,7 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-07-30 (after Lesson 2.11 — Module 2: 11 of 12, 25 of 94 lessons)
+updated: 2026-07-31 (after Lesson 2.12 — **MODULE 2 COMPLETE**, 26 of 94 lessons)
 
 conventions:
   world: right-handed, Y-up, -Z forward
@@ -165,6 +165,36 @@ conventions:
         (2.2) and that half-pixel is what keeps the two conventions consistent.
         VERIFIED: the new viewport reproduces 2.10's ad-hoc constants EXACTLY (worst
         diff 0.000e+00 over an NDC grid) — 2.11 moved no pixels, it named a transform.
+  meshes: INDEXED GEOMETRY (2.12). A mesh is a VERTEX ARRAY (positions, each stored
+        once) plus an INDEX ARRAY of uint16 taken in TRIPLES, one triple per
+        TRIANGLE — never an edge list, because triangles are what gets filled (3.x),
+        culled (3.4) and uploaded (Module 4). src/gfx/mesh.hpp (header-only, NEW):
+        struct mesh { span<const vec3> vertices; span<const uint16_t> indices; }
+        — two std::spans, so a mesh is NON-OWNING, four words, and cannot outlive
+        its data (fine for inline constexpr arrays; Module 5's asset system is what
+        happens when meshes are loaded at runtime). Data arrays are INLINE constexpr
+        (ODR: a plain constexpr array in a header is one object PER TU).
+        WHY INDEXED: the icosahedron's 12 vertices serve 20 faces, so unshared would
+        store 60 positions and do 60 matrix multiplies/frame instead of 12. The
+        saving is WORK, not just bytes; it is why GPUs have a post-transform cache.
+        WIREFRAME FROM TRIANGLES draws each shared edge TWICE (60 draws for 30
+        edges, 2x). Named, not hidden; it evaporates once triangles are filled.
+        ALL FACES WOUND CCW FROM OUTSIDE, authored that way from the start even
+        though nothing consumes winding until 3.4, so meshes never need re-authoring.
+        VALIDATE, NEVER TRUST mesh data: Euler V-E+F=2; every UNDIRECTED edge in
+        exactly 2 faces (manifold); every DIRECTED edge exactly once (consistent
+        winding); each face normal cross(b-a,c-a) pointing away from the centre
+        (outward). VERIFIED on the shipped data: icosahedron 12/30/20 -> Euler 2,
+        all edges 2-shared, all 20 faces outward, degree uniformly 5, radius exactly
+        1.000000, all 30 edges 1.051462. Cube 8/18/12 -> Euler 2 (18 edges, not 12,
+        because triangulating each square face adds a diagonal).
+        THE ICOSAHEDRON AND WHY phi IS FORCED: three mutually perpendicular
+        rectangles of width 2 and height 2h have 12 corners = cyclic permutations of
+        (0,+-1,+-h). Demanding ALL 30 EDGES EQUAL gives 2h^2-2h+2 = 4, i.e.
+        h^2 = h+1 — the golden ratio's defining equation, so h = phi = 1.6180340.
+        Normalising by sqrt(1+phi^2) = 1.9021131 puts every vertex on the UNIT
+        SPHERE (so size is the transform's job, not the data's) and makes every edge
+        2/1.9021131 = 1.0514622. k_icos_a = 0.5257311, k_icos_b = 0.8506508.
   cross-product: cross(a,b) = (a.y*b.z - a.z*b.y, a.z*b.x - a.x*b.z, a.x*b.y -
         a.y*b.x). Perpendicular to both; |a x b| = |a||b|sin(theta) = the
         PARALLELOGRAM AREA (the sin sibling of dot's cos). Zero for parallel
@@ -599,6 +629,7 @@ completed:
   - 2.9  The View Matrix: Deriving Look-At
   - 2.10 Perspective from Similar Triangles
   - 2.11 The Viewport Transform
+  - 2.12 MILESTONE: A Spinning Wireframe Mesh  (**Module 2 complete**)
 
 capabilities:
   - verified C++20 toolchain (MSVC / GCC / Clang), 64-bit
@@ -630,6 +661,26 @@ capabilities:
     switches with [M]
   - maths: src/math/vec2.hpp (header-only) — arithmetic, length/length_squared,
     normalised(+_or), dot, perpendicular, project_onto, reflect, lerp, distance
+  - gfx 2.12: src/gfx/mesh.hpp (header-only, NEW) — struct mesh (two spans) +
+    triangle_count(), plus cube_mesh() (8 verts / 12 tris / 36 idx) and
+    icosahedron_mesh() (12 / 20 / 60). main.cpp: draw_cube -> draw_mesh(fb, mesh, m,
+    proj, point_w) which transforms each vertex ONCE into view space then walks
+    indices 3 at a time drawing each triangle's 3 edges (bounds-checked: its input is
+    DATA, which can be wrong in ways code cannot — the same put_pixel-vs-at(row,col)
+    distinction from 2.5). New demo-local `struct scene_object { transform xform;
+    mesh geometry; const char* name; }` — deliberately NOT bolted onto
+    engine::transform (a transform is a placement, not a thing; Module 5's ECS
+    attaches mesh and transform as separate components for the same reason).
+    Scene is now icosahedron (hero, uniform, spinning) + slab (non-uniform,
+    spinning — keeps 2.8's [O] teaching) + plinth (non-uniform, still). The HUD
+    probe is now VERTEX 0 OF THE SELECTED MESH and the panel shows verts/tris/idx.
+    Dolly min raised 3.0 -> 4.0 (VERIFIED: at 4 the whole scene stays inside the
+    viewport at every orbit angle and elevation; the ground grid still runs
+    off-screen, which is what a floor should do).
+    Verified default frame: icosahedron vertex 0 model(-0.53,+0.85,0) ->
+    world(-0.77,+1.29,+0.37) -> view(-0.77,+0.52,-6.42) ->
+    clip(-0.83,+1.00,+6.14,w=6.42) -> ndc(-0.130,+0.156,+0.956) -> scr(80.9,82.5,
+    d=0.956). 132 wireframe line draws/frame across the 3 objects.
   - gfx 2.11: src/gfx/viewport.hpp (header-only, NEW) — struct viewport {x,y,w,h,
     min_depth,max_depth} mirroring SDL_GPUViewport, with constexpr to_screen(ndc)
     doing the three affine maps and the y flip. main.cpp: k_scene_viewport
@@ -960,7 +1011,7 @@ files:
   src/core/: input.hpp, input.cpp, clock.hpp, clock.cpp,
             fixed_step.hpp, fixed_step.cpp
   src/gfx/: colour.hpp, colour.cpp, framebuffer.hpp, framebuffer.cpp,
-            raster.hpp, raster.cpp, viewport.hpp
+            raster.hpp, raster.cpp, viewport.hpp, mesh.hpp
   src/math/: vec2.hpp, vec3.hpp, vec4.hpp, mat2.hpp, mat3.hpp, mat4.hpp, transform.hpp
   src/game/: pong.hpp, pong.cpp
   docs/: index.html, conventions.html, math-toolbox.html, cpp-style.html
@@ -976,43 +1027,49 @@ files:
                  02-05-matrices.html, 02-06-mat4.html,
                  02-07-homogeneous.html, 02-08-space-chain.html,
                  02-09-view-matrix.html, 02-10-perspective.html,
-                 02-11-viewport.html
+                 02-11-viewport.html, 02-12-wireframe-mesh.html
   docs/_template/: lesson-template.html, README.md, apply-shared.py, check-page.js
   memory/: 2026-07-16.md, 2026-07-18.md, 2026-07-21.md, 2026-07-22.md,
            2026-07-23.md, 2026-07-24.md, 2026-07-25.md, 2026-07-26.md,
-           2026-07-27.md, 2026-07-28.md, 2026-07-29.md, 2026-07-30.md
+           2026-07-27.md, 2026-07-28.md, 2026-07-29.md, 2026-07-30.md,
+           2026-07-31.md
   (retired: hello.cpp)
 
-next: 2.12 — Milestone: A Spinning Wireframe Mesh
-      (planned filename: docs/lessons/02-12-wireframe-mesh.html — 2.11 links to it)
-      THE MODULE 2 MILESTONE, and CLAUDE.md §5 names it: "wireframe 3D meshes
-      spinning on screen, every line of which the student can explain." Spend almost
-      NO length on new theory — spend it on lighting the whole chain end to end and
-      on consolidation. Every transform now exists; this is the payoff.
-        - A REAL MESH, more than the 8-vertex cube. Options: (a) hand-authored
-          vertex+index arrays for something with actual shape (an icosahedron is
-          20 faces / 12 verts and derivable from the golden ratio — nice, small,
-          and teaches indexed geometry); (b) a tiny generated mesh (UV sphere or
-          torus from two loops of trig) which also motivates index buffers. DO NOT
-          write the OBJ loader here — CLAUDE.md puts the hand-rolled OBJ parser in
-          Module 3 (3.5), and 2.12 should not steal it. PICK ONE and say why.
-        - INTRODUCE INDEXED GEOMETRY properly: a vertex array + an index array, and
-          why (shared vertices, one transform per vertex not per face). This is the
-          shape Module 4's vertex/index BUFFERS will take, so it is genuinely
-          load-bearing, not decoration.
-        - Probably a `mesh` type (src/gfx/mesh.hpp?) holding vertices + edges (still
-          wireframe; TRIANGLES with fills are Module 3). Keep it minimal.
-        - CONSOLIDATION IS THE CONTENT: one annotated walk of a single vertex
-          through all six spaces with the real numbers, a full-pipeline diagram
-          that ties every lesson 2.5-2.11 to its stage, and an honest list of what
-          is still missing (no z-buffer -> far edges draw over near ones; no
-          clipping -> geometry behind the camera is dropped whole, not trimmed; no
-          culling; no fills) — each pointing at the Module 3 lesson that fixes it.
-        - The demo already has camera + projection + viewport + the [P]/[O]/[X]
-          toggles; 2.12 mostly swaps the cube for the mesh and adds the
-          full-pipeline HUD/diagram. Consider retiring some older toggles if the
-          panel is too full.
-      Then MODULE 3 opens: z-buffer (3.1), perspective-correct interpolation (3.2),
-      near-plane clipping (3.3), back-face culling + cross product deepened (3.4),
-      OBJ loader (3.5), normals & shading (3.6), textures (3.7), profiling, capstone.
+next: 3.1 — The Painter's Problem and the Z-Buffer
+      (planned filename: docs/lessons/03-01-z-buffer.html — 2.12 links to it)
+      MODULE 3 OPENS. Module 2 built the geometry; Module 3 fills it in. 3.1 attacks
+      the flaw 2.12's milestone makes most visible: FAR EDGES DRAW OVER NEAR ONES
+      because nothing compares depth. The demo already shows it (you see through the
+      icosahedron) — open with that artifact, per pedagogy §5.
+        - SHOW THE PAINTER'S ALGORITHM FAIL FIRST. Sort triangles back-to-front by
+          average view-space depth; it works on the icosahedron and looks solved.
+          Then break it, and Exercise 2.12.5 already sets this up: INTERSECTING
+          triangles have no correct order; OVERLAPPING triangles can form a CYCLE
+          (A over B over C over A); a triangle stretched in depth has an "average"
+          describing none of it. Build the cycle case explicitly — three long quads
+          is the classic. That failure is the argument for per-pixel depth.
+        - THEN THE Z-BUFFER: a depth per PIXEL, alongside the colour buffer. Write a
+          pixel only if its depth beats what is there. Needs (a) a depth buffer in
+          gfx (parallel to framebuffer — consider std::vector<float> and whether it
+          lives IN framebuffer or beside it; DECIDE), (b) depth INTERPOLATED across
+          the triangle, which is barycentric interpolation from 2.3/2.4 applied to
+          the depth attribute, (c) a clear-to-far each frame.
+        - WHICH DEPTH TO INTERPOLATE is the subtle bit and it sets up 3.2: NDC z is
+          already the 1/z-nonlinear value (2.10 §3.4), and it interpolates CORRECTLY
+          in screen space precisely BECAUSE it is 1/z-ish — whereas view-space z does
+          not. Say this carefully; 3.2 (perspective-correct interpolation) is the
+          full treatment and this is the first taste.
+        - PRECISION: 2.10's worked numbers (near=1,far=100 puts z=-2 at z_ndc=0.505)
+          become z-FIGHTING here. Reuse them; Exercise 2.10.4 already quantised depth.
+        - THIS IS WHERE FILLED TRIANGLES MEET THE 3-D PIPELINE. fill_triangle exists
+          since 2.2 but nothing has connected it to model->...->screen. 3.1 is
+          plausibly where draw_mesh gains a filled path (flat-shaded per triangle,
+          since lighting is 3.6). DECIDE whether 3.1 fills or stays wireframe+depth.
+      Module 3 then continues: 3.2 perspective-correct interpolation (derive the 1/w
+      trick, show the affine-texturing artifact first), 3.3 near-plane clipping
+      (Sutherland-Hodgman; the project() guard that DROPS whole edges is the artifact),
+      3.4 back-face culling + the cross product deepened (the meshes are already wound
+      CCW-outward and verified, so the data is ready), 3.5 the hand-rolled OBJ loader,
+      3.6 normals and shading (Lambert -> Blinn-Phong; flat/Gouraud/per-pixel), 3.7
+      texture mapping + bilinear, then a profiling pass and the Module 3 capstone.
 ```

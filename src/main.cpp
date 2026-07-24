@@ -1,14 +1,15 @@
 // src/main.cpp — the engine's entry point.
 //
-// This file hosts the current lesson's demo. As of Lesson 2.11 that is a SCENE
-// carried through the COMPLETE coordinate chain: a ground plane, a world origin,
-// and three objects sharing one eight-vertex mesh, taken model -> world (2.8) ->
-// view (2.9) -> clip (2.10) -> NDC -> SCREEN, the last hop being the viewport
-// transform (an engine::viewport, this lesson). [P] swaps perspective/orthographic;
-// the HUD carries one vertex through every one of those spaces, so you can watch w
-// stop being 1 at clip and the +y axis flip at screen.
+// This file hosts the current lesson's demo. As of Lesson 2.12 — the Module 2
+// MILESTONE — that is a real indexed MESH spinning in perspective: a regular
+// icosahedron (12 vertices, 20 triangles, built from the golden ratio) plus two
+// cubes, on a ground plane, carried through the COMPLETE coordinate chain
+// model -> world (2.8) -> view (2.9) -> clip (2.10) -> NDC -> screen (2.11).
+// [P] swaps perspective/orthographic; the HUD narrates vertex 0 of the selected
+// mesh through every one of those spaces, so you can watch w stop being 1 at clip
+// and the +y axis flip at screen. Not one line of it is unexplained.
 //
-// [Tab] CYCLES five demos — scene (2.6-2.11), basis transforms (2.5), triangles
+// [Tab] CYCLES five demos — scene (2.6-2.12), basis transforms (2.5), triangles
 // (2.2-2.4), lines (2.1), and Pong (1.8) — because deleting a working demo to
 // make room would be a regression. Five is far too many for one executable, and
 // the next one will be worse. That is not an oversight: Module 5 opens by
@@ -25,6 +26,7 @@
 #include "game/pong.hpp"
 #include "gfx/colour.hpp"
 #include "gfx/framebuffer.hpp"
+#include "gfx/mesh.hpp"
 #include "gfx/raster.hpp"
 #include "gfx/viewport.hpp"
 #include "math/mat2.hpp"
@@ -752,65 +754,74 @@ void line3_world(engine::framebuffer& fb, const engine::mat4& view, const engine
 }
 
 // ---------------------------------------------------------------------------
-// The mesh, in MODEL SPACE
+// Drawing a MESH, in MODEL SPACE
 // ---------------------------------------------------------------------------
 //
-// These eight numbers are the whole of Lesson 2.8's first claim: this cube is not
-// anywhere. It is not at the left of the screen, it is not two metres from the
-// door, it is not big or small. It is a unit cube expressed in ITS OWN
-// coordinates — model space — and the only reason those coordinates mean anything
-// is that a model matrix is going to say where the space itself goes.
+// The geometry itself now lives in gfx/mesh.hpp as vertices + triangle indices
+// (Lesson 2.12). What has not changed since Lesson 2.8 is the claim those
+// coordinates make: a mesh is not ANYWHERE. It is not at the left of the screen,
+// not two metres from the door, not big or small. It is a shape in ITS OWN
+// coordinates — model space — and the model matrix says where that space goes.
 //
-// One consequence is worth stating out loud, because it is where the lesson's
-// payoff comes from: this array is used by all three objects in the scene below.
-// Three different sizes, three orientations, three places, ONE mesh. That is not
-// a trick of the demo — it is what "model space" buys, and it is why a game can
-// ship one crate and place four hundred of them.
-//
-// Centred rather than corner-at-origin so that rotation — which is always about
-// the origin (Lesson 2.5 §3.8) — spins it in place rather than swinging it round.
-constexpr engine::vec3 k_cube_v[8] = {
-    {-0.5f, -0.5f, -0.5f}, {+0.5f, -0.5f, -0.5f}, {+0.5f, +0.5f, -0.5f}, {-0.5f, +0.5f, -0.5f},
-    {-0.5f, -0.5f, +0.5f}, {+0.5f, -0.5f, +0.5f}, {+0.5f, +0.5f, +0.5f}, {-0.5f, +0.5f, +0.5f},
-};
-constexpr int k_cube_e[12][2] = {
-    {0,1},{1,2},{2,3},{3,0},   // back face
-    {4,5},{5,6},{6,7},{7,4},   // front face
-    {0,4},{1,5},{2,6},{3,7},   // the four struts joining them
-};
+// Which is why the same twelve-vertex icosahedron and the same eight-vertex cube
+// serve every object in the scene below, at different sizes, orientations and
+// places. That is what model space buys, and it is why a game ships one crate and
+// places four hundred.
 
-/// Draw the cube, with edge brightness standing in for depth, through `proj`.
+/// Draw a mesh as a wireframe, with edge brightness standing in for depth.
+///
+/// Every triangle contributes its three edges. Shared edges are therefore drawn
+/// TWICE — 60 line draws for the icosahedron's 30 unique edges — which is honest
+/// waste worth naming rather than hiding. Deduplicating would mean building an edge
+/// list, and the moment Module 3 fills these triangles the duplication vanishes on
+/// its own, so we pay it and say so.
 ///
 /// The brightness is a **cue, not a calculation** — there is no depth buffer yet
-/// (Lesson 3.1) and no lighting (Lesson 3.6), so this is simply "edges further
-/// away are dimmer" so the wireframe can be read at all. Without it a rotating
-/// wireframe cube is a genuinely ambiguous picture: your eye flips between two
-/// interpretations, because a wireframe has discarded the only information that
-/// could settle it.
-/// @param point_w  the fourth component the corners are sent with. 1 is correct;
+/// (Lesson 3.1) and no lighting (Lesson 3.6), so this is simply "edges further away
+/// are dimmer" so the wireframe can be read at all. Without it a spinning wireframe
+/// is a genuinely ambiguous picture: your eye flips between two interpretations,
+/// because a wireframe has discarded the only information that could settle it.
+///
+/// @param point_w  the fourth component the vertices are sent with. 1 is correct;
 ///                  0 reproduces Lesson 2.6, where every translation is ignored.
-void draw_cube(engine::framebuffer& fb, const engine::mat4& m,
-               const engine::mat4& proj, float point_w)
+void draw_mesh(engine::framebuffer& fb, const engine::mesh& geometry,
+               const engine::mat4& m, const engine::mat4& proj, float point_w)
 {
-    engine::vec3 p[8];
-    for (int i = 0; i < 8; ++i)
+    // Transform each vertex ONCE, into view space, and keep the results. This is
+    // the whole practical argument for indexed geometry: the icosahedron's twelve
+    // vertices are shared by twenty triangles, so transforming per-vertex rather
+    // than per-triangle-corner does 12 matrix multiplies instead of 60.
+    engine::vec3 p[64];
+    const std::size_t vertex_count = std::min(geometry.vertices.size(), std::size(p));
+    for (std::size_t i = 0; i < vertex_count; ++i)
     {
-        // A corner is a POSITION, so w = 1 and the model+view matrix's translation
+        // A vertex is a POSITION, so w = 1 and the model+view matrix's translation
         // is added in full. p[] comes out in VIEW space — the projection to the
         // screen happens later, inside line3, through `proj`.
-        p[i] = engine::xyz(m * engine::to_vec4(k_cube_v[i], point_w));
+        p[i] = engine::xyz(m * engine::to_vec4(geometry.vertices[i], point_w));
     }
 
-    for (const auto& e : k_cube_e)
+    // Walk the index array three at a time; each triple is one triangle, and each
+    // triangle draws its three edges.
+    for (std::size_t t = 0; t + 2 < geometry.indices.size(); t += 3)
     {
-        // Depth from view-space z (distance in front of the camera, negative since
-        // the camera looks down -z). Nearer edges (z closer to 0) are brighter.
-        // The window -13..-2 covers the scene's view-space z spread across the
-        // whole dolly range; still a cue, not a z-buffer (that is Lesson 3.1).
-        const float mid_z = 0.5f * (p[e[0]].z + p[e[1]].z);
-        const float t = std::clamp((mid_z + 13.0f) / 11.0f, 0.0f, 1.0f);   // -13..-2 -> 0..1
-        const Uint8 v = static_cast<Uint8>(70.0f + 165.0f * t);
-        line3(fb, p[e[0]], p[e[1]], engine::pack_argb(v, v, static_cast<Uint8>(v * 0.94f)), proj);
+        const std::size_t tri[3] = {geometry.indices[t], geometry.indices[t + 1],
+                                    geometry.indices[t + 2]};
+        for (int e = 0; e < 3; ++e)
+        {
+            const std::size_t ia = tri[e];
+            const std::size_t ib = tri[(e + 1) % 3];
+            if (ia >= vertex_count || ib >= vertex_count) { continue; }
+
+            // Depth from view-space z (distance in front of the camera, negative
+            // since the camera looks down -z). Nearer edges (z closer to 0) are
+            // brighter. The window -13..-2 covers the scene's view-space z spread
+            // across the dolly range; a cue, not a z-buffer (Lesson 3.1).
+            const float mid_z = 0.5f * (p[ia].z + p[ib].z);
+            const float t01 = std::clamp((mid_z + 13.0f) / 11.0f, 0.0f, 1.0f);
+            const Uint8 v = static_cast<Uint8>(70.0f + 165.0f * t01);
+            line3(fb, p[ia], p[ib], engine::pack_argb(v, v, static_cast<Uint8>(v * 0.94f)), proj);
+        }
     }
 }
 
@@ -922,53 +933,69 @@ enum class trs_order
     return R * T * S;
 }
 
+/// One thing in the world: where it is, and what shape it is.
+///
+/// A transform plus a mesh. That pairing is the smallest useful definition of a
+/// renderable object, and it is deliberately kept OUT of `engine::transform` — a
+/// transform is a placement, not a thing, and Module 5's ECS will attach geometry
+/// to a transform as a separate component for exactly this reason. Here it is a
+/// two-field demo struct, which is the honest amount of machinery for three objects.
+///
+/// The `mesh` is stored BY VALUE and that is cheap: it is two spans, four words,
+/// pointing at static geometry that outlives everything.
+struct scene_object
+{
+    engine::transform xform;
+    engine::mesh geometry;
+    const char* name;
+};
+
 /// The three objects in the world, and why each one is here.
 ///
-/// Every object below is the SAME eight vertices (`k_cube_v`) — the difference
-/// between a slab, a post and a plinth is entirely in the transform. Their roles
-/// are deliberately different, because the interesting question is not "does the
-/// wrong order look wrong" but "when does it look right anyway":
+/// The icosahedron is the milestone's hero — a real mesh, twelve vertices and twenty
+/// faces, not an axis-aligned box, so a rotation reads richly instead of looking like
+/// a square wobbling. The other two are the SAME eight-vertex cube at different
+/// transforms, kept because their roles are still teaching something (Lesson 2.8):
 ///
-///   slab    non-uniform scale, spinning.  The order matters, visibly and always.
-///   post    UNIFORM scale, spinning.      T*R*S and T*S*R are bit-identical.
-///   plinth  non-uniform scale, still.     Identity rotation, so likewise identical.
+///   icosahedron  UNIFORM scale, spinning.   T*R*S and T*S*R are bit-identical.
+///   slab (cube)  non-uniform, spinning.     The order matters, visibly and always.
+///   plinth(cube) non-uniform, still.        Identity rotation, so likewise identical.
 ///
-/// Two of the three are controls. That is the point: get the order wrong and two
-/// thirds of your scene still looks perfect, which is exactly how the bug ships.
+/// Two of the three are controls. That is the point of [O]: get the composition
+/// order wrong and two thirds of the scene still looks perfect, which is exactly how
+/// such a bug ships.
 constexpr int k_scene_count = 3;
 
-[[nodiscard]] const char* scene_name(int i)
-{
-    switch (i)
-    {
-    case 0:  return "slab   (non-uniform, spinning)";
-    case 1:  return "post   (uniform, spinning)";
-    default: return "plinth (non-uniform, still)";
-    }
-}
-
-/// Rebuild the scene's transforms for the current time and rotation mode.
+/// Rebuild the scene for the current time and rotation mode.
 ///
 /// Rebuilt from scratch every frame rather than accumulated into, deliberately.
 /// Repeatedly multiplying a rotation by a small delta drifts — the matrix stops
 /// being a rotation, and the object slowly shears. Deriving the whole transform
 /// from one authoritative `t` cannot drift, and it is the pattern the engine keeps
 /// (Module 5's transform component stores the *inputs*, never a running matrix).
-void build_scene(engine::transform (&out)[k_scene_count], spin mode, float t)
+void build_scene(scene_object (&out)[k_scene_count], spin mode, float t)
 {
     const engine::mat3 spinning = build_spin(mode, t);
 
-    out[0].scale    = {1.8f, 0.35f, 0.9f};
-    out[0].position = {-1.4f, 1.0f, 0.2f};
-    out[0].rotation = spinning;
+    // The hero. Tilted by a fixed rotation as well as the animated one so its
+    // symmetry is never accidentally axis-aligned.
+    out[0].xform.scale    = {0.9f, 0.9f, 0.9f};
+    out[0].xform.position = {0.0f, 1.0f, 0.0f};
+    out[0].xform.rotation = spinning * engine::rotation_x(0.5f);
+    out[0].geometry       = engine::icosahedron_mesh();
+    out[0].name           = "icosahedron (uniform, spinning)";
 
-    out[1].scale    = {0.5f, 0.5f, 0.5f};
-    out[1].position = {1.5f, 0.5f, -0.9f};
-    out[1].rotation = spinning;
+    out[1].xform.scale    = {1.8f, 0.35f, 0.9f};
+    out[1].xform.position = {-1.6f, 0.5f, 0.4f};
+    out[1].xform.rotation = spinning;
+    out[1].geometry       = engine::cube_mesh();
+    out[1].name           = "slab   (non-uniform, spinning)";
 
-    out[2].scale    = {1.2f, 0.25f, 1.2f};
-    out[2].position = {0.5f, 0.125f, 1.4f};
-    out[2].rotation = engine::mat3::identity();
+    out[2].xform.scale    = {1.2f, 0.25f, 1.2f};
+    out[2].xform.position = {1.4f, 0.125f, 0.9f};
+    out[2].xform.rotation = engine::mat3::identity();
+    out[2].geometry       = engine::cube_mesh();
+    out[2].name           = "plinth (non-uniform, still)";
 }
 
 /// Draw the world through the camera: a ground grid on y = 0 and a marked origin.
@@ -1410,7 +1437,7 @@ int main(int argc, char* argv[])
             SDL_VERSIONNUM_MINOR(sdl_version),
             SDL_VERSIONNUM_MICRO(sdl_version));
 
-    SDL_Window* window = SDL_CreateWindow("The Viewport Transform — Module 2", 1280, 720,
+    SDL_Window* window = SDL_CreateWindow("Wireframe Mesh — Module 2 Milestone", 1280, 720,
                                           SDL_WINDOW_RESIZABLE);
     if (window == nullptr)
     {
@@ -1469,15 +1496,15 @@ int main(int argc, char* argv[])
     // ---- Lesson 2.8's scene ------------------------------------------------
     trs_order order = trs_order::trs;   ///< [O] — only the first is right
     int selected = 0;                   ///< [X] — which object the HUD reports on
-    engine::transform scene[k_scene_count];
+    scene_object scene[k_scene_count];
     engine::mat4 selected_m;            ///< the selected object's model matrix
     engine::vec3 selected_world;        ///< one model vertex, carried into world space
     float selected_axis_len = 0.0f;     ///< |model x axis| in world units
     float selected_corner = 0.0f;       ///< angle between model x and y, in degrees
 
-    /// The one vertex the HUD carries model -> world every frame. It is a corner
-    /// of the mesh, chosen to match the lesson's worked example.
-    constexpr engine::vec3 k_probe_vertex{0.5f, 0.5f, -0.5f};
+    /// Vertex 0 of the SELECTED object's mesh — the one the HUD narrates through
+    /// every space, refreshed each frame because [X] can change which mesh it is.
+    engine::vec3 selected_probe;
 
     // ---- Lesson 2.9's camera -----------------------------------------------
     orbit_camera cam;                   ///< arrow keys orbit; [-]/[=] dolly
@@ -1529,9 +1556,9 @@ int main(int argc, char* argv[])
     SDL_Log("  [4]/[5] follow the mouse: the three sub-triangles ARE the three weights. [R] fill rule.");
     SDL_Log("  [6] Gouraud (three corner colours) [7] uv checker — [M] switches blend space");
     SDL_Log("Basis (2.5): [Z] transform  [,] [.] adjust  [0] reset  [Space] animate");
-    SDL_Log("Scene (2.11): [arrows] orbit  [-]/[=] dolly  [P] persp/ortho  [O] model order");
+    SDL_Log("Scene (2.12): [arrows] orbit  [-]/[=] dolly  [P] persp/ortho  [O] model order");
     SDL_Log("  [X] object  [Z] rotation axis  [,] [.] t  [Space] spin  [W]/[N] the 2.7 w bugs");
-    SDL_Log("[Tab] cycles demos: scene (2.6-2.11) -> basis (2.5) -> triangles -> lines -> Pong");
+    SDL_Log("[Tab] cycles demos: scene (2.6-2.12) -> basis (2.5) -> triangles -> lines -> Pong");
     SDL_Log("[V] vsync · [T] throttle · [Esc] quit");
 
     bool running = true;
@@ -1568,7 +1595,7 @@ int main(int argc, char* argv[])
         {
             which = next_demo(which);
             SDL_SetWindowTitle(window,
-                which == demo::scene     ? "The Viewport Transform — Module 2"
+                which == demo::scene     ? "Wireframe Mesh — Module 2 Milestone"
               : which == demo::basis     ? "Basis Transforms — Module 2"
               : which == demo::triangles ? "Triangles — Module 2"
               : which == demo::lines     ? "Lines — Module 2"
@@ -1620,7 +1647,11 @@ int main(int argc, char* argv[])
                 // so. Perspective (Lesson 2.10) is what finally makes it matter.
                 if (in.key_down(SDL_SCANCODE_MINUS))  { cam.radius += 4.0f * stepper.h(); }
                 if (in.key_down(SDL_SCANCODE_EQUALS)) { cam.radius -= 4.0f * stepper.h(); }
-                cam.radius = std::clamp(cam.radius, 3.0f, 14.0f);
+                // The near limit is 4, not 3: verified that at 4 the whole scene
+                // stays inside the viewport rectangle at every orbit angle and
+                // elevation, so nothing is lost off the framebuffer's edge. (The
+                // ground grid still runs off-screen, which is what a floor should do.)
+                cam.radius = std::clamp(cam.radius, 4.0f, 14.0f);
             }
 
             cube_m = build_spin(cube_mode, cube_t);
@@ -1643,19 +1674,22 @@ int main(int argc, char* argv[])
             // perspective divide inside project() finishes the job.
             for (int i = 0; i < k_scene_count; ++i)
             {
-                const engine::mat4 world_from_model = model_matrix(scene[i], order);
+                const engine::mat4 world_from_model = model_matrix(scene[i].xform, order);
                 const engine::mat4 view_from_model = view_from_world * world_from_model;
-                draw_cube(fb, view_from_model, proj, cube_point_w);
+                draw_mesh(fb, scene[i].geometry, view_from_model, proj, cube_point_w);
                 draw_axes3(fb, view_from_model, proj, cube_point_w, cube_dir_w);
             }
 
             // Everything the HUD reports is read back out of the matrices that were
-            // actually used to draw. The probe vertex is now carried the WHOLE chain
-            // — model -> world -> view -> clip -> NDC — so the HUD shows where w
-            // stops being 1 and the divide takes over.
-            selected_m = model_matrix(scene[selected], order);
+            // actually used to draw. The probe is now vertex 0 OF THE SELECTED MESH,
+            // carried the whole chain — model -> world -> view -> clip -> NDC ->
+            // screen — so the HUD narrates a real vertex of the shape on screen.
+            selected_probe = scene[selected].geometry.vertices.empty()
+                           ? engine::vec3{}
+                           : scene[selected].geometry.vertices[0];
+            selected_m = model_matrix(scene[selected].xform, order);
             selected_world = engine::xyz(selected_m
-                                       * engine::to_vec4(k_probe_vertex, cube_point_w));
+                                       * engine::to_vec4(selected_probe, cube_point_w));
             selected_view = engine::xyz(view_from_world * engine::point(selected_world));
             selected_clip = proj * engine::point(selected_view);
             selected_ndc = engine::perspective_divide(selected_clip);
@@ -1918,51 +1952,57 @@ int main(int argc, char* argv[])
             // space in the chain — model -> world -> view -> clip -> NDC -> SCREEN.
             // You can see w stop being 1 at clip, and the +y flip at screen.
             SDL_SetRenderDrawColor(renderer, 210, 212, 220, 255);
-            SDL_RenderDebugTextFormat(renderer, 380.0f, 100.0f, "[X] %s, one corner:",
-                                      scene_name(selected));
+            SDL_RenderDebugTextFormat(renderer, 380.0f, 100.0f, "[X] %s", scene[selected].name);
+            // Indexed geometry, made concrete: how few vertices, how many triangles.
             SDL_SetRenderDrawColor(renderer, 150, 152, 170, 255);
-            SDL_RenderDebugTextFormat(renderer, 380.0f, 114.0f, "model (%+.2f %+.2f %+.2f)",
-                static_cast<double>(k_probe_vertex.x), static_cast<double>(k_probe_vertex.y),
-                static_cast<double>(k_probe_vertex.z));
+            SDL_RenderDebugTextFormat(renderer, 380.0f, 114.0f,
+                "  %zu verts, %zu tris, %zu idx -> vertex 0:",
+                scene[selected].geometry.vertices.size(),
+                scene[selected].geometry.triangle_count(),
+                scene[selected].geometry.indices.size());
+            SDL_SetRenderDrawColor(renderer, 150, 152, 170, 255);
+            SDL_RenderDebugTextFormat(renderer, 380.0f, 128.0f, "model (%+.2f %+.2f %+.2f)",
+                static_cast<double>(selected_probe.x), static_cast<double>(selected_probe.y),
+                static_cast<double>(selected_probe.z));
             SDL_SetRenderDrawColor(renderer, 226, 196, 110, 255);
-            SDL_RenderDebugTextFormat(renderer, 380.0f, 128.0f, "world (%+.2f %+.2f %+.2f)",
+            SDL_RenderDebugTextFormat(renderer, 380.0f, 142.0f, "world (%+.2f %+.2f %+.2f)",
                 static_cast<double>(selected_world.x), static_cast<double>(selected_world.y),
                 static_cast<double>(selected_world.z));
             SDL_SetRenderDrawColor(renderer, 130, 190, 220, 255);
-            SDL_RenderDebugTextFormat(renderer, 380.0f, 142.0f, "view  (%+.2f %+.2f %+.2f)",
+            SDL_RenderDebugTextFormat(renderer, 380.0f, 156.0f, "view  (%+.2f %+.2f %+.2f)",
                 static_cast<double>(selected_view.x), static_cast<double>(selected_view.y),
                 static_cast<double>(selected_view.z));
             // clip: w is the star — it is -z_view now, no longer 1 (2.10).
             SDL_SetRenderDrawColor(renderer, 236, 196, 110, 255);
-            SDL_RenderDebugTextFormat(renderer, 380.0f, 156.0f, "clip  (%+.2f %+.2f %+.2f w=%.2f)",
+            SDL_RenderDebugTextFormat(renderer, 380.0f, 170.0f, "clip  (%+.2f %+.2f %+.2f w=%.2f)",
                 static_cast<double>(selected_clip.x), static_cast<double>(selected_clip.y),
                 static_cast<double>(selected_clip.z), static_cast<double>(selected_clip.w));
             SDL_SetRenderDrawColor(renderer, 150, 152, 170, 255);
-            SDL_RenderDebugTextFormat(renderer, 380.0f, 170.0f, "  w=%.2f %s",
+            SDL_RenderDebugTextFormat(renderer, 380.0f, 184.0f, "  w=%.2f %s",
                 static_cast<double>(selected_clip.w),
                 use_perspective ? "=-z_view (was 1!)" : "=1 (ortho keeps it)");
             // ndc: after the perspective divide. xy in [-1,1], z in [0,1], +y UP.
             SDL_SetRenderDrawColor(renderer, 130, 220, 170, 255);
-            SDL_RenderDebugTextFormat(renderer, 380.0f, 184.0f, "ndc   (%+.3f %+.3f %+.3f) /w",
+            SDL_RenderDebugTextFormat(renderer, 380.0f, 198.0f, "ndc   (%+.3f %+.3f %+.3f) /w",
                 static_cast<double>(selected_ndc.x), static_cast<double>(selected_ndc.y),
                 static_cast<double>(selected_ndc.z));
             // screen: THIS lesson's viewport transform. Pixels + device depth.
             SDL_SetRenderDrawColor(renderer, 236, 210, 150, 255);
-            SDL_RenderDebugTextFormat(renderer, 380.0f, 198.0f, "scr   (%.1f %.1f  d=%.3f) px",
+            SDL_RenderDebugTextFormat(renderer, 380.0f, 212.0f, "scr   (%.1f %.1f  d=%.3f) px",
                 static_cast<double>(selected_screen.x), static_cast<double>(selected_screen.y),
                 static_cast<double>(selected_screen.z));
             SDL_SetRenderDrawColor(renderer, 150, 152, 170, 255);
-            SDL_RenderDebugText(renderer, 380.0f, 212.0f, "  ndc +y UP -> screen +y DOWN (flip)");
+            SDL_RenderDebugText(renderer, 380.0f, 226.0f, "  ndc +y UP -> screen +y DOWN (flip)");
 
             // Deform/move check from 2.8, plus the 2.7 w-bug flag when engaged.
-            const float want_len = scene[selected].scale.x;
+            const float want_len = scene[selected].xform.scale.x;
             const bool rigid = std::fabs(selected_corner - 90.0f) < 0.01f
                             && std::fabs(selected_axis_len - want_len) < 0.001f;
             const bool w_bug = (cube_point_w != 1.0f || cube_dir_w != 0.0f);
             SDL_SetRenderDrawColor(renderer, (rigid && !w_bug) ? 150 : 236,
                                              (rigid && !w_bug) ? 152 : 92,
                                              (rigid && !w_bug) ? 170 : 92, 255);
-            SDL_RenderDebugTextFormat(renderer, 380.0f, 232.0f, "|x|=%.2f corner %.0f%s%s",
+            SDL_RenderDebugTextFormat(renderer, 380.0f, 244.0f, "|x|=%.2f corner %.0f%s%s",
                 static_cast<double>(selected_axis_len), static_cast<double>(selected_corner),
                 rigid ? "" : " DEFORM", w_bug ? "  [W/N bug]" : "");
 
@@ -1970,21 +2010,21 @@ int main(int argc, char* argv[])
             SDL_SetRenderDrawColor(renderer, 150, 152, 170, 255);
             if (order != trs_order::trs)
             {
-                SDL_RenderDebugText(renderer, 380.0f, 252.0f, "wrong model order [O]: 2.8's");
-                SDL_RenderDebugText(renderer, 380.0f, 266.0f, order == trs_order::tsr
+                SDL_RenderDebugText(renderer, 380.0f, 262.0f, "wrong model order [O]: 2.8's");
+                SDL_RenderDebugText(renderer, 380.0f, 276.0f, order == trs_order::tsr
                                     ? "shear is back." : "orbit-origin is back.");
             }
             else if (use_perspective)
             {
-                SDL_RenderDebugText(renderer, 380.0f, 252.0f, "the whole chain, one corner:");
-                SDL_RenderDebugText(renderer, 380.0f, 266.0f, "model->world->view->clip->ndc");
-                SDL_RenderDebugText(renderer, 380.0f, 280.0f, "->screen. [P] flattens it.");
+                SDL_RenderDebugText(renderer, 380.0f, 262.0f, "the whole chain, one corner:");
+                SDL_RenderDebugText(renderer, 380.0f, 276.0f, "model->world->view->clip->ndc");
+                SDL_RenderDebugText(renderer, 380.0f, 290.0f, "->screen. [P] flattens it.");
             }
             else
             {
-                SDL_RenderDebugText(renderer, 380.0f, 252.0f, "orthographic: every cube the same");
-                SDL_RenderDebugText(renderer, 380.0f, 266.0f, "size, rails parallel, dolly inert.");
-                SDL_RenderDebugText(renderer, 380.0f, 280.0f, "[P] back to perspective.");
+                SDL_RenderDebugText(renderer, 380.0f, 262.0f, "orthographic: every cube the same");
+                SDL_RenderDebugText(renderer, 380.0f, 276.0f, "size, rails parallel, dolly inert.");
+                SDL_RenderDebugText(renderer, 380.0f, 290.0f, "[P] back to perspective.");
             }
 
             SDL_SetRenderDrawColor(renderer, 210, 212, 220, 255);

@@ -1347,3 +1347,43 @@ buffers want (2.6), and the projection targets SDL_GPU's `[0,1]` NDC depth rathe
 `[-1,1]` (2.10, the NDC-parity decision). The pattern is worth naming — **match the destination
 early, port cheaply later** — with the caveat that "mirrors the C struct" is a claim about a header
 that can change, so it belongs behind a `⚠ VERIFY` and a real grep of the header, never memory.
+
+
+## Hand-authored geometry is DATA — validate it, don't eyeball it (Lesson 2.12)
+
+The icosahedron ships as sixty hand-typed index numbers. Exactly one of them being wrong produces a
+missing face or a doubled edge that is easy to miss in a spinning wireframe and impossible to
+diagnose by staring. But mesh data is *checkable*, cheaply and mechanically:
+
+- **Euler's formula** `V − E + F = 2` for a closed surface. Breaks if you merged or duplicated an edge.
+- **Manifold:** every *undirected* edge belongs to exactly two faces — one means a hole, three a pinch.
+- **Consistent winding:** every *directed* edge appears exactly once, because adjacent faces traverse
+  their shared edge in opposite directions. This is strictly stronger than the manifold check.
+- **Outward winding:** each face's `cross(b−a, c−a)` dotted against the face centre (relative to the
+  mesh centroid) must be positive.
+
+The last one matters most for a reason that is easy to miss: **a wireframe does not care about
+winding, so a winding error is completely invisible until Lesson 3.4 turns on back-face culling and
+random triangles vanish.** Authoring the data correctly *and verifying it* while the check is free
+means the mesh never needs re-authoring. The general rule: when a convention has no consumer yet,
+that is the cheapest possible moment to get it right and prove it — not the moment to defer it.
+
+This is the same "check where the input can actually be wrong" judgement as `put_pixel` bounds-checking
+while `at(row, col)` does not (Lesson 2.5). Code you wrote is wrong in ways review catches; *data* is
+wrong in ways only a validator catches.
+
+
+## The saving from indexed geometry is WORK, not bytes (Lesson 2.12)
+
+The obvious pitch for a vertex array plus an index array is memory: the icosahedron stores 12
+positions instead of 60. True, and much the less interesting half. The real win is that the render
+loop transforms **each vertex once** — 12 matrix multiplies per frame instead of 60 — because the
+indices are consulted *after* the transform, not before. Order the two loops the other way (walk
+triangles, transform each corner) and you keep the memory saving while throwing away the compute
+saving entirely.
+
+That is exactly why GPUs carry a post-transform vertex cache, and why the loop structure in
+`draw_mesh` — transform all vertices, *then* walk indices — is the structure Module 4 hands to the
+hardware. Worth internalising as a general shape: **an indirection is only a saving if the expensive
+work happens on the small side of it.**
+
