@@ -25,6 +25,7 @@
 #include "core/input.hpp"
 #include "game/pong.hpp"
 #include "gfx/colour.hpp"
+#include "gfx/depth_buffer.hpp"
 #include "gfx/framebuffer.hpp"
 #include "gfx/mesh.hpp"
 #include "gfx/raster.hpp"
@@ -696,9 +697,14 @@ enum class spin
 constexpr engine::viewport k_scene_viewport{6.0f, 41.625f, 172.0f, 96.75f, 0.0f, 1.0f};
 
 /// A point projected to the screen, and whether it was in front of the camera.
+///
+/// `depth` is the device depth in [0, 1] that Lesson 2.11's viewport transform
+/// has been producing all along. Until Lesson 3.1 nothing read it; it is now the
+/// value the z-buffer stores.
 struct screen_point
 {
     engine::vec2 xy;
+    float depth;
     bool visible;
 };
 
@@ -720,16 +726,15 @@ struct screen_point
     // negative-w warning). We drop the whole line rather than clip it — proper
     // near-plane clipping is Lesson 3.3, and the demo keeps its geometry in front
     // so this guard almost never fires.
-    if (clip.w <= 0.05f) { return {{}, false}; }
+    if (clip.w <= 0.05f) { return {{}, 1.0f, false}; }
 
     const engine::vec3 ndc = engine::perspective_divide(clip);
 
     // The viewport does the NDC -> pixel map AND the +y-up-to-+y-down flip. Its
-    // third output is the device depth (ndc.z mapped to [min_depth, max_depth]) —
-    // unused until Lesson 3.1 gives it a z-buffer to live in, but computed now
-    // because it is part of the same transform.
+    // third output is the device depth (ndc.z mapped to [min_depth, max_depth]),
+    // and as of Lesson 3.1 it finally has somewhere to go: the depth buffer.
     const engine::vec3 screen = k_scene_viewport.to_screen(ndc);
-    return {{screen.x, screen.y}, true};
+    return {{screen.x, screen.y}, screen.z, true};
 }
 
 /// Draw a line whose endpoints are in VIEW space, through `proj`.
@@ -943,11 +948,15 @@ enum class trs_order
 ///
 /// The `mesh` is stored BY VALUE and that is cheap: it is two spans, four words,
 /// pointing at static geometry that outlives everything.
+///
+/// Lesson 3.1 adds a `tint`. Triangles are filled now, and a fill needs a colour;
+/// there is no lighting until 3.6, so each object simply carries one.
 struct scene_object
 {
     engine::transform xform;
     engine::mesh geometry;
     const char* name;
+    Uint32 tint = 0xFFFFFFFFu;
 };
 
 /// The three objects in the world, and why each one is here.
@@ -964,38 +973,235 @@ struct scene_object
 /// Two of the three are controls. That is the point of [O]: get the composition
 /// order wrong and two thirds of the scene still looks perfect, which is exactly how
 /// such a bug ships.
-constexpr int k_scene_count = 3;
+constexpr int k_max_objects = 4;
 
-/// Rebuild the scene for the current time and rotation mode.
+// ---------------------------------------------------------------------------
+// Lesson 3.1 — the scenes that break sorting, and the scene that does not
+// ---------------------------------------------------------------------------
+
+/// Which scene is loaded. [C] cycles.
+///
+/// The first is the Module 2 milestone, on which a back-to-front sort works
+/// perfectly. The other three each break it in a different, irreparable way —
+/// which is the argument for solving visibility per PIXEL instead.
+enum class scene_kind
+{
+    solids,      ///< 2.12's icosahedron and cubes. Sorting works here.
+    cycle,       ///< three planks: A over B over C over A. No order is correct.
+    intersect,   ///< two quads passing through each other. Order changes mid-triangle.
+    zfight       ///< two near-coplanar quads. The z-buffer's own failure mode.
+};
+
+[[nodiscard]] const char* name_of(scene_kind k)
+{
+    switch (k)
+    {
+    case scene_kind::solids:    return "solids (sorting looks fine)";
+    case scene_kind::cycle:     return "CYCLE  (A>B>C>A)";
+    case scene_kind::intersect: return "INTERSECTING quads";
+    case scene_kind::zfight:    return "near-coplanar (z-fight)";
+    }
+    return "?";
+}
+
+[[nodiscard]] scene_kind next_scene(scene_kind k)
+{
+    switch (k)
+    {
+    case scene_kind::solids:    return scene_kind::cycle;
+    case scene_kind::cycle:     return scene_kind::intersect;
+    case scene_kind::intersect: return scene_kind::zfight;
+    case scene_kind::zfight:    return scene_kind::solids;
+    }
+    return scene_kind::solids;
+}
+
+/// A flat panel through `a` and `b`, `width` across, whose `a` end is pushed AWAY
+/// from the camera by `tilt` and whose `b` end is pulled TOWARD it by the same
+/// amount, and which extends `overhang` past both ends.
+///
+/// The construction is worth reading, because it is Lesson 2.5's claim used as a
+/// tool rather than admired: **a rotation matrix is its three columns, and its
+/// columns are where the basis vectors land.** We want the quad's own x axis to
+/// run across the plank, its y axis along it, and its z axis to be the face
+/// normal — so we build those three directions and hand them over as columns.
+/// No angles are computed anywhere, and no `rotation_x/y/z` is composed.
+///
+/// The three axes are orthonormal by construction: `axis_x` is perpendicular to
+/// the plank's horizontal run and has no z component, so it is perpendicular to
+/// `axis_y` whatever the tilt; and `axis_z` is their cross product. Its
+/// determinant is +1, verified — a reflection here would flip every triangle's
+/// winding and quietly matter in Lesson 3.4.
+///
+/// The `overhang` lengthens the quad WITHOUT moving its plane, so the depths at
+/// `a` and `b` are still exactly -tilt and +tilt. It exists so the planks
+/// properly cross at the corners rather than merely touching: end-to-end panels
+/// overlap in a sliver, and a sliver is not a demonstration.
+[[nodiscard]] engine::transform make_plank(engine::vec2 a, engine::vec2 b,
+                                           float width, float tilt, float overhang)
+{
+    const engine::vec3 end_a{a.x, a.y, -tilt};
+    const engine::vec3 end_b{b.x, b.y, +tilt};
+
+    const engine::vec3 along = end_b - end_a;
+
+    const engine::vec3 axis_y = engine::normalised(along);               // model +y
+    const engine::vec3 axis_x = engine::normalised(                      // model +x
+        engine::vec3{-(b.y - a.y), b.x - a.x, 0.0f});
+    const engine::vec3 axis_z = engine::cross(axis_x, axis_y);           // model +z
+
+    engine::transform t;
+    t.rotation = engine::mat3{axis_x, axis_y, axis_z};
+    t.scale    = {width, engine::length(along) + 2.0f * overhang, 1.0f};
+    t.position = (end_a + end_b) * 0.5f;
+    return t;
+}
+
+/// Rebuild the scene for the current time, rotation mode and scene kind.
+/// Returns how many objects were written.
 ///
 /// Rebuilt from scratch every frame rather than accumulated into, deliberately.
 /// Repeatedly multiplying a rotation by a small delta drifts — the matrix stops
 /// being a rotation, and the object slowly shears. Deriving the whole transform
 /// from one authoritative `t` cannot drift, and it is the pattern the engine keeps
 /// (Module 5's transform component stores the *inputs*, never a running matrix).
-void build_scene(scene_object (&out)[k_scene_count], spin mode, float t)
+int build_scene(scene_object (&out)[k_max_objects], scene_kind kind, spin mode, float t)
 {
     const engine::mat3 spinning = build_spin(mode, t);
 
-    // The hero. Tilted by a fixed rotation as well as the animated one so its
-    // symmetry is never accidentally axis-aligned.
-    out[0].xform.scale    = {0.9f, 0.9f, 0.9f};
-    out[0].xform.position = {0.0f, 1.0f, 0.0f};
-    out[0].xform.rotation = spinning * engine::rotation_x(0.5f);
-    out[0].geometry       = engine::icosahedron_mesh();
-    out[0].name           = "icosahedron (uniform, spinning)";
+    // Three hues that are not the axis colours, so nothing in the scene can be
+    // mistaken for a coordinate axis (conventions.html §8 reserves red/green/blue
+    // for x/y/z, and that rule is worth honouring outside diagrams too).
+    constexpr Uint32 k_amber = 0xFFE0A83Cu;
+    constexpr Uint32 k_teal = 0xFF3CB8A8u;
+    constexpr Uint32 k_violet = 0xFFA070D8u;
 
-    out[1].xform.scale    = {1.8f, 0.35f, 0.9f};
-    out[1].xform.position = {-1.6f, 0.5f, 0.4f};
-    out[1].xform.rotation = spinning;
-    out[1].geometry       = engine::cube_mesh();
-    out[1].name           = "slab   (non-uniform, spinning)";
+    if (kind == scene_kind::solids)
+    {
+        // The hero. Tilted by a fixed rotation as well as the animated one so its
+        // symmetry is never accidentally axis-aligned.
+        out[0].xform.scale    = {0.9f, 0.9f, 0.9f};
+        out[0].xform.position = {0.0f, 1.0f, 0.0f};
+        out[0].xform.rotation = spinning * engine::rotation_x(0.5f);
+        out[0].geometry       = engine::icosahedron_mesh();
+        out[0].name           = "icosahedron (uniform, spinning)";
+        out[0].tint           = k_amber;
 
-    out[2].xform.scale    = {1.2f, 0.25f, 1.2f};
-    out[2].xform.position = {1.4f, 0.125f, 0.9f};
-    out[2].xform.rotation = engine::mat3::identity();
-    out[2].geometry       = engine::cube_mesh();
-    out[2].name           = "plinth (non-uniform, still)";
+        out[1].xform.scale    = {1.8f, 0.35f, 0.9f};
+        out[1].xform.position = {-1.6f, 0.5f, 0.4f};
+        out[1].xform.rotation = spinning;
+        out[1].geometry       = engine::cube_mesh();
+        out[1].name           = "slab   (non-uniform, spinning)";
+        out[1].tint           = k_teal;
+
+        out[2].xform.scale    = {1.2f, 0.25f, 1.2f};
+        out[2].xform.position = {1.4f, 0.125f, 0.9f};
+        out[2].xform.rotation = engine::mat3::identity();
+        out[2].geometry       = engine::cube_mesh();
+        out[2].name           = "plinth (non-uniform, still)";
+        out[2].tint           = k_violet;
+        return 3;
+    }
+
+    if (kind == scene_kind::cycle)
+    {
+        // THE CYCLE. Three planks laid along the sides of an equilateral
+        // triangle, each one tilted so that it passes IN FRONT OF the next at the
+        // corner they share and BEHIND the previous one at the other end. Woven,
+        // exactly like three sticks laid over and under each other.
+        //
+        //   at corner 2:  A in front of B
+        //   at corner 3:  B in front of C
+        //   at corner 1:  C in front of A     <- and now it is a loop
+        //
+        // No ordering of three items can satisfy all three constraints; that is
+        // what "cyclic" means. And every plank's centre sits at exactly z = 0, so
+        // their average depths are IDENTICAL — the sort key cannot even prefer a
+        // wrong answer, it has nothing to compare. Verified in
+        // scratch/verify_31.cpp; Lesson 3.1 §1.3.
+        constexpr float R = 1.2f;
+        constexpr float k_third = 2.0f * 3.14159265358979f / 3.0f;
+        const engine::vec2 c1{R * std::cos(1.5707963f), R * std::sin(1.5707963f)};
+        const engine::vec2 c2{R * std::cos(1.5707963f + k_third),
+                              R * std::sin(1.5707963f + k_third)};
+        const engine::vec2 c3{R * std::cos(1.5707963f + 2.0f * k_third),
+                              R * std::sin(1.5707963f + 2.0f * k_third)};
+
+        constexpr float k_width = 1.05f;
+        constexpr float k_tilt = 0.55f;
+        constexpr float k_overhang = 0.5f;
+
+        out[0].xform = make_plank(c1, c2, k_width, k_tilt, k_overhang);
+        out[0].geometry = engine::quad_mesh();
+        out[0].name = "plank A (C1->C2)";
+        out[0].tint = k_amber;
+
+        out[1].xform = make_plank(c2, c3, k_width, k_tilt, k_overhang);
+        out[1].geometry = engine::quad_mesh();
+        out[1].name = "plank B (C2->C3)";
+        out[1].tint = k_teal;
+
+        out[2].xform = make_plank(c3, c1, k_width, k_tilt, k_overhang);
+        out[2].geometry = engine::quad_mesh();
+        out[2].name = "plank C (C3->C1)";
+        out[2].tint = k_violet;
+
+        // Lift the weave so its centre sits exactly on the camera's target. With
+        // the elevation at zero that makes all three planks EQUIDISTANT from the
+        // eye, so their average view depths are identical to the last bit — a
+        // renderer that sorts whole objects has literally nothing to compare.
+        for (int i = 0; i < 3; ++i) { out[i].xform.position.y += 0.6f; }
+        return 3;
+    }
+
+    if (kind == scene_kind::intersect)
+    {
+        // TWO QUADS PASSING THROUGH EACH OTHER. Their centres are a clear 0.2
+        // apart in z, so the sort key gives a confident answer — and the answer is
+        // right on one side of the intersection line and wrong on the other.
+        //
+        // This is the deeper failure. The cycle at least has no correct order; here
+        // a correct order exists PER PIXEL and simply cannot be expressed
+        // per-triangle. No sorting algorithm, however clever, can fix that: the
+        // question "which triangle is in front" has no single answer.
+        out[0].xform.scale    = {2.6f, 2.0f, 1.0f};
+        out[0].xform.position = {0.0f, 1.1f, +0.1f};
+        out[0].xform.rotation = engine::rotation_y(+0.7f);
+        out[0].geometry       = engine::quad_mesh();
+        out[0].name           = "quad A (nearer centre)";
+        out[0].tint           = k_amber;
+
+        out[1].xform.scale    = {2.6f, 2.0f, 1.0f};
+        out[1].xform.position = {0.0f, 1.1f, -0.1f};
+        out[1].xform.rotation = engine::rotation_y(-0.7f);
+        out[1].geometry       = engine::quad_mesh();
+        out[1].name           = "quad B (further centre)";
+        out[1].tint           = k_teal;
+        return 2;
+    }
+
+    // NEAR-COPLANAR. The z-buffer's own failure mode, and the reason a depth
+    // format is a decision rather than a detail.
+    //
+    // Two large panels a hair apart, both turned well away from face-on so that
+    // depth varies strongly across the screen. B is nearer everywhere, so the
+    // correct picture is "B, entirely". Whether you get it depends on whether the
+    // buffer can represent a gap this small at this distance — press [B] and
+    // watch D16_UNORM fail to. Lesson 3.1 §3.6.
+    out[0].xform.scale    = {3.0f, 2.4f, 1.0f};
+    out[0].xform.position = {0.0f, 1.1f, 0.0f};
+    out[0].xform.rotation = engine::rotation_y(0.9f);
+    out[0].geometry       = engine::quad_mesh();
+    out[0].name           = "panel A (behind)";
+    out[0].tint           = k_amber;
+
+    out[1].xform.scale    = {3.0f, 2.4f, 1.0f};
+    out[1].xform.position = {0.0f, 1.1f, 0.001f};   // one millimetre nearer. That is all.
+    out[1].xform.rotation = engine::rotation_y(0.9f);
+    out[1].geometry       = engine::quad_mesh();
+    out[1].name           = "panel B (1 mm in front)";
+    out[1].tint           = k_teal;
+    return 2;
 }
 
 /// Draw the world through the camera: a ground grid on y = 0 and a marked origin.
@@ -1026,6 +1232,279 @@ void draw_world(engine::framebuffer& fb, const engine::mat4& view, const engine:
     line3_world(fb, view, proj, {0.0f, 0.0f, 0.0f}, {0.9f, 0.0f, 0.0f}, engine::pack_argb(150, 66, 66));
     line3_world(fb, view, proj, {0.0f, 0.0f, 0.0f}, {0.0f, 0.9f, 0.0f}, engine::pack_argb(78, 130, 100));
     line3_world(fb, view, proj, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.9f}, engine::pack_argb(82, 108, 156));
+}
+
+// ---------------------------------------------------------------------------
+// Lesson 3.1 — hidden surfaces: sort them, or test them per pixel
+// ---------------------------------------------------------------------------
+
+/// How the demo decides what is in front of what. [F] cycles.
+enum class hidden_surface
+{
+    wireframe,    ///< 2.12's picture: no surfaces at all, so nothing to hide
+    painter,      ///< sort triangles back-to-front and paint over. Fails, on purpose.
+    zbuffer,      ///< one depth per pixel. The answer.
+    depth_view    ///< show the depth buffer itself, stretched to its own range
+};
+
+[[nodiscard]] const char* name_of(hidden_surface h)
+{
+    switch (h)
+    {
+    case hidden_surface::wireframe:  return "wireframe (2.12)";
+    case hidden_surface::painter:    return "PAINTER'S (sorted)";
+    case hidden_surface::zbuffer:    return "Z-BUFFER";
+    case hidden_surface::depth_view: return "depth buffer";
+    }
+    return "?";
+}
+
+[[nodiscard]] hidden_surface next_hidden(hidden_surface h)
+{
+    switch (h)
+    {
+    case hidden_surface::wireframe:  return hidden_surface::painter;
+    case hidden_surface::painter:    return hidden_surface::zbuffer;
+    case hidden_surface::zbuffer:    return hidden_surface::depth_view;
+    case hidden_surface::depth_view: return hidden_surface::wireframe;
+    }
+    return hidden_surface::zbuffer;
+}
+
+[[nodiscard]] engine::depth_format next_depth_format(engine::depth_format f)
+{
+    switch (f)
+    {
+    case engine::depth_format::f32:     return engine::depth_format::unorm24;
+    case engine::depth_format::unorm24: return engine::depth_format::unorm16;
+    case engine::depth_format::unorm16: return engine::depth_format::f32;
+    }
+    return engine::depth_format::f32;
+}
+
+/// One triangle, already projected, ready to hand to the rasterizer.
+///
+/// The three vertices carry pixel coordinates AND device depth, which is all the
+/// z-buffer needs. `sort_key` is the extra thing the painter's algorithm needs
+/// and the z-buffer does not — keeping it in the struct rather than recomputing
+/// it lets the two paths be compared on exactly the same geometry.
+struct raster_triangle
+{
+    engine::vertex v[3];
+
+    /// Average VIEW-space z of the three corners: the painter's algorithm's
+    /// entire idea, and its entire problem. View z is negative in front of the
+    /// camera, so a MORE negative key is further away and sorts first.
+    ///
+    /// Note what this number is not: it is not "the depth of the triangle",
+    /// because a triangle stretched in depth does not have one. §1.2.
+    float sort_key = 0.0f;
+};
+
+/// Per-face brightness, so adjacent faces of a solid can be told apart.
+///
+/// **This is a debug palette, not lighting.** There is no light in the scene, no
+/// normal is consulted, and the number depends only on which triangle this
+/// happens to be. Lesson 3.6 replaces it with a Lambert term computed from a real
+/// normal and a real light direction, and the difference will be obvious: shading
+/// will then change when the object turns, and this does not.
+///
+/// The scaling happens in LINEAR LIGHT, decoding and re-encoding around it,
+/// because "70% as bright" is a statement about light and multiplying a stored
+/// sRGB value by 0.7 does not produce 70% of the light (Lesson 1.6).
+[[nodiscard]] Uint32 face_shade(Uint32 base, std::size_t face)
+{
+    constexpr float k_steps[5] = {1.00f, 0.84f, 0.70f, 0.57f, 0.45f};
+    const float k = k_steps[face % 5];
+    const engine::linear_rgb light = engine::to_linear(base);
+    return engine::to_encoded({light.r * k, light.g * k, light.b * k});
+}
+
+/// Project every triangle of every object into screen space.
+///
+/// This is the same per-vertex transform `draw_mesh` does, with the projection
+/// carried all the way through to pixels and depth instead of stopping at view
+/// space. Doing it for the whole scene at once, into one flat list, is what makes
+/// the two hidden-surface strategies comparable: the painter's algorithm needs to
+/// sort ACROSS objects (sorting each object's triangles separately would be
+/// wrong the moment two objects overlap), and the z-buffer needs nothing at all.
+void collect_triangles(std::vector<raster_triangle>& out,
+                       const scene_object* objects, int count,
+                       const engine::mat4& view_from_world,
+                       const engine::mat4& proj, trs_order order)
+{
+    out.clear();
+
+    for (int i = 0; i < count; ++i)
+    {
+        const engine::mat4 view_from_model =
+            view_from_world * model_matrix(objects[i].xform, order);
+
+        // Transform each vertex ONCE. The icosahedron's twelve vertices are
+        // shared by twenty triangles, so this is 12 matrix multiplies instead of
+        // 60 — the practical argument for indexed geometry, from Lesson 2.12.
+        engine::vec3 view_pos[64];
+        screen_point screen[64];
+        const std::size_t vertex_count =
+            std::min(objects[i].geometry.vertices.size(), std::size(view_pos));
+        for (std::size_t v = 0; v < vertex_count; ++v)
+        {
+            view_pos[v] = engine::xyz(view_from_model
+                                    * engine::point(objects[i].geometry.vertices[v]));
+            screen[v] = project(view_pos[v], proj);
+        }
+
+        const std::span<const std::uint16_t> idx = objects[i].geometry.indices;
+        for (std::size_t f = 0; f * 3 + 2 < idx.size(); ++f)
+        {
+            const std::size_t a = idx[f * 3 + 0];
+            const std::size_t b = idx[f * 3 + 1];
+            const std::size_t c = idx[f * 3 + 2];
+            if (a >= vertex_count || b >= vertex_count || c >= vertex_count) { continue; }
+
+            // Any vertex behind the near plane sinks the whole triangle. That is
+            // a real defect and it is Lesson 3.3's to fix: the right answer is to
+            // CLIP the triangle against the near plane, producing one or two new
+            // triangles that are entirely in front of it. Dropping it whole means
+            // a wall you walk into disappears rather than filling the screen.
+            if (!screen[a].visible || !screen[b].visible || !screen[c].visible) { continue; }
+
+            const Uint32 colour = face_shade(objects[i].tint, f);
+
+            auto to_vertex = [&](std::size_t v) {
+                return engine::vertex{static_cast<int>(std::lround(screen[v].xy.x)),
+                                      static_cast<int>(std::lround(screen[v].xy.y)),
+                                      screen[v].depth, colour};
+            };
+
+            raster_triangle tri;
+            tri.v[0] = to_vertex(a);
+            tri.v[1] = to_vertex(b);
+            tri.v[2] = to_vertex(c);
+            tri.sort_key = (view_pos[a].z + view_pos[b].z + view_pos[c].z) / 3.0f;
+            out.push_back(tri);
+        }
+    }
+}
+
+/// Draw a collected list of triangles.
+///
+/// One function, two algorithms, and the difference between them is two lines —
+/// which is exactly the point worth taking away. The painter's algorithm needs a
+/// sort of the whole scene, O(n log n) and growing, and it is still wrong; the
+/// z-buffer needs no sort, no ordering, and no knowledge of the other triangles
+/// at all, and it is right.
+///
+/// @param depth  the depth attachment, or nullptr for the painter's algorithm.
+/// @param sorted true to sort back-to-front before drawing.
+void draw_triangles(engine::framebuffer& fb, engine::depth_buffer* depth,
+                    std::vector<raster_triangle>& tris, bool sorted)
+{
+    if (sorted)
+    {
+        // Furthest first. View-space z is NEGATIVE in front of the camera, so
+        // "furthest" is "most negative" and plain ascending order is what we
+        // want. Getting this backwards paints the scene inside out, which at
+        // least fails loudly — unlike everything else about this algorithm.
+        std::sort(tris.begin(), tris.end(),
+                  [](const raster_triangle& a, const raster_triangle& b)
+                  { return a.sort_key < b.sort_key; });
+    }
+
+    for (const raster_triangle& t : tris)
+    {
+        // Three identical corner colours, so the Gouraud interpolation of Lesson
+        // 2.4 delivers a flat face. That is not a waste to be optimised away yet:
+        // 3.6 gives the corners genuinely different colours (Gouraud shading) and
+        // this same call starts doing real work.
+        engine::fill_triangle(fb, depth, t.v[0], t.v[1], t.v[2]);
+    }
+}
+
+/// Paint the depth buffer itself into the framebuffer, stretched to its own range.
+///
+/// Two things are true at once and both are worth seeing. Raw, the buffer is very
+/// nearly uniform white: with near = 0.3 the entire visible scene occupies about
+/// two percent of the [0,1] range, because depth is distributed as 1/z (§3.6).
+/// Stretched between the minimum and maximum actually present, the same numbers
+/// show a perfectly readable depth image. The HUD prints the two endpoints, so
+/// the readable picture never lets you forget how narrow the band is.
+///
+/// Returns the (min, max) actually found, for the HUD.
+struct depth_range { float lo = 1.0f; float hi = 0.0f; };
+
+[[nodiscard]] depth_range show_depth(engine::framebuffer& fb,
+                                     const engine::depth_buffer& db,
+                                     const engine::viewport& vp)
+{
+    const int x0 = std::max(0, static_cast<int>(vp.x));
+    const int y0 = std::max(0, static_cast<int>(vp.y));
+    const int x1 = std::min(fb.width(), static_cast<int>(vp.x + vp.w));
+    const int y1 = std::min(fb.height(), static_cast<int>(vp.y + vp.h));
+
+    depth_range range;
+    for (int y = y0; y < y1; ++y)
+    {
+        for (int x = x0; x < x1; ++x)
+        {
+            const float d = db.depth_at(x, y);
+            if (d >= engine::depth_buffer::k_far) { continue; }   // never written
+            range.lo = std::min(range.lo, d);
+            range.hi = std::max(range.hi, d);
+        }
+    }
+
+    const float span = range.hi - range.lo;
+    const float inv = (span > 1e-9f) ? 1.0f / span : 0.0f;
+
+    for (int y = y0; y < y1; ++y)
+    {
+        for (int x = x0; x < x1; ++x)
+        {
+            const float d = db.depth_at(x, y);
+            if (d >= engine::depth_buffer::k_far)
+            {
+                fb.put_pixel(x, y, engine::pack_argb(16, 18, 26));   // untouched
+                continue;
+            }
+            // NEAR is bright, far is dark — the opposite of the stored value, so
+            // the picture reads the way a torch beam does rather than the way the
+            // number does.
+            const float t01 = 1.0f - std::clamp((d - range.lo) * inv, 0.0f, 1.0f);
+            const Uint8 v = static_cast<Uint8>(30.0f + 215.0f * t01);
+            fb.put_pixel(x, y, engine::pack_argb(v, v, v));
+        }
+    }
+    return range;
+}
+
+/// How many pixels two framebuffers disagree on, inside the viewport rectangle.
+///
+/// The lesson's headline number. The painter's algorithm and the z-buffer are run
+/// on identical geometry every frame and their outputs compared; the count is the
+/// size of the region where sorting gets the wrong answer. On the icosahedron it
+/// is zero and stays zero. On the cycle it is hundreds, and no amount of
+/// improving the sort will move it.
+[[nodiscard]] int count_differences(const engine::framebuffer& a,
+                                    const engine::framebuffer& b,
+                                    const engine::viewport& vp)
+{
+    const int x0 = std::max(0, static_cast<int>(vp.x));
+    const int y0 = std::max(0, static_cast<int>(vp.y));
+    const int x1 = std::min(a.width(), static_cast<int>(vp.x + vp.w));
+    const int y1 = std::min(a.height(), static_cast<int>(vp.y + vp.h));
+
+    int differ = 0;
+    for (int y = y0; y < y1; ++y)
+    {
+        const Uint32* const ra = a.row(y);
+        const Uint32* const rb = b.row(y);
+        for (int x = x0; x < x1; ++x)
+        {
+            if (ra[x] != rb[x]) { ++differ; }
+        }
+    }
+    return differ;
 }
 
 // ---------------------------------------------------------------------------
@@ -1437,7 +1916,7 @@ int main(int argc, char* argv[])
             SDL_VERSIONNUM_MINOR(sdl_version),
             SDL_VERSIONNUM_MICRO(sdl_version));
 
-    SDL_Window* window = SDL_CreateWindow("Wireframe Mesh — Module 2 Milestone", 1280, 720,
+    SDL_Window* window = SDL_CreateWindow("The Z-Buffer — Module 3", 1280, 720,
                                           SDL_WINDOW_RESIZABLE);
     if (window == nullptr)
     {
@@ -1464,6 +1943,18 @@ int main(int argc, char* argv[])
     }
 
     engine::framebuffer fb(k_fb_width, k_fb_height);
+
+    // Lesson 3.1's depth attachment. Same dimensions as the colour buffer,
+    // allocated once and cleared every frame — never reallocated, because a
+    // per-frame allocation of 230 KB is a per-frame page fault storm for a buffer
+    // whose size cannot change.
+    engine::depth_buffer scene_depth(k_fb_width, k_fb_height);
+
+    // A second colour+depth pair, used only to run the OTHER hidden-surface
+    // algorithm on the same geometry so the two can be compared pixel for pixel.
+    // Purely a teaching instrument; a real renderer has one of each.
+    engine::framebuffer scratch_fb(k_fb_width, k_fb_height);
+    engine::depth_buffer scratch_depth(k_fb_width, k_fb_height);
 
     SDL_Texture* screen_texture = SDL_CreateTexture(renderer,
                                                     SDL_PIXELFORMAT_ARGB8888,
@@ -1496,7 +1987,8 @@ int main(int argc, char* argv[])
     // ---- Lesson 2.8's scene ------------------------------------------------
     trs_order order = trs_order::trs;   ///< [O] — only the first is right
     int selected = 0;                   ///< [X] — which object the HUD reports on
-    scene_object scene[k_scene_count];
+    scene_object scene[k_max_objects];
+    int scene_count = 0;                ///< how many of them this scene uses
     engine::mat4 selected_m;            ///< the selected object's model matrix
     engine::vec3 selected_world;        ///< one model vertex, carried into world space
     float selected_axis_len = 0.0f;     ///< |model x axis| in world units
@@ -1521,6 +2013,15 @@ int main(int argc, char* argv[])
     const engine::mat4 scene_perspective =
         engine::perspective(k_scene_fovy, k_scene_aspect, k_scene_near, k_scene_far);
     const engine::mat4 scene_orthographic = demo_orthographic();
+
+    // ---- Lesson 3.1 --------------------------------------------------------
+    hidden_surface hs = hidden_surface::zbuffer;   ///< [F]
+    scene_kind scene_mode = scene_kind::solids;    ///< [C]
+    engine::depth_format depth_fmt = engine::depth_format::f32;   ///< [B]
+    std::vector<raster_triangle> scene_tris;       ///< reused, never reallocated per frame
+    int painter_wrong = 0;                         ///< px where the two algorithms disagree
+    depth_range shown_depth;                       ///< what the depth view actually contained
+
     xform basis_mode = xform::rotate;   ///< Lesson 2.5
     float basis_t = 0.6f;               ///< the one parameter every mode reads
     bool basis_animating = false;
@@ -1556,9 +2057,10 @@ int main(int argc, char* argv[])
     SDL_Log("  [4]/[5] follow the mouse: the three sub-triangles ARE the three weights. [R] fill rule.");
     SDL_Log("  [6] Gouraud (three corner colours) [7] uv checker — [M] switches blend space");
     SDL_Log("Basis (2.5): [Z] transform  [,] [.] adjust  [0] reset  [Space] animate");
-    SDL_Log("Scene (2.12): [arrows] orbit  [-]/[=] dolly  [P] persp/ortho  [O] model order");
-    SDL_Log("  [X] object  [Z] rotation axis  [,] [.] t  [Space] spin  [W]/[N] the 2.7 w bugs");
-    SDL_Log("[Tab] cycles demos: scene (2.6-2.12) -> basis (2.5) -> triangles -> lines -> Pong");
+    SDL_Log("Scene (3.1): [F] wireframe/painter/z-buffer/depth  [C] scene  [B] depth format");
+    SDL_Log("  [arrows] orbit  [-]/[=] dolly  [P] persp/ortho  [O] model order  [X] object");
+    SDL_Log("  [Z] rotation axis  [,] [.] t  [Space] spin  [W]/[N] the 2.7 w bugs");
+    SDL_Log("[Tab] cycles demos: scene (2.6-3.1) -> basis (2.5) -> triangles -> lines -> Pong");
     SDL_Log("[V] vsync · [T] throttle · [Esc] quit");
 
     bool running = true;
@@ -1595,7 +2097,7 @@ int main(int argc, char* argv[])
         {
             which = next_demo(which);
             SDL_SetWindowTitle(window,
-                which == demo::scene     ? "Wireframe Mesh — Module 2 Milestone"
+                which == demo::scene     ? "The Z-Buffer — Module 3"
               : which == demo::basis     ? "Basis Transforms — Module 2"
               : which == demo::triangles ? "Triangles — Module 2"
               : which == demo::lines     ? "Lines — Module 2"
@@ -1618,8 +2120,33 @@ int main(int argc, char* argv[])
             // ---- Lesson 2.8's scene, through 2.9's camera and 2.10's projection ---
             if (in.key_pressed(SDL_SCANCODE_Z)) { cube_mode = next_spin(cube_mode); }
             if (in.key_pressed(SDL_SCANCODE_O)) { order = next_order(order); }
-            if (in.key_pressed(SDL_SCANCODE_X)) { selected = (selected + 1) % k_scene_count; }
+            if (in.key_pressed(SDL_SCANCODE_X) && scene_count > 0)
+            {
+                selected = (selected + 1) % scene_count;
+            }
             if (in.key_pressed(SDL_SCANCODE_P)) { use_perspective = !use_perspective; }
+            if (in.key_pressed(SDL_SCANCODE_F)) { hs = next_hidden(hs); }
+            if (in.key_pressed(SDL_SCANCODE_B))
+            {
+                depth_fmt = next_depth_format(depth_fmt);
+                scene_depth.set_format(depth_fmt);
+                scratch_depth.set_format(depth_fmt);
+            }
+            if (in.key_pressed(SDL_SCANCODE_C))
+            {
+                scene_mode = next_scene(scene_mode);
+                selected = 0;
+                // Put the camera where the new scene reads best. The failure
+                // cases are arrangements in DEPTH, and depth is what you cannot
+                // see from the side.
+                cam.azimuth = 0.0f;
+                // Zero elevation for the CYCLE, and only there: it is what makes
+                // the three planks exactly equidistant from the eye.
+                cam.elevation = (scene_mode == scene_kind::solids) ? 0.35f
+                              : (scene_mode == scene_kind::cycle)  ? 0.0f
+                                                                   : 0.08f;
+                cam.radius = 7.0f;
+            }
             if (in.key_pressed(SDL_SCANCODE_SPACE)) { cube_animating = !cube_animating; }
             if (in.key_pressed(SDL_SCANCODE_0)) { cube_t = 0.0f; }
             if (in.key_pressed(SDL_SCANCODE_W)) { cube_point_w = (cube_point_w == 1.0f) ? 0.0f : 1.0f; }
@@ -1655,7 +2182,8 @@ int main(int argc, char* argv[])
             }
 
             cube_m = build_spin(cube_mode, cube_t);
-            build_scene(scene, cube_mode, cube_t);
+            scene_count = build_scene(scene, scene_mode, cube_mode, cube_t);
+            if (selected >= scene_count) { selected = 0; }
 
             // The view matrix (2.9) and the projection matrix (2.10). The
             // projection is [P]-selectable; everything downstream is identical, so
@@ -1667,17 +2195,62 @@ int main(int argc, char* argv[])
 
             // The world FIRST, through the camera and projection, so the floor and
             // origin turn with the viewpoint and its rails converge with distance.
+            //
+            // Drawn before anything else and never depth-tested — which is the
+            // painter's algorithm surviving as a legitimate special case. A
+            // background is the one thing you always know is behind everything,
+            // so it needs no test; that is exactly how a skybox works (Module 6),
+            // and it is why the grid vanishes correctly behind solid objects here
+            // without a depth value of its own. Giving lines a real depth test is
+            // Exercise 3.1.4.
             draw_world(fb, view_from_world, proj);
 
-            // One mesh, three transforms, one camera, one projection. The full
-            // chain: clip = proj * view_from_world * world_from_model, and the
-            // perspective divide inside project() finishes the job.
-            for (int i = 0; i < k_scene_count; ++i)
+            if (hs == hidden_surface::wireframe)
             {
-                const engine::mat4 world_from_model = model_matrix(scene[i].xform, order);
-                const engine::mat4 view_from_model = view_from_world * world_from_model;
-                draw_mesh(fb, scene[i].geometry, view_from_model, proj, cube_point_w);
-                draw_axes3(fb, view_from_model, proj, cube_point_w, cube_dir_w);
+                // Lesson 2.12's picture, unchanged: edges only, so there are no
+                // surfaces to hide and nothing for a depth buffer to do.
+                for (int i = 0; i < scene_count; ++i)
+                {
+                    const engine::mat4 world_from_model = model_matrix(scene[i].xform, order);
+                    const engine::mat4 view_from_model = view_from_world * world_from_model;
+                    draw_mesh(fb, scene[i].geometry, view_from_model, proj, cube_point_w);
+                    draw_axes3(fb, view_from_model, proj, cube_point_w, cube_dir_w);
+                }
+                painter_wrong = 0;
+                shown_depth = {};
+            }
+            else
+            {
+                // Project the whole scene ONCE, into one flat list. Both
+                // algorithms below then run on identical geometry, which is what
+                // makes the pixel-for-pixel comparison honest.
+                collect_triangles(scene_tris, scene, scene_count,
+                                  view_from_world, proj, order);
+
+                const bool want_painter = (hs == hidden_surface::painter);
+
+                // Clearing to FAR is not optional and not cosmetic. Skip it and
+                // last frame's depths survive into this one; §7 has the picture.
+                scene_depth.clear();
+                draw_triangles(fb, want_painter ? nullptr : &scene_depth,
+                               scene_tris, want_painter);
+
+                // ---- The comparison ---------------------------------------
+                // Run the OTHER algorithm over the same background, on the same
+                // triangles, and count the pixels the two disagree about. This is
+                // the lesson's headline number and it is measured, not claimed.
+                scratch_fb.clear(k_bg);
+                draw_world(scratch_fb, view_from_world, proj);
+                scratch_depth.clear();
+                draw_triangles(scratch_fb, want_painter ? &scratch_depth : nullptr,
+                               scene_tris, !want_painter);
+                painter_wrong = count_differences(fb, scratch_fb, k_scene_viewport);
+
+                // The depth view runs last, over the z-buffered image, because it
+                // needs the buffer the z-buffer pass just filled.
+                shown_depth = (hs == hidden_surface::depth_view)
+                            ? show_depth(fb, scene_depth, k_scene_viewport)
+                            : depth_range{};
             }
 
             // Everything the HUD reports is read back out of the matrices that were
@@ -1849,9 +2422,15 @@ int main(int argc, char* argv[])
                 // because the three primaries are exactly where the encoded
                 // blend goes most obviously wrong. [M] switches the space.
                 engine::fill_triangle(fb,
-                    engine::vertex{vx[0], vy[0], engine::pack_argb(255, 0, 0)},
-                    engine::vertex{vx[1], vy[1], engine::pack_argb(0, 255, 0)},
-                    engine::vertex{vx[2], vy[2], engine::pack_argb(0, 0, 255)},
+                    // The explicit 0.0f is Lesson 3.1's new `vertex::z`. This is a
+                    // FLAT picture, so every corner sits at the near plane — and
+                    // the fill has no depth attachment anyway, so the value is
+                    // never read. Written out rather than defaulted because a
+                    // reader should not have to check the header to know that a
+                    // 2-D triangle has a depth field at all.
+                    engine::vertex{vx[0], vy[0], 0.0f, engine::pack_argb(255, 0, 0)},
+                    engine::vertex{vx[1], vy[1], 0.0f, engine::pack_argb(0, 255, 0)},
+                    engine::vertex{vx[2], vy[2], 0.0f, engine::pack_argb(0, 0, 255)},
                     linear_blend ? engine::blend_space::linear
                                  : engine::blend_space::encoded);
                 break;
@@ -1922,6 +2501,37 @@ int main(int argc, char* argv[])
                                              correct_order ? 152 : 92, 255);
             SDL_RenderDebugTextFormat(renderer, 6.0f, 20.0f,
                                       "[O] model matrix = %s", name_of(order));
+
+            // ---- Lesson 3.1's readout, above the picture ------------------
+            // Green when the strategy on screen is the correct one, amber when it
+            // is a demonstration of something broken.
+            const bool sound = (hs == hidden_surface::zbuffer
+                             || hs == hidden_surface::depth_view
+                             || hs == hidden_surface::wireframe);
+            SDL_SetRenderDrawColor(renderer, sound ? 122 : 236,
+                                             sound ? 196 : 196,
+                                             sound ? 152 : 110, 255);
+            SDL_RenderDebugTextFormat(renderer, 6.0f, 34.0f,
+                                      "[F] %-18s   [C] scene = %s",
+                                      name_of(hs), name_of(scene_mode));
+
+            if (hs == hidden_surface::wireframe)
+            {
+                SDL_SetRenderDrawColor(renderer, 150, 152, 170, 255);
+                SDL_RenderDebugText(renderer, 6.0f, 48.0f,
+                    "  no surfaces, so nothing to hide - [F] fills them in");
+            }
+            else
+            {
+                // The number the whole lesson turns on. Red the moment sorting
+                // and per-pixel depth disagree about a single pixel.
+                SDL_SetRenderDrawColor(renderer, painter_wrong > 0 ? 236 : 122,
+                                                 painter_wrong > 0 ? 92 : 196,
+                                                 painter_wrong > 0 ? 92 : 152, 255);
+                SDL_RenderDebugTextFormat(renderer, 6.0f, 48.0f,
+                    "[B] depth = %-10s  %zu tris   painter vs z-buffer: %d px differ",
+                    engine::name_of(depth_fmt), scene_tris.size(), painter_wrong);
+            }
 
             // The camera identity (its axes are the view matrix's rows; 2.9).
             const engine::vec3 eye = cam.eye();
@@ -2006,9 +2616,38 @@ int main(int argc, char* argv[])
                 static_cast<double>(selected_axis_len), static_cast<double>(selected_corner),
                 rigid ? "" : " DEFORM", w_bug ? "  [W/N bug]" : "");
 
-            // What to look for.
+            // What to look for. Lesson 3.1's scenes each have one thing to see,
+            // so they say it themselves; otherwise the older commentary stands.
             SDL_SetRenderDrawColor(renderer, 150, 152, 170, 255);
-            if (order != trs_order::trs)
+            if (hs == hidden_surface::depth_view)
+            {
+                SDL_RenderDebugText(renderer, 380.0f, 262.0f, "the DEPTH buffer, stretched to");
+                SDL_RenderDebugTextFormat(renderer, 380.0f, 276.0f, "[%.4f, %.4f] - the whole",
+                    static_cast<double>(shown_depth.lo), static_cast<double>(shown_depth.hi));
+                SDL_RenderDebugTextFormat(renderer, 380.0f, 290.0f,
+                    "scene fits in %.1f%% of [0,1].",
+                    static_cast<double>((shown_depth.hi - shown_depth.lo) * 100.0f));
+                SDL_RenderDebugText(renderer, 380.0f, 304.0f, "That is the 1/z crowding.");
+            }
+            else if (scene_mode == scene_kind::cycle)
+            {
+                SDL_RenderDebugText(renderer, 380.0f, 262.0f, "A over B over C over A. No");
+                SDL_RenderDebugText(renderer, 380.0f, 276.0f, "order is right, and all three");
+                SDL_RenderDebugText(renderer, 380.0f, 290.0f, "average depths are equal.");
+            }
+            else if (scene_mode == scene_kind::intersect)
+            {
+                SDL_RenderDebugText(renderer, 380.0f, 262.0f, "they pass THROUGH each other:");
+                SDL_RenderDebugText(renderer, 380.0f, 276.0f, "the right answer changes");
+                SDL_RenderDebugText(renderer, 380.0f, 290.0f, "halfway across one triangle.");
+            }
+            else if (scene_mode == scene_kind::zfight)
+            {
+                SDL_RenderDebugText(renderer, 380.0f, 262.0f, "B is 1 mm in front of A, so B");
+                SDL_RenderDebugText(renderer, 380.0f, 276.0f, "should win everywhere. [B] to");
+                SDL_RenderDebugText(renderer, 380.0f, 290.0f, "D16_UNORM and watch it stop.");
+            }
+            else if (order != trs_order::trs)
             {
                 SDL_RenderDebugText(renderer, 380.0f, 262.0f, "wrong model order [O]: 2.8's");
                 SDL_RenderDebugText(renderer, 380.0f, 276.0f, order == trs_order::tsr
@@ -2018,7 +2657,7 @@ int main(int argc, char* argv[])
             {
                 SDL_RenderDebugText(renderer, 380.0f, 262.0f, "the whole chain, one corner:");
                 SDL_RenderDebugText(renderer, 380.0f, 276.0f, "model->world->view->clip->ndc");
-                SDL_RenderDebugText(renderer, 380.0f, 290.0f, "->screen. [P] flattens it.");
+                SDL_RenderDebugText(renderer, 380.0f, 290.0f, "->screen. [F] hides surfaces.");
             }
             else
             {
@@ -2028,8 +2667,10 @@ int main(int argc, char* argv[])
             }
 
             SDL_SetRenderDrawColor(renderer, 210, 212, 220, 255);
+            SDL_RenderDebugText(renderer, 6.0f, 314.0f,
+                                "[F] hidden surface  [C] scene  [B] depth format  [X] object");
             SDL_RenderDebugText(renderer, 6.0f, 328.0f,
-                                "[arrows] orbit  [-][=] dolly  [P] proj  [O] order  [X] obj  [Tab] demo");
+                                "[arrows] orbit  [-][=] dolly  [P] proj  [O] order  [Tab] demo");
         }
         else if (which == demo::basis)
         {

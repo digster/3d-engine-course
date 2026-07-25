@@ -74,6 +74,30 @@ inline constexpr std::uint16_t k_cube_indices[36] = {
 /// The unit cube, as a mesh.
 [[nodiscard]] inline mesh cube_mesh() { return {k_cube_vertices, k_cube_indices}; }
 
+// ---- The unit quad ---------------------------------------------------------
+
+// Four corners in the z = 0 plane, two triangles, wound counter-clockwise seen
+// from +z — so its front face looks along +z, in the direction its own normal
+// points. Added in Lesson 3.1, where the failure scenes need flat panels that can
+// be tilted independently: a cube cannot be arranged into a depth-sorting cycle,
+// because a cycle needs surfaces that pass over and under one another.
+//
+// It will earn its keep again in 3.7 (a texture wants somewhere flat to live) and
+// in Module 6 (a full-screen post-processing pass is one quad).
+inline constexpr vec3 k_quad_vertices[4] = {
+    {-0.5f, -0.5f, 0.0f},   // 0  bottom-left
+    {+0.5f, -0.5f, 0.0f},   // 1  bottom-right
+    {+0.5f, +0.5f, 0.0f},   // 2  top-right
+    {-0.5f, +0.5f, 0.0f},   // 3  top-left
+};
+
+inline constexpr std::uint16_t k_quad_indices[6] = {
+    0, 1, 2,   0, 2, 3,
+};
+
+/// A 1x1 square in the z = 0 plane, centred on the origin.
+[[nodiscard]] inline mesh quad_mesh() { return {k_quad_vertices, k_quad_indices}; }
+
 // ---- The icosahedron -------------------------------------------------------
 
 // Twelve vertices, twenty faces, and not one arbitrary number in it.

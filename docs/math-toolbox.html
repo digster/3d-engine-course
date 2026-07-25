@@ -597,6 +597,21 @@ th, td {
   border-bottom: 1px solid var(--rule);
   vertical-align: top;
 }
+
+/* Available to screen readers, invisible on screen. A <table> with a
+   <caption class="visually-hidden"> announces what it is about before a
+   screen-reader user hears the column headers, without adding a redundant
+   title next to a heading that already says it. Not `display: none`, which
+   removes it from the accessibility tree as well. */
+.visually-hidden {
+  position: absolute;
+  width: 1px; height: 1px;
+  margin: -1px; padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
 th {
   font-weight: 650;
   color: var(--text-muted);
@@ -839,6 +854,17 @@ td code { font-size: 0.82em; }
 }
 .widget-controls label { display: flex; align-items: center; gap: 0.4rem; }
 .widget-controls input[type="range"] { accent-color: var(--accent); }
+
+/* A widget's SVG is NOT a `figure.dia`, so the diagram text rule above does not
+   reach it — and an SVG <text> with no fill defaults to black, which disappears
+   against a dark background. Give widget SVGs the same theme-aware vocabulary so
+   a widget label is written the same way a diagram label is. */
+.widget svg text   { font-family: var(--font-ui); fill: var(--dia-ink); }
+.widget svg .muted { fill: var(--dia-ink-soft); }
+.widget svg .t-hi  { fill: var(--dia-hi); }
+.widget svg .mono  { font-family: var(--font-mono); }
+.widget svg .sm    { font-size: 11px; }
+.widget svg .xs    { font-size: 9.5px; }
 .widget-readout {
   font-family: var(--font-mono);
   font-size: 0.78rem;
@@ -939,6 +965,7 @@ td code { font-size: 0.82em; }
       <li><a href="#trig">Trigonometry, only what we need</a></li>
       <li><a href="#vectors">Vectors</a></li>
       <li><a href="#matrices">Matrices</a></li>
+      <li><a href="#depth">Depth and screen-space interpolation</a></li>
       <li><a href="#intersection">Geometry and intersection</a></li>
       <li><a href="#coming">Coming as the course proceeds</a></li>
     </ol>
@@ -1909,7 +1936,77 @@ td code { font-size: 0.82em; }
   </div>
 
 
-  <h2 id="intersection"><span class="num">5</span>Geometry and intersection</h2>
+  <!-- ===================================================================== -->
+  <h2 id="depth"><span class="num">5</span>Depth and screen-space interpolation</h2>
+
+  <div class="tool">
+    <h3>Device depth in terms of 1/w <span class="from">Lesson 3.1</span></h3>
+    <div class="eq">
+      <span>\[ z_n = \frac{A z_v + B}{w} = -A + B\cdot\frac{1}{w}, \qquad w = -z_v \]</span>
+      <span class="eq-plain">z_ndc = (A*z_view + B)/w = -A + B*(1/w),  where w = -z_view</span>
+    </div>
+    <p>
+      With <code>A = far/(near−far)</code> and <code>B = far·near/(near−far)</code> from the
+      projection matrix (Lesson 2.10). Rearranging the divide this way is the whole trick: it turns
+      &ldquo;depth&rdquo; from something that looks nonlinear into an <em>affine function of
+      1/w</em>, and 1/w is the quantity that behaves itself on screen.
+    </p>
+    <p>
+      <strong>Inverting it</strong> — for a linear depth in a debug view, a fog term, or a
+      reconstruction from a depth texture — gives <code>w = B / (z_n + A)</code>.
+    </p>
+  </div>
+
+  <div class="tool">
+    <h3>1/w is affine in screen space <span class="from">Lesson 3.1</span></h3>
+    <div class="eq">
+      <span>\[ \frac{1}{w} = \frac{1}{d}\left[\frac{a\,n_x}{f}x_n + \frac{n_y}{f}y_n - n_z\right] \]</span>
+      <span class="eq-plain">1/w = (1/d) * [ (aspect*n.x/f)*x_ndc + (n.y/f)*y_ndc - n.z ]   for a triangle on the plane n.p = d</span>
+    </div>
+    <p>
+      <strong>The single most reusable fact in the rasterizer.</strong> Substitute the projection
+      into a triangle's plane equation and <em>w</em> factors straight out, leaving 1/w as a
+      constant plus constants times the screen coordinates. Two things follow immediately:
+    </p>
+    <ul>
+      <li><strong>Device depth interpolates exactly</strong> with ordinary barycentric weights,
+        because it is affine in 1/w which is affine in screen position (Lesson 3.1).</li>
+      <li><strong>Nothing else does.</strong> Every other vertex attribute is linear along the
+        <em>surface</em>, and the surface is 1/w-warped on the screen — which is exactly the
+        correction Lesson 3.2 derives.</li>
+    </ul>
+    <p>
+      The one degenerate case, <code>d = 0</code>, is a plane through the eye: it projects to a
+      line, has zero screen area, and is rejected before interpolation begins.
+    </p>
+  </div>
+
+  <div class="tool">
+    <h3>Depth precision <span class="from">Lesson 3.1</span></h3>
+    <div class="eq">
+      <span>\[ \Delta w = \Delta z \cdot w^2\left(\frac{1}{near}-\frac{1}{far}\right) \]</span>
+      <span class="eq-plain">delta_w = delta_z * w^2 * (1/near - 1/far),  with delta_z = 1/(2^bits - 1)</span>
+    </div>
+    <p>
+      How much real distance one depth code buys you, at distance <em>w</em>. Differentiating
+      <code>z_n = −A + B/w</code> and rearranging. Three readings:
+    </p>
+    <ul>
+      <li><strong>Quadratic in distance</strong> — twice as far is four times coarser.</li>
+      <li><strong>The near plane dominates.</strong> The bracket is essentially <code>1/near</code>,
+        so halving <code>near</code> halves your precision everywhere.</li>
+      <li><strong>The far plane is nearly free.</strong> With <code>near = 1</code>, pushing
+        <code>far</code> from 100 to 1000 costs 0.9%; pulling <code>near</code> from 1 to 0.1 costs
+        10.09&times;.</li>
+    </ul>
+    <p>
+      Worked, with <code>near = 1</code>, <code>far = 100</code>, 16-bit depth: one code spans
+      0.06&nbsp;mm at 2 units, 1.5&nbsp;mm at 10, and 12&nbsp;cm at 90. Two surfaces closer than that
+      store the same number and z-fight.
+    </p>
+  </div>
+
+  <h2 id="intersection"><span class="num">6</span>Geometry and intersection</h2>
 
   <div class="tool">
     <h3>Axis-aligned box overlap <span class="from">Lesson 1.8</span></h3>
@@ -2037,7 +2134,7 @@ td code { font-size: 0.82em; }
     </p>
   </div>
 
-  <h2 id="coming"><span class="num">6</span>Coming as the course proceeds</h2>
+  <h2 id="coming"><span class="num">7</span>Coming as the course proceeds</h2>
 
   <p>
     This page is reissued at every module boundary. Each entry lands here only once its lesson
@@ -2054,8 +2151,9 @@ td code { font-size: 0.82em; }
   </div>
 
   <div class="pending">
-    <b>Module 3 — Depth and light.</b> The 1/w trick for perspective-correct interpolation ·
-    plane equations · Lambert's cosine law · the halfway vector and Blinn-Phong · bilinear
+    <b>Module 3 — Depth and light.</b> <span class="badge done">3.1 landed: device depth,
+    1/w affinity, depth precision</span> The 1/w trick for perspective-correct interpolation ·
+    Lambert's cosine law · the halfway vector and Blinn-Phong · bilinear
     filtering as a double lerp. (The reflection vector arrived early, in 1.8, because a bouncing
     ball needed it before a specular highlight did.)
   </div>

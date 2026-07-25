@@ -597,6 +597,21 @@ th, td {
   border-bottom: 1px solid var(--rule);
   vertical-align: top;
 }
+
+/* Available to screen readers, invisible on screen. A <table> with a
+   <caption class="visually-hidden"> announces what it is about before a
+   screen-reader user hears the column headers, without adding a redundant
+   title next to a heading that already says it. Not `display: none`, which
+   removes it from the accessibility tree as well. */
+.visually-hidden {
+  position: absolute;
+  width: 1px; height: 1px;
+  margin: -1px; padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
 th {
   font-weight: 650;
   color: var(--text-muted);
@@ -839,6 +854,17 @@ td code { font-size: 0.82em; }
 }
 .widget-controls label { display: flex; align-items: center; gap: 0.4rem; }
 .widget-controls input[type="range"] { accent-color: var(--accent); }
+
+/* A widget's SVG is NOT a `figure.dia`, so the diagram text rule above does not
+   reach it — and an SVG <text> with no fill defaults to black, which disappears
+   against a dark background. Give widget SVGs the same theme-aware vocabulary so
+   a widget label is written the same way a diagram label is. */
+.widget svg text   { font-family: var(--font-ui); fill: var(--dia-ink); }
+.widget svg .muted { fill: var(--dia-ink-soft); }
+.widget svg .t-hi  { fill: var(--dia-hi); }
+.widget svg .mono  { font-family: var(--font-mono); }
+.widget svg .sm    { font-size: 11px; }
+.widget svg .xs    { font-size: 9.5px; }
 .widget-readout {
   font-family: var(--font-mono);
   font-size: 0.78rem;
@@ -920,6 +946,7 @@ td code { font-size: 0.82em; }
       <li><a href="#ndc">Clip space and NDC — fixed by SDL_GPU</a></li>
       <li><a href="#flip">Where the handedness flip happens</a></li>
       <li><a href="#matrices">Matrices: column vectors, column-major</a></li>
+      <li><a href="#depth">The depth buffer &mdash; clear value, compare, format</a></li>
       <li><a href="#winding">Winding and culling</a></li>
       <li><a href="#units">Units and angles</a></li>
       <li><a href="#simulation">The simulation contract</a></li>
@@ -1563,6 +1590,78 @@ td code { font-size: 0.82em; }
   </div>
 
   <!-- ===================================================================== -->
+
+  <!-- ===================================================================== -->
+  <h2 id="depth"><span class="num">6b</span>The depth buffer &mdash; clear value, compare, format</h2>
+
+  <p>
+    Settled in <a href="lessons/03-01-z-buffer.html">Lesson 3.1</a>. These four follow from the
+    NDC depth range in &sect;4 and are not independent choices &mdash; but every one of them is a
+    silent, total failure if you get it backwards, so they are written down.
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>Decision</th><th>Ours</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Direction</td><td><strong>smaller is nearer</strong></td>
+          <td>Forced by &sect;4: device depth is <code>0</code> at the near plane and <code>1</code> at the far plane.</td>
+        </tr>
+        <tr>
+          <td>Clear value</td><td><strong><code>1.0</code></strong> (far)</td>
+          <td>&ldquo;Nothing here yet&rdquo; must lose to everything. Clearing to <code>0</code> makes every
+              fragment fail its test and renders a completely empty screen.</td>
+        </tr>
+        <tr>
+          <td>Comparison</td><td><strong><code>&lt;</code></strong>, strictly</td>
+          <td>On an exact tie the pixel already there keeps it, so coplanar geometry has one stable
+              winner &mdash; the first drawn. Matches <code>SDL_GPU_COMPAREOP_LESS</code>.</td>
+        </tr>
+        <tr>
+          <td>What is stored</td><td><strong>device depth</strong>, never view-space z</td>
+          <td>Device depth is exactly affine in screen space, so barycentric interpolation of it is
+              exact; view-space z is a hyperbola and interpolating it linearly is simply wrong.
+              Derived in Lesson 3.1 &sect;3.4.</td>
+        </tr>
+        <tr>
+          <td>Format</td><td><code>depth_format::f32</code> by default</td>
+          <td>Mirrors <code>SDL_GPU_TEXTUREFORMAT_D32_FLOAT</code>; <code>unorm24</code> and
+              <code>unorm16</code> mirror <code>D24_UNORM</code> and <code>D16_UNORM</code>.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    <strong>Precision is predictable, so predict it.</strong> One depth code spans
+  </p>
+
+  <div class="eq">
+    <span>\[ \Delta w = \Delta z \cdot w^2 \left(\frac{1}{near} - \frac{1}{far}\right) \]</span>
+    <span class="eq-plain">delta_w = delta_z * w^2 * (1/near - 1/far)</span>
+  </div>
+
+  <p>
+    of real distance at distance <code>w</code>, with <code>&Delta;z = 1/(2<sup>bits</sup>&minus;1)</code>.
+    Two consequences worth memorising: precision degrades with the <em>square</em> of distance, and the
+    bracket is dominated by <code>1/near</code> &mdash; so <strong>the near plane is the expensive
+    one and the far plane is nearly free</strong>. Moving <code>near</code> from 1 to 0.1 costs
+    10.09&times; precision everywhere; moving <code>far</code> from 100 to 1000 costs 0.9%.
+  </p>
+
+  <div class="callout note">
+    <span class="label">The test is not part of the buffer</span>
+    <p>
+      Storage and comparison are separate, here and on the hardware. <code>engine::depth_buffer</code>
+      clears and stores; the rasterizer compares. That is the same split as
+      <code>SDL_GPUDepthStencilState</code>, whose <code>compare_op</code>,
+      <code>enable_depth_test</code> and <code>enable_depth_write</code> are three independent knobs
+      set per pipeline &mdash; a shadow pass writes depth and no colour, a transparent pass tests
+      depth and does not write it.
+    </p>
+  </div>
+
   <h2 id="winding"><span class="num">7</span>Winding and culling</h2>
 
   <p>
@@ -1827,6 +1926,9 @@ td code { font-size: 0.82em; }
       <tbody>
         <tr><td>NDC extents</td><td>lower-left <code>(−1,−1)</code>, upper-right <code>(1,1)</code> → <strong>+Y up</strong></td><td>SDL3 wiki, CategoryGPU</td></tr>
         <tr><td>NDC depth</td><td><strong><code>z ∈ [0,1]</code></strong>, 0 = near</td><td>SDL3 wiki, CategoryGPU</td></tr>
+        <tr><td>Depth attachment</td><td>separate parameter to <code>SDL_BeginGPURenderPass</code>; <em>may be NULL</em></td><td><code>SDL3/SDL_gpu.h</code></td></tr>
+        <tr><td>Depth test state</td><td><code>SDL_GPUDepthStencilState { compare_op, enable_depth_test, enable_depth_write }</code></td><td><code>SDL3/SDL_gpu.h</code></td></tr>
+        <tr><td>Depth formats</td><td><code>D16_UNORM</code>, <code>D24_UNORM</code>, <code>D32_FLOAT</code> (+ stencil variants)</td><td><code>SDL3/SDL_gpu.h</code></td></tr>
         <tr><td>Viewport</td><td>top-left <code>(0,0)</code> → <code>(w,h)</code>, <strong>+Y down</strong></td><td>SDL3 wiki, CategoryGPU</td></tr>
         <tr><td>Texture coords</td><td>top-left <code>(0,0)</code> → <code>(1,1)</code>, <strong>+Y down</strong></td><td>SDL3 wiki, CategoryGPU</td></tr>
         <tr><td>Vulkan Y-flip</td><td>SDL converts behind the scenes; no shader flip</td><td>SDL3 wiki, CategoryGPU</td></tr>

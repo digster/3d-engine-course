@@ -1387,3 +1387,103 @@ That is exactly why GPUs carry a post-transform vertex cache, and why the loop s
 hardware. Worth internalising as a general shape: **an indirection is only a saving if the expensive
 work happens on the small side of it.**
 
+
+## "Show the failure" only works if the failure is BIG ENOUGH TO SEE (Lesson 3.1)
+
+The cycle scene — three woven panels whose depth order is a loop — was correct geometry from the
+first attempt. The harness confirmed A over B over C over A at all three corners. And the demo
+looked *fine*: the painter's algorithm and the z-buffer disagreed on **7 pixels**, a smudge you
+would never notice.
+
+The construction was right and the *parameters* were wrong. Planks laid end to end along the sides
+of a triangle only overlap in a sliver near each shared corner; the wrongness was real and
+microscopic. Sweeping the circumradius, plank width and overhang and measuring the disagreement
+took ten minutes and moved it from 7 px to **144 px** — a fifth of the covered area, unmissable.
+
+The lesson generalises beyond this demo. Pedagogy §5 says *show the artifact*, and it is easy to
+read that as "construct a case where the bug occurs". It is not enough. The artifact has to be
+loud, and whether it is loud is a **quantitative** property of your test scene that you should
+measure and tune deliberately, exactly as you would tune the scene for a screenshot. A failure
+demo that requires the reader to squint has failed.
+
+Corollary: build the measurement *before* the demo. The pixel-difference counter was written to be
+a HUD readout and turned out to be the tool that made the scene right.
+
+
+## A verification harness will tell you your explanation is wrong, if you let it (Lesson 3.1)
+
+The demo prints how many pixels the painter's algorithm and the z-buffer disagree about. On the
+milestone scene — where sorting is genuinely correct — it read **29**, not 0. The hypothesis was
+easy to reach and easy to believe: silhouette edges, where a front face and a back face share an
+edge, tie exactly in depth, and the two algorithms break ties in opposite directions (`<` keeps the
+first drawn; painting keeps the last).
+
+Believing it would have been a mistake. The check was four lines: drop screen-space back-facing
+triangles and re-measure. Result: `6 of 12 tris kept, 0 px differ`. The explanation was right —
+*and now it is verified*, which is a different thing, and it is what let the pitfall entry state it
+as fact and hand the fix to Lesson 3.4 by name.
+
+The general rule this codebase keeps re-learning: **a plausible explanation for a measured anomaly
+is a hypothesis, and hypotheses are cheap to test when you already have a harness.** The cost of
+the check was minutes; the cost of publishing a confident wrong explanation is a reader who cannot
+reproduce it.
+
+
+## Interpolate the quantity the projection already fixed (Lesson 3.1)
+
+The reason a z-buffer stores *device* depth rather than view-space `z` is not a convention or an
+efficiency: it is that barycentric interpolation computes the unique **affine** function agreeing
+with three corner values, and only one of the two candidates is affine in screen space.
+
+Substituting the projection into a triangle's plane equation makes `w` factor straight out and
+leaves `1/w` as a constant plus constants times the screen coordinates. Since
+`z_ndc = −A + B·(1/w)`, device depth inherits that affinity exactly. View-space `z = −1/(1/w)` is
+the reciprocal of an affine function — a hyperbola — and interpolating it linearly reads **−50.5
+where the truth is −1.98** at the screen midpoint of a near-to-far edge.
+
+Two things to carry forward:
+
+- **The bug hides on flat walls.** If a triangle's plane is parallel to the screen, `1/w` is
+  constant and both choices agree exactly. Test scenes are made of boxes and floors, which is
+  precisely the geometry that cannot reveal the error. When something "works on my test scene",
+  ask what family of input the test scene structurally excludes.
+- **`1/w` is affine in screen space** is the reusable fact, not the depth conclusion. It is the
+  entire tool Lesson 3.2 needs for perspective-correct interpolation of every *other* attribute.
+
+
+## Precision is a formula, not a vibe (Lesson 3.1)
+
+Z-fighting gets diagnosed by staring at shimmering surfaces and then nudging geometry until it
+stops. It does not need to be. One depth code spans
+
+    Δw = Δz · w² · (1/near − 1/far)      with  Δz = 1/(2^bits − 1)
+
+of real distance at distance `w`. Put your numbers in and you get an answer in metres, and you can
+compare it against the gap between your surfaces *before* rendering anything.
+
+The formula also ranks the fixes, which staring never does. The bracket is dominated by `1/near`,
+so with `near = 1, far = 100`: pulling `near` to 0.1 costs **10.09×** precision everywhere, while
+pushing `far` to 1000 costs **0.9%**. The near plane is the expensive knob and the far plane is
+nearly free — the opposite of most people's intuition, and it is arithmetic rather than opinion.
+
+The demo's numbers back it: two panels 1 mm apart at ~6.4 units, where one D16 code spans
+0.00208 units, means a 0.48-code gap — and 478 of 875 covered pixels (54.6%) show the wrong panel.
+At D24 and D32_FLOAT, zero do. The prediction and the pixel count agree.
+
+
+## Widget SVGs are not `figure.dia` SVGs, and an unstyled `<text>` is black (Lesson 3.1)
+
+The shared stylesheet themes diagram text with `figure.dia svg text { fill: var(--dia-ink) }`.
+Interactive widgets live in `.widget`, which that selector does not reach — so an SVG `<text>` in a
+widget falls back to the SVG default fill, which is **black**, and disappears against the dark
+theme's raised background. It had been that way since Lesson 2.12's widget shipped.
+
+The trap has two halves and both are worth remembering. Adding `fill="var(--dia-ink-soft)"` inline
+*works* in a widget (nothing overrides it) but is flagged by `apply-shared.py`'s lint, which is
+unanchored — and the lint is right in spirit even where it is wrong in detail, because the fix
+belongs in the shared stylesheet. `.widget svg` now carries the same `text` / `.muted` / `.mono` /
+`.sm` / `.xs` vocabulary as `figure.dia svg`, so a widget label is written exactly like a diagram
+label, and 2.12's widget was repaired by re-stamping.
+
+General rule: when a lint tells you not to do the obvious thing, check whether the obvious thing is
+a symptom of a missing shared rule rather than a local mistake.

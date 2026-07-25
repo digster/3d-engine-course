@@ -597,6 +597,21 @@ th, td {
   border-bottom: 1px solid var(--rule);
   vertical-align: top;
 }
+
+/* Available to screen readers, invisible on screen. A <table> with a
+   <caption class="visually-hidden"> announces what it is about before a
+   screen-reader user hears the column headers, without adding a redundant
+   title next to a heading that already says it. Not `display: none`, which
+   removes it from the accessibility tree as well. */
+.visually-hidden {
+  position: absolute;
+  width: 1px; height: 1px;
+  margin: -1px; padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
 th {
   font-weight: 650;
   color: var(--text-muted);
@@ -839,6 +854,17 @@ td code { font-size: 0.82em; }
 }
 .widget-controls label { display: flex; align-items: center; gap: 0.4rem; }
 .widget-controls input[type="range"] { accent-color: var(--accent); }
+
+/* A widget's SVG is NOT a `figure.dia`, so the diagram text rule above does not
+   reach it — and an SVG <text> with no fill defaults to black, which disappears
+   against a dark background. Give widget SVGs the same theme-aware vocabulary so
+   a widget label is written the same way a diagram label is. */
+.widget svg text   { font-family: var(--font-ui); fill: var(--dia-ink); }
+.widget svg .muted { fill: var(--dia-ink-soft); }
+.widget svg .t-hi  { fill: var(--dia-hi); }
+.widget svg .mono  { font-family: var(--font-mono); }
+.widget svg .sm    { font-size: 11px; }
+.widget svg .xs    { font-size: 9.5px; }
 .widget-readout {
   font-family: var(--font-mono);
   font-size: 0.78rem;
@@ -965,7 +991,7 @@ table.lessons .d { color: var(--text-muted); font-size: 0.95em; line-height: 1.4
     <div class="stat"><span class="n">94</span><span class="l">lessons</span></div>
     <div class="stat"><span class="n">9</span><span class="l">modules</span></div>
     <div class="stat"><span class="n">~433</span><span class="l">hours</span></div>
-    <div class="stat"><span class="n">26</span><span class="l">published</span></div>
+    <div class="stat"><span class="n">27</span><span class="l">published</span></div>
   </div>
 
   <p>
@@ -1266,7 +1292,7 @@ table.lessons .d { color: var(--text-muted); font-size: 0.95em; line-height: 1.4
   <details class="module">
     <summary>
       <span class="m-num">Module 3</span>
-      <span class="m-name">Software Rasterizer II: Depth, Light, Texture <span class="stage-tag a">CPU</span></span>
+      <span class="m-name">Software Rasterizer II: Depth, Light, Texture <span class="stage-tag a">CPU</span> <span class="badge new">in progress</span></span>
       <span class="m-meta">10 lessons · ~46 h</span>
     </summary>
     <div class="m-body">
@@ -1278,7 +1304,7 @@ table.lessons .d { color: var(--text-muted); font-size: 0.95em; line-height: 1.4
       <div class="tbl-scroll">
         <table class="lessons">
           <tbody>
-            <tr><td class="id">3.1</td><td><span class="t">The Painter's Problem and the Z-Buffer</span><span class="d">Sorting triangles fails, and we show exactly how. Then the z-buffer — memory traded for correctness.</span></td><td class="hrs">5 h</td></tr>
+            <tr><td class="id">3.1</td><td><span class="t"><a href="lessons/03-01-z-buffer.html">The Painter's Problem and the Z-Buffer</a> <span class="badge done">published</span></span><span class="d">Sorting cannot be repaired, and three independent proofs are built rather than asserted: a triangle has no single depth, overlaps can form a <em>cycle</em>, and intersecting triangles change the answer halfway across. Then one float per pixel — and the derivation that says <em>which</em> depth to store, because device depth is exactly affine in screen space and view-space depth is a hyperbola that reads 50.5 where the truth is 1.98. Ends with a precision budget you can compute before you see the z-fighting.</span></td><td class="hrs">5 h</td></tr>
             <tr><td class="id">3.2</td><td><span class="t">Perspective-Correct Interpolation</span><span class="d">We show the swimming-texture artifact first, then derive the 1/w trick that explains it. One of the most satisfying derivations in graphics.</span></td><td class="hrs">5 h</td></tr>
             <tr><td class="id">3.3</td><td><span class="t">Near-Plane Clipping</span><span class="d">Why it cannot be skipped: what happens when a vertex crosses behind the eye. Sutherland–Hodgman, implemented.</span></td><td class="hrs">5 h</td></tr>
             <tr><td class="id">3.4</td><td><span class="t">Back-Face Culling</span><span class="d">Winding and the cross product — the same signed area from lesson 2.3, reused. Half the triangles, free.</span></td><td class="hrs">3 h</td></tr>

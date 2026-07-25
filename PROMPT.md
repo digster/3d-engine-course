@@ -667,3 +667,56 @@ part.
 
 **Module 2 is complete** — the geometry pipeline is finished and every hop derived.
 
+
+---
+
+## 2026-08-01 — Lesson 3.1 (Module 3 opens)
+
+> Based on the STATE and the project's claude instructions, work on the next.
+
+Resumed from `STATE.md` → `next: 3.1 — The Painter's Problem and the Z-Buffer`, which left **two
+decisions explicitly open**: where the depth buffer lives, and whether 3.1 connects `fill_triangle`
+to the 3-D pipeline or stays wireframe-plus-depth.
+
+### Judgement calls
+
+| Question | Decision | Why |
+|---|---|---|
+| Depth buffer inside `framebuffer`, or beside it? | **Beside it, as `engine::depth_buffer`** | Decided by the hardware, not by taste: `SDL_BeginGPURenderPass` takes colour targets as an *array* and the depth-stencil target as a *separate, nullable* parameter (verified in `SDL3/SDL_gpu.h`). Also: 2-D demos, Pong, the HUD and Module 6's post-process intermediates are colour-only and would each pay 8 MB at 1080p for nothing; and the two have different formats and unrelated clear values. |
+| Should the buffer own the depth test? | **No — the rasterizer compares** | `SDL_GPUDepthStencilState` carries `compare_op`, `enable_depth_test` and `enable_depth_write` as three independent pipeline knobs, because a shadow pass writes depth and no colour while a transparent pass tests depth and does not write it. A `test_and_set()` would bake one policy into storage and make those unexpressible. |
+| Wireframe + depth, or fill? | **Fill** | A wireframe writes almost no pixels, so depth-testing one is a half-measure; and `fill_triangle` had existed since 2.2 without ever meeting the coordinate pipeline. Filling also makes the z-buffer's own demonstration possible: with depth testing and *no* culling, front faces beat back faces and a correct solid appears — which is precisely the point that culling (3.4) is an optimisation while the z-buffer is the correctness mechanism. |
+| Two overloads, or a nullable pointer? | **`fill_triangle(fb, depth_buffer*, …)`** | Two overloads would duplicate the fill's set-up — the bias, six steps, three starting values — and `raster.cpp` already argues that duplicating something *subtle* is how one bias ends up wrong in one of three places. The nullable non-owning pointer is not a breach of the no-raw-owning-pointers rule: that rule is about ownership, and what a reference cannot express is *optionality*. It is also literally the shape `SDL_BeginGPURenderPass` uses. |
+| Where does `z` go in `vertex`? | **Before `colour`, breaking every call site** | `Uint32` → `float` is narrowing in list-initialisation, so the old three-argument form is a **compile error** rather than a colour landing silently in the depth field. Aggregate initialisation earning its keep; a constructor taking `(int,int,Uint32)` would have compiled and produced garbage. |
+| Model depth *formats*? | **Yes — `depth_format {f32, unorm24, unorm16}`** | §3.6 is not an aside; precision is a decision the type should be able to express, and it mirrors `SDL_GPU_TEXTUREFORMAT_D32_FLOAT / D24_UNORM / D16_UNORM`. Storage stays `float` and we round to the format's grid on write — the *behaviour* (z-fighting) is exact, the memory saving is the part not modelled, and the lesson says so. |
+
+### Verification
+
+Two harnesses, both under `scratch/`. `verify_31.cpp` checks the mathematics: over 199,273
+well-conditioned random triangles, interpolating **device depth** is wrong by at most
+`8.2 × 10⁻¹³` (double-precision noise) while interpolating **view-space z** is wrong by up to
+**5.73 units — 243.6%** of the true depth. The worked example checks out exactly: `near = 1`,
+`far = 100`, `A = B = −100/99`; the screen midpoint of a near-to-far edge is at `w = 1.980198`,
+where linear interpolation of device depth gives **exactly** the true `0.5`, and linear
+interpolation of view z gives `−50.5` against a truth of `−1.98` — **25.5× too far**.
+
+`verify_31_render.cpp` links the real rasterizer and measures what the demo actually draws: the
+cycle scene's three planks sit at exactly `±0.55` at each shared corner (A over B over C over A,
+determinant `+1.000000`); painter-vs-z-buffer disagreement is **144 px** on the cycle and **162 px**
+on the intersecting pair; the near-coplanar panels lose **478 of 875** covered pixels (54.6%) at
+`D16_UNORM` and **zero** at `D24_UNORM` and `D32_FLOAT`; and the milestone scene occupies
+`[0.95032, 0.96200]` — **1.17% of the depth range**.
+
+Two things the harness changed. The cycle scene originally disagreed on only **7 pixels** — correct
+geometry, invisible artifact — and a parameter sweep moved it to 144. And the disagreement counter
+never read zero on the *solids* scene; the silhouette-tie explanation was plausible, so it was
+tested rather than believed: culling back faces gives `6 of 12 tris kept, 0 px differ`, which is now
+stated as fact in the pitfalls and handed to 3.4 by name.
+
+`check-page.js` returned `pass: true`, but caught nothing that eyes did not: **Figure 2's near/far
+labels were inverted relative to its own geometry** (the eye is at the bottom, so the *lower* line
+is the nearer one) — a correctness bug in a diagram, found by reading the screenshot against the
+coordinates. The lint also surfaced a genuine shared-CSS gap: widget SVGs are not `figure.dia`
+SVGs, so their `<text>` fell back to black and vanished in dark mode. Fixed in the template and
+re-stamped across all 31 pages, which repaired 2.12's widget too.
+
+**Module 3 is open**, and the geometry pipeline now produces solids.

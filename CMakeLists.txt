@@ -50,6 +50,7 @@ add_executable(engine
     src/core/input.cpp
     src/game/pong.cpp
     src/gfx/colour.cpp
+    src/gfx/depth_buffer.cpp
     src/gfx/framebuffer.cpp
     src/gfx/raster.cpp
 )

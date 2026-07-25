@@ -7,7 +7,7 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-07-31 (after Lesson 2.12 — **MODULE 2 COMPLETE**, 26 of 94 lessons)
+updated: 2026-08-01 (after Lesson 3.1 — Module 3 opens, 27 of 94 lessons)
 
 conventions:
   world: right-handed, Y-up, -Z forward
@@ -29,6 +29,30 @@ conventions:
         A*B means B FIRST. Forced by (A*B)v == A(Bv), not a convention to look
         up. Row-vector codebases (v' = v*M) read the other way; mixing the two
         gives code that is transposed AND backwards.
+  depth: DEVICE DEPTH, in [0,1], 0 = NEAR, 1 = FAR. Smaller is nearer.
+        CLEAR TO 1.0. Clearing to 0 claims the whole screen is already covered by
+        something touching the lens, so EVERY fragment fails and the screen is
+        empty — a total failure that reads like a broken transform.
+        COMPARE WITH < (strictly). On a tie the pixel already there keeps it, so
+        coplanar geometry has ONE STABLE winner (the first drawn) instead of
+        flickering. Matches SDL_GPU_COMPAREOP_LESS. Note the consequence: at a
+        SILHOUETTE, a back face and a front face tie exactly along their shared
+        edge and the back face wins — a one-pixel artifact that 3.4's culling
+        removes (measured: 29 px on the milestone scene, 0 with back faces culled).
+        STORE DEVICE DEPTH, NEVER VIEW-SPACE z. Device depth is EXACTLY AFFINE in
+        screen space (1/w is affine in screen space; z_ndc = -A + B*(1/w)), so
+        barycentric interpolation of it is exact rather than approximate. View z
+        is the RECIPROCAL of an affine function — a hyperbola — and interpolating
+        it linearly reads -50.5 where the truth is -1.98 (near=1, far=100, screen
+        midpoint). THE BUG HIDES on surfaces parallel to the screen, where 1/w is
+        constant and both choices agree — i.e. on exactly the boxes-and-floors
+        geometry test scenes are made of.
+        PRECISION: dw = dz * w^2 * (1/near - 1/far). Quadratic in distance; the
+        bracket is dominated by 1/near. near 1 -> 0.1 costs 10.09x EVERYWHERE;
+        far 100 -> 1000 costs 0.9%. The near plane is the expensive one.
+        THE TEST IS NOT PART OF THE BUFFER. depth_buffer stores and clears; the
+        rasterizer compares. Same split as SDL_GPUDepthStencilState's three
+        independent knobs (compare_op / enable_depth_test / enable_depth_write).
   homogeneous: w SAYS WHAT KIND OF THING THIS IS.
         w = 1  a POSITION  -> the translation column is added in full
         w = 0  a DIRECTION -> the translation column is multiplied by 0
@@ -630,6 +654,8 @@ completed:
   - 2.10 Perspective from Similar Triangles
   - 2.11 The Viewport Transform
   - 2.12 MILESTONE: A Spinning Wireframe Mesh  (**Module 2 complete**)
+  ===> MODULE 2 COMPLETE <===
+  - 3.1  The Painter's Problem and the Z-Buffer
 
 capabilities:
   - verified C++20 toolchain (MSVC / GCC / Clang), 64-bit
@@ -899,6 +925,21 @@ capabilities:
     ONE impact resolved per simulation step (Module 7 iterates until the budget is spent);
     the naive DDA line routine was RETIRED with 1.7's demo — Lesson 2.1 derives line
     drawing properly and puts it in gfx/ (nothing draws lines at the moment)
+  - depth_buffer subsystem (src/gfx/depth_buffer): width x height floats, clear to
+    far, clamped row() fast path, depth_format {f32, unorm24, unorm16} mirroring
+    SDL_GPU_TEXTUREFORMAT_D32_FLOAT / D24_UNORM / D16_UNORM, quantise() applied
+    BEFORE the compare (the order the hardware uses)
+  - fill_triangle takes a NULLABLE depth_buffer*, mirroring
+    SDL_BeginGPURenderPass's depth_stencil_target_info ("may be NULL"). Depth is
+    interpolated with the SAME unbiased weights as colour; the colour blend runs
+    AFTER the test, so a losing pixel is never shaded (early-Z in miniature)
+  - vertex carries z (device depth), so fill_triangle's reorientation swap carries
+    it automatically — the 2.4 argument for bundling attributes, collected again
+  - mesh: quad_mesh() added (4 verts / 2 tris, z=0 plane, CCW from +z)
+  - demo: filled, depth-tested 3-D. [F] wireframe / painter's / z-buffer / depth view,
+    [C] four scenes (solids, CYCLE, intersecting, near-coplanar), [B] depth format.
+    Every frame runs BOTH hidden-surface algorithms on identical geometry and counts
+    disagreeing pixels — the lesson's headline number, measured live
   - skills: reading SDL headers as source of truth; debugging with lldb/gdb/VS
 
 decisions:
@@ -999,6 +1040,47 @@ decisions:
     ambiguous. 2.11 names that boundary.
   - the demo glyph is an F, not a blob. A symmetric shape cannot show a reflection,
     and the reflection case is the entire point of the determinant's sign.
+  - DEPTH BUFFER IS ITS OWN TYPE, not a field of framebuffer. Three reasons, and the
+    third settles it: (a) 2-D demos, Pong, the HUD and Module 6's post-process
+    intermediates are colour-only and would pay 8 MB each at 1080p for nothing;
+    (b) different formats and unrelated clear values; (c) SDL_BeginGPURenderPass
+    takes colour targets as an ARRAY and the depth-stencil target as a SEPARATE,
+    NULLABLE parameter. Modelling the hardware's split now makes Module 4 a rename.
+  - NO depth_buffer::test_and_set(). Tempting — it would name the algorithm — and
+    wrong: the comparison is PIPELINE state, not storage. SDL_GPUDepthStencilState
+    has compare_op + enable_depth_test + enable_depth_write as three separate knobs
+    because different passes set them differently (shadow pass writes depth and no
+    colour; transparent pass tests depth and does not write it). Baking
+    "less-than, always write" into the buffer would make those unexpressible.
+  - fill_triangle takes depth_buffer* rather than gaining a second overload. The
+    fill's set-up is subtle (bias, six steps, three starting values) and raster.cpp
+    already argues that duplicating something subtle is how one bias ends up wrong
+    in one of three places. A nullable NON-OWNING pointer is not a violation of the
+    no-raw-owning-pointers rule: that rule is about ownership, and what a reference
+    cannot express here is OPTIONALITY.
+  - z inserted BEFORE colour in `vertex`, which breaks every brace-init call site —
+    deliberately. Uint32 -> float is narrowing in list-initialisation, so the old
+    3-argument form is a COMPILE ERROR rather than a colour landing silently in the
+    depth field. Aggregate initialisation earning its keep; a constructor taking
+    (int,int,Uint32) would have compiled and produced garbage.
+  - quantisation is a property of the BUFFER (its format), not of the rasterizer or
+    the demo. Storage stays float and we round to the format's grid on write, so the
+    BEHAVIOUR (z-fighting) is exact while the memory saving is the part not modelled.
+    Said so in the lesson. 2^24-1 and 2^16-1 are exactly representable in float, so
+    round(z*codes)/codes lands on a real grid point.
+  - the ground grid is drawn FIRST and never depth-tested. Not laziness — it is the
+    painter's algorithm surviving as a legitimate special case for a background,
+    which is exactly what a skybox is (Module 6). Depth-tested lines are Ex 3.1.2.
+  - the demo renders BOTH algorithms every frame into a scratch framebuffer and
+    counts differing pixels. A second full pass at 320x180 costs microseconds and
+    turns "the painter's algorithm is wrong" from a claim into a live number. Fifth
+    time this bargain has been made (draw_line_naive 2.1, pong swept_collision 1.8,
+    blend_space::encoded 2.4, the w toggles 2.7, trs_order 2.8).
+  - the CYCLE scene's planks are built from make_plank(a, b, width, tilt, OVERHANG).
+    The overhang lengthens each quad WITHOUT moving its plane, so the depths at the
+    two named corners are still exactly +-tilt. It exists because end-to-end planks
+    overlap in a sliver, and a sliver is not a demonstration: swept (R, width),
+    the disagreement went 7 px -> 144 px. Measured, not eyeballed.
   - the naive collision test is KEPT in the shipped code behind state::swept_collision
     rather than deleted, so the failure can be reproduced on demand (pedagogy §5:
     show the artifact). It is dead weight only if you think a bug you can summon is
@@ -1010,7 +1092,8 @@ files:
   src/: main.cpp
   src/core/: input.hpp, input.cpp, clock.hpp, clock.cpp,
             fixed_step.hpp, fixed_step.cpp
-  src/gfx/: colour.hpp, colour.cpp, framebuffer.hpp, framebuffer.cpp,
+  src/gfx/: colour.hpp, colour.cpp, depth_buffer.hpp, depth_buffer.cpp,
+            framebuffer.hpp, framebuffer.cpp,
             raster.hpp, raster.cpp, viewport.hpp, mesh.hpp
   src/math/: vec2.hpp, vec3.hpp, vec4.hpp, mat2.hpp, mat3.hpp, mat4.hpp, transform.hpp
   src/game/: pong.hpp, pong.cpp
@@ -1027,49 +1110,55 @@ files:
                  02-05-matrices.html, 02-06-mat4.html,
                  02-07-homogeneous.html, 02-08-space-chain.html,
                  02-09-view-matrix.html, 02-10-perspective.html,
-                 02-11-viewport.html, 02-12-wireframe-mesh.html
+                 02-11-viewport.html, 02-12-wireframe-mesh.html,
+                 03-01-z-buffer.html
   docs/_template/: lesson-template.html, README.md, apply-shared.py, check-page.js
   memory/: 2026-07-16.md, 2026-07-18.md, 2026-07-21.md, 2026-07-22.md,
            2026-07-23.md, 2026-07-24.md, 2026-07-25.md, 2026-07-26.md,
            2026-07-27.md, 2026-07-28.md, 2026-07-29.md, 2026-07-30.md,
-           2026-07-31.md
+           2026-07-31.md, 2026-08-01.md
   (retired: hello.cpp)
 
-next: 3.1 — The Painter's Problem and the Z-Buffer
-      (planned filename: docs/lessons/03-01-z-buffer.html — 2.12 links to it)
-      MODULE 3 OPENS. Module 2 built the geometry; Module 3 fills it in. 3.1 attacks
-      the flaw 2.12's milestone makes most visible: FAR EDGES DRAW OVER NEAR ONES
-      because nothing compares depth. The demo already shows it (you see through the
-      icosahedron) — open with that artifact, per pedagogy §5.
-        - SHOW THE PAINTER'S ALGORITHM FAIL FIRST. Sort triangles back-to-front by
-          average view-space depth; it works on the icosahedron and looks solved.
-          Then break it, and Exercise 2.12.5 already sets this up: INTERSECTING
-          triangles have no correct order; OVERLAPPING triangles can form a CYCLE
-          (A over B over C over A); a triangle stretched in depth has an "average"
-          describing none of it. Build the cycle case explicitly — three long quads
-          is the classic. That failure is the argument for per-pixel depth.
-        - THEN THE Z-BUFFER: a depth per PIXEL, alongside the colour buffer. Write a
-          pixel only if its depth beats what is there. Needs (a) a depth buffer in
-          gfx (parallel to framebuffer — consider std::vector<float> and whether it
-          lives IN framebuffer or beside it; DECIDE), (b) depth INTERPOLATED across
-          the triangle, which is barycentric interpolation from 2.3/2.4 applied to
-          the depth attribute, (c) a clear-to-far each frame.
-        - WHICH DEPTH TO INTERPOLATE is the subtle bit and it sets up 3.2: NDC z is
-          already the 1/z-nonlinear value (2.10 §3.4), and it interpolates CORRECTLY
-          in screen space precisely BECAUSE it is 1/z-ish — whereas view-space z does
-          not. Say this carefully; 3.2 (perspective-correct interpolation) is the
-          full treatment and this is the first taste.
-        - PRECISION: 2.10's worked numbers (near=1,far=100 puts z=-2 at z_ndc=0.505)
-          become z-FIGHTING here. Reuse them; Exercise 2.10.4 already quantised depth.
-        - THIS IS WHERE FILLED TRIANGLES MEET THE 3-D PIPELINE. fill_triangle exists
-          since 2.2 but nothing has connected it to model->...->screen. 3.1 is
-          plausibly where draw_mesh gains a filled path (flat-shaded per triangle,
-          since lighting is 3.6). DECIDE whether 3.1 fills or stays wireframe+depth.
-      Module 3 then continues: 3.2 perspective-correct interpolation (derive the 1/w
-      trick, show the affine-texturing artifact first), 3.3 near-plane clipping
-      (Sutherland-Hodgman; the project() guard that DROPS whole edges is the artifact),
-      3.4 back-face culling + the cross product deepened (the meshes are already wound
-      CCW-outward and verified, so the data is ready), 3.5 the hand-rolled OBJ loader,
-      3.6 normals and shading (Lambert -> Blinn-Phong; flat/Gouraud/per-pixel), 3.7
-      texture mapping + bilinear, then a profiling pass and the Module 3 capstone.
+next: 3.2 — Perspective-Correct Interpolation
+      (planned filename: docs/lessons/03-02-perspective-correct.html — 3.1 links to it)
+      3.1 LEFT THE LOOSE END LYING IN PLAIN SIGHT and said so, twice: device depth
+      interpolates exactly BECAUSE the projection had already converted it into a
+      screen-affine quantity, and NOTHING ELSE a vertex carries has had that done to
+      it. 3.2 collects.
+        - SHOW THE ARTIFACT FIRST (pedagogy §5). A textured or checkered quad on a
+          floor, seen at a glancing angle, with affine interpolation: the classic
+          PS1 swim/buckle. The seam runs along the triangle DIAGONAL, which is the
+          giveaway — split the quad the other way and the wrongness moves with it.
+          Two triangles that share an edge disagree about what is in the middle.
+          The demo already has fill_triangle_uv (2.4's checker) and quad_mesh().
+        - THE DERIVATION IS ALREADY DONE. 3.1 §3.4 proved 1/w is AFFINE in screen
+          space. That is the whole tool. An attribute a is linear over the SURFACE,
+          so a/w is affine in screen space too; interpolate a/w and 1/w with the
+          ordinary barycentric weights, then divide: a = (a/w) / (1/w). Do NOT
+          re-derive 1/w's affinity — reference 3.1 and spend the space on WHY a/w
+          is the thing that behaves, which is the step people skip.
+        - WHERE w COMES FROM. vertex has x, y, z, colour. Perspective-correct
+          interpolation needs the CLIP-SPACE w at each corner, which project()
+          currently computes and throws away (same crime 2.11 committed with depth).
+          DECIDE: add `float inv_w` to vertex (pre-divided, so the rasterizer never
+          divides per vertex) or `float w`. inv_w is probably right — it is what the
+          inner loop wants and it makes the "divide at the end" a multiply.
+        - THE COST IS ONE DIVIDE PER PIXEL, and that is the honest headline: depth
+          was free, this is not. Measure it. Then note that the divide is per pixel
+          and not per attribute, so it amortises the moment there is more than one.
+        - CHECK IT NUMERICALLY, not by eye: put a u,v on a deep quad, sample the
+          middle pixel, and compare against the ray-plane intersection truth — the
+          same harness shape as scratch/verify_31.cpp's affinity test, which is
+          already written and can be extended rather than rewritten.
+        - DEPTH IS THE CONTROL. z_ndc must come out IDENTICAL under both the old and
+          new code paths, because it was already correct. If it moves, the new path
+          is wrong. That is a free regression test and it should be in the lesson.
+      Module 3 then continues: 3.3 near-plane clipping (Sutherland-Hodgman; the
+      artifact is 3.1's collect_triangles DROPPING whole triangles when any vertex
+      fails the w > 0.05 guard), 3.4 back-face culling + the cross product deepened
+      (the meshes are wound CCW-outward and verified, AND 3.1 left a measured debt:
+      the silhouette tie artifact that culling removes — 29 px -> 0 px), 3.5 the
+      hand-rolled OBJ loader, 3.6 normals and Lambert (replacing face_shade's debug
+      palette), 3.7 specular/Blinn-Phong, 3.8 flat vs Gouraud vs per-pixel, 3.9
+      texture mapping + bilinear, 3.10 profiling and the Module 3 capstone.
 ```

@@ -1,10 +1,16 @@
-// src/gfx/raster.cpp — the three line algorithms of Lesson 2.1.
+// src/gfx/raster.cpp — the software rasterizer's implementation.
 //
-// Read them in the order they appear. Each one fixes something the one above it
-// got wrong, and the last one is the only one that should ever be called.
+// Three line algorithms (Lesson 2.1), then triangles by edge function (2.2),
+// barycentric coordinates (2.3), attribute interpolation (2.4), and the depth
+// test (3.1).
+//
+// Read the line routines in the order they appear. Each one fixes something the
+// one above it got wrong, and the last one is the only one that should ever be
+// called.
 
 #include "gfx/raster.hpp"
 
+#include "gfx/depth_buffer.hpp"
 #include "gfx/framebuffer.hpp"
 
 #include <algorithm>
@@ -378,7 +384,7 @@ void fill_triangle(framebuffer& fb,
     }
 }
 
-void fill_triangle(framebuffer& fb,
+void fill_triangle(framebuffer& fb, depth_buffer* depth,
                    const vertex& a, const vertex& b, const vertex& c,
                    blend_space space)
 {
@@ -429,6 +435,12 @@ void fill_triangle(framebuffer& fb,
 
         Uint32* const row = fb.row(y);
 
+        // The matching row of the depth attachment, or nullptr when there is no
+        // attachment. Hoisted out of the inner loop for the same reason the
+        // colour row is: the row index does not change across a scanline, so
+        // resolving it per pixel would be paying for an answer we already have.
+        float* const zrow = (depth != nullptr) ? depth->row(y) : nullptr;
+
         for (int x = s.min_x; x <= s.max_x; ++x)
         {
             if (w0 >= 0 && w1 >= 0 && w2 >= 0)
@@ -446,19 +458,55 @@ void fill_triangle(framebuffer& fb,
                 const float f1 = static_cast<float>(w1 - s.bias1) * inv_area;
                 const float f2 = static_cast<float>(w2 - s.bias2) * inv_area;
 
-                // Three multiply-adds per channel. This is the interpolation,
-                // and it is the same three lines whatever the attribute turns
-                // out to be — depth in Lesson 3.1, texture coordinates in 3.7,
-                // normals in 3.6. The rasterizer never learns what it carries.
-                const rgb3 mixed{f0 * c0.r + f1 * c1.r + f2 * c2.r,
-                                 f0 * c0.g + f1 * c1.g + f2 * c2.g,
-                                 f0 * c0.b + f1 * c1.b + f2 * c2.b};
+                // ---- The depth test (Lesson 3.1) --------------------------
+                //
+                // Depth is interpolated by exactly the same three multiply-adds
+                // as a colour channel, with exactly the same weights, and that
+                // is not an approximation: the projective divide has already
+                // made device depth an AFFINE function of the pixel position, so
+                // barycentric interpolation of it is the exact answer. (Lesson
+                // 3.1 §3.4 derives it; §3.5 shows what interpolating view-space
+                // z instead would do, which is to put the midpoint of a
+                // near-to-far edge 25x too far away.)
+                //
+                // Quantise BEFORE comparing, because that is the order the
+                // hardware uses: the fragment's depth is converted to the
+                // attachment's format, then tested against a value already in
+                // it. For a full-precision buffer this is the identity.
+                //
+                // With no attachment bound, `visible` stays true and not one
+                // instruction of depth work happens — the 2-D fills of Lessons
+                // 2.2-2.4 pay nothing for a feature they do not use.
+                bool visible = true;
+                if (zrow != nullptr)
+                {
+                    const float z = depth->quantise(f0 * v0.z + f1 * v1.z + f2 * v2.z);
 
-                // One branch per pixel on a value that is constant for the whole
-                // triangle. A branch predictor eats this for free; hoisting it
-                // would mean two copies of the loop, which is a worse trade at
-                // this size. Measured either way in §3.7.
-                row[x] = pixel_from(mixed, space);
+                    // Smaller is nearer. `<` and not `<=`: on a tie the pixel
+                    // already there keeps it, so a surface drawn twice does not
+                    // flicker between two identical answers, and coplanar
+                    // geometry has one stable winner — the first one drawn.
+                    visible = z < zrow[x];
+                    if (visible) { zrow[x] = z; }
+                }
+
+                if (visible)
+                {
+                    // Three multiply-adds per channel. This is the
+                    // interpolation, and it is the same three lines whatever the
+                    // attribute turns out to be — depth just above, texture
+                    // coordinates in 3.7, normals in 3.6. The rasterizer never
+                    // learns what it carries.
+                    const rgb3 mixed{f0 * c0.r + f1 * c1.r + f2 * c2.r,
+                                     f0 * c0.g + f1 * c1.g + f2 * c2.g,
+                                     f0 * c0.b + f1 * c1.b + f2 * c2.b};
+
+                    // One branch per pixel on a value that is constant for the
+                    // whole triangle. A branch predictor eats this for free;
+                    // hoisting it would mean two copies of the loop, which is a
+                    // worse trade at this size. Measured either way in §3.7.
+                    row[x] = pixel_from(mixed, space);
+                }
             }
 
             w0 += s.step_x0;

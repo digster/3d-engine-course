@@ -68,8 +68,10 @@ inventing one — but without paying framework ceremony before it buys anything.
 │   │   ├── colour.cpp
 │   │   ├── framebuffer.hpp # CPU pixel buffer, ARGB8888, row-major   [EXISTS from 1.5]
 │   │   ├── framebuffer.cpp
+│   │   ├── depth_buffer.hpp# CPU depth attachment, [0,1], 0 = near  [EXISTS from 3.1]
+│   │   ├── depth_buffer.cpp
 │   │   ├── raster.hpp      # which pixels a SHAPE is made of         [EXISTS from 2.1]
-│   │   ├── raster.cpp      # lines (2.1) + triangles (2.2) + shading (2.4)
+│   │   ├── raster.cpp      # lines (2.1) + triangles (2.2) + shading (2.4) + depth (3.1)
 │   │   ├── viewport.hpp    # NDC -> pixels + the y-flip           [EXISTS from 2.11]
 │   │   └── mesh.hpp        # indexed geometry: verts + tri indices [EXISTS from 2.12]
 │   ├── game/               # NOT engine — game code, see §2.1.1        [EXISTS from 1.8]
@@ -745,6 +747,14 @@ Built roughly in dependency order — each module's milestone is the next module
   painfully; physics in Module 7 depends on it already being right.
 - **No exceptions, no RTTI in engine core.** Explicit error handling instead. The tradeoff is
   taught honestly in its own section rather than asserted.
+- **Colour and depth are separate attachments** (Module 3, Lesson 3.1). `framebuffer` and
+  `depth_buffer` are independent types with independent lifetimes, and the depth test lives in
+  the *rasterizer*, not in the buffer. Both choices copy the hardware:
+  `SDL_BeginGPURenderPass` takes colour targets as an array and the depth-stencil target as a
+  separate, nullable parameter, and `SDL_GPUDepthStencilState` carries `compare_op`,
+  `enable_depth_test` and `enable_depth_write` as three independent pipeline knobs. Modelling
+  that split in the software rasterizer means the Module 4 port is a rename rather than a
+  redesign — which is the whole argument for Stage A targeting SDL_GPU's conventions exactly.
 - **Public API surface is a deliberate artifact,** not whatever headers happen to be reachable.
 
 ---

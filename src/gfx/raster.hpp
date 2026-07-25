@@ -15,12 +15,13 @@
 
 #include <SDL3/SDL.h>
 
-// Forward declaration, not an include: every function below takes a
-// framebuffer by reference and none of them needs its layout. raster.cpp
-// includes the real header because it actually writes pixels. The habit is
-// from Lesson 1.8 §4.1 — in a header, include what you use and forward declare
-// what you merely mention.
+// Forward declarations, not includes: every function below takes a framebuffer
+// (and, from Lesson 3.1, a depth buffer) by reference or pointer, and none of
+// them needs the layout of either. raster.cpp includes the real headers because
+// it actually writes pixels and depths. The habit is from Lesson 1.8 §4.1 — in a
+// header, include what you use and forward declare what you merely mention.
 namespace engine { class framebuffer; }
+namespace engine { class depth_buffer; }
 
 namespace engine {
 
@@ -177,14 +178,32 @@ void fill_triangle(framebuffer& fb,
 /// shading is rotated by one corner and whose geometry is perfect. One `struct`
 /// and one `std::swap` make that bug unwritable. Lesson 2.4 §4.2.
 ///
-/// It carries only a colour today because only a colour is needed today.
-/// Module 3 adds depth (`z`), texture coordinates (`u`, `v`) and normals as the
-/// lessons that need them arrive — each one three more lines in the same loop,
-/// which is exactly the point Lesson 2.4 §3.6 makes.
+/// Lesson 2.4 predicted that Module 3 would add depth, texture coordinates and
+/// normals here, "each one three more lines in the same loop". Lesson 3.1
+/// collects on the first of those: `z`.
 struct vertex
 {
     int x = 0;                       ///< pixel column
     int y = 0;                       ///< pixel row
+
+    /// **Device depth** in `[0, 1]` — 0 at the near plane, 1 at the far plane.
+    ///
+    /// Specifically the third component of `viewport::to_screen` (Lesson 2.11),
+    /// which has been computed and discarded ever since for want of a depth
+    /// buffer to put it in. Note what it is *not*: it is not the view-space `z`,
+    /// and the difference is not cosmetic. Device depth is the value that
+    /// interpolates **correctly** across a triangle in screen space, because the
+    /// projective divide has already made it an affine function of the pixel
+    /// position; view-space `z` is a reciprocal of one and interpolating it
+    /// linearly is simply wrong. Lesson 3.1 §3.4 derives this, and Lesson 3.2
+    /// generalises the same fact into perspective-correct interpolation for
+    /// every *other* attribute.
+    ///
+    /// Defaults to 0 — nearest — so a purely 2-D vertex passed to a depth-tested
+    /// fill behaves like an overlay that always wins, which is the sensible thing
+    /// for something with no depth to speak of.
+    float z = 0.0f;
+
     Uint32 colour = 0xFFFFFFFFu;     ///< ARGB8888 as stored — i.e. sRGB-encoded
 };
 
@@ -225,9 +244,39 @@ enum class blend_space
 /// Same coverage as the flat `fill_triangle` — identical bounding box, identical
 /// fill rule, identical pixels — so the two can be swapped without a seam
 /// appearing anywhere.
-void fill_triangle(framebuffer& fb,
+///
+/// **Depth.** Pass a `depth_buffer` and the fill becomes hidden-surface correct:
+/// each pixel's depth is interpolated from the three corners, compared against
+/// what is already stored, and colour and depth are written only if it wins.
+/// Pass `nullptr` and no depth work happens at all — every covered pixel is
+/// written, which is what a 2-D fill wants.
+///
+/// A nullable pointer rather than two functions, because that is exactly the
+/// shape the hardware has: `SDL_BeginGPURenderPass` takes a
+/// `SDL_GPUDepthStencilTargetInfo*` that "may be NULL", and a pass with no depth
+/// attachment simply cannot depth-test. One rasterizer, one attachment slot,
+/// filled or not.
+///
+/// The comparison is a fixed `<` with depth writes always on — the equivalent of
+/// `SDL_GPU_COMPAREOP_LESS` with `enable_depth_write = true`. Real pipelines make
+/// both configurable (a transparent pass tests but does not write); we do not
+/// need that until Module 6, and a knob with one setting is worse than no knob.
+///
+/// @param depth  the depth attachment to test and write against, or `nullptr`.
+void fill_triangle(framebuffer& fb, depth_buffer* depth,
                    const vertex& a, const vertex& b, const vertex& c,
                    blend_space space = blend_space::linear);
+
+/// The same fill with no depth attachment — `fill_triangle(fb, nullptr, …)`.
+///
+/// Kept as its own name because two thirds of the calls in this engine are 2-D
+/// and should not have to say `nullptr` to mean "this is a flat picture".
+inline void fill_triangle(framebuffer& fb,
+                          const vertex& a, const vertex& b, const vertex& c,
+                          blend_space space = blend_space::linear)
+{
+    fill_triangle(fb, nullptr, a, b, c, space);
+}
 
 /// The outline only — three calls to draw_line.
 ///
