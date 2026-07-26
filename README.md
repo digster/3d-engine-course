@@ -81,9 +81,9 @@ cmake --build build
 ```
 
 The code in `src/` is the state of the engine as of the most recently published lesson (see
-[STATE.md](STATE.md)). Running it today gives you **Lesson 3.1's z-buffer demo** — a solid,
-correctly occluded icosahedron spinning above a ground grid, every pixel of it rasterized by code
-in this repository:
+[STATE.md](STATE.md)). Running it today gives you **Module 3's software rasterizer** — a solid,
+correctly occluded icosahedron spinning above a ground grid, and a checkerboard running to the
+horizon, every pixel of both rasterized by code in this repository:
 
 ```sh
 ./build/engine            # macOS / Linux
@@ -103,6 +103,12 @@ Arrow keys orbit the camera, <kbd>-</kbd>/<kbd>=</kbd> dolly. The three keys wor
 Why sorting cannot be repaired, why the buffer stores *device* depth rather than view-space `z`,
 and how to predict z-fighting in metres before you see it, is
 [Lesson 3.1](docs/lessons/03-01-z-buffer.html).
+
+Press <kbd>C</kbd> once more for the **checkered floor**. <kbd>I</kbd> turns perspective-correct
+interpolation off and the floor buckles into the warping every PlayStation game had; <kbd>T</kbd>
+subdivides the floor and shows you what the era's alternative actually cost. The derivation — five
+lines, and it covers every attribute a vertex will ever carry — is
+[Lesson 3.2](docs/lessons/03-02-perspective-correct.html).
 
 <kbd>Tab</kbd> cycles the earlier demos, which are kept rather than deleted: the basis-transform
 visualiser (2.5), the triangle rasterizer's seven views (2.2–2.4), the line-algorithm fan (2.1),

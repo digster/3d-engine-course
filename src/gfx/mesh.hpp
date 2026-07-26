@@ -22,6 +22,7 @@
 
 #pragma once
 
+#include "math/vec2.hpp"
 #include "math/vec3.hpp"
 
 #include <cstdint>
@@ -42,8 +43,32 @@ struct mesh
     std::span<const vec3> vertices;             ///< positions, in MODEL space
     std::span<const std::uint16_t> indices;     ///< triples; each triple is a triangle
 
+    /// Texture coordinates, one per position — or **empty**, meaning this mesh has
+    /// none. Added in Lesson 3.2, where a surface finally needs something painted
+    /// on it that varies faster than its corners.
+    ///
+    /// A PARALLEL ARRAY rather than an interleaved `struct vertex { pos; uv; }`,
+    /// and that is a real choice with a real trade. Parallel arrays let a mesh
+    /// carry an attribute some consumers ignore without paying for it — the cube
+    /// and icosahedron have no uvs and store none. Interleaving puts a vertex's
+    /// data in one cache line, which is what the GPU wants and what Module 4's
+    /// vertex buffers will use. We keep parallel arrays while the meshes are
+    /// static data and the reader is a CPU loop, and Module 4 revisits it with the
+    /// memory-layout diagram the decision deserves.
+    ///
+    /// **Empty is a valid state, not a missing one.** `uvs.empty()` means "this
+    /// geometry has no texture coordinates", and a renderer that wants them
+    /// substitutes zero rather than failing.
+    std::span<const vec2> uvs;
+
     /// Number of triangles. Three indices each, so this is simply the count / 3.
     [[nodiscard]] constexpr std::size_t triangle_count() const { return indices.size() / 3; }
+
+    /// The uv at vertex `i`, or `(0,0)` if this mesh carries none.
+    [[nodiscard]] constexpr vec2 uv_at(std::size_t i) const
+    {
+        return i < uvs.size() ? uvs[i] : vec2{};
+    }
 };
 
 // ---- The unit cube ---------------------------------------------------------
@@ -72,7 +97,7 @@ inline constexpr std::uint16_t k_cube_indices[36] = {
 };
 
 /// The unit cube, as a mesh.
-[[nodiscard]] inline mesh cube_mesh() { return {k_cube_vertices, k_cube_indices}; }
+[[nodiscard]] inline mesh cube_mesh() { return {k_cube_vertices, k_cube_indices, {}}; }
 
 // ---- The unit quad ---------------------------------------------------------
 
@@ -95,8 +120,18 @@ inline constexpr std::uint16_t k_quad_indices[6] = {
     0, 1, 2,   0, 2, 3,
 };
 
-/// A 1x1 square in the z = 0 plane, centred on the origin.
-[[nodiscard]] inline mesh quad_mesh() { return {k_quad_vertices, k_quad_indices}; }
+// The unit square of texture space, laid on the quad so that +u runs with +x and
+// +v runs with +y. Note that this is a MODEL-space convention, not a screen one:
+// which way "up" ends up on screen depends entirely on where the quad is put.
+inline constexpr vec2 k_quad_uvs[4] = {
+    {0.0f, 0.0f},   // 0  bottom-left
+    {1.0f, 0.0f},   // 1  bottom-right
+    {1.0f, 1.0f},   // 2  top-right
+    {0.0f, 1.0f},   // 3  top-left
+};
+
+/// A 1x1 square in the z = 0 plane, centred on the origin, with uvs over [0,1].
+[[nodiscard]] inline mesh quad_mesh() { return {k_quad_vertices, k_quad_indices, k_quad_uvs}; }
 
 // ---- The icosahedron -------------------------------------------------------
 
@@ -152,7 +187,7 @@ inline constexpr std::uint16_t k_icosahedron_indices[60] = {
 /// A regular icosahedron inscribed in the unit sphere, as a mesh.
 [[nodiscard]] inline mesh icosahedron_mesh()
 {
-    return {k_icosahedron_vertices, k_icosahedron_indices};
+    return {k_icosahedron_vertices, k_icosahedron_indices, {}};
 }
 
 } // namespace engine

@@ -284,6 +284,26 @@ struct rgb3
                      static_cast<Uint8>(mixed.b + 0.5f));
 }
 
+/// A procedural checkerboard: one cell per unit of texture space.
+///
+/// `std::floor`, not a cast to int, and the difference is a real bug rather than
+/// a style point: a cast truncates TOWARD ZERO, so -0.5 and +0.5 both land in
+/// cell 0 and the pattern grows a doubled cell straddling the origin. Floor is
+/// the function that means "which cell is this in" for negative coordinates too,
+/// and uvs go negative the moment a mesh is tiled or a uv is offset.
+///
+/// Fixed colours, deliberately. This is a debug pattern with one job — showing
+/// you where texture space lands on a surface — and a configurable palette would
+/// be a knob nobody turns. Lesson 3.9 replaces the whole function with a texture
+/// lookup and this argument goes away with it.
+[[nodiscard]] Uint32 checker_at(float u, float v)
+{
+    const float cu = std::floor(u);
+    const float cv = std::floor(v);
+    const bool light = (static_cast<int>(cu) + static_cast<int>(cv)) % 2 == 0;
+    return light ? pack_argb(232, 226, 214) : pack_argb(58, 64, 88);
+}
+
 } // namespace
 
 barycentric barycentric_at(int x0, int y0, int x1, int y1, int x2, int y2,
@@ -386,7 +406,7 @@ void fill_triangle(framebuffer& fb,
 
 void fill_triangle(framebuffer& fb, depth_buffer* depth,
                    const vertex& a, const vertex& b, const vertex& c,
-                   blend_space space)
+                   fill_style style)
 {
     // Local copies, because reorienting reorders the vertices — and this is the
     // whole reason a vertex is a struct. `std::swap` on the struct moves the
@@ -419,9 +439,36 @@ void fill_triangle(framebuffer& fb, depth_buffer* depth,
     // conversions for a triangle covering eight thousand pixels; the interior is
     // then pure arithmetic. This hoist is the reason the correct path is
     // affordable at all — see §3.7 for what it costs when you forget it.
-    const rgb3 c0 = corner_in(v0.colour, space);
-    const rgb3 c1 = corner_in(v1.colour, space);
-    const rgb3 c2 = corner_in(v2.colour, space);
+    const rgb3 c0 = corner_in(v0.colour, style.space);
+    const rgb3 c1 = corner_in(v1.colour, style.space);
+    const rgb3 c2 = corner_in(v2.colour, style.space);
+
+    // ---- Perspective correction (Lesson 3.2) -------------------------------
+    //
+    // THE AFFINE MODE IS NOT A SEPARATE CODE PATH. It is this same arithmetic
+    // with every `1/w` forced to 1 — which is precisely what affine
+    // interpolation *is*: a renderer behaving as though `w = 1` everywhere, i.e.
+    // as though the projection were orthographic. Writing it that way rather than
+    // as a second loop is not only shorter, it says the thing.
+    //
+    // Note the consequence for 2-D: `vertex::inv_w` defaults to 1, so a flat fill
+    // takes the "correct" path and gets exactly the answer it always got.
+    const bool correct = (style.interp == interpolation::perspective);
+    const float iw0 = correct ? v0.inv_w : 1.0f;
+    const float iw1 = correct ? v1.inv_w : 1.0f;
+    const float iw2 = correct ? v2.inv_w : 1.0f;
+
+    // Pre-divide every attribute by w, ONCE PER TRIANGLE. What interpolates
+    // affinely across the screen is `a/w`, not `a` — so these are the values the
+    // inner loop actually blends, and the division back out happens per pixel
+    // using the interpolated `1/w`. Lesson 3.2 §3.3.
+    const rgb3 p0{c0.r * iw0, c0.g * iw0, c0.b * iw0};
+    const rgb3 p1{c1.r * iw1, c1.g * iw1, c1.b * iw1};
+    const rgb3 p2{c2.r * iw2, c2.g * iw2, c2.b * iw2};
+
+    const float pu0 = v0.u * iw0, pv0 = v0.v * iw0;
+    const float pu1 = v1.u * iw1, pv1 = v1.v * iw1;
+    const float pu2 = v2.u * iw2, pv2 = v2.v * iw2;
 
     int row_w0 = s.row_w0;
     int row_w1 = s.row_w1;
@@ -480,6 +527,14 @@ void fill_triangle(framebuffer& fb, depth_buffer* depth,
                 bool visible = true;
                 if (zrow != nullptr)
                 {
+                    // NOTE the asymmetry with everything below: `z` is
+                    // interpolated DIRECTLY, with no perspective correction,
+                    // because the projection has already made device depth affine
+                    // in screen space. Correcting it here would be actively
+                    // wrong — and it is the single easiest mistake to make once
+                    // you have learnt Lesson 3.2's trick and start applying it
+                    // everywhere. Depth is the one attribute that arrives
+                    // pre-corrected. Lesson 3.2 §3.5.
                     const float z = depth->quantise(f0 * v0.z + f1 * v1.z + f2 * v2.z);
 
                     // Smaller is nearer. `<` and not `<=`: on a tie the pixel
@@ -492,20 +547,46 @@ void fill_triangle(framebuffer& fb, depth_buffer* depth,
 
                 if (visible)
                 {
-                    // Three multiply-adds per channel. This is the
-                    // interpolation, and it is the same three lines whatever the
-                    // attribute turns out to be — depth just above, texture
-                    // coordinates in 3.7, normals in 3.6. The rasterizer never
-                    // learns what it carries.
-                    const rgb3 mixed{f0 * c0.r + f1 * c1.r + f2 * c2.r,
-                                     f0 * c0.g + f1 * c1.g + f2 * c2.g,
-                                     f0 * c0.b + f1 * c1.b + f2 * c2.b};
+                    // ---- Perspective correction, per pixel (Lesson 3.2) ----
+                    //
+                    // Interpolate 1/w with the same weights as everything else —
+                    // it is affine in screen space (Lesson 3.1 §3.4) — and its
+                    // reciprocal is the factor that turns every interpolated
+                    // `a/w` back into an `a`.
+                    //
+                    // ONE DIVIDE PER PIXEL, and it is the honest cost of this
+                    // lesson. It is paid once, not once per attribute, so it
+                    // amortises the moment a fragment carries more than one
+                    // thing — which from Lesson 3.6 onwards it always will.
+                    // In affine mode every iw is 1, so this sum is 1 and the
+                    // reciprocal is a no-op that we pay for anyway; keeping one
+                    // loop is worth more than saving a divide on a mode that
+                    // exists only to be shown failing.
+                    const float w_recip = 1.0f / (f0 * iw0 + f1 * iw1 + f2 * iw2);
 
-                    // One branch per pixel on a value that is constant for the
-                    // whole triangle. A branch predictor eats this for free;
-                    // hoisting it would mean two copies of the loop, which is a
-                    // worse trade at this size. Measured either way in §3.7.
-                    row[x] = pixel_from(mixed, space);
+                    if (style.shade == shading::uv_checker)
+                    {
+                        const float uu = (f0 * pu0 + f1 * pu1 + f2 * pu2) * w_recip;
+                        const float vv = (f0 * pv0 + f1 * pv1 + f2 * pv2) * w_recip;
+                        row[x] = checker_at(uu, vv);
+                    }
+                    else
+                    {
+                        // Three multiply-adds per channel, then the divide-back.
+                        // This is the interpolation, and it is the same three
+                        // lines whatever the attribute turns out to be — texture
+                        // coordinates just above, normals in 3.6. The rasterizer
+                        // never learns what it carries.
+                        const rgb3 mixed{(f0 * p0.r + f1 * p1.r + f2 * p2.r) * w_recip,
+                                         (f0 * p0.g + f1 * p1.g + f2 * p2.g) * w_recip,
+                                         (f0 * p0.b + f1 * p1.b + f2 * p2.b) * w_recip};
+
+                        // One branch per pixel on a value that is constant for
+                        // the whole triangle. A branch predictor eats this for
+                        // free; hoisting it would mean two copies of the loop,
+                        // which is a worse trade at this size.
+                        row[x] = pixel_from(mixed, style.space);
+                    }
                 }
             }
 

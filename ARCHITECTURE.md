@@ -71,7 +71,8 @@ inventing one — but without paying framework ceremony before it buys anything.
 │   │   ├── depth_buffer.hpp# CPU depth attachment, [0,1], 0 = near  [EXISTS from 3.1]
 │   │   ├── depth_buffer.cpp
 │   │   ├── raster.hpp      # which pixels a SHAPE is made of         [EXISTS from 2.1]
-│   │   ├── raster.cpp      # lines (2.1) + triangles (2.2) + shading (2.4) + depth (3.1)
+│   │   ├── raster.cpp      # lines (2.1) + triangles (2.2) + shading (2.4)
+│   │   │                   # + depth (3.1) + perspective correction (3.2)
 │   │   ├── viewport.hpp    # NDC -> pixels + the y-flip           [EXISTS from 2.11]
 │   │   └── mesh.hpp        # indexed geometry: verts + tri indices [EXISTS from 2.12]
 │   ├── game/               # NOT engine — game code, see §2.1.1        [EXISTS from 1.8]
@@ -755,6 +756,13 @@ Built roughly in dependency order — each module's milestone is the next module
   `enable_depth_test` and `enable_depth_write` as three independent pipeline knobs. Modelling
   that split in the software rasterizer means the Module 4 port is a rename rather than a
   redesign — which is the whole argument for Stage A targeting SDL_GPU's conventions exactly.
+- **Render state is an object, not a parameter list** (Module 3, Lesson 3.2). `fill_style`
+  gathers interpolation mode, shading and blend space into one struct passed to the rasterizer.
+  This is the shape the hardware has — a GPU bakes state into a *pipeline object* built once and
+  bound before drawing, because validating it per draw call would be ruinous, and
+  `SDL_GPUGraphicsPipelineCreateInfo` is this struct several times over. Adopting the shape while
+  it holds three fields means Module 4 is a rename, and each new knob costs one field rather than
+  one more argument at every call site.
 - **Public API surface is a deliberate artifact,** not whatever headers happen to be reachable.
 
 ---

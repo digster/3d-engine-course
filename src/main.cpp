@@ -696,6 +696,23 @@ enum class spin
 // single vertex.
 constexpr engine::viewport k_scene_viewport{6.0f, 41.625f, 172.0f, 96.75f, 0.0f, 1.0f};
 
+// ...and, as of Lesson 3.2, a second one: the WHOLE framebuffer.
+//
+// A ground plane cannot be made to fit a sub-rectangle. Measured (scratch/fit_floor.cpp):
+// across every floor extent worth having, the near edge projects to |x_ndc| > 1 —
+// which is not a tuning failure but geometry. A surface you are standing on fills
+// the bottom of your view, and that is what makes it a good subject for this
+// lesson in the first place.
+//
+// So the floor scene draws through a viewport that is the entire 320x180 buffer.
+// That costs nothing and needs no new projection matrix, because 320x180 IS 16:9 —
+// the same aspect the projection already bakes in. It is also the first time this
+// course changes the viewport at all, which is the point of Lesson 2.11 having
+// made it a parameter rather than three constants.
+constexpr engine::viewport k_full_viewport{0.0f, 0.0f,
+                                           static_cast<float>(k_fb_width),
+                                           static_cast<float>(k_fb_height), 0.0f, 1.0f};
+
 /// A point projected to the screen, and whether it was in front of the camera.
 ///
 /// `depth` is the device depth in [0, 1] that Lesson 2.11's viewport transform
@@ -705,6 +722,13 @@ struct screen_point
 {
     engine::vec2 xy;
     float depth;
+
+    /// `1 / w_clip` — the reciprocal of the clip-space w, which Lesson 3.2 needs
+    /// at every corner to interpolate anything correctly. Computed here because
+    /// this is the only place that still has `w`: `perspective_divide` consumes
+    /// it and does not give it back.
+    float inv_w;
+
     bool visible;
 };
 
@@ -717,7 +741,8 @@ struct screen_point
 /// Passing the projection matrix in is what lets [P] swap perspective for
 /// orthographic with nothing else changing; the viewport is fixed (the window does
 /// not change), so it is a file-scope constant rather than a parameter.
-[[nodiscard]] screen_point project(engine::vec3 v_view, const engine::mat4& proj)
+[[nodiscard]] screen_point project(engine::vec3 v_view, const engine::mat4& proj,
+                                   const engine::viewport& vp)
 {
     const engine::vec4 clip = proj * engine::point(v_view);
 
@@ -726,23 +751,23 @@ struct screen_point
     // negative-w warning). We drop the whole line rather than clip it — proper
     // near-plane clipping is Lesson 3.3, and the demo keeps its geometry in front
     // so this guard almost never fires.
-    if (clip.w <= 0.05f) { return {{}, 1.0f, false}; }
+    if (clip.w <= 0.05f) { return {{}, 1.0f, 1.0f, false}; }
 
     const engine::vec3 ndc = engine::perspective_divide(clip);
 
     // The viewport does the NDC -> pixel map AND the +y-up-to-+y-down flip. Its
     // third output is the device depth (ndc.z mapped to [min_depth, max_depth]),
     // and as of Lesson 3.1 it finally has somewhere to go: the depth buffer.
-    const engine::vec3 screen = k_scene_viewport.to_screen(ndc);
-    return {{screen.x, screen.y}, screen.z, true};
+    const engine::vec3 screen = vp.to_screen(ndc);
+    return {{screen.x, screen.y}, screen.z, 1.0f / clip.w, true};
 }
 
 /// Draw a line whose endpoints are in VIEW space, through `proj`.
 void line3(engine::framebuffer& fb, engine::vec3 a, engine::vec3 b,
-           Uint32 colour, const engine::mat4& proj)
+           Uint32 colour, const engine::mat4& proj, const engine::viewport& vp)
 {
-    const screen_point pa = project(a, proj);
-    const screen_point pb = project(b, proj);
+    const screen_point pa = project(a, proj, vp);
+    const screen_point pb = project(b, proj, vp);
     if (!pa.visible || !pb.visible) { return; }   // crosses the near plane — 3.3 clips it properly
     engine::draw_line(fb,
         static_cast<int>(std::lround(pa.xy.x)), static_cast<int>(std::lround(pa.xy.y)),
@@ -752,10 +777,10 @@ void line3(engine::framebuffer& fb, engine::vec3 a, engine::vec3 b,
 /// Draw a WORLD-space line through the view and projection matrices. Convenience
 /// for the world grid and axes, whose endpoints are natural world-space constants.
 void line3_world(engine::framebuffer& fb, const engine::mat4& view, const engine::mat4& proj,
-                 engine::vec3 a, engine::vec3 b, Uint32 colour)
+                 const engine::viewport& vp, engine::vec3 a, engine::vec3 b, Uint32 colour)
 {
     line3(fb, engine::xyz(view * engine::point(a)),
-          engine::xyz(view * engine::point(b)), colour, proj);
+          engine::xyz(view * engine::point(b)), colour, proj, vp);
 }
 
 // ---------------------------------------------------------------------------
@@ -790,7 +815,8 @@ void line3_world(engine::framebuffer& fb, const engine::mat4& view, const engine
 /// @param point_w  the fourth component the vertices are sent with. 1 is correct;
 ///                  0 reproduces Lesson 2.6, where every translation is ignored.
 void draw_mesh(engine::framebuffer& fb, const engine::mesh& geometry,
-               const engine::mat4& m, const engine::mat4& proj, float point_w)
+               const engine::mat4& m, const engine::mat4& proj, const engine::viewport& vp,
+               float point_w)
 {
     // Transform each vertex ONCE, into view space, and keep the results. This is
     // the whole practical argument for indexed geometry: the icosahedron's twelve
@@ -825,7 +851,8 @@ void draw_mesh(engine::framebuffer& fb, const engine::mesh& geometry,
             const float mid_z = 0.5f * (p[ia].z + p[ib].z);
             const float t01 = std::clamp((mid_z + 13.0f) / 11.0f, 0.0f, 1.0f);
             const Uint8 v = static_cast<Uint8>(70.0f + 165.0f * t01);
-            line3(fb, p[ia], p[ib], engine::pack_argb(v, v, static_cast<Uint8>(v * 0.94f)), proj);
+            line3(fb, p[ia], p[ib], engine::pack_argb(v, v, static_cast<Uint8>(v * 0.94f)),
+                  proj, vp);
         }
     }
 }
@@ -841,7 +868,8 @@ void draw_mesh(engine::framebuffer& fb, const engine::mesh& geometry,
 ///               are directions. 1 translates them, which is the classic
 ///               transform-a-normal-as-a-point bug, drawn.
 void draw_axes3(engine::framebuffer& fb, const engine::mat4& m,
-                const engine::mat4& proj, float point_w, float dir_w)
+                const engine::mat4& proj, const engine::viewport& vp,
+                float point_w, float dir_w)
 {
     const Uint32 col[3] = {engine::pack_argb(236, 92, 92),     // x
                            engine::pack_argb(122, 196, 152),   // y
@@ -858,13 +886,13 @@ void draw_axes3(engine::framebuffer& fb, const engine::mat4& m,
         const engine::vec3 d = engine::xyz(m * engine::to_vec4(basis[i], dir_w));
         const engine::vec3 tip = origin + d * 0.75f;
         const engine::vec3 offset = origin;
-        line3(fb, offset, tip, col[i], proj);
+        line3(fb, offset, tip, col[i], proj, vp);
 
         // A small head, built in SCREEN space by rotating the projected arrow —
         // the same trick as 2.5's, now after the projection because that is where
         // the head has to be legible. Skip it if either end is off-screen.
-        const screen_point a = project(offset, proj);
-        const screen_point b = project(tip, proj);
+        const screen_point a = project(offset, proj, vp);
+        const screen_point b = project(tip, proj, vp);
         if (!a.visible || !b.visible) { continue; }
         const engine::vec2 back = engine::normalised(a.xy - b.xy) * 5.0f;
         if (engine::length_squared(back) > 0.0f)
@@ -989,7 +1017,8 @@ enum class scene_kind
     solids,      ///< 2.12's icosahedron and cubes. Sorting works here.
     cycle,       ///< three planks: A over B over C over A. No order is correct.
     intersect,   ///< two quads passing through each other. Order changes mid-triangle.
-    zfight       ///< two near-coplanar quads. The z-buffer's own failure mode.
+    zfight,      ///< two near-coplanar quads. The z-buffer's own failure mode.
+    floor        ///< Lesson 3.2 — a checkered plane running to the horizon.
 };
 
 [[nodiscard]] const char* name_of(scene_kind k)
@@ -1000,6 +1029,7 @@ enum class scene_kind
     case scene_kind::cycle:     return "CYCLE  (A>B>C>A)";
     case scene_kind::intersect: return "INTERSECTING quads";
     case scene_kind::zfight:    return "near-coplanar (z-fight)";
+    case scene_kind::floor:     return "FLOOR (checker to horizon)";
     }
     return "?";
 }
@@ -1011,7 +1041,8 @@ enum class scene_kind
     case scene_kind::solids:    return scene_kind::cycle;
     case scene_kind::cycle:     return scene_kind::intersect;
     case scene_kind::intersect: return scene_kind::zfight;
-    case scene_kind::zfight:    return scene_kind::solids;
+    case scene_kind::zfight:    return scene_kind::floor;
+    case scene_kind::floor:     return scene_kind::solids;
     }
     return scene_kind::solids;
 }
@@ -1057,6 +1088,84 @@ enum class scene_kind
     return t;
 }
 
+// ---------------------------------------------------------------------------
+// Lesson 3.2 — a surface that recedes, and something painted on it
+// ---------------------------------------------------------------------------
+
+/// The ground plane's extent, in world units. Deliberately lopsided: it starts
+/// just in front of the default camera and runs a long way away, so one quad
+/// spans a **37:1 range of depth**. That ratio is the whole demo — affine
+/// interpolation is exact when w is constant and worst when it is not.
+constexpr float k_floor_x = 9.0f;      ///< half-width
+constexpr float k_floor_near = 6.0f;   ///< +z edge, about a unit in front of the eye
+constexpr float k_floor_far = -30.0f;  ///< -z edge, 37 units away
+
+/// How many world units one checker cell covers. Fixed, so that changing the
+/// TESSELLATION changes only the interpolation error and never the pattern —
+/// which is what makes the two comparable.
+constexpr float k_floor_cell = 3.0f;
+
+/// Storage for the floor. A `mesh` is a pair of non-owning spans (Lesson 2.12),
+/// so unlike every mesh so far — which view `inline constexpr` arrays with
+/// program lifetime — this one needs somebody to own its arrays. That somebody is
+/// the demo, and the awkwardness is the point: it is exactly the pressure that
+/// produces Module 5's asset system.
+struct floor_geometry
+{
+    std::vector<engine::vec3> vertices;
+    std::vector<engine::vec2> uvs;
+    std::vector<std::uint16_t> indices;
+    int cells = 0;                       ///< quads per side; 0 = not built yet
+
+    [[nodiscard]] engine::mesh view() const { return {vertices, indices, uvs}; }
+};
+
+/// Tessellate the ground plane into `cells` x `cells` quads.
+///
+/// The uvs are computed from the **world position**, not from the grid index, so
+/// the checker pattern is bit-identical at every tessellation level. Only the
+/// number of triangles the interpolation has to span changes — which is what lets
+/// the demo answer "how much subdivision would affine interpolation need?" with a
+/// number instead of a shrug.
+void build_floor(floor_geometry& g, int cells)
+{
+    if (g.cells == cells) { return; }   // nothing to do; rebuilt only on [T]
+    g.cells = cells;
+    g.vertices.clear();
+    g.uvs.clear();
+    g.indices.clear();
+
+    const int n = cells + 1;   // vertices per side
+    for (int j = 0; j < n; ++j)
+    {
+        const float tz = static_cast<float>(j) / static_cast<float>(cells);
+        const float z = k_floor_near + tz * (k_floor_far - k_floor_near);
+        for (int i = 0; i < n; ++i)
+        {
+            const float tx = static_cast<float>(i) / static_cast<float>(cells);
+            const float x = -k_floor_x + tx * (2.0f * k_floor_x);
+            g.vertices.push_back({x, 0.0f, z});
+            g.uvs.push_back({x / k_floor_cell, z / k_floor_cell});
+        }
+    }
+
+    // Two triangles per quad, both wound counter-clockwise seen from ABOVE
+    // (+y), which is the side anybody stands on.
+    for (int j = 0; j < cells; ++j)
+    {
+        for (int i = 0; i < cells; ++i)
+        {
+            const auto v = [&](int ii, int jj) {
+                return static_cast<std::uint16_t>(jj * n + ii);
+            };
+            g.indices.push_back(v(i, j));     g.indices.push_back(v(i, j + 1));
+            g.indices.push_back(v(i + 1, j + 1));
+            g.indices.push_back(v(i, j));     g.indices.push_back(v(i + 1, j + 1));
+            g.indices.push_back(v(i + 1, j));
+        }
+    }
+}
+
 /// Rebuild the scene for the current time, rotation mode and scene kind.
 /// Returns how many objects were written.
 ///
@@ -1065,7 +1174,8 @@ enum class scene_kind
 /// being a rotation, and the object slowly shears. Deriving the whole transform
 /// from one authoritative `t` cannot drift, and it is the pattern the engine keeps
 /// (Module 5's transform component stores the *inputs*, never a running matrix).
-int build_scene(scene_object (&out)[k_max_objects], scene_kind kind, spin mode, float t)
+int build_scene(scene_object (&out)[k_max_objects], scene_kind kind, spin mode, float t,
+                const floor_geometry& floor)
 {
     const engine::mat3 spinning = build_spin(mode, t);
 
@@ -1075,6 +1185,20 @@ int build_scene(scene_object (&out)[k_max_objects], scene_kind kind, spin mode, 
     constexpr Uint32 k_amber = 0xFFE0A83Cu;
     constexpr Uint32 k_teal = 0xFF3CB8A8u;
     constexpr Uint32 k_violet = 0xFFA070D8u;
+
+    if (kind == scene_kind::floor)
+    {
+        // One object, no transform at all: the floor is authored in world
+        // coordinates, so its model matrix is the identity. That is unusual and
+        // worth noticing — every other object in this course is a unit shape
+        // placed by a transform, and a ground plane is the one thing it is more
+        // honest to build where it lives.
+        out[0].xform = engine::transform{};
+        out[0].geometry = floor.view();
+        out[0].name = "ground plane (checkered)";
+        out[0].tint = k_amber;   // unused: the floor is shaded from its uvs
+        return 1;
+    }
 
     if (kind == scene_kind::solids)
     {
@@ -1211,7 +1335,8 @@ int build_scene(scene_object (&out)[k_max_objects], scene_kind kind, spin mode, 
 /// and turns as the camera orbits. As of Lesson 2.10 it goes on through `proj`, so
 /// the far edge of the floor is smaller than the near edge: the floor's parallel
 /// rails now visibly converge, which is perspective made obvious.
-void draw_world(engine::framebuffer& fb, const engine::mat4& view, const engine::mat4& proj)
+void draw_world(engine::framebuffer& fb, const engine::mat4& view, const engine::mat4& proj,
+                const engine::viewport& vp)
 {
     constexpr float reach = 2.5f;
     const Uint32 faint = engine::pack_argb(40, 44, 60);
@@ -1223,15 +1348,15 @@ void draw_world(engine::framebuffer& fb, const engine::mat4& view, const engine:
     {
         const float f = static_cast<float>(i) * 0.5f;
         const Uint32 c = (i == 0) ? axis_line : faint;
-        line3_world(fb, view, proj, {f, 0.0f, -reach}, {f, 0.0f, reach}, c);
-        line3_world(fb, view, proj, {-reach, 0.0f, f}, {reach, 0.0f, f}, c);
+        line3_world(fb, view, proj, vp, {f, 0.0f, -reach}, {f, 0.0f, reach}, c);
+        line3_world(fb, view, proj, vp, {-reach, 0.0f, f}, {reach, 0.0f, f}, c);
     }
 
     // The world's own axis triad, at the world origin, in the course colours.
     // Every object's position is measured from exactly this point.
-    line3_world(fb, view, proj, {0.0f, 0.0f, 0.0f}, {0.9f, 0.0f, 0.0f}, engine::pack_argb(150, 66, 66));
-    line3_world(fb, view, proj, {0.0f, 0.0f, 0.0f}, {0.0f, 0.9f, 0.0f}, engine::pack_argb(78, 130, 100));
-    line3_world(fb, view, proj, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.9f}, engine::pack_argb(82, 108, 156));
+    line3_world(fb, view, proj, vp, {0.0f, 0.0f, 0.0f}, {0.9f, 0.0f, 0.0f}, engine::pack_argb(150, 66, 66));
+    line3_world(fb, view, proj, vp, {0.0f, 0.0f, 0.0f}, {0.0f, 0.9f, 0.0f}, engine::pack_argb(78, 130, 100));
+    line3_world(fb, view, proj, vp, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.9f}, engine::pack_argb(82, 108, 156));
 }
 
 // ---------------------------------------------------------------------------
@@ -1320,6 +1445,23 @@ struct raster_triangle
     return engine::to_encoded({light.r * k, light.g * k, light.b * k});
 }
 
+/// Reusable working storage for `collect_triangles`.
+///
+/// The per-vertex arrays used to be fixed 64-element stacks, which was fine while
+/// the largest mesh was a twelve-vertex icosahedron and silently wrong the moment
+/// Lesson 3.2's tessellated floor arrived with 289. Vectors remove the cap; owning
+/// them **across frames** rather than declaring them inside the function is what
+/// removes the per-frame allocation, since `clear()` keeps the capacity.
+///
+/// This is the smallest possible taste of Module 8's allocators: the fix for
+/// allocation in a hot loop is almost never a faster allocator, it is not
+/// allocating.
+struct projection_scratch
+{
+    std::vector<engine::vec3> view_pos;
+    std::vector<screen_point> screen;
+};
+
 /// Project every triangle of every object into screen space.
 ///
 /// This is the same per-vertex transform `draw_mesh` does, with the projection
@@ -1328,10 +1470,10 @@ struct raster_triangle
 /// the two hidden-surface strategies comparable: the painter's algorithm needs to
 /// sort ACROSS objects (sorting each object's triangles separately would be
 /// wrong the moment two objects overlap), and the z-buffer needs nothing at all.
-void collect_triangles(std::vector<raster_triangle>& out,
+void collect_triangles(std::vector<raster_triangle>& out, projection_scratch& scratch,
                        const scene_object* objects, int count,
                        const engine::mat4& view_from_world,
-                       const engine::mat4& proj, trs_order order)
+                       const engine::mat4& proj, const engine::viewport& vp, trs_order order)
 {
     out.clear();
 
@@ -1343,15 +1485,18 @@ void collect_triangles(std::vector<raster_triangle>& out,
         // Transform each vertex ONCE. The icosahedron's twelve vertices are
         // shared by twenty triangles, so this is 12 matrix multiplies instead of
         // 60 — the practical argument for indexed geometry, from Lesson 2.12.
-        engine::vec3 view_pos[64];
-        screen_point screen[64];
-        const std::size_t vertex_count =
-            std::min(objects[i].geometry.vertices.size(), std::size(view_pos));
+        const std::size_t vertex_count = objects[i].geometry.vertices.size();
+        std::vector<engine::vec3>& view_pos = scratch.view_pos;
+        std::vector<screen_point>& screen = scratch.screen;
+        view_pos.clear();
+        screen.clear();
+        view_pos.reserve(vertex_count);
+        screen.reserve(vertex_count);
         for (std::size_t v = 0; v < vertex_count; ++v)
         {
-            view_pos[v] = engine::xyz(view_from_model
-                                    * engine::point(objects[i].geometry.vertices[v]));
-            screen[v] = project(view_pos[v], proj);
+            view_pos.push_back(engine::xyz(view_from_model
+                                         * engine::point(objects[i].geometry.vertices[v])));
+            screen.push_back(project(view_pos.back(), proj, vp));
         }
 
         const std::span<const std::uint16_t> idx = objects[i].geometry.indices;
@@ -1372,9 +1517,11 @@ void collect_triangles(std::vector<raster_triangle>& out,
             const Uint32 colour = face_shade(objects[i].tint, f);
 
             auto to_vertex = [&](std::size_t v) {
+                const engine::vec2 uv = objects[i].geometry.uv_at(v);
                 return engine::vertex{static_cast<int>(std::lround(screen[v].xy.x)),
                                       static_cast<int>(std::lround(screen[v].xy.y)),
-                                      screen[v].depth, colour};
+                                      screen[v].depth, screen[v].inv_w,
+                                      uv.x, uv.y, colour};
             };
 
             raster_triangle tri;
@@ -1397,8 +1544,13 @@ void collect_triangles(std::vector<raster_triangle>& out,
 ///
 /// @param depth  the depth attachment, or nullptr for the painter's algorithm.
 /// @param sorted true to sort back-to-front before drawing.
+/// @param style  one style for the whole batch, which is how hardware works: you
+///               bind a pipeline, draw everything that uses it, then bind
+///               another. A scene with two materials is two batches, and sorting
+///               draws by pipeline is a real optimisation in Module 6.
 void draw_triangles(engine::framebuffer& fb, engine::depth_buffer* depth,
-                    std::vector<raster_triangle>& tris, bool sorted)
+                    std::vector<raster_triangle>& tris, bool sorted,
+                    engine::fill_style style)
 {
     if (sorted)
     {
@@ -1417,7 +1569,7 @@ void draw_triangles(engine::framebuffer& fb, engine::depth_buffer* depth,
         // 2.4 delivers a flat face. That is not a waste to be optimised away yet:
         // 3.6 gives the corners genuinely different colours (Gouraud shading) and
         // this same call starts doing real work.
-        engine::fill_triangle(fb, depth, t.v[0], t.v[1], t.v[2]);
+        engine::fill_triangle(fb, depth, t.v[0], t.v[1], t.v[2], style);
     }
 }
 
@@ -2019,8 +2171,15 @@ int main(int argc, char* argv[])
     scene_kind scene_mode = scene_kind::solids;    ///< [C]
     engine::depth_format depth_fmt = engine::depth_format::f32;   ///< [B]
     std::vector<raster_triangle> scene_tris;       ///< reused, never reallocated per frame
+    projection_scratch scratch;                    ///< ditto, for the per-vertex arrays
     int painter_wrong = 0;                         ///< px where the two algorithms disagree
     depth_range shown_depth;                       ///< what the depth view actually contained
+
+    // ---- Lesson 3.2 --------------------------------------------------------
+    engine::interpolation interp = engine::interpolation::perspective;   ///< [I]
+    floor_geometry floor;                          ///< rebuilt only when [T] changes it
+    int floor_cells = 1;                           ///< quads per side; [T] cycles
+    int interp_wrong = 0;                          ///< px where affine and perspective differ
 
     xform basis_mode = xform::rotate;   ///< Lesson 2.5
     float basis_t = 0.6f;               ///< the one parameter every mode reads
@@ -2057,11 +2216,12 @@ int main(int argc, char* argv[])
     SDL_Log("  [4]/[5] follow the mouse: the three sub-triangles ARE the three weights. [R] fill rule.");
     SDL_Log("  [6] Gouraud (three corner colours) [7] uv checker — [M] switches blend space");
     SDL_Log("Basis (2.5): [Z] transform  [,] [.] adjust  [0] reset  [Space] animate");
-    SDL_Log("Scene (3.1): [F] wireframe/painter/z-buffer/depth  [C] scene  [B] depth format");
+    SDL_Log("Scene (3.1-3.2): [F] wireframe/painter/z-buffer/depth  [C] scene  [B] depth format");
+    SDL_Log("  [I] affine/perspective interpolation  [T] floor tessellation");
     SDL_Log("  [arrows] orbit  [-]/[=] dolly  [P] persp/ortho  [O] model order  [X] object");
     SDL_Log("  [Z] rotation axis  [,] [.] t  [Space] spin  [W]/[N] the 2.7 w bugs");
     SDL_Log("[Tab] cycles demos: scene (2.6-3.1) -> basis (2.5) -> triangles -> lines -> Pong");
-    SDL_Log("[V] vsync · [T] throttle · [Esc] quit");
+    SDL_Log("[V] vsync · [Y] throttle · [Esc] quit");
 
     bool running = true;
     while (running)
@@ -2126,6 +2286,19 @@ int main(int argc, char* argv[])
             }
             if (in.key_pressed(SDL_SCANCODE_P)) { use_perspective = !use_perspective; }
             if (in.key_pressed(SDL_SCANCODE_F)) { hs = next_hidden(hs); }
+            if (in.key_pressed(SDL_SCANCODE_I))
+            {
+                interp = (interp == engine::interpolation::perspective)
+                       ? engine::interpolation::affine
+                       : engine::interpolation::perspective;
+            }
+            if (in.key_pressed(SDL_SCANCODE_T))
+            {
+                // 1 -> 2 -> 4 -> 8 -> 16 -> 1. Doubling rather than incrementing
+                // because the question this answers is "how much subdivision
+                // would it take", and the answer moves in octaves.
+                floor_cells = (floor_cells >= 16) ? 1 : floor_cells * 2;
+            }
             if (in.key_pressed(SDL_SCANCODE_B))
             {
                 depth_fmt = next_depth_format(depth_fmt);
@@ -2144,6 +2317,7 @@ int main(int argc, char* argv[])
                 // the three planks exactly equidistant from the eye.
                 cam.elevation = (scene_mode == scene_kind::solids) ? 0.35f
                               : (scene_mode == scene_kind::cycle)  ? 0.0f
+                              : (scene_mode == scene_kind::floor)  ? 0.10f
                                                                    : 0.08f;
                 cam.radius = 7.0f;
             }
@@ -2182,7 +2356,8 @@ int main(int argc, char* argv[])
             }
 
             cube_m = build_spin(cube_mode, cube_t);
-            scene_count = build_scene(scene, scene_mode, cube_mode, cube_t);
+            build_floor(floor, floor_cells);
+            scene_count = build_scene(scene, scene_mode, cube_mode, cube_t, floor);
             if (selected >= scene_count) { selected = 0; }
 
             // The view matrix (2.9) and the projection matrix (2.10). The
@@ -2190,6 +2365,11 @@ int main(int argc, char* argv[])
             // the toggle isolates exactly what perspective changes.
             view_from_world = cam.view();
             const engine::mat4& proj = use_perspective ? scene_perspective : scene_orthographic;
+
+            // The floor needs the whole frame; everything else keeps the inset
+            // rectangle it has had since Lesson 2.10, with the HUD beside it.
+            const engine::viewport& vp = (scene_mode == scene_kind::floor)
+                                       ? k_full_viewport : k_scene_viewport;
 
             fb.clear(k_bg);
 
@@ -2203,7 +2383,7 @@ int main(int argc, char* argv[])
             // and it is why the grid vanishes correctly behind solid objects here
             // without a depth value of its own. Giving lines a real depth test is
             // Exercise 3.1.4.
-            draw_world(fb, view_from_world, proj);
+            draw_world(fb, view_from_world, proj, vp);
 
             if (hs == hidden_surface::wireframe)
             {
@@ -2213,8 +2393,8 @@ int main(int argc, char* argv[])
                 {
                     const engine::mat4 world_from_model = model_matrix(scene[i].xform, order);
                     const engine::mat4 view_from_model = view_from_world * world_from_model;
-                    draw_mesh(fb, scene[i].geometry, view_from_model, proj, cube_point_w);
-                    draw_axes3(fb, view_from_model, proj, cube_point_w, cube_dir_w);
+                    draw_mesh(fb, scene[i].geometry, view_from_model, proj, vp, cube_point_w);
+                    draw_axes3(fb, view_from_model, proj, vp, cube_point_w, cube_dir_w);
                 }
                 painter_wrong = 0;
                 shown_depth = {};
@@ -2224,32 +2404,60 @@ int main(int argc, char* argv[])
                 // Project the whole scene ONCE, into one flat list. Both
                 // algorithms below then run on identical geometry, which is what
                 // makes the pixel-for-pixel comparison honest.
-                collect_triangles(scene_tris, scene, scene_count,
-                                  view_from_world, proj, order);
+                collect_triangles(scene_tris, scratch, scene, scene_count,
+                                  view_from_world, proj, vp, order);
 
                 const bool want_painter = (hs == hidden_surface::painter);
+                const bool checkered = (scene_mode == scene_kind::floor);
+
+                // One style for the whole batch — the pipeline-object model. The
+                // floor is shaded from its uvs; everything else from its vertex
+                // colours. Lesson 3.2 §4.1.
+                const engine::fill_style style{
+                    .interp = interp,
+                    .shade = checkered ? engine::shading::uv_checker
+                                       : engine::shading::vertex_colour,
+                    .space = engine::blend_space::linear};
 
                 // Clearing to FAR is not optional and not cosmetic. Skip it and
                 // last frame's depths survive into this one; §7 has the picture.
                 scene_depth.clear();
                 draw_triangles(fb, want_painter ? nullptr : &scene_depth,
-                               scene_tris, want_painter);
+                               scene_tris, want_painter, style);
 
                 // ---- The comparison ---------------------------------------
-                // Run the OTHER algorithm over the same background, on the same
-                // triangles, and count the pixels the two disagree about. This is
-                // the lesson's headline number and it is measured, not claimed.
+                // Run the scene a second time with ONE THING CHANGED, over the
+                // same background and the same triangles, and count the pixels
+                // the two renders disagree about. Which thing changes depends on
+                // what the scene is for: the hidden-surface strategy (3.1) on the
+                // solid scenes, the interpolation (3.2) on the floor.
                 scratch_fb.clear(k_bg);
-                draw_world(scratch_fb, view_from_world, proj);
+                draw_world(scratch_fb, view_from_world, proj, vp);
                 scratch_depth.clear();
-                draw_triangles(scratch_fb, want_painter ? &scratch_depth : nullptr,
-                               scene_tris, !want_painter);
-                painter_wrong = count_differences(fb, scratch_fb, k_scene_viewport);
+
+                if (checkered)
+                {
+                    engine::fill_style other = style;
+                    other.interp = (interp == engine::interpolation::perspective)
+                                 ? engine::interpolation::affine
+                                 : engine::interpolation::perspective;
+                    draw_triangles(scratch_fb, want_painter ? nullptr : &scratch_depth,
+                                   scene_tris, want_painter, other);
+                    interp_wrong = count_differences(fb, scratch_fb, vp);
+                    painter_wrong = 0;
+                }
+                else
+                {
+                    draw_triangles(scratch_fb, want_painter ? &scratch_depth : nullptr,
+                                   scene_tris, !want_painter, style);
+                    painter_wrong = count_differences(fb, scratch_fb, vp);
+                    interp_wrong = 0;
+                }
 
                 // The depth view runs last, over the z-buffered image, because it
                 // needs the buffer the z-buffer pass just filled.
                 shown_depth = (hs == hidden_surface::depth_view)
-                            ? show_depth(fb, scene_depth, k_scene_viewport)
+                            ? show_depth(fb, scene_depth, vp)
                             : depth_range{};
             }
 
@@ -2266,7 +2474,7 @@ int main(int argc, char* argv[])
             selected_view = engine::xyz(view_from_world * engine::point(selected_world));
             selected_clip = proj * engine::point(selected_view);
             selected_ndc = engine::perspective_divide(selected_clip);
-            selected_screen = k_scene_viewport.to_screen(selected_ndc);
+            selected_screen = vp.to_screen(selected_ndc);
             selected_axis_len = axis_length(selected_m, {1.0f, 0.0f, 0.0f});
             selected_corner = axis_angle_deg(selected_m, {1.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f});
         }
@@ -2421,18 +2629,18 @@ int main(int argc, char* argv[])
                 // Red, green and blue at the corners — the classic, and chosen
                 // because the three primaries are exactly where the encoded
                 // blend goes most obviously wrong. [M] switches the space.
+                // Designated initialisers, because `vertex` now has seven fields
+                // and only two of them are interesting here. This is a FLAT
+                // picture: `z` stays 0 (and there is no depth attachment to read
+                // it), and `inv_w` stays 1 — which is exactly why the
+                // perspective-correct path returns the same pixels it always did.
+                // Lesson 3.2 §4.2.
                 engine::fill_triangle(fb,
-                    // The explicit 0.0f is Lesson 3.1's new `vertex::z`. This is a
-                    // FLAT picture, so every corner sits at the near plane — and
-                    // the fill has no depth attachment anyway, so the value is
-                    // never read. Written out rather than defaulted because a
-                    // reader should not have to check the header to know that a
-                    // 2-D triangle has a depth field at all.
-                    engine::vertex{vx[0], vy[0], 0.0f, engine::pack_argb(255, 0, 0)},
-                    engine::vertex{vx[1], vy[1], 0.0f, engine::pack_argb(0, 255, 0)},
-                    engine::vertex{vx[2], vy[2], 0.0f, engine::pack_argb(0, 0, 255)},
-                    linear_blend ? engine::blend_space::linear
-                                 : engine::blend_space::encoded);
+                    engine::vertex{.x = vx[0], .y = vy[0], .colour = engine::pack_argb(255, 0, 0)},
+                    engine::vertex{.x = vx[1], .y = vy[1], .colour = engine::pack_argb(0, 255, 0)},
+                    engine::vertex{.x = vx[2], .y = vy[2], .colour = engine::pack_argb(0, 0, 255)},
+                    engine::fill_style{.space = linear_blend ? engine::blend_space::linear
+                                                             : engine::blend_space::encoded});
                 break;
             case tri_mode::checker:
                 fill_triangle_uv(fb, vx[0], vy[0], vx[1], vy[1], vx[2], vy[2], false);
@@ -2521,6 +2729,20 @@ int main(int argc, char* argv[])
                 SDL_RenderDebugText(renderer, 6.0f, 48.0f,
                     "  no surfaces, so nothing to hide - [F] fills them in");
             }
+            else if (scene_mode == scene_kind::floor)
+            {
+                // Lesson 3.2's readout. The interpolation mode, the tessellation,
+                // and the number that connects them: how many pixels affine
+                // interpolation gets wrong on this exact frame.
+                const bool corrected = (interp == engine::interpolation::perspective);
+                SDL_SetRenderDrawColor(renderer, corrected ? 122 : 236,
+                                                 corrected ? 196 : 196,
+                                                 corrected ? 152 : 110, 255);
+                SDL_RenderDebugTextFormat(renderer, 6.0f, 48.0f,
+                    "[I] %-13s  [T] %2dx%-2d floor (%zu tris)   affine vs correct: %d px",
+                    corrected ? "PERSPECTIVE" : "AFFINE (wrong)",
+                    floor_cells, floor_cells, scene_tris.size(), interp_wrong);
+            }
             else
             {
                 // The number the whole lesson turns on. Red the moment sorting
@@ -2533,144 +2755,181 @@ int main(int argc, char* argv[])
                     engine::name_of(depth_fmt), scene_tris.size(), painter_wrong);
             }
 
-            // The camera identity (its axes are the view matrix's rows; 2.9).
-            const engine::vec3 eye = cam.eye();
+            const bool floor_scene = (scene_mode == scene_kind::floor);
 
-            SDL_SetRenderDrawColor(renderer, 210, 212, 220, 255);
-            SDL_RenderDebugTextFormat(renderer, 380.0f, 40.0f,
-                                      "CAMERA   eye (%+.2f %+.2f %+.2f)",
-                                      static_cast<double>(eye.x), static_cast<double>(eye.y),
-                                      static_cast<double>(eye.z));
-            SDL_SetRenderDrawColor(renderer, 150, 152, 170, 255);
-            SDL_RenderDebugTextFormat(renderer, 380.0f, 54.0f,
-                                      "azim %4.0f  elev %+3.0f deg  r %.1f",
-                                      static_cast<double>(cam.azimuth * 180.0f / 3.14159265f),
-                                      static_cast<double>(cam.elevation * 180.0f / 3.14159265f),
-                                      static_cast<double>(cam.radius));
-            // The projection mode — 2.10's toggle, and what distance does under it.
-            SDL_SetRenderDrawColor(renderer, use_perspective ? 122 : 226,
-                                             use_perspective ? 196 : 196,
-                                             use_perspective ? 152 : 110, 255);
-            SDL_RenderDebugTextFormat(renderer, 380.0f, 68.0f, "[P] projection = %s",
-                                      use_perspective ? "PERSPECTIVE" : "orthographic");
-            SDL_SetRenderDrawColor(renderer, 150, 152, 170, 255);
-            SDL_RenderDebugText(renderer, 380.0f, 82.0f, use_perspective
-                                ? "  [-][=] dolly: far shrinks, near grows"
-                                : "  [-][=] dolly: NO effect on size");
-
-            // THE LESSON'S SPINE, now complete: one corner carried through EVERY
-            // space in the chain — model -> world -> view -> clip -> NDC -> SCREEN.
-            // You can see w stop being 1 at clip, and the +y flip at screen.
-            SDL_SetRenderDrawColor(renderer, 210, 212, 220, 255);
-            SDL_RenderDebugTextFormat(renderer, 380.0f, 100.0f, "[X] %s", scene[selected].name);
-            // Indexed geometry, made concrete: how few vertices, how many triangles.
-            SDL_SetRenderDrawColor(renderer, 150, 152, 170, 255);
-            SDL_RenderDebugTextFormat(renderer, 380.0f, 114.0f,
-                "  %zu verts, %zu tris, %zu idx -> vertex 0:",
-                scene[selected].geometry.vertices.size(),
-                scene[selected].geometry.triangle_count(),
-                scene[selected].geometry.indices.size());
-            SDL_SetRenderDrawColor(renderer, 150, 152, 170, 255);
-            SDL_RenderDebugTextFormat(renderer, 380.0f, 128.0f, "model (%+.2f %+.2f %+.2f)",
-                static_cast<double>(selected_probe.x), static_cast<double>(selected_probe.y),
-                static_cast<double>(selected_probe.z));
-            SDL_SetRenderDrawColor(renderer, 226, 196, 110, 255);
-            SDL_RenderDebugTextFormat(renderer, 380.0f, 142.0f, "world (%+.2f %+.2f %+.2f)",
-                static_cast<double>(selected_world.x), static_cast<double>(selected_world.y),
-                static_cast<double>(selected_world.z));
-            SDL_SetRenderDrawColor(renderer, 130, 190, 220, 255);
-            SDL_RenderDebugTextFormat(renderer, 380.0f, 156.0f, "view  (%+.2f %+.2f %+.2f)",
-                static_cast<double>(selected_view.x), static_cast<double>(selected_view.y),
-                static_cast<double>(selected_view.z));
-            // clip: w is the star — it is -z_view now, no longer 1 (2.10).
-            SDL_SetRenderDrawColor(renderer, 236, 196, 110, 255);
-            SDL_RenderDebugTextFormat(renderer, 380.0f, 170.0f, "clip  (%+.2f %+.2f %+.2f w=%.2f)",
-                static_cast<double>(selected_clip.x), static_cast<double>(selected_clip.y),
-                static_cast<double>(selected_clip.z), static_cast<double>(selected_clip.w));
-            SDL_SetRenderDrawColor(renderer, 150, 152, 170, 255);
-            SDL_RenderDebugTextFormat(renderer, 380.0f, 184.0f, "  w=%.2f %s",
-                static_cast<double>(selected_clip.w),
-                use_perspective ? "=-z_view (was 1!)" : "=1 (ortho keeps it)");
-            // ndc: after the perspective divide. xy in [-1,1], z in [0,1], +y UP.
-            SDL_SetRenderDrawColor(renderer, 130, 220, 170, 255);
-            SDL_RenderDebugTextFormat(renderer, 380.0f, 198.0f, "ndc   (%+.3f %+.3f %+.3f) /w",
-                static_cast<double>(selected_ndc.x), static_cast<double>(selected_ndc.y),
-                static_cast<double>(selected_ndc.z));
-            // screen: THIS lesson's viewport transform. Pixels + device depth.
-            SDL_SetRenderDrawColor(renderer, 236, 210, 150, 255);
-            SDL_RenderDebugTextFormat(renderer, 380.0f, 212.0f, "scr   (%.1f %.1f  d=%.3f) px",
-                static_cast<double>(selected_screen.x), static_cast<double>(selected_screen.y),
-                static_cast<double>(selected_screen.z));
-            SDL_SetRenderDrawColor(renderer, 150, 152, 170, 255);
-            SDL_RenderDebugText(renderer, 380.0f, 226.0f, "  ndc +y UP -> screen +y DOWN (flip)");
-
-            // Deform/move check from 2.8, plus the 2.7 w-bug flag when engaged.
-            const float want_len = scene[selected].xform.scale.x;
-            const bool rigid = std::fabs(selected_corner - 90.0f) < 0.01f
-                            && std::fabs(selected_axis_len - want_len) < 0.001f;
-            const bool w_bug = (cube_point_w != 1.0f || cube_dir_w != 0.0f);
-            SDL_SetRenderDrawColor(renderer, (rigid && !w_bug) ? 150 : 236,
-                                             (rigid && !w_bug) ? 152 : 92,
-                                             (rigid && !w_bug) ? 170 : 92, 255);
-            SDL_RenderDebugTextFormat(renderer, 380.0f, 244.0f, "|x|=%.2f corner %.0f%s%s",
-                static_cast<double>(selected_axis_len), static_cast<double>(selected_corner),
-                rigid ? "" : " DEFORM", w_bug ? "  [W/N bug]" : "");
-
-            // What to look for. Lesson 3.1's scenes each have one thing to see,
-            // so they say it themselves; otherwise the older commentary stands.
-            SDL_SetRenderDrawColor(renderer, 150, 152, 170, 255);
-            if (hs == hidden_surface::depth_view)
+            if (floor_scene)
             {
-                SDL_RenderDebugText(renderer, 380.0f, 262.0f, "the DEPTH buffer, stretched to");
-                SDL_RenderDebugTextFormat(renderer, 380.0f, 276.0f, "[%.4f, %.4f] - the whole",
-                    static_cast<double>(shown_depth.lo), static_cast<double>(shown_depth.hi));
-                SDL_RenderDebugTextFormat(renderer, 380.0f, 290.0f,
-                    "scene fits in %.1f%% of [0,1].",
-                    static_cast<double>((shown_depth.hi - shown_depth.lo) * 100.0f));
-                SDL_RenderDebugText(renderer, 380.0f, 304.0f, "That is the 1/z crowding.");
-            }
-            else if (scene_mode == scene_kind::cycle)
-            {
-                SDL_RenderDebugText(renderer, 380.0f, 262.0f, "A over B over C over A. No");
-                SDL_RenderDebugText(renderer, 380.0f, 276.0f, "order is right, and all three");
-                SDL_RenderDebugText(renderer, 380.0f, 290.0f, "average depths are equal.");
-            }
-            else if (scene_mode == scene_kind::intersect)
-            {
-                SDL_RenderDebugText(renderer, 380.0f, 262.0f, "they pass THROUGH each other:");
-                SDL_RenderDebugText(renderer, 380.0f, 276.0f, "the right answer changes");
-                SDL_RenderDebugText(renderer, 380.0f, 290.0f, "halfway across one triangle.");
-            }
-            else if (scene_mode == scene_kind::zfight)
-            {
-                SDL_RenderDebugText(renderer, 380.0f, 262.0f, "B is 1 mm in front of A, so B");
-                SDL_RenderDebugText(renderer, 380.0f, 276.0f, "should win everywhere. [B] to");
-                SDL_RenderDebugText(renderer, 380.0f, 290.0f, "D16_UNORM and watch it stop.");
-            }
-            else if (order != trs_order::trs)
-            {
-                SDL_RenderDebugText(renderer, 380.0f, 262.0f, "wrong model order [O]: 2.8's");
-                SDL_RenderDebugText(renderer, 380.0f, 276.0f, order == trs_order::tsr
-                                    ? "shear is back." : "orbit-origin is back.");
-            }
-            else if (use_perspective)
-            {
-                SDL_RenderDebugText(renderer, 380.0f, 262.0f, "the whole chain, one corner:");
-                SDL_RenderDebugText(renderer, 380.0f, 276.0f, "model->world->view->clip->ndc");
-                SDL_RenderDebugText(renderer, 380.0f, 290.0f, "->screen. [F] hides surfaces.");
-            }
-            else
-            {
-                SDL_RenderDebugText(renderer, 380.0f, 262.0f, "orthographic: every cube the same");
-                SDL_RenderDebugText(renderer, 380.0f, 276.0f, "size, rails parallel, dolly inert.");
-                SDL_RenderDebugText(renderer, 380.0f, 290.0f, "[P] back to perspective.");
+                // The floor uses the whole framebuffer, so there is no column of
+                // spare pixels to write into — every HUD line moves up into the
+                // sky above the horizon, which is the only empty part left.
+                SDL_SetRenderDrawColor(renderer, 150, 152, 170, 255);
+                SDL_RenderDebugText(renderer, 6.0f, 70.0f,
+                    "affine interpolation makes the checker swim and buckle, and breaks");
+                SDL_RenderDebugText(renderer, 6.0f, 84.0f,
+                    "along the diagonal each quad is split on. [I] toggles the fix.");
+                SDL_RenderDebugText(renderer, 6.0f, 104.0f,
+                    "[T] subdivides the floor: the error falls with the SQUARE of the");
+                SDL_RenderDebugText(renderer, 6.0f, 118.0f,
+                    "subdivision, and never reaches zero. That is why 1990s floors");
+                SDL_RenderDebugText(renderer, 6.0f, 132.0f,
+                    "were tessellated to death - and why one divide per pixel won.");
+                SDL_SetRenderDrawColor(renderer, 210, 212, 220, 255);
+                SDL_RenderDebugText(renderer, 6.0f, 152.0f,
+                    "[I] interp  [T] tessellate  [C] scene  [arrows] orbit  [-][=] dolly");
             }
 
-            SDL_SetRenderDrawColor(renderer, 210, 212, 220, 255);
-            SDL_RenderDebugText(renderer, 6.0f, 314.0f,
-                                "[F] hidden surface  [C] scene  [B] depth format  [X] object");
-            SDL_RenderDebugText(renderer, 6.0f, 328.0f,
-                                "[arrows] orbit  [-][=] dolly  [P] proj  [O] order  [Tab] demo");
+            // Everything below writes into the column of pixels beside the inset
+            // viewport, which the floor scene does not have. Guarded rather than
+            // skipped with a `continue`, so that anything added to the end of the
+            // frame keeps running for every scene.
+            if (!floor_scene)
+            {
+                        // The camera identity (its axes are the view matrix's rows; 2.9).
+                        const engine::vec3 eye = cam.eye();
+
+                        SDL_SetRenderDrawColor(renderer, 210, 212, 220, 255);
+                        SDL_RenderDebugTextFormat(renderer, 380.0f, 40.0f,
+                                                  "CAMERA   eye (%+.2f %+.2f %+.2f)",
+                                                  static_cast<double>(eye.x), static_cast<double>(eye.y),
+                                                  static_cast<double>(eye.z));
+                        SDL_SetRenderDrawColor(renderer, 150, 152, 170, 255);
+                        SDL_RenderDebugTextFormat(renderer, 380.0f, 54.0f,
+                                                  "azim %4.0f  elev %+3.0f deg  r %.1f",
+                                                  static_cast<double>(cam.azimuth * 180.0f / 3.14159265f),
+                                                  static_cast<double>(cam.elevation * 180.0f / 3.14159265f),
+                                                  static_cast<double>(cam.radius));
+                        // The projection mode — 2.10's toggle, and what distance does under it.
+                        SDL_SetRenderDrawColor(renderer, use_perspective ? 122 : 226,
+                                                         use_perspective ? 196 : 196,
+                                                         use_perspective ? 152 : 110, 255);
+                        SDL_RenderDebugTextFormat(renderer, 380.0f, 68.0f, "[P] projection = %s",
+                                                  use_perspective ? "PERSPECTIVE" : "orthographic");
+                        SDL_SetRenderDrawColor(renderer, 150, 152, 170, 255);
+                        SDL_RenderDebugText(renderer, 380.0f, 82.0f, use_perspective
+                                            ? "  [-][=] dolly: far shrinks, near grows"
+                                            : "  [-][=] dolly: NO effect on size");
+
+                        // THE LESSON'S SPINE, now complete: one corner carried through EVERY
+                        // space in the chain — model -> world -> view -> clip -> NDC -> SCREEN.
+                        // You can see w stop being 1 at clip, and the +y flip at screen.
+                        SDL_SetRenderDrawColor(renderer, 210, 212, 220, 255);
+                        SDL_RenderDebugTextFormat(renderer, 380.0f, 100.0f, "[X] %s", scene[selected].name);
+                        // Indexed geometry, made concrete: how few vertices, how many triangles.
+                        SDL_SetRenderDrawColor(renderer, 150, 152, 170, 255);
+                        SDL_RenderDebugTextFormat(renderer, 380.0f, 114.0f,
+                            "  %zu verts, %zu tris, %zu idx -> vertex 0:",
+                            scene[selected].geometry.vertices.size(),
+                            scene[selected].geometry.triangle_count(),
+                            scene[selected].geometry.indices.size());
+                        SDL_SetRenderDrawColor(renderer, 150, 152, 170, 255);
+                        SDL_RenderDebugTextFormat(renderer, 380.0f, 128.0f, "model (%+.2f %+.2f %+.2f)",
+                            static_cast<double>(selected_probe.x), static_cast<double>(selected_probe.y),
+                            static_cast<double>(selected_probe.z));
+                        SDL_SetRenderDrawColor(renderer, 226, 196, 110, 255);
+                        SDL_RenderDebugTextFormat(renderer, 380.0f, 142.0f, "world (%+.2f %+.2f %+.2f)",
+                            static_cast<double>(selected_world.x), static_cast<double>(selected_world.y),
+                            static_cast<double>(selected_world.z));
+                        SDL_SetRenderDrawColor(renderer, 130, 190, 220, 255);
+                        SDL_RenderDebugTextFormat(renderer, 380.0f, 156.0f, "view  (%+.2f %+.2f %+.2f)",
+                            static_cast<double>(selected_view.x), static_cast<double>(selected_view.y),
+                            static_cast<double>(selected_view.z));
+                        // clip: w is the star — it is -z_view now, no longer 1 (2.10).
+                        SDL_SetRenderDrawColor(renderer, 236, 196, 110, 255);
+                        SDL_RenderDebugTextFormat(renderer, 380.0f, 170.0f, "clip  (%+.2f %+.2f %+.2f w=%.2f)",
+                            static_cast<double>(selected_clip.x), static_cast<double>(selected_clip.y),
+                            static_cast<double>(selected_clip.z), static_cast<double>(selected_clip.w));
+                        SDL_SetRenderDrawColor(renderer, 150, 152, 170, 255);
+                        SDL_RenderDebugTextFormat(renderer, 380.0f, 184.0f, "  w=%.2f %s",
+                            static_cast<double>(selected_clip.w),
+                            use_perspective ? "=-z_view (was 1!)" : "=1 (ortho keeps it)");
+                        // ndc: after the perspective divide. xy in [-1,1], z in [0,1], +y UP.
+                        SDL_SetRenderDrawColor(renderer, 130, 220, 170, 255);
+                        SDL_RenderDebugTextFormat(renderer, 380.0f, 198.0f, "ndc   (%+.3f %+.3f %+.3f) /w",
+                            static_cast<double>(selected_ndc.x), static_cast<double>(selected_ndc.y),
+                            static_cast<double>(selected_ndc.z));
+                        // screen: THIS lesson's viewport transform. Pixels + device depth.
+                        SDL_SetRenderDrawColor(renderer, 236, 210, 150, 255);
+                        SDL_RenderDebugTextFormat(renderer, 380.0f, 212.0f, "scr   (%.1f %.1f  d=%.3f) px",
+                            static_cast<double>(selected_screen.x), static_cast<double>(selected_screen.y),
+                            static_cast<double>(selected_screen.z));
+                        SDL_SetRenderDrawColor(renderer, 150, 152, 170, 255);
+                        SDL_RenderDebugText(renderer, 380.0f, 226.0f, "  ndc +y UP -> screen +y DOWN (flip)");
+
+                        // Deform/move check from 2.8, plus the 2.7 w-bug flag when engaged.
+                        const float want_len = scene[selected].xform.scale.x;
+                        const bool rigid = std::fabs(selected_corner - 90.0f) < 0.01f
+                                        && std::fabs(selected_axis_len - want_len) < 0.001f;
+                        const bool w_bug = (cube_point_w != 1.0f || cube_dir_w != 0.0f);
+                        SDL_SetRenderDrawColor(renderer, (rigid && !w_bug) ? 150 : 236,
+                                                         (rigid && !w_bug) ? 152 : 92,
+                                                         (rigid && !w_bug) ? 170 : 92, 255);
+                        SDL_RenderDebugTextFormat(renderer, 380.0f, 244.0f, "|x|=%.2f corner %.0f%s%s",
+                            static_cast<double>(selected_axis_len), static_cast<double>(selected_corner),
+                            rigid ? "" : " DEFORM", w_bug ? "  [W/N bug]" : "");
+
+                        // What to look for. Lesson 3.1's scenes each have one thing to see,
+                        // so they say it themselves; otherwise the older commentary stands.
+                        SDL_SetRenderDrawColor(renderer, 150, 152, 170, 255);
+                        if (hs == hidden_surface::depth_view)
+                        {
+                            SDL_RenderDebugText(renderer, 380.0f, 262.0f, "the DEPTH buffer, stretched to");
+                            SDL_RenderDebugTextFormat(renderer, 380.0f, 276.0f, "[%.4f, %.4f] - the whole",
+                                static_cast<double>(shown_depth.lo), static_cast<double>(shown_depth.hi));
+                            SDL_RenderDebugTextFormat(renderer, 380.0f, 290.0f,
+                                "scene fits in %.1f%% of [0,1].",
+                                static_cast<double>((shown_depth.hi - shown_depth.lo) * 100.0f));
+                            SDL_RenderDebugText(renderer, 380.0f, 304.0f, "That is the 1/z crowding.");
+                        }
+                        else if (scene_mode == scene_kind::cycle)
+                        {
+                            SDL_RenderDebugText(renderer, 380.0f, 262.0f, "A over B over C over A. No");
+                            SDL_RenderDebugText(renderer, 380.0f, 276.0f, "order is right, and all three");
+                            SDL_RenderDebugText(renderer, 380.0f, 290.0f, "average depths are equal.");
+                        }
+                        else if (scene_mode == scene_kind::intersect)
+                        {
+                            SDL_RenderDebugText(renderer, 380.0f, 262.0f, "they pass THROUGH each other:");
+                            SDL_RenderDebugText(renderer, 380.0f, 276.0f, "the right answer changes");
+                            SDL_RenderDebugText(renderer, 380.0f, 290.0f, "halfway across one triangle.");
+                        }
+                        else if (scene_mode == scene_kind::floor)
+                        {
+                            SDL_RenderDebugText(renderer, 380.0f, 262.0f, "affine interpolation makes the");
+                            SDL_RenderDebugText(renderer, 380.0f, 276.0f, "checker swim, and breaks along");
+                            SDL_RenderDebugText(renderer, 380.0f, 290.0f, "the diagonal. [T] subdivides:");
+                            SDL_RenderDebugText(renderer, 380.0f, 304.0f, "the error falls, never to zero.");
+                        }
+                        else if (scene_mode == scene_kind::zfight)
+                        {
+                            SDL_RenderDebugText(renderer, 380.0f, 262.0f, "B is 1 mm in front of A, so B");
+                            SDL_RenderDebugText(renderer, 380.0f, 276.0f, "should win everywhere. [B] to");
+                            SDL_RenderDebugText(renderer, 380.0f, 290.0f, "D16_UNORM and watch it stop.");
+                        }
+                        else if (order != trs_order::trs)
+                        {
+                            SDL_RenderDebugText(renderer, 380.0f, 262.0f, "wrong model order [O]: 2.8's");
+                            SDL_RenderDebugText(renderer, 380.0f, 276.0f, order == trs_order::tsr
+                                                ? "shear is back." : "orbit-origin is back.");
+                        }
+                        else if (use_perspective)
+                        {
+                            SDL_RenderDebugText(renderer, 380.0f, 262.0f, "the whole chain, one corner:");
+                            SDL_RenderDebugText(renderer, 380.0f, 276.0f, "model->world->view->clip->ndc");
+                            SDL_RenderDebugText(renderer, 380.0f, 290.0f, "->screen. [F] hides surfaces.");
+                        }
+                        else
+                        {
+                            SDL_RenderDebugText(renderer, 380.0f, 262.0f, "orthographic: every cube the same");
+                            SDL_RenderDebugText(renderer, 380.0f, 276.0f, "size, rails parallel, dolly inert.");
+                            SDL_RenderDebugText(renderer, 380.0f, 290.0f, "[P] back to perspective.");
+                        }
+
+                        SDL_SetRenderDrawColor(renderer, 210, 212, 220, 255);
+                        SDL_RenderDebugText(renderer, 6.0f, 314.0f,
+                                            "[F] hidden surface  [C] scene  [B] depth  [I] interp  [T] tessellate");
+                        SDL_RenderDebugText(renderer, 6.0f, 328.0f,
+                                            "[arrows] orbit  [-][=] dolly  [P] proj  [O] order  [Tab] demo");
+            }
         }
         else if (which == demo::basis)
         {
@@ -2845,7 +3104,10 @@ int main(int argc, char* argv[])
         SDL_SetRenderScale(renderer, 1.0f, 1.0f);
         SDL_RenderPresent(renderer);
 
-        if (in.key_down(SDL_SCANCODE_T))
+        // The frame throttle moved from [T] to [Y] in Lesson 3.2, because [T]
+        // now cycles the floor tessellation and a key that means two things in
+        // two demos is a key that gets pressed by accident in both.
+        if (in.key_down(SDL_SCANCODE_Y))
         {
             SDL_Delay(k_throttle_ms);
         }

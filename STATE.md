@@ -7,7 +7,7 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-08-01 (after Lesson 3.1 — Module 3 opens, 27 of 94 lessons)
+updated: 2026-08-02 (after Lesson 3.2, 28 of 94 lessons)
 
 conventions:
   world: right-handed, Y-up, -Z forward
@@ -53,6 +53,35 @@ conventions:
         THE TEST IS NOT PART OF THE BUFFER. depth_buffer stores and clears; the
         rasterizer compares. Same split as SDL_GPUDepthStencilState's three
         independent knobs (compare_op / enable_depth_test / enable_depth_write).
+  interpolation: BARYCENTRIC INTERPOLATION PROMISES ONE THING — the unique AFFINE
+        function of the PIXEL POSITION agreeing with three corner values. So it is
+        correct for a quantity affine in screen space and wrong for one that is not.
+        Two answers, and the asymmetry is load-bearing:
+          DEPTH        interpolated DIRECTLY. Already affine (3.1). Correcting it
+                       twice is a real bug: self-consistent, so it reads as a depth
+                       PRECISION problem and sends you to the near plane.
+          EVERYTHING   perspective-corrected: interpolate a/w and 1/w, divide.
+          ELSE         a is linear over the SURFACE; substituting the projection
+                       gives a/w = (affine in x_n,y_n) + delta*(1/w), affine by 3.1.
+                       One derivation covers uv, colour, normals — the constants
+                       cancel and are never computed.
+        vertex::inv_w stores 1/w PRE-DIVIDED (the loop wants 1/w, and the divide-back
+        becomes a multiply). DEFAULTS TO 1 = the orthographic case, where the
+        correction is the identity — so every 2-D fill written before 3.2 goes
+        through the new path and comes out BIT-IDENTICAL (verified, 17275 px, 0 differ).
+        COST: one divide per pixel, shared by every attribute, so it amortises the
+        moment a fragment carries more than one thing.
+        THE BLIND SPOT: a triangle whose plane is PARALLEL TO THE SCREEN has constant
+        w, so affine and correct agree EXACTLY. Sprites, UI quads, billboards and the
+        front faces of axis-aligned boxes are all in that family — which is why BOTH
+        of Module 3's interpolation bugs survive any test scene made of them. The
+        question to ask is not "what is different about the game" but "WHAT FAMILY OF
+        INPUT DOES MY TEST SCENE STRUCTURALLY EXCLUDE?"
+        THE SHAPE TO RECOGNISE: an error that is EXACTLY ZERO AT THE CORNERS and
+        maximal in the middle is a chord drawn under a curve. That is why checking
+        vertex values — the first thing anyone does — never finds it. Chord error is
+        O(h^2), so subdividing converges QUADRATICALLY and never terminates: measured
+        ratios 2.31, 2.42, 2.62, 2.84, 3.10 (-> 4), and 381 px still wrong at 2048 tris.
   homogeneous: w SAYS WHAT KIND OF THING THIS IS.
         w = 1  a POSITION  -> the translation column is added in full
         w = 0  a DIRECTION -> the translation column is multiplied by 0
@@ -656,6 +685,7 @@ completed:
   - 2.12 MILESTONE: A Spinning Wireframe Mesh  (**Module 2 complete**)
   ===> MODULE 2 COMPLETE <===
   - 3.1  The Painter's Problem and the Z-Buffer
+  - 3.2  Perspective-Correct Interpolation
 
 capabilities:
   - verified C++20 toolchain (MSVC / GCC / Clang), 64-bit
@@ -940,6 +970,22 @@ capabilities:
     [C] four scenes (solids, CYCLE, intersecting, near-coplanar), [B] depth format.
     Every frame runs BOTH hidden-surface algorithms on identical geometry and counts
     disagreeing pixels — the lesson's headline number, measured live
+  - PERSPECTIVE-CORRECT INTERPOLATION of every vertex attribute; the affine failure
+    kept behind interpolation::affine and summonable on [I]
+  - vertex now carries x, y, z, inv_w, u, v, colour; mesh carries an optional uvs span
+    (empty = this geometry has none) plus uv_at()
+  - fill_style: render state as an OBJECT (interpolation + shading + blend_space),
+    every field defaulting to the correct value. The shape of a GPU pipeline object;
+    adding a knob in 3.6 costs one field, not one parameter at every call site
+  - shading::uv_checker — a procedural debug pattern, explicitly a placeholder for a
+    fragment shader, which 3.6 will strain and Module 4 replaces
+  - the VIEWPORT IS NOW A PARAMETER, threaded through project/line3/draw_world/
+    draw_mesh/collect_triangles. The floor scene uses the whole 320x180 framebuffer
+    (which is already 16:9, so no new projection); everything else keeps the inset rect
+  - demo: a checkered ground plane to the horizon, [I] interpolation, [T] tessellation
+    (1..16, rebuilt only on change), and the affine-vs-correct disagreement measured live
+  - projection_scratch: reusable per-vertex buffers owned ACROSS frames, replacing the
+    fixed 64-vertex stack arrays that the 289-vertex floor would have silently truncated
   - skills: reading SDL headers as source of truth; debugging with lldb/gdb/VS
 
 decisions:
@@ -1081,6 +1127,32 @@ decisions:
     two named corners are still exactly +-tilt. It exists because end-to-end planks
     overlap in a sliver, and a sliver is not a demonstration: swept (R, width),
     the disagreement went 7 px -> 144 px. Measured, not eyeballed.
+  - inv_w STORED PRE-DIVIDED rather than w. The inner loop interpolates 1/w, so
+    storing w would mean a divide per vertex AND the same divide per pixel; and the
+    divide-back becomes a multiply by a reciprocal already computed.
+  - AFFINE MODE IS NOT A SECOND CODE PATH. It is the same arithmetic with every 1/w
+    forced to 1 — which is what affine interpolation IS: a perspective renderer doing
+    orthographic interpolation. One loop, and it says the thing. Costs a redundant
+    divide in a mode that exists only to be shown failing; worth it.
+  - fill_style replaces the growing tail of trailing enums. Not only tidiness: it is
+    the pipeline-object shape (SDL_GPUGraphicsPipelineCreateInfo), and it previews
+    Module 4 §2's "why state lives in pipeline objects".
+  - shading enum lives in the RASTERIZER and is admitted to be a placeholder for a
+    fragment shader. Introduce the crude thing, let it strain (3.6), let the strain
+    motivate the right thing — the same arc as main.cpp -> Module 5's demos/ split.
+  - mesh uvs are a PARALLEL ARRAY, not interleaved. Parallel lets the cube and
+    icosahedron carry none and store none; interleaving is what the GPU wants and what
+    Module 4 revisits with the memory-layout diagram the decision deserves.
+  - the FLOOR gets the whole framebuffer as its viewport, and that is measured rather
+    than chosen: scratch/fit_floor.cpp sweeps every extent worth having and the near
+    edge ALWAYS projects outside the inset rect. Not a tuning failure — a surface you
+    stand on fills the bottom of your view, which is what makes it a good subject.
+  - the uvs on the floor come from the WORLD POSITION, not the grid index, so the
+    checker is bit-identical at every tessellation and [T] changes only the
+    interpolation error. Without that you are comparing two different pictures.
+  - std::floor, not a cast to int, in checker_at. A cast truncates toward zero, so
+    -0.5 and +0.5 share cell 0 and the pattern grows a doubled cell at the origin —
+    which the floor's uvs (-3..+3) would have shown.
   - the naive collision test is KEPT in the shipped code behind state::swept_collision
     rather than deleted, so the failure can be reproduced on demand (pedagogy §5:
     show the artifact). It is dead weight only if you think a bug you can summon is
@@ -1111,54 +1183,66 @@ files:
                  02-07-homogeneous.html, 02-08-space-chain.html,
                  02-09-view-matrix.html, 02-10-perspective.html,
                  02-11-viewport.html, 02-12-wireframe-mesh.html,
-                 03-01-z-buffer.html
+                 03-01-z-buffer.html, 03-02-perspective-correct.html
   docs/_template/: lesson-template.html, README.md, apply-shared.py, check-page.js
   memory/: 2026-07-16.md, 2026-07-18.md, 2026-07-21.md, 2026-07-22.md,
            2026-07-23.md, 2026-07-24.md, 2026-07-25.md, 2026-07-26.md,
            2026-07-27.md, 2026-07-28.md, 2026-07-29.md, 2026-07-30.md,
-           2026-07-31.md, 2026-08-01.md
+           2026-07-31.md, 2026-08-01.md, 2026-08-02.md
   (retired: hello.cpp)
 
-next: 3.2 — Perspective-Correct Interpolation
-      (planned filename: docs/lessons/03-02-perspective-correct.html — 3.1 links to it)
-      3.1 LEFT THE LOOSE END LYING IN PLAIN SIGHT and said so, twice: device depth
-      interpolates exactly BECAUSE the projection had already converted it into a
-      screen-affine quantity, and NOTHING ELSE a vertex carries has had that done to
-      it. 3.2 collects.
-        - SHOW THE ARTIFACT FIRST (pedagogy §5). A textured or checkered quad on a
-          floor, seen at a glancing angle, with affine interpolation: the classic
-          PS1 swim/buckle. The seam runs along the triangle DIAGONAL, which is the
-          giveaway — split the quad the other way and the wrongness moves with it.
-          Two triangles that share an edge disagree about what is in the middle.
-          The demo already has fill_triangle_uv (2.4's checker) and quad_mesh().
-        - THE DERIVATION IS ALREADY DONE. 3.1 §3.4 proved 1/w is AFFINE in screen
-          space. That is the whole tool. An attribute a is linear over the SURFACE,
-          so a/w is affine in screen space too; interpolate a/w and 1/w with the
-          ordinary barycentric weights, then divide: a = (a/w) / (1/w). Do NOT
-          re-derive 1/w's affinity — reference 3.1 and spend the space on WHY a/w
-          is the thing that behaves, which is the step people skip.
-        - WHERE w COMES FROM. vertex has x, y, z, colour. Perspective-correct
-          interpolation needs the CLIP-SPACE w at each corner, which project()
-          currently computes and throws away (same crime 2.11 committed with depth).
-          DECIDE: add `float inv_w` to vertex (pre-divided, so the rasterizer never
-          divides per vertex) or `float w`. inv_w is probably right — it is what the
-          inner loop wants and it makes the "divide at the end" a multiply.
-        - THE COST IS ONE DIVIDE PER PIXEL, and that is the honest headline: depth
-          was free, this is not. Measure it. Then note that the divide is per pixel
-          and not per attribute, so it amortises the moment there is more than one.
-        - CHECK IT NUMERICALLY, not by eye: put a u,v on a deep quad, sample the
-          middle pixel, and compare against the ray-plane intersection truth — the
-          same harness shape as scratch/verify_31.cpp's affinity test, which is
-          already written and can be extended rather than rewritten.
-        - DEPTH IS THE CONTROL. z_ndc must come out IDENTICAL under both the old and
-          new code paths, because it was already correct. If it moves, the new path
-          is wrong. That is a free regression test and it should be in the lesson.
-      Module 3 then continues: 3.3 near-plane clipping (Sutherland-Hodgman; the
-      artifact is 3.1's collect_triangles DROPPING whole triangles when any vertex
-      fails the w > 0.05 guard), 3.4 back-face culling + the cross product deepened
-      (the meshes are wound CCW-outward and verified, AND 3.1 left a measured debt:
-      the silhouette tie artifact that culling removes — 29 px -> 0 px), 3.5 the
-      hand-rolled OBJ loader, 3.6 normals and Lambert (replacing face_shade's debug
-      palette), 3.7 specular/Blinn-Phong, 3.8 flat vs Gouraud vs per-pixel, 3.9
-      texture mapping + bilinear, 3.10 profiling and the Module 3 capstone.
+next: 3.3 — Near-Plane Clipping
+      (planned filename: docs/lessons/03-03-near-plane-clipping.html — 3.2 links to it)
+      THE ARTIFACT IS ALREADY IN THE DEMO AND 3.2 NAMES IT: orbit the floor scene and
+      the floor VANISHES. project() returns visible=false when clip.w <= 0.05, and
+      collect_triangles then drops the WHOLE triangle. Survivable when the geometry is
+      a small object mid-view; catastrophic when it is the wall you are walking into,
+      which is exactly what the 1x1 floor is.
+        - SHOW IT FIRST (pedagogy §5). Two artifacts, not one: (a) whole triangles
+          disappearing as the camera pushes through them, and (b) — worse and more
+          instructive — what happens if you REMOVE the guard instead of fixing it.
+          A vertex behind the eye has w < 0, the divide flips its sign, and it lands
+          on the OPPOSITE side of the screen: the triangle stretches across the whole
+          frame or turns inside out. 2.7 warned about negative w in the abstract; this
+          is where it bites. Build both.
+        - THE FIX IS NOT A BIGGER GUARD. It is to CUT the triangle against the near
+          plane and rasterize the part in front. Sutherland-Hodgman: walk the polygon's
+          edges, classify each vertex against the plane, and emit crossings. One
+          triangle in gives a triangle or a QUAD out (which is 2 triangles) — so a
+          clipper returns a variable number of triangles, and that is the design
+          pressure worth naming.
+        - CLIP IN CLIP SPACE, BEFORE THE DIVIDE. This is the part people get wrong.
+          Under our [0,1] depth convention the NEAR PLANE is z_clip = 0: 2.10's
+          depth row gives z_clip = A*z_v + B, which is 0 exactly at z_v = -near
+          (checked). So the inside test is z_clip >= 0. Do NOT confuse that with
+          w_clip >= 0, which is the plane through the EYE — a different, more
+          permissive plane that still lets the divide blow up. DERIVE it in the
+          lesson rather than asserting it. And note that clipping AFTER the divide
+          is impossible: the divide is what destroyed the information.
+        - INTERPOLATE THE NEW VERTEX'S ATTRIBUTES. A crossing point needs a position,
+          a uv, a colour AND a w — and it is a LINEAR interpolation in CLIP space,
+          before the divide, which is where everything is still affine. That is a
+          direct payoff from 3.2's derivation and should be presented as one: the
+          reason clipping is done pre-divide is the same reason a/w interpolates.
+          engine::vertex is a SCREEN-space type, so the clipper needs a clip-space
+          vertex type — DECIDE whether that is a new struct or whether collect_
+          triangles grows a clip-space stage. Probably a new `clip_vertex {vec4 pos;
+          vec2 uv; Uint32 colour;}` and the projection pipeline becomes
+          transform -> clip -> divide -> viewport -> engine::vertex.
+        - ONLY THE NEAR PLANE. The other five frustum planes are an OPTIMISATION (the
+          rasterizer's bbox clamp already handles them correctly, just wastefully);
+          the near plane is a CORRECTNESS requirement because the divide is undefined
+          there. Say which is which — it is the whole reason this lesson exists and
+          3.4's culling does not.
+        - VERIFY: sweep the camera through the floor and assert (a) no triangle ever
+          disappears, (b) the clipped geometry's silhouette matches the unclipped one
+          wherever both are valid, and (c) attributes at the new vertices match the
+          ray-plane truth — the same harness shape scratch/verify_32.cpp already uses.
+      Module 3 then continues: 3.4 back-face culling (the meshes are wound CCW-outward
+      and verified, AND 3.1 left a measured debt: the silhouette tie artifact culling
+      removes, 29 px -> 0), 3.5 the hand-rolled OBJ loader (which finally gives the uvs
+      3.2 added a real source), 3.6 normals and Lambert (replacing face_shade's debug
+      palette and straining the shading enum, as designed), 3.7 specular/Blinn-Phong,
+      3.8 flat vs Gouraud vs per-pixel, 3.9 texture mapping + bilinear (replacing
+      checker_at with a real sampler), 3.10 profiling and the Module 3 capstone.
 ```

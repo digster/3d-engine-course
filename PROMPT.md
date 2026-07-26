@@ -720,3 +720,54 @@ SVGs, so their `<text>` fell back to black and vanished in dark mode. Fixed in t
 re-stamped across all 31 pages, which repaired 2.12's widget too.
 
 **Module 3 is open**, and the geometry pipeline now produces solids.
+
+---
+
+## 2026-08-02 — Lesson 3.2
+
+> next
+
+Resumed from `STATE.md` → `next: 3.2 — Perspective-Correct Interpolation`, which had flagged one
+open decision (whether `vertex` should carry `w` or `inv_w`) and one free regression test (depth
+must not move).
+
+### Judgement calls
+
+| Question | Decision | Why |
+|---|---|---|
+| `w` or `inv_w` on the vertex? | **`inv_w`, pre-divided** | The inner loop interpolates `1/w`, so storing `w` would mean a divide per vertex *and* the same divide again per pixel; and the divide-back at the end becomes a multiply by a reciprocal we had to compute anyway. Defaulting it to `1` also makes the 2-D path exactly correct with no special case — `w = 1` is the orthographic case, where the correction is the identity. |
+| Two loops, or one? | **One, with affine as `inv_w = 1`** | Affine interpolation *is* the correct arithmetic with every `1/w` forced to 1 — a perspective renderer doing orthographic interpolation. Writing it that way is shorter than duplicating the fill's subtle set-up and it says the thing. Cost: a redundant divide in a mode that exists only to be shown failing. |
+| Where do the growing knobs go? | **A `fill_style` struct** | `blend_space` (2.4) was about to be joined by interpolation and shading, with a lighting term due in 3.6. Not merely tidiness: it is the pipeline-object shape, and `SDL_GPUGraphicsPipelineCreateInfo` is this struct several times over. Every field defaults to the correct value, so the short call is the right call. |
+| How does a uv become a colour with no textures yet? | **`shading::uv_checker`, admitted to be a placeholder** | A procedural debug pattern — which every engine ships, because it is how you check a uv layout before there is art. The header says outright that the enum stands in for a fragment shader, that 3.6 will strain it, and that Module 4 replaces it. Introduce the crude thing and let the strain motivate the right thing, the same arc `main.cpp` is on toward Module 5. |
+| Interleaved or parallel uvs on `mesh`? | **Parallel span, empty = none** | Lets the cube and icosahedron carry no uvs and store none. Interleaving is what the GPU wants and what Module 4 revisits with the memory-layout diagram the decision deserves. |
+| The floor spills outside the scene viewport | **Give the floor the whole framebuffer** | Measured rather than tuned: `scratch/fit_floor.cpp` swept every extent worth having and the near edge *always* projects outside the inset rect. That is geometry, not a tuning failure — a surface you stand on fills the bottom of your view, which is the same property that makes it a good subject. 320×180 is already 16:9, so no new projection is needed, and the change was to thread the viewport through as a parameter, which is what Lesson 2.11 built it to be. |
+
+### Verification
+
+`scratch/verify_32.cpp` links the real rasterizer. Over 199,241 random triangles carrying a random
+attribute linear over their surface, perspective-correct interpolation is wrong by at most
+`1.3 × 10⁻¹²` (double-precision noise) while affine is wrong by up to **9.89** on attributes whose
+whole range is about ±13. The worked example checks out exactly: at the screen midpoint of an edge
+running from `w = 1` to `w = 100`, the true `u` is `0.00990099`, affine gives `0.5` — **50.5× too
+far** — and `0.005 / 0.505` gives the truth to every digit.
+
+Two controls, both green. **Depth must not move:** over a triangle whose colours change on 20,590
+pixels, the depth buffer differs on `0`. **The 2-D path must not move:** 17,275 covered pixels,
+`0` differences between the two interpolation modes.
+
+The tessellation sweep produced the lesson's best number and its most instructive mistake. The
+pixel-difference count read 48.5%, 48.2%, 51.2%, 46.7% and then collapsed to 4.9% — which looks
+like the error behaving oddly and is actually the *metric* saturating: two scrambled two-colour
+images differ on about half their pixels no matter how much worse one gets. Measuring the worst uv
+error instead gave `4.23 → 1.83 → 0.76 → 0.29 → 0.10 → 0.03`, from which second-order convergence
+is obvious — and at 2,048 triangles the floor is still wrong on 381 pixels. Convergence is not
+termination.
+
+Both floor renders were dumped to PPM and looked at, which is how the widget's hairline gaps along
+the split diagonal were caught: piece-based drawing straddled the two triangles' differing maps.
+Rewritten with a `clipPath` per triangle — no gaps, fewer polygons, and the perspective path now
+emits 13 elements regardless of subdivision, which demonstrates the lesson's point in the DOM.
+
+`check-page.js` returned `pass: true` after four label collisions were fixed. It could not catch
+the one that mattered: **Figure 5's caption still described a dashed line I had removed**, found by
+reading the rendered figure against its own text.

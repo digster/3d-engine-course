@@ -180,7 +180,8 @@ void fill_triangle(framebuffer& fb,
 ///
 /// Lesson 2.4 predicted that Module 3 would add depth, texture coordinates and
 /// normals here, "each one three more lines in the same loop". Lesson 3.1
-/// collects on the first of those: `z`.
+/// collected on `z`; Lesson 3.2 collects on `u`, `v` — and on `inv_w`, which is
+/// the price of carrying them correctly.
 struct vertex
 {
     int x = 0;                       ///< pixel column
@@ -204,7 +205,75 @@ struct vertex
     /// for something with no depth to speak of.
     float z = 0.0f;
 
+    /// **The reciprocal of the clip-space `w`** at this corner — that is,
+    /// `1 / (-z_view)` under a perspective projection.
+    ///
+    /// This is the one number that makes every *other* attribute interpolate
+    /// correctly, and Lesson 3.2 derives why: `1/w` is affine in screen space
+    /// (Lesson 3.1 §3.4), and so is `a/w` for any attribute `a` that is linear
+    /// over the surface. Interpolate both, divide at the end, and you get `a`.
+    ///
+    /// Stored **pre-divided**, not as `w`, for two reasons. The inner loop wants
+    /// `1/w` — it interpolates it directly — so storing `w` would mean a divide
+    /// per vertex *and* the same divide again inside the loop. And the final
+    /// "divide back" becomes a multiply by the reciprocal we already had to
+    /// compute.
+    ///
+    /// **Defaults to 1**, which is exactly right: `w = 1` is the orthographic /
+    /// 2-D case, where the correction is the identity and affine interpolation is
+    /// already correct. Nothing written before Lesson 3.2 needs updating, and
+    /// nothing written before it was wrong.
+    float inv_w = 1.0f;
+
+    float u = 0.0f;                  ///< texture coordinate; 3.9 gives it texels
+    float v = 0.0f;
+
     Uint32 colour = 0xFFFFFFFFu;     ///< ARGB8888 as stored — i.e. sRGB-encoded
+};
+
+/// Whether attributes are corrected for perspective.
+///
+/// Like `blend_space` and `draw_line_naive`, the wrong one is kept so it can be
+/// summoned rather than described. This is the fifth such bargain in the engine.
+enum class interpolation
+{
+    /// Interpolate attributes directly from the barycentric weights, ignoring
+    /// `w`. **Wrong** on any surface that is not parallel to the screen, and
+    /// wrong in the specific, famous way Lesson 3.2 opens with: textures that
+    /// swim and buckle, with the error largest along a triangle's longest run in
+    /// depth and a visible break along the diagonal a quad is split on.
+    ///
+    /// It is not *arbitrarily* wrong. It is exactly what you get if you believe
+    /// `w = 1` everywhere — which is to say, it is a perspective renderer doing
+    /// orthographic interpolation.
+    affine,
+
+    /// Interpolate `a/w` and `1/w`, then divide. **The correct one**, and the
+    /// default. Costs one divide per pixel, which is the honest headline: depth
+    /// came free in Lesson 3.1, and this does not.
+    perspective
+};
+
+/// How a covered pixel turns its interpolated attributes into a colour.
+///
+/// This enum is a **placeholder for a fragment shader**, and saying so now is
+/// cheaper than pretending otherwise later. A real renderer lets the caller supply
+/// the function; Module 4 does exactly that, and calls it a fragment shader.
+/// Lesson 3.6 will add a lighting term and this enum will start to strain, which
+/// is the point at which the right structure will have earned itself.
+enum class shading
+{
+    /// The barycentric blend of the three corner colours — Gouraud, from
+    /// Lesson 2.4.
+    vertex_colour,
+
+    /// A procedural checkerboard evaluated at `(u, v)`, one cell per unit.
+    ///
+    /// A **debug pattern**, not a texture: no image, no sampler, no filtering.
+    /// Every engine ships something like it, because it is how you check a mesh's
+    /// uv layout before there is any art to put on it. Lesson 3.9 replaces the
+    /// rule with a lookup, and nothing else about the loop changes.
+    uv_checker
 };
 
 /// Which space three vertex colours are combined in.
@@ -227,12 +296,32 @@ enum class blend_space
     encoded
 };
 
-/// Fill a triangle whose corners carry their own colours — **Gouraud shading**.
+/// The knobs a fill runs under, gathered into one object.
+///
+/// Three booleans-worth of state used to be three trailing parameters, and a
+/// fourth was about to arrive. Gathering them is not only tidiness: it is the
+/// shape the hardware uses. A GPU does not take render state as call arguments —
+/// it bakes it into a **pipeline object** created once and bound before drawing,
+/// because validating and compiling that state per draw call would be ruinous.
+/// `SDL_GPUGraphicsPipelineCreateInfo` is exactly this struct, several times
+/// larger. Module 4 §2 makes the argument properly; this is a first taste, and it
+/// means adding a knob in 3.6 costs one field rather than one more parameter at
+/// every call site.
+///
+/// Every field has the *correct* value as its default, so `fill_triangle(fb, a, b, c)`
+/// is right, and every deliberately-wrong mode has to be asked for by name.
+struct fill_style
+{
+    interpolation interp = interpolation::perspective;
+    shading shade = shading::vertex_colour;
+    blend_space space = blend_space::linear;
+};
+
+/// Fill a triangle whose corners carry their own attributes — the shaded fill.
 ///
 /// Every interior pixel gets the barycentric-weighted average of the three
-/// corner colours, which is the unique affine function agreeing with them
-/// (Lesson 2.3 §3.7). Two details that are easy to get wrong and invisible when
-/// you do:
+/// corners, which is the unique affine function agreeing with them (Lesson 2.3
+/// §3.7). Three details that are easy to get wrong and invisible when you do:
 ///
 ///   - the weights used here are **unbiased**. The top-left rule's `-1` decides
 ///     *coverage*, and feeding it into an attribute displaces the whole field by
@@ -240,6 +329,11 @@ enum class blend_space
 ///     §3.5.
 ///   - the blend happens in **linear light** by default, because a colour is a
 ///     quantity of light and averaging encoded values does not average light.
+///   - attributes are **perspective-corrected** by default (Lesson 3.2). What is
+///     interpolated is `a/w` and `1/w`; the division at the end recovers `a`.
+///     Skip it and a texture swims. Note the asymmetry with depth: `z` is
+///     interpolated *directly*, because the projection has already made device
+///     depth affine in screen space and correcting it again would be wrong.
 ///
 /// Same coverage as the flat `fill_triangle` — identical bounding box, identical
 /// fill rule, identical pixels — so the two can be swapped without a seam
@@ -263,9 +357,10 @@ enum class blend_space
 /// need that until Module 6, and a knob with one setting is worse than no knob.
 ///
 /// @param depth  the depth attachment to test and write against, or `nullptr`.
+/// @param style  interpolation, shading and blend space. The default is correct.
 void fill_triangle(framebuffer& fb, depth_buffer* depth,
                    const vertex& a, const vertex& b, const vertex& c,
-                   blend_space space = blend_space::linear);
+                   fill_style style = {});
 
 /// The same fill with no depth attachment — `fill_triangle(fb, nullptr, …)`.
 ///
@@ -273,9 +368,9 @@ void fill_triangle(framebuffer& fb, depth_buffer* depth,
 /// and should not have to say `nullptr` to mean "this is a flat picture".
 inline void fill_triangle(framebuffer& fb,
                           const vertex& a, const vertex& b, const vertex& c,
-                          blend_space space = blend_space::linear)
+                          fill_style style = {})
 {
-    fill_triangle(fb, nullptr, a, b, c, space);
+    fill_triangle(fb, nullptr, a, b, c, style);
 }
 
 /// The outline only — three calls to draw_line.

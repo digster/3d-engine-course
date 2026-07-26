@@ -1487,3 +1487,102 @@ label, and 2.12's widget was repaired by re-stamping.
 
 General rule: when a lint tells you not to do the obvious thing, check whether the obvious thing is
 a symptom of a missing shared rule rather than a local mistake.
+
+## Interpolate the quantity that is affine in the space you are walking (Lesson 3.2)
+
+Lessons 3.1 and 3.2 are the same sentence applied twice. Barycentric interpolation promises exactly
+one thing: **the unique affine function of the pixel position** that agrees with three corner
+values. So the only question worth asking about any quantity is *is this affine in screen space?*
+
+- Device depth: **yes**, because the projection matrix's depth row already made it so. Interpolate
+  it directly. Correcting it again is a genuine bug.
+- View-space `z`: **no** — it is the reciprocal of an affine function.
+- Texture coordinates, colours, normals: **no**, but `a/w` is, and so is `1/w`. Interpolate both
+  and divide.
+
+The derivation for the third case is five lines and it never mentions texture coordinates: write
+`a = αx_v + βy_v + γz_v + δ`, substitute the projection, divide by `w`, and the constants cancel
+out of the conclusion. One derivation therefore covers every attribute a vertex will ever carry —
+which is why hardware documentation can describe varying interpolation in a paragraph.
+
+The reusable habit: when an interpolation looks wrong, do not reach for a fudge factor. Ask which
+space the interpolator walks in, and what is affine *there*.
+
+
+## An error that is zero at the corners is a chord under a curve (Lesson 3.2)
+
+Affine texture warping is invisible to every check you would naturally run. Print the corner uvs —
+correct. Verify the mesh — correct. Look at the wireframe — correct. The error is **exactly zero at
+all three vertices and maximal in the interior**, because that is what a chord does under a curve.
+
+Recognising the shape tells you three things at once: where to look (the middle), why your tests
+passed (they sampled the endpoints), and how it will respond to subdivision (quadratically — chord
+error over an interval `h` is `O(h²)`).
+
+That last one is worth having as a number rather than a feeling. Measured on this course's floor,
+the improvement ratios per doubling run 2.31, 2.42, 2.62, 2.84, 3.10 — climbing toward 4 — and at
+2,048 triangles the picture is *still* wrong on 381 pixels. **Convergence is not termination.** Any
+time subdivision is proposed as a fix for an interpolation error, that distinction is the whole
+argument.
+
+
+## Ask what your test scene structurally cannot show (Lesson 3.2)
+
+Both of Module 3's interpolation bugs — view-space depth in 3.1, affine attributes in 3.2 — are
+*exactly zero* on a triangle whose plane is parallel to the screen, because `w` is then constant
+across it and every interpolation scheme agrees. Sprites, UI quads, billboards and the front faces
+of axis-aligned boxes are all in that family. A test scene built from them cannot reveal either
+bug, no matter how carefully it is inspected.
+
+This reframes "it works on my test scene" from an embarrassment into a question with a findable
+answer: **what family of input does my test set structurally exclude?** Here the answer was
+"anything steeply angled", and the fix was to put a steeply-angled surface in the demo permanently,
+one keypress away. That is cheaper than remembering to test for it.
+
+
+## A saturating metric hides the thing it is measuring (Lesson 3.2)
+
+The demo counts pixels where two renders disagree. On the tessellation sweep it read 48.5%, 48.2%,
+51.2%, 46.7% — flat, and then fell off a cliff to 4.9%. That looks like a threshold effect in the
+*error*. It is not: it is the **metric** saturating. Once the uv error exceeds half a checker cell
+the pattern is scrambled, and two scrambled two-colour images differ on about half their pixels
+however much worse one of them gets. *You cannot be more wrong than a coin flip.*
+
+Measuring the underlying quantity instead — worst uv error, in cells — gave a clean
+`4.23 → 1.83 → 0.76 → 0.29 → 0.10 → 0.03`, from which the second-order convergence is obvious.
+
+The general hazard: **measuring a continuous error through a quantised output caps your dynamic
+range at the quantisation.** Pixel-difference counts, pass/fail rates and anything else derived
+from a thresholded comparison all have this ceiling. Keep one metric on the raw quantity.
+
+
+## A parameter list that keeps growing is asking to be a state object (Lesson 3.2)
+
+`fill_triangle` collected a `blend_space` in 2.4, was about to collect an interpolation mode and a
+shading mode in 3.2, and will want a lighting term in 3.6. Four trailing enums at every call site
+is where an API starts to rot — and the fix was not invention but *recognition*: the hardware
+already solved this, and calls the answer a **pipeline object**. A GPU does not take render state as
+draw-call arguments; it bakes it into an object built once and bound before drawing, because
+validating that state per draw would be ruinous.
+
+So `fill_style` is not tidiness, it is adopting a shape that is known to be right and that Module 4
+will make literal. Two properties worth copying deliberately: **every field defaults to the correct
+value**, so the right call is the short call and each deliberately-broken mode must be named; and
+adding a knob costs one field rather than one argument at every call site.
+
+
+## The fixed-size scratch array that was fine until it wasn't (Lesson 3.2)
+
+`collect_triangles` transformed vertices into `engine::vec3 view_pos[64]`, clamped with
+`std::min(mesh.vertices.size(), std::size(view_pos))`. Correct and cheap while the largest mesh was
+a twelve-vertex icosahedron. Lesson 3.2's tessellated floor has **289** vertices, and the clamp
+would have silently drawn a fraction of it — no crash, no warning, just a floor with a bite out of
+it and no obvious cause.
+
+The clamp is the trap. A hard limit that *truncates* rather than failing converts a capacity bug
+into a rendering bug, which is much harder to trace. Two honest options: assert, or remove the
+limit. We removed it — `std::vector` scratch owned **across frames** by the caller, so `clear()`
+keeps the capacity and the steady state allocates nothing.
+
+That ownership detail is the whole trick, and it is the smallest possible preview of Module 8: the
+fix for allocation in a hot loop is almost never a faster allocator, it is not allocating.

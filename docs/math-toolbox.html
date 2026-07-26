@@ -2006,6 +2006,55 @@ td code { font-size: 0.82em; }
     </p>
   </div>
 
+  <div class="tool">
+    <h3>Perspective-correct interpolation <span class="from">Lesson 3.2</span></h3>
+    <div class="eq">
+      <span>\[ a \;=\; \frac{\sum_i f_i\,(a_i/w_i)}{\sum_i f_i\,(1/w_i)} \]</span>
+      <span class="eq-plain">a = ( f0*a0/w0 + f1*a1/w1 + f2*a2/w2 ) / ( f0/w0 + f1/w1 + f2/w2 )</span>
+    </div>
+    <p>
+      <strong>The whole of it, and it follows from the entry above.</strong> An attribute
+      <code>a</code> that is linear over the surface can be written
+      <code>a = &alpha;x_v + &beta;y_v + &gamma;z_v + &delta;</code>; substituting the projection
+      and dividing through by <code>w</code> gives
+    </p>
+    <div class="eq">
+      <span>\[ \frac{a}{w} = \left(\alpha\frac{a_r}{f}x_n + \beta\frac{1}{f}y_n - \gamma\right) + \delta\cdot\frac{1}{w} \]</span>
+      <span class="eq-plain">a/w = (affine in x_ndc, y_ndc)  +  delta * (1/w)</span>
+    </div>
+    <p>
+      &mdash; affine, plus a constant times an affine thing, hence affine. So interpolate
+      <code>a/w</code> and <code>1/w</code> with the ordinary barycentric weights and divide one by
+      the other. The four constants never need to be computed; they cancel.
+    </p>
+    <p>
+      <strong>Not depth.</strong> Device depth is already affine in screen space, so it is
+      interpolated directly &mdash; correcting it twice is a real and nasty bug (Lesson 3.2 &sect;3.5).
+      <strong>Cost:</strong> one divide per pixel, shared by every attribute.
+      <strong>Degenerate case:</strong> with <code>w</code> constant across a triangle (a
+      screen-parallel surface, or any 2-D fill) the correction is the identity &mdash; which is why
+      the bug is invisible on flat test scenes.
+    </p>
+  </div>
+
+  <div class="tool">
+    <h3>Chord versus curve, as a diagnostic <span class="from">Lesson 3.2</span></h3>
+    <p>
+      Not a formula but a shape worth recognising. Interpolating a non-affine quantity linearly
+      draws a <em>chord</em> under a <em>curve</em>: the error is <strong>exactly zero at both
+      ends and maximal in the middle</strong>. When a bug is invisible at every vertex and wrong in
+      the interior, this is the family it belongs to &mdash; and it explains why checking your
+      corner values, which is the first thing anyone does, never finds it.
+    </p>
+    <p>
+      The error of a chord under a smooth curve across an interval <code>h</code> is
+      <code>O(h&sup2;)</code>, which is why subdividing geometry to hide the problem converges
+      <em>quadratically</em>: each halving quarters the error. Measured on this course's floor, the
+      improvement ratios run 2.31, 2.42, 2.62, 2.84, 3.10 &mdash; climbing toward 4, and never
+      reaching zero.
+    </p>
+  </div>
+
   <h2 id="intersection"><span class="num">6</span>Geometry and intersection</h2>
 
   <div class="tool">
@@ -2151,9 +2200,8 @@ td code { font-size: 0.82em; }
   </div>
 
   <div class="pending">
-    <b>Module 3 — Depth and light.</b> <span class="badge done">3.1 landed: device depth,
-    1/w affinity, depth precision</span> The 1/w trick for perspective-correct interpolation ·
-    Lambert's cosine law · the halfway vector and Blinn-Phong · bilinear
+    <b>Module 3 — Depth and light.</b> <span class="badge done">3.1–3.2 landed: device depth,
+    1/w affinity, depth precision, perspective-correct interpolation</span> Lambert's cosine law · the halfway vector and Blinn-Phong · bilinear
     filtering as a double lerp. (The reflection vector arrived early, in 1.8, because a bouncing
     ball needed it before a specular highlight did.)
   </div>

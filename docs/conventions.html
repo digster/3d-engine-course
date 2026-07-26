@@ -947,6 +947,7 @@ td code { font-size: 0.82em; }
       <li><a href="#flip">Where the handedness flip happens</a></li>
       <li><a href="#matrices">Matrices: column vectors, column-major</a></li>
       <li><a href="#depth">The depth buffer &mdash; clear value, compare, format</a></li>
+      <li><a href="#interpolation">Interpolating vertex attributes</a></li>
       <li><a href="#winding">Winding and culling</a></li>
       <li><a href="#units">Units and angles</a></li>
       <li><a href="#simulation">The simulation contract</a></li>
@@ -1625,6 +1626,15 @@ td code { font-size: 0.82em; }
               Derived in Lesson 3.1 &sect;3.4.</td>
         </tr>
         <tr>
+          <td>Depth vs other attributes</td>
+          <td>depth is interpolated <strong>directly</strong>; everything else is
+              <strong>perspective-corrected</strong></td>
+          <td>The asymmetry is the point. The projection matrix's third row has already made depth
+              screen-affine, so correcting it again is wrong; no other attribute has had that done
+              to it. Lesson 3.2. <em>The regression test:</em> the depth buffer's contents must not
+              change when perspective correction is toggled.</td>
+        </tr>
+        <tr>
           <td>Format</td><td><code>depth_format::f32</code> by default</td>
           <td>Mirrors <code>SDL_GPU_TEXTUREFORMAT_D32_FLOAT</code>; <code>unorm24</code> and
               <code>unorm16</code> mirror <code>D24_UNORM</code> and <code>D16_UNORM</code>.</td>
@@ -1659,6 +1669,53 @@ td code { font-size: 0.82em; }
       <code>enable_depth_test</code> and <code>enable_depth_write</code> are three independent knobs
       set per pipeline &mdash; a shadow pass writes depth and no colour, a transparent pass tests
       depth and does not write it.
+    </p>
+  </div>
+
+  <!-- ===================================================================== -->
+  <h2 id="interpolation"><span class="num">6c</span>Interpolating vertex attributes</h2>
+
+  <p>
+    Settled in <a href="lessons/03-02-perspective-correct.html">Lesson 3.2</a>. Barycentric
+    interpolation produces the unique <strong>affine function of the pixel position</strong> that
+    agrees with three corner values &mdash; so it is correct for a quantity that is affine in screen
+    space, and wrong for one that is not.
+  </p>
+
+  <div class="eq">
+    <span>\[ a \;=\; \frac{\sum_i f_i\,(a_i/w_i)}{\sum_i f_i\,(1/w_i)} \]</span>
+    <span class="eq-plain">a = ( f0*a0/w0 + f1*a1/w1 + f2*a2/w2 ) / ( f0/w0 + f1/w1 + f2/w2 )</span>
+  </div>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>Quantity</th><th>How it is interpolated</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td>device depth (<code>z</code>)</td><td><strong>directly</strong></td>
+            <td>Already affine in screen space &mdash; the projection's depth row did the job.</td></tr>
+        <tr><td>uv, colour, normals, &hellip;</td><td><strong>perspective-corrected</strong></td>
+            <td>Linear over the <em>surface</em>, which the divide by <em>w</em> warps.
+                <code>a/w</code> and <code>1/w</code> are both affine, so interpolate those.</td></tr>
+        <tr><td>weights (<code>f0, f1, f2</code>)</td><td><strong>unbiased</strong></td>
+            <td>The top-left rule's <code>&minus;1</code> decides coverage, not position; leaving it
+                in displaces the whole field. Lesson 2.4 &sect;3.5.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    <code>vertex::inv_w</code> stores <code>1/w</code>, pre-divided, and <strong>defaults to
+    1</strong> &mdash; the orthographic case, where the correction is the identity. Cost: one divide
+    per pixel, shared by every attribute.
+  </p>
+
+  <div class="callout note">
+    <span class="label">The blind spot to know about</span>
+    <p>
+      If a triangle's plane is parallel to the screen, <code>w</code> is constant across it and
+      affine interpolation is <em>exactly</em> correct. Sprites, UI quads, billboards and the front
+      faces of axis-aligned boxes are all in that family &mdash; which is why both of Module 3's
+      interpolation bugs survive any test scene made of them.
     </p>
   </div>
 
