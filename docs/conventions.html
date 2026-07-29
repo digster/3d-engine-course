@@ -948,6 +948,7 @@ td code { font-size: 0.82em; }
       <li><a href="#matrices">Matrices: column vectors, column-major</a></li>
       <li><a href="#depth">The depth buffer &mdash; clear value, compare, format</a></li>
       <li><a href="#interpolation">Interpolating vertex attributes</a></li>
+      <li><a href="#clipping">Clipping &mdash; where, against what</a></li>
       <li><a href="#winding">Winding and culling</a></li>
       <li><a href="#units">Units and angles</a></li>
       <li><a href="#simulation">The simulation contract</a></li>
@@ -1718,6 +1719,70 @@ td code { font-size: 0.82em; }
       interpolation bugs survive any test scene made of them.
     </p>
   </div>
+
+  <h2 id="clipping"><span class="num">6d</span>Clipping &mdash; where, against what</h2>
+
+  <p>
+    Settled in <a href="lessons/03-03-near-plane-clipping.html">Lesson 3.3</a>. Two facts, and
+    both of them are the kind that produce silent, hard-to-reproduce bugs when they are assumed
+    rather than written down.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">Where</span>
+    <p><strong>Clipping happens in CLIP SPACE, before the perspective divide.</strong> The divide is
+    the one information-destroying step in the pipeline: it turns a signed <em>w</em> into a ratio,
+    and two points on opposite sides of the eye can produce the same ratio. Anything that needs to
+    know which side a vertex was on has to run before it.</p>
+  </div>
+
+  <div class="callout warn">
+    <span class="label">Against what</span>
+    <p><strong>The near plane is <code>z_clip &ge; 0</code>, not <code>w &ge; 0</code>.</strong>
+    <code>w = &minus;z_view</code>, so <code>w = 0</code> is the plane through the <em>eye</em>;
+    the near plane is <code>near</code> units further out. The projection&rsquo;s depth row
+    (<code>z_clip = A z_view + B</code>) was built so that <code>z_clip = 0</code> lands exactly at
+    <code>z_view = &minus;near</code>. Equivalently: <code>w &ge; near</code>.</p>
+  </div>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>Plane</th><th>Clip-space test</th><th>Category</th></tr></thead>
+      <tbody>
+        <tr><td><strong>near</strong></td><td class="mono">z_clip &ge; 0</td>
+            <td><strong>correctness</strong> &mdash; the divide is undefined or sign-flipped without it</td></tr>
+        <tr><td>far</td><td class="mono">z_clip &le; w</td>
+            <td>optimisation (and the depth test already handles it)</td></tr>
+        <tr><td>left / right</td><td class="mono">|x_clip| &le; w</td>
+            <td>optimisation &mdash; the rasterizer&rsquo;s bounding-box clamp is already correct</td></tr>
+        <tr><td>top / bottom</td><td class="mono">|y_clip| &le; w</td>
+            <td>optimisation, same reason</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    <strong>This engine clips the near plane only</strong>, and the asymmetry is deliberate rather
+    than unfinished. A triangle hanging off the left of the screen is drawn <em>correctly</em>
+    today, just wastefully; a triangle straddling the eye cannot be drawn at all.
+  </p>
+
+  <p>
+    <strong>Crossing vertices.</strong> The parameter is
+    <code>t = d<sub>a</sub> / (d<sub>a</sub> &minus; d<sub>b</sub>)</code>, and every component of
+    the new vertex &mdash; all four of the position, <em>including</em> <code>w</code>, plus every
+    attribute &mdash; is lerped with that one <code>t</code>. It is a <strong>3-D</strong>
+    parameter: the crossing does <em>not</em> sit at fraction <code>t</code> along the segment as
+    drawn on screen, for exactly the reason &sect;6c gives. Colour is lerped in linear light.
+  </p>
+
+  <p>
+    <strong>Sutherland&ndash;Hodgman preserves convexity and winding.</strong> Both are relied on:
+    the first lets a clipped polygon be fanned as <code>(out[0], out[k&minus;1], out[k])</code>,
+    the second keeps &sect;7&rsquo;s back-face test meaningful afterwards. A triangle against one
+    plane yields <strong>0, 3 or 4</strong> vertices &mdash; never 1 or 2 &mdash; so
+    <code>k_clip_max_vertices = 4</code> is an exact bound, not a margin. Six planes would need 9.
+  </p>
 
   <h2 id="winding"><span class="num">7</span>Winding and culling</h2>
 

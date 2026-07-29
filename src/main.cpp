@@ -24,6 +24,7 @@
 #include "core/fixed_step.hpp"
 #include "core/input.hpp"
 #include "game/pong.hpp"
+#include "gfx/clip.hpp"
 #include "gfx/colour.hpp"
 #include "gfx/depth_buffer.hpp"
 #include "gfx/framebuffer.hpp"
@@ -713,74 +714,183 @@ constexpr engine::viewport k_full_viewport{0.0f, 0.0f,
                                            static_cast<float>(k_fb_width),
                                            static_cast<float>(k_fb_height), 0.0f, 1.0f};
 
-/// A point projected to the screen, and whether it was in front of the camera.
+// ---------------------------------------------------------------------------
+// Lesson 3.3 — the near plane
+// ---------------------------------------------------------------------------
+
+/// What this demo does with geometry that crosses the near plane. [K] cycles.
 ///
-/// `depth` is the device depth in [0, 1] that Lesson 2.11's viewport transform
-/// has been producing all along. Until Lesson 3.1 nothing read it; it is now the
-/// value the z-buffer stores.
+/// Three settings rather than a bool, because there are **two different wrong
+/// answers** here and they fail in visibly different ways. Seeing both is the
+/// lesson; a bool would only let you see one.
+enum class near_mode
+{
+    /// Lesson 3.2's behaviour: if any vertex is behind the near plane, drop the
+    /// whole triangle (and the whole line). Never crashes, never produces a wild
+    /// coordinate — and is catastrophically wrong the moment the geometry matters,
+    /// because the surface you are walking into *disappears* instead of filling
+    /// the view. Dolly into the floor scene and the ground under your feet goes.
+    drop,
+
+    /// No guard at all: divide by `w` whatever it happens to be. This is what the
+    /// code did before the guard existed, and it is the failure Lesson 2.7 warned
+    /// about in the abstract. A vertex behind the eye has `w < 0`, so `x/w` flips
+    /// its sign and the vertex lands on the **opposite side of the screen**; the
+    /// triangle stretches across the whole frame or turns inside out.
+    none,
+
+    /// Cut the geometry along the near plane and rasterize the part in front.
+    /// **The answer**, and the default.
+    clip
+};
+
+[[nodiscard]] const char* name_of(near_mode m)
+{
+    switch (m)
+    {
+    case near_mode::drop: return "DROP (3.2's bug)";
+    case near_mode::none: return "NONE (no guard)";
+    case near_mode::clip: return "CLIP (correct)";
+    }
+    return "?";
+}
+
+[[nodiscard]] near_mode next_near(near_mode m)
+{
+    switch (m)
+    {
+    case near_mode::clip: return near_mode::drop;
+    case near_mode::drop: return near_mode::none;
+    case near_mode::none: return near_mode::clip;
+    }
+    return near_mode::clip;
+}
+
+/// Everything needed to turn a view-space point into a pixel, in one object.
+///
+/// This used to be two loose parameters (`proj`, `vp`) threaded through six
+/// functions, and Lesson 3.3 was about to make it three. Gathering them is the
+/// same argument `fill_style` made in Lesson 3.2, applied one level up: state that
+/// always travels together should travel as one thing, and adding a knob should
+/// cost one field rather than one more parameter at every call site. It is also
+/// the shape Module 5's renderer has — a camera hands the frame a projection, a
+/// viewport, and its clipping rules, and everything downstream reads them.
+struct projector
+{
+    engine::mat4 proj;                  ///< view -> clip (Lesson 2.10)
+    engine::viewport vp;                ///< NDC -> pixels, with the y flip (2.11)
+    near_mode near = near_mode::clip;   ///< what happens at the near plane (3.3)
+};
+
+/// VIEW space -> CLIP space. One matrix multiply — and the pipeline's new stopping
+/// point, because clipping has to happen *before* the divide.
+[[nodiscard]] engine::vec4 to_clip(engine::vec3 v_view, const engine::mat4& proj)
+{
+    return proj * engine::point(v_view);
+}
+
+/// A point that has been through the divide: pixels, device depth, and `1/w`.
+///
+/// `depth` is the device depth in [0, 1] that Lesson 2.11's viewport transform has
+/// been producing all along, and which Lesson 3.1 gave somewhere to go. `inv_w` is
+/// the reciprocal of the clip-space `w`, which Lesson 3.2 needs at every corner;
+/// it is computed here because this is the last place that still *has* `w` —
+/// `perspective_divide` consumes it and does not give it back.
+///
+/// Note what this struct no longer carries: a `visible` flag. Before Lesson 3.3
+/// the projection answered "…and is this point usable at all?", which was the
+/// polite way of saying the pipeline had no plan for geometry near the eye. Now it
+/// has one, and it runs a step earlier.
 struct screen_point
 {
     engine::vec2 xy;
     float depth;
-
-    /// `1 / w_clip` — the reciprocal of the clip-space w, which Lesson 3.2 needs
-    /// at every corner to interpolate anything correctly. Computed here because
-    /// this is the only place that still has `w`: `perspective_divide` consumes
-    /// it and does not give it back.
     float inv_w;
-
-    bool visible;
 };
 
-/// VIEW space -> framebuffer pixels, the pipeline's final three steps:
+/// A float pixel coordinate, rounded and made **safe to convert**.
 ///
-///   1. project:  clip = proj * point(v_view)   — the matrix writes -z into w (2.10)
-///   2. divide:   ndc  = clip / clip.w           — the perspective divide (2.10)
-///   3. viewport: ndc [-1,1] -> framebuffer pixels + depth (2.11, the +y flip)
+/// Converting a float to an int is undefined behaviour when the value does not fit
+/// in the int, and `near_mode::none` produces exactly that: a `w` near zero sends a
+/// coordinate into the millions. This is not the fix for the near plane — clipping
+/// is — it is what lets the broken mode be *shown* without the program losing its
+/// meaning while you look at it.
 ///
-/// Passing the projection matrix in is what lets [P] swap perspective for
-/// orthographic with nothing else changing; the viewport is fixed (the window does
-/// not change), so it is a file-scope constant rather than a parameter.
-[[nodiscard]] screen_point project(engine::vec3 v_view, const engine::mat4& proj,
-                                   const engine::viewport& vp)
+/// The bound is 8,000 and not something larger for a second reason. `edge_function`
+/// (raster.hpp) multiplies coordinate *differences*: at ±8,000 the products stay
+/// comfortably inside a 32-bit int, and signed overflow is undefined too. One
+/// constant, two undefined behaviours held off.
+[[nodiscard]] int to_pixel(float f)
 {
-    const engine::vec4 clip = proj * engine::point(v_view);
+    constexpr float k_wild = 8000.0f;
+    if (std::isnan(f)) { return 0; }   // every comparison with a NaN is false, so clamp cannot
+    return static_cast<int>(std::lround(std::clamp(f, -k_wild, k_wild)));
+}
 
-    // Behind (or on) the near plane: clip.w = -z_view <= 0 means the point is at
-    // or behind the eye, and the divide would fling it to nonsense (Lesson 2.7's
-    // negative-w warning). We drop the whole line rather than clip it — proper
-    // near-plane clipping is Lesson 3.3, and the demo keeps its geometry in front
-    // so this guard almost never fires.
-    if (clip.w <= 0.05f) { return {{}, 1.0f, 1.0f, false}; }
-
-    const engine::vec3 ndc = engine::perspective_divide(clip);
+/// CLIP space -> framebuffer pixels: the perspective divide, then the viewport map.
+///
+/// **This function assumes its input has already been clipped.** That is the whole
+/// contract, and it is why it has no guard: `w` at or behind the eye is not a case
+/// to branch on here, it is a case that must not reach here. The demo's `none` mode
+/// deliberately breaks that contract to show what happens.
+[[nodiscard]] screen_point screen_from_clip(const engine::vec4& clip,
+                                            const engine::viewport& vp)
+{
+    // `w == 0` is the plane through the eye itself, where every ratio is 0/0 — a
+    // NaN, not a large number. Nudging it off zero is demo scaffolding, not engine
+    // policy: it makes `none` produce a wildly wrong *picture* rather than
+    // undefined behaviour. Under `clip` the branch is unreachable, because the near
+    // plane sits a whole `near` in front of `w = 0`.
+    const float w = (clip.w == 0.0f) ? 1.0e-6f : clip.w;
+    const engine::vec3 ndc = engine::perspective_divide({clip.x, clip.y, clip.z, w});
 
     // The viewport does the NDC -> pixel map AND the +y-up-to-+y-down flip. Its
-    // third output is the device depth (ndc.z mapped to [min_depth, max_depth]),
-    // and as of Lesson 3.1 it finally has somewhere to go: the depth buffer.
+    // third output is the device depth the z-buffer stores (Lesson 3.1).
     const engine::vec3 screen = vp.to_screen(ndc);
-    return {{screen.x, screen.y}, screen.z, 1.0f / clip.w, true};
+    return {{screen.x, screen.y}, screen.z, 1.0f / w};
 }
 
-/// Draw a line whose endpoints are in VIEW space, through `proj`.
+/// Draw a line whose endpoints are in VIEW space.
+///
+/// The one-dimensional case of the whole lesson, and the place the fix is easiest
+/// to read: build both endpoints in clip space, hand them to the clipper, and only
+/// then divide. Before Lesson 3.3 a line crossing the near plane simply vanished —
+/// which is why walking over a gridline used to make it disappear rather than run
+/// off the bottom of the screen.
 void line3(engine::framebuffer& fb, engine::vec3 a, engine::vec3 b,
-           Uint32 colour, const engine::mat4& proj, const engine::viewport& vp)
+           Uint32 colour, const projector& pr)
 {
-    const screen_point pa = project(a, proj, vp);
-    const screen_point pb = project(b, proj, vp);
-    if (!pa.visible || !pb.visible) { return; }   // crosses the near plane — 3.3 clips it properly
-    engine::draw_line(fb,
-        static_cast<int>(std::lround(pa.xy.x)), static_cast<int>(std::lround(pa.xy.y)),
-        static_cast<int>(std::lround(pb.xy.x)), static_cast<int>(std::lround(pb.xy.y)), colour);
+    engine::clip_vertex ca{to_clip(a, pr.proj), {}, colour};
+    engine::clip_vertex cb{to_clip(b, pr.proj), {}, colour};
+
+    switch (pr.near)
+    {
+    case near_mode::clip:
+        if (!engine::clip_segment_near(ca, cb)) { return; }
+        break;
+
+    case near_mode::drop:
+        if (engine::near_distance(ca.position) < 0.0f
+         || engine::near_distance(cb.position) < 0.0f) { return; }
+        break;
+
+    case near_mode::none:
+        break;
+    }
+
+    const screen_point pa = screen_from_clip(ca.position, pr.vp);
+    const screen_point pb = screen_from_clip(cb.position, pr.vp);
+    engine::draw_line(fb, to_pixel(pa.xy.x), to_pixel(pa.xy.y),
+                          to_pixel(pb.xy.x), to_pixel(pb.xy.y), colour);
 }
 
-/// Draw a WORLD-space line through the view and projection matrices. Convenience
+/// Draw a WORLD-space line through the view matrix and the projector. Convenience
 /// for the world grid and axes, whose endpoints are natural world-space constants.
-void line3_world(engine::framebuffer& fb, const engine::mat4& view, const engine::mat4& proj,
-                 const engine::viewport& vp, engine::vec3 a, engine::vec3 b, Uint32 colour)
+void line3_world(engine::framebuffer& fb, const engine::mat4& view, const projector& pr,
+                 engine::vec3 a, engine::vec3 b, Uint32 colour)
 {
     line3(fb, engine::xyz(view * engine::point(a)),
-          engine::xyz(view * engine::point(b)), colour, proj, vp);
+          engine::xyz(view * engine::point(b)), colour, pr);
 }
 
 // ---------------------------------------------------------------------------
@@ -815,8 +925,7 @@ void line3_world(engine::framebuffer& fb, const engine::mat4& view, const engine
 /// @param point_w  the fourth component the vertices are sent with. 1 is correct;
 ///                  0 reproduces Lesson 2.6, where every translation is ignored.
 void draw_mesh(engine::framebuffer& fb, const engine::mesh& geometry,
-               const engine::mat4& m, const engine::mat4& proj, const engine::viewport& vp,
-               float point_w)
+               const engine::mat4& m, const projector& pr, float point_w)
 {
     // Transform each vertex ONCE, into view space, and keep the results. This is
     // the whole practical argument for indexed geometry: the icosahedron's twelve
@@ -851,8 +960,7 @@ void draw_mesh(engine::framebuffer& fb, const engine::mesh& geometry,
             const float mid_z = 0.5f * (p[ia].z + p[ib].z);
             const float t01 = std::clamp((mid_z + 13.0f) / 11.0f, 0.0f, 1.0f);
             const Uint8 v = static_cast<Uint8>(70.0f + 165.0f * t01);
-            line3(fb, p[ia], p[ib], engine::pack_argb(v, v, static_cast<Uint8>(v * 0.94f)),
-                  proj, vp);
+            line3(fb, p[ia], p[ib], engine::pack_argb(v, v, static_cast<Uint8>(v * 0.94f)), pr);
         }
     }
 }
@@ -867,8 +975,7 @@ void draw_mesh(engine::framebuffer& fb, const engine::mesh& geometry,
 /// @param dir_w  the fourth component the AXES are sent with. 0 is correct — they
 ///               are directions. 1 translates them, which is the classic
 ///               transform-a-normal-as-a-point bug, drawn.
-void draw_axes3(engine::framebuffer& fb, const engine::mat4& m,
-                const engine::mat4& proj, const engine::viewport& vp,
+void draw_axes3(engine::framebuffer& fb, const engine::mat4& m, const projector& pr,
                 float point_w, float dir_w)
 {
     const Uint32 col[3] = {engine::pack_argb(236, 92, 92),     // x
@@ -886,14 +993,27 @@ void draw_axes3(engine::framebuffer& fb, const engine::mat4& m,
         const engine::vec3 d = engine::xyz(m * engine::to_vec4(basis[i], dir_w));
         const engine::vec3 tip = origin + d * 0.75f;
         const engine::vec3 offset = origin;
-        line3(fb, offset, tip, col[i], proj, vp);
+        line3(fb, offset, tip, col[i], pr);
 
         // A small head, built in SCREEN space by rotating the projected arrow —
         // the same trick as 2.5's, now after the projection because that is where
-        // the head has to be legible. Skip it if either end is off-screen.
-        const screen_point a = project(offset, proj, vp);
-        const screen_point b = project(tip, proj, vp);
-        if (!a.visible || !b.visible) { continue; }
+        // the head has to be legible.
+        //
+        // This is the ONE place in the demo where dropping is still the right
+        // answer, and it is worth being explicit about why rather than leaving it
+        // looking like an oversight. The head is screen-space DECORATION: it is
+        // constructed by rotating the projected shaft, so if either end of that
+        // shaft is behind the eye the rotation has nothing meaningful to act on.
+        // A decoration with no defined position is dropped; GEOMETRY is clipped.
+        // Lesson 3.3 §4.4.
+        const engine::vec4 clip_a = to_clip(offset, pr.proj);
+        const engine::vec4 clip_b = to_clip(tip, pr.proj);
+        if (engine::near_distance(clip_a) < 0.0f || engine::near_distance(clip_b) < 0.0f)
+        {
+            continue;
+        }
+        const screen_point a = screen_from_clip(clip_a, pr.vp);
+        const screen_point b = screen_from_clip(clip_b, pr.vp);
         const engine::vec2 back = engine::normalised(a.xy - b.xy) * 5.0f;
         if (engine::length_squared(back) > 0.0f)
         {
@@ -1335,8 +1455,7 @@ int build_scene(scene_object (&out)[k_max_objects], scene_kind kind, spin mode, 
 /// and turns as the camera orbits. As of Lesson 2.10 it goes on through `proj`, so
 /// the far edge of the floor is smaller than the near edge: the floor's parallel
 /// rails now visibly converge, which is perspective made obvious.
-void draw_world(engine::framebuffer& fb, const engine::mat4& view, const engine::mat4& proj,
-                const engine::viewport& vp)
+void draw_world(engine::framebuffer& fb, const engine::mat4& view, const projector& pr)
 {
     constexpr float reach = 2.5f;
     const Uint32 faint = engine::pack_argb(40, 44, 60);
@@ -1348,15 +1467,15 @@ void draw_world(engine::framebuffer& fb, const engine::mat4& view, const engine:
     {
         const float f = static_cast<float>(i) * 0.5f;
         const Uint32 c = (i == 0) ? axis_line : faint;
-        line3_world(fb, view, proj, vp, {f, 0.0f, -reach}, {f, 0.0f, reach}, c);
-        line3_world(fb, view, proj, vp, {-reach, 0.0f, f}, {reach, 0.0f, f}, c);
+        line3_world(fb, view, pr, {f, 0.0f, -reach}, {f, 0.0f, reach}, c);
+        line3_world(fb, view, pr, {-reach, 0.0f, f}, {reach, 0.0f, f}, c);
     }
 
     // The world's own axis triad, at the world origin, in the course colours.
     // Every object's position is measured from exactly this point.
-    line3_world(fb, view, proj, vp, {0.0f, 0.0f, 0.0f}, {0.9f, 0.0f, 0.0f}, engine::pack_argb(150, 66, 66));
-    line3_world(fb, view, proj, vp, {0.0f, 0.0f, 0.0f}, {0.0f, 0.9f, 0.0f}, engine::pack_argb(78, 130, 100));
-    line3_world(fb, view, proj, vp, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.9f}, engine::pack_argb(82, 108, 156));
+    line3_world(fb, view, pr, {0.0f, 0.0f, 0.0f}, {0.9f, 0.0f, 0.0f}, engine::pack_argb(150, 66, 66));
+    line3_world(fb, view, pr, {0.0f, 0.0f, 0.0f}, {0.0f, 0.9f, 0.0f}, engine::pack_argb(78, 130, 100));
+    line3_world(fb, view, pr, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.9f}, engine::pack_argb(82, 108, 156));
 }
 
 // ---------------------------------------------------------------------------
@@ -1459,7 +1578,29 @@ struct raster_triangle
 struct projection_scratch
 {
     std::vector<engine::vec3> view_pos;
-    std::vector<screen_point> screen;
+
+    /// The per-vertex CLIP positions. This used to be `std::vector<screen_point>`
+    /// — the vertices were carried straight through to pixels here. Lesson 3.3
+    /// stops one step earlier, because the divide is the thing clipping has to
+    /// happen before, and a vertex that has already been divided has thrown away
+    /// the only information the clipper could have used.
+    std::vector<engine::vec4> clip_pos;
+};
+
+/// What the near plane did to this frame's geometry. Purely for the HUD.
+///
+/// Reported as properties of the GEOMETRY rather than of the mode, so the same
+/// three numbers mean the same thing whichever setting [K] is on: `straddling` is
+/// how many triangles genuinely cross the plane, whether or not the current mode
+/// does anything sensible about them. That is what makes the modes comparable —
+/// only `output` changes.
+struct clip_stats
+{
+    int input = 0;        ///< triangles the scene offered
+    int in_front = 0;     ///< wholly in front of the near plane — the common case
+    int straddling = 0;   ///< crossing it: the ones that need cutting
+    int behind = 0;       ///< wholly behind it: nothing to draw either way
+    int output = 0;       ///< triangles actually handed to the rasterizer
 };
 
 /// Project every triangle of every object into screen space.
@@ -1470,12 +1611,25 @@ struct projection_scratch
 /// the two hidden-surface strategies comparable: the painter's algorithm needs to
 /// sort ACROSS objects (sorting each object's triangles separately would be
 /// wrong the moment two objects overlap), and the z-buffer needs nothing at all.
+/// As of Lesson 3.3 the per-vertex work stops at CLIP space, and the divide has
+/// moved *inside* the per-triangle loop, after the clipper. That reordering is the
+/// entire structural change of this lesson, and it costs something worth naming:
+/// the divide is now done per triangle CORNER rather than per vertex, so a shared
+/// vertex is divided once for each triangle that uses it. On the icosahedron that
+/// is 60 divides instead of 12.
+///
+/// It is paid knowingly, because the alternative is a two-pass scheme (divide the
+/// unclipped vertices, then re-divide only the clipped ones) that is more code, more
+/// state, and wrong in a way that is easy to miss. Real engines pay it too: the
+/// hardware runs the vertex shader, clips, and *then* divides, which is precisely
+/// this order. Module 4 hands the whole problem to the GPU.
 void collect_triangles(std::vector<raster_triangle>& out, projection_scratch& scratch,
                        const scene_object* objects, int count,
                        const engine::mat4& view_from_world,
-                       const engine::mat4& proj, const engine::viewport& vp, trs_order order)
+                       const projector& pr, trs_order order, clip_stats& stats)
 {
     out.clear();
+    stats = {};
 
     for (int i = 0; i < count; ++i)
     {
@@ -1487,17 +1641,26 @@ void collect_triangles(std::vector<raster_triangle>& out, projection_scratch& sc
         // 60 — the practical argument for indexed geometry, from Lesson 2.12.
         const std::size_t vertex_count = objects[i].geometry.vertices.size();
         std::vector<engine::vec3>& view_pos = scratch.view_pos;
-        std::vector<screen_point>& screen = scratch.screen;
+        std::vector<engine::vec4>& clip_pos = scratch.clip_pos;
         view_pos.clear();
-        screen.clear();
+        clip_pos.clear();
         view_pos.reserve(vertex_count);
-        screen.reserve(vertex_count);
+        clip_pos.reserve(vertex_count);
         for (std::size_t v = 0; v < vertex_count; ++v)
         {
             view_pos.push_back(engine::xyz(view_from_model
                                          * engine::point(objects[i].geometry.vertices[v])));
-            screen.push_back(project(view_pos.back(), proj, vp));
+            clip_pos.push_back(to_clip(view_pos.back(), pr.proj));
         }
+
+        // CLIP space -> pixels, for one already-clipped corner. Everything the
+        // rasterizer needs, and nothing it does not: `engine::vertex` is a
+        // screen-space type and this is the one conversion into it.
+        const auto to_vertex = [&](const engine::clip_vertex& cv) {
+            const screen_point s = screen_from_clip(cv.position, pr.vp);
+            return engine::vertex{to_pixel(s.xy.x), to_pixel(s.xy.y),
+                                  s.depth, s.inv_w, cv.uv.x, cv.uv.y, cv.colour};
+        };
 
         const std::span<const std::uint16_t> idx = objects[i].geometry.indices;
         for (std::size_t f = 0; f * 3 + 2 < idx.size(); ++f)
@@ -1507,29 +1670,70 @@ void collect_triangles(std::vector<raster_triangle>& out, projection_scratch& sc
             const std::size_t c = idx[f * 3 + 2];
             if (a >= vertex_count || b >= vertex_count || c >= vertex_count) { continue; }
 
-            // Any vertex behind the near plane sinks the whole triangle. That is
-            // a real defect and it is Lesson 3.3's to fix: the right answer is to
-            // CLIP the triangle against the near plane, producing one or two new
-            // triangles that are entirely in front of it. Dropping it whole means
-            // a wall you walk into disappears rather than filling the screen.
-            if (!screen[a].visible || !screen[b].visible || !screen[c].visible) { continue; }
+            ++stats.input;
 
             const Uint32 colour = face_shade(objects[i].tint, f);
+            const engine::clip_vertex src[3] = {
+                {clip_pos[a], objects[i].geometry.uv_at(a), colour},
+                {clip_pos[b], objects[i].geometry.uv_at(b), colour},
+                {clip_pos[c], objects[i].geometry.uv_at(c), colour}};
 
-            auto to_vertex = [&](std::size_t v) {
-                const engine::vec2 uv = objects[i].geometry.uv_at(v);
-                return engine::vertex{static_cast<int>(std::lround(screen[v].xy.x)),
-                                      static_cast<int>(std::lround(screen[v].xy.y)),
-                                      screen[v].depth, screen[v].inv_w,
-                                      uv.x, uv.y, colour};
-            };
+            // How the triangle sits relative to the near plane — measured from the
+            // geometry, not inferred from what the current mode does about it, so
+            // the HUD's numbers mean the same thing in all three modes.
+            int outside = 0;
+            for (const engine::clip_vertex& v : src)
+            {
+                if (engine::near_distance(v.position) < 0.0f) { ++outside; }
+            }
+            if (outside == 0)      { ++stats.in_front; }
+            else if (outside == 3) { ++stats.behind; }
+            else                   { ++stats.straddling; }
 
-            raster_triangle tri;
-            tri.v[0] = to_vertex(a);
-            tri.v[1] = to_vertex(b);
-            tri.v[2] = to_vertex(c);
-            tri.sort_key = (view_pos[a].z + view_pos[b].z + view_pos[c].z) / 3.0f;
-            out.push_back(tri);
+            // The painter's sort key (Lesson 3.1) belongs to the SOURCE triangle,
+            // so it is computed before clipping and shared by every piece the
+            // clipper produces. Recomputing it per piece would let one half of a
+            // wall sort in front of the other half — the pieces are the same
+            // surface, and a sort must not be able to tell them apart.
+            const float key = (view_pos[a].z + view_pos[b].z + view_pos[c].z) / 3.0f;
+
+            engine::clip_vertex poly[engine::k_clip_max_vertices];
+            std::size_t n = 0;
+
+            switch (pr.near)
+            {
+            case near_mode::clip:
+                // One call, and the output is a polygon of 0, 3 or 4 vertices.
+                n = engine::clip_polygon_near(src, poly);
+                break;
+
+            case near_mode::drop:
+                // Lesson 3.2's rule: one bad corner sinks the whole triangle.
+                if (outside == 0) { poly[0] = src[0]; poly[1] = src[1]; poly[2] = src[2]; n = 3; }
+                break;
+
+            case near_mode::none:
+                // Straight through to the divide, whatever `w` turns out to be.
+                poly[0] = src[0]; poly[1] = src[1]; poly[2] = src[2]; n = 3;
+                break;
+            }
+
+            // FAN the clipped polygon: (0, k-1, k) for k = 2 … n-1. Three vertices
+            // give one triangle and four give two, which is where "a clipper
+            // returns a variable number of triangles" stops being a design note and
+            // becomes a loop. The fan is valid because Sutherland–Hodgman preserves
+            // both convexity and winding — so every piece is wound the way the
+            // original was, which Lesson 3.4's back-face test will depend on.
+            for (std::size_t k = 2; k < n; ++k)
+            {
+                raster_triangle tri;
+                tri.v[0] = to_vertex(poly[0]);
+                tri.v[1] = to_vertex(poly[k - 1]);
+                tri.v[2] = to_vertex(poly[k]);
+                tri.sort_key = key;
+                out.push_back(tri);
+                ++stats.output;
+            }
         }
     }
 }
@@ -2181,6 +2385,12 @@ int main(int argc, char* argv[])
     int floor_cells = 1;                           ///< quads per side; [T] cycles
     int interp_wrong = 0;                          ///< px where affine and perspective differ
 
+    // ---- Lesson 3.3 --------------------------------------------------------
+    near_mode near_handling = near_mode::clip;     ///< [K]
+    clip_stats scene_clip;                         ///< what the near plane did this frame
+    std::vector<raster_triangle> compare_tris;     ///< the reference render's own geometry
+    int near_wrong = 0;                            ///< px this near mode gets wrong vs clipping
+
     xform basis_mode = xform::rotate;   ///< Lesson 2.5
     float basis_t = 0.6f;               ///< the one parameter every mode reads
     bool basis_animating = false;
@@ -2216,11 +2426,12 @@ int main(int argc, char* argv[])
     SDL_Log("  [4]/[5] follow the mouse: the three sub-triangles ARE the three weights. [R] fill rule.");
     SDL_Log("  [6] Gouraud (three corner colours) [7] uv checker — [M] switches blend space");
     SDL_Log("Basis (2.5): [Z] transform  [,] [.] adjust  [0] reset  [Space] animate");
-    SDL_Log("Scene (3.1-3.2): [F] wireframe/painter/z-buffer/depth  [C] scene  [B] depth format");
+    SDL_Log("Scene (3.1-3.3): [F] wireframe/painter/z-buffer/depth  [C] scene  [B] depth format");
     SDL_Log("  [I] affine/perspective interpolation  [T] floor tessellation");
+    SDL_Log("  [K] near plane: clip / drop / none - on the floor scene, hold [=] to walk into it");
     SDL_Log("  [arrows] orbit  [-]/[=] dolly  [P] persp/ortho  [O] model order  [X] object");
     SDL_Log("  [Z] rotation axis  [,] [.] t  [Space] spin  [W]/[N] the 2.7 w bugs");
-    SDL_Log("[Tab] cycles demos: scene (2.6-3.1) -> basis (2.5) -> triangles -> lines -> Pong");
+    SDL_Log("[Tab] cycles demos: scene (2.6-3.3) -> basis (2.5) -> triangles -> lines -> Pong");
     SDL_Log("[V] vsync · [Y] throttle · [Esc] quit");
 
     bool running = true;
@@ -2299,6 +2510,7 @@ int main(int argc, char* argv[])
                 // would it take", and the answer moves in octaves.
                 floor_cells = (floor_cells >= 16) ? 1 : floor_cells * 2;
             }
+            if (in.key_pressed(SDL_SCANCODE_K)) { near_handling = next_near(near_handling); }
             if (in.key_pressed(SDL_SCANCODE_B))
             {
                 depth_fmt = next_depth_format(depth_fmt);
@@ -2352,7 +2564,15 @@ int main(int argc, char* argv[])
                 // stays inside the viewport rectangle at every orbit angle and
                 // elevation, so nothing is lost off the framebuffer's edge. (The
                 // ground grid still runs off-screen, which is what a floor should do.)
-                cam.radius = std::clamp(cam.radius, 4.0f, 14.0f);
+                //
+                // The FLOOR is the exception, and Lesson 3.3 is why. Its near edge
+                // sits at world z = +6 and the eye at radius 7 sits at z ≈ 6.97 —
+                // barely a unit in front of it. Dollying in walks the camera PAST
+                // that edge, which is the only way to put geometry behind the eye
+                // and therefore the only way to see the near plane matter. One
+                // unit is close enough to stand on the ground and look along it.
+                const float min_radius = (scene_mode == scene_kind::floor) ? 1.0f : 4.0f;
+                cam.radius = std::clamp(cam.radius, min_radius, 14.0f);
             }
 
             cube_m = build_spin(cube_mode, cube_t);
@@ -2371,6 +2591,11 @@ int main(int argc, char* argv[])
             const engine::viewport& vp = (scene_mode == scene_kind::floor)
                                        ? k_full_viewport : k_scene_viewport;
 
+            // Lesson 3.3's gathering: the projection, the viewport and the
+            // near-plane policy, travelling together. Everything that draws in 3-D
+            // now takes exactly one of these.
+            const projector pr{proj, vp, near_handling};
+
             fb.clear(k_bg);
 
             // The world FIRST, through the camera and projection, so the floor and
@@ -2383,7 +2608,7 @@ int main(int argc, char* argv[])
             // and it is why the grid vanishes correctly behind solid objects here
             // without a depth value of its own. Giving lines a real depth test is
             // Exercise 3.1.4.
-            draw_world(fb, view_from_world, proj, vp);
+            draw_world(fb, view_from_world, pr);
 
             if (hs == hidden_surface::wireframe)
             {
@@ -2393,11 +2618,13 @@ int main(int argc, char* argv[])
                 {
                     const engine::mat4 world_from_model = model_matrix(scene[i].xform, order);
                     const engine::mat4 view_from_model = view_from_world * world_from_model;
-                    draw_mesh(fb, scene[i].geometry, view_from_model, proj, vp, cube_point_w);
-                    draw_axes3(fb, view_from_model, proj, vp, cube_point_w, cube_dir_w);
+                    draw_mesh(fb, scene[i].geometry, view_from_model, pr, cube_point_w);
+                    draw_axes3(fb, view_from_model, pr, cube_point_w, cube_dir_w);
                 }
                 painter_wrong = 0;
+                near_wrong = 0;
                 shown_depth = {};
+                scene_clip = {};
             }
             else
             {
@@ -2405,7 +2632,7 @@ int main(int argc, char* argv[])
                 // algorithms below then run on identical geometry, which is what
                 // makes the pixel-for-pixel comparison honest.
                 collect_triangles(scene_tris, scratch, scene, scene_count,
-                                  view_from_world, proj, vp, order);
+                                  view_from_world, pr, order, scene_clip);
 
                 const bool want_painter = (hs == hidden_surface::painter);
                 const bool checkered = (scene_mode == scene_kind::floor);
@@ -2427,15 +2654,43 @@ int main(int argc, char* argv[])
 
                 // ---- The comparison ---------------------------------------
                 // Run the scene a second time with ONE THING CHANGED, over the
-                // same background and the same triangles, and count the pixels
-                // the two renders disagree about. Which thing changes depends on
-                // what the scene is for: the hidden-surface strategy (3.1) on the
-                // solid scenes, the interpolation (3.2) on the floor.
+                // same background, and count the pixels the two renders disagree
+                // about. Which thing changes depends on what is on trial: the
+                // near-plane policy (3.3) whenever it is set to something wrong,
+                // then the interpolation (3.2) on the floor, then the
+                // hidden-surface strategy (3.1) everywhere else.
+                //
+                // The near-plane comparison comes FIRST and outranks the others
+                // because it is the only one that changes what geometry exists.
+                // Comparing interpolation modes on a scene whose triangles are
+                // being dropped would be measuring the wrong thing carefully.
+                const bool near_on_trial = (pr.near != near_mode::clip);
+
+                // The reference render. Identical in every respect except the one
+                // under test — including the background grid, which is drawn
+                // through the projector and is therefore itself affected by [K].
+                projector reference = pr;
+                if (near_on_trial) { reference.near = near_mode::clip; }
+
                 scratch_fb.clear(k_bg);
-                draw_world(scratch_fb, view_from_world, proj, vp);
+                draw_world(scratch_fb, view_from_world, reference);
                 scratch_depth.clear();
 
-                if (checkered)
+                if (near_on_trial)
+                {
+                    // A second collection, because the clipper produces a
+                    // DIFFERENT SET OF TRIANGLES — this is the one comparison in
+                    // the demo where the two renders cannot share geometry.
+                    clip_stats reference_clip;
+                    collect_triangles(compare_tris, scratch, scene, scene_count,
+                                      view_from_world, reference, order, reference_clip);
+                    draw_triangles(scratch_fb, want_painter ? nullptr : &scratch_depth,
+                                   compare_tris, want_painter, style);
+                    near_wrong = count_differences(fb, scratch_fb, vp);
+                    interp_wrong = 0;
+                    painter_wrong = 0;
+                }
+                else if (checkered)
                 {
                     engine::fill_style other = style;
                     other.interp = (interp == engine::interpolation::perspective)
@@ -2445,6 +2700,7 @@ int main(int argc, char* argv[])
                                    scene_tris, want_painter, other);
                     interp_wrong = count_differences(fb, scratch_fb, vp);
                     painter_wrong = 0;
+                    near_wrong = 0;
                 }
                 else
                 {
@@ -2452,6 +2708,7 @@ int main(int argc, char* argv[])
                                    scene_tris, !want_painter, style);
                     painter_wrong = count_differences(fb, scratch_fb, vp);
                     interp_wrong = 0;
+                    near_wrong = 0;
                 }
 
                 // The depth view runs last, over the z-buffered image, because it
@@ -2755,6 +3012,41 @@ int main(int argc, char* argv[])
                     engine::name_of(depth_fmt), scene_tris.size(), painter_wrong);
             }
 
+            // ---- Lesson 3.3's readout -------------------------------------
+            // The near-plane policy, and the three numbers that say what the
+            // geometry is actually doing about it. `straddling` is the count that
+            // matters: while it is zero all three modes agree exactly, which is
+            // why this bug hides until the moment you walk into something.
+            {
+                const bool near_ok = (near_handling == near_mode::clip);
+                SDL_SetRenderDrawColor(renderer, near_ok ? 122 : 236,
+                                                 near_ok ? 196 : 92,
+                                                 near_ok ? 152 : 92, 255);
+                if (hs == hidden_surface::wireframe)
+                {
+                    // No triangles were collected, so there are no counts — but
+                    // [K] still governs the LINES, which are clipped by the same
+                    // plane with the same crossing parameter.
+                    SDL_RenderDebugTextFormat(renderer, 6.0f, 62.0f,
+                        "[K] near = %-16s  (lines are clipped too - the 1-D case)",
+                        name_of(near_handling));
+                }
+                else if (near_ok)
+                {
+                    SDL_RenderDebugTextFormat(renderer, 6.0f, 62.0f,
+                        "[K] near = %-16s  %d tris -> %d  (%d straddle, %d behind)",
+                        name_of(near_handling), scene_clip.input, scene_clip.output,
+                        scene_clip.straddling, scene_clip.behind);
+                }
+                else
+                {
+                    SDL_RenderDebugTextFormat(renderer, 6.0f, 62.0f,
+                        "[K] near = %-16s  %d tris -> %d  vs clipped: %d px WRONG",
+                        name_of(near_handling), scene_clip.input, scene_clip.output,
+                        near_wrong);
+                }
+            }
+
             const bool floor_scene = (scene_mode == scene_kind::floor);
 
             if (floor_scene)
@@ -2763,19 +3055,58 @@ int main(int argc, char* argv[])
                 // spare pixels to write into — every HUD line moves up into the
                 // sky above the horizon, which is the only empty part left.
                 SDL_SetRenderDrawColor(renderer, 150, 152, 170, 255);
-                SDL_RenderDebugText(renderer, 6.0f, 70.0f,
-                    "affine interpolation makes the checker swim and buckle, and breaks");
-                SDL_RenderDebugText(renderer, 6.0f, 84.0f,
-                    "along the diagonal each quad is split on. [I] toggles the fix.");
-                SDL_RenderDebugText(renderer, 6.0f, 104.0f,
-                    "[T] subdivides the floor: the error falls with the SQUARE of the");
-                SDL_RenderDebugText(renderer, 6.0f, 118.0f,
-                    "subdivision, and never reaches zero. That is why 1990s floors");
-                SDL_RenderDebugText(renderer, 6.0f, 132.0f,
-                    "were tessellated to death - and why one divide per pixel won.");
+                if (near_handling == near_mode::clip
+                    && interp == engine::interpolation::affine)
+                {
+                    // Lesson 3.2's subject is what is on screen, so 3.2 gets the
+                    // sky. Each wrong mode explains itself and only itself —
+                    // stacking every explanation at once is how a HUD becomes
+                    // wallpaper nobody reads.
+                    SDL_RenderDebugText(renderer, 6.0f, 84.0f,
+                        "AFFINE: the checker swims and buckles, and breaks along the");
+                    SDL_RenderDebugText(renderer, 6.0f, 98.0f,
+                        "diagonal each quad is split on. [T] subdivides: the error falls");
+                    SDL_RenderDebugText(renderer, 6.0f, 112.0f,
+                        "with the SQUARE of the subdivision and never reaches zero. That");
+                    SDL_RenderDebugText(renderer, 6.0f, 126.0f,
+                        "is why 1990s floors were tessellated to death. [I] for the fix.");
+                }
+                else if (near_handling == near_mode::clip)
+                {
+                    SDL_RenderDebugText(renderer, 6.0f, 84.0f,
+                        "hold [=] to walk forward. The floor's near edge passes the eye at");
+                    SDL_RenderDebugText(renderer, 6.0f, 98.0f,
+                        "radius 7, and from there part of it is BEHIND you. Clipping cuts");
+                    SDL_RenderDebugText(renderer, 6.0f, 112.0f,
+                        "those triangles along the near plane and draws the rest. [K] to");
+                    SDL_RenderDebugText(renderer, 6.0f, 126.0f,
+                        "see what the two obvious alternatives do instead.");
+                }
+                else if (near_handling == near_mode::drop)
+                {
+                    SDL_RenderDebugText(renderer, 6.0f, 84.0f,
+                        "DROP: one corner behind the near plane sinks the WHOLE triangle, so");
+                    SDL_RenderDebugText(renderer, 6.0f, 98.0f,
+                        "the ground you stand on is simply not drawn. [T] shrinks the hole -");
+                    SDL_RenderDebugText(renderer, 6.0f, 112.0f,
+                        "it is one cell deep, so it goes like 1/N - but at 16x16 there is");
+                    SDL_RenderDebugText(renderer, 6.0f, 126.0f,
+                        "still a viewpoint that loses half the frame. 512 tris to hide it.");
+                }
+                else
+                {
+                    SDL_RenderDebugText(renderer, 6.0f, 84.0f,
+                        "NONE: no guard at all. A vertex behind the eye has w < 0, so the");
+                    SDL_RenderDebugText(renderer, 6.0f, 98.0f,
+                        "divide FLIPS ITS SIGN and it lands on the far side of the screen.");
+                    SDL_RenderDebugText(renderer, 6.0f, 112.0f,
+                        "The triangle spans the frame or turns inside out; magenta marks");
+                    SDL_RenderDebugText(renderer, 6.0f, 126.0f,
+                        "pixels whose uv came back infinite. This is 2.7's warning, live.");
+                }
                 SDL_SetRenderDrawColor(renderer, 210, 212, 220, 255);
-                SDL_RenderDebugText(renderer, 6.0f, 152.0f,
-                    "[I] interp  [T] tessellate  [C] scene  [arrows] orbit  [-][=] dolly");
+                SDL_RenderDebugText(renderer, 6.0f, 146.0f,
+                    "[K] near  [I] interp  [T] tessellate  [C] scene  [arrows] orbit  [-][=] dolly");
             }
 
             // Everything below writes into the column of pixels beside the inset

@@ -49,6 +49,7 @@ add_executable(engine
     src/core/fixed_step.cpp
     src/core/input.cpp
     src/game/pong.cpp
+    src/gfx/clip.cpp
     src/gfx/colour.cpp
     src/gfx/depth_buffer.cpp
     src/gfx/framebuffer.cpp

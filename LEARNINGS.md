@@ -1586,3 +1586,109 @@ keeps the capacity and the steady state allocates nothing.
 
 That ownership detail is the whole trick, and it is the smallest possible preview of Module 8: the
 fix for allocation in a hot loop is almost never a faster allocator, it is not allocating.
+
+
+## A destructive step has a precondition, not a guard (Lesson 3.3)
+
+The perspective divide is `x/w`, and for a vertex behind the eye `w` is negative, so the result is
+not merely large — it is **sign-flipped**. A point up and to the right of the camera lands down and
+to the left. `x_ndc = -0.43` is that point; it is *also* an ordinary point slightly left of centre,
+comfortably in front. The divide collapses the two onto one number and leaves no residue.
+
+So there is no test you can put *after* the divide that recovers the distinction, and no branch you
+can put *inside* it that helps: the correct answer for a straddling triangle is not "draw it" or
+"drop it" but "draw a different, smaller triangle". That is work, and it has to happen upstream.
+
+**The general form:** when a step destroys information, the check that needs that information cannot
+live at or after the step. It has to be a precondition enforced by whoever comes before, and the
+step's contract should say so out loud. `screen_from_clip` has no guard on `w`, and its doc comment
+says why: a `w` at the eye is not a case to branch on, it is a case that must not arrive.
+
+
+## Two states that must not be confused should be two types (Lesson 3.3)
+
+`engine::vertex` is a screen-space type: integer pixels, device depth in `[0,1]`, a pre-divided
+`inv_w`. Every one of those fields assumes the divide has already happened, which is exactly what
+makes it the wrong type to clip with. A single struct with a "have I been divided yet" flag would
+compile, and would let a screen-space vertex reach the clipper, where the arithmetic is silently
+meaningless.
+
+`clip_vertex` makes that a compile error instead. This is the third time the same move has paid in
+this codebase — `point()` vs `direction()` (2.7), `xyz()` vs `perspective_divide()` (2.10), and now
+this — and the pattern is worth naming: **when two things have the same shape and different
+meanings, spending a type is cheaper than spending a comment.**
+
+
+## Prove the bound instead of clamping to it (Lesson 3.3)
+
+`clip_polygon_near` writes into a caller-supplied buffer with no capacity check in the loop. That is
+defensible only because the bound is a *proof*, written where the reader will meet it: emissions are
+(vertices inside) + (crossings), one plane produces at most one crossing in each direction around a
+convex polygon, a triangle has three vertices, so the worst case is exactly 4.
+
+Lesson 3.2 learned the other half of this the hard way — a fixed array plus `std::min` turns a
+capacity bug into a *rendering* bug, which is far harder to trace. The resolution is not "always
+clamp" and not "always assert". It is: make the bound exact and say why, or make exceeding it fail
+loudly. What must never happen is a limit that silently truncates.
+
+
+## The measurement is allowed to prove *you* wrong (Lesson 3.3)
+
+This lesson's first draft asserted that "no amount of subdivision removes the artifact" — a
+satisfying line, parallel to 3.2's genuine finding about quadratic convergence. The harness
+disagreed immediately: at 8×8 on the demo's floor, dropping straddling triangles and clipping them
+produced **bit-identical frames**.
+
+The reason is specific and it is the interesting part. On a *ground plane* the strip that straddles
+the near plane is the one under and behind your feet, so once tessellation makes it thin enough it
+falls off the bottom of the view and costs nothing. Subdivision does not fix the bug; it moves the
+hole somewhere the camera is not looking.
+
+What replaced the false claim is stronger than it was: measured over every camera the demo allows,
+2 triangles lose the whole frame, 32 triangles lose the whole frame, 512 triangles still lose 51%,
+and it takes **8,192** — four thousand times the geometry — before the hole is finally pushed off
+every reachable view. The clipper is thirty lines and exact.
+
+Pedagogy §5 says show the failure. It cuts both ways: build the harness so it can tell you the
+failure you are describing is not the one that happens.
+
+
+## Do not use a broken baseline to test the fix for the breakage (Lesson 3.3)
+
+The obvious winding check is "signed screen area before clipping vs after". It fails, and the
+clipper is innocent: the *before* triangle has a vertex behind the eye, so its projection is exactly
+the garbage this lesson exists to prevent. Comparing against it measures nothing.
+
+The test that works is **continuity**. Slide a triangle steadily through the plane, clipping at every
+step, and assert the sign never changes — it cannot, because the shape does not turn inside out as
+it moves. Generalisation: when testing a fix for a degenerate case, the reference has to be drawn
+from the *non*-degenerate regime, and a sweep through the boundary is usually how you get one.
+
+
+## `std::clamp` cannot remove a NaN (Lesson 3.3)
+
+`std::clamp(v, lo, hi)` is `v < lo ? lo : hi < v ? hi : v`. Every comparison against a NaN is false,
+so both tests fail and the NaN is handed straight back. Code that clamps "to be safe" before a cast
+is therefore not safe at all, and converting a NaN — or any float outside the target's range — to an
+integer is **undefined behaviour**, not a large number.
+
+Two consequences worth carrying:
+
+- Write the test in the form that catches NaN: `!(x < limit)` and `!(x > 0)`, never `x >= limit` or
+  `x <= 0`. The negated form is true for a NaN; the direct form is false.
+- A cast that is undefined for a value the program can reach is a latent bug regardless of which
+  lesson first reaches it. Lesson 3.3's deliberately-broken mode is what *found* the reachable NaN
+  in `linear_to_srgb_u8`, but Module 6's HDR pipeline and Module 7's physics would both have found
+  it eventually, in circumstances far less convenient.
+
+
+## One constant, two undefined behaviours (Lesson 3.3)
+
+`to_pixel` clamps to ±8,000, and the number is doing two jobs at once. It keeps the float inside
+`int`'s range so the conversion is defined — and it keeps `edge_function`'s products inside 32 bits,
+because that function multiplies coordinate *differences* and signed overflow is undefined too.
+Picking ±100,000 would have fixed the first and quietly created the second.
+
+Worth the habit: when a limit exists to hold off one failure, check what else downstream has a
+range, and pick a value that satisfies all of them. Then say so at the constant, because the next
+person will otherwise assume the smaller number was arbitrary and raise it.

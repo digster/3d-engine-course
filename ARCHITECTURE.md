@@ -64,6 +64,8 @@ inventing one — but without paying framework ceremony before it buys anything.
 │   │   ├── vec3/4.hpp, mat2/3/4.hpp  # header-only 3-D maths          [EXISTS from 2.5–2.6]
 │   │   └── transform.hpp   # position/rotation/scale → model matrix   [EXISTS from 2.8]
 │   ├── gfx/                # framebuffer, software rasterizer → later SDL_GPU renderer
+│   │   ├── clip.hpp        # near-plane clipping, in CLIP space     [EXISTS from 3.3]
+│   │   ├── clip.cpp        # Sutherland–Hodgman; segments and polygons
 │   │   ├── colour.hpp      # pack/unpack, sRGB transfer functions   [EXISTS from 1.6]
 │   │   ├── colour.cpp
 │   │   ├── framebuffer.hpp # CPU pixel buffer, ARGB8888, row-major   [EXISTS from 1.5]
@@ -763,6 +765,18 @@ Built roughly in dependency order — each module's milestone is the next module
   `SDL_GPUGraphicsPipelineCreateInfo` is this struct several times over. Adopting the shape while
   it holds three fields means Module 4 is a rename, and each new knob costs one field rather than
   one more argument at every call site.
+- **Clipping is a pipeline stage, not a guard** (Module 3, Lesson 3.3). The perspective divide
+  has a *precondition*, not a branch: `x/w` cannot be made safe from the inside, because for a
+  vertex behind the eye it is not merely large but *sign-flipped*, and once divided the
+  information needed to detect that is gone. So `src/gfx/clip.hpp` introduces a second vertex
+  type — `clip_vertex`, living in clip space, where `w` is still signed — and the geometry
+  pipeline gains a stage between the projection matrix and the divide. The near plane is
+  `z_clip >= 0`, which the projection's depth row was *built* to make a coordinate plane; it is
+  emphatically not `w >= 0`, which is the plane through the eye and admits screen coordinates in
+  the hundreds of thousands. Only the near plane is clipped, and that asymmetry is the load-bearing
+  part: the near plane is a **correctness** requirement, the other five are an **optimisation**
+  the rasterizer's bounding-box clamp already covers. Keeping those categories distinct is what
+  lets a later lesson skip one deliberately (guard-band clipping, Module 4).
 - **Public API surface is a deliberate artifact,** not whatever headers happen to be reachable.
 
 ---

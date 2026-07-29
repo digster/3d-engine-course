@@ -90,7 +90,7 @@ horizon, every pixel of both rasterized by code in this repository:
 .\build\Debug\engine.exe  # Windows
 ```
 
-Arrow keys orbit the camera, <kbd>-</kbd>/<kbd>=</kbd> dolly. The three keys worth pressing first:
+Arrow keys orbit the camera, <kbd>-</kbd>/<kbd>=</kbd> dolly. The keys worth pressing first:
 
 - <kbd>F</kbd> cycles **wireframe → painter's algorithm → z-buffer → depth view**. The HUD counts,
   live, how many pixels the two hidden-surface strategies disagree about.
@@ -109,6 +109,13 @@ interpolation off and the floor buckles into the warping every PlayStation game 
 subdivides the floor and shows you what the era's alternative actually cost. The derivation — five
 lines, and it covers every attribute a vertex will ever carry — is
 [Lesson 3.2](docs/lessons/03-02-perspective-correct.html).
+
+Then hold <kbd>=</kbd> on that floor and walk *into* it. <kbd>K</kbd> cycles what happens to a
+triangle with a corner behind your eye: **clip** it (correct), **drop** it (the ground vanishes —
+31,747 pixels of 57,600), or divide anyway with **no guard** at all (the floor folds inside out and
+188 pixels survive). Why the perspective divide has a precondition rather than a guard, why the
+near plane is `z_clip ≥ 0` and not `w ≥ 0`, and Sutherland–Hodgman implemented for polygons *and*
+line segments, is [Lesson 3.3](docs/lessons/03-03-near-plane-clipping.html).
 
 <kbd>Tab</kbd> cycles the earlier demos, which are kept rather than deleted: the basis-transform
 visualiser (2.5), the triangle rasterizer's seven views (2.2–2.4), the line-algorithm fan (2.1),

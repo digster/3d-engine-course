@@ -2183,6 +2183,86 @@ td code { font-size: 0.82em; }
     </p>
   </div>
 
+  <div class="tool">
+    <h3>Signed distance to a plane, and the crossing parameter <span class="from">Lesson 3.3</span></h3>
+    <div class="eq">
+      <span>\[ t \;=\; \frac{d_a}{d_a - d_b} \qquad\text{where } d \text{ is the signed distance} \]</span>
+      <span class="eq-plain">t = d_a / (d_a - d_b)</span>
+    </div>
+    <p>
+      <strong>Signed distances turn &ldquo;where does this segment meet that plane?&rdquo; into a
+      lerp.</strong> Distance varies affinely along a straight segment, so
+      <code>d(t) = d<sub>a</sub> + t(d<sub>b</sub> &minus; d<sub>a</sub>)</code>, and setting it to
+      zero gives the formula above. Read it as a sentence: <code>d<sub>a</sub></code> is how far
+      inside you start, <code>d<sub>a</sub> &minus; d<sub>b</sub></code> is how much distance the
+      whole segment loses, so the ratio is the fraction spent reaching zero.
+    </p>
+    <p>
+      When the endpoints straddle the plane the two distances have opposite signs, so the
+      denominator is larger in magnitude than the numerator and <code>t</code> is strictly inside
+      <code>(0, 1)</code>. Once you have <code>t</code>, <em>everything</em> the endpoints carry is
+      lerped with it &mdash; which is why this one formula covers position, depth, texture
+      coordinates and colour at once.
+    </p>
+    <p>
+      <strong>The near plane in clip space is <code>z_clip = 0</code></strong>, so its signed
+      distance is a component you read rather than a dot product you compute. That falls out of the
+      projection&rsquo;s depth row (below), not from luck.
+    </p>
+  </div>
+
+  <div class="tool">
+    <h3>Where the near plane lives in clip space <span class="from">Lesson 3.3</span></h3>
+    <div class="eq">
+      <span>\[ z_{\text{clip}} = A z_{\text{view}} + B = 0 \;\Longrightarrow\; z_{\text{view}} = -\frac{B}{A} = -n \]</span>
+      <span class="eq-plain">A*z_view + B = 0  gives  z_view = -B/A = -near</span>
+    </div>
+    <p>
+      With <code>A = f/(n&minus;f)</code> and <code>B = fn/(n&minus;f)</code> from Lesson
+      2.10&rsquo;s projection, the <code>f</code> and the <code>(n&minus;f)</code> cancel and what
+      is left is exactly the near plane. <strong>The near plane has been arranged to be a
+      coordinate plane</strong>, which is what makes the clip test one comparison.
+    </p>
+    <p>
+      <strong>Do not confuse it with <code>w &ge; 0</code>.</strong> <code>w = &minus;z_view</code>,
+      so that is the plane through the <em>eye</em> &mdash; <code>near</code> units closer, and not
+      enough: a point <code>0.0001</code> units in front of the eye passes it and divides to a
+      screen coordinate 691,714 pixels wide. The equivalent <code>w</code> form of the correct test
+      is <code>w &ge; near</code>.
+    </p>
+    <div class="worked">
+      <span class="label">Worked example &mdash; the demo&rsquo;s projection</span>
+      <p>
+        <code>near = 0.3</code>, <code>far = 100</code>, so <code>n &minus; f = &minus;99.7</code>:
+      </p>
+      <ul>
+        <li><code>A = 100 / (&minus;99.7) = &minus;1.00300908</code></li>
+        <li><code>B = 30 / (&minus;99.7) = &minus;0.30090272</code></li>
+        <li><code>&minus;B/A = &minus;0.30000001</code> &nbsp;&mdash; that is <code>&minus;near</code>, as promised</li>
+        <li>An edge from <code>z = &minus;5</code> to <code>z = +1</code> crosses at
+            <code>t = (&minus;5 + 0.3)/(&minus;5 &minus; 1) = 47/60 = 0.7833333</code>, and the
+            crossing has <code>w = 0.3</code> and device depth <code>0</code> exactly.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="tool">
+    <h3>Sutherland&ndash;Hodgman, one plane <span class="from">Lesson 3.3</span></h3>
+    <p>
+      <strong>Walk the polygon&rsquo;s edges; for the edge arriving at each vertex, ask two
+      questions.</strong> <em>Did this edge cross the plane?</em> Emit the crossing.
+      <em>Is this vertex inside?</em> Emit the vertex. That is the whole algorithm, and writing it
+      as two questions rather than four cases is what stops one of them being wrong.
+    </p>
+    <p>
+      It preserves convexity and winding, so the result can be fanned as
+      <code>(out[0], out[k&minus;1], out[k])</code>. A triangle against one plane gives
+      <strong>0, 3 or 4</strong> vertices &mdash; never 1 or 2, because a convex polygon cut by a
+      plane is either empty or has an interior. Each additional plane adds at most one more vertex,
+      so the full six-plane frustum needs 9 slots.
+    </p>
+  </div>
+
   <h2 id="coming"><span class="num">7</span>Coming as the course proceeds</h2>
 
   <p>

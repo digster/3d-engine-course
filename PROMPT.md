@@ -771,3 +771,53 @@ emits 13 elements regardless of subdivision, which demonstrates the lesson's poi
 `check-page.js` returned `pass: true` after four label collisions were fixed. It could not catch
 the one that mattered: **Figure 5's caption still described a dashed line I had removed**, found by
 reading the rendered figure against its own text.
+
+
+## 2026-08-03 — Lesson 3.3
+
+> Based on the STATE and the project's claude instructions, work on the next.
+
+Resumed from `STATE.md` → `next: 3.3 — Near-Plane Clipping`. The block had already named the
+artifact (orbit the floor and it vanishes, because `project()` returns invisible for `w ≤ 0.05`),
+the fix (Sutherland–Hodgman in clip space at `z_clip ≥ 0`, *not* `w ≥ 0`), and one open decision:
+whether the clipper needs its own vertex type.
+
+### Judgement calls
+
+| Question | Decision | Why |
+|---|---|---|
+| Does the clipper need its own vertex type? | **Yes — `clip_vertex`** | `engine::vertex` is a *screen-space* type: integer pixels, device depth, a pre-divided `inv_w`. Every field assumes the divide has happened, which is exactly what makes it the wrong type to clip with. One struct with a "divided yet?" flag would compile and silently produce nonsense; two types make that call a compile error. Third time this move has paid — `point()`/`direction()` (2.7), `xyz()`/`perspective_divide()` (2.10). |
+| Clip triangles only, or segments too? | **Both** | The demo draws a great many lines — world grid, object axes, every wireframe edge — and a line crossing the near plane is exactly as broken as a triangle that does. It is also the honest way *in*: three cases you can hold in your head at once, before the polygon loop. Walking over a gridline no longer makes it blink out. |
+| A new scene for the artifact? | **No — the existing floor** | STATE said the 1×1 floor *is* the wall-you-walk-into case, and the measurement agreed: dropping loses 31,747 of 57,600 pixels at the demo's default tessellation, and 100% at some camera angles. Adding a corridor scene would have been a larger diff for a weaker reason; it is Exercise 3.3.3 instead, with the harness numbers to compare against. The floor's dolly limit moved 4 → 1 so the camera can actually walk past the ground's near edge. |
+| How do the three near modes travel through six drawing functions? | **A `projector` struct** | `proj` and `vp` were already a loose pair threaded through `line3`, `line3_world`, `draw_world`, `draw_mesh`, `draw_axes3` and `collect_triangles`, and this lesson was about to make it three. Same argument `fill_style` made in 3.2, one level up — and note the direction of the win: adding a knob made every call site *shorter*. |
+| Where does the divide go now? | **Inside the triangle loop, after the clipper** | Costs a divide per triangle *corner* rather than per vertex — 60 instead of 12 on the icosahedron. Paid knowingly: the two-pass alternative (divide the unclipped, re-divide the clipped) is more code, more state, and wrong in ways easy to miss. Real hardware pays it too — vertex shader, clip, *then* divide. |
+| The `none` mode can produce NaN inside the rasterizer | **Harden the engine, not the demo** | `float → int` is undefined out of range, and an interpolated `1/w` passing through zero reaches it. Three guards: `to_pixel` (clamp ±8000 — which also keeps `edge_function`'s products inside int32), `checker_at` (magenta on a non-finite uv), `linear_to_srgb_u8` (`!(linear > 0)`). The last is not demo scaffolding: Module 6's HDR pipeline pushes floats through the same function, and `std::clamp` *cannot* remove a NaN. |
+
+### Verification
+
+`scratch/verify_33.cpp`, nine sections, all green. The near plane is `z_clip = 0` to `1e-9` and
+`−B/A = −0.30000001` against `near = 0.3`. Over 68,594 random straddling edges the clip-space
+crossing parameter matches the view-space form `(z_a + near)/(z_a − z_b)` to `4.8e-7`, the new
+vertex lands on the plane to `1.6e-6`, its uv matches an independently computed ray–plane
+intersection to `2.3e-6`, and its `w` equals `near` to `1.7e-6`. All four Sutherland–Hodgman
+configurations check out: 3 in → 3 out *bit-identical*, 2 in → 4, 1 in → 3, 0 in → 0.
+
+The regression that mattered most: over **405** camera-and-tessellation combinations with nothing
+straddling, clipping and dropping produce **0** differing pixels. A fix that changes the image
+where there was no bug is not a fix.
+
+Two things the harness corrected rather than confirmed. The winding check failed first, and the
+clipper was innocent — the "before" area was computed from a triangle with a vertex behind the eye,
+whose projection is exactly the garbage the lesson exists to prevent. Replaced with a continuity
+test: slide a triangle through the plane and assert the sign never changes (502 clipped steps, both
+windings, 0 flips). And the draft's claim that "no amount of subdivision removes the artifact" was
+simply **false** — at 8×8 on a ground plane, dropping and clipping give bit-identical frames,
+because the straddling strip is the one under your feet. The measured replacement is a better
+argument: 2 triangles lose the whole frame, 512 still lose 51%, and it takes 8,192 before the hole
+is finally pushed off every reachable view.
+
+`check-page.js` returned `pass: true` after twelve label collisions and two spills were fixed. It
+could not catch the one that mattered: **Figure 6's text said "the gold dot" about a marker that is
+green**, found by rendering the figure and reading it against its own prose. Also caught by eye —
+the widget's view frustum was drawn far outside its panel (fixed with a `clipPath`) and its "eye"
+label sat underneath a draggable handle.

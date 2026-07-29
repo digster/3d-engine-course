@@ -7,7 +7,7 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-08-02 (after Lesson 3.2, 28 of 94 lessons)
+updated: 2026-08-03 (after Lesson 3.3, 29 of 94 lessons)
 
 conventions:
   world: right-handed, Y-up, -Z forward
@@ -53,6 +53,29 @@ conventions:
         THE TEST IS NOT PART OF THE BUFFER. depth_buffer stores and clears; the
         rasterizer compares. Same split as SDL_GPUDepthStencilState's three
         independent knobs (compare_op / enable_depth_test / enable_depth_write).
+  clipping: NEAR PLANE ONLY, IN CLIP SPACE, BEFORE THE DIVIDE. Inside is
+        z_clip >= 0 — NOT w >= 0, which is the plane through the EYE, `near` units
+        closer, and which admits a point 0.0001 units in front of the camera that
+        divides to x = 691714 px on a 320-px-wide buffer (measured).
+        WHY BEFORE THE DIVIDE: the divide is the ONE information-destroying step in
+        the pipeline. x/w for a point behind the eye and x/w for an ordinary point
+        slightly left of centre are the SAME NUMBER. Nothing downstream can tell
+        them apart, so nothing downstream can clip.
+        WHY z_clip = 0 IS THE NEAR PLANE: 2.10's depth row is z_clip = A*z_v + B
+        with A = f/(n-f), B = f*n/(n-f); setting it to zero cancels f and (n-f) and
+        leaves z_v = -n exactly. The plane was ARRANGED to be a coordinate plane,
+        which is what makes the test one comparison. Equivalent w form: w >= near.
+        CROSSING PARAMETER t = da/(da - db), and it equals (z_a + n)/(z_a - z_b) —
+        the far/(near-far) factor is common to both distances and cancels, so t does
+        not depend on the far plane, the fov or the aspect at all. If yours changes
+        when you change `far`, you have a bug.
+        EVERY COMPONENT lerps with that one t, INCLUDING w. Interpolating x,y,z and
+        forgetting w gives a vertex in the right place with the wrong depth scale —
+        right shape, wrong size, and only on clipped geometry.
+        THE OTHER FIVE PLANES ARE AN OPTIMISATION, not correctness: the rasterizer's
+        bbox clamp already draws off-screen triangles correctly, just wastefully.
+        Say which is which; it is the whole reason this lesson exists and 3.4's
+        culling does not.
   interpolation: BARYCENTRIC INTERPOLATION PROMISES ONE THING — the unique AFFINE
         function of the PIXEL POSITION agreeing with three corner values. So it is
         correct for a quantity affine in screen space and wrong for one that is not.
@@ -686,8 +709,33 @@ completed:
   ===> MODULE 2 COMPLETE <===
   - 3.1  The Painter's Problem and the Z-Buffer
   - 3.2  Perspective-Correct Interpolation
+  - 3.3  Near-Plane Clipping
 
 capabilities:
+  - gfx 3.3: NEAR-PLANE CLIPPING. src/gfx/clip.hpp/.cpp (NEW) — struct clip_vertex
+    {vec4 position; vec2 uv; Uint32 colour;} (a CLIP-SPACE type, deliberately
+    distinct from engine::vertex which is screen-space, so handing the wrong one to
+    the clipper is a compile error rather than nonsense); constexpr near_distance(p)
+    = p.z; constexpr near_crossing(da, db) = da/(da-db); lerp() (all four position
+    components + uv + colour IN LINEAR LIGHT); clip_segment_near(a, b) in place
+    (the 1-D case, for the world grid / axes / wireframe); clip_polygon_near(span,
+    span) — Sutherland-Hodgman as TWO questions, not four cases, returning 0/3/4
+    vertices; k_clip_max_vertices = 4 (an EXACT bound, proved in the header, not a
+    margin — six planes would need 9).
+    main.cpp: project() SPLIT into to_clip() and screen_from_clip(); screen_point
+    LOSES its `visible` flag (the pipeline now has a plan instead of a question);
+    new `struct projector {mat4 proj; viewport vp; near_mode near;}` replaces the
+    loose (proj, vp) pair everywhere — adding a knob made every call site SHORTER;
+    collect_triangles stops at clip space per vertex and moves the divide INSIDE
+    the triangle loop, after the clipper, then fans (0, k-1, k); clip_stats reports
+    input / in_front / straddling / behind / output as properties of the GEOMETRY,
+    not the mode, so the three modes are comparable. [K] cycles clip / drop / none.
+    Floor scene dolly min 4 -> 1 so the camera can actually walk past the floor's
+    near edge (z=+6, and the eye at radius 7 is at z~6.97).
+    NaN guards, all three genuine hardenings: to_pixel() (float->int is UB out of
+    range; clamp to +-8000, which also keeps edge_function's products inside int32),
+    checker_at() (magenta on a non-finite uv), linear_to_srgb_u8() (`!(linear > 0)`
+    — std::clamp CANNOT remove a NaN, since every comparison with one is false).
   - verified C++20 toolchain (MSVC / GCC / Clang), 64-bit
   - portable CMake build, now six translation units; FetchContent SDL3 (release-3.4.12)
   - engine app: 1280x720 window, complete switch-based event dispatch (quit,
@@ -1157,6 +1205,55 @@ decisions:
     rather than deleted, so the failure can be reproduced on demand (pedagogy §5:
     show the artifact). It is dead weight only if you think a bug you can summon is
     worth less than one you can only describe.
+  - CLIPPING GETS ITS OWN VERTEX TYPE. engine::vertex is a SCREEN-space type —
+    integer pixels, device depth, a pre-divided inv_w — and every one of those
+    fields assumes the divide has happened, which is exactly what makes it the
+    wrong type to clip with. One flexible struct with a "have I been divided yet"
+    flag would COMPILE and silently produce nonsense. Two types make that call fail
+    to compile. Same argument as point()/direction() in 2.7 and drop-vs-divide in
+    2.10: when two states must not be confused, make them two things.
+  - clip_polygon_near TAKES AND RETURNS SPANS, and the output bound is a PROOF
+    written in the header, not a margin: emissions = (vertices inside) + (crossings),
+    one plane gives at most one crossing each way around a convex polygon, so 2+2=4.
+    No capacity check in the loop. This is 3.2's lesson applied — a limit that
+    silently truncates turns a capacity bug into a rendering bug, so the right move
+    is to make the bound provable rather than to clamp.
+  - SUTHERLAND-HODGMAN WRITTEN AS TWO QUESTIONS, NOT FOUR CASES. "Did the edge
+    cross?" (emit the crossing) and "is `cur` inside?" (emit cur). The four-row
+    table is real but it is a table, and four branches that are really two is an
+    invitation to typo one of them.
+  - THE SORT KEY IS COMPUTED BEFORE CLIPPING and shared by every piece. The pieces
+    are the same surface; a sort must not be able to tell them apart, or one half of
+    a wall sorts in front of the other.
+  - THE DIVIDE MOVED INSIDE THE TRIANGLE LOOP, so a shared vertex is divided once
+    per triangle using it (60 instead of 12 on the icosahedron). Paid knowingly: the
+    two-pass alternative (divide the unclipped, re-divide the clipped) is more code,
+    more state, and wrong in ways that are easy to miss. Real hardware pays it too —
+    vertex shader, clip, THEN divide, in that order.
+  - `projector` GATHERS proj + viewport + near policy. Same argument fill_style made
+    in 3.2, one level up. Note the direction of the win: adding this lesson's knob
+    made every call site SHORTER, because it replaced two loose parameters with one.
+  - THE ARROWHEAD IN draw_axes3 STILL DROPS RATHER THAN CLIPS, and says so. It is
+    screen-space DECORATION built by rotating the projected shaft; if either end is
+    behind the eye the rotation has nothing meaningful to act on. A decoration with
+    no defined position is dropped; GEOMETRY is clipped. Worth stating explicitly so
+    it does not read as an oversight.
+  - THREE near modes, not a bool. There are two DIFFERENT wrong answers here (drop
+    the triangle; divide anyway) and they fail in visibly different ways. A bool
+    would only let one of them be seen. Sixth time this bargain has been made
+    (draw_line_naive 2.1, pong swept_collision 1.8, blend_space::encoded 2.4, the w
+    toggles 2.7, trs_order 2.8, interpolation::affine 3.2).
+  - THE NaN GUARDS ARE ENGINE HARDENING, NOT DEMO SCAFFOLDING. float->int is
+    UNDEFINED out of range, and `none` mode reaches it. But the NaN is not really
+    the demo's: Module 6 pushes an HDR pipeline through linear_to_srgb_u8 and
+    Module 7's physics will produce the occasional NaN the way all physics does. A
+    cast that is undefined for a value the program can reach is a latent bug
+    whichever lesson first reaches it. Note the SHAPE of the test — `!(x < limit)`
+    and `!(linear > 0)`, because every comparison with a NaN is false and
+    std::clamp therefore hands one straight back.
+  - to_pixel CLAMPS TO +-8000 and the constant does two jobs: it keeps the float
+    inside int's range, AND it keeps edge_function's products (which multiply
+    coordinate DIFFERENCES) inside int32, where signed overflow is also undefined.
 
 files:
   /: CLAUDE.md, README.md, ARCHITECTURE.md, LEARNINGS.md, PROMPT.md, LICENSE,
@@ -1164,7 +1261,8 @@ files:
   src/: main.cpp
   src/core/: input.hpp, input.cpp, clock.hpp, clock.cpp,
             fixed_step.hpp, fixed_step.cpp
-  src/gfx/: colour.hpp, colour.cpp, depth_buffer.hpp, depth_buffer.cpp,
+  src/gfx/: clip.hpp, clip.cpp, colour.hpp, colour.cpp,
+            depth_buffer.hpp, depth_buffer.cpp,
             framebuffer.hpp, framebuffer.cpp,
             raster.hpp, raster.cpp, viewport.hpp, mesh.hpp
   src/math/: vec2.hpp, vec3.hpp, vec4.hpp, mat2.hpp, mat3.hpp, mat4.hpp, transform.hpp
@@ -1183,66 +1281,68 @@ files:
                  02-07-homogeneous.html, 02-08-space-chain.html,
                  02-09-view-matrix.html, 02-10-perspective.html,
                  02-11-viewport.html, 02-12-wireframe-mesh.html,
-                 03-01-z-buffer.html, 03-02-perspective-correct.html
+                 03-01-z-buffer.html, 03-02-perspective-correct.html,
+                 03-03-near-plane-clipping.html
   docs/_template/: lesson-template.html, README.md, apply-shared.py, check-page.js
   memory/: 2026-07-16.md, 2026-07-18.md, 2026-07-21.md, 2026-07-22.md,
            2026-07-23.md, 2026-07-24.md, 2026-07-25.md, 2026-07-26.md,
            2026-07-27.md, 2026-07-28.md, 2026-07-29.md, 2026-07-30.md,
-           2026-07-31.md, 2026-08-01.md, 2026-08-02.md
+           2026-07-31.md, 2026-08-01.md, 2026-08-02.md, 2026-08-03.md
   (retired: hello.cpp)
 
-next: 3.3 — Near-Plane Clipping
-      (planned filename: docs/lessons/03-03-near-plane-clipping.html — 3.2 links to it)
-      THE ARTIFACT IS ALREADY IN THE DEMO AND 3.2 NAMES IT: orbit the floor scene and
-      the floor VANISHES. project() returns visible=false when clip.w <= 0.05, and
-      collect_triangles then drops the WHOLE triangle. Survivable when the geometry is
-      a small object mid-view; catastrophic when it is the wall you are walking into,
-      which is exactly what the 1x1 floor is.
-        - SHOW IT FIRST (pedagogy §5). Two artifacts, not one: (a) whole triangles
-          disappearing as the camera pushes through them, and (b) — worse and more
-          instructive — what happens if you REMOVE the guard instead of fixing it.
-          A vertex behind the eye has w < 0, the divide flips its sign, and it lands
-          on the OPPOSITE side of the screen: the triangle stretches across the whole
-          frame or turns inside out. 2.7 warned about negative w in the abstract; this
-          is where it bites. Build both.
-        - THE FIX IS NOT A BIGGER GUARD. It is to CUT the triangle against the near
-          plane and rasterize the part in front. Sutherland-Hodgman: walk the polygon's
-          edges, classify each vertex against the plane, and emit crossings. One
-          triangle in gives a triangle or a QUAD out (which is 2 triangles) — so a
-          clipper returns a variable number of triangles, and that is the design
-          pressure worth naming.
-        - CLIP IN CLIP SPACE, BEFORE THE DIVIDE. This is the part people get wrong.
-          Under our [0,1] depth convention the NEAR PLANE is z_clip = 0: 2.10's
-          depth row gives z_clip = A*z_v + B, which is 0 exactly at z_v = -near
-          (checked). So the inside test is z_clip >= 0. Do NOT confuse that with
-          w_clip >= 0, which is the plane through the EYE — a different, more
-          permissive plane that still lets the divide blow up. DERIVE it in the
-          lesson rather than asserting it. And note that clipping AFTER the divide
-          is impossible: the divide is what destroyed the information.
-        - INTERPOLATE THE NEW VERTEX'S ATTRIBUTES. A crossing point needs a position,
-          a uv, a colour AND a w — and it is a LINEAR interpolation in CLIP space,
-          before the divide, which is where everything is still affine. That is a
-          direct payoff from 3.2's derivation and should be presented as one: the
-          reason clipping is done pre-divide is the same reason a/w interpolates.
-          engine::vertex is a SCREEN-space type, so the clipper needs a clip-space
-          vertex type — DECIDE whether that is a new struct or whether collect_
-          triangles grows a clip-space stage. Probably a new `clip_vertex {vec4 pos;
-          vec2 uv; Uint32 colour;}` and the projection pipeline becomes
-          transform -> clip -> divide -> viewport -> engine::vertex.
-        - ONLY THE NEAR PLANE. The other five frustum planes are an OPTIMISATION (the
-          rasterizer's bbox clamp already handles them correctly, just wastefully);
-          the near plane is a CORRECTNESS requirement because the divide is undefined
-          there. Say which is which — it is the whole reason this lesson exists and
-          3.4's culling does not.
-        - VERIFY: sweep the camera through the floor and assert (a) no triangle ever
-          disappears, (b) the clipped geometry's silhouette matches the unclipped one
-          wherever both are valid, and (c) attributes at the new vertices match the
-          ray-plane truth — the same harness shape scratch/verify_32.cpp already uses.
-      Module 3 then continues: 3.4 back-face culling (the meshes are wound CCW-outward
-      and verified, AND 3.1 left a measured debt: the silhouette tie artifact culling
-      removes, 29 px -> 0), 3.5 the hand-rolled OBJ loader (which finally gives the uvs
-      3.2 added a real source), 3.6 normals and Lambert (replacing face_shade's debug
-      palette and straining the shading enum, as designed), 3.7 specular/Blinn-Phong,
-      3.8 flat vs Gouraud vs per-pixel, 3.9 texture mapping + bilinear (replacing
-      checker_at with a real sampler), 3.10 profiling and the Module 3 capstone.
+
+next: 3.4 — Back-Face Culling
+      (planned filename: docs/lessons/03-04-back-face-culling.html — 3.3 links to it)
+      3.1 LEFT A MEASURED DEBT AND NAMED THE PAYER. On the solids scene the painter's
+      algorithm and the z-buffer disagreed on 29 px and the counter never read zero.
+      The silhouette-tie explanation was TESTED, not assumed: cull back faces and it
+      reads "6 of 12 tris kept, 0 px differ". That number is the lesson's opening and
+      its checkpoint — start by reproducing it.
+        - THE MECHANISM IS ALREADY BUILT. edge_function (2.2) returns twice the signed
+          area, and fill_triangle already measures its sign to orient itself. Culling
+          is reading that sign instead of correcting for it. So this lesson is mostly
+          about WHICH SIGN and WHERE, and both are traps:
+        - SIGN. raster.hpp §edge_function says it plainly and it is worth re-deriving
+          rather than quoting: in FRAMEBUFFER coordinates (+y DOWN) a triangle that
+          appears counter-clockwise ON SCREEN has a NEGATIVE edge function. The
+          conventions page states winding in NDC (+y UP), where CCW = front. Those are
+          the same rule seen through 2.11's y flip, and stating it in only one space is
+          how a renderer ends up culling exactly the faces it wanted.
+        - WHERE. Cull in SCREEN space, after the divide, from the sign of the area —
+          NOT in view space from dot(normal, view_direction). The dot-product version
+          is the one everybody writes first and it is wrong for a perspective camera:
+          "facing away" is relative to the ray from the EYE to the triangle, not to the
+          camera's forward axis, so a triangle at the edge of a wide FOV is
+          misclassified. Derive that; it is a good failure to show.
+        - 3.3 PRESERVED THE WINDING SO THIS COULD WORK, and the harness proves it by
+          sliding a triangle through the near plane and asserting the sign of its
+          clipped screen area never changes (verify_33.cpp §F). Say so — it is what
+          makes clipping and culling composable, and the pitfall entry
+          "clipped triangles disappear once culling is on" is already written in 3.3 §7
+          waiting for this lesson.
+        - IT IS AN OPTIMISATION, NOT CORRECTNESS. 3.3 §3.8 drew that line explicitly
+          and this is the lesson that lands on the other side of it: the z-buffer
+          already produces the right picture without culling. What culling buys is
+          roughly half the fill work on a closed mesh — MEASURE it (the demo already
+          has the two-render harness and a tris counter), and be honest if the win is
+          small at 320x180.
+        - THE EXCEPTIONS ARE THE INTERESTING PART. Culling is only valid for CLOSED
+          geometry: the floor, the quads and the planks in the demo's scenes are
+          single-sided and will VANISH from below. That is not a bug to hide, it is
+          SDL_GPU_CULLMODE_NONE / _FRONT / _BACK as three pipeline states, and it is
+          why fill_style is the right home for the knob (three modes, cycled, exactly
+          like near_mode). Note the floor scene needs CULLMODE_NONE or [C] gets a
+          nasty surprise.
+        - VERIFY: (a) the 29 px goes to 0 on solids; (b) tris kept is exactly half on
+          the cube and icosahedron at every orientation; (c) the CYCLE and INTERSECT
+          scenes' painter-vs-zbuffer numbers are UNCHANGED (culling must not fix or
+          worsen those — they are about depth, not winding); (d) with culling on, the
+          floor disappears when viewed from below and returns under CULLMODE_NONE.
+      Module 3 then continues: 3.5 the hand-rolled OBJ loader (which finally gives the
+      uvs 3.2 added a real source, and brings meshes whose triangle count cannot be
+      raised to paper over anything — 3.3 §3.9's point), 3.6 normals and Lambert
+      (replacing face_shade's debug palette and straining the shading enum, as
+      designed), 3.7 specular/Blinn-Phong, 3.8 flat vs Gouraud vs per-pixel, 3.9
+      texture mapping + bilinear (replacing checker_at with a real sampler), 3.10
+      profiling and the Module 3 capstone.
 ```

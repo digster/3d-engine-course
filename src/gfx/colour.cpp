@@ -72,6 +72,22 @@ float srgb_to_linear_u8(Uint8 encoded)
 
 Uint8 linear_to_srgb_u8(float linear)
 {
+    // NaN never reaches the cast at the bottom, and this line is the only thing
+    // that can promise that. `std::clamp` cannot: every comparison against a NaN is
+    // false, so `clamp` finds it neither below the low bound nor above the high one
+    // and hands it straight back. Converting a NaN to a `Uint8` is undefined
+    // behaviour — not "some arbitrary byte", but a program with no defined meaning.
+    //
+    // Lesson 3.3 is where a NaN first becomes reachable in this engine: a triangle
+    // straddling the near plane, with the projective divide allowed to run anyway,
+    // interpolates a `1/w` that passes through zero, and `0 * infinity` is a NaN.
+    // Writing the test as `!(linear > 0)` rather than `linear <= 0` is what catches
+    // it, for exactly the reason above.
+    //
+    // For every value that is *not* a NaN this changes nothing: negatives and zero
+    // both encoded to 0 before, and they still do.
+    if (!(linear > 0.0f)) { return 0; }
+
     // Clamp before encoding. Light values arriving from a calculation can
     // legitimately exceed 1.0 — that is what "brighter than white" means, and
     // Module 6's HDR pipeline treats it as signal rather than error. Here there

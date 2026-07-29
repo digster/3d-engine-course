@@ -300,6 +300,29 @@ struct rgb3
 {
     const float cu = std::floor(u);
     const float cv = std::floor(v);
+
+    // A uv that is infinite or NaN is not a hypothetical, and Lesson 3.3 is where
+    // it arrives: let a triangle straddle the near plane with the projective divide
+    // still switched on and the interpolated `1/w` passes through zero, so its
+    // reciprocal — the factor every attribute is multiplied by — is an infinity.
+    //
+    // This guard is about UNDEFINED BEHAVIOUR, not tidiness. Converting a float to
+    // an int is undefined when the value is not representable, so `static_cast<int>`
+    // below on an infinity is not "a big number", it is a program with no defined
+    // meaning; the compiler is free to produce anything at all. Magenta is the
+    // long-standing debug convention for "this value is invalid", and it is
+    // genuinely informative here: it marks exactly the pixels where the divide
+    // broke. The fix is upstream — clip the triangle (Lesson 3.3 §3) — and this is
+    // only what keeps the broken mode showable.
+    //
+    // `!(x < limit)` rather than `x >= limit` because every comparison against a
+    // NaN is false, so the negated form catches NaN and the direct form does not.
+    constexpr float k_cell_limit = 1.0e7f;
+    if (!(std::fabs(cu) < k_cell_limit) || !(std::fabs(cv) < k_cell_limit))
+    {
+        return pack_argb(255, 0, 200);
+    }
+
     const bool light = (static_cast<int>(cu) + static_cast<int>(cv)) % 2 == 0;
     return light ? pack_argb(232, 226, 214) : pack_argb(58, 64, 88);
 }
