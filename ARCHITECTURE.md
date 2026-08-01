@@ -75,6 +75,7 @@ inventing one — but without paying framework ceremony before it buys anything.
 │   │   ├── raster.hpp      # which pixels a SHAPE is made of         [EXISTS from 2.1]
 │   │   ├── raster.cpp      # lines (2.1) + triangles (2.2) + shading (2.4)
 │   │   │                   # + depth (3.1) + perspective correction (3.2)
+│   │   │                   # + back-face culling (3.4)
 │   │   ├── viewport.hpp    # NDC -> pixels + the y-flip           [EXISTS from 2.11]
 │   │   └── mesh.hpp        # indexed geometry: verts + tri indices [EXISTS from 2.12]
 │   ├── game/               # NOT engine — game code, see §2.1.1        [EXISTS from 1.8]
@@ -777,6 +778,15 @@ Built roughly in dependency order — each module's milestone is the next module
   part: the near plane is a **correctness** requirement, the other five are an **optimisation**
   the rasterizer's bounding-box clamp already covers. Keeping those categories distinct is what
   lets a later lesson skip one deliberately (guard-band clipping, Module 4).
+- **Culling reads a sign the rasterizer already had** (Module 3, Lesson 3.4). `fill_triangle` has
+  computed the triangle's signed area since Lesson 2.2 and then immediately destroyed its sign by
+  reorienting to a positive area — so back-face culling is one comparison inserted into the single
+  window between those two events. It lives in the rasterizer, not in the caller, because that is
+  where the hardware runs it: after clipping and the perspective divide, before rasterization. The
+  test deliberately takes *screen-space* vertices, which makes the classic bug — asking
+  `dot(normal, camera_forward)` in view space, wrong on 15% of triangles at a 55° field of view —
+  impossible to write by accident. And it is the second entry in `fill_style` to mirror
+  `SDL_GPURasterizerState` field for field, so the Module 4 port stays a rename.
 - **Public API surface is a deliberate artifact,** not whatever headers happen to be reachable.
 
 ---

@@ -2263,6 +2263,63 @@ td code { font-size: 0.82em; }
     </p>
   </div>
 
+  <div class="tool">
+    <h3>The scalar triple product, and which way a face points <span class="from">Lesson 3.4</span></h3>
+    <div class="eq">
+      <span>\[ \mathbf{n}\cdot\mathbf{a} \;=\; \big[(\mathbf{b}-\mathbf{a})\times(\mathbf{c}-\mathbf{a})\big]\cdot\mathbf{a} \;=\; \mathbf{a}\cdot(\mathbf{b}\times\mathbf{c}) \;=\; \det[\mathbf{a},\mathbf{b},\mathbf{c}] \]</span>
+      <span class="eq-plain">dot(n, a) = a · (b × c) = det[a, b, c]</span>
+    </div>
+    <p>
+      <strong>Three vectors from a common origin have a determinant, and its sign says which side of
+      their plane the origin is on.</strong> Expanding the left-hand side, every cross term contains
+      a repeated vector and dies, so the normal-dot-corner and the triple product are the same
+      number &mdash; six times the signed volume of the tetrahedron formed by the origin and the
+      triangle.
+    </p>
+    <p>
+      In VIEW space the origin <em>is</em> the eye, which is what makes this a facing test:
+      <code>det &lt; 0</code> means the eye is on the triangle&rsquo;s outward side. Note that it
+      does not matter which corner you dot with &mdash; all three lie in the plane, so
+      <code>dot(n, a) = dot(n, b) = dot(n, c) = dot(n, centroid)</code>.
+    </p>
+    <div class="callout warn">
+      <span class="label">The wrong version of this test</span>
+      <p>
+        <code>dot(n, camera_forward)</code> is <em>not</em> the same question. It asks about the
+        camera&rsquo;s axis; the facing question is about the ray from the eye. They agree only for
+        an orthographic camera, where every ray <em>is</em> the axis. Under a 55&deg; perspective
+        they differ on 15.46% of triangles.
+      </p>
+    </div>
+  </div>
+
+  <div class="tool">
+    <h3>How projection transforms a signed area <span class="from">Lesson 3.4</span></h3>
+    <div class="eq">
+      <span>\[ 2A_{\text{ndc}} \;=\; k_x k_y \cdot \frac{-\det[\mathbf{a},\mathbf{b},\mathbf{c}]}{w_a\,w_b\,w_c} \]</span>
+      <span class="eq-plain">2 * area_ndc = kx*ky * ( -det[a,b,c] ) / (w_a * w_b * w_c)</span>
+    </div>
+    <p>
+      <strong>The perspective divide scales a triangle&rsquo;s area by the product of its three
+      <code>w</code> values, and does nothing else to it.</strong> The practical consequence is the
+      sign: every vertex that survives near-plane clipping has <code>w &ge; near &gt; 0</code>, so
+      the divisor is strictly positive and <em>cannot</em> flip the orientation. A projected
+      triangle&rsquo;s winding is therefore decided entirely by the view-space determinant &mdash;
+      which is why a facing test done after the projection is exactly the one done before it, for
+      free.
+    </p>
+    <p>
+      The leading minus is the same reflection the viewport applies. Chase the signs through and
+      front-facing (<code>det &lt; 0</code>) becomes counter-clockwise in NDC and a
+      <strong>negative</strong> <code>edge_function</code> in framebuffer coordinates.
+    </p>
+    <p>
+      <strong>And the converse is a warning.</strong> Let a vertex through with <code>w &lt; 0</code>
+      and one factor goes negative, so a triangle whose geometry never moved is suddenly wound the
+      other way. Culling without clipping is not merely unsafe, it is actively wrong.
+    </p>
+  </div>
+
   <h2 id="coming"><span class="num">7</span>Coming as the course proceeds</h2>
 
   <p>

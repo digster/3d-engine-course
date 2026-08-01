@@ -1692,3 +1692,93 @@ Picking ±100,000 would have fixed the first and quietly created the second.
 Worth the habit: when a limit exists to hold off one failure, check what else downstream has a
 range, and pick a value that satisfies all of them. Then say so at the constant, because the next
 person will otherwise assume the smaller number was arbitrary and raise it.
+
+
+## Read the sign before you destroy it (Lesson 3.4)
+
+`fill_triangle` had computed the triangle's signed area since Lesson 2.2, and then immediately
+swapped two vertices to force it positive — because the top-left rule is stated for a
+positively-oriented triangle. That swap *destroys the facing*. Back-face culling is therefore not a
+new computation at all; it is one comparison inserted into the single window between the sign being
+known and the sign being thrown away.
+
+The generalisable habit: when you find yourself adding a test, look first for a quantity the code
+already computes for another reason. Twice now in this module the answer was already on the stack —
+`1/w` in Lesson 3.2, the signed area here — and in both cases the "expensive" feature turned out to
+cost one line.
+
+
+## A function signature can make a bug unwritable (Lesson 3.4)
+
+`is_front_facing` takes three **screen-space** vertices. There is no overload that accepts a
+view-space position, so the classic culling bug — asking the question before the projection, against
+the camera's forward axis — cannot be written by accident against this API. The type says where the
+test belongs.
+
+That is a cheaper defence than a comment and a much cheaper one than a code review. It is the same
+move as `point()` vs `direction()` (2.7), `xyz()` vs `perspective_divide()` (2.10), and
+`clip_vertex` vs `vertex` (3.3): **when two things have the same shape and different meanings,
+spend a type.**
+
+
+## The wrong test is often the right test for a camera you are not using (Lesson 3.4)
+
+`dot(normal, camera_forward)` misjudges 15.46% of triangles at a 55° field of view and 32.43% at
+120°. Under an **orthographic** projection it is wrong **0 times out of 200,000** — because
+orthographic projection is exactly the statement that every ray to the eye *is* the camera axis.
+
+So it is not a sloppy approximation. It is a correct implementation of a different question, and
+that is why it survives in codebases: it is exactly right in the orthographic views a level editor
+shows you, and subtly wrong in the wide-FOV gameplay camera nobody is looking at while they write
+the culler. When a bug's incidence depends on a *parameter* (here, field of view), find the value at
+which it vanishes — it usually explains why the bug exists.
+
+
+## Folklore deserves a measurement (Lesson 3.4)
+
+"Back-face culling removes half your triangles" is repeated everywhere and is false. Measured over
+6,000 random orientations: a cube shows **2 to 6** of its 12 triangles (mean 5.55), an icosahedron
+**7 to 10** of its 20 (mean 8.80). Half is a *ceiling*, not a rule, and the geometry says why —
+pair the faces whose planes are parallel, and the eye is in front of at most one of each pair, and
+in front of *neither* when it lies in the slab between them. Look a cube square in the face and you
+see one face, not three.
+
+The time saved is smaller again: 54.8% of triangles removed bought **31.6%** of the frame
+(19.95 µs → 13.64 µs), because back faces were precisely the triangles the z-buffer was already
+rejecting on their first depth comparison. They were the cheapest pixels in the frame, not the most
+expensive.
+
+Both numbers are better teaching than the folklore was, and neither could have been guessed.
+
+
+## An optimisation that quietly fixes a bug is worth understanding, not glossing (Lesson 3.4)
+
+Culling should be invisible on closed geometry. Measured over 1,008 camera and rotation
+combinations, it changes up to **44 pixels** — and **100% of the changed pixels are ones a back face
+had been drawn on**. That framing needed no threshold and is the strongest form of the claim: the
+only thing culling can touch is a place where you were seeing the inside of a solid.
+
+Two mechanisms put a back face there, both ties. Along a silhouette, a front face and a back face
+share an edge in 3-D and therefore have *equal* depth; the test is a strict `<`, so mesh order
+decides. (Drawing front faces first drops the worst case from 44 px to 29 px — which is exactly the
+number Lesson 3.1 measured and could not explain.) The remaining 29 px are quantisation: the two
+faces round to integer pixels independently, so the back face's outline can stick out where the
+front face's does not reach. No draw order fixes that; only removing the back face does.
+
+So back-face culling is an optimisation *and*, marginally, a correctness improvement — not because
+the z-buffer was broken, but because a tie has to break somewhere and "never show the inside of a
+solid" is a better rule than "whichever triangle the index buffer listed first". Lesson 3.3 drew a
+firm line between correctness and optimisation; this is the case that shows the line is real but not
+always sharp.
+
+
+## Choose a normaliser that reflects where the error comes from (Lesson 3.4)
+
+Checking `dot(n, a) == det[a,b,c]` numerically "failed" at a relative error of 1.1e-4, and the
+identity is exact algebra. The error was in the *test*: I divided by the magnitude of the result,
+and the triple product is a difference of large products that cancels almost completely near
+degeneracy — so a relative-to-result error is unbounded and meaningless there. Normalising by
+`|a||b||c|`, the size of the *terms*, gives 1.06e-6 and a threshold that means something.
+
+The general rule: when a quantity is computed as a difference, its error scales with the
+**inputs**, not with the answer. Normalise by what the floats actually were.

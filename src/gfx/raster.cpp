@@ -443,6 +443,29 @@ void fill_triangle(framebuffer& fb, depth_buffer* depth,
 
     int area = edge_function(v0.x, v0.y, v1.x, v1.y, v2.x, v2.y);
     if (area == 0) { return; }
+
+    // ---- Back-face culling (Lesson 3.4) ------------------------------------
+    //
+    // Note where this sits: AFTER the area is known and BEFORE the reorientation
+    // below. That ordering is the whole implementation. The sign of `area` is the
+    // facing, and the very next thing this function does is destroy it by
+    // swapping two vertices to make the area positive — so the test has exactly
+    // one place it can live, and this is it.
+    //
+    // `is_front_facing` rather than an inline `area < 0`, even though that is
+    // literally what it is: the rule now has two readers (this, and the demo's
+    // kept/culled counter), and Lesson 2.4 made the same move with `is_top_left`
+    // for the same reason — a rule you cannot inspect is a rule you cannot check.
+    if (style.cull != cull_mode::none)
+    {
+        const bool front = is_front_facing(v0, v1, v2);
+        if ((style.cull == cull_mode::back && !front)
+         || (style.cull == cull_mode::front && front))
+        {
+            return;
+        }
+    }
+
     if (area < 0)
     {
         std::swap(v1, v2);

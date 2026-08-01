@@ -821,3 +821,62 @@ could not catch the one that mattered: **Figure 6's text said "the gold dot" abo
 green**, found by rendering the figure and reading it against its own prose. Also caught by eye —
 the widget's view frustum was drawn far outside its panel (fixed with a `clipPath`) and its "eye"
 label sat underneath a draggable handle.
+
+
+## 2026-08-04 — Lesson 3.4
+
+> next
+
+Resumed from `STATE.md` → `next: 3.4 — Back-Face Culling`. The block carried a measured debt from
+Lesson 3.1 (29 px of painter-vs-z-buffer disagreement on the solids scene, with "cull back faces and
+it reads 0" already *tested*), two named traps (which sign, and where to ask), and a verification
+list.
+
+### Judgement calls
+
+| Question | Decision | Why |
+|---|---|---|
+| Where does the cull test live? | **In `fill_triangle`, between the area measurement and the reorientation** | The swap to positive area *destroys* the facing, so there is exactly one window and this is it. It is also where hardware runs it — after clipping and the divide, before rasterization — so the Module 4 port stays a rename. |
+| Inline `area < 0`, or a named function? | **`is_front_facing`, in the header** | The rule now has two readers: the rasterizer that acts on it and the demo that counts it. Same argument `is_top_left` got in 2.4. And taking *screen-space* vertices makes the view-space bug unwritable against this API. |
+| How does the HUD count culled triangles? | **In the caller, via the same `is_front_facing`** | `fill_triangle` could return a bool, but that puts a value at 100% of call sites that 99% ignore. Counting in `draw_triangles` costs one edge function per triangle and keeps the *rule* in one place — instrumentation may duplicate the question, never the answer. |
+| Default for `fill_style::cull`? | **`none`** | Breaks 3.2's "every field defaults to correct" rule, deliberately: there is no universally correct cull mode. `back` is right for a closed mesh and destroys a ground plane. SDL_GPU lands identically — a zero-initialised `SDL_GPURasterizerState` is `CULLMODE_NONE`. |
+| Per-object cull modes? | **No — a `closed` bool and a HUD warning** | The scene is one batch with one `fill_style`; per-object culling means splitting the draw. That friction *is* the lesson, and the answer is a material system (Module 6), not another parameter. |
+| Where to put the wrong test? | **In `collect_triangles`, in view space** | Not for convenience — that is exactly where the bug lives in codebases that have it, because it looks like a sensible early-out. Seventh keep-the-wrong-thing bargain in this engine. |
+
+### Verification
+
+`scratch/verify_34.cpp`, eight sections, all green. The headline: **29 px → 0 px**, exactly as
+Lesson 3.1 predicted, from an explanation it could only guess at.
+
+The sign was measured rather than argued: a triangle that is provably counter-clockwise in NDC
+(signed area `+0.18`) comes through the real viewport as pixels whose `edge_function` is
+`−5184`. The determinant identity `dot(n,a) == det[a,b,c]` holds to `1.06e-6` over 399,935
+triangles, and the ray test and the *unrounded* screen-area test disagree on **zero** of them —
+768 (0.19%) disagree after rounding to integer pixels, every one a sliver at most **1.71 px** wide,
+and **zero** among triangles at least 4 px wide. The forward-axis test misjudges 15.46% of triangles
+at 55° fovy, 32.43% at 120°, and **0 of 200,000** under an orthographic projection.
+
+### Three things the harness corrected
+
+**"Exactly half the triangles" was folklore.** Measured: a cube shows **2 to 6** of its 12 (mean
+5.55), an icosahedron **7 to 10** of 20 (mean 8.80). Never more than half, usually fewer — the eye
+can lie *between* a parallel face pair's planes and see neither. Look a cube square in the face and
+you see one face, not three.
+
+**"Culling is invisible on closed geometry" was also false.** It changes up to 44 px over 1,008
+camera/rotation combinations. Rather than tune a geometric threshold, I found the claim that needs
+none: **100% of the changed pixels are pixels a back face had been drawn on**. Drawing front faces
+first drops the worst case to 29 px (the tie), and the residue is quantisation (the two outlines
+round independently). So culling is an optimisation *and*, marginally, a correctness improvement.
+
+**And a test-design error of my own.** The identity check "failed" at 1.1e-4 because I normalised
+by the magnitude of the *result* — and the triple product is a cancelling difference, so that ratio
+is unbounded near degeneracy. Normalising by `|a||b||c|`, the size of the terms, gives 1.06e-6.
+
+The timing is reported honestly: 54.8% of triangles removed bought 31.6% of the frame
+(19.95 → 13.64 µs), because back faces were the ones the z-buffer was already rejecting cheapest.
+
+`check-page.js` returned `pass: true` after nine label overlaps and nine labels-on-strokes were
+fixed. It could not catch the one that mattered: **Figure 6 had the front and back arcs on the wrong
+sides** — the eye is drawn on the left, so the solid front surface must bulge left, and my SVG arc
+sweep flags said otherwise. Found by rendering the figure and reading it against its own labels.

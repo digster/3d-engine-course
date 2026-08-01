@@ -7,7 +7,7 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-08-03 (after Lesson 3.3, 29 of 94 lessons)
+updated: 2026-08-04 (after Lesson 3.4, 30 of 94 lessons)
 
 conventions:
   world: right-handed, Y-up, -Z forward
@@ -76,6 +76,33 @@ conventions:
         bbox clamp already draws off-screen triangles correctly, just wastefully.
         Say which is which; it is the whole reason this lesson exists and 3.4's
         culling does not.
+  culling: FROM THE SIGN OF THE SCREEN-SPACE SIGNED AREA, in the rasterizer, at
+        the front of fill_triangle. FRONT-FACING IS edge_function < 0 in framebuffer
+        coordinates — the convention is CCW-in-NDC (+y up), the viewport flips y, and
+        a reflection reverses signed area. Measured: a CCW-in-NDC triangle through the
+        real viewport gives -5184. DO NOT discover this sign by trying both; a wrong
+        guess looks plausible (you see the inside of everything) and leaves you with
+        two unexplained flips the day a mirrored transform arrives.
+        NEVER dot(normal, camera_forward). That asks about the camera's AXIS; the
+        question is about the RAY FROM THE EYE. Measured wrong on 15.46% of triangles
+        at 55° fovy, 32.43% at 120°, and 0% under an ORTHOGRAPHIC projection — which
+        is exactly why it survives: it is the ray test, for a camera we are not using.
+        The correct view-space form is dot(n, centroid) < 0.
+        WHY THE SCREEN TEST IS THE VIEW TEST: dot(n,a) = det[a,b,c], and
+        2*area_ndc = kx*ky*(-det)/(wa*wb*wc). Clipping guarantees every w >= near > 0,
+        so the divisor is positive and the sign is the determinant's alone. Culling
+        without clipping is not merely unsafe, it is WRONG — a negative w flips the
+        winding of a triangle that never moved.
+        PRECONDITION: CLOSED geometry. "Facing away" implies "hidden" only for a
+        surface enclosing a volume. Ground planes, quads and billboards need
+        cull_mode::none; it is a property of the OBJECT, not the renderer, which is
+        why it belongs on a material (Module 6) and why two cull modes = two batches.
+        NOT "half the triangles" — that is a CEILING, not a rule. Measured: a cube
+        shows 2..6 of its 12 (mean 5.55), an icosahedron 7..10 of 20 (mean 8.80).
+        The eye can lie BETWEEN a parallel face pair's planes, in front of neither.
+        And 54.8% of triangles removed bought 31.6% of the time (19.95 -> 13.64 us):
+        back faces were the ones the z-buffer was already rejecting on their first
+        depth test. Culling is worth MORE the more expensive the fragment work is.
   interpolation: BARYCENTRIC INTERPOLATION PROMISES ONE THING — the unique AFFINE
         function of the PIXEL POSITION agreeing with three corner values. So it is
         correct for a quantity affine in screen space and wrong for one that is not.
@@ -710,8 +737,30 @@ completed:
   - 3.1  The Painter's Problem and the Z-Buffer
   - 3.2  Perspective-Correct Interpolation
   - 3.3  Near-Plane Clipping
+  - 3.4  Back-Face Culling
 
 capabilities:
+  - gfx 3.4: BACK-FACE CULLING. raster.hpp gains constexpr is_front_facing(a,b,c)
+    (= edge_function < 0; a NAMED rule because it now has two readers — the
+    rasterizer that acts on it and the demo that counts it, the same argument
+    is_top_left got in 2.4), enum class cull_mode {none, front, back} mirroring
+    SDL_GPUCullMode's order exactly (verified against SDL_gpu.h), and
+    fill_style::cull defaulting to NONE — the ONE field in that struct whose default
+    is SAFE rather than CORRECT, because there is no universally correct cull mode.
+    raster.cpp: one branch, placed AFTER the area is known and BEFORE the swap that
+    reorients to positive area — the swap destroys the sign, so there is exactly one
+    window and this is it. Takes SCREEN-SPACE vertices, so the view-space bug cannot
+    be written by accident.
+    main.cpp: [U] cycles cull_choice {none, back, front, back_by_forward}; the last
+    is the classic bug (dot(n, camera_forward), culled in collect_triangles in VIEW
+    space, which is exactly where it lives in real codebases) and maps to
+    cull_mode::none at the rasterizer. raster_triangle carries front_by_forward so
+    the two tests can be compared on identical geometry every frame. cull_stats
+    {submitted, front, drawn, disagree}. scene_object gains `closed` — the
+    precondition, declared by the geometry, with the HUD warning rather than
+    switching modes per object (two cull modes would mean two batches, which is the
+    honest lesson and Module 6's job). Second render with cull=none counts the pixels
+    culling changed: 100% of them are pixels a BACK FACE had been drawn on.
   - gfx 3.3: NEAR-PLANE CLIPPING. src/gfx/clip.hpp/.cpp (NEW) — struct clip_vertex
     {vec4 position; vec2 uv; Uint32 colour;} (a CLIP-SPACE type, deliberately
     distinct from engine::vertex which is screen-space, so handing the wrong one to
@@ -1254,6 +1303,37 @@ decisions:
   - to_pixel CLAMPS TO +-8000 and the constant does two jobs: it keeps the float
     inside int's range, AND it keeps edge_function's products (which multiply
     coordinate DIFFERENCES) inside int32, where signed overflow is also undefined.
+  - CULLING READS A SIGN THE RASTERIZER WAS ALREADY COMPUTING, and then throwing
+    away. fill_triangle has measured edge_function since 2.2 and immediately
+    reoriented to positive area so the top-left rule has meaning — which destroys
+    the facing. One window, one branch. No normal, no dot product, no camera: the
+    projection already folded the camera into the sign (see the determinant identity
+    in the conventions block).
+  - is_front_facing IS A NAMED FUNCTION taking SCREEN-SPACE vertices, for two
+    reasons. The rule has two readers (rasterizer + HUD counter) and duplicating it
+    is how they drift apart — 2.4's is_top_left argument exactly. And the signature
+    makes the view-space bug UNWRITABLE: there is no overload that accepts a
+    view-space position, so you cannot ask the question in the wrong space by
+    accident.
+  - THE DEMO COUNTS IN THE CALLER, NOT VIA A RETURN VALUE. fill_triangle could
+    report whether it culled, but making every fill return a bool puts a value at
+    100% of call sites that 99% ignore. Counting in draw_triangles costs one extra
+    edge_function per triangle and keeps the RULE in one place. Instrumentation may
+    duplicate the question; it must never duplicate the answer.
+  - cull_mode DEFAULTS TO none, breaking 3.2's rule that every fill_style field
+    defaults to the correct value. Deliberate: there IS no universally correct cull
+    mode, so the default is the SAFE one. SDL_GPU makes the same call (a
+    zero-initialised SDL_GPURasterizerState is CULLMODE_NONE).
+  - `closed` IS A BOOL ON scene_object AND THE DEMO ONLY WARNS. Restraint on
+    purpose: the whole scene is one batch with one fill_style, and per-object cull
+    modes would mean splitting the draw. That friction is the lesson — it is the
+    first time this engine has wanted two pipeline states in one frame, and the
+    answer is a material system (Module 6), not another parameter.
+  - THE WRONG TEST IS CULLED IN collect_triangles, IN VIEW SPACE — not because that
+    was convenient, but because that is exactly where the bug lives in codebases that
+    have it. It looks like a sensible early-out. Seventh keep-the-wrong-thing bargain
+    (draw_line_naive 2.1, pong swept_collision 1.8, blend_space::encoded 2.4, the w
+    toggles 2.7, trs_order 2.8, interpolation::affine 3.2, near_mode 3.3).
 
 files:
   /: CLAUDE.md, README.md, ARCHITECTURE.md, LEARNINGS.md, PROMPT.md, LICENSE,
@@ -1282,67 +1362,74 @@ files:
                  02-09-view-matrix.html, 02-10-perspective.html,
                  02-11-viewport.html, 02-12-wireframe-mesh.html,
                  03-01-z-buffer.html, 03-02-perspective-correct.html,
-                 03-03-near-plane-clipping.html
+                 03-03-near-plane-clipping.html, 03-04-back-face-culling.html
   docs/_template/: lesson-template.html, README.md, apply-shared.py, check-page.js
   memory/: 2026-07-16.md, 2026-07-18.md, 2026-07-21.md, 2026-07-22.md,
            2026-07-23.md, 2026-07-24.md, 2026-07-25.md, 2026-07-26.md,
            2026-07-27.md, 2026-07-28.md, 2026-07-29.md, 2026-07-30.md,
-           2026-07-31.md, 2026-08-01.md, 2026-08-02.md, 2026-08-03.md
+           2026-07-31.md, 2026-08-01.md, 2026-08-02.md, 2026-08-03.md,
+           2026-08-04.md
   (retired: hello.cpp)
 
 
-next: 3.4 — Back-Face Culling
-      (planned filename: docs/lessons/03-04-back-face-culling.html — 3.3 links to it)
-      3.1 LEFT A MEASURED DEBT AND NAMED THE PAYER. On the solids scene the painter's
-      algorithm and the z-buffer disagreed on 29 px and the counter never read zero.
-      The silhouette-tie explanation was TESTED, not assumed: cull back faces and it
-      reads "6 of 12 tris kept, 0 px differ". That number is the lesson's opening and
-      its checkpoint — start by reproducing it.
-        - THE MECHANISM IS ALREADY BUILT. edge_function (2.2) returns twice the signed
-          area, and fill_triangle already measures its sign to orient itself. Culling
-          is reading that sign instead of correcting for it. So this lesson is mostly
-          about WHICH SIGN and WHERE, and both are traps:
-        - SIGN. raster.hpp §edge_function says it plainly and it is worth re-deriving
-          rather than quoting: in FRAMEBUFFER coordinates (+y DOWN) a triangle that
-          appears counter-clockwise ON SCREEN has a NEGATIVE edge function. The
-          conventions page states winding in NDC (+y UP), where CCW = front. Those are
-          the same rule seen through 2.11's y flip, and stating it in only one space is
-          how a renderer ends up culling exactly the faces it wanted.
-        - WHERE. Cull in SCREEN space, after the divide, from the sign of the area —
-          NOT in view space from dot(normal, view_direction). The dot-product version
-          is the one everybody writes first and it is wrong for a perspective camera:
-          "facing away" is relative to the ray from the EYE to the triangle, not to the
-          camera's forward axis, so a triangle at the edge of a wide FOV is
-          misclassified. Derive that; it is a good failure to show.
-        - 3.3 PRESERVED THE WINDING SO THIS COULD WORK, and the harness proves it by
-          sliding a triangle through the near plane and asserting the sign of its
-          clipped screen area never changes (verify_33.cpp §F). Say so — it is what
-          makes clipping and culling composable, and the pitfall entry
-          "clipped triangles disappear once culling is on" is already written in 3.3 §7
-          waiting for this lesson.
-        - IT IS AN OPTIMISATION, NOT CORRECTNESS. 3.3 §3.8 drew that line explicitly
-          and this is the lesson that lands on the other side of it: the z-buffer
-          already produces the right picture without culling. What culling buys is
-          roughly half the fill work on a closed mesh — MEASURE it (the demo already
-          has the two-render harness and a tris counter), and be honest if the win is
-          small at 320x180.
-        - THE EXCEPTIONS ARE THE INTERESTING PART. Culling is only valid for CLOSED
-          geometry: the floor, the quads and the planks in the demo's scenes are
-          single-sided and will VANISH from below. That is not a bug to hide, it is
-          SDL_GPU_CULLMODE_NONE / _FRONT / _BACK as three pipeline states, and it is
-          why fill_style is the right home for the knob (three modes, cycled, exactly
-          like near_mode). Note the floor scene needs CULLMODE_NONE or [C] gets a
-          nasty surprise.
-        - VERIFY: (a) the 29 px goes to 0 on solids; (b) tris kept is exactly half on
-          the cube and icosahedron at every orientation; (c) the CYCLE and INTERSECT
-          scenes' painter-vs-zbuffer numbers are UNCHANGED (culling must not fix or
-          worsen those — they are about depth, not winding); (d) with culling on, the
-          floor disappears when viewed from below and returns under CULLMODE_NONE.
-      Module 3 then continues: 3.5 the hand-rolled OBJ loader (which finally gives the
-      uvs 3.2 added a real source, and brings meshes whose triangle count cannot be
-      raised to paper over anything — 3.3 §3.9's point), 3.6 normals and Lambert
-      (replacing face_shade's debug palette and straining the shading enum, as
-      designed), 3.7 specular/Blinn-Phong, 3.8 flat vs Gouraud vs per-pixel, 3.9
-      texture mapping + bilinear (replacing checker_at with a real sampler), 3.10
-      profiling and the Module 3 capstone.
+
+next: 3.5 — A Hand-Rolled OBJ Loader
+      (planned filename: docs/lessons/03-05-obj-loader.html — 3.4 links to it)
+      THE RASTERIZER IS DONE AND HAS NOTHING TO DRAW. Three hand-typed meshes, all
+      convex, all closed, all correctly wound because we typed them that way. Every
+      assumption Module 3 has been leaning on is about to meet data it did not author.
+        - PARSING IS THE EASY PART AND MUST NOT BE THE LESSON. The OBJ format is
+          line-oriented ASCII: `v x y z`, `vt u v`, `vn x y z`, `f a/b/c a/b/c a/b/c`.
+          An hour of work. Spend the lesson on the parts that are actually hard:
+        - THE INDEX PROBLEM IS THE REAL CONTENT. OBJ has SEPARATE indices per
+          attribute (`f 1/3/7`), and a GPU vertex buffer has ONE index per vertex.
+          So a position shared by two faces with different uvs must become TWO
+          vertices. Deriving that — and the de-duplicating map from
+          (v_idx, vt_idx, vn_idx) -> our index — is the lesson's spine. It is also
+          the first time the course has had to RESHAPE data to fit the hardware
+          rather than the other way round, which is what an asset pipeline IS.
+        - NEGATIVE INDICES. OBJ allows -1 to mean "the last vertex so far". A real
+          format detail that is trivial to handle and silently corrupts everything
+          if you do not. Good example of "read the spec, do not infer it from your
+          test file".
+        - FACES CAN HAVE MORE THAN THREE VERTICES. Quads are common, n-gons legal.
+          Triangulate with a fan — and note the assumption a fan makes (convexity),
+          because 3.3's clipper made the same one and said so.
+        - 1-BASED INDICES. Say it once, loudly. It is the single most common bug.
+        - THEN THE DEBTS THIS MODULE LEFT:
+          (a) 3.3 §3.9 — a loaded mesh's triangle count is what it is. You cannot
+              subdivide your way out of a bug in geometry you did not author, which
+              was the whole argument for clipping properly.
+          (b) 3.4 §3.6 — you cannot assume winding either. Real OBJ files are
+              inconsistently wound, and back-face culling turns that into missing
+              faces. 2.12's validator (Euler, every directed edge exactly once) is
+              the tool; this is where it earns its keep on data from disk. Consider
+              a [V] key that reports the validation result for the loaded mesh.
+          (c) 3.2 gave uvs a real source at last — the checker pattern can finally be
+              replaced by something the artist chose. (The SAMPLER is 3.9; this is
+              just where the coordinates start being real.)
+        - OWNERSHIP. engine::mesh is two non-owning spans (2.12), and 3.2 already
+          felt the strain with the runtime floor. A mesh loaded from disk MUST own
+          its arrays. Introduce something like `mesh_data` (owning) with `.view()`
+          returning a `mesh` — and SAY that this is the shape Module 5's asset system
+          generalises, so the awkwardness is a preview and not a design failure.
+        - ERROR HANDLING, first real encounter. A file can be missing, truncated,
+          or malformed. No exceptions in engine core (CLAUDE.md §4), so this is where
+          the explicit-error-return style gets chosen — Module 5 §"logging, assertions
+          and an error strategy" will formalise it, but 3.5 has to pick something and
+          justify it. Do not invent a Result type here; keep it small and honest.
+        - GET A REAL MODEL. Something with a few thousand triangles, non-convex, so
+          the z-buffer finally does work no sort could fake and culling has something
+          to bite on. State where it came from and its licence.
+        - VERIFY: (a) round-trip a known mesh (our cube, written out and read back)
+          and compare vertex-for-vertex; (b) the de-dup map produces the minimal
+          vertex count on a mesh with shared uvs; (c) negative and 1-based indices
+          both resolve correctly, with a hand-written test file; (d) the loaded mesh
+          passes 2.12's validator, or reports precisely why it does not; (e) a
+          malformed file fails cleanly rather than reading out of bounds.
+      Module 3 then finishes: 3.6 normals and Lambert (replacing face_shade's debug
+      palette and finally straining the shading enum, as designed since 3.2), 3.7
+      specular/Blinn-Phong, 3.8 flat vs Gouraud vs per-pixel, 3.9 texture mapping +
+      bilinear (replacing checker_at with a real sampler), 3.10 profiling and the
+      Module 3 capstone.
 ```

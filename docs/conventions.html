@@ -1878,9 +1878,11 @@ td code { font-size: 0.82em; }
       <code>+100</code>.
     </p>
     <p>
-      Module 2's software rasterizer therefore does <em>not</em> cull by winding —
-      <code>fill_triangle</code> accepts either and orients its test to match. Culling is a
-      decision made in a specific space for a specific reason, and Lesson 3.4 makes it there.
+      Module 2's software rasterizer therefore did <em>not</em> cull by winding —
+      <code>fill_triangle</code> accepted either and oriented its test to match. Lesson 3.4 makes
+      the decision, in that space, for that reason: <strong>front-facing is
+      <code>edge_function &lt; 0</code></strong>, read from the sign of the area the rasterizer was
+      already computing, immediately before it destroys that sign by reorienting.
     </p>
   </div>
 
@@ -1895,12 +1897,64 @@ td code { font-size: 0.82em; }
   </p>
 
   <p>
-    <strong>Every triangle is wound counter-clockwise as seen from outside the solid.</strong> Nothing
-    consumed that convention before Lesson 3.4, but the data is authored to it from the start so the
-    meshes never have to be re-authored. Mesh data is <em>validated</em>, not trusted: Euler's
+    <strong>Every triangle is wound counter-clockwise as seen from outside the solid.</strong>
+    Nothing consumed that convention before Lesson 3.4 — it is what culling reads — but the
+    data was authored to it from the start so the meshes never had to be re-authored. Mesh data is <em>validated</em>, not trusted: Euler's
     <code>V − E + F = 2</code>, every undirected edge in exactly two faces, every directed edge exactly
     once (consistent winding), and each face's normal pointing away from the centre (outward winding).
   </p>
+
+  <h3>Culling: where the test lives, and what it assumes</h3>
+
+  <p>
+    Settled in <a href="lessons/03-04-back-face-culling.html">Lesson 3.4</a>.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">Ask the question after the projection, never before it</span>
+    <p>
+      Cull from the <strong>sign of the screen-space signed area</strong>. Do <em>not</em> cull with
+      <code>dot(normal, camera_forward)</code> in view space: that asks whether a face points against
+      the camera&rsquo;s <em>axis</em>, and the question is whether it points against the <em>ray
+      from the eye to it</em>. Measured, those differ on <strong>15.46%</strong> of triangles at our
+      55&deg; vertical field of view and <strong>32.43%</strong> at 120&deg; &mdash; and on exactly
+      <strong>0%</strong> under an orthographic projection, which is why the mistake survives so long.
+    </p>
+    <p>
+      The correct view-space form, if you ever need it, is <code>dot(n, centroid) &lt; 0</code>. It
+      is the same number as the screen test: twice the projected signed area is
+      <code>&minus;det[a,b,c] / (w<sub>a</sub>w<sub>b</sub>w<sub>c</sub>)</code>, and
+      <code>det[a,b,c] = dot(n, a)</code>. Clipping (&sect;6d) is what keeps that divisor positive,
+      so the sign is decided by the determinant alone.
+    </p>
+  </div>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>Decision</th><th>Ours</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td>Where</td><td><strong>in the rasterizer</strong>, at the front of <code>fill_triangle</code></td>
+            <td>After clipping and the divide, before rasterization &mdash; exactly where the hardware
+                runs it, so the Module 4 port is a rename.</td></tr>
+        <tr><td>Test</td><td><code>edge_function &lt; 0</code> is front-facing</td>
+            <td>The convention is CCW-in-NDC; the viewport flips <code>y</code>; a reflection reverses
+                signed area. Measured: a CCW-in-NDC triangle gives <code>&minus;5184</code>.</td></tr>
+        <tr><td>Default</td><td><code>cull_mode::none</code></td>
+            <td>The only field in <code>fill_style</code> whose default is <em>safe</em> rather than
+                <em>correct</em>, because there is no universally correct cull mode. Matches a
+                zero-initialised <code>SDL_GPURasterizerState</code>.</td></tr>
+        <tr><td>Precondition</td><td><strong>closed</strong> geometry only</td>
+            <td>&ldquo;Facing away&rdquo; implies &ldquo;hidden&rdquo; only for a surface that
+                encloses a volume. Ground planes, quads and billboards must use
+                <code>none</code>.</td></tr>
+        <tr><td>Category</td><td>optimisation &mdash; <em>almost</em></td>
+            <td>It removes at most half a closed mesh&rsquo;s triangles (measured: 2&ndash;6 of a
+                cube&rsquo;s 12) for 31.6% of the frame time. It also changes the picture, but only
+                on silhouettes, and only where a back face had been visible &mdash; which is
+                Lesson 3.1&rsquo;s 29-pixel debt.</td></tr>
+      </tbody>
+    </table>
+  </div>
 
   <h2 id="units"><span class="num">8</span>Units and angles</h2>
 

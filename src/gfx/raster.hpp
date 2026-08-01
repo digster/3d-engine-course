@@ -231,6 +231,72 @@ struct vertex
     Uint32 colour = 0xFFFFFFFFu;     ///< ARGB8888 as stored — i.e. sRGB-encoded
 };
 
+/// Is this triangle facing the camera?
+///
+/// The whole of back-face culling, in one comparison — and the comparison is one
+/// the rasterizer was already making. `edge_function` returns twice the signed
+/// area, `fill_triangle` measures its sign to orient itself, and culling is
+/// nothing more than *reading* that sign instead of correcting for it.
+///
+/// **Front-facing means a NEGATIVE edge function**, and that is worth stating in
+/// full because it is the single easiest thing to get backwards. Lesson 3.4 §3.3
+/// derives it; the short version is that our convention (`conventions.html` §7) is
+/// stated in **NDC**, where +y is up and counter-clockwise means front — and the
+/// viewport transform (Lesson 2.11) flips y on the way to framebuffer coordinates.
+/// A mirror reverses orientation. So a triangle that is counter-clockwise in NDC
+/// arrives here with a negative signed area, and one that is clockwise arrives
+/// positive.
+///
+/// Measured rather than argued: an NDC triangle with a positive (counter-clockwise)
+/// signed area maps through a 320x180 viewport to pixels whose `edge_function` is
+/// `-5184`. Verified in `scratch/verify_34.cpp` §A.
+///
+/// **Takes screen-space vertices, and that is not an accident.** The other way to
+/// ask this question — dot a face normal with the camera's forward axis — is the
+/// one most people write first and it is *wrong* under perspective, because
+/// "facing away" is relative to the ray from the eye to the triangle, not to the
+/// camera's axis. Lesson 3.4 §3.4 shows the failure and measures it. Doing the test
+/// after the projection makes the perspective divide do the work for free.
+///
+/// A degenerate triangle (zero area) is neither front nor back; this reports it as
+/// back-facing, which is harmless because `fill_triangle` discards it either way.
+[[nodiscard]] constexpr bool is_front_facing(const vertex& a, const vertex& b, const vertex& c)
+{
+    return edge_function(a.x, a.y, b.x, b.y, c.x, c.y) < 0;
+}
+
+/// Which faces to throw away before rasterizing.
+///
+/// Field order and meaning mirror `SDL_GPUCullMode` exactly — verified against
+/// `SDL3/SDL_gpu.h`, where the enumerators are `NONE`, `FRONT`, `BACK` in that
+/// order — so Module 4's port is a rename. It lives in `fill_style` for the same
+/// reason: SDL_GPU carries `cull_mode` in `SDL_GPURasterizerState` alongside
+/// `fill_mode` and `front_face`, which is to say it is *pipeline state*, decided
+/// once and bound, not a per-draw argument.
+///
+/// **This is an optimisation, not a correctness fix**, and Lesson 3.4 spends real
+/// time on that distinction. The z-buffer already produces the right picture with
+/// culling switched off; what culling buys is not drawing roughly half of a closed
+/// mesh's triangles at all.
+enum class cull_mode
+{
+    /// Draw everything. **The default**, and the only setting that is correct for
+    /// *every* mesh — because culling is only valid on geometry that is closed.
+    /// A ground plane, a billboard, a leaf card and a sheet of paper are all
+    /// single-sided, and back-face culling makes them vanish when seen from behind.
+    none,
+
+    /// Throw away front faces. Useful for looking inside a closed mesh, and
+    /// genuinely used in real renderers — rendering the inside of a skybox cube, or
+    /// the back faces of shadow volumes.
+    front,
+
+    /// Throw away back faces. **The one you want** on any closed mesh: no face
+    /// pointing away from the camera can be visible, because a closer front face is
+    /// always in the way.
+    back
+};
+
 /// Whether attributes are corrected for perspective.
 ///
 /// Like `blend_space` and `draw_line_naive`, the wrong one is kept so it can be
@@ -315,6 +381,14 @@ struct fill_style
     interpolation interp = interpolation::perspective;
     shading shade = shading::vertex_colour;
     blend_space space = blend_space::linear;
+
+    /// Which faces to discard. **Defaults to `none`**, and this is the one field
+    /// whose default is *safe* rather than *correct* — because there is no
+    /// universally correct answer. `back` is right for a closed mesh and wrong for
+    /// a ground plane, so the choice belongs to whoever knows which they have.
+    /// SDL_GPU makes the same call: a zero-initialised `SDL_GPURasterizerState` has
+    /// `SDL_GPU_CULLMODE_NONE`.
+    cull_mode cull = cull_mode::none;
 };
 
 /// Fill a triangle whose corners carry their own attributes — the shaded fill.
@@ -356,8 +430,15 @@ struct fill_style
 /// both configurable (a transparent pass tests but does not write); we do not
 /// need that until Module 6, and a knob with one setting is worse than no knob.
 ///
+/// **Culling.** `style.cull` decides whether a triangle is discarded before any
+/// pixel work happens, and the test is `is_front_facing` above — the sign of the
+/// area this function was already computing. Culling happens *here*, at the front
+/// of the rasterizer, because that is where the hardware does it: after clipping
+/// and the divide, before rasterization. Doing it earlier would mean doing it in
+/// view space, which Lesson 3.4 §3.4 shows is a different and wrong question.
+///
 /// @param depth  the depth attachment to test and write against, or `nullptr`.
-/// @param style  interpolation, shading and blend space. The default is correct.
+/// @param style  interpolation, shading, blend space and cull mode.
 void fill_triangle(framebuffer& fb, depth_buffer* depth,
                    const vertex& a, const vertex& b, const vertex& c,
                    fill_style style = {});

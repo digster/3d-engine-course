@@ -1105,6 +1105,23 @@ struct scene_object
     engine::mesh geometry;
     const char* name;
     Uint32 tint = 0xFFFFFFFFu;
+
+    /// Is this geometry a **closed surface** — a solid with an inside you can never
+    /// see into? Added in Lesson 3.4, because it is the precondition for back-face
+    /// culling and nothing else in the engine knows it.
+    ///
+    /// The cube and the icosahedron are closed. A quad is not, and neither is the
+    /// ground plane: they are infinitely thin sheets with two visible sides, so
+    /// culling their back faces makes them disappear when seen from behind. That is
+    /// not a bug in the culler, it is culling being applied to geometry that does
+    /// not satisfy its assumption.
+    ///
+    /// In a real engine this lives on the **material**, because cull mode is
+    /// pipeline state and pipeline state is what a material *is* (Module 6). Here it
+    /// is a bool on the object and the demo only warns, because the whole scene is
+    /// drawn in one batch with one style — which is itself the honest lesson: two
+    /// cull modes means two batches.
+    bool closed = true;
 };
 
 /// The three objects in the world, and why each one is here.
@@ -1317,6 +1334,7 @@ int build_scene(scene_object (&out)[k_max_objects], scene_kind kind, spin mode, 
         out[0].geometry = floor.view();
         out[0].name = "ground plane (checkered)";
         out[0].tint = k_amber;   // unused: the floor is shaded from its uvs
+        out[0].closed = false;   // a sheet, not a solid — 3.4 must not cull it
         return 1;
     }
 
@@ -1330,6 +1348,7 @@ int build_scene(scene_object (&out)[k_max_objects], scene_kind kind, spin mode, 
         out[0].geometry       = engine::icosahedron_mesh();
         out[0].name           = "icosahedron (uniform, spinning)";
         out[0].tint           = k_amber;
+        out[0].closed         = true;
 
         out[1].xform.scale    = {1.8f, 0.35f, 0.9f};
         out[1].xform.position = {-1.6f, 0.5f, 0.4f};
@@ -1337,6 +1356,7 @@ int build_scene(scene_object (&out)[k_max_objects], scene_kind kind, spin mode, 
         out[1].geometry       = engine::cube_mesh();
         out[1].name           = "slab   (non-uniform, spinning)";
         out[1].tint           = k_teal;
+        out[1].closed         = true;
 
         out[2].xform.scale    = {1.2f, 0.25f, 1.2f};
         out[2].xform.position = {1.4f, 0.125f, 0.9f};
@@ -1344,6 +1364,7 @@ int build_scene(scene_object (&out)[k_max_objects], scene_kind kind, spin mode, 
         out[2].geometry       = engine::cube_mesh();
         out[2].name           = "plinth (non-uniform, still)";
         out[2].tint           = k_violet;
+        out[2].closed         = true;
         return 3;
     }
 
@@ -1379,16 +1400,19 @@ int build_scene(scene_object (&out)[k_max_objects], scene_kind kind, spin mode, 
         out[0].geometry = engine::quad_mesh();
         out[0].name = "plank A (C1->C2)";
         out[0].tint = k_amber;
+        out[0].closed = false;
 
         out[1].xform = make_plank(c2, c3, k_width, k_tilt, k_overhang);
         out[1].geometry = engine::quad_mesh();
         out[1].name = "plank B (C2->C3)";
         out[1].tint = k_teal;
+        out[1].closed = false;
 
         out[2].xform = make_plank(c3, c1, k_width, k_tilt, k_overhang);
         out[2].geometry = engine::quad_mesh();
         out[2].name = "plank C (C3->C1)";
         out[2].tint = k_violet;
+        out[2].closed = false;
 
         // Lift the weave so its centre sits exactly on the camera's target. With
         // the elevation at zero that makes all three planks EQUIDISTANT from the
@@ -1414,6 +1438,7 @@ int build_scene(scene_object (&out)[k_max_objects], scene_kind kind, spin mode, 
         out[0].geometry       = engine::quad_mesh();
         out[0].name           = "quad A (nearer centre)";
         out[0].tint           = k_amber;
+        out[0].closed         = false;
 
         out[1].xform.scale    = {2.6f, 2.0f, 1.0f};
         out[1].xform.position = {0.0f, 1.1f, -0.1f};
@@ -1421,6 +1446,7 @@ int build_scene(scene_object (&out)[k_max_objects], scene_kind kind, spin mode, 
         out[1].geometry       = engine::quad_mesh();
         out[1].name           = "quad B (further centre)";
         out[1].tint           = k_teal;
+        out[1].closed         = false;
         return 2;
     }
 
@@ -1438,6 +1464,7 @@ int build_scene(scene_object (&out)[k_max_objects], scene_kind kind, spin mode, 
     out[0].geometry       = engine::quad_mesh();
     out[0].name           = "panel A (behind)";
     out[0].tint           = k_amber;
+    out[0].closed         = false;
 
     out[1].xform.scale    = {3.0f, 2.4f, 1.0f};
     out[1].xform.position = {0.0f, 1.1f, 0.001f};   // one millimetre nearer. That is all.
@@ -1445,6 +1472,7 @@ int build_scene(scene_object (&out)[k_max_objects], scene_kind kind, spin mode, 
     out[1].geometry       = engine::quad_mesh();
     out[1].name           = "panel B (1 mm in front)";
     out[1].tint           = k_teal;
+    out[1].closed         = false;
     return 2;
 }
 
@@ -1543,6 +1571,15 @@ struct raster_triangle
     /// Note what this number is not: it is not "the depth of the triangle",
     /// because a triangle stretched in depth does not have one. §1.2.
     float sort_key = 0.0f;
+
+    /// What the **wrong** facing test says about this triangle: the sign of
+    /// `dot(face_normal, camera_forward)`, computed in VIEW space (Lesson 3.4 §3.4).
+    ///
+    /// Kept alongside the geometry purely so the two tests can be compared on
+    /// identical triangles, every frame, and the disagreement counted. The right
+    /// test needs no storage at all — it is the sign of an area the rasterizer
+    /// already computes, which is most of the argument for using it.
+    bool front_by_forward = false;
 };
 
 /// Per-face brightness, so adjacent faces of a solid can be told apart.
@@ -1563,6 +1600,75 @@ struct raster_triangle
     const engine::linear_rgb light = engine::to_linear(base);
     return engine::to_encoded({light.r * k, light.g * k, light.b * k});
 }
+
+// ---------------------------------------------------------------------------
+// Lesson 3.4 — back-face culling
+// ---------------------------------------------------------------------------
+
+/// What the demo does about faces pointing away from the camera. [U] cycles.
+///
+/// Three of these are `engine::cull_mode` and one is not: `back_by_forward` culls
+/// with the *wrong test* — the one almost everybody writes first — so it can be
+/// watched failing rather than described. Seventh time this bargain has been made
+/// in the engine, and the pattern is now the house style: keep the wrong thing,
+/// behind a key.
+enum class cull_choice
+{
+    none,              ///< draw everything (engine::cull_mode::none)
+    back,              ///< the right test, the useful direction (cull_mode::back)
+    front,             ///< the right test, inverted — see inside things (cull_mode::front)
+    back_by_forward    ///< THE CLASSIC BUG: dot(normal, camera_forward). Demo-only.
+};
+
+[[nodiscard]] const char* name_of(cull_choice c)
+{
+    switch (c)
+    {
+    case cull_choice::none:            return "NONE (draw all)";
+    case cull_choice::back:            return "BACK (correct)";
+    case cull_choice::front:           return "FRONT (inverted)";
+    case cull_choice::back_by_forward: return "BACK by dot(n,fwd)";
+    }
+    return "?";
+}
+
+[[nodiscard]] cull_choice next_cull(cull_choice c)
+{
+    switch (c)
+    {
+    case cull_choice::none:            return cull_choice::back;
+    case cull_choice::back:            return cull_choice::front;
+    case cull_choice::front:           return cull_choice::back_by_forward;
+    case cull_choice::back_by_forward: return cull_choice::none;
+    }
+    return cull_choice::none;
+}
+
+/// The `engine::cull_mode` this choice asks the rasterizer for.
+///
+/// `back_by_forward` maps to `none`, because that mode does its (wrong) culling in
+/// the demo, in view space, before the triangles ever reach the rasterizer. That is
+/// exactly where the bug lives in the codebases that have it.
+[[nodiscard]] engine::cull_mode to_engine_cull(cull_choice c)
+{
+    switch (c)
+    {
+    case cull_choice::back:  return engine::cull_mode::back;
+    case cull_choice::front: return engine::cull_mode::front;
+    case cull_choice::none:
+    case cull_choice::back_by_forward: break;
+    }
+    return engine::cull_mode::none;
+}
+
+/// What culling did to this frame, for the HUD.
+struct cull_stats
+{
+    int submitted = 0;   ///< triangles handed to the rasterizer
+    int front = 0;       ///< …of which front-facing, by the SCREEN-SPACE test
+    int drawn = 0;       ///< …and how many survived the current cull mode
+    int disagree = 0;    ///< triangles the two facing tests classify differently
+};
 
 /// Reusable working storage for `collect_triangles`.
 ///
@@ -1626,7 +1732,8 @@ struct clip_stats
 void collect_triangles(std::vector<raster_triangle>& out, projection_scratch& scratch,
                        const scene_object* objects, int count,
                        const engine::mat4& view_from_world,
-                       const projector& pr, trs_order order, clip_stats& stats)
+                       const projector& pr, trs_order order, clip_stats& stats,
+                       cull_choice cull)
 {
     out.clear();
     stats = {};
@@ -1697,6 +1804,30 @@ void collect_triangles(std::vector<raster_triangle>& out, projection_scratch& sc
             // surface, and a sort must not be able to tell them apart.
             const float key = (view_pos[a].z + view_pos[b].z + view_pos[c].z) / 3.0f;
 
+            // ---- The WRONG facing test (Lesson 3.4 §3.4) --------------------
+            //
+            // The face normal in VIEW space, from the cross product of two edges
+            // (Lesson 1.7's right-hand rule, in 3-D). Our meshes are wound
+            // counter-clockwise seen from outside, so for a triangle facing the
+            // camera this points back toward the eye — which in view space, where
+            // the camera sits at the origin looking down -z, means a POSITIVE z.
+            //
+            // The camera's forward axis is (0, 0, -1), so
+            // `dot(normal, forward) = -normal.z`, and "facing me" comes out as
+            // `normal.z > 0`. That is the test almost everybody writes first. It is
+            // wrong under perspective, and §3.4 shows exactly where: it asks
+            // whether the face points against the camera's AXIS, when the question
+            // is whether it points against the RAY FROM THE EYE TO IT. Those differ
+            // by more the further off-axis the triangle is.
+            const engine::vec3 face_normal =
+                engine::cross(view_pos[b] - view_pos[a], view_pos[c] - view_pos[a]);
+            const bool front_by_forward = (face_normal.z > 0.0f);
+
+            // ...and in this mode, act on it. Note WHERE this happens: in view
+            // space, before the projection, which is precisely how the bug gets
+            // into a codebase — it looks like a sensible early-out.
+            if (cull == cull_choice::back_by_forward && !front_by_forward) { continue; }
+
             engine::clip_vertex poly[engine::k_clip_max_vertices];
             std::size_t n = 0;
 
@@ -1731,6 +1862,9 @@ void collect_triangles(std::vector<raster_triangle>& out, projection_scratch& sc
                 tri.v[1] = to_vertex(poly[k - 1]);
                 tri.v[2] = to_vertex(poly[k]);
                 tri.sort_key = key;
+                // Every piece of a clipped triangle lies in the SAME plane, so they
+                // share one face normal and one answer from the wrong test.
+                tri.front_by_forward = front_by_forward;
                 out.push_back(tri);
                 ++stats.output;
             }
@@ -1754,8 +1888,32 @@ void collect_triangles(std::vector<raster_triangle>& out, projection_scratch& sc
 ///               draws by pipeline is a real optimisation in Module 6.
 void draw_triangles(engine::framebuffer& fb, engine::depth_buffer* depth,
                     std::vector<raster_triangle>& tris, bool sorted,
-                    engine::fill_style style)
+                    engine::fill_style style, cull_stats* culled = nullptr)
 {
+    // The HUD's numbers, and a note on why they are gathered HERE rather than
+    // returned by the rasterizer. `fill_triangle` culls internally — that is where
+    // the hardware does it — so it could report back, but making every fill return
+    // a bool would put a value at 100% of call sites that 99% of them ignore.
+    // Counting in the caller costs one extra `edge_function` per triangle and keeps
+    // the rule itself in ONE place: `is_front_facing`, which is what the rasterizer
+    // calls too. Instrumentation duplicates the *question*, never the answer.
+    if (culled != nullptr)
+    {
+        *culled = {};
+        for (const raster_triangle& t : tris)
+        {
+            ++culled->submitted;
+            const bool front = engine::is_front_facing(t.v[0], t.v[1], t.v[2]);
+            if (front) { ++culled->front; }
+            if (front != t.front_by_forward) { ++culled->disagree; }
+
+            const bool kept = (style.cull == engine::cull_mode::none)
+                           || (style.cull == engine::cull_mode::back && front)
+                           || (style.cull == engine::cull_mode::front && !front);
+            if (kept) { ++culled->drawn; }
+        }
+    }
+
     if (sorted)
     {
         // Furthest first. View-space z is NEGATIVE in front of the camera, so
@@ -2391,6 +2549,11 @@ int main(int argc, char* argv[])
     std::vector<raster_triangle> compare_tris;     ///< the reference render's own geometry
     int near_wrong = 0;                            ///< px this near mode gets wrong vs clipping
 
+    // ---- Lesson 3.4 --------------------------------------------------------
+    cull_choice culling = cull_choice::none;       ///< [U]
+    cull_stats scene_cull;                         ///< kept / culled / disagreeing, this frame
+    int cull_wrong = 0;                            ///< px the current cull mode gets wrong
+
     xform basis_mode = xform::rotate;   ///< Lesson 2.5
     float basis_t = 0.6f;               ///< the one parameter every mode reads
     bool basis_animating = false;
@@ -2429,6 +2592,7 @@ int main(int argc, char* argv[])
     SDL_Log("Scene (3.1-3.3): [F] wireframe/painter/z-buffer/depth  [C] scene  [B] depth format");
     SDL_Log("  [I] affine/perspective interpolation  [T] floor tessellation");
     SDL_Log("  [K] near plane: clip / drop / none - on the floor scene, hold [=] to walk into it");
+    SDL_Log("  [U] cull: none / back / front / back-by-dot(n,fwd) (the classic bug)");
     SDL_Log("  [arrows] orbit  [-]/[=] dolly  [P] persp/ortho  [O] model order  [X] object");
     SDL_Log("  [Z] rotation axis  [,] [.] t  [Space] spin  [W]/[N] the 2.7 w bugs");
     SDL_Log("[Tab] cycles demos: scene (2.6-3.3) -> basis (2.5) -> triangles -> lines -> Pong");
@@ -2511,6 +2675,7 @@ int main(int argc, char* argv[])
                 floor_cells = (floor_cells >= 16) ? 1 : floor_cells * 2;
             }
             if (in.key_pressed(SDL_SCANCODE_K)) { near_handling = next_near(near_handling); }
+            if (in.key_pressed(SDL_SCANCODE_U)) { culling = next_cull(culling); }
             if (in.key_pressed(SDL_SCANCODE_B))
             {
                 depth_fmt = next_depth_format(depth_fmt);
@@ -2623,8 +2788,10 @@ int main(int argc, char* argv[])
                 }
                 painter_wrong = 0;
                 near_wrong = 0;
+                cull_wrong = 0;
                 shown_depth = {};
                 scene_clip = {};
+                scene_cull = {};
             }
             else
             {
@@ -2632,7 +2799,7 @@ int main(int argc, char* argv[])
                 // algorithms below then run on identical geometry, which is what
                 // makes the pixel-for-pixel comparison honest.
                 collect_triangles(scene_tris, scratch, scene, scene_count,
-                                  view_from_world, pr, order, scene_clip);
+                                  view_from_world, pr, order, scene_clip, culling);
 
                 const bool want_painter = (hs == hidden_surface::painter);
                 const bool checkered = (scene_mode == scene_kind::floor);
@@ -2644,13 +2811,55 @@ int main(int argc, char* argv[])
                     .interp = interp,
                     .shade = checkered ? engine::shading::uv_checker
                                        : engine::shading::vertex_colour,
-                    .space = engine::blend_space::linear};
+                    .space = engine::blend_space::linear,
+                    .cull = to_engine_cull(culling)};
 
                 // Clearing to FAR is not optional and not cosmetic. Skip it and
                 // last frame's depths survive into this one; §7 has the picture.
                 scene_depth.clear();
                 draw_triangles(fb, want_painter ? nullptr : &scene_depth,
-                               scene_tris, want_painter, style);
+                               scene_tris, want_painter, style, &scene_cull);
+
+                // ---- Lesson 3.4's own comparison --------------------------
+                // Culling is an OPTIMISATION, so the claim to check is not "does
+                // it look better" but "does it look IDENTICAL". Render the same
+                // scene with culling off and count the pixels that differ: on
+                // closed geometry with `back` this must read exactly 0, and any
+                // other reading means the cull removed something visible.
+                //
+                // Run before the main comparison because both want scratch_fb,
+                // and this one is the cheaper claim to settle.
+                if (culling != cull_choice::none)
+                {
+                    engine::fill_style unculled = style;
+                    unculled.cull = engine::cull_mode::none;
+
+                    scratch_fb.clear(k_bg);
+                    draw_world(scratch_fb, view_from_world, pr);
+                    scratch_depth.clear();
+
+                    if (culling == cull_choice::back_by_forward)
+                    {
+                        // That mode culls in collect_triangles, not in the
+                        // rasterizer, so the reference needs its own geometry.
+                        clip_stats ignored;
+                        collect_triangles(compare_tris, scratch, scene, scene_count,
+                                          view_from_world, pr, order, ignored,
+                                          cull_choice::none);
+                        draw_triangles(scratch_fb, want_painter ? nullptr : &scratch_depth,
+                                       compare_tris, want_painter, unculled);
+                    }
+                    else
+                    {
+                        draw_triangles(scratch_fb, want_painter ? nullptr : &scratch_depth,
+                                       scene_tris, want_painter, unculled);
+                    }
+                    cull_wrong = count_differences(fb, scratch_fb, vp);
+                }
+                else
+                {
+                    cull_wrong = 0;
+                }
 
                 // ---- The comparison ---------------------------------------
                 // Run the scene a second time with ONE THING CHANGED, over the
@@ -2683,7 +2892,8 @@ int main(int argc, char* argv[])
                     // the demo where the two renders cannot share geometry.
                     clip_stats reference_clip;
                     collect_triangles(compare_tris, scratch, scene, scene_count,
-                                      view_from_world, reference, order, reference_clip);
+                                      view_from_world, reference, order, reference_clip,
+                                      culling);
                     draw_triangles(scratch_fb, want_painter ? nullptr : &scratch_depth,
                                    compare_tris, want_painter, style);
                     near_wrong = count_differences(fb, scratch_fb, vp);
@@ -3047,6 +3257,43 @@ int main(int argc, char* argv[])
                 }
             }
 
+            // ---- Lesson 3.4's readout -------------------------------------
+            // Culling is an optimisation, so the honest headline is a PAIR of
+            // numbers: how much work it saved, and how many pixels it cost. The
+            // second must be zero, or it was not an optimisation.
+            {
+                bool any_open = false;
+                for (int i = 0; i < scene_count; ++i)
+                {
+                    if (!scene[i].closed) { any_open = true; }
+                }
+                const bool cull_sound = (culling == cull_choice::none)
+                                     || (culling == cull_choice::back && !any_open);
+                SDL_SetRenderDrawColor(renderer, cull_sound ? 122 : 236,
+                                                 cull_sound ? 196 : 196,
+                                                 cull_sound ? 152 : 110, 255);
+                if (hs == hidden_surface::wireframe)
+                {
+                    SDL_RenderDebugTextFormat(renderer, 6.0f, 76.0f,
+                        "[U] cull = %-18s  (wireframe draws no faces to cull)",
+                        name_of(culling));
+                }
+                else if (culling == cull_choice::none)
+                {
+                    SDL_RenderDebugTextFormat(renderer, 6.0f, 76.0f,
+                        "[U] cull = %-18s  %d tris, %d front   dot(n,fwd) misjudges %d",
+                        name_of(culling), scene_cull.submitted, scene_cull.front,
+                        scene_cull.disagree);
+                }
+                else
+                {
+                    SDL_RenderDebugTextFormat(renderer, 6.0f, 76.0f,
+                        "[U] cull = %-18s  %d of %d drawn   vs no culling: %d px",
+                        name_of(culling), scene_cull.drawn, scene_cull.submitted,
+                        cull_wrong);
+                }
+            }
+
             const bool floor_scene = (scene_mode == scene_kind::floor);
 
             if (floor_scene)
@@ -3062,51 +3309,51 @@ int main(int argc, char* argv[])
                     // sky. Each wrong mode explains itself and only itself —
                     // stacking every explanation at once is how a HUD becomes
                     // wallpaper nobody reads.
-                    SDL_RenderDebugText(renderer, 6.0f, 84.0f,
+                    SDL_RenderDebugText(renderer, 6.0f, 96.0f,
                         "AFFINE: the checker swims and buckles, and breaks along the");
-                    SDL_RenderDebugText(renderer, 6.0f, 98.0f,
+                    SDL_RenderDebugText(renderer, 6.0f, 110.0f,
                         "diagonal each quad is split on. [T] subdivides: the error falls");
-                    SDL_RenderDebugText(renderer, 6.0f, 112.0f,
+                    SDL_RenderDebugText(renderer, 6.0f, 124.0f,
                         "with the SQUARE of the subdivision and never reaches zero. That");
-                    SDL_RenderDebugText(renderer, 6.0f, 126.0f,
+                    SDL_RenderDebugText(renderer, 6.0f, 138.0f,
                         "is why 1990s floors were tessellated to death. [I] for the fix.");
                 }
                 else if (near_handling == near_mode::clip)
                 {
-                    SDL_RenderDebugText(renderer, 6.0f, 84.0f,
+                    SDL_RenderDebugText(renderer, 6.0f, 96.0f,
                         "hold [=] to walk forward. The floor's near edge passes the eye at");
-                    SDL_RenderDebugText(renderer, 6.0f, 98.0f,
+                    SDL_RenderDebugText(renderer, 6.0f, 110.0f,
                         "radius 7, and from there part of it is BEHIND you. Clipping cuts");
-                    SDL_RenderDebugText(renderer, 6.0f, 112.0f,
+                    SDL_RenderDebugText(renderer, 6.0f, 124.0f,
                         "those triangles along the near plane and draws the rest. [K] to");
-                    SDL_RenderDebugText(renderer, 6.0f, 126.0f,
+                    SDL_RenderDebugText(renderer, 6.0f, 138.0f,
                         "see what the two obvious alternatives do instead.");
                 }
                 else if (near_handling == near_mode::drop)
                 {
-                    SDL_RenderDebugText(renderer, 6.0f, 84.0f,
+                    SDL_RenderDebugText(renderer, 6.0f, 96.0f,
                         "DROP: one corner behind the near plane sinks the WHOLE triangle, so");
-                    SDL_RenderDebugText(renderer, 6.0f, 98.0f,
+                    SDL_RenderDebugText(renderer, 6.0f, 110.0f,
                         "the ground you stand on is simply not drawn. [T] shrinks the hole -");
-                    SDL_RenderDebugText(renderer, 6.0f, 112.0f,
+                    SDL_RenderDebugText(renderer, 6.0f, 124.0f,
                         "it is one cell deep, so it goes like 1/N - but at 16x16 there is");
-                    SDL_RenderDebugText(renderer, 6.0f, 126.0f,
+                    SDL_RenderDebugText(renderer, 6.0f, 138.0f,
                         "still a viewpoint that loses half the frame. 512 tris to hide it.");
                 }
                 else
                 {
-                    SDL_RenderDebugText(renderer, 6.0f, 84.0f,
+                    SDL_RenderDebugText(renderer, 6.0f, 96.0f,
                         "NONE: no guard at all. A vertex behind the eye has w < 0, so the");
-                    SDL_RenderDebugText(renderer, 6.0f, 98.0f,
+                    SDL_RenderDebugText(renderer, 6.0f, 110.0f,
                         "divide FLIPS ITS SIGN and it lands on the far side of the screen.");
-                    SDL_RenderDebugText(renderer, 6.0f, 112.0f,
+                    SDL_RenderDebugText(renderer, 6.0f, 124.0f,
                         "The triangle spans the frame or turns inside out; magenta marks");
-                    SDL_RenderDebugText(renderer, 6.0f, 126.0f,
+                    SDL_RenderDebugText(renderer, 6.0f, 138.0f,
                         "pixels whose uv came back infinite. This is 2.7's warning, live.");
                 }
                 SDL_SetRenderDrawColor(renderer, 210, 212, 220, 255);
-                SDL_RenderDebugText(renderer, 6.0f, 146.0f,
-                    "[K] near  [I] interp  [T] tessellate  [C] scene  [arrows] orbit  [-][=] dolly");
+                SDL_RenderDebugText(renderer, 6.0f, 158.0f,
+                    "[U] cull  [K] near  [I] interp  [T] tessellate  [C] scene  [arrows] orbit  [-][=] dolly");
             }
 
             // Everything below writes into the column of pixels beside the inset

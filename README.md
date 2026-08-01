@@ -110,6 +110,14 @@ subdivides the floor and shows you what the era's alternative actually cost. The
 lines, and it covers every attribute a vertex will ever carry — is
 [Lesson 3.2](docs/lessons/03-02-perspective-correct.html).
 
+Back on the solids scene, press <kbd>U</kbd> to cycle back-face culling. Half the triangles stop
+being drawn and the picture does not change — except that the painter-versus-z-buffer counter drops
+from 29 pixels to **0**, settling a debt [Lesson 3.1](docs/lessons/03-01-z-buffer.html) measured and
+could not explain. Keep pressing and the last setting is the classic bug: culling with
+`dot(normal, camera_forward)`, which misjudges one triangle in six at this field of view. Why that
+is a different question from the right one, and why the answer is a sign the rasterizer was already
+computing, is [Lesson 3.4](docs/lessons/03-04-back-face-culling.html).
+
 Then hold <kbd>=</kbd> on that floor and walk *into* it. <kbd>K</kbd> cycles what happens to a
 triangle with a corner behind your eye: **clip** it (correct), **drop** it (the ground vanishes —
 31,747 pixels of 57,600), or divide anyway with **no guard** at all (the floor folds inside out and
