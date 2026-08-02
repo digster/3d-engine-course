@@ -950,6 +950,7 @@ td code { font-size: 0.82em; }
       <li><a href="#interpolation">Interpolating vertex attributes</a></li>
       <li><a href="#clipping">Clipping &mdash; where, against what</a></li>
       <li><a href="#winding">Winding and culling</a></li>
+      <li><a href="#assets">Geometry from disk &mdash; the asset contract</a></li>
       <li><a href="#units">Units and angles</a></li>
       <li><a href="#simulation">The simulation contract</a></li>
       <li><a href="#colour">Colour and diagram conventions</a></li>
@@ -1956,6 +1957,87 @@ td code { font-size: 0.82em; }
     </table>
   </div>
 
+  <!-- ===================================================================== -->
+  <h2 id="assets"><span class="num">7b</span>Geometry from disk &mdash; the asset contract</h2>
+
+  <p>
+    Settled in Lesson 3.5, and binding for every loader the engine ever grows. Up to that point
+    all geometry was typed into <code>mesh.hpp</code>, so its properties were true by
+    construction. From here they are <em>claims about a file</em>, and the difference between a
+    parser and an asset pipeline is that a pipeline knows which claims it has checked.
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>Rule</th><th>Value</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td>Index base</td><td>OBJ indices are <strong>1-based</strong>; <code>slot = index − 1</code></td>
+            <td>Format requirement. The single most common OBJ bug, and it does not crash &mdash;
+                it silently builds every triangle from its neighbours&rsquo; corners.</td></tr>
+        <tr><td>Negative indices</td><td><code>slot = n + index</code>, resolved against the count
+            <em>seen so far</em></td>
+            <td>Legal, and used by exporters that emit per-object chunks. Resolution must happen
+                during the read, not in a tidy second pass.</td></tr>
+        <tr><td>Index <code>0</code></td><td>illegal &mdash; free sentinel for &ldquo;absent&rdquo;</td>
+            <td>Numbering starts at 1 and negatives count back, so nothing can collide with it.</td></tr>
+        <tr><td>What a vertex is</td><td>the <strong>triple</strong>
+            <code>(i<sub>v</sub>, i<sub>vt</sub>, i<sub>vn</sub>)</code></td>
+            <td>One index downstream selects one whole vertex, so corners share a vertex only when
+                they agree about <em>everything</em>. A cube&rsquo;s 8 positions become
+                <strong>24</strong> vertices.</td></tr>
+        <tr><td>Vertex numbering</td><td>order of <strong>first appearance</strong></td>
+            <td>Deterministic and independent of the hash map&rsquo;s iteration order, so two loads
+                of the same file are bit-identical and can be diffed.</td></tr>
+        <tr><td>Attribute arrays</td><td>index-parallel, or <strong>empty</strong></td>
+            <td><code>vertices[k]</code>, <code>uvs[k]</code> and <code>normals[k]</code> belong
+                together. Empty means &ldquo;this mesh has none&rdquo;; an array of zeroes would be
+                a different and much more confusing claim.</td></tr>
+        <tr><td>Triangulation</td><td>fan from corner 0 &mdash; <code>(0, k−1, k)</code></td>
+            <td>Same fan as the near-plane clipper (§<a href="#clipping">6d</a>), and the same
+                assumption: <strong>correct only for convex faces</strong>. Ear clipping is
+                Module 5.</td></tr>
+        <tr><td>Index width</td><td><code>uint16_t</code>, ceiling <strong>65,536</strong> vertices</td>
+            <td>One of the two widths GPU index buffers come in
+                (<code>SDL_GPU_INDEXELEMENTSIZE_16BIT</code>). Exceeding it is an <em>error</em>,
+                never a silent wrap.</td></tr>
+        <tr><td>Normals</td><td>stored <strong>as written</strong>, not normalised on load</td>
+            <td>A loader is not a place where data may differ from its source. Normalise at the
+                point of use.</td></tr>
+        <tr><td>Texture coords</td><td>stored <strong>as written</strong>; the origin question is
+            <em>open</em></td>
+            <td>&#9888; Most exporters write <code>v</code> with the origin at the bottom-left,
+                while §<a href="#verified">11</a> records SDL_GPU sampling with the origin at the
+                top-left. We store the file&rsquo;s numbers unchanged and settle the flip in
+                Lesson 3.9, where a sampler first makes it observable.</td></tr>
+        <tr><td>Ownership</td><td><code>mesh_data</code> owns; <code>mesh</code> views</td>
+            <td>Loaders fill a caller-owned out-parameter. Returning a <code>mesh</code> from a
+                function that built the data locally compiles and dangles.</td></tr>
+        <tr><td>Failure policy</td><td><strong>malformed is fatal, silly is counted</strong></td>
+            <td><code>f 1/x/2</code> stops the load with a line number; a zero-area face is
+                dropped and reported. Both halves are in the report, so neither is a surprise.</td></tr>
+        <tr><td>Errors</td><td>an enum and a line number &mdash; <strong>never an exception</strong></td>
+            <td>Engine-core rule. An enum makes the caller write the branch.</td></tr>
+        <tr><td>Topology</td><td>measured on the <strong>welded</strong> mesh</td>
+            <td>A uv seam legitimately stores one point twice. Ask the raw arrays and a watertight
+                model reports a seam-shaped hole.</td></tr>
+        <tr><td>&ldquo;Wound outward&rdquo;</td><td><strong>signed volume &gt; 0</strong></td>
+            <td>Assumption-free, unlike the centroid test, which needs a star-shaped solid and
+                fails on the first torus it meets.</td></tr>
+        <tr><td>Euler characteristic</td><td>a <strong>diagnostic</strong>, not a validity condition</td>
+            <td><code>V − E + F = 2 − 2g</code>. A torus gives 0. Asserting 2 rejects every handle,
+                link and hole in the world.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    The last three rows are the ones that change how the rest of the engine is written. Back-face
+    culling (§<a href="#winding">7</a>) has a precondition &mdash; closed, consistently wound
+    geometry &mdash; and until Lesson 3.5 that precondition was a <code>bool</code> somebody typed.
+    It is now the output of <code>validate()</code>, which is the difference between an engine that
+    hopes and an engine that knows.
+  </p>
+
   <h2 id="units"><span class="num">8</span>Units and angles</h2>
 
   <div class="tbl-scroll">
@@ -2111,6 +2193,11 @@ td code { font-size: 0.82em; }
         <tr><td>Front face</td><td><code>SDL_GPUFrontFace</code> = <code>{COUNTER_CLOCKWISE = 0, CLOCKWISE}</code></td><td><code>SDL3/SDL_gpu.h</code></td></tr>
         <tr><td>Cull mode</td><td><code>SDL_GPUCullMode</code> = <code>{NONE = 0, FRONT, BACK}</code></td><td><code>SDL3/SDL_gpu.h</code></td></tr>
         <tr><td>Window creation</td><td><code>SDL_CreateWindow(const char *title, int w, int h, SDL_WindowFlags flags)</code> — <strong>no x/y</strong></td><td><code>SDL3/SDL_video.h</code></td></tr>
+        <tr><td>Base path</td><td><code>const char *SDL_GetBasePath(void)</code> — <strong>cached by SDL; the caller must NOT free it</strong> (an SDL2 → SDL3 change), may be <code>NULL</code></td><td><code>SDL3/SDL_filesystem.h</code></td></tr>
+        <tr><td>Whole-file read</td><td><code>void *SDL_LoadFile(const char *file, size_t *datasize)</code> — appends a zero byte <em>not</em> counted in <code>datasize</code>; free with <code>SDL_free</code></td><td><code>SDL3/SDL_iostream.h</code></td></tr>
+        <tr><td>Whole-file write</td><td><code>bool SDL_SaveFile(const char *file, const void *data, size_t datasize)</code></td><td><code>SDL3/SDL_iostream.h</code></td></tr>
+        <tr><td>Number parsing</td><td><code>SDL_strtod</code> makes <strong>fewer guarantees than the C runtime</strong>: handling of scientific and hexadecimal notation is <em>unspecified</em>. Not usable for asset parsing — we use <code>std::strtof</code>.</td><td><code>SDL3/SDL_stdinc.h</code></td></tr>
+        <tr><td>Index element size</td><td><code>SDL_GPUIndexElementSize</code> = <code>{_16BIT, _32BIT}</code> — the reason <code>mesh::indices</code> is <code>uint16_t</code> and has a ceiling</td><td><code>SDL3/SDL_gpu.h</code></td></tr>
       </tbody>
     </table>
   </div>

@@ -7,7 +7,7 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-08-04 (after Lesson 3.4, 30 of 94 lessons)
+updated: 2026-08-05 (after Lesson 3.5, 31 of 94 lessons)
 
 conventions:
   world: right-handed, Y-up, -Z forward
@@ -507,6 +507,43 @@ conventions:
             vanishes; culling by sign is Lesson 3.4's job, in its own space.
             Zero area = collinear = draws nothing. That check is LOAD-BEARING: the fill
             rule's proof needs a non-degenerate edge.
+  assets: GEOMETRY FROM DISK IS DATA, AND DATA GETS CHECKED. Settled in 3.5.
+            OBJ INDICES ARE 1-BASED (slot = index - 1) and may be NEGATIVE, meaning
+            relative to the count SEEN SO FAR (slot = n + index, no extra -1).
+            Index 0 is illegal, which makes it a free "absent" sentinel.
+            A VERTEX IS THE TRIPLE (i_v, i_vt, i_vn). Corners share a vertex only when
+            they agree about EVERYTHING. Numbered by first appearance, so a load is
+            reproducible and diffable.
+            ATTRIBUTE ARRAYS ARE INDEX-PARALLEL OR EMPTY. Empty means "has none"; an
+            array of zeroes would be the different and more confusing claim that every
+            pixel samples one texel.
+            FAN TRIANGULATION, (0, k-1, k) — same fan as 3.3's clipper and the same
+            condition, stated precisely: correct IFF corner 0 SEES the whole polygon
+            (star-shaped about it). Convexity is the sufficient version, sufficient
+            because then EVERY corner works. So a concave face may fan fine from one
+            corner and grow fins from another — the bug depends on where the exporter
+            started listing, which is what makes it intermittent across files.
+            uint16 INDICES, ceiling 65536 = SDL_GPU_INDEXELEMENTSIZE_16BIT. Exceeding
+            it is an ERROR; a silent wrap builds triangles from unrelated corners.
+            NORMALS AND UVS STORED AS WRITTEN — a loader is not a place where data may
+            differ from its source. ⚠ THE uv ORIGIN IS STILL OPEN: exporters write v
+            bottom-up, SDL_GPU samples top-down; we store the file's numbers and
+            settle the flip in 3.9, where a sampler first makes it observable.
+            MALFORMED IS FATAL, SILLY IS COUNTED. `f 1/x/2` stops the load with a line
+            number; a zero-area face is dropped and reported. Both in the report.
+            TOPOLOGY IS MEASURED ON THE WELDED MESH. A uv seam legitimately stores one
+            point twice; ask the raw arrays and a watertight model reports a
+            seam-shaped hole. Welding is by EXACT bits (with -0.0 normalised) because
+            the duplicates came from one computation — a tolerance is Module 5's.
+            THE SEAM ONLY WELDS IF YOU ARRANGE IT: computing the wrap angle from
+            u = 1.0 gives sin(1.0f*tau) = 1.748e-7 instead of 0, so the two copies
+            differ in the last bit and 48 boundary edges appear in a closed torus.
+            Compute it from `i % nu`. (Measured, verify_35 §E.)
+            EULER IS A DIAGNOSTIC, NOT A VALIDITY CONDITION. V - E + F = 2 - 2g; the
+            torus gives 0. Asserting 2 rejects every handle and hole ever modelled.
+            "WOUND OUTWARD" = SIGNED VOLUME > 0, by the divergence theorem — assumption
+            free, unlike 2.12's centroid test which needs a star-shaped solid and fails
+            on the first torus. Accumulate in double: the terms nearly cancel.
   fill-rule: top-left. For a triangle oriented to POSITIVE area:
             top edge = (dy == 0 && dx > 0); left edge = (dy < 0). Bias -1 on the others,
             folded into the loop's starting value, so it costs NOTHING per pixel.
@@ -738,8 +775,51 @@ completed:
   - 3.2  Perspective-Correct Interpolation
   - 3.3  Near-Plane Clipping
   - 3.4  Back-Face Culling
+  - 3.5  A Hand-Rolled OBJ Loader
 
 capabilities:
+  - gfx 3.5: GEOMETRY FROM DISK. Four files, and the lesson is none of them being
+    the parser.
+    THE INDEX PROBLEM IS THE CONTENT. OBJ gives every face corner three INDEPENDENT
+    indices (`f 1/1/1`); a vertex buffer has ONE index that selects the whole
+    vertex. So a vertex IS the triple (i_v, i_vt, i_vn), and a position shared by
+    faces that disagree about uv or normal must be stored twice. Measured on
+    assets/cube.obj: 8 positions + 4 uvs + 6 normals -> 24 vertices, 16 splits, 0
+    reused corners (every one of the 24 corner tokens is a distinct triple). That is
+    also why a cube in any engine's vertex buffer has 24 vertices and not 8.
+    Numbered by ORDER OF FIRST APPEARANCE, which is deterministic and independent of
+    unordered_map's iteration order — so two loads of a file are bit-identical and
+    can be diffed.
+    src/gfx/mesh.hpp — mesh gains `normals` (nothing reads them until 3.6; they are
+    loaded because the file has them and because a normal PARTICIPATES IN DECIDING
+    WHAT A VERTEX IS). New owning `mesh_data` {vertices, uvs, normals, indices} with
+    .view() -> mesh: the owner/view pair (string/string_view, vector/span), and the
+    answer to the ownership strain 3.2's floor_geometry admitted. New `mesh_report`
+    + validate(). k_max_mesh_vertices = 65536 — not arbitrary, it is
+    SDL_GPU_INDEXELEMENTSIZE_16BIT (verified in SDL_gpu.h). Three factory functions
+    switched to designated initialisers (four members now; -Wmissing-field-
+    initializers was right to complain).
+    src/gfx/mesh.cpp NEW — validate() and make_torus(). Validation runs ONCE at a
+    trust boundary, so it reaches for std::map while the loader's hot de-dup loop
+    reaches for unordered_map: match the container to how hot the loop actually is.
+    src/gfx/obj.hpp/.cpp NEW — obj_status (enum + line number, NOT an exception and
+    NOT a general Result<T,E>: that would be inventing a language feature for a
+    problem we have once), obj_report (counts, not a bool — split_vertices is the
+    index problem measured on this file), parse_obj(string_view) separate from
+    load_obj(path) so every awkward case is testable from a string literal,
+    save_obj() which COMPACTS each attribute stream as a real exporter does, and
+    asset_path() over SDL_GetBasePath.
+    src/main.cpp — scene_kind::model + [L] cycling torus/cube/twisted/quirks/
+    generated, a live round-trip pixel comparison, and scene_object::closed now
+    computed from validate() instead of typed by hand.
+    CMakeLists.txt — POST_BUILD copy of assets/ to $<TARGET_FILE_DIR:engine>, a
+    generator expression because multi-config generators put the binary in Debug/.
+    .gitignore — `*.obj` is MSVC's object extension AND Wavefront's model
+    extension; without `!assets/*.obj` every model silently fails to be added.
+    assets/ NEW — cube.obj (20 readable lines, quads, the worked example),
+    twisted.obj (one face reversed: 3.4's debt made visible), quirks.obj (CRLF,
+    negative indices, mixed corner formats, an n-gon, a degenerate face, unknown
+    keywords), torus.obj (2,304 tris, written by save_obj from make_torus).
   - gfx 3.4: BACK-FACE CULLING. raster.hpp gains constexpr is_front_facing(a,b,c)
     (= edge_function < 0; a NAMED rule because it now has two readers — the
     rasterizer that acts on it and the demo that counts it, the same argument
@@ -1344,9 +1424,11 @@ files:
   src/gfx/: clip.hpp, clip.cpp, colour.hpp, colour.cpp,
             depth_buffer.hpp, depth_buffer.cpp,
             framebuffer.hpp, framebuffer.cpp,
-            raster.hpp, raster.cpp, viewport.hpp, mesh.hpp
+            mesh.hpp, mesh.cpp, obj.hpp, obj.cpp,
+            raster.hpp, raster.cpp, viewport.hpp
   src/math/: vec2.hpp, vec3.hpp, vec4.hpp, mat2.hpp, mat3.hpp, mat4.hpp, transform.hpp
   src/game/: pong.hpp, pong.cpp
+  assets/: cube.obj, twisted.obj, quirks.obj, torus.obj
   docs/: index.html, conventions.html, math-toolbox.html, cpp-style.html
   docs/lessons/: 00-01-what-is-an-engine.html, 00-02-how-this-course-works.html,
                  00-03-toolchain.html, 00-04-cmake-from-zero.html,
@@ -1362,74 +1444,70 @@ files:
                  02-09-view-matrix.html, 02-10-perspective.html,
                  02-11-viewport.html, 02-12-wireframe-mesh.html,
                  03-01-z-buffer.html, 03-02-perspective-correct.html,
-                 03-03-near-plane-clipping.html, 03-04-back-face-culling.html
+                 03-03-near-plane-clipping.html, 03-04-back-face-culling.html,
+                 03-05-obj-loader.html
   docs/_template/: lesson-template.html, README.md, apply-shared.py, check-page.js
   memory/: 2026-07-16.md, 2026-07-18.md, 2026-07-21.md, 2026-07-22.md,
            2026-07-23.md, 2026-07-24.md, 2026-07-25.md, 2026-07-26.md,
            2026-07-27.md, 2026-07-28.md, 2026-07-29.md, 2026-07-30.md,
            2026-07-31.md, 2026-08-01.md, 2026-08-02.md, 2026-08-03.md,
-           2026-08-04.md
+           2026-08-04.md, 2026-08-05.md
   (retired: hello.cpp)
 
 
 
-next: 3.5 — A Hand-Rolled OBJ Loader
-      (planned filename: docs/lessons/03-05-obj-loader.html — 3.4 links to it)
-      THE RASTERIZER IS DONE AND HAS NOTHING TO DRAW. Three hand-typed meshes, all
-      convex, all closed, all correctly wound because we typed them that way. Every
-      assumption Module 3 has been leaning on is about to meet data it did not author.
-        - PARSING IS THE EASY PART AND MUST NOT BE THE LESSON. The OBJ format is
-          line-oriented ASCII: `v x y z`, `vt u v`, `vn x y z`, `f a/b/c a/b/c a/b/c`.
-          An hour of work. Spend the lesson on the parts that are actually hard:
-        - THE INDEX PROBLEM IS THE REAL CONTENT. OBJ has SEPARATE indices per
-          attribute (`f 1/3/7`), and a GPU vertex buffer has ONE index per vertex.
-          So a position shared by two faces with different uvs must become TWO
-          vertices. Deriving that — and the de-duplicating map from
-          (v_idx, vt_idx, vn_idx) -> our index — is the lesson's spine. It is also
-          the first time the course has had to RESHAPE data to fit the hardware
-          rather than the other way round, which is what an asset pipeline IS.
-        - NEGATIVE INDICES. OBJ allows -1 to mean "the last vertex so far". A real
-          format detail that is trivial to handle and silently corrupts everything
-          if you do not. Good example of "read the spec, do not infer it from your
-          test file".
-        - FACES CAN HAVE MORE THAN THREE VERTICES. Quads are common, n-gons legal.
-          Triangulate with a fan — and note the assumption a fan makes (convexity),
-          because 3.3's clipper made the same one and said so.
-        - 1-BASED INDICES. Say it once, loudly. It is the single most common bug.
-        - THEN THE DEBTS THIS MODULE LEFT:
-          (a) 3.3 §3.9 — a loaded mesh's triangle count is what it is. You cannot
-              subdivide your way out of a bug in geometry you did not author, which
-              was the whole argument for clipping properly.
-          (b) 3.4 §3.6 — you cannot assume winding either. Real OBJ files are
-              inconsistently wound, and back-face culling turns that into missing
-              faces. 2.12's validator (Euler, every directed edge exactly once) is
-              the tool; this is where it earns its keep on data from disk. Consider
-              a [V] key that reports the validation result for the loaded mesh.
-          (c) 3.2 gave uvs a real source at last — the checker pattern can finally be
-              replaced by something the artist chose. (The SAMPLER is 3.9; this is
-              just where the coordinates start being real.)
-        - OWNERSHIP. engine::mesh is two non-owning spans (2.12), and 3.2 already
-          felt the strain with the runtime floor. A mesh loaded from disk MUST own
-          its arrays. Introduce something like `mesh_data` (owning) with `.view()`
-          returning a `mesh` — and SAY that this is the shape Module 5's asset system
-          generalises, so the awkwardness is a preview and not a design failure.
-        - ERROR HANDLING, first real encounter. A file can be missing, truncated,
-          or malformed. No exceptions in engine core (CLAUDE.md §4), so this is where
-          the explicit-error-return style gets chosen — Module 5 §"logging, assertions
-          and an error strategy" will formalise it, but 3.5 has to pick something and
-          justify it. Do not invent a Result type here; keep it small and honest.
-        - GET A REAL MODEL. Something with a few thousand triangles, non-convex, so
-          the z-buffer finally does work no sort could fake and culling has something
-          to bite on. State where it came from and its licence.
-        - VERIFY: (a) round-trip a known mesh (our cube, written out and read back)
-          and compare vertex-for-vertex; (b) the de-dup map produces the minimal
-          vertex count on a mesh with shared uvs; (c) negative and 1-based indices
-          both resolve correctly, with a hand-written test file; (d) the loaded mesh
-          passes 2.12's validator, or reports precisely why it does not; (e) a
-          malformed file fails cleanly rather than reading out of bounds.
-      Module 3 then finishes: 3.6 normals and Lambert (replacing face_shade's debug
-      palette and finally straining the shading enum, as designed since 3.2), 3.7
-      specular/Blinn-Phong, 3.8 flat vs Gouraud vs per-pixel, 3.9 texture mapping +
-      bilinear (replacing checker_at with a real sampler), 3.10 profiling and the
-      Module 3 capstone.
+next: 3.6 — Normals and Lambert's Cosine Law
+      (planned filename: docs/lessons/03-06-normals-and-lambert.html — 3.5 links to it)
+      THE DEBUG PALETTE HAS TO GO. face_shade() has coloured surfaces since 3.1 by
+      indexing five brightness steps with the TRIANGLE NUMBER. It owes nothing to any
+      light, consults no normal, and — the tell — does not change when the object
+      turns. 3.5 just filled mesh::normals from disk and nothing reads them.
+        - LAMBERT FROM GEOMETRY, NOT FROM A FORMULA SHEET. A beam of light of fixed
+          cross-section striking a surface at angle theta spreads over an area
+          1/cos(theta) larger, so the power per unit area falls as cos(theta). That
+          is the whole law, and it should arrive as a picture of a spreading beam
+          before `max(0, dot(n, l))` is written down. The clamp is not a detail: a
+          negative dot means the surface faces AWAY, and letting it through subtracts
+          light, which is the "black rim" artifact.
+        - dot(n, l) IS THE PROJECTION 1.7 ALREADY TAUGHT, on unit vectors. Nothing new
+          is needed mathematically; the lesson is what the number MEANS here.
+        - THE NORMAL MATRIX. The first genuinely surprising result: a normal is NOT
+          transformed by the model matrix. Under a non-uniform scale, transforming a
+          normal as a direction tilts it the wrong way — squash a sphere flat and its
+          normals should splay OUTWARD, and M*n turns them inward. The answer is the
+          INVERSE TRANSPOSE, and it should be DERIVED from "the normal must stay
+          perpendicular to every tangent" (dot(M*t, X*n) = dot(t, n) = 0 forces
+          X = (M^-1)^T), not quoted. Our scene has TWO non-uniformly scaled objects
+          (slab and plinth) precisely so the bug is visible on a keypress.
+          NOTE: mat3/mat4 have no inverse() yet. Either derive the general one or
+          exploit that the upper-left 3x3 of a T*R*S is R*S with S diagonal — decide
+          and say which, because "we have no inverse" is a real constraint today.
+        - WHERE TO EVALUATE IT. Per-triangle (flat) is 3.6's starting point and it is
+          the honest one: our vertices carry one normal each, so a FACETED mesh
+          (cube.obj: 24 vertices, 3 normals per corner) shades correctly and a SMOOTH
+          one (torus.obj: one normal per position) will look banded until 3.8's
+          per-pixel. 3.7 adds specular, 3.8 compares flat/Gouraud/per-pixel properly.
+          Do not pre-empt 3.8 — but DO note that torus.obj already carries the smooth
+          normals that make the comparison possible.
+        - THE SHADING ENUM FINALLY STRAINS, exactly as 3.2 predicted when it wrote
+          `enum class shading {vertex_colour, uv_checker}`. A third value (`lambert`)
+          that needs a light direction and a normal per vertex is the point at which
+          "one enum plus one fill_style" stops being enough — name that pressure and
+          point at Module 6's material system rather than solving it now.
+        - THE MISSING NORMALS PROBLEM. quirks.obj has faces with no `vn` at all, and
+          mesh::normal_at returns (0,0,0) there, which shades black. Either generate
+          face normals at load (cross product, the obvious fix) or refuse to Lambert
+          a mesh without them. Decide, and note that generating SMOOTH normals means
+          averaging around a vertex, which needs the adjacency 3.5's validate()
+          already builds — a good place to reuse it rather than rebuild it.
+        - VERIFY: (a) a face-on surface reads exactly the light's intensity and a
+          90-degree one reads exactly 0; (b) the inverse transpose keeps
+          dot(n, tangent) = 0 under the slab's (1.8, 0.35, 0.9) scale while M*n does
+          not — measure the angle error; (c) shading now CHANGES as the object spins,
+          which the debug palette never did — that is the one-line proof the light is
+          real; (d) energy: no pixel brighter than the light itself.
+      Module 3 then finishes: 3.7 specular/Blinn-Phong, 3.8 flat vs Gouraud vs
+      per-pixel, 3.9 texture mapping + bilinear (replacing checker_at with a real
+      sampler, and settling the uv-origin question 3.5 deliberately left open),
+      3.10 profiling and the Module 3 capstone.
 ```

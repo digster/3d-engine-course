@@ -30,7 +30,13 @@ third_party/*/
 
 # ---- Binaries & libraries ---------------------------------------------------
 *.o
+# `*.obj` is MSVC's object-file extension AND Wavefront's model extension, and this
+# rule cannot tell them apart. Lesson 3.5 ships models under assets/, so they are
+# excepted here — without this line `git add assets/cube.obj` silently does nothing
+# and the repository builds fine for you and for nobody else.
 *.obj
+!assets/*.obj
+!assets/**/*.obj
 *.a
 *.lib
 *.so

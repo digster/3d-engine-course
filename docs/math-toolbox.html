@@ -967,6 +967,7 @@ td code { font-size: 0.82em; }
       <li><a href="#matrices">Matrices</a></li>
       <li><a href="#depth">Depth and screen-space interpolation</a></li>
       <li><a href="#intersection">Geometry and intersection</a></li>
+      <li><a href="#meshes">Measuring a mesh</a></li>
       <li><a href="#coming">Coming as the course proceeds</a></li>
     </ol>
   </details>
@@ -2320,7 +2321,111 @@ td code { font-size: 0.82em; }
     </p>
   </div>
 
-  <h2 id="coming"><span class="num">7</span>Coming as the course proceeds</h2>
+  <!-- ===================================================================== -->
+  <h2 id="meshes"><span class="num">7</span>Measuring a mesh</h2>
+
+  <p>
+    Three tools that answer questions about geometry <em>as a whole</em> rather than about one
+    triangle. They exist because Lesson 3.5 started loading models the course did not write, and
+    every one of them turns an assumption the renderer had been making into something checkable.
+  </p>
+
+  <div class="tool">
+    <h3>The Euler characteristic <span class="from">Lesson 3.5</span></h3>
+    <div class="eq">
+      <span>\[ \chi \;=\; V - E + F \;=\; 2 - 2g \]</span>
+      <span class="eq-plain">chi = V - E + F = 2 - 2g, where g is the genus (the number of holes)</span>
+    </div>
+    <p>
+      <strong>Vertices minus edges plus faces, and it does not change when you subdivide.</strong>
+      Cut a face in two and you add one face and one edge, which cancel in the alternating sum —
+      which is why χ is a fact about the <em>shape</em> and not about the mesh. It changes only
+      when the surface&rsquo;s kind changes: a sphere, cube or icosahedron gives 2; a torus gives
+      0; a two-holed pretzel gives −2.
+    </p>
+    <p>
+      Two practical notes. <strong>Count on the welded mesh</strong>: a uv seam stores one point of
+      the surface twice, and the raw vertex array is an encoding, not the surface. And
+      <strong>χ is a diagnostic, not a validity condition</strong> — a loader that asserts χ = 2
+      rejects every handle, link and hole ever modelled.
+    </p>
+    <div class="worked">
+      <span class="label">Worked</span>
+      <p>
+        Cube as six squares: <code>8 − 12 + 6 = 2</code>. Triangulated, each square gains a
+        diagonal: <code>8 − 18 + 12 = 2</code> — unchanged. Our 48 × 24 torus welds to 1,152
+        positions with 2,304 triangles, and every edge is shared by two of them, so
+        <code>E = 3F/2 = 3,456</code> and <code>χ = 1,152 − 3,456 + 2,304 = 0</code>.
+      </p>
+    </div>
+  </div>
+
+  <div class="tool">
+    <h3>Signed volume of a closed mesh <span class="from">Lesson 3.5</span></h3>
+    <div class="eq">
+      <span>\[ V \;=\; \frac{1}{6}\sum_{\text{triangles}} \mathbf{a} \cdot (\mathbf{b} \times \mathbf{c}) \]</span>
+      <span class="eq-plain">V = (1/6) * sum over triangles of dot(a, cross(b, c))</span>
+    </div>
+    <p>
+      Each triangle forms a tetrahedron with the <strong>origin</strong>, whose signed volume is a
+      sixth of the scalar triple product of its corners. Summed over a closed surface, the space
+      <em>outside</em> the solid is swept an even number of times with opposite signs and cancels
+      exactly; the interior is swept once. So the sum is the enclosed volume, and
+      <strong>the origin&rsquo;s position does not matter</strong> — which is what makes this the
+      general test where the centroid test of Lesson 2.12 is not.
+    </p>
+    <p>
+      <strong>The sign is the useful part.</strong> Positive means the mesh is wound
+      counter-clockwise seen from outside — the precondition back-face culling depends on and
+      cannot check for itself. Reverse every face and you get exactly <code>−V</code>; reverse
+      only some and you land in between, which is a detection, not merely a curiosity.
+      Accumulate in <code>double</code>: it is a sum of large signed terms that nearly cancel.
+    </p>
+    <div class="worked">
+      <span class="label">Worked</span>
+      <p>
+        The unit cube centred on the origin: each face&rsquo;s tetrahedron is a pyramid on a
+        1 × 1 base with height ½, so <code>1 × 0.5 / 3 = 1/6</code> each, and
+        <code>6 × 1/6 = 1</code>. Measured: <code>+1.000000</code>. Flip one face and its
+        contribution goes from <code>+1/6</code> to <code>−1/6</code>, predicting
+        <code>1 − 1/3 = 0.6667</code>; measured <code>+0.666667</code>. And the torus converges to
+        <code>2π²Rr² = 3.158274</code> from below — 1.42% low at 48 × 24, with the error falling
+        by 4 for every doubling.
+      </p>
+    </div>
+  </div>
+
+  <div class="tool">
+    <h3>The directed-edge test for closure and winding <span class="from">Lesson 3.5</span></h3>
+    <p>
+      Not a formula but a counting argument, and it decides three separate questions at once.
+      Walk every triangle&rsquo;s boundary in index order and record each edge by its
+      <em>unordered</em> pair of endpoints, noting which direction it was traversed. In a closed,
+      consistently wound surface every edge comes out
+      <strong><code>forward = 1, backward = 1</code></strong> — because each of the two triangles
+      sharing it walks its own boundary counter-clockwise, so the edge lies on the left of one and
+      the right of the other.
+    </p>
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>Reading</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><code>forward + backward == 1</code></td><td><strong>a boundary edge</strong> — the surface has a rim here, so it encloses nothing</td></tr>
+          <tr><td><code>forward + backward &gt; 2</code></td><td><strong>non-manifold</strong> — three or more faces meet along one edge; not a surface</td></tr>
+          <tr><td><code>forward == 2</code> or <code>backward == 2</code></td><td><strong>inconsistent winding</strong> — two faces, both walking the same way, so one is reversed</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      Key on the <em>sorted</em> pair, or A→B and B→A file separately and every edge in the mesh
+      looks like a rim. Measured on <code>twisted.obj</code> — a cube with one quad listed
+      backwards — this reports <strong>4</strong> reversed edges: the flipped quad&rsquo;s four
+      outer edges, but not the diagonal between its own two triangles, since those flipped
+      together.
+    </p>
+  </div>
+
+  <h2 id="coming"><span class="num">8</span>Coming as the course proceeds</h2>
 
   <p>
     This page is reissued at every module boundary. Each entry lands here only once its lesson
@@ -2337,8 +2442,11 @@ td code { font-size: 0.82em; }
   </div>
 
   <div class="pending">
-    <b>Module 3 — Depth and light.</b> <span class="badge done">3.1–3.2 landed: device depth,
-    1/w affinity, depth precision, perspective-correct interpolation</span> Lambert's cosine law · the halfway vector and Blinn-Phong · bilinear
+    <b>Module 3 — Depth and light.</b> <span class="badge done">3.1–3.5 landed</span>
+    Device depth and <code>1/w</code> affinity · the depth-precision budget ·
+    perspective-correct interpolation · the near-plane crossing parameter · the signed-area
+    facing test · the Euler characteristic and signed volume (§7 above). Still ahead:
+    Lambert's cosine law · the halfway vector and Blinn-Phong · bilinear
     filtering as a double lerp. (The reflection vector arrived early, in 1.8, because a bouncing
     ball needed it before a specular highlight did.)
   </div>

@@ -880,3 +880,66 @@ The timing is reported honestly: 54.8% of triangles removed bought 31.6% of the 
 fixed. It could not catch the one that mattered: **Figure 6 had the front and back arcs on the wrong
 sides** — the eye is drawn on the left, so the solid front surface must bulge left, and my SVG arc
 sweep flags said otherwise. Found by rendering the figure and reading it against its own labels.
+
+---
+
+## 2026-08-05 — Lesson 3.5
+
+> Based on the STATE and the project's claude instructions, work on the next.
+
+Resumed from `STATE.md` → `next: 3.5 — A Hand-Rolled OBJ Loader`. The block was unusually explicit:
+parsing is an afternoon and must not be the lesson; the **index problem** is the spine; and two
+debts were named for collection (3.3 §3.9 — you cannot subdivide your way out of a bug in geometry
+you did not author; 3.4 §3.6 — you cannot assume its winding either).
+
+### Judgement calls
+
+| Question | Decision | Why |
+|---|---|---|
+| Ship a third-party model? | **No — author our own, and ship the generator** | `make_torus()` in `mesh.cpp` plus `save_obj()` produces `assets/torus.obj`, so the course ships no third-party geometry, every number in the lesson is reproducible, and the writer buys a **round-trip test** a reader alone cannot have. A torus is also the right subject: non-convex, self-occluding, has a uv seam by construction, and its Euler characteristic is 0 rather than 2. |
+| Which model does the demo compare against? | **The in-memory `make_torus()`, every frame** | `assets/torus.obj` *was* written from that call, so "loaded == generated" is an end-to-end check of writer and reader together, in the currency this module has used for every claim it makes: **0 px differ**. |
+| Return `Result<T,E>`? | **No — an enum, a line number and a counts struct** | Building a general result type here would be inventing a language feature for a problem we have exactly once. Module 5 has ten loaders wanting the same shape; that is when the shape earns a name. |
+| Fatal or forgiving on bad input? | **Malformed is fatal, silly is counted** | `f 1/x/2` is not an OBJ file and guessing helps nobody; a zero-area face is a perfectly good file describing a silly triangle, and real files contain them. Both halves appear in the report. |
+| `try_emplace` for the de-dup map? | **`find` then `emplace`, two lookups on a miss** | `try_emplace` needs the new index as an *argument*, so `uint16_t(65536)` — a silent 0 — is computed before the ceiling test can run. The value is never used, but correctness resting on "we return before that matters" breaks on the next edit. |
+| Parse floats with `SDL_strtod`? | **No — `std::strtof`** | Checked the header: SDL's is documented to make *fewer* guarantees than the C runtime's, with scientific notation explicitly unspecified. Exporters emit `1.0e-5` constantly. `from_chars` is the principled answer and is guarded behind `__cpp_lib_to_chars` as Exercise 3.5.4. |
+| Load normals nothing reads yet? | **Yes** | The file has them, re-parsing later is worse, and — the real reason — a normal *participates in deciding what a vertex is*. Without them the cube would not split into 24 and the lesson would have no evidence. |
+
+### Verification
+
+`scratch/verify_35.cpp`, eight sections, all green, plus `scratch/render_35.cpp` for offscreen
+renders. Headlines: cube.obj **8 positions → 24 vertices (16 splits, 0 reused)**; the round trip is
+bit-exact corner for corner and **0 px** on screen; the torus's χ is **0** and its signed volume
+converges to `2π²Rr²` from below with clean second-order error; `twisted.obj` reports **4 reversed
+edges** and volume `+0.667` instead of `+1.0`, and culling changes **2,459 px** on it versus **2 px**
+on the correct cube.
+
+### Three things the harness corrected
+
+**My hand arithmetic on `quirks.obj` was wrong** — I predicted 15 unified vertices and the program
+said 14, because I had mis-mapped the base quad's position indices. The program was right.
+
+**Two normals genuinely coincide in `torus.obj`** — 1,152 `v` lines but only 1,150 `vn`. Not a bug:
+on a torus the normal at `(u,v)` is *exactly* the normal at `(u+π, π−v)`, and in `float` the
+identity survives to the last bit in two of the 576 pairs. A good reminder that the three index
+streams are independent and their lengths mean nothing to each other.
+
+**The seam nearly did not weld.** Computing the wrap angle as `sin(1.0f * τ)` gives `1.75e-07`
+rather than 0, leaving the two copies of the seam an ulp apart — so a watertight torus would have
+reported 48 boundary edges. Fixed by wrapping the *index* (`i % nu`); measured in §E rather than
+left for a student to discover.
+
+### And two figures that lied while `check-page.js` said `pass: true`
+
+Figure 5's two cones were drawn at angles where the cancellation was invisible, so the picture
+demonstrated nothing; rebuilt so the near cone nests exactly inside the far one and "green minus
+amber is the solid" is literally what you see. Figure 4 was worse — it captioned a fan triangle
+"leaves the polygon" and a point-in-polygon test put its centroid firmly *inside*. Rebuilding it
+produced a better statement than the wrong one had: a fan is correct **iff the anchor corner can
+see the whole polygon**, with convexity as the sufficient condition everyone quotes. The prose and
+the `obj.cpp` comment were both sharpened to match.
+
+Also caught by eye and then disproved by measurement: the rendered cube's silhouette looked
+concave. Testing every row for contiguity and both edges for unimodality proved it convex — the
+"notch" was Lesson 3.1's per-*triangle* debug palette shading the two halves of one face
+differently. The eye was wrong and the measurement was right, which is the opposite of the usual
+lesson and worth the same attention.

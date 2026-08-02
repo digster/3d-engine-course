@@ -94,7 +94,7 @@ Arrow keys orbit the camera, <kbd>-</kbd>/<kbd>=</kbd> dolly. The keys worth pre
 
 - <kbd>F</kbd> cycles **wireframe → painter's algorithm → z-buffer → depth view**. The HUD counts,
   live, how many pixels the two hidden-surface strategies disagree about.
-- <kbd>C</kbd> cycles four scenes, three of which exist to break sorting: a cyclic overlap where
+- <kbd>C</kbd> cycles six scenes, three of which exist to break sorting: a cyclic overlap where
   A is in front of B in front of C in front of A, an intersecting pair where the right answer
   changes halfway across one triangle, and two panels a millimetre apart.
 - <kbd>B</kbd> switches the depth format between `D32_FLOAT`, `D24_UNORM` and `D16_UNORM` — the
@@ -117,6 +117,19 @@ could not explain. Keep pressing and the last setting is the classic bug: cullin
 `dot(normal, camera_forward)`, which misjudges one triangle in six at this field of view. Why that
 is a different question from the right one, and why the answer is a sign the rasterizer was already
 computing, is [Lesson 3.4](docs/lessons/03-04-back-face-culling.html).
+
+Press <kbd>L</kbd> and the scene fills with something nobody typed: a **2,304-triangle torus read
+off a disk**, non-convex, occluding itself, with the HUD reading `1152+73 -> 1225 verts`. Those
+three numbers are the lesson — a file gives every face corner three *independent* indices and a
+vertex buffer has one, so 1,152 positions become 1,225 vertices, and a cube's 8 become 24. Keep
+pressing: `cube.obj` shows that split at a size you can count by hand, and `twisted.obj` is the
+same cube with one face listed backwards — press <kbd>U</kbd> there and 2,459 pixels of it
+disappear, because back-face culling believes winding. The HUD says `WINDING!` in red before you
+press anything, because the mesh was *validated* at load: Euler characteristic (0 for the torus,
+not 2 — a torus is not a sphere), boundary edges, and signed volume by the divergence theorem. And
+the reading `round trip: 0 px differ` is the loaded torus being compared, every frame, against the
+same mesh generated in memory and written out by our own OBJ writer.
+[Lesson 3.5](docs/lessons/03-05-obj-loader.html).
 
 Then hold <kbd>=</kbd> on that floor and walk *into* it. <kbd>K</kbd> cycles what happens to a
 triangle with a corner behind your eye: **clip** it (correct), **drop** it (the ground vanishes —

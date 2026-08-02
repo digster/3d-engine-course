@@ -77,13 +77,21 @@ inventing one — but without paying framework ceremony before it buys anything.
 │   │   │                   # + depth (3.1) + perspective correction (3.2)
 │   │   │                   # + back-face culling (3.4)
 │   │   ├── viewport.hpp    # NDC -> pixels + the y-flip           [EXISTS from 2.11]
-│   │   └── mesh.hpp        # indexed geometry: verts + tri indices [EXISTS from 2.12]
+│   │   ├── mesh.hpp        # indexed geometry: verts + tri indices [EXISTS from 2.12]
+│   │   │                   # + normals, owning mesh_data, mesh_report (3.5)
+│   │   ├── mesh.cpp        # validate() + make_torus()             [EXISTS from 3.5]
+│   │   ├── obj.hpp         # Wavefront OBJ read/write, asset paths [EXISTS from 3.5]
+│   │   └── obj.cpp         # the index problem: (v, vt, vn) -> one vertex
 │   ├── game/               # NOT engine — game code, see §2.1.1        [EXISTS from 1.8]
 │   │   ├── pong.hpp        # the Module 1 checkpoint game
 │   │   └── pong.cpp
 │   └── platform/           # window + event pumping (Module 5; see the note below)
 ├── shaders/                # HLSL sources (Module 4+). Compiled output is gitignored.
-├── assets/                 # meshes, textures, fonts
+├── assets/                 # meshes, textures, fonts                   [EXISTS from 3.5]
+│   ├── cube.obj            # 20 readable lines; the index problem, by hand
+│   ├── twisted.obj         # …with one face reversed: 3.4's precondition, violated
+│   ├── quirks.obj          # CRLF, negative indices, mixed corner formats, an n-gon
+│   └── torus.obj           # 2,304 triangles, written by save_obj from make_torus
 ├── tests/                  # unit tests (math first — it is the most testable layer)
 └── third_party/            # stb, ImGui, cgltf. SDL3 arrives via FetchContent.
 ```
@@ -787,6 +795,25 @@ Built roughly in dependency order — each module's milestone is the next module
   `dot(normal, camera_forward)` in view space, wrong on 15% of triangles at a 55° field of view —
   impossible to write by accident. And it is the second entry in `fill_style` to mirror
   `SDL_GPURasterizerState` field for field, so the Module 4 port stays a rename.
+- **Untrusted data enters at exactly one place, and is measured there** (Module 3, Lesson 3.5).
+  Up to 3.4 every mesh was typed into `mesh.hpp`, so "closed", "consistently wound", "indices in
+  range" and "faces are triangles" were true *by construction*. A loader makes all four into
+  claims about a file, and the engine's answer is `validate()` — welded vertex count, edges,
+  Euler characteristic, boundary and non-manifold edges, winding conflicts, signed volume —
+  computed **once, at the boundary**, so everything downstream may assume. That is why
+  `scene_object::closed` is no longer a `bool` somebody typed next to the geometry: it is the
+  validator's output, and back-face culling is gated on a measurement. Validation is not a
+  per-frame cost and is not shaped like one; it reaches for `std::map` while the loader's hot
+  de-duplication loop reaches for `std::unordered_map`, and matching the container to how hot
+  the loop actually is is most of what performance-awareness means in practice.
+- **Owning and viewing are different types** (Module 3, Lesson 3.5). `mesh_data` owns four
+  `std::vector`s; `mesh` is four `std::span`s over them. Every function that *draws* takes the
+  view, so it works identically on compiled-in arrays and on a file loaded a moment ago; only
+  the loader needs the owner. The rule that comes with it — a view must not outlive its owner —
+  is not enforceable by the type system, so the API is shaped to remove the mistake: loaders
+  fill a caller-owned out-parameter rather than returning geometry, because returning
+  `data.view()` from a function that built `data` locally compiles cleanly and dangles. Module
+  5's handles replace "safe because of the order two things happen in" with something checkable.
 - **Public API surface is a deliberate artifact,** not whatever headers happen to be reachable.
 
 ---

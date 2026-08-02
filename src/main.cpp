@@ -29,6 +29,7 @@
 #include "gfx/depth_buffer.hpp"
 #include "gfx/framebuffer.hpp"
 #include "gfx/mesh.hpp"
+#include "gfx/obj.hpp"
 #include "gfx/raster.hpp"
 #include "gfx/viewport.hpp"
 #include "math/mat2.hpp"
@@ -45,6 +46,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <string>
 #include <vector>
 
 namespace {
@@ -1155,7 +1157,8 @@ enum class scene_kind
     cycle,       ///< three planks: A over B over C over A. No order is correct.
     intersect,   ///< two quads passing through each other. Order changes mid-triangle.
     zfight,      ///< two near-coplanar quads. The z-buffer's own failure mode.
-    floor        ///< Lesson 3.2 — a checkered plane running to the horizon.
+    floor,       ///< Lesson 3.2 — a checkered plane running to the horizon.
+    model        ///< Lesson 3.5 — geometry read off a disk. [L] chooses which.
 };
 
 [[nodiscard]] const char* name_of(scene_kind k)
@@ -1167,6 +1170,7 @@ enum class scene_kind
     case scene_kind::intersect: return "INTERSECTING quads";
     case scene_kind::zfight:    return "near-coplanar (z-fight)";
     case scene_kind::floor:     return "FLOOR (checker to horizon)";
+    case scene_kind::model:     return "MODEL (loaded from disk)";
     }
     return "?";
 }
@@ -1179,7 +1183,8 @@ enum class scene_kind
     case scene_kind::cycle:     return scene_kind::intersect;
     case scene_kind::intersect: return scene_kind::zfight;
     case scene_kind::zfight:    return scene_kind::floor;
-    case scene_kind::floor:     return scene_kind::solids;
+    case scene_kind::floor:     return scene_kind::model;
+    case scene_kind::model:     return scene_kind::solids;
     }
     return scene_kind::solids;
 }
@@ -1254,7 +1259,19 @@ struct floor_geometry
     std::vector<std::uint16_t> indices;
     int cells = 0;                       ///< quads per side; 0 = not built yet
 
-    [[nodiscard]] engine::mesh view() const { return {vertices, indices, uvs}; }
+    /// Designated initialisers, as of Lesson 3.5: `mesh` grew a fourth member and
+    /// this floor carries no normals, so naming the three it does carry is both
+    /// clearer and what stops `-Wmissing-field-initializers` complaining.
+    ///
+    /// This struct is what `engine::mesh_data` generalises — Lesson 3.2 said at the
+    /// time that the awkwardness of owning geometry by hand was the pressure that
+    /// would eventually produce a real type. It is kept as it is because the floor
+    /// is *generated*, not loaded, and rewriting it to use `mesh_data` would gain
+    /// nothing but churn in a demo that already works.
+    [[nodiscard]] engine::mesh view() const
+    {
+        return engine::mesh{.vertices = vertices, .indices = indices, .uvs = uvs};
+    }
 };
 
 /// Tessellate the ground plane into `cells` x `cells` quads.
@@ -1303,6 +1320,159 @@ void build_floor(floor_geometry& g, int cells)
     }
 }
 
+// ---------------------------------------------------------------------------
+// Lesson 3.5 — geometry from disk
+// ---------------------------------------------------------------------------
+
+/// Which model the [C] = model scene is showing. [L] cycles.
+///
+/// Four files and one mesh that never touched a disk. The last one is not padding:
+/// `generated` is `make_torus()` in memory, and `torus` is that same mesh written
+/// out by `save_obj` and read back. Rendering both and counting the pixels that
+/// differ is how this lesson checks its own loader — the same trick Lessons 3.1
+/// through 3.4 each used, applied now to an asset pipeline instead of an algorithm.
+enum class model_choice
+{
+    torus,       ///< assets/torus.obj — 2,304 triangles, non-convex, a real workout
+    cube,        ///< assets/cube.obj — twenty readable lines, and the index problem
+    twisted,     ///< assets/twisted.obj — cube.obj with one face wound backwards
+    quirks,      ///< assets/quirks.obj — every awkward-but-legal construct at once
+    generated    ///< make_torus(), never written or read. The round trip's control.
+};
+
+[[nodiscard]] const char* name_of(model_choice c)
+{
+    switch (c)
+    {
+    case model_choice::torus:     return "torus.obj";
+    case model_choice::cube:      return "cube.obj";
+    case model_choice::twisted:   return "twisted.obj";
+    case model_choice::quirks:    return "quirks.obj";
+    case model_choice::generated: return "make_torus()";
+    }
+    return "?";
+}
+
+[[nodiscard]] const char* file_of(model_choice c)
+{
+    switch (c)
+    {
+    case model_choice::torus:     return "torus.obj";
+    case model_choice::cube:      return "cube.obj";
+    case model_choice::twisted:   return "twisted.obj";
+    case model_choice::quirks:    return "quirks.obj";
+    case model_choice::generated: break;
+    }
+    return nullptr;
+}
+
+[[nodiscard]] model_choice next_model(model_choice c)
+{
+    switch (c)
+    {
+    case model_choice::torus:     return model_choice::cube;
+    case model_choice::cube:      return model_choice::twisted;
+    case model_choice::twisted:   return model_choice::quirks;
+    case model_choice::quirks:    return model_choice::generated;
+    case model_choice::generated: return model_choice::torus;
+    }
+    return model_choice::torus;
+}
+
+/// How big to draw each model, so that all five fill the viewport comparably.
+///
+/// The torus spans 1.4 units, the cube 1, the pyramid 2 — a single scale would make
+/// one of them a speck. In an engine this is the ASSET's business, not the
+/// renderer's: a model is authored at its real size and placed by a transform.
+/// Module 5's asset system computes and stores a bounding box for exactly this, and
+/// Module 6's frustum culling needs the same number. Here it is a switch.
+[[nodiscard]] float display_scale(model_choice c)
+{
+    switch (c)
+    {
+    case model_choice::torus:
+    case model_choice::generated: return 1.5f;
+    case model_choice::cube:      return 2.4f;
+    case model_choice::twisted:   return 2.4f;
+    case model_choice::quirks:    return 1.1f;
+    }
+    return 1.0f;
+}
+
+/// The loaded model, plus everything measured about it.
+///
+/// **`data` owns the arrays and `view()` borrows them**, which is the hazard this
+/// type exists to make obvious. Reloading on [L] clears the vectors, so any `mesh`
+/// taken before the reload now points at freed memory. The demo is safe because
+/// `build_scene` runs after key handling and re-takes the view every frame — but
+/// "safe because of the order two things happen in" is exactly the kind of safety
+/// Module 5's handles replace with something a compiler can check.
+struct model_state
+{
+    model_choice choice = model_choice::torus;
+    engine::mesh_data data;        ///< whatever [L] currently names
+    engine::obj_report load;       ///< what the file contained, and what we built
+    engine::mesh_report check;     ///< …and whether it is safe to draw
+    double load_ms = 0.0;          ///< wall-clock cost of the last load
+
+    /// `make_torus()`, built once. The control for the round-trip comparison, and
+    /// the source `assets/torus.obj` was written from.
+    engine::mesh_data generated;
+};
+
+/// Load (or regenerate) the current model and measure it.
+///
+/// Both halves matter. The loader answers "what does the file say"; `validate()`
+/// answers "is that safe to draw", and until this lesson nothing in the engine could
+/// ask the second question at all. Its answer feeds `scene_object::closed`, so the
+/// demo's back-face culling is now gated on a MEASUREMENT rather than on a promise —
+/// which is the debt Lesson 3.4 §3.6 left, paid.
+void load_model(model_state& m, model_choice c)
+{
+    m.choice = c;
+
+    const Uint64 t0 = SDL_GetTicksNS();
+    if (c == model_choice::generated)
+    {
+        m.data = m.generated;   // a copy: four vectors, and it happens on a keypress
+        m.load = {};
+        m.load.status = engine::obj_status::ok;
+        m.load.vertices = static_cast<int>(m.data.vertices.size());
+        m.load.triangles = static_cast<int>(m.data.triangle_count());
+    }
+    else
+    {
+        // asset_path() puts us next to the executable, wherever it was launched
+        // from. std::string, because the path is assembled at runtime and something
+        // has to own the characters — the same ownership question as the mesh, one
+        // level down.
+        const std::string path = engine::asset_path(file_of(c));
+        m.load = engine::load_obj(path.c_str(), m.data);
+    }
+    const Uint64 t1 = SDL_GetTicksNS();
+    m.load_ms = static_cast<double>(t1 - t0) / 1.0e6;
+
+    // Validate whatever we got, INCLUDING a failed load — on failure the arrays are
+    // empty, and an empty mesh reports zeroes rather than crashing the report.
+    m.check = engine::validate(m.data.view());
+
+    if (m.load.ok())
+    {
+        SDL_Log("Loaded %-24s %5d verts (%+d split), %5d tris, euler %+d, "
+                "volume %+.4f, %s%s  [%.2f ms]",
+                name_of(c), m.load.vertices, m.load.split_vertices, m.load.triangles,
+                m.check.euler, static_cast<double>(m.check.signed_volume),
+                m.check.closed() ? "closed" : "OPEN",
+                m.check.consistently_wound() ? "" : ", WINDING INCONSISTENT",
+                m.load_ms);
+    }
+    else
+    {
+        SDL_Log("FAILED to load %s: %s (line %d)", name_of(c),
+                engine::name_of(m.load.status), m.load.line);
+    }
+}
+
 /// Rebuild the scene for the current time, rotation mode and scene kind.
 /// Returns how many objects were written.
 ///
@@ -1312,7 +1482,7 @@ void build_floor(floor_geometry& g, int cells)
 /// from one authoritative `t` cannot drift, and it is the pattern the engine keeps
 /// (Module 5's transform component stores the *inputs*, never a running matrix).
 int build_scene(scene_object (&out)[k_max_objects], scene_kind kind, spin mode, float t,
-                const floor_geometry& floor)
+                const floor_geometry& floor, const model_state& model)
 {
     const engine::mat3 spinning = build_spin(mode, t);
 
@@ -1335,6 +1505,28 @@ int build_scene(scene_object (&out)[k_max_objects], scene_kind kind, spin mode, 
         out[0].name = "ground plane (checkered)";
         out[0].tint = k_amber;   // unused: the floor is shaded from its uvs
         out[0].closed = false;   // a sheet, not a solid — 3.4 must not cull it
+        return 1;
+    }
+
+    if (kind == scene_kind::model)
+    {
+        // ONE OBJECT, AND NOTHING ABOUT IT WAS TYPED HERE. Its vertex count, its
+        // triangle count, its winding and whether it is closed at all are properties
+        // of a file, discovered at load time. Every other branch of this function
+        // builds geometry the course authored; this one places geometry it did not.
+        const float s = display_scale(model.choice);
+        out[0].xform.scale = {s, s, s};
+        out[0].xform.position = {0.0f, 1.0f, 0.0f};
+        out[0].xform.rotation = spinning * engine::rotation_x(0.35f);
+        out[0].geometry = model.data.view();
+        out[0].name = name_of(model.choice);
+        out[0].tint = k_amber;
+
+        // The 3.4 debt, paid. `closed` used to be a promise typed next to the
+        // geometry; here it is the validator's answer. Note that it takes BOTH
+        // conditions: twisted.obj is topologically closed and still unsafe to cull,
+        // because culling reads winding and its winding disagrees with itself.
+        out[0].closed = model.check.closed() && model.check.consistently_wound();
         return 1;
     }
 
@@ -2554,6 +2746,16 @@ int main(int argc, char* argv[])
     cull_stats scene_cull;                         ///< kept / culled / disagreeing, this frame
     int cull_wrong = 0;                            ///< px the current cull mode gets wrong
 
+    // ---- Lesson 3.5 --------------------------------------------------------
+    model_state model;                             ///< [L] chooses; loaded on the spot
+    int roundtrip_wrong = 0;                       ///< px between the loaded and generated torus
+
+    // The control mesh, built once. `assets/torus.obj` was written from exactly this
+    // call, so "loaded == generated" is a real end-to-end check of writer and reader
+    // together — and it is a claim the demo re-tests on every frame it is shown.
+    model.generated = engine::make_torus(48, 24, 1.0f, 0.4f);
+    load_model(model, model_choice::torus);
+
     xform basis_mode = xform::rotate;   ///< Lesson 2.5
     float basis_t = 0.6f;               ///< the one parameter every mode reads
     bool basis_animating = false;
@@ -2593,6 +2795,7 @@ int main(int argc, char* argv[])
     SDL_Log("  [I] affine/perspective interpolation  [T] floor tessellation");
     SDL_Log("  [K] near plane: clip / drop / none - on the floor scene, hold [=] to walk into it");
     SDL_Log("  [U] cull: none / back / front / back-by-dot(n,fwd) (the classic bug)");
+    SDL_Log("  [L] load a model: torus.obj / cube.obj / twisted.obj / quirks.obj / generated");
     SDL_Log("  [arrows] orbit  [-]/[=] dolly  [P] persp/ortho  [O] model order  [X] object");
     SDL_Log("  [Z] rotation axis  [,] [.] t  [Space] spin  [W]/[N] the 2.7 w bugs");
     SDL_Log("[Tab] cycles demos: scene (2.6-3.3) -> basis (2.5) -> triangles -> lines -> Pong");
@@ -2676,6 +2879,16 @@ int main(int argc, char* argv[])
             }
             if (in.key_pressed(SDL_SCANCODE_K)) { near_handling = next_near(near_handling); }
             if (in.key_pressed(SDL_SCANCODE_U)) { culling = next_cull(culling); }
+            if (in.key_pressed(SDL_SCANCODE_L))
+            {
+                // A real load, on a keypress, every time — not a cache lookup. It
+                // costs about half a millisecond for the torus and the HUD says so,
+                // which is the honest way to introduce the fact that asset loading
+                // is work. Module 5 caches; today we measure.
+                load_model(model, next_model(model.choice));
+                scene_mode = scene_kind::model;
+                selected = 0;
+            }
             if (in.key_pressed(SDL_SCANCODE_B))
             {
                 depth_fmt = next_depth_format(depth_fmt);
@@ -2695,7 +2908,12 @@ int main(int argc, char* argv[])
                 cam.elevation = (scene_mode == scene_kind::solids) ? 0.35f
                               : (scene_mode == scene_kind::cycle)  ? 0.0f
                               : (scene_mode == scene_kind::floor)  ? 0.10f
+                              : (scene_mode == scene_kind::model)  ? 0.45f
                                                                    : 0.08f;
+                // Looking down at 26 degrees on the model scene, because a torus
+                // seen edge-on is a rectangle: the hole — the thing that makes it
+                // non-convex and gives the z-buffer real work — is only visible
+                // from above.
                 cam.radius = 7.0f;
             }
             if (in.key_pressed(SDL_SCANCODE_SPACE)) { cube_animating = !cube_animating; }
@@ -2742,7 +2960,7 @@ int main(int argc, char* argv[])
 
             cube_m = build_spin(cube_mode, cube_t);
             build_floor(floor, floor_cells);
-            scene_count = build_scene(scene, scene_mode, cube_mode, cube_t, floor);
+            scene_count = build_scene(scene, scene_mode, cube_mode, cube_t, floor, model);
             if (selected >= scene_count) { selected = 0; }
 
             // The view matrix (2.9) and the projection matrix (2.10). The
@@ -2859,6 +3077,36 @@ int main(int argc, char* argv[])
                 else
                 {
                     cull_wrong = 0;
+                }
+
+                // ---- Lesson 3.5's own comparison --------------------------
+                // THE ROUND TRIP, ON SCREEN. assets/torus.obj was written from
+                // make_torus() by save_obj and is read back by load_obj. Draw the
+                // in-memory mesh over the same background with the same everything
+                // and count the pixels that differ: writer and reader together must
+                // be the identity, and any other reading means one of them lies.
+                //
+                // Only meaningful for the torus — the other four have no in-memory
+                // twin to be compared against.
+                if (scene_mode == scene_kind::model && model.choice == model_choice::torus)
+                {
+                    scene_object control = scene[0];
+                    control.geometry = model.generated.view();
+
+                    clip_stats ignored;
+                    collect_triangles(compare_tris, scratch, &control, 1,
+                                      view_from_world, pr, order, ignored, culling);
+
+                    scratch_fb.clear(k_bg);
+                    draw_world(scratch_fb, view_from_world, pr);
+                    scratch_depth.clear();
+                    draw_triangles(scratch_fb, want_painter ? nullptr : &scratch_depth,
+                                   compare_tris, want_painter, style);
+                    roundtrip_wrong = count_differences(fb, scratch_fb, vp);
+                }
+                else
+                {
+                    roundtrip_wrong = 0;
                 }
 
                 // ---- The comparison ---------------------------------------
@@ -3210,6 +3458,31 @@ int main(int argc, char* argv[])
                     corrected ? "PERSPECTIVE" : "AFFINE (wrong)",
                     floor_cells, floor_cells, scene_tris.size(), interp_wrong);
             }
+            else if (scene_mode == scene_kind::model)
+            {
+                // Lesson 3.5's readout. The three numbers that ARE the index
+                // problem: how many positions the file holds, how many extra
+                // vertices reconciling the attribute streams cost, and the total.
+                const bool good = model.load.ok() && model.check.consistently_wound();
+                SDL_SetRenderDrawColor(renderer, good ? 122 : 236,
+                                                 good ? 196 : 92,
+                                                 good ? 152 : 92, 255);
+                if (!model.load.ok())
+                {
+                    SDL_RenderDebugTextFormat(renderer, 6.0f, 48.0f,
+                        "[L] %-16s  FAILED: %s (line %d)",
+                        name_of(model.choice), engine::name_of(model.load.status),
+                        model.load.line);
+                }
+                else
+                {
+                    SDL_RenderDebugTextFormat(renderer, 6.0f, 48.0f,
+                        "[L] %-16s  %d+%d -> %d verts, %d tris  [%.2f ms]",
+                        name_of(model.choice), model.load.positions,
+                        model.load.split_vertices, model.load.vertices,
+                        model.load.triangles, model.load_ms);
+                }
+            }
             else
             {
                 // The number the whole lesson turns on. Red the moment sorting
@@ -3476,6 +3749,49 @@ int main(int argc, char* argv[])
                             SDL_RenderDebugText(renderer, 380.0f, 276.0f, "checker swim, and breaks along");
                             SDL_RenderDebugText(renderer, 380.0f, 290.0f, "the diagonal. [T] subdivides:");
                             SDL_RenderDebugText(renderer, 380.0f, 304.0f, "the error falls, never to zero.");
+                        }
+                        else if (scene_mode == scene_kind::model)
+                        {
+                            // The file's three streams, then what they became, then
+                            // whether the result is safe to draw. Every number here
+                            // was measured at load time; none of it was promised.
+                            SDL_RenderDebugTextFormat(renderer, 380.0f, 262.0f,
+                                "file: v %d  vt %d  vn %d", model.load.positions,
+                                model.load.uvs, model.load.normals);
+                            SDL_RenderDebugTextFormat(renderer, 380.0f, 276.0f,
+                                "-> %d verts (%+d split)",
+                                model.load.vertices, model.load.split_vertices);
+
+                            const bool wound = model.check.consistently_wound();
+                            SDL_SetRenderDrawColor(renderer, wound ? 150 : 236,
+                                                             wound ? 152 : 92,
+                                                             wound ? 170 : 92, 255);
+                            SDL_RenderDebugTextFormat(renderer, 380.0f, 290.0f,
+                                "euler %+d  %s  %s", model.check.euler,
+                                model.check.closed() ? "closed" : "OPEN",
+                                wound ? "wound ok" : "WINDING!");
+                            SDL_SetRenderDrawColor(renderer, 150, 152, 170, 255);
+                            SDL_RenderDebugTextFormat(renderer, 380.0f, 304.0f,
+                                "volume %+.3f  E %d",
+                                static_cast<double>(model.check.signed_volume),
+                                model.check.edges);
+
+                            if (model.choice == model_choice::torus)
+                            {
+                                // Writer and reader, checked against each other in
+                                // the only currency that matters: pixels.
+                                SDL_SetRenderDrawColor(renderer, roundtrip_wrong ? 236 : 122,
+                                                                 roundtrip_wrong ? 92 : 196,
+                                                                 roundtrip_wrong ? 92 : 152, 255);
+                                SDL_RenderDebugTextFormat(renderer, 380.0f, 318.0f,
+                                    "round trip: %d px differ", roundtrip_wrong);
+                            }
+                            else if (model.choice == model_choice::twisted)
+                            {
+                                SDL_SetRenderDrawColor(renderer, 236, 196, 110, 255);
+                                SDL_RenderDebugText(renderer, 380.0f, 318.0f,
+                                    "[U] cull back -> a hole");
+                            }
                         }
                         else if (scene_mode == scene_kind::zfight)
                         {

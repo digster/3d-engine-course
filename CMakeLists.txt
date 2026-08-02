@@ -53,6 +53,8 @@ add_executable(engine
     src/gfx/colour.cpp
     src/gfx/depth_buffer.cpp
     src/gfx/framebuffer.cpp
+    src/gfx/mesh.cpp
+    src/gfx/obj.cpp
     src/gfx/raster.cpp
 )
 
@@ -68,6 +70,27 @@ target_include_directories(engine PRIVATE src)
 # was built"; linking it also pulls in SDL's headers and platform frameworks
 # transitively, so we never name Cocoa or user32 ourselves.
 target_link_libraries(engine PRIVATE SDL3::SDL3)
+
+# ---- Assets ----------------------------------------------------------------
+# Lesson 3.5. The program loads models at runtime, and it finds them with
+# SDL_GetBasePath() — the directory the executable lives in — never with a path
+# relative to the current working directory, which is wherever the user happened
+# to be standing when they launched it. So the assets have to BE there, and
+# putting them there is the build's job.
+#
+# POST_BUILD runs after every successful link, so editing a model and rebuilding
+# is enough; there is no separate "install assets" step to forget.
+#
+# $<TARGET_FILE_DIR:engine> is a GENERATOR EXPRESSION — a value CMake cannot know
+# at configure time and resolves when it writes the build rules. It matters here
+# because multi-config generators (Visual Studio, Xcode) put the binary in
+# Debug/ or Release/ and a hard-coded path would be right in at most one of them.
+add_custom_command(TARGET engine POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_CURRENT_SOURCE_DIR}/assets"
+            "$<TARGET_FILE_DIR:engine>/assets"
+    COMMENT "Copying assets/ next to the executable"
+    VERBATIM)
 
 # Our warning discipline (see cpp-style §9) — applied to OUR target only, never
 # to SDL. Third-party code is compiled with its own flags; holding someone

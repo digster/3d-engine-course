@@ -20,13 +20,21 @@
 // each shared edge is drawn twice — honest waste we name rather than hide, and which
 // disappears the moment the triangles are filled.
 
+// Lesson 3.5 adds the other half of the story: geometry that OWNS its arrays.
+// Everything above describes a VIEW, which is exactly right for data compiled into
+// the program and exactly wrong for data read off a disk. `mesh_data` at the bottom
+// of this file is the owning form, and `validate()` is the tool that decides whether
+// geometry we did not author is safe to draw.
+
 #pragma once
 
 #include "math/vec2.hpp"
 #include "math/vec3.hpp"
 
+#include <cstddef>
 #include <cstdint>
 #include <span>
+#include <vector>
 
 namespace engine {
 
@@ -61,6 +69,23 @@ struct mesh
     /// substitutes zero rather than failing.
     std::span<const vec2> uvs;
 
+    /// Surface normals, one per position — or **empty**, meaning this mesh has none.
+    /// Added in Lesson 3.5 for a reason worth being honest about: **nothing draws
+    /// with them yet.** Lesson 3.6 turns a normal into a brightness; today they are
+    /// here only because the file on disk contains them, and a loader that reads a
+    /// file and throws away a third of it has to read it again later.
+    ///
+    /// They are not inert, though. A normal participates in deciding *what a vertex
+    /// is* — two faces meeting at a corner with different normals need two vertices
+    /// there, even though the position is one point. That is why a cube's vertex
+    /// buffer holds 24 vertices and not 8, and Lesson 3.5 §3 measures exactly that.
+    ///
+    /// In MODEL space, like the positions, and **not necessarily unit length**: a
+    /// file may contain whatever it contains. Lesson 3.6 normalises at the point of
+    /// use, which is also where the normal matrix problem (a non-uniform scale does
+    /// not transform normals the way it transforms points) finally has to be faced.
+    std::span<const vec3> normals;
+
     /// Number of triangles. Three indices each, so this is simply the count / 3.
     [[nodiscard]] constexpr std::size_t triangle_count() const { return indices.size() / 3; }
 
@@ -68,6 +93,17 @@ struct mesh
     [[nodiscard]] constexpr vec2 uv_at(std::size_t i) const
     {
         return i < uvs.size() ? uvs[i] : vec2{};
+    }
+
+    /// The normal at vertex `i`, or `(0,0,0)` if this mesh carries none.
+    ///
+    /// Zero is a deliberate choice of "absent" rather than, say, `(0,1,0)`: a zero
+    /// vector has no direction, so any shading term built from it is visibly wrong
+    /// rather than plausibly wrong. A default of "up" would light every unshaded
+    /// mesh as though the sun were overhead, which is the kind of bug that ships.
+    [[nodiscard]] constexpr vec3 normal_at(std::size_t i) const
+    {
+        return i < normals.size() ? normals[i] : vec3{};
     }
 };
 
@@ -97,7 +133,15 @@ inline constexpr std::uint16_t k_cube_indices[36] = {
 };
 
 /// The unit cube, as a mesh.
-[[nodiscard]] inline mesh cube_mesh() { return {k_cube_vertices, k_cube_indices, {}}; }
+///
+/// Designated initialisers, as of Lesson 3.5: `mesh` has four members now and only
+/// two of them apply here. Listing them by name means adding a fifth attribute one
+/// day cannot silently shift a value into the wrong field — and it silences
+/// `-Wmissing-field-initializers`, which was right to complain.
+[[nodiscard]] inline mesh cube_mesh()
+{
+    return mesh{.vertices = k_cube_vertices, .indices = k_cube_indices};
+}
 
 // ---- The unit quad ---------------------------------------------------------
 
@@ -131,7 +175,10 @@ inline constexpr vec2 k_quad_uvs[4] = {
 };
 
 /// A 1x1 square in the z = 0 plane, centred on the origin, with uvs over [0,1].
-[[nodiscard]] inline mesh quad_mesh() { return {k_quad_vertices, k_quad_indices, k_quad_uvs}; }
+[[nodiscard]] inline mesh quad_mesh()
+{
+    return mesh{.vertices = k_quad_vertices, .indices = k_quad_indices, .uvs = k_quad_uvs};
+}
 
 // ---- The icosahedron -------------------------------------------------------
 
@@ -187,7 +234,157 @@ inline constexpr std::uint16_t k_icosahedron_indices[60] = {
 /// A regular icosahedron inscribed in the unit sphere, as a mesh.
 [[nodiscard]] inline mesh icosahedron_mesh()
 {
-    return {k_icosahedron_vertices, k_icosahedron_indices, {}};
+    return mesh{.vertices = k_icosahedron_vertices, .indices = k_icosahedron_indices};
 }
+
+// ---- Geometry that owns itself ---------------------------------------------
+//
+// Lesson 3.5. Every mesh above views `inline constexpr` arrays with program
+// lifetime, so `mesh`'s spans can never dangle. Geometry read from a file has no
+// such guarantee: somebody has to hold the arrays, and "somebody" has to be a type,
+// because the alternative is a pile of `std::vector`s in whatever function happened
+// to do the loading. Lesson 3.2's `floor_geometry` was exactly that pile, and it was
+// admitted at the time to be the pressure that produces this.
+
+/// Geometry that OWNS its arrays: the form a loaded mesh arrives in.
+///
+/// The relationship to `mesh` is the one C++ draws everywhere and is worth naming
+/// once: `std::string` owns, `std::string_view` views; `std::vector` owns,
+/// `std::span` views. `mesh_data` owns, `mesh` views. Functions that merely *read*
+/// geometry take a `mesh` and so work on both; only the loader needs the owner.
+///
+/// The four arrays are **parallel and index-aligned**: `vertices[i]`, `uvs[i]` and
+/// `normals[i]` are the position, texture coordinate and normal of one vertex, and
+/// `indices` names vertices in triples. `uvs` and `normals` may be empty, meaning
+/// the geometry carries none; if non-empty they must be exactly as long as
+/// `vertices`, which `view()` quietly relies on and `validate()` checks.
+///
+/// **Copyable, movable, and cheap to move** — it is four vectors and nothing else,
+/// so the compiler-generated special members are all correct. That is the RAII
+/// bargain (Lesson 0.6): own resources in members that manage themselves and you
+/// write no destructor, no copy constructor, and no assignment operator, and you
+/// cannot leak. The moment you write one of the five by hand you owe all of them.
+struct mesh_data
+{
+    std::vector<vec3> vertices;
+    std::vector<vec2> uvs;
+    std::vector<vec3> normals;
+    std::vector<std::uint16_t> indices;
+
+    /// A non-owning view of this data. **The view dies with the owner** — the usual
+    /// span rule, and the reason `view()` is not called on a temporary anywhere in
+    /// this codebase. Returning a `mesh` from a function that built a `mesh_data`
+    /// locally would compile and dangle; the loader therefore fills an out-parameter
+    /// the caller owns, rather than returning geometry by value.
+    [[nodiscard]] mesh view() const { return {vertices, indices, uvs, normals}; }
+
+    /// Drop everything, keeping the allocated capacity for the next load.
+    void clear()
+    {
+        vertices.clear();
+        uvs.clear();
+        normals.clear();
+        indices.clear();
+    }
+
+    [[nodiscard]] std::size_t triangle_count() const { return indices.size() / 3; }
+};
+
+/// **The index-space ceiling.** `mesh::indices` is `std::uint16_t`, so a mesh can
+/// name at most 65,536 distinct vertices. That is not a limitation we invented: GPU
+/// index buffers come in exactly these two widths, and SDL_GPU spells them
+/// `SDL_GPU_INDEXELEMENTSIZE_16BIT` and `_32BIT` (Module 4). Sixteen bits halves the
+/// bandwidth of every index fetch, which is why it is still worth having.
+///
+/// A loader's job is to **notice** when a file exceeds it. Silently wrapping at
+/// 65,536 produces triangles that connect unrelated corners — geometry that looks
+/// like a bag of glass shards and gives no clue why.
+inline constexpr std::size_t k_max_mesh_vertices = 65536;
+
+// ---- Validation ------------------------------------------------------------
+//
+// Lesson 2.12 checked the hand-typed icosahedron against four properties — Euler's
+// formula, every edge shared by exactly two faces, uniform vertex degree, outward
+// winding — and did it in prose, by hand, because the data was twenty lines long and
+// we had written it ourselves. Lesson 3.5 makes those checks a function, because the
+// data is now four thousand lines long and we did not.
+
+/// What `validate()` found. Every field is a count you can act on, not a verdict.
+///
+/// The two booleans at the end are conveniences derived from the counts; the counts
+/// are the useful part, because "this mesh has 4 boundary edges" tells you where to
+/// look and "invalid" does not.
+struct mesh_report
+{
+    // ---- As stored -------------------------------------------------------
+    int vertices = 0;          ///< entries in the vertex array
+    int triangles = 0;         ///< index triples
+    int unused_vertices = 0;   ///< present in the array, named by no triangle
+    int out_of_range = 0;      ///< indices naming a vertex that does not exist
+    int degenerate = 0;        ///< triangles with a repeated index, or zero area
+
+    // ---- After welding by position ---------------------------------------
+    //
+    // Two vertices at the same POSITION are one point of the surface even when the
+    // arrays store them separately — which they must, whenever the two carry
+    // different uvs or normals (§3 of the lesson). Topology is a property of the
+    // surface, so every question below is asked of the WELDED graph. Ask them of the
+    // stored arrays instead and a perfectly watertight model reports a seam-shaped
+    // hole, which is one of the most confusing false alarms in asset pipelines.
+    int welded_vertices = 0;   ///< distinct positions
+    int split_vertices = 0;    ///< vertices - welded_vertices: the index problem, counted
+    int edges = 0;             ///< distinct undirected edges of the welded graph
+    int euler = 0;             ///< V - E + F. 2 for a sphere, 0 for a torus (§6.3)
+    int boundary_edges = 0;    ///< used by exactly one triangle: the surface has a rim
+    int nonmanifold_edges = 0; ///< used by three or more: not a surface at all
+    int reversed_edges = 0;    ///< used twice in the SAME direction: winding disagrees
+
+    /// Total signed volume enclosed, by the divergence theorem (§6.4). Meaningful
+    /// only when the surface is closed; **positive means wound outward**, which is
+    /// the property Lesson 3.4's back-face culling depends on and cannot check.
+    float signed_volume = 0.0f;
+
+    /// No rim, no non-manifold junctions: the surface encloses a region.
+    [[nodiscard]] bool closed() const
+    {
+        return boundary_edges == 0 && nonmanifold_edges == 0 && triangles > 0;
+    }
+
+    /// Every shared edge traversed once in each direction — the definition of
+    /// consistent winding, and the thing a mesh from disk most often lacks.
+    [[nodiscard]] bool consistently_wound() const { return reversed_edges == 0; }
+};
+
+/// Measure a mesh against the properties a renderer quietly assumes it has.
+///
+/// Costs one hash-map pass over the positions and one over the edges, so it is a
+/// load-time or tool-time check — not something to run per frame. Which is the
+/// normal shape of validation in an engine: pay once, at the boundary where
+/// untrusted data enters, and let everything downstream assume.
+[[nodiscard]] mesh_report validate(const mesh& m);
+
+// ---- A procedural mesh worth loading ---------------------------------------
+
+/// A torus in the y-up world: a tube of radius `minor` swept around a ring of radius
+/// `major`, lying in the xz plane. Wound counter-clockwise seen from outside.
+///
+/// Built rather than typed, because at 48 x 24 it is 2,304 triangles and nobody
+/// types that. It is here for four reasons, each of which a cube fails at:
+///
+///   - **Non-convex.** Parts of it hide other parts, so the z-buffer does work no
+///     sort could fake, and back-face culling has something real to bite on.
+///   - **It has a uv seam.** Going once around, `u` runs 0 → 1 and then must be 0
+///     again — but the same vertex cannot hold both. Splitting that seam is the
+///     index problem in its purest form, and this mesh contains it by construction.
+///   - **Its Euler characteristic is 0, not 2.** A torus is not a sphere, and a
+///     validator that "knows" V - E + F = 2 is about to learn what that formula is
+///     actually a statement about (§6.3).
+///   - **Its volume has a closed form**, 2·pi²·major·minor², so the signed-volume
+///     check has an exact number to converge to rather than a plausible one.
+///
+/// @param major_segments  divisions around the ring   (>= 3)
+/// @param minor_segments  divisions around the tube   (>= 3)
+[[nodiscard]] mesh_data make_torus(int major_segments, int minor_segments,
+                                   float major_radius, float minor_radius);
 
 } // namespace engine

@@ -1,0 +1,58 @@
+# quirks.obj - a square pyramid, written as awkwardly as the format allows.
+#
+# Every line of this file is LEGAL OBJ, and every one of them breaks a parser
+# that was written by looking at one well-behaved export. It is the test file
+# for Lesson 3.5 SS8, and it is deliberately small enough to check by hand:
+# 5 positions, 6 faces, one of which is a quad and one of which is degenerate.
+#
+# What is in here on purpose:
+#   - CRLF line endings, because the file came from Windows
+#   - a `v` line with three extra numbers (the vertex-colour extension)
+#   - faces in three different corner formats: v, v//vn, and v/vt/vn
+#   - NEGATIVE indices, which count backwards from the most recent element
+#   - a 4-corner face that must be triangulated
+#   - a face naming the same corner twice, which has no area
+#   - keywords we skip (g, s, usemtl, mtllib) and one we have never heard of
+#   - trailing whitespace, blank lines, and comments in the middle
+#
+# Authored for "Build a Professional 3D Game Engine". MIT.
+
+mtllib nowhere.mtl
+o pyramid
+
+# The apex first, so the negative indices below have something to count back to.
+v 0.0 1.0 0.0 0.9 0.4 0.2
+v -1.0 0.0 -1.0
+v 1.0 0.0 -1.0   
+v 1.0 0.0 1.0
+v -1.0 0.0 1.0
+
+vt 0.0 0.0
+vt 1.0 0.0
+vt 0.5 1.0
+
+vn 0.0 -1.0 0.0
+vn 0.0 0.7071068 -0.7071068
+vn 0.7071068 0.7071068 0.0
+vn 0.0 0.7071068 0.7071068
+vn -0.7071068 0.7071068 0.0
+
+handedness right   # not a real OBJ keyword; counted as unknown, never fatal
+
+g base
+s off
+# The base, as ONE quad with positions only: no uv, no normal, four corners.
+f 2 3 4 5
+
+g sides
+usemtl none
+# Position and normal, no texture coordinate. The double slash is required.
+f 3//2 2//2 1//2
+# The full form.
+f 4/1/3 3/2/3 1/3/3
+# NEGATIVE indices: -1 is the most recent position (v 5), -5 is the apex.
+f -1//4 -2//4 -5//4
+f 2 5 1 
+
+# A face with a repeated corner. No area, no pixels; dropped and counted.
+f 2 2 3

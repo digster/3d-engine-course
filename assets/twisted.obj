@@ -1,0 +1,44 @@
+# twisted.obj — cube.obj with ONE face wound the wrong way round.
+#
+# Lesson 3.4 left a debt: back-face culling discards triangles by winding, and
+# nothing in the engine had ever checked that a mesh's winding was consistent,
+# because every mesh so far was one we typed. This file is what an inconsistently
+# wound export actually looks like — and it is indistinguishable from cube.obj
+# until you either cull back faces (the top of the cube vanishes and you see the
+# inside) or run validate(), which reports the two directed edges that disagree.
+#
+# The only change from cube.obj is the fifth face, whose four corners are listed
+# in reverse. Its `vn` still claims to point at +y, which is exactly how this
+# survives in the wild: the normals look right, so the file looks right.
+#
+# Authored for "Build a Professional 3D Game Engine". MIT.
+
+o cube_twisted
+
+v -0.5 -0.5 -0.5
+v  0.5 -0.5 -0.5
+v  0.5  0.5 -0.5
+v -0.5  0.5 -0.5
+v -0.5 -0.5  0.5
+v  0.5 -0.5  0.5
+v  0.5  0.5  0.5
+v -0.5  0.5  0.5
+
+vt 0.0 0.0
+vt 1.0 0.0
+vt 1.0 1.0
+vt 0.0 1.0
+
+vn  0.0  0.0 -1.0
+vn  0.0  0.0  1.0
+vn -1.0  0.0  0.0
+vn  1.0  0.0  0.0
+vn  0.0  1.0  0.0
+vn  0.0 -1.0  0.0
+
+f 1/1/1 4/4/1 3/3/1 2/2/1
+f 5/1/2 6/2/2 7/3/2 8/4/2
+f 1/1/3 5/2/3 8/3/3 4/4/3
+f 2/1/4 3/4/4 7/3/4 6/2/4
+f 3/4/5 7/3/5 8/2/5 4/1/5
+f 1/1/6 2/2/6 6/3/6 5/4/6

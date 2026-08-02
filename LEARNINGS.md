@@ -1782,3 +1782,171 @@ degeneracy — so a relative-to-result error is unbounded and meaningless there.
 
 The general rule: when a quantity is computed as a difference, its error scales with the
 **inputs**, not with the answer. Normalise by what the floats actually were.
+
+
+## The extension your build system reserves may be someone else's data format (Lesson 3.5)
+
+`*.obj` is MSVC's object-file extension. It is in essentially every C++ project's `.gitignore`,
+including this one since Lesson 0.4. It is also Wavefront's model extension.
+
+So `git add assets/cube.obj` silently does nothing. Not an error, not a warning — the file is
+simply not staged, the build works perfectly on the machine that has it, and the repository is
+broken for everybody else in a way that looks like a missing feature rather than a missing file.
+
+Two habits fall out of it. **Negate deliberately** (`!assets/*.obj`) rather than deleting the
+broad rule, because the broad rule is still right for build output. And **check the decision
+rather than the intent**: `git check-ignore -v <path>` prints the exact rule that decided, so a
+pattern with `!` in the output means "not ignored" and you have proof rather than a belief.
+`git status --untracked-files=all` is the other half — plain `git status` collapses a whole
+untracked directory to one line and will happily hide that only three of its four files matter.
+
+
+## A file's idea of a vertex and the hardware's idea of a vertex are different ideas (Lesson 3.5)
+
+This is the whole of what makes writing an OBJ loader worth a lesson rather than an afternoon.
+OBJ gives each face corner **three independent indices** — `f 1/3/7` means position 1, texture
+coordinate 3, normal 7 — while a vertex buffer has **one** index that selects position, uv and
+normal together, because the hardware fetches a vertex as a unit.
+
+So a vertex is not a position. A vertex is the *triple* `(i_v, i_vt, i_vn)`, and a position shared
+by two faces that disagree about its normal has to be stored twice. That is why a cube arrives as
+**24 vertices, not 8** — every corner is three corners of paper, one per face, and the three
+disagree about which way the surface faces. Measured on our `assets/cube.obj`: 8 positions, 4 uvs,
+6 normals, 24 corner tokens, 24 distinct triples, zero reuse.
+
+The generalisable part is not about OBJ. It is that **an asset pipeline exists because the shape
+data is authored in is not the shape hardware consumes**, and reconciling the two is real work with
+a real cost you should be able to quote. Anyone who has wondered why an exporter turns a tidy
+model into a much bigger vertex buffer has met this without being told what it was.
+
+
+## Number parsing is where a loader most easily starts lying (Lesson 3.5)
+
+Three separate traps, all of which fail silently.
+
+**Accept the whole token or reject it.** `strtof("1.0abc", &end)` returns 1.0 and points `end` at
+the `a`. If you do not compare `end` against the token's end, a typo in a model file becomes
+geometry instead of an error.
+
+**`SDL_strtod` is not `strtod`.** SDL's header documents it as making *fewer* guarantees than the
+C runtime's: "the handling of scientific and hexadecimal notation is unspecified". Exporters emit
+`1.0e-5` constantly. Checked in `SDL3/SDL_stdinc.h`, not assumed — and it is the sort of thing that
+would have looked like a natural choice for a program that already links SDL.
+
+**`strtof` reads the decimal point through `LC_NUMERIC`.** On a machine whose locale writes `1,5`,
+a program that has called `setlocale(LC_ALL, "")` parses `"1.5"` as **1** and drops the fraction,
+for every number in every asset. We are safe only because neither we nor SDL calls `setlocale`.
+`std::from_chars` is the principled fix — locale-independent by definition — but floating-point
+`from_chars` was the last piece of C++17 to reach the standard libraries and arrived very late in
+libc++, so it needs a `__cpp_lib_to_chars` guard rather than an assumption.
+
+
+## Topology is a property of the surface, not of the array that encodes it (Lesson 3.5)
+
+A uv seam stores one point of the surface twice, because the two copies need different texture
+coordinates and a vertex cannot hold two values. That is correct and unavoidable. It also means
+**the vertex array is an encoding, not the set of points** — so every topological question (is it
+closed? is the winding consistent? what is V − E + F?) has to be asked of the *welded* mesh.
+
+Ask them of the raw arrays and a perfectly watertight torus reports 48 boundary edges: a
+seam-shaped hole in a model with no hole. It is a spectacularly confusing false alarm, because the
+model renders perfectly and the number is precise.
+
+The same distinction settles what a round-trip test should compare. Writing a mesh and reading it
+back must preserve the *geometry* — the expanded list of triangle corners — not the vertex array's
+ordering, which the loader has no way to reproduce and which means nothing.
+
+
+## "Same point in principle" is not "same number", and welding needs the second (Lesson 3.5)
+
+Generating a torus, the natural way to place the seam column is to compute its angle from its
+texture coordinate: the last column has `u = 1`, so its angle is `1.0f * 2π`, and the first has
+`u = 0`, so its angle is `0`. Mathematically identical positions. In `float`:
+
+```
+sin(0.0f)                    = 0
+sin(1.0f * 6.28318530718f)   = 1.74845553e-07
+```
+
+A float cannot hold 2π exactly, so the two columns land 1.7 × 10⁻⁷ apart. Nothing renders
+differently. But no welder recognises them, so the seam becomes a boundary and every check in the
+previous entry reports a hole that is not there.
+
+The fix is to compute the angle from the **wrapped index** (`i % nu`) so the last column literally
+reuses the first column's angle — the two positions are then the same *number*, not merely the same
+*point*. The general lesson: if two values must compare equal later, arrange for them to be
+produced by the same computation, rather than by two computations that agree in exact arithmetic.
+
+
+## Euler's formula is a statement about spheres (Lesson 3.5)
+
+`V − E + F = 2` is how everyone learns it, and it is the special case. The real statement is
+`χ = V − E + F = 2 − 2g`, where `g` counts the holes: a sphere, cube or icosahedron gives 2, a
+torus gives **0**, a two-holed pretzel gives −2. χ is invariant under subdivision — cutting a face
+in two adds one face and one edge, which cancel in the alternating sum — which is exactly why it is
+a fact about the *shape* and not about the mesh, and why it can be computed on the triangulated
+form and still be talking about the cube.
+
+The practical consequence is a rule about validators: **χ is a diagnostic, not a validity
+condition.** A loader that asserts 2 rejects every handle, link, chain and pair of glasses ever
+modelled. The conditions that really are errors for a renderer are different ones — boundary edges,
+non-manifold edges, inconsistent winding — and they should be reported as separate counts, because
+"this mesh has 4 boundary edges" tells you where to look and "invalid" does not.
+
+
+## The general test costs the same as the test that only works sometimes (Lesson 3.5)
+
+Lesson 2.12 checked "wound outward" by taking each face's normal and dotting it against the vector
+from the centroid. That silently assumes the solid is **star-shaped about its centroid** — that a
+ray from the centre hits the surface once. It is true for an icosahedron and false for the first
+torus you meet, whose centroid is in the hole.
+
+The assumption-free test is the signed volume by the divergence theorem: sum `dot(a, cross(b, c))`
+over every triangle and divide by six. Space outside the solid is swept an even number of times
+with opposite signs and cancels; the interior is swept once. **The origin's position is
+irrelevant**, which is precisely what makes it general. Positive means wound counter-clockwise seen
+from outside — the property back-face culling depends on and cannot check for itself.
+
+It is also barely more code than the wrong test, and it comes with a free numeric check: a unit
+cube reads exactly 1.0, and a torus converges to `2π²Rr²` from below with second-order error
+(12.3% → 3.2% → 0.8% → 0.09% as the resolution doubles). Verify a geometric predicate against a
+closed form whenever one exists — a predicate that returns a *number* can be checked, and one that
+returns a *bool* can only be believed.
+
+
+## Distinguish "malformed" from "silly", and report both (Lesson 3.5)
+
+A loader for real-world data has to answer a policy question before it answers any technical one:
+which inputs stop the load, and which are absorbed?
+
+The line that worked: **malformed is fatal, silly is counted.** `f 1/x/2` is not an OBJ file, so
+guessing what it meant helps nobody — that stops with a line number. A face whose three corners are
+the same vertex is a perfectly good OBJ file describing a triangle with no area, usually left by a
+merge operation; real files contain these, so it is dropped and counted and the load succeeds.
+
+Both halves have to appear in the report, which is the part that is easy to skip. A loader that
+silently absorbs oddities and a loader that dies on real data are both unusable; what makes one
+usable by somebody who is not its author is that the report says *how much* it ignored. `skipped
+412 lines` is a very different statement from silence.
+
+
+## A check-page pass is a floor, not a ceiling — two figures said false things (Lesson 3.5)
+
+`check-page.js` reported `pass: true` on figures that were actively wrong, because it checks
+*collisions*, not *claims*.
+
+Figure 5 shaded two overlapping cones from an origin and asserted they cancelled outside the solid;
+they were drawn at angles where the nesting was invisible, so the picture demonstrated nothing.
+Figure 4 was worse: it drew a concave pentagon, highlighted the fan triangle `(0,2,3)`, and
+captioned it "leaves the polygon" — and a point-in-polygon test on that triangle's centroid put it
+firmly *inside*. The figure's central claim was false, and it looked plausible.
+
+Both were caught by rendering the figure and reading it against its own caption, which is now the
+habit. And the second one produced a better lesson than the wrong one would have: a fan is correct
+**iff the anchor corner can see the whole polygon** (star-shaped about it). Convexity is the
+*sufficient* condition everyone quotes, and it is sufficient because in a convex polygon every
+corner works. So a concave face may fan perfectly from one corner and grow fins from another —
+which means the bug depends on where the exporter started listing the face, and that is what makes
+it appear in one file and not the next one that looks just like it.
+
+When a diagram makes a geometric claim, **test the claim numerically**, not just the layout.
