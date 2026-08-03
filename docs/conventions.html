@@ -862,6 +862,8 @@ td code { font-size: 0.82em; }
 .widget svg text   { font-family: var(--font-ui); fill: var(--dia-ink); }
 .widget svg .muted { fill: var(--dia-ink-soft); }
 .widget svg .t-hi  { fill: var(--dia-hi); }
+.widget svg .t-ok  { fill: var(--ok-bd); }
+.widget svg .t-bad { fill: var(--verify-bd); }
 .widget svg .mono  { font-family: var(--font-mono); }
 .widget svg .sm    { font-size: 11px; }
 .widget svg .xs    { font-size: 9.5px; }
@@ -951,6 +953,7 @@ td code { font-size: 0.82em; }
       <li><a href="#clipping">Clipping &mdash; where, against what</a></li>
       <li><a href="#winding">Winding and culling</a></li>
       <li><a href="#assets">Geometry from disk &mdash; the asset contract</a></li>
+      <li><a href="#lighting">Lighting</a></li>
       <li><a href="#units">Units and angles</a></li>
       <li><a href="#simulation">The simulation contract</a></li>
       <li><a href="#colour">Colour and diagram conventions</a></li>
@@ -2037,6 +2040,63 @@ td code { font-size: 0.82em; }
     It is now the output of <code>validate()</code>, which is the difference between an engine that
     hopes and an engine that knows.
   </p>
+
+  <!-- ===================================================================== -->
+  <h2 id="lighting"><span class="num">7c</span>Lighting</h2>
+
+  <p>
+    Settled in Lesson 3.6, and binding for every shading term the course adds after it &mdash;
+    Blinn-Phong in 3.7, the microfacet BRDF in Module 6. The model grows; these rules do not.
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>Rule</th><th>Value</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td>Space</td><td><strong>world space</strong></td>
+            <td>Lights are authored in world space, so shading there means a light does not have
+                to be re-derived every time the camera moves.</td></tr>
+        <tr><td>Light direction</td><td>stored as the direction light <strong>TRAVELS</strong></td>
+            <td>Physical description: midday sun is <code>(0, &minus;1, 0)</code>. The cosine law
+                wants the vector <em>toward</em> the source, so it asks for
+                <code>to_light()</code> by name rather than remembering to negate. The single
+                most common lighting bug.</td></tr>
+        <tr><td>Diffuse term</td><td><code>max(0, dot(n, l))</code>, both unit</td>
+            <td>Lambert. The clamp is load-bearing: past the terminator the dot product goes
+                negative and <em>subtracts</em> light, which eats a hard black rim into the lit
+                side (measured: &minus;0.740 in red).</td></tr>
+        <tr><td>Colour space</td><td><strong>linear, always</strong></td>
+            <td>Every lighting operation is a multiply, and a multiply is a statement about
+                photons. Decode once, shade, encode once (Lesson 1.6).</td></tr>
+        <tr><td>Albedo</td><td>a <strong>ratio</strong> in [0,1], not a colour</td>
+            <td>The fraction of arriving light reflected per channel. The same surface emits
+                nothing in the dark.</td></tr>
+        <tr><td>Normals</td><td><strong>inverse transpose</strong> of the model matrix's linear part</td>
+            <td>A normal is defined by being perpendicular to every tangent, and only
+                <code>(M<sup>&minus;1</sup>)<sup>T</sup></code> preserves that. Identical to
+                <code>M</code> for a rotation and parallel to it for a uniform scale &mdash; so
+                the bug is invisible until something is non-uniformly scaled, and then it is
+                worth up to 68&deg; of tilt and 97.5% of an object's pixels.</td></tr>
+        <tr><td>Normalisation</td><td>after transforming, <strong>at the point of use</strong></td>
+            <td>The inverse transpose does not preserve length. An un-normalised normal scales
+                brightness by its length &mdash; a lighting bug with no lighting cause.</td></tr>
+        <tr><td>Missing normals</td><td>fall back to the <strong>face normal</strong></td>
+            <td><code>cross(b&minus;a, c&minus;a)</code>, which our winding makes point outward.
+                It goes through the same normal matrix, because a face normal is a normal.</td></tr>
+        <tr><td>Evaluation point</td><td><strong>per vertex</strong>, interpolated by the fill</td>
+            <td>Shared vertices are shaded once, not once per triangle &mdash; the same argument
+                indexed geometry made in 2.12. Where it is evaluated is a separate axis from
+                where the normal came from; Lesson 3.8 compares them properly.</td></tr>
+        <tr><td>Ambient</td><td>a constant &mdash; and <strong>an admitted fudge</strong></td>
+            <td>A stand-in for global illumination, kept so the unlit side does not vanish into
+                the background. Module 6 replaces it with image-based lighting.</td></tr>
+        <tr><td>Where it runs</td><td>the <strong>vertex stage</strong>, not the rasterizer</td>
+            <td><code>fill_style</code> is fragment state. Lighting produces a vertex colour and
+                the rasterizer interpolates it, which is the vertex/fragment split arriving on
+                its own &mdash; Module 4 makes it literal.</td></tr>
+      </tbody>
+    </table>
+  </div>
 
   <h2 id="units"><span class="num">8</span>Units and angles</h2>
 

@@ -862,6 +862,8 @@ td code { font-size: 0.82em; }
 .widget svg text   { font-family: var(--font-ui); fill: var(--dia-ink); }
 .widget svg .muted { fill: var(--dia-ink-soft); }
 .widget svg .t-hi  { fill: var(--dia-hi); }
+.widget svg .t-ok  { fill: var(--ok-bd); }
+.widget svg .t-bad { fill: var(--verify-bd); }
 .widget svg .mono  { font-family: var(--font-mono); }
 .widget svg .sm    { font-size: 11px; }
 .widget svg .xs    { font-size: 9.5px; }
@@ -2425,6 +2427,73 @@ td code { font-size: 0.82em; }
     </p>
   </div>
 
+  <div class="tool">
+    <h3>Lambert's cosine law <span class="from">Lesson 3.6</span></h3>
+    <div class="eq">
+      <span>\[ E \;=\; \max\!\left(0,\; \mathbf{n} \cdot \mathbf{l}\right) \]</span>
+      <span class="eq-plain">E = max(0, dot(n, l)), with n and l both unit length</span>
+    </div>
+    <p>
+      <strong>Not a formula to memorise &mdash; a footprint.</strong> A beam of fixed
+      cross-section striking a surface tilted by <code>&theta;</code> from its normal spreads over
+      an area <code>1/cos&nbsp;&theta;</code> larger, so the power arriving per unit area falls by
+      <code>cos&nbsp;&theta;</code>. Nothing is absorbed and nothing dims; the same light covers
+      more surface. With both vectors unit length the dot product <em>is</em> that cosine
+      (&sect;<a href="#vectors">3</a>), so no new machinery is needed.
+    </p>
+    <p>
+      <code>l</code> points <strong>toward</strong> the light. The clamp is not tidying: past the
+      terminator the dot product is negative, and letting it through subtracts light rather than
+      adding none.
+    </p>
+    <div class="worked">
+      <span class="label">Worked</span>
+      <p>
+        At <code>&theta; = 60&deg;</code> the footprint is <code>1/0.5 = 2.00</code> beam-widths,
+        so the surface receives exactly half the power per unit area &mdash; and
+        <code>cos&nbsp;60&deg; = 0.5</code> ✓. At 30&deg;: footprint 1.1547, power 0.8660.
+      </p>
+    </div>
+  </div>
+
+  <div class="tool">
+    <h3>The normal matrix <span class="from">Lesson 3.6</span></h3>
+    <div class="eq">
+      <span>\[ X \;=\; \left(M^{-1}\right)^{\mathsf{T}} \]</span>
+      <span class="eq-plain">X = transpose(inverse(M)), the inverse transpose of the linear part</span>
+    </div>
+    <p>
+      <strong>Normals are not transformed by the model matrix.</strong> A normal is not an arrow
+      drawn on the surface &mdash; it is defined by a relationship, being perpendicular to every
+      tangent, and it is that relationship which must survive. Tangents go to <code>M&middot;t</code>;
+      demanding <code>(M t)&middot;(X n) = 0</code> whenever <code>t&middot;n = 0</code>, and using
+      <code>a&middot;b = a<sup>T</sup>b</code>, gives <code>t<sup>T</sup> M<sup>T</sup> X n</code>
+      &mdash; which reduces to <code>t<sup>T</sup>n</code> exactly when
+      <code>M<sup>T</sup>X = I</code>.
+    </p>
+    <p>
+      <strong>When it does not matter:</strong> for a rotation the inverse <em>is</em> the
+      transpose, so <code>X = R</code> exactly; for a uniform scale <code>sR</code> it is
+      <code>(1/s)R</code>, which points every normal the same way once normalised. The distinction
+      only bites under a <strong>non-uniform</strong> scale &mdash; which is why it is a bug that
+      ships. And <code>X</code> does not preserve length, so normalise at the point of use.
+    </p>
+    <div class="worked">
+      <span class="label">Worked</span>
+      <p>
+        Scale <code>(1.8, 0.35, 0.9)</code>, normal <code>n = (0, 0.7071, 0.7071)</code> with
+        tangent <code>t = (0, 0.7071, &minus;0.7071)</code>. Then
+        <code>M&middot;t = (0, 0.2475, &minus;0.6364)</code> and
+        <code>M&middot;n = (0, 0.2475, 0.6364)</code> &mdash; <strong>137.50&deg;</strong> apart,
+        not 90&deg;. With <code>X = diag(0.5556, 2.857, 1.111)</code>,
+        <code>X&middot;n = (0, 2.0203, 0.7857)</code>, whose dot with <code>M&middot;t</code> is
+        <code>0.50003 &minus; 0.50002 &asymp; 0</code>: <strong>90.00&deg;</strong> ✓. Over 20,000
+        random tangents the inverse transpose never deviates by more than 0.00003&deg;; the naive
+        transform reaches 67.96&deg;.
+      </p>
+    </div>
+  </div>
+
   <h2 id="coming"><span class="num">8</span>Coming as the course proceeds</h2>
 
   <p>
@@ -2442,11 +2511,12 @@ td code { font-size: 0.82em; }
   </div>
 
   <div class="pending">
-    <b>Module 3 — Depth and light.</b> <span class="badge done">3.1–3.5 landed</span>
+    <b>Module 3 — Depth and light.</b> <span class="badge done">3.1–3.6 landed</span>
     Device depth and <code>1/w</code> affinity · the depth-precision budget ·
     perspective-correct interpolation · the near-plane crossing parameter · the signed-area
-    facing test · the Euler characteristic and signed volume (§7 above). Still ahead:
-    Lambert's cosine law · the halfway vector and Blinn-Phong · bilinear
+    facing test · the Euler characteristic and signed volume · <strong>Lambert's cosine law</strong> ·
+    <strong>the normal matrix</strong> (§7 above). Still ahead:
+    the halfway vector and Blinn-Phong · bilinear
     filtering as a double lerp. (The reflection vector arrived early, in 1.8, because a bouncing
     ball needed it before a specular highlight did.)
   </div>

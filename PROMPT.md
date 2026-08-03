@@ -943,3 +943,58 @@ concave. Testing every row for contiguity and both edges for unimodality proved 
 "notch" was Lesson 3.1's per-*triangle* debug palette shading the two halves of one face
 differently. The eye was wrong and the measurement was right, which is the opposite of the usual
 lesson and worth the same attention.
+
+---
+
+## 2026-08-06 — Lesson 3.6
+
+> next
+
+Resumed from `STATE.md` → `next: 3.6 — Normals and Lambert's Cosine Law`. The block named the
+spine (derive the cosine law from a spreading beam, not a formula sheet), flagged the normal
+matrix as the genuinely surprising part, and recorded a constraint that turned out to be
+**wrong**: it said `mat3`/`mat4` have no `inverse()`. `mat3` has had one since Lesson 2.5, built
+from cofactors and the adjugate — so the normal matrix needed no new machinery at all. Checking
+the claim before designing around it saved a whole detour.
+
+### Judgement calls
+
+| Question | Decision | Why |
+|---|---|---|
+| Flat or per-vertex first? | **Both, with per-vertex as the default** | STATE planned flat as the starting point. Per-vertex costs the same code, uses the normals 3.5 loaded, and produces the lesson's best beat: `cube.obj` renders **pixel-identically** either way, because 3.5's split already gave each of its 24 vertices its own face's normal. A faceted mesh is faceted because of the split, not the shading model. |
+| Store which light direction? | **The direction light TRAVELS**, plus `to_light()` | Physical description, and the negation gets a name so it cannot be silently skipped. The classic sign error. |
+| Where does lighting live? | **`collect_triangles`, per vertex, in world space** | World space because lights are authored there, and it makes "orbiting the camera must not change the shading" a testable claim. Per vertex because shared vertices shade once — 12 evaluations instead of 60 on the icosahedron. |
+| Extend `fill_style` with a light? | **No — the rasterizer is untouched** | Lighting's output is a vertex colour, and interpolating those is 2.4's job. That `fill_style` cannot host lighting is the pressure that produces a material system, and it is worth naming rather than working around. |
+| Ambient term? | **Yes, and labelled a fudge in the header** | Without it the unlit half is exactly the background colour and the silhouette vanishes, which would make the lesson's own pictures worse. |
+| Generate smooth normals for meshes without them? | **No — fall back to the face normal** | Correct, honest, and free. Generation needs adjacency and a smoothing-group policy, which is Exercise 3.6.4 with a pointer at `validate()`'s edge map. |
+
+### Verification
+
+`scratch/verify_36.cpp`, eight sections, all green, plus `scratch/render_36.cpp` for the
+comparison renders. The numbers the lesson is built on: the footprint at 60° is exactly 2.00 and
+the brightness 0.50; unclamped shading reads **−0.740**; the slab's scale tilts a 45° normal by
+**47.50°** (137.50° to the tangent instead of 90°), with a worst case of **67.99°** over 20,000
+random normals; rotation gives `5.96e−08`; uniform scale `0.0000°`; moving the light changes
+6,104 px while moving the camera leaves the brightest lit pixel bit-identical; and flat vs
+per-vertex is **0 px** on `cube.obj` against 5,576 on `torus.obj`.
+
+Rendered, the normal-matrix bug costs **97.5% of a squashed torus's covered pixels**, worst
+channel delta 135/255 — and the naive version does not look like noise, it looks like a correctly
+lit *round* tube. It is lighting the shape the object had before the squash.
+
+### Three figures that lied while `check-page.js` said `pass: true`
+
+Figure 1 was drawn at 30° and labelled 60°. Figure 2 shaded the wrong half of the disc as unlit,
+put the terminator on the wrong diagonal, and mislabelled a cosine as 0.28 where the geometry
+gives 0.10. Figure 3 and the interactive widget disagreed with the worked example, because the
+figure squashed one axis and the example squashed two.
+
+All three are now generated from computed coordinates — a short script prints each sample point's
+normal, its dot product with the light and its arrow endpoint, and the SVG carries those numbers.
+The widget was changed to use the slab's full `(1.8, 0.35, 0.9)`, so dragging it to 0.35
+reproduces the prose's 137.5° / 90.0° exactly, and dragging to 0.90 makes the scale uniform and
+the whole problem disappear — which is §3.6 in one gesture.
+
+A clean rebuild also caught a `-Wmissing-field-initializers` warning in `floor_geometry::view()`
+that the incremental build had hidden, because `mesh` grew a fourth member in 3.5 and that file
+had not been recompiled since.

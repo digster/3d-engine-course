@@ -862,6 +862,8 @@ td code { font-size: 0.82em; }
 .widget svg text   { font-family: var(--font-ui); fill: var(--dia-ink); }
 .widget svg .muted { fill: var(--dia-ink-soft); }
 .widget svg .t-hi  { fill: var(--dia-hi); }
+.widget svg .t-ok  { fill: var(--ok-bd); }
+.widget svg .t-bad { fill: var(--verify-bd); }
 .widget svg .mono  { font-family: var(--font-mono); }
 .widget svg .sm    { font-size: 11px; }
 .widget svg .xs    { font-size: 9.5px; }
@@ -991,7 +993,7 @@ table.lessons .d { color: var(--text-muted); font-size: 0.95em; line-height: 1.4
     <div class="stat"><span class="n">94</span><span class="l">lessons</span></div>
     <div class="stat"><span class="n">9</span><span class="l">modules</span></div>
     <div class="stat"><span class="n">~433</span><span class="l">hours</span></div>
-    <div class="stat"><span class="n">31</span><span class="l">published</span></div>
+    <div class="stat"><span class="n">32</span><span class="l">published</span></div>
   </div>
 
   <p>
@@ -1309,7 +1311,7 @@ table.lessons .d { color: var(--text-muted); font-size: 0.95em; line-height: 1.4
             <tr><td class="id">3.3</td><td><span class="t"><a href="lessons/03-03-near-plane-clipping.html">Near-Plane Clipping</a> <span class="badge done">published</span></span><span class="d">Walk into the floor and it vanishes; delete the guard that makes it vanish and it detonates across the screen. Both are one bug: the perspective divide has a <em>precondition</em>, not a guard, and it must be enforced a stage earlier. Derives the near plane as <code>z_clip = 0</code> from the projection&rsquo;s own depth row, shows why <code>w &ge; 0</code> is a different plane that admits coordinates 691,714 pixels wide, and implements Sutherland&ndash;Hodgman for polygons <em>and</em> segments. The camera can now move through the world.</span></td><td class="hrs">5 h</td></tr>
             <tr><td class="id">3.4</td><td><span class="t"><a href="lessons/03-04-back-face-culling.html">Back-Face Culling</a> <span class="badge done">published</span></span><span class="d">One comparison &mdash; the sign of a signed area the rasterizer was <em>already</em> computing and then deliberately throwing away. Derives which sign from the viewport&rsquo;s y-flip rather than finding it by trial; shows that <code>dot(n, camera_forward)</code> is a different question that misjudges 15% of triangles at our field of view and a third at 120&deg;; and settles Lesson 3.1&rsquo;s 29-pixel debt exactly as predicted. Two folk facts get measured and corrected on the way.</span></td><td class="hrs">3 h</td></tr>
             <tr><td class="id">3.5</td><td><span class="t"><a href="lessons/03-05-obj-loader.html">A Hand-Rolled OBJ Loader</a> <span class="badge done">published</span></span><span class="d">Parsing is an afternoon; the lesson is the sentence hiding in <code>f 1/1/1</code>. A file gives every face corner three <em>independent</em> indices and a vertex buffer has one, so a cube&rsquo;s 8 positions become 24 vertices &mdash; the first time this course reshapes data to suit the hardware, which is what an asset pipeline <em>is</em>. Then the debts: you cannot assume a loaded mesh&rsquo;s winding or its watertightness, so both get <em>measured</em> &mdash; Euler characteristic (0 for the torus, not 2), boundary and non-manifold edges, and signed volume by the divergence theorem. Round-tripped through our own writer: 0 pixels different.</span></td><td class="hrs">6 h</td></tr>
-            <tr><td class="id">3.6</td><td><span class="t">Normals and Lambert, Derived</span><span class="d">Why cos θ — from the geometry of a beam of light hitting a tilted surface, not from a formula sheet.</span></td><td class="hrs">5 h</td></tr>
+            <tr><td class="id">3.6</td><td><span class="t"><a href="lessons/03-06-normals-and-lambert.html">Normals and Lambert&rsquo;s Cosine Law</a> <span class="badge done">published</span></span><span class="d">Why <code>cos&nbsp;θ</code> &mdash; from a torch tilted at a table, where the beam does not dim but <em>spreads</em> over a footprint <code>1/cos&nbsp;θ</code> wider. Then the result that catches everyone: a normal is <strong>not</strong> transformed by the model matrix. Derived from the one property that defines a normal &mdash; perpendicular to every tangent &mdash; the answer is the inverse transpose, and the naive version tilts a normal by up to 68&deg; and gets 97.5% of a squashed object&rsquo;s pixels wrong. It is also invisible under rotation and uniform scale, which is exactly why it ships.</span></td><td class="hrs">5 h</td></tr>
             <tr><td class="id">3.7</td><td><span class="t">Specular and Blinn-Phong</span><span class="d">Highlights, the halfway vector, and an honest account of what this model gets wrong — a debt Module 6 repays.</span></td><td class="hrs">4 h</td></tr>
             <tr><td class="id">3.8</td><td><span class="t">Flat vs Gouraud vs Per-Pixel</span><span class="d">The same scene, three ways, compared visually. Where each breaks, and why per-pixel won.</span></td><td class="hrs">4 h</td></tr>
             <tr><td class="id">3.9</td><td><span class="t">Texture Mapping and Bilinear Filtering</span><span class="d">From UVs to texels, and why nearest-neighbour sparkles. Bilinear as a weighted average you can compute by hand.</span></td><td class="hrs">5 h</td></tr>

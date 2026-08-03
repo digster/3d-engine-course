@@ -28,6 +28,7 @@
 #include "gfx/colour.hpp"
 #include "gfx/depth_buffer.hpp"
 #include "gfx/framebuffer.hpp"
+#include "gfx/light.hpp"
 #include "gfx/mesh.hpp"
 #include "gfx/obj.hpp"
 #include "gfx/raster.hpp"
@@ -1779,8 +1780,10 @@ struct raster_triangle
 /// **This is a debug palette, not lighting.** There is no light in the scene, no
 /// normal is consulted, and the number depends only on which triangle this
 /// happens to be. Lesson 3.6 replaces it with a Lambert term computed from a real
-/// normal and a real light direction, and the difference will be obvious: shading
-/// will then change when the object turns, and this does not.
+/// normal and a real light direction — and keeps this behind `[G]`, because the two
+/// pictures side by side are the fastest way to see what "the shading does not
+/// change when the object turns" actually means. Eighth keep-the-wrong-thing
+/// bargain in this engine, and the first where the wrong thing was ever the default.
 ///
 /// The scaling happens in LINEAR LIGHT, decoding and re-encoding around it,
 /// because "70% as bright" is a statement about light and multiplying a stored
@@ -1791,6 +1794,66 @@ struct raster_triangle
     const float k = k_steps[face % 5];
     const engine::linear_rgb light = engine::to_linear(base);
     return engine::to_encoded({light.r * k, light.g * k, light.b * k});
+}
+
+// ---------------------------------------------------------------------------
+// Lesson 3.6 — normals, and light that is actually light
+// ---------------------------------------------------------------------------
+
+/// Where the surface normal used for shading comes from. [G] cycles.
+///
+/// Note what is NOT in this enum: "per-pixel". Interpolating the *colour* across a
+/// triangle (which is what `smooth` does, via Lesson 2.4's machinery) and
+/// interpolating the *normal* and shading each pixel are different things, and
+/// comparing them properly is Lesson 3.8. Today's two real modes differ only in
+/// where the normal is fetched from.
+enum class shade_mode
+{
+    palette,   ///< Lesson 3.1's debug ramp. No light, no normal. Kept for contrast.
+    flat,      ///< one normal per TRIANGLE, from the cross product of its own edges
+    smooth     ///< one normal per VERTEX, as authored — interpolated by the fill
+};
+
+[[nodiscard]] const char* name_of(shade_mode s)
+{
+    switch (s)
+    {
+    case shade_mode::palette: return "debug palette (3.1)";
+    case shade_mode::flat:    return "LAMBERT, flat";
+    case shade_mode::smooth:  return "LAMBERT, per-vertex";
+    }
+    return "?";
+}
+
+[[nodiscard]] shade_mode next_shade(shade_mode s)
+{
+    switch (s)
+    {
+    case shade_mode::palette: return shade_mode::flat;
+    case shade_mode::flat:    return shade_mode::smooth;
+    case shade_mode::smooth:  return shade_mode::palette;
+    }
+    return shade_mode::palette;
+}
+
+/// What this frame's normals did, for the HUD.
+struct normal_stats
+{
+    int shaded = 0;         ///< vertices given a Lambert term
+    int fell_back = 0;      ///< …of which had no authored normal, so used the face's
+    float max_tilt = 0.0f;  ///< worst angle, in degrees, between the correct normal
+                            ///< transform and the naive one. Zero unless something
+                            ///< in the scene is non-uniformly scaled.
+};
+
+/// The angle between two directions, in degrees. Used only for the HUD's honesty
+/// check, so the acos guard matters more than the speed.
+[[nodiscard]] float angle_between_deg(engine::vec3 a, engine::vec3 b)
+{
+    const engine::vec3 ua = engine::normalised_or(a, {});
+    const engine::vec3 ub = engine::normalised_or(b, {});
+    const float c = std::clamp(engine::dot(ua, ub), -1.0f, 1.0f);
+    return std::acos(c) * 180.0f / 3.14159265358979f;
 }
 
 // ---------------------------------------------------------------------------
@@ -1883,6 +1946,22 @@ struct projection_scratch
     /// happen before, and a vertex that has already been divided has thrown away
     /// the only information the clipper could have used.
     std::vector<engine::vec4> clip_pos;
+
+    /// Lesson 3.6. The per-vertex WORLD-space normals, and the colour each vertex
+    /// ends up with once the light has been applied to it.
+    ///
+    /// Both are computed ONCE PER VERTEX and then read by every triangle that uses
+    /// that vertex — which is the same argument indexed geometry made in Lesson 2.12
+    /// and the reason per-vertex lighting is cheap. On the icosahedron it is 12
+    /// shading calls instead of 60.
+    ///
+    /// Lighting in WORLD space, not view space, and that is a real choice. A light's
+    /// direction is authored in world space, so shading there means the light does
+    /// not have to be re-derived every time the camera moves. It also makes the HUD
+    /// honest: orbit the camera and the shading must NOT change, because Lambert
+    /// does not depend on where you are standing. (Specular does — Lesson 3.7.)
+    std::vector<engine::vec3> world_normal;
+    std::vector<Uint32> vertex_colour;
 };
 
 /// What the near plane did to this frame's geometry. Purely for the HUD.
@@ -1925,15 +2004,31 @@ void collect_triangles(std::vector<raster_triangle>& out, projection_scratch& sc
                        const scene_object* objects, int count,
                        const engine::mat4& view_from_world,
                        const projector& pr, trs_order order, clip_stats& stats,
-                       cull_choice cull)
+                       cull_choice cull, shade_mode shading, const engine::lighting& lights,
+                       bool correct_normals, normal_stats* normals_out)
 {
     out.clear();
     stats = {};
+    normal_stats nstats;
 
     for (int i = 0; i < count; ++i)
     {
-        const engine::mat4 view_from_model =
-            view_from_world * model_matrix(objects[i].xform, order);
+        const engine::mat4 world_from_model = model_matrix(objects[i].xform, order);
+        const engine::mat4 view_from_model = view_from_world * world_from_model;
+
+        // ---- Lesson 3.6: the matrix that transforms NORMALS ----------------
+        //
+        // Not the model matrix. A normal is defined by being perpendicular to the
+        // surface, and only the inverse transpose preserves that under a
+        // non-uniform scale (mat4.hpp derives it). `[J]` switches to the naive
+        // version so the failure can be watched rather than described — and note
+        // that on the icosahedron, which is uniformly scaled, the two are
+        // indistinguishable. That is the whole reason this bug survives in
+        // codebases: two thirds of a typical scene looks perfect.
+        const engine::mat3 to_world_normal = correct_normals
+            ? engine::normal_matrix(world_from_model)
+            : engine::linear_of(world_from_model);
+        const engine::mat3 reference_normal = engine::normal_matrix(world_from_model);
 
         // Transform each vertex ONCE. The icosahedron's twelve vertices are
         // shared by twenty triangles, so this is 12 matrix multiplies instead of
@@ -1941,15 +2036,53 @@ void collect_triangles(std::vector<raster_triangle>& out, projection_scratch& sc
         const std::size_t vertex_count = objects[i].geometry.vertices.size();
         std::vector<engine::vec3>& view_pos = scratch.view_pos;
         std::vector<engine::vec4>& clip_pos = scratch.clip_pos;
+        std::vector<engine::vec3>& world_normal = scratch.world_normal;
+        std::vector<Uint32>& vertex_colour = scratch.vertex_colour;
         view_pos.clear();
         clip_pos.clear();
+        world_normal.clear();
+        vertex_colour.clear();
         view_pos.reserve(vertex_count);
         clip_pos.reserve(vertex_count);
+        world_normal.reserve(vertex_count);
+        vertex_colour.reserve(vertex_count);
+
+        const bool per_vertex_light = (shading == shade_mode::smooth);
+
         for (std::size_t v = 0; v < vertex_count; ++v)
         {
             view_pos.push_back(engine::xyz(view_from_model
                                          * engine::point(objects[i].geometry.vertices[v])));
             clip_pos.push_back(to_clip(view_pos.back(), pr.proj));
+
+            // The authored normal, carried into world space. `normal_at` returns
+            // the zero vector when the mesh has none, and zero survives the matrix
+            // as zero — so the per-triangle loop can detect it and fall back to the
+            // face normal without a second flag travelling alongside.
+            const engine::vec3 n_model = objects[i].geometry.normal_at(v);
+            world_normal.push_back(to_world_normal * n_model);
+
+            if (per_vertex_light)
+            {
+                vertex_colour.push_back(
+                    engine::shade_encoded(objects[i].tint, world_normal.back(), lights));
+            }
+            else
+            {
+                vertex_colour.push_back(objects[i].tint);
+            }
+
+            // How far the naive transform would have tilted this normal. Measured
+            // against the correct one every frame, whichever is in use, so the
+            // number means the same thing in both modes — the same discipline
+            // 3.3's clip_stats and 3.4's cull_stats follow.
+            if (n_model != engine::vec3{})
+            {
+                ++nstats.shaded;
+                const float tilt = angle_between_deg(reference_normal * n_model,
+                                                     engine::linear_of(world_from_model) * n_model);
+                nstats.max_tilt = std::max(nstats.max_tilt, tilt);
+            }
         }
 
         // CLIP space -> pixels, for one already-clipped corner. Everything the
@@ -1971,11 +2104,61 @@ void collect_triangles(std::vector<raster_triangle>& out, projection_scratch& sc
 
             ++stats.input;
 
-            const Uint32 colour = face_shade(objects[i].tint, f);
+            // ---- Lesson 3.6: what colour is this triangle's light? ---------
+            //
+            // The FACE normal, from this triangle's own edges, in MODEL space —
+            // and then through the same normal matrix as everything else, because
+            // a face normal is a normal and obeys the same rule. Our winding is
+            // counter-clockwise seen from outside (conventions §7), so
+            // cross(b - a, c - a) points OUT, which is what a surface normal means.
+            //
+            // Computed for every triangle because both remaining shading modes can
+            // need it: `flat` always, and `smooth` for any corner whose mesh gave
+            // it no normal — the fallback that lets an unauthored mesh light
+            // correctly instead of turning black.
+            const std::span<const engine::vec3> mv = objects[i].geometry.vertices;
+            const engine::vec3 face_model = engine::cross(mv[b] - mv[a], mv[c] - mv[a]);
+            const engine::vec3 face_world = to_world_normal * face_model;
+
+            Uint32 colour_a = 0;
+            Uint32 colour_b = 0;
+            Uint32 colour_c = 0;
+            switch (shading)
+            {
+            case shade_mode::palette:
+                // Lesson 3.1's ramp: no normal, no light, indexed by triangle
+                // number. Kept so the comparison is one keypress away.
+                colour_a = colour_b = colour_c = face_shade(objects[i].tint, f);
+                break;
+
+            case shade_mode::flat:
+            {
+                // ONE normal for the whole triangle, so all three corners get the
+                // same colour and the fill interpolates between three equal
+                // values — which is a flat face, at no extra cost.
+                const Uint32 lit = engine::shade_encoded(objects[i].tint, face_world, lights);
+                colour_a = colour_b = colour_c = lit;
+                break;
+            }
+
+            case shade_mode::smooth:
+            {
+                const auto pick = [&](std::size_t vi) -> Uint32 {
+                    if (world_normal[vi] != engine::vec3{}) { return vertex_colour[vi]; }
+                    ++nstats.fell_back;
+                    return engine::shade_encoded(objects[i].tint, face_world, lights);
+                };
+                colour_a = pick(a);
+                colour_b = pick(b);
+                colour_c = pick(c);
+                break;
+            }
+            }
+
             const engine::clip_vertex src[3] = {
-                {clip_pos[a], objects[i].geometry.uv_at(a), colour},
-                {clip_pos[b], objects[i].geometry.uv_at(b), colour},
-                {clip_pos[c], objects[i].geometry.uv_at(c), colour}};
+                {clip_pos[a], objects[i].geometry.uv_at(a), colour_a},
+                {clip_pos[b], objects[i].geometry.uv_at(b), colour_b},
+                {clip_pos[c], objects[i].geometry.uv_at(c), colour_c}};
 
             // How the triangle sits relative to the near plane — measured from the
             // geometry, not inferred from what the current mode does about it, so
@@ -2062,6 +2245,8 @@ void collect_triangles(std::vector<raster_triangle>& out, projection_scratch& sc
             }
         }
     }
+
+    if (normals_out != nullptr) { *normals_out = nstats; }
 }
 
 /// Draw a collected list of triangles.
@@ -2750,6 +2935,25 @@ int main(int argc, char* argv[])
     model_state model;                             ///< [L] chooses; loaded on the spot
     int roundtrip_wrong = 0;                       ///< px between the loaded and generated torus
 
+    // ---- Lesson 3.6 --------------------------------------------------------
+    shade_mode shading = shade_mode::smooth;       ///< [G] — the debug palette is now a comparison
+    bool correct_normals = true;                   ///< [J] — inverse transpose vs the naive M
+    normal_stats scene_normals;                    ///< what the normals did this frame
+    int normal_wrong = 0;                          ///< px the naive normal transform costs
+
+    /// The one light. Its direction is described by two angles for the same reason
+    /// the camera's is (Lesson 2.9): an angle pair cannot drift away from being a
+    /// unit vector, and it is what a person actually wants to adjust.
+    ///
+    /// The elevation is fixed and the azimuth is on [A]/[D], which is enough to make
+    /// the point that matters: the shading follows the LIGHT. Orbit the camera with
+    /// the arrow keys and nothing about the shading changes at all — Lambert does
+    /// not depend on where you are standing, and Lesson 3.7's specular will be the
+    /// first term that does.
+    float light_azimuth = 0.85f;
+    constexpr float k_light_elevation = 0.70f;     ///< ~40 degrees above the horizon
+    engine::lighting lights;
+
     // The control mesh, built once. `assets/torus.obj` was written from exactly this
     // call, so "loaded == generated" is a real end-to-end check of writer and reader
     // together — and it is a claim the demo re-tests on every frame it is shown.
@@ -2796,6 +3000,10 @@ int main(int argc, char* argv[])
     SDL_Log("  [K] near plane: clip / drop / none - on the floor scene, hold [=] to walk into it");
     SDL_Log("  [U] cull: none / back / front / back-by-dot(n,fwd) (the classic bug)");
     SDL_Log("  [L] load a model: torus.obj / cube.obj / twisted.obj / quirks.obj / generated");
+    SDL_Log("  [G] shading: debug palette / Lambert flat / Lambert per-vertex");
+    SDL_Log("  [J] normal matrix: inverse-transpose (correct) vs the naive model matrix");
+    SDL_Log("  [A]/[D] swing the light. Note the camera does NOT change the shading - Lambert");
+    SDL_Log("          is view-independent; 3.7's specular will be the first term that is not.");
     SDL_Log("  [arrows] orbit  [-]/[=] dolly  [P] persp/ortho  [O] model order  [X] object");
     SDL_Log("  [Z] rotation axis  [,] [.] t  [Space] spin  [W]/[N] the 2.7 w bugs");
     SDL_Log("[Tab] cycles demos: scene (2.6-3.3) -> basis (2.5) -> triangles -> lines -> Pong");
@@ -2879,6 +3087,8 @@ int main(int argc, char* argv[])
             }
             if (in.key_pressed(SDL_SCANCODE_K)) { near_handling = next_near(near_handling); }
             if (in.key_pressed(SDL_SCANCODE_U)) { culling = next_cull(culling); }
+            if (in.key_pressed(SDL_SCANCODE_G)) { shading = next_shade(shading); }
+            if (in.key_pressed(SDL_SCANCODE_J)) { correct_normals = !correct_normals; }
             if (in.key_pressed(SDL_SCANCODE_L))
             {
                 // A real load, on a keypress, every time — not a cache lookup. It
@@ -2956,6 +3166,30 @@ int main(int argc, char* argv[])
                 // unit is close enough to stand on the ground and look along it.
                 const float min_radius = (scene_mode == scene_kind::floor) ? 1.0f : 4.0f;
                 cam.radius = std::clamp(cam.radius, min_radius, 14.0f);
+
+                // Swing the light. Level-triggered, like the camera orbit, so
+                // holding a key sweeps — which is what makes "the terminator moves
+                // across the surface" something you watch rather than infer.
+                constexpr float k_light_speed = 1.6f;   // radians / second
+                if (in.key_down(SDL_SCANCODE_A)) { light_azimuth -= k_light_speed * stepper.h(); }
+                if (in.key_down(SDL_SCANCODE_D)) { light_azimuth += k_light_speed * stepper.h(); }
+            }
+
+            // Rebuild the light from its angles, every frame, for the same reason
+            // the scene's transforms are rebuilt from `t` rather than accumulated
+            // (build_scene): a direction derived from an authoritative angle cannot
+            // drift away from unit length, and a repeatedly-rotated vector can.
+            {
+                const float ce = std::cos(k_light_elevation);
+                const engine::vec3 to_light{ce * std::sin(light_azimuth),
+                                            std::sin(k_light_elevation),
+                                            ce * std::cos(light_azimuth)};
+                // The stored direction is the direction light TRAVELS, so it is the
+                // negation of the vector pointing at the source. light.hpp shouts
+                // about this because it is the classic sign error.
+                lights.key.direction = -to_light;
+                lights.key.colour = {1.0f, 0.97f, 0.90f};   // a touch warm, like daylight
+                lights.key.intensity = 1.0f;
             }
 
             cube_m = build_spin(cube_mode, cube_t);
@@ -3007,9 +3241,12 @@ int main(int argc, char* argv[])
                 painter_wrong = 0;
                 near_wrong = 0;
                 cull_wrong = 0;
+                normal_wrong = 0;
+                roundtrip_wrong = 0;
                 shown_depth = {};
                 scene_clip = {};
                 scene_cull = {};
+                scene_normals = {};
             }
             else
             {
@@ -3017,7 +3254,8 @@ int main(int argc, char* argv[])
                 // algorithms below then run on identical geometry, which is what
                 // makes the pixel-for-pixel comparison honest.
                 collect_triangles(scene_tris, scratch, scene, scene_count,
-                                  view_from_world, pr, order, scene_clip, culling);
+                                  view_from_world, pr, order, scene_clip, culling,
+                                  shading, lights, correct_normals, &scene_normals);
 
                 const bool want_painter = (hs == hidden_surface::painter);
                 const bool checkered = (scene_mode == scene_kind::floor);
@@ -3063,7 +3301,8 @@ int main(int argc, char* argv[])
                         clip_stats ignored;
                         collect_triangles(compare_tris, scratch, scene, scene_count,
                                           view_from_world, pr, order, ignored,
-                                          cull_choice::none);
+                                          cull_choice::none, shading, lights,
+                                          correct_normals, nullptr);
                         draw_triangles(scratch_fb, want_painter ? nullptr : &scratch_depth,
                                        compare_tris, want_painter, unculled);
                     }
@@ -3095,7 +3334,8 @@ int main(int argc, char* argv[])
 
                     clip_stats ignored;
                     collect_triangles(compare_tris, scratch, &control, 1,
-                                      view_from_world, pr, order, ignored, culling);
+                                      view_from_world, pr, order, ignored, culling,
+                                      shading, lights, correct_normals, nullptr);
 
                     scratch_fb.clear(k_bg);
                     draw_world(scratch_fb, view_from_world, pr);
@@ -3107,6 +3347,35 @@ int main(int argc, char* argv[])
                 else
                 {
                     roundtrip_wrong = 0;
+                }
+
+                // ---- Lesson 3.6's own comparison --------------------------
+                // What does getting the normal transform wrong actually cost? Not
+                // an argument — a pixel count, on this frame, of this scene.
+                //
+                // Guarded on `max_tilt > 0`, which is exactly the condition under
+                // which the two transforms can differ at all: with no non-uniform
+                // scale in the scene the inverse transpose and the model matrix
+                // agree to the last bit, so there is nothing to render twice. That
+                // guard is also the lesson — the bug is invisible until something
+                // is squashed.
+                if (shading != shade_mode::palette && scene_normals.max_tilt > 0.0f)
+                {
+                    clip_stats ignored;
+                    collect_triangles(compare_tris, scratch, scene, scene_count,
+                                      view_from_world, pr, order, ignored, culling,
+                                      shading, lights, !correct_normals, nullptr);
+
+                    scratch_fb.clear(k_bg);
+                    draw_world(scratch_fb, view_from_world, pr);
+                    scratch_depth.clear();
+                    draw_triangles(scratch_fb, want_painter ? nullptr : &scratch_depth,
+                                   compare_tris, want_painter, style);
+                    normal_wrong = count_differences(fb, scratch_fb, vp);
+                }
+                else
+                {
+                    normal_wrong = 0;
                 }
 
                 // ---- The comparison ---------------------------------------
@@ -3141,7 +3410,7 @@ int main(int argc, char* argv[])
                     clip_stats reference_clip;
                     collect_triangles(compare_tris, scratch, scene, scene_count,
                                       view_from_world, reference, order, reference_clip,
-                                      culling);
+                                      culling, shading, lights, correct_normals, nullptr);
                     draw_triangles(scratch_fb, want_painter ? nullptr : &scratch_depth,
                                    compare_tris, want_painter, style);
                     near_wrong = count_differences(fb, scratch_fb, vp);
@@ -3564,6 +3833,41 @@ int main(int argc, char* argv[])
                         "[U] cull = %-18s  %d of %d drawn   vs no culling: %d px",
                         name_of(culling), scene_cull.drawn, scene_cull.submitted,
                         cull_wrong);
+                }
+            }
+
+            // ---- Lesson 3.6's readout -------------------------------------
+            // Two facts, side by side: which normal each surface is being shaded
+            // from, and what the *wrong* normal transform would cost. The second
+            // number is 0 whenever nothing in the scene is non-uniformly scaled,
+            // which is the honest way to say "this bug hides".
+            if (scene_mode != scene_kind::floor)
+            {
+                const bool lit = (shading != shade_mode::palette);
+                SDL_SetRenderDrawColor(renderer, lit ? 122 : 236,
+                                                 lit ? 196 : 196,
+                                                 lit ? 152 : 110, 255);
+                if (hs == hidden_surface::wireframe)
+                {
+                    SDL_RenderDebugTextFormat(renderer, 6.0f, 292.0f,
+                        "[G] %-20s (wireframe has no surfaces to light)", name_of(shading));
+                }
+                else if (!lit)
+                {
+                    SDL_RenderDebugTextFormat(renderer, 6.0f, 292.0f,
+                        "[G] %-20s no light, no normal - it does NOT change as it spins",
+                        name_of(shading));
+                }
+                else
+                {
+                    SDL_SetRenderDrawColor(renderer, correct_normals ? 122 : 236,
+                                                     correct_normals ? 196 : 92,
+                                                     correct_normals ? 152 : 92, 255);
+                    SDL_RenderDebugTextFormat(renderer, 6.0f, 292.0f,
+                        "[G] %-20s [J] %-13s tilt %4.1f deg  dif %d px",
+                        name_of(shading),
+                        correct_normals ? "inv-transpose" : "NAIVE M",
+                        static_cast<double>(scene_normals.max_tilt), normal_wrong);
                 }
             }
 

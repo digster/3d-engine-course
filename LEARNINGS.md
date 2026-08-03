@@ -1950,3 +1950,96 @@ which means the bug depends on where the exporter started listing the face, and 
 it appear in one file and not the next one that looks just like it.
 
 When a diagram makes a geometric claim, **test the claim numerically**, not just the layout.
+
+
+## A normal is not a direction — it is a relationship (Lesson 3.6)
+
+The single most useful reframing in this lesson, and it generalises far past lighting.
+
+Lesson 2.7 established that points have `w = 1` and translate, directions have `w = 0` and do
+not. That makes it look as though "direction" is one kind of thing transformed one way — and a
+normal is not that kind of thing. A **tangent** is a direction: it joins two nearby points on the
+surface, so it goes wherever `M` sends those points. A **normal** is defined by a *property* —
+perpendicular to every tangent — and it is the property, not the arrow, that has to survive.
+
+Write the property down and the answer falls out in three lines. Demand
+`dot(M·t, X·n) = 0` whenever `dot(t, n) = 0`; use `a·b = aᵀb` to get `tᵀ Mᵀ X n`; observe that
+this reduces to `tᵀn` exactly when `Mᵀ X = I`, so `X = (M⁻¹)ᵀ`.
+
+The transferable habit: **when you do not know how something transforms, ask what defines it and
+require that to be preserved.** Tangent vectors, normals, planes, and covectors generally all
+fall out of this, and it saves memorising a table of rules that look arbitrary.
+
+
+## The bug that only appears on objects nobody is looking at (Lesson 3.6)
+
+The inverse transpose is **identical** to the model matrix for a pure rotation (measured:
+`max |R − normal_matrix(R)| = 5.96e−08`) and **parallel** to it for a uniform scale (`0.0000°` of
+difference). It differs only under a non-uniform scale.
+
+Rotation and uniform scale describe an enormous fraction of a typical scene. In our own demo the
+uniformly-scaled icosahedron — the hero, the thing you are actually looking at — shows a
+worst-case normal tilt of `0.03°`, i.e. float noise, while the squashed slab reaches **67.99°**
+and the plinth **66.46°**. Rendered on a flattened torus, **97.5% of the object's covered pixels
+differ**, by up to 135/255 in a channel.
+
+So the failure mode is: *the hero object is perfect and the set dressing is subtly wrong.* Nobody
+files that bug. The lesson for testing is to **choose test geometry that violates the assumption
+you are least sure about** — and, better, to make the invariant checkable directly: take any
+tangent, transform it with `M` and the normal with your candidate matrix, and assert the dot
+product is still zero. Two lines, no rendering, no eyes.
+
+
+## Fake shading gives itself away by what it does NOT do (Lesson 3.6)
+
+`face_shade(base, face_index)` coloured every surface in this course for five lessons, and no
+individual frame it produced ever looked wrong. The tell is not a bad colour — it is the
+**absence of a relationship**: spin the object and the shading does not move, because
+`face % 5` does not care which way the surface is pointing.
+
+This is worth generalising into a debugging instinct. When something looks plausible but you
+suspect it is not real, do not stare harder at one frame — **change an input that the correct
+implementation must respond to, and check that it responds.** Rotate the object and watch the
+shading; move the camera and watch the specular (and watch the diffuse *not* move, which is
+equally informative). A still image cannot distinguish a computation from a lookup table; a
+derivative can.
+
+
+## Adding a light required no rasterizer changes, and that was informative (Lesson 3.6)
+
+`fill_style` gained no field. `fill_triangle` gained no branch. Lighting's output is a vertex
+colour, and interpolating vertex colours across a triangle has been the fill's job since Lesson
+2.4, so a whole new subsystem dropped in with zero changes to the code that draws pixels.
+
+That is not luck — it is the **vertex/fragment split** appearing before it was named. Lighting is
+per-vertex work whose result feeds per-pixel work, and the pipeline already had that boundary
+implicitly. Module 4 makes it literal with two shaders.
+
+The corollary is the useful part: it also revealed that `fill_style` is the *wrong home* for
+shading parameters. Specular colour and shininess belong to the surface, not the fill, and 3.7
+will not be able to fit them there. When a new feature slots in with no changes, that is evidence
+the boundary is in the right place; when the next one cannot, that is where the next abstraction
+goes.
+
+
+## Verify a figure's claim numerically, not just its layout (Lesson 3.6)
+
+Lesson 3.5 already learned that `check-page.js` cannot see a false claim. Lesson 3.6 produced
+three more instances, in one lesson, all of which passed the collision checker:
+
+- **Figure 1** was drawn with the surface at 30° while its labels said 60°, so a reader measuring
+  the picture would have got a footprint of 1.15 where the text said 2.00.
+- **Figure 2** shaded the *wrong half* of the disc as unlit, drew the terminator along the wrong
+  diagonal, and mislabelled one cosine as 0.28 where the geometry gives 0.10.
+- **Figure 3** and its interactive widget disagreed with the worked example, because the figure
+  squashed one axis and the example squashed two.
+
+The fix that worked was to **compute the figure's coordinates in a script and read the labels off
+the computation**, rather than placing them by eye and annotating them from memory. For Figure 2
+that meant a five-line program printing each sample point's normal, its dot product with the
+light, and the arrow's endpoint. Every number in the final SVG came from that output.
+
+For an interactive widget the same rule applies with more force, because a reader *will* drag it
+to the value the prose quotes: the widget, the figure and the worked example must all use the
+same inputs. Ours now all use the slab's `(1.8, 0.35, 0.9)`, and dragging the slider to 0.35
+reproduces the prose's 137.5° and 90.0° exactly.

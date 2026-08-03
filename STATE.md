@@ -7,7 +7,7 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-08-05 (after Lesson 3.5, 31 of 94 lessons)
+updated: 2026-08-06 (after Lesson 3.6, 32 of 94 lessons)
 
 conventions:
   world: right-handed, Y-up, -Z forward
@@ -544,6 +544,44 @@ conventions:
             "WOUND OUTWARD" = SIGNED VOLUME > 0, by the divergence theorem — assumption
             free, unlike 2.12's centroid test which needs a star-shaped solid and fails
             on the first torus. Accumulate in double: the terms nearly cancel.
+  lighting: IN WORLD SPACE, PER VERTEX, IN LINEAR LIGHT. Settled in 3.6.
+            LAMBERT IS A FOOTPRINT, NOT A FORMULA. A beam of fixed cross-section on a
+            surface tilted by theta covers 1/cos(theta) more area, so power per unit
+            area falls by cos(theta). Measured: at 60 deg the footprint is exactly
+            2.00 and the brightness exactly 0.50.
+            l POINTS TOWARD THE LIGHT. A directional light stores the direction light
+            TRAVELS (midday sun = (0,-1,0)); to_light() is the negation and exists so
+            the negation has a name. Getting it wrong lights the scene from precisely
+            the wrong side and NOTHING LOOKS BROKEN.
+            THE CLAMP IS LOAD-BEARING. Past the terminator the dot goes negative and
+            SUBTRACTS light: measured -0.740 in red for albedo 0.8. It hides on the
+            unlit side (already black) and shows as a hard black rim eating into the
+            LIT side near the terminator.
+            NORMALS GO THROUGH THE INVERSE TRANSPOSE, never the model matrix. Derived
+            from the only thing that defines a normal: perpendicular to every tangent,
+            so dot(M*t, X*n) = 0 forces M^T X = I, X = (M^-1)^T.
+            AND IT HIDES. Rotation: X == R exactly (measured max diff 5.96e-08).
+            Uniform scale: X = (1/s)R, same direction, 0.0000 deg apart. Only a
+            NON-UNIFORM scale differs — our slab (1.8,0.35,0.9) tilts a normal by up
+            to 67.99 deg, the plinth (1.2,0.25,1.2) by 66.46, the icosahedron by 0.03.
+            Rendered on a squashed torus: 97.5% of covered pixels differ, worst
+            channel delta 135/255. THE HERO OBJECT LOOKS PERFECT, which is why it ships.
+            NORMALISE AT THE POINT OF USE. The inverse transpose does not preserve
+            length (the worked example produces one of length 2.16), and neither does
+            interpolation. An un-normalised normal scales brightness by its length.
+            NO NORMALS -> FACE NORMAL, cross(b-a, c-a), through the SAME normal matrix
+            because a face normal is a normal. Zero is the sentinel (normal_at), and it
+            survives a matrix multiply as zero.
+            LAMBERT IS VIEW-INDEPENDENT. Moving the camera must not change the shading
+            (verified: the brightest lit pixel is identical from two camera angles);
+            moving the light changed 6,104 px. 3.7's specular is the first view-dependent
+            term.
+            WHERE THE NORMAL COMES FROM is a SEPARATE axis from WHERE THE EQUATION IS
+            EVALUATED. 3.6 does per-vertex evaluation with either normal source; 3.8
+            compares flat/Gouraud/per-pixel properly. And cube.obj cannot tell the two
+            sources apart — 0 px — because 3.5's split already gave each of its 24
+            vertices its own face's normal. A faceted mesh is faceted because of the
+            SPLIT, not the shading model. (torus.obj: 5,576 px.)
   fill-rule: top-left. For a triangle oriented to POSITIVE area:
             top edge = (dy == 0 && dx > 0); left edge = (dy < 0). Bias -1 on the others,
             folded into the loop's starting value, so it costs NOTHING per pixel.
@@ -776,8 +814,31 @@ completed:
   - 3.3  Near-Plane Clipping
   - 3.4  Back-Face Culling
   - 3.5  A Hand-Rolled OBJ Loader
+  - 3.6  Normals and Lambert's Cosine Law
 
 capabilities:
+  - gfx 3.6: LIGHT. face_shade's five-step ramp indexed by TRIANGLE NUMBER is retired to
+    a key; surfaces now respond to which way they face.
+    src/gfx/light.hpp NEW (header-only) — directional_light {direction, colour,
+    intensity} where DIRECTION IS THE WAY LIGHT TRAVELS and to_light() is the
+    negation, named so it cannot be skipped; `lighting` adding an ambient constant
+    that the header itself labels a fudge; lambert(n, l) = max(0, dot) with the clamp
+    justified rather than tidied; shade()/shade_encoded() doing every multiply in
+    LINEAR light and normalising the normal at the point of use.
+    src/math/mat4.hpp — linear_of() and normal_matrix() = transpose(inverse(3x3)),
+    with the derivation in the header: a normal is defined by being perpendicular to
+    every tangent, so demanding dot(M*t, X*n) = 0 forces X = (M^-1)^T. Needed no new
+    machinery — mat3 has had inverse() and transpose() since 2.5.
+    src/main.cpp — shading happens PER VERTEX, in WORLD space, in collect_triangles;
+    scratch gains world_normal[] and vertex_colour[]. shade_mode {palette, flat,
+    smooth} on [G]; correct_normals on [J] with the naive M kept as the wrong thing
+    behind a key (8th time, and the FIRST where the wrong thing was the default);
+    [A]/[D] swing the light; normal_stats {shaded, fell_back, max_tilt} and a
+    normal_wrong pixel count guarded on max_tilt > 0 — no non-uniform scale, nothing
+    to compare, which is itself the lesson.
+    THE RASTERIZER DID NOT CHANGE. fill_style gained no field and fill_triangle
+    gained no branch: lighting produces a vertex colour, and interpolating vertex
+    colours is 2.4's job. That is the vertex/fragment split arriving unbidden.
   - gfx 3.5: GEOMETRY FROM DISK. Four files, and the lesson is none of them being
     the parser.
     THE INDEX PROBLEM IS THE CONTENT. OBJ gives every face corner three INDEPENDENT
@@ -1445,69 +1506,64 @@ files:
                  02-11-viewport.html, 02-12-wireframe-mesh.html,
                  03-01-z-buffer.html, 03-02-perspective-correct.html,
                  03-03-near-plane-clipping.html, 03-04-back-face-culling.html,
-                 03-05-obj-loader.html
+                 03-05-obj-loader.html, 03-06-normals-and-lambert.html
   docs/_template/: lesson-template.html, README.md, apply-shared.py, check-page.js
   memory/: 2026-07-16.md, 2026-07-18.md, 2026-07-21.md, 2026-07-22.md,
            2026-07-23.md, 2026-07-24.md, 2026-07-25.md, 2026-07-26.md,
            2026-07-27.md, 2026-07-28.md, 2026-07-29.md, 2026-07-30.md,
            2026-07-31.md, 2026-08-01.md, 2026-08-02.md, 2026-08-03.md,
-           2026-08-04.md, 2026-08-05.md
+           2026-08-04.md, 2026-08-05.md, 2026-08-06.md
   (retired: hello.cpp)
 
 
 
-next: 3.6 — Normals and Lambert's Cosine Law
-      (planned filename: docs/lessons/03-06-normals-and-lambert.html — 3.5 links to it)
-      THE DEBUG PALETTE HAS TO GO. face_shade() has coloured surfaces since 3.1 by
-      indexing five brightness steps with the TRIANGLE NUMBER. It owes nothing to any
-      light, consults no normal, and — the tell — does not change when the object
-      turns. 3.5 just filled mesh::normals from disk and nothing reads them.
-        - LAMBERT FROM GEOMETRY, NOT FROM A FORMULA SHEET. A beam of light of fixed
-          cross-section striking a surface at angle theta spreads over an area
-          1/cos(theta) larger, so the power per unit area falls as cos(theta). That
-          is the whole law, and it should arrive as a picture of a spreading beam
-          before `max(0, dot(n, l))` is written down. The clamp is not a detail: a
-          negative dot means the surface faces AWAY, and letting it through subtracts
-          light, which is the "black rim" artifact.
-        - dot(n, l) IS THE PROJECTION 1.7 ALREADY TAUGHT, on unit vectors. Nothing new
-          is needed mathematically; the lesson is what the number MEANS here.
-        - THE NORMAL MATRIX. The first genuinely surprising result: a normal is NOT
-          transformed by the model matrix. Under a non-uniform scale, transforming a
-          normal as a direction tilts it the wrong way — squash a sphere flat and its
-          normals should splay OUTWARD, and M*n turns them inward. The answer is the
-          INVERSE TRANSPOSE, and it should be DERIVED from "the normal must stay
-          perpendicular to every tangent" (dot(M*t, X*n) = dot(t, n) = 0 forces
-          X = (M^-1)^T), not quoted. Our scene has TWO non-uniformly scaled objects
-          (slab and plinth) precisely so the bug is visible on a keypress.
-          NOTE: mat3/mat4 have no inverse() yet. Either derive the general one or
-          exploit that the upper-left 3x3 of a T*R*S is R*S with S diagonal — decide
-          and say which, because "we have no inverse" is a real constraint today.
-        - WHERE TO EVALUATE IT. Per-triangle (flat) is 3.6's starting point and it is
-          the honest one: our vertices carry one normal each, so a FACETED mesh
-          (cube.obj: 24 vertices, 3 normals per corner) shades correctly and a SMOOTH
-          one (torus.obj: one normal per position) will look banded until 3.8's
-          per-pixel. 3.7 adds specular, 3.8 compares flat/Gouraud/per-pixel properly.
-          Do not pre-empt 3.8 — but DO note that torus.obj already carries the smooth
-          normals that make the comparison possible.
-        - THE SHADING ENUM FINALLY STRAINS, exactly as 3.2 predicted when it wrote
-          `enum class shading {vertex_colour, uv_checker}`. A third value (`lambert`)
-          that needs a light direction and a normal per vertex is the point at which
-          "one enum plus one fill_style" stops being enough — name that pressure and
-          point at Module 6's material system rather than solving it now.
-        - THE MISSING NORMALS PROBLEM. quirks.obj has faces with no `vn` at all, and
-          mesh::normal_at returns (0,0,0) there, which shades black. Either generate
-          face normals at load (cross product, the obvious fix) or refuse to Lambert
-          a mesh without them. Decide, and note that generating SMOOTH normals means
-          averaging around a vertex, which needs the adjacency 3.5's validate()
-          already builds — a good place to reuse it rather than rebuild it.
-        - VERIFY: (a) a face-on surface reads exactly the light's intensity and a
-          90-degree one reads exactly 0; (b) the inverse transpose keeps
-          dot(n, tangent) = 0 under the slab's (1.8, 0.35, 0.9) scale while M*n does
-          not — measure the angle error; (c) shading now CHANGES as the object spins,
-          which the debug palette never did — that is the one-line proof the light is
-          real; (d) energy: no pixel brighter than the light itself.
-      Module 3 then finishes: 3.7 specular/Blinn-Phong, 3.8 flat vs Gouraud vs
-      per-pixel, 3.9 texture mapping + bilinear (replacing checker_at with a real
-      sampler, and settling the uv-origin question 3.5 deliberately left open),
+next: 3.7 — Specular and Blinn-Phong
+      (planned filename: docs/lessons/03-07-specular-blinn-phong.html — 3.6 links to it)
+      EVERYTHING SO FAR IS VIEW-INDEPENDENT, and 3.6 proved it rather than claiming it:
+      orbit the camera and the brightest lit pixel does not change by one bit. That is
+      correct for a matte surface and wrong for almost every real one. A highlight is
+      light that bounced off in a PREFERRED direction, so the shading finally has to
+      know where the viewer is.
+        - START FROM THE MIRROR, NOT FROM A FORMULA. Perfect reflection is the whole
+          intuition: the reflection vector R = 2(n·l)n - l, which 1.8 ALREADY DERIVED
+          for a bouncing ball and which the math toolbox already carries. A mirror
+          returns light only when v == R exactly; a glossy surface returns some when v
+          is NEAR R. Phong is literally "how near", raised to a power.
+        - THEN THE HALFWAY VECTOR, and derive why it is not merely cheaper. h =
+          normalise(l + v) is the normal a microfacet would need in order to reflect l
+          straight at v — so dot(n, h) asks "what fraction of the surface is oriented
+          to send light at the viewer", which is a question about the SURFACE rather
+          than about the reflected ray. That reframing is what Module 6's microfacet
+          theory is built on, so it is worth the paragraph. Also note the exponents are
+          not comparable: Blinn's is roughly 4x Phong's for the same visual tightness.
+        - THE ARTIFACT TO SHOW FIRST. Phong's R·v goes wrong at grazing angles — the
+          highlight gets clipped off where R falls behind the surface — and Blinn-Phong
+          does not. That is a real, visible difference and the honest reason Blinn won,
+          not just speed.
+        - PER-VERTEX SPECULAR IS THE WRONG PLACE AND THIS IS WHERE 3.8 GETS ITS ARGUMENT.
+          A highlight smaller than a triangle FALLS BETWEEN VERTICES and vanishes or
+          flickers as the object turns. Diffuse survives per-vertex evaluation; specular
+          does not. Show it on the torus at 48x24, then say that this is exactly what
+          3.8 is about — do not solve it yet.
+        - ENERGY, HONESTLY. Blinn-Phong is not energy-conserving: crank the exponent and
+          the highlight gets tighter without getting brighter, when physically it should.
+          Say so, name the normalisation factor ((n+8)/8pi is the usual one), and hand
+          the debt to Module 6. Same discipline as 3.6's albedo/pi note.
+        - MATERIALS FINALLY STRAIN THE DESIGN. A specular term needs a shininess and a
+          specular colour PER OBJECT, and scene_object has neither. 3.2 predicted the
+          shading enum would strain; 3.6 noted fill_style is the wrong home for lighting;
+          this is where "these parameters travel together and belong to the surface"
+          becomes undeniable. Name it, add the two fields to scene_object, and point at
+          Module 6's material system rather than building it.
+        - VERIFY: (a) the highlight MOVES when the camera moves, and by the predicted
+          amount — the mirror direction is computable; (b) Phong and Blinn agree closely
+          face-on and diverge at grazing incidence, measured as an angle and a pixel
+          count; (c) exponent n and 4n look alike for Blinn vs Phong; (d) per-vertex
+          specular loses the highlight entirely at some orientations — count the frames
+          where the brightest pixel drops below the diffuse maximum; (e) nothing exceeds
+          light + ambient + specular_max.
+      Module 3 then finishes: 3.8 flat vs Gouraud vs per-pixel (where the specular
+      failure above is the motivating case), 3.9 texture mapping + bilinear (replacing
+      checker_at with a real sampler and settling the uv-origin question 3.5 left open),
       3.10 profiling and the Module 3 capstone.
 ```

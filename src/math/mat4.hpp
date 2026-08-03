@@ -252,7 +252,54 @@ struct mat4
             {0.0f,       0.0f, B,     0.0f}};
 }
 
-// There is deliberately no `determinant` or `inverse` here.
+// ---- The linear part, and the matrix that transforms normals -----------------
+
+/// The upper-left 3x3: everything the transform does that is **not** translation.
+///
+/// A 4x4 affine matrix is a 3x3 linear map plus an offset (`affine()`, above).
+/// Directions — normals, tangents, velocities — are unaffected by the offset, which
+/// is exactly what the `w = 0` convention of Lesson 2.7 encodes. Pulling the 3x3 out
+/// says the same thing in the type system: the result cannot be translated, because
+/// there is nowhere left to put a translation.
+[[nodiscard]] constexpr mat3 linear_of(const mat4& m)
+{
+    return {xyz(m.c0), xyz(m.c1), xyz(m.c2)};
+}
+
+/// The matrix that transforms **normals**, given a model matrix. Lesson 3.6.
+///
+/// This is the first result in the course where the obvious answer is wrong, and it
+/// is worth carrying the reason rather than the formula.
+///
+/// A normal is not an arrow drawn on the surface — it is defined by a *relationship*:
+/// it is perpendicular to every tangent. Transform the surface and that relationship
+/// is what has to survive. So write it down. If tangents go to `M·t` and normals go
+/// to `X·n` for some matrix `X` we are looking for, we need
+///
+///     (M·t) · (X·n) = 0   whenever   t · n = 0
+///
+/// A dot product is `aᵀb`, so the left side is `tᵀ Mᵀ X n`. That equals `tᵀ n` for
+/// every `t` exactly when `Mᵀ X = I`, which gives
+///
+///     X = (Mᵀ)⁻¹ = (M⁻¹)ᵀ        the INVERSE TRANSPOSE
+///
+/// **When it does not matter.** For a pure rotation `R`, the inverse is the
+/// transpose, so `X = (Rᵀ)ᵀ = R` — the normal matrix *is* the model matrix. For a
+/// uniform scale `sR` it comes out as `(1/s)R`, which points the same way and we
+/// normalise anyway. So the whole issue is invisible until a **non-uniform** scale
+/// appears, at which point normals tilt the wrong way and lighting is quietly wrong
+/// on exactly the objects that have been squashed. Engines that know their scales
+/// are uniform legitimately skip this; engines that assume it get bug reports.
+///
+/// Translation is dropped before inverting, which is not an approximation: a normal
+/// has no position, and including the offset would ask what happens when you move a
+/// direction.
+[[nodiscard]] inline mat3 normal_matrix(const mat4& model)
+{
+    return transpose(inverse(linear_of(model)));
+}
+
+// There is deliberately no `determinant` or `inverse` for the full 4x4 here.
 //
 // Both exist for 4x4 matrices and both are considerably more work than the 3x3
 // versions — and nothing in this course has needed either yet. When an inverse is

@@ -70,6 +70,7 @@ inventing one — but without paying framework ceremony before it buys anything.
 │   │   ├── colour.cpp
 │   │   ├── framebuffer.hpp # CPU pixel buffer, ARGB8888, row-major   [EXISTS from 1.5]
 │   │   ├── framebuffer.cpp
+│   │   ├── light.hpp       # directional light + Lambert diffuse     [EXISTS from 3.6]
 │   │   ├── depth_buffer.hpp# CPU depth attachment, [0,1], 0 = near  [EXISTS from 3.1]
 │   │   ├── depth_buffer.cpp
 │   │   ├── raster.hpp      # which pixels a SHAPE is made of         [EXISTS from 2.1]
@@ -814,6 +815,21 @@ Built roughly in dependency order — each module's milestone is the next module
   fill a caller-owned out-parameter rather than returning geometry, because returning
   `data.view()` from a function that built `data` locally compiles cleanly and dangles. Module
   5's handles replace "safe because of the order two things happen in" with something checkable.
+- **Lighting is a vertex-stage concern, and the pipeline said so before we did** (Module 3,
+  Lesson 3.6). Adding a real light changed no rasterizer code at all: `fill_style` gained no
+  field and `fill_triangle` gained no branch, because lighting's output is a *vertex colour* and
+  interpolating vertex colours has been the fill's job since Lesson 2.4. That is the
+  vertex/fragment boundary showing up on its own, ahead of Module 4 making it literal with two
+  separate shaders — and it is also why `fill_style` is now visibly the wrong home for shading
+  parameters, which is the pressure that produces a material system in Module 6.
+- **Normals are transformed by the inverse transpose, everywhere, forever** (Module 3, Lesson
+  3.6). `normal_matrix` lives in `src/math/mat4.hpp` rather than in the renderer because it is a
+  statement about matrices, not about light — normal mapping (Module 6) and collision response
+  (Module 7) need the same function. The rule exists because a normal is defined by a
+  *relationship* (perpendicular to every tangent) rather than by being an arrow, and only
+  `(M⁻¹)ᵀ` preserves it. Critically, it is **identical to the model matrix for rotations and
+  parallel to it for uniform scales**, so a codebase can carry the bug indefinitely while its
+  hero assets look perfect; ours makes the failure a keypress and a pixel count.
 - **Public API surface is a deliberate artifact,** not whatever headers happen to be reachable.
 
 ---

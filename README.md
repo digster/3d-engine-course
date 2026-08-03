@@ -131,6 +131,20 @@ the reading `round trip: 0 px differ` is the loaded torus being compared, every 
 same mesh generated in memory and written out by our own OBJ writer.
 [Lesson 3.5](docs/lessons/03-05-obj-loader.html).
 
+Everything above is **lit**. Press <kbd>G</kbd> to cycle the shading: the debug palette that
+coloured this course for five lessons (five brightnesses indexed by *triangle number* — watch it
+fail to change as the object spins), then Lambert with one normal per face, then one per vertex,
+at which point 2,304 flat triangles become a smooth torus. Hold <kbd>A</kbd>/<kbd>D</kbd> to swing
+the light and the terminator sweeps across the surface; orbit the camera instead and **nothing
+changes at all**, because Lambert is view-independent.
+
+Then press <kbd>J</kbd>. That transforms normals with the model matrix instead of its inverse
+transpose — the mistake nearly everyone makes — and the HUD reports what it costs. The
+uniformly-scaled icosahedron is pixel-identical either way; the squashed slab and plinth are lit
+as though they were never squashed, with normals tilted by up to 68°. Why a normal is not a
+direction you can transform like any other, derived from the one property that defines it, is
+[Lesson 3.6](docs/lessons/03-06-normals-and-lambert.html).
+
 Then hold <kbd>=</kbd> on that floor and walk *into* it. <kbd>K</kbd> cycles what happens to a
 triangle with a corner behind your eye: **clip** it (correct), **drop** it (the ground vanishes —
 31,747 pixels of 57,600), or divide anyway with **no guard** at all (the floor folds inside out and
