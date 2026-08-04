@@ -10,13 +10,13 @@ the master prompt wins.
 
 ## 1. The hard constraints
 
-1. **One lesson = one self-contained `.html` file.** No external assets, no build step, no
-   server. It must render by double-clicking it on a machine with no network.
-2. **The `<style>` block and the trailing `<script>` block are identical in every lesson.** Both
-   are duplicated, not linked, because of constraint 1. `lesson-template.html` is the source of
-   truth — change it there first, then run `apply-shared.py` (§14). Never edit one lesson's copy
-   in isolation: that is precisely how the highlighter ended up with three different keyword
-   lists across six lessons.
+1. **No build step, no server.** A lesson must render by double-clicking it on a machine with no
+   network. What it may *not* do is depend on tooling; linking a sibling file is fine, because a
+   relative `<link>` resolves straight off the filesystem.
+2. **One lesson = one `.html` file inside the `docs/` tree.** Styling and page behaviour come
+   from `docs/shared/course.css` and `docs/shared/course.js` — **linked, one copy each, no page
+   carries its own**. Edit the shared file and every page changes. The tree is the unit of
+   portability: a lesson copied out on its own renders unstyled.
 3. **The only permitted remote is the KaTeX CDN**, and the page must survive its absence
    (see §5).
 4. **All 13 sections of the master prompt's §6, in order.** Not a menu.
@@ -47,10 +47,15 @@ Then delete any example content that survives (the dot-product worked example, t
 `src/gfx/example.*` listings, the specimen pitfalls). They are demonstrations of the house
 style, not content.
 
-**Keep the four `SHARED-CSS` / `SHARED-SCRIPT` marker comments.** The template carries both
-pairs precisely so a copy of it is already opted into propagation (§14). Delete them and your
-new lesson silently stops receiving shared CSS and script updates — `apply-shared.py` will
-report it as `skip`, which is easy to read past.
+**Keep the four `SHARED-CSS` / `SHARED-SCRIPT` marker comments.** They are how `apply-shared.py`
+finds and verifies the links to the shared stylesheet and script (§14). Delete them and the tool
+stops checking your page — it reports `skip`, which is easy to read past — so a broken link will
+sail through unnoticed.
+
+The template lives in `docs/_template/`, one level below `docs/`, which is the same depth as
+`docs/lessons/`. That is deliberate: its `../shared/…` links are already correct when you copy it
+into `docs/lessons/`. **If you put a lesson anywhere else, run `apply-shared.py` afterwards** —
+the correct prefix depends on depth, and getting it wrong fails silently (§14).
 
 ### The `<title>`
 
@@ -122,13 +127,13 @@ correctness bug, not a typo.
 - **Code never wraps.** It scrolls horizontally. Wrapped code lies about its structure.
 - Every listing must compile at its point in the course.
 
-The highlighter is ~60 lines of embedded vanilla JS rather than highlight.js from a CDN, because
-colour is not worth a dependency that can be absent. It reads `textContent` and rebuilds escaped
-HTML, so the worst it can do is mis-colour a token — it can never corrupt a listing or execute
-page content.
+The highlighter is ~60 lines of hand-written vanilla JS rather than highlight.js from a CDN,
+because colour is not worth a dependency that can be absent. It reads `textContent` and rebuilds
+escaped HTML, so the worst it can do is mis-colour a token — it can never corrupt a listing or
+execute page content.
 
-It lives in the shared `SHARED-SCRIPT` region (§14), so **add a keyword by editing the template
-and re-stamping**, never by patching the lesson you happen to be writing.
+It lives in `docs/shared/course.js`, so **add a keyword by editing that file**. There is one copy
+and every page links it; the change is live everywhere the moment you save.
 
 Two things to know if you touch its word lists:
 
@@ -306,6 +311,7 @@ there:
 | SVG spill (viewBox) | A label outside its own figure | 1.2 |
 | SVG text-vs-text | Two labels stacked | 1.2 |
 | SVG **text-vs-shape** | A label sitting on a line or curve | 1.3, 2.1 |
+| **Shared-asset positive signal** (`course.css` in effect, highlighter ran) | A wrong `../shared/…` prefix — an unstyled, inert page that throws nothing | CSS extraction |
 | Horizontal page scroll, wrapped listings | Layout regressions | — |
 
 Three traps are baked into that script, all of which cost real time before they were understood:
@@ -324,36 +330,67 @@ wrong row of a stacked diagram, need eyes — 1.2's Figure 1 had its comparison 
 through the event-tick timeline and only a screenshot revealed it. When a diagram has stacked
 rows, compute the path coordinates and check the extremes land inside their band.
 
-## 14. The shared CSS and script regions
+## 14. The shared CSS and script
 
-`apply-shared.py` propagates two blocks from `lesson-template.html` into every page that opts in
-with a marker pair:
+Two files style and drive every page:
 
 ```
-<!-- SHARED-CSS:BEGIN -->      …stylesheet…      <!-- SHARED-CSS:END -->
-<!-- SHARED-SCRIPT:BEGIN -->   …page script…     <!-- SHARED-SCRIPT:END -->
+docs/shared/course.css     the stylesheet — design tokens, layout, diagram classes
+docs/shared/course.js      theme toggle, TOC scrollspy, syntax highlighter
+```
+
+**Edit these directly.** There is one copy of each and every page links it, so a change is live
+across the whole course the moment you save. Nothing to propagate, nothing to re-stamp.
+
+Each page links them from inside a marker pair, and `apply-shared.py` owns what is between:
+
+```
+<!-- SHARED-CSS:BEGIN -->      …<link>…     <!-- SHARED-CSS:END -->
+<!-- SHARED-SCRIPT:BEGIN -->   …<script>…   <!-- SHARED-SCRIPT:END -->
 ```
 
 ```sh
-python3 docs/_template/apply-shared.py           # stamp every page
+python3 docs/_template/apply-shared.py           # fix every page's links
 python3 docs/_template/apply-shared.py --check   # verify only; exit 1 on drift
 ```
 
-**This is not a build step.** Readers never run it; the published files are complete and work by
-double-clicking. It is an authoring-time tool, like a formatter. Run it after editing the
-template, and run `--check` before committing.
+**This is not a build step.** Readers never run it; the published files are static HTML linking
+static assets and work by double-clicking, offline. It is an authoring-time tool. Run it when you
+**add or move** a page, and run `--check` before committing.
 
-The canonical copy of each region is read from between that same marker pair **in the template
-itself**, so the template carries every marker a page does. That is what makes "copy the
-template to start a lesson" produce a page that is already opted in — see §3.
+### Why a tool at all, if nothing is duplicated any more
 
-The regions are independent — a page may opt into either, both, or neither. `index.html` and
-`math-toolbox.html` carry the script region even though they have no listings today, so the
-highlighter is simply dormant until they gain one.
+Because the link's relative prefix depends on the page's depth — `shared/course.css` from
+`docs/`, `../shared/course.css` from `docs/lessons/` — and **getting it wrong fails silently**.
+Nothing throws. The page renders unstyled and inert, which looks like a page nobody has finished
+rather than a page that is broken. It breaks by *moving* a file, not by editing one, which is
+exactly the kind of change that gets committed without a second look.
 
-**Page-specific JavaScript goes *outside* the markers.** Lesson 1.2's key-state widget sits in
-its own `<script>` earlier in the body and is never touched by the stamp.
+That is the whole remaining risk surface. The older and larger one is gone: the CSS and script
+used to be **duplicated into all 36 pages**, and by Lesson 1.2 the script existed in six
+inconsistent versions — three C++ keyword lists, a CMake highlighter in one lesson, a
+Windows-batch `::` rule in two. All silent mis-renders. Extraction removed the cause.
 
-`--check` also lints for `fill="…"` on an SVG `<text>`: the shared stylesheet's
+### What stays inline, and why
+
+- **The two KaTeX CDN tags** live *inside* the `SHARED-SCRIPT` region and must stay there. They
+  carry SRI hashes and an inline `onload`, so they cannot move into `course.js`; and they must
+  stay between the markers because they once sat just *below* `SHARED-SCRIPT:END`, where nothing
+  propagated them and every lesson shipped without a maths renderer for six lessons.
+- **Page-specific JavaScript** goes *outside* the markers. Lesson 1.2's key-state widget sits in
+  its own `<script>` earlier in the body and is never touched.
+- **Page-specific CSS** likewise: `index.html` and `math-toolbox.html` keep a small `<style>`
+  block of their own *after* `SHARED-CSS:END`.
+
+The regions are independent — a page may opt into either, both, or neither.
+
+`--check` also lints for `fill="…"` on an SVG `<text>`: `course.css`'s
 `figure.dia svg text { fill: … }` always beats a presentation attribute, so an inline fill is
 silently ignored. Use the classes in §7 instead.
+
+### One trap when verifying
+
+Do **not** decide "the stylesheet loaded" from `document.styleSheets[…].cssRules`. Over `file://`
+WebKit treats every file as its own origin and throws a `SecurityError` reading the CSSOM — on a
+sheet that loaded and applied perfectly. Judge it by computed style instead, the way
+`check-page.js` does.

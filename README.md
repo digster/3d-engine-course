@@ -44,13 +44,20 @@ engine codebases without drowning.
 
 ## Reading the course
 
-The lessons are **self-contained HTML files** — no build step, no server, no npm.
+The lessons are **plain HTML files** — no build step, no server, no npm. Open the index and
+navigate:
 
 ```sh
 open docs/index.html          # macOS
 xdg-open docs/index.html      # Linux
 start docs\index.html         # Windows
 ```
+
+Styling and page behaviour come from two shared files, `docs/shared/course.css` and
+`docs/shared/course.js`, which every page links. They resolve straight off the filesystem, so
+this works offline with no server — but it does mean **a lesson file is only readable inside the
+`docs/` tree**. Copy one out on its own and it renders unstyled; keep the folder together, or
+just clone the repository.
 
 Three living pages sit alongside the lessons and are updated at every module boundary:
 
