@@ -703,21 +703,31 @@ conventions:
   build: CMake >= 3.24, out-of-source (build/), 64-bit; two phases (configure, build);
          Debug build = -DCMAKE_BUILD_TYPE=Debug (adds -g); sources listed explicitly
          (never file(GLOB)); target_include_directories(engine PRIVATE src)
-  docs-tooling: pages stay self-contained, so the shared <style> AND the shared trailing
-         <script> are DUPLICATED into every page — and propagated by
-         docs/_template/apply-shared.py, never by hand. Two marker regions:
-         <!-- SHARED-CSS:BEGIN/END --> and <!-- SHARED-SCRIPT:BEGIN/END -->.
-         Edit lesson-template.html, then stamp. NEVER edit one lesson's copy in
-         isolation — that is how the script drifted into 6 versions before 1.2.
-         The template carries both marker pairs, so a new lesson started by copying
-         it is already opted in; keep the markers when filling the template in.
-         Page-specific JS (interactive widgets) goes OUTSIDE the markers — the
-         stamper rewrites only what is between them (see 1.2's key-state widget).
+  docs-tooling: the shared CSS and page script are LINKED, not duplicated — ONE copy each,
+         at docs/shared/course.css and docs/shared/course.js. Edit those files
+         directly; every page picks the change up immediately. (Until the CSS
+         extraction they were duplicated into all 36 pages = 18% of docs/; that is
+         how the script drifted into 6 versions before 1.2. Cause removed.)
+         Still no build step: relative <link>/<script src> resolve off the
+         filesystem, so docs/index.html opens by double-clicking, offline —
+         verified in Chromium, Firefox AND WebKit including ../shared/ from
+         docs/lessons/. Cost: a lesson file is NOT portable alone; the docs/ tree is.
+         Two marker regions remain — <!-- SHARED-CSS:BEGIN/END --> and
+         <!-- SHARED-SCRIPT:BEGIN/END --> — but they now hold the LINK TAGS, and
+         docs/_template/apply-shared.py computes each page's relative prefix
+         ("" at docs/, "../" at docs/lessons/) and verifies it. A wrong prefix is
+         SILENT: unstyled inert page, no error. It breaks by MOVING a page, not
+         editing one, so run the tool after adding/moving pages.
+         The KaTeX loader stays INLINE inside SHARED-SCRIPT (SRI + inline onload
+         cannot move into course.js; and below the END marker it was never
+         propagated — 6 lessons shipped with no maths renderer).
+         Page-specific JS/CSS goes OUTSIDE the markers (1.2's key-state widget;
+         index.html + math-toolbox.html's own <style>).
          Highlighter word lists: kw is checked before ty, so fundamental types
          (bool/char/int/Uint32/...) belong in CPP_TYPES only. Shell `::` comments
          are anchored to line start (SDL3::SDL3 must not read as a comment).
-         `apply-shared.py --check` exits 1 on drift, 2 on a broken template, and
-         also lints inline fill= on SVG <text>. Run it before committing docs/.
+         `apply-shared.py --check` exits 1 on drift, 2 if a shared file is missing
+         or empty, and also lints inline fill= on SVG <text>. Run before committing.
   docs-verify: serve docs/ over HTTP and drive REAL Chromium (Playwright). The
          preview pane reports impossible computed styles — it will show a dead
          highlighter or broken theme toggle as fine. Strongest highlighter check:
@@ -1446,6 +1456,7 @@ files:
                  03-01-z-buffer.html, 03-02-perspective-correct.html,
                  03-03-near-plane-clipping.html, 03-04-back-face-culling.html,
                  03-05-obj-loader.html
+  docs/shared/: course.css, course.js      (THE stylesheet + page script; one copy each)
   docs/_template/: lesson-template.html, README.md, apply-shared.py, check-page.js
   memory/: 2026-07-16.md, 2026-07-18.md, 2026-07-21.md, 2026-07-22.md,
            2026-07-23.md, 2026-07-24.md, 2026-07-25.md, 2026-07-26.md,

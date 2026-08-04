@@ -1950,3 +1950,52 @@ which means the bug depends on where the exporter started listing the face, and 
 it appear in one file and not the next one that looks just like it.
 
 When a diagram makes a geometric claim, **test the claim numerically**, not just the layout.
+
+
+## A constraint nobody rechecked cost 18% of the docs tree (CSS extraction)
+
+The shared stylesheet and page script were duplicated into all 36 pages — 26.6 KB and 8.0 KB
+each, **1.18 MB, 18% of `docs/`** — because the spec said each lesson had to be "fully
+self-contained … no external assets". That rule was written to protect a real property: a lesson
+must render by double-clicking it, offline, with no server and no build step.
+
+The rule outlived its justification. **`file://` does not block a relative `<link
+rel=stylesheet>` or a classic `<script src>`.** The restriction people remember is on
+`fetch`/XHR/ES modules, which are a different mechanism. So the no-build-step guarantee never
+actually required inlining — the duplication was protecting against something that was not there.
+
+Two lessons, and the second is the sharper one:
+
+- **Test the constraint, don't inherit it.** The premise was checkable in about five minutes with
+  a three-file fixture and a headless browser. It had instead been carried, unexamined, through
+  36 pages and a purpose-built propagation tool.
+- **Check it in the engine that is strictest, not the one you have open.** Lesson pages link
+  *upward* (`../shared/course.css`), and WebKit — Safari's engine, the one with the tightest
+  `file://` policy — is the one that could plausibly have refused. Verifying in Chromium alone
+  would have proved almost nothing about the macOS reader who double-clicks a lesson. All three
+  engines pass, including the upward traversal; that is the claim worth having.
+
+What it cost, stated so nobody rediscovers it as a bug: **a lesson file is no longer portable on
+its own.** Copied out of the tree it renders unstyled. The `docs/` directory is the unit now.
+
+### The failure mode traded for the old one
+
+Duplication drifts loudly enough to be findable (six versions of the highlighter by Lesson 1.2).
+A **wrong relative href does not fail at all** — no error, no console warning, just an unstyled,
+inert page that reads as unfinished rather than broken. And it breaks by *moving* a page, not by
+editing one, so it arrives in commits that look unrelated. The prefix depends on depth (`shared/…`
+at `docs/`, `../shared/…` at `docs/lessons/`), which is why `apply-shared.py` computes it per page
+rather than trusting anyone's eye, and why `check-page.js` now asserts the sheet is *in effect*
+rather than merely linked.
+
+### Do not ask the CSSOM whether a stylesheet loaded
+
+The obvious probe — `document.styleSheets[…].cssRules.length > 0` — reports a **perfectly good
+page as broken** over `file://` in WebKit, which treats every file as its own origin and throws a
+`SecurityError` on CSSOM access. The sheet had loaded and applied; only the introspection was
+blocked. The check flagged all nine sample pages while `getComputedStyle` showed the shared
+`--bg: #fdfdfb` and 22,829 highlighted tokens on the very same pages.
+
+Same shape as the KaTeX trap in this file: **a probe that cannot distinguish "absent" from
+"unreadable" is not a check.** Judge by the effect (computed style), and treat a thrown CSSOM read
+as *inconclusive* — never as failure.
