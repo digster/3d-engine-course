@@ -15,12 +15,18 @@ This repo contains **a course** and **an engine**, and they evolve together:
 
 | Stream | Lives in | Build step? |
 |---|---|---|
-| Course — self-contained HTML lessons | `docs/` | **None, ever.** Open the file. |
+| Course — plain HTML lessons + two shared assets | `docs/` | **None, ever.** Open the file. |
 | Engine — an always-compiling C++20 codebase | `src/` → later `engine/`, `demos/`, `tools/` | CMake ≥ 3.24 |
 
 The no-build-step rule is a hard constraint on the *tutorial content only*. A lesson page must
 render from a bare filesystem with no network — a CDN is allowed for math typesetting, but every
 crucial equation stays legible from the prose if the CDN is unreachable.
+
+Note what that rule does **not** say. Pages are not individually self-contained: styling and page
+behaviour live in `docs/shared/course.css` and `docs/shared/course.js`, which every page links.
+That is still zero build steps — a relative `<link>` resolves straight off the filesystem — but
+the unit of portability is the `docs/` **tree**, not the file. §3 covers why this changed and what
+it costs.
 
 **The codebase is a single evolving tree, not per-lesson snapshots.** `HEAD` is always the state
 at the end of the most recently published lesson, and it always compiles. Each lesson's own
@@ -637,29 +643,48 @@ docs/
 ├── lessons/
 │   ├── 00-01-what-is-an-engine.html
 │   └── ...                 # NN-MM-slug.html, zero-padded so they sort correctly
+├── shared/
+│   ├── course.css          # THE stylesheet — one copy, linked by every page
+│   └── course.js           # THE page script — theme, TOC, syntax highlighter
 └── _template/
-    ├── lesson-template.html   # canonical lesson skeleton + shared CSS + shared script
-    ├── apply-shared.py        # authoring-time: stamps both shared regions into every page
+    ├── lesson-template.html   # canonical lesson skeleton (links the shared files)
+    ├── apply-shared.py        # authoring-time: verifies every page's shared links
+    ├── check-page.js          # authoring-time: browser-side page verification
     └── README.md              # authoring & visual style guide
 ```
 
 `index.html`, `conventions.html` and `math-toolbox.html` are **living pages**, reissued updated
 at every module boundary.
 
-**The shared CSS and the shared page script are duplicated into every lesson file, by design.**
-This is the one place we knowingly trade DRY for the self-containment guarantee: a lesson must
-render from a bare filesystem, so it can reference neither a shared stylesheet nor a shared
-script. `_template/lesson-template.html` is the source of truth for both. This trade is worth
-naming out loud because it looks like a mistake until you know the constraint.
+### The shared CSS and page script
 
-Duplication that nothing propagates *will* drift, and it drifted here before it was mechanised:
-by Lesson 1.2 the trailing `<script>` existed in six mutually inconsistent versions — three
-different C++ keyword lists, a CMake highlighter present in exactly one lesson, and a
-Windows-batch comment rule present in two. Each was a silent mis-render, never a crash, which is
-what made it survive review.
+**There is exactly one copy of each: `docs/shared/course.css` and `docs/shared/course.js`.**
+Every page links them. Edit the shared file; no page carries a copy to keep in step.
 
-`apply-shared.py` closes that hole. Each page opts a region in with a marker pair, and the tool
-rewrites only what lies between the markers:
+It was not always so, and the history explains the tooling. The original constraint made each
+lesson *individually* self-contained, which forced both blocks to be **duplicated into all 36
+pages** — 26.6 KB of CSS and 8.0 KB of script apiece, 18% of the entire `docs/` tree. Duplication
+that nothing propagates drifts, and it did: by Lesson 1.2 the trailing `<script>` existed in six
+mutually inconsistent versions — three different C++ keyword lists, a CMake highlighter present
+in exactly one lesson, and a Windows-batch comment rule present in two. Each was a silent
+mis-render, never a crash, which is what let it survive review. `apply-shared.py` was written to
+stamp one canonical copy into every page and hold them identical.
+
+The extraction removed the cause rather than managing it. The premise turned out to be checkable
+rather than merely assumed: a relative `<link>` and a classic `<script src>` **do** load over
+`file://`, verified in Chromium, Firefox *and* WebKit, including the upward `../shared/`
+traversal from `docs/lessons/`. So the no-build-step guarantee never depended on inlining.
+
+**What it cost, stated plainly:** a lesson file is no longer portable alone. Copy one out of the
+tree and it renders unstyled. The `docs/` directory is now the unit you move, not the file.
+
+**What now needs policing** is the link, not the content — and that failure is *silent*: a wrong
+href throws nothing, it just yields an unstyled, inert page that reads as unfinished rather than
+broken. The correct relative prefix depends on the page's depth (`shared/…` at `docs/`,
+`../shared/…` at `docs/lessons/`), so it breaks by **moving** a page, not by editing one.
+
+`apply-shared.py` therefore kept its marker architecture and changed its job — from copying
+content into a region to computing and verifying that region's link:
 
 ```
 <!-- SHARED-CSS:BEGIN -->    …    <!-- SHARED-CSS:END -->
@@ -667,21 +692,17 @@ rewrites only what lies between the markers:
 ```
 
 ```sh
-python3 docs/_template/apply-shared.py           # stamp
+python3 docs/_template/apply-shared.py           # fix every page's links
 python3 docs/_template/apply-shared.py --check   # verify only; exit 1 on drift
 ```
 
-Each region's canonical copy is read from between that same marker pair **in the template
-itself**, so the template carries every marker a page does — which is what makes starting a
-lesson by copying the template produce a page that is already opted into both regions. A new
-lesson that drops the markers silently stops receiving updates, so the authoring guide calls
-them out as must-keep.
-
-Two further properties matter architecturally. **It is not a build step** — readers never run it
-and the published files are complete static HTML, so the "no build tooling" guarantee in §1
-holds; it is an authoring-time formatter. And **it is region-scoped, not file-scoped**, so a page
-keeps its own page-specific JavaScript (Lesson 1.2's key-state widget, and any future
-interactive diagram) outside the markers where the stamp cannot reach it.
+Three properties matter architecturally. **It is not a build step** — readers never run it and
+the published files are static HTML linking static assets, so the "no build tooling" guarantee in
+§1 holds; it is an authoring-time tool. **It is region-scoped, not file-scoped**, so a page keeps
+its own page-specific JavaScript (Lesson 1.2's key-state widget, and any future interactive
+diagram) outside the markers where the stamp cannot reach it. And the **KaTeX loader stays inline
+inside the SCRIPT region** — both tags carry SRI hashes and one carries an inline `onload`, so
+neither survives being moved into a linked file.
 
 ---
 

@@ -946,6 +946,35 @@ lesson and worth the same attention.
 
 ---
 
+## Session — docs: extract the shared CSS/JS (not a lesson)
+
+> why is the css copied over in the html files and not a common css file? Check the feasibility
+> for a common file. Do not change anything in the repo yet.
+
+Answered from the repo: the duplication was **deliberate** — `CLAUDE.md` §7 ("one fully
+self-contained `.html` file … no external assets"), restated in `README.md` and
+`ARCHITECTURE.md`, with `apply-shared.py` already keeping the 36 copies identical (zero drift at
+the time of asking). Measured the cost: 26.6 KB CSS + 8.0 KB script × 36 pages = **1.18 MB, 18%
+of the 6.7 MB tree**. Verified that `file://` does *not* block a relative stylesheet or classic
+script, so extraction was feasible; recommended against it on the portability trade, and flagged
+that the only unenforced gap was `--check` running on discipline alone.
+
+> ok, since it's feasible lets extract the common css/js.
+
+The user overrode §7. Two decisions taken up front: shared files at `docs/shared/` as a **single
+copy** but gated on cross-browser verification first (fall back to per-directory copies if any
+engine refused the upward `../shared/` traversal), and **no** inline-for-distribution escape
+hatch — single-file portability dropped outright.
+
+The gate passed in Chromium, Firefox **and WebKit**, so the single-copy layout shipped. Extracted
+`docs/shared/course.css` + `course.js` byte-identically, rewrote all 36 pages to link them,
+repurposed `apply-shared.py` from *propagating content* to *computing and verifying each page's
+depth-relative link*, and added a positive-signal shared-asset check to `check-page.js`. Proved
+no visual change by diffing computed styles against a pristine `HEAD` worktree — 25 selectors ×
+11 pages, identical. 6.7 MB → 5.6 MB.
+
+---
+
 ## 2026-08-06 — Lesson 3.6
 
 > next

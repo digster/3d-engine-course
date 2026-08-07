@@ -34,6 +34,19 @@
 //                      along each stroke and testing them against text boxes is
 //                      the cheapest thing that catches it.
 //
+//   4. SHARED ASSETS. The CSS and page script are linked from docs/shared/
+//      rather than inlined, so a wrong relative href now breaks a page — and
+//      breaks it silently. Nothing throws; the page renders unstyled and inert,
+//      which reads as an unfinished page rather than a broken one. The correct
+//      prefix depends on the page's depth, so this breaks by MOVING a file, not
+//      by editing one. Checked by positive signal, like KaTeX above: the sheet's
+//      rules are in effect and the highlighter actually ran.
+//
+//      Do NOT decide this on styleSheets[].cssRules. Over file:// WebKit makes
+//      every file its own origin and throws a SecurityError reading CSSOM, on a
+//      sheet that loaded and applied correctly — the naive probe reports a
+//      perfectly good page as broken. Computed style is the honest signal.
+//
 // What none of these catch: a label on a filled <rect>, and a line drawn
 // through the wrong row of a stacked diagram. Look at the rendered figure.
 
@@ -129,6 +142,47 @@
   out.svgTextOnShape = onShape;
   out.figures = document.querySelectorAll('figure.dia svg').length;
 
+  // ---- 4. SHARED ASSETS ---------------------------------------------------
+  // The CSS and page script are linked from docs/shared/, not inlined, so a
+  // wrong relative href is now a real failure mode — and a silent one. Nothing
+  // throws: the page renders unstyled and inert, which reads as "a page nobody
+  // has styled yet" rather than as a bug. The prefix depends on the page's
+  // depth (shared/… at docs/, ../shared/… at docs/lessons/), so this breaks by
+  // moving a file, not by editing one.
+  //
+  // Check the POSITIVE signal, the same way the KaTeX check does: prove the
+  // stylesheet's rules are actually in effect, not merely that the <link> tag
+  // is present in the markup — a 404 leaves the tag sitting there looking fine.
+  out.sharedCssLinked = !!document.querySelector('link[href$="shared/course.css"]');
+  // Reading .cssRules is the obvious probe and the wrong one to trust alone:
+  // over file:// WebKit treats every file as its own origin and throws a
+  // SecurityError on CSSOM access, even though the sheet loaded and applied
+  // perfectly. So a throw is INCONCLUSIVE (null), never a failure — the
+  // computed-style probe below is what actually decides.
+  out.sharedCssLoaded = (() => {
+    const sheet = [...document.styleSheets]
+      .find(s => s.href && s.href.includes('shared/course.css'));
+    if (!sheet) return false;              // never even reached the sheet list
+    try { return sheet.cssRules.length > 0; }
+    catch (e) { return null; }             // WebKit + file://: cannot tell from here
+  })();
+  // The decisive check, and the only one that survives every engine and both
+  // protocols: is a value only the shared sheet defines actually in effect?
+  // --bg is #fdfdfb; with no stylesheet the UA default is white/transparent.
+  const probe = document.querySelector('.listing pre') || document.body;
+  out.sharedCssApplied = getComputedStyle(probe).backgroundColor !== 'rgba(0, 0, 0, 0)' &&
+                         getComputedStyle(probe).backgroundColor !== 'rgb(255, 255, 255)';
+  // The shared script signs its work in the markup: the highlighter rewrites
+  // every listing into <span class="tok-…">. That is the only trace it leaves
+  // that survives into the DOM, so it is the signal. Pages with no listings
+  // (index, math-toolbox) cannot be probed this way — report null rather than
+  // false, so "nothing to check" never reads as "the script is dead".
+  out.sharedJsRan = document.querySelectorAll('.listing pre code').length === 0
+    ? null
+    : document.querySelectorAll('.listing [class^="tok-"]').length > 0;
+  out.sharedOk = out.sharedCssLinked && out.sharedCssLoaded !== false
+              && out.sharedCssApplied && out.sharedJsRan !== false;
+
   // ---- 2. KaTeX -----------------------------------------------------------
   out.eqBlocks = document.querySelectorAll('.eq').length;
   out.katexRendered = document.querySelectorAll('.katex').length;
@@ -155,7 +209,7 @@
       }
     }
     out.pass = spill.length === 0 && overlap.length === 0 && onShape.length === 0
-            && out.corruptedListings.length === 0 && out.katexOk
+            && out.corruptedListings.length === 0 && out.katexOk && out.sharedOk
             && !out.pageScrollsX && out.wrappedListings === 0;
     return out;
   });
