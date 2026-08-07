@@ -2092,3 +2092,30 @@ For an interactive widget the same rule applies with more force, because a reade
 to the value the prose quotes: the widget, the figure and the worked example must all use the
 same inputs. Ours now all use the slab's `(1.8, 0.35, 0.9)`, and dragging the slider to 0.35
 reproduces the prose's 137.5° and 90.0° exactly.
+
+
+## Two correct branches can leave a hole between them (docs tooling)
+
+The change that extracted the shared CSS and script into `docs/shared/` converted all 36 pages
+that existed **on its branch**. That branch was cut before Lesson 3.6 landed on `main`. So when it
+merged, 3.6 was not converted — not because the run missed it, but because the page did not exist
+when the run happened, and a merge has nothing to say about a file neither side changed.
+
+Both branches were individually correct and fully verified. The defect lived in the gap, and 3.6
+shipped for weeks carrying an 881-line inline copy of a stylesheet that by then had a single source
+of truth.
+
+Two properties made it survive review:
+
+- **It is introduced by merging, not by editing.** No diff shows anything wrong, because nothing
+  about the page changed. It simply missed a change that happened elsewhere. There is no hunk to
+  review.
+- **It fails silently.** A missing or wrong shared link throws nothing; the page renders unstyled
+  and inert, which reads as a page nobody finished rather than a page that is broken.
+
+The general shape is worth carrying beyond stylesheets: **a branch that adds an item and a branch
+that transforms every item are a bad pair**, and no amount of care on either one closes the gap.
+Codemods, renames, lint-rule rollouts and dependency bumps all have it. The only reliable defence
+is a checker that enumerates the current tree rather than the changed files — `apply-shared.py
+--check` does exactly that, which is why it found this in one run — and the discipline is to run it
+**after merges**, not only after the edits you remember making.

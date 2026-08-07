@@ -358,6 +358,19 @@ python3 docs/_template/apply-shared.py --check   # verify only; exit 1 on drift
 static assets and work by double-clicking, offline. It is an authoring-time tool. Run it when you
 **add or move** a page, and run `--check` before committing.
 
+**And run `--check` after any merge.** This one was learned the expensive way. The extraction that
+created `docs/shared/` converted all 36 pages that existed *on its branch* — but that branch was
+cut before Lesson 3.6 landed on `main`, so 3.6 was not among them and the merge had nothing to
+convert. Both changes were individually correct; the gap opened between them, and 3.6 shipped
+carrying an 881-line inline copy of a stylesheet that by then had a single source of truth. It was
+caught weeks later, by running `--check` before adding the next page.
+
+Note the shape of it: **this drift is introduced by merging, not by editing.** No diff to the page
+shows anything wrong, because nothing about the page changed — it simply missed a change that
+happened elsewhere. Combined with the silent-failure mode below, that makes it invisible to review.
+A branch that adds a page and a branch that touches every page are a bad pair, and `--check` is the
+only thing standing between them.
+
 ### Why a tool at all, if nothing is duplicated any more
 
 Because the link's relative prefix depends on the page's depth — `shared/course.css` from

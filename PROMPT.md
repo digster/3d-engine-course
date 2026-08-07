@@ -1027,3 +1027,25 @@ the whole problem disappear — which is §3.6 in one gesture.
 A clean rebuild also caught a `-Wmissing-field-initializers` warning in `floor_geometry::view()`
 that the incremental build had hidden, because `mesh` grew a fourth member in 3.5 and that file
 had not been recompiled since.
+
+
+## Session — docs: migrate 03-06 to the shared stylesheet (not a lesson)
+
+Found by running `apply-shared.py --check` before adding a new page. It reported drift on exactly
+one file: `docs/lessons/03-06-normals-and-lambert.html` still carried an 881-line inline copy of
+the stylesheet and page script.
+
+Not an oversight in the extraction run. The extraction branch was cut **before** 3.6 landed on
+`main`, so the page did not exist on that branch and the merge had nothing to convert. Two correct
+changes, and the gap opened between them.
+
+Fixed by running the tool without `--check`; the page dropped 881 lines and gained the same
+ten-line link-and-comment block every other page carries. Re-verified over HTTP in Chromium:
+`check-page.js` → `pass: true`, 49 equations rendered, highlighter round-trip clean, no listing
+corrupted.
+
+The workflow note that comes out of it: this drift is **introduced by merging, not by editing**,
+and it fails silently — a wrong shared link throws nothing and renders an unstyled, inert page that
+reads as unfinished rather than broken. `docs/_template/README.md` said to run `--check` when a
+page is added or moved; it also has to run after any merge that brings pages in from a branch cut
+at a different time.
