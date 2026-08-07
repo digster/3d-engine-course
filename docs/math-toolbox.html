@@ -1618,6 +1618,132 @@
     </div>
   </div>
 
+  <div class="tool">
+    <h3>The mirror direction <span class="from">Lesson 3.7</span></h3>
+    <div class="eq">
+      <span>\[ \mathbf{R} \;=\; 2(\mathbf{n}\cdot\mathbf{l})\,\mathbf{n} \;-\; \mathbf{l} \]</span>
+      <span class="eq-plain">R = 2·dot(n, l)·n − l, with n and l both unit length</span>
+    </div>
+    <p>
+      The direction a perfect mirror sends light arriving along <code>l</code>. Same derivation as
+      Lesson 1.8&rsquo;s bounce: split <code>l</code> into its shadow on the normal and the
+      leftover running along the surface, keep the first and flip the second &mdash; and flipping
+      a part means subtracting it twice.
+    </p>
+    <p>
+      <strong>Mind the sign against <code>reflect</code>.</strong> Lesson 1.8&rsquo;s
+      <code>reflect(v, n) = v &minus; 2&middot;dot(v, n)&middot;n</code> mirrors a vector travelling
+      <em>into</em> the surface, which is what a ball&rsquo;s velocity does; <code>l</code> points
+      <em>out</em> of it. So <code>mirror(n, l) = &minus;reflect(l, n)</code> exactly. Getting it
+      backwards puts the highlight on the far side of the object.
+    </p>
+    <p>
+      Two properties, both proved rather than assumed. <strong>Unit length:</strong> with
+      <code>c = n&middot;l</code>, <code>R&middot;R = 4c² &minus; 4c² + 1 = 1</code>, so no
+      renormalisation is needed. <strong>Equal angles:</strong>
+      <code>n&middot;R = 2c &minus; c = c = n&middot;l</code> &mdash; the schoolbook &ldquo;angle
+      of incidence equals angle of reflection&rdquo;, falling out of the algebra. A consequence
+      worth carrying: <strong>R can never point below a surface the light is above</strong>.
+    </p>
+    <div class="worked">
+      <span class="label">Worked</span>
+      <p>
+        Floor <code>n = (0,1,0)</code>, light <code>l = (0.6, 0.8, 0)</code>. Then
+        <code>n&middot;l = 0.8</code>, <code>2(0.8)n = (0, 1.6, 0)</code>, and
+        <code>R = (&minus;0.6, 0.8, 0)</code>: the horizontal component flips and the vertical one
+        does not. Length <code>0.36 + 0.64 = 1</code> ✓, and both make
+        <code>acos(0.8) = 36.8699&deg;</code> with the normal ✓.
+      </p>
+    </div>
+  </div>
+
+  <div class="tool">
+    <h3>The halfway vector <span class="from">Lesson 3.7</span></h3>
+    <div class="eq">
+      <span>\[ \mathbf{h} \;=\; \frac{\mathbf{l} + \mathbf{v}}{\|\mathbf{l} + \mathbf{v}\|} \]</span>
+      <span class="eq-plain">h = normalise(l + v), with l toward the light and v toward the eye</span>
+    </div>
+    <p>
+      <strong>Not an approximation of anything.</strong> <code>h</code> is <em>exactly</em> the
+      normal a surface would need in order to bounce the light straight into the eye. Demand
+      <code>mirror(h, l) = v</code> and the formula above says
+      <code>2(h&middot;l)h = l + v</code>, so <code>h</code> must lie along <code>l + v</code>;
+      being unit length fixes it uniquely. Verified over 20,000 random pairs: worst
+      <code>|mirror(h, l) &minus; v|</code> is <code>6e&minus;6</code>.
+    </p>
+    <p>
+      That is why <code>dot(n, h)</code> is a question about the <strong>surface</strong>
+      (&ldquo;how much of it already faces that way?&rdquo;) rather than about a reflected ray.
+      Microfacet theory answers exactly that question, so this is the doorway to Module 6.
+    </p>
+    <p>
+      Returns zero when <code>v = &minus;l</code>, where no normal could do the job.
+      <code>dot(n, 0) = 0</code> then kills the term &mdash; the right answer, free. Returning
+      <code>n</code> instead would give a <em>maximal</em> highlight in the one configuration that
+      cannot have one.
+    </p>
+  </div>
+
+  <div class="tool">
+    <h3>&beta; = &alpha;/2, and the 4&times; exponent rule <span class="from">Lesson 3.7</span></h3>
+    <div class="eq">
+      <span>\[ \beta = \tfrac{1}{2}\alpha \quad\Longrightarrow\quad \cos^{p}\alpha \;\approx\; \cos^{4p}\!\left(\tfrac{\alpha}{2}\right) \]</span>
+      <span class="eq-plain">the angle from n to h is exactly half the angle from R to v, so Blinn's exponent must be about four times Phong's</span>
+    </div>
+    <p>
+      Put <code>n</code>, <code>l</code> and <code>v</code> in one plane and measure signed angles
+      from the normal, the light at <code>a</code> and the eye at <code>b</code>. Then
+      <code>R</code> sits at <code>&minus;a</code>, so <code>&alpha; = |a + b|</code>; and
+      <code>h</code> bisects, so <code>&beta; = |a + b|/2</code>. Exact, not approximate &mdash;
+      worst deviation over a 33&times;33 sweep is <code>0.000018&deg;</code>.
+    </p>
+    <p>
+      The exponent follows from <code>cos x &asymp; 1 &minus; x²/2</code>, so
+      <code>cos<sup>k</sup>x &asymp; exp(&minus;k x²/2)</code>. Matching
+      <code>exp(&minus;p&alpha;²/2)</code> against <code>exp(&minus;q&alpha;²/8)</code> needs
+      <code>q = 4p</code>. It is a <strong>near-peak</strong> match and gets worse as the lobe
+      broadens: fitted, the ratio is 4.38&times; at <code>p = 4</code> and 4.01&times; at
+      <code>p = 128</code>.
+    </p>
+    <div class="worked">
+      <span class="label">Worked</span>
+      <p>
+        <code>n = (0,1,0)</code>, <code>l = (0.6, 0.8, 0)</code>, <code>v = (&minus;0.8, 0.6, 0)</code>.
+        Phong: <code>R&middot;v = 0.48 + 0.48 = 0.96</code>, so <code>&alpha; = 16.26&deg;</code>.
+        Blinn: <code>l + v = (&minus;0.2, 1.4, 0)</code>, <code>|l+v| = &radic;2</code>,
+        <code>h = (&minus;0.1414, 0.9899, 0)</code>, <code>n&middot;h = 0.9899</code>, so
+        <code>&beta; = 8.13&deg;</code> &mdash; exactly half ✓. At <code>p = 8</code> Phong gives
+        <code>0.96<sup>8</sup> = 0.7214</code>; Blinn at the same 8 gives
+        <code>0.9899<sup>8</sup> = 0.9224</code>. <strong>The two exponents are not the same
+        parameter.</strong>
+      </p>
+    </div>
+  </div>
+
+  <div class="tool">
+    <h3>Where a highlight lands on a plane <span class="from">Lesson 3.7</span></h3>
+    <div class="eq">
+      <span>\[ \mathbf{p} \;=\; \mathbf{e} \;-\; \mathbf{R}\,\frac{e_y}{R_y} \]</span>
+      <span class="eq-plain">peak position = eye − R · (eye.y / R.y), for a horizontal plane at y = 0</span>
+    </div>
+    <p>
+      The peak is where <code>dot(n, h)</code> is largest, which is where <code>h = n</code>,
+      which is where the direction to the eye <em>is</em> <code>R</code>. And <code>R</code>
+      depends only on the light and the surface &mdash; it is the same vector everywhere on the
+      plane. So the peak is simply where a ray from the eye along <code>&minus;R</code> meets it.
+    </p>
+    <div class="worked">
+      <span class="label">Worked</span>
+      <p>
+        <code>l = (0.400, 0.799, 0.449)</code> gives <code>R = (&minus;0.400, 0.799, &minus;0.449)</code>.
+        Eye at <code>(0, 3, 6)</code>: <code>t = 3/0.799 = 3.755</code>, so
+        <code>p = (1.500, 0, 7.688)</code>. Brute-forcing the argmax over a 1601&times;1601 grid
+        finds <code>(1.500, 7.680)</code> &mdash; agreement to well within the 0.02 grid step, and
+        the worst disagreement over four eye positions is 0.0107.
+      </p>
+    </div>
+  </div>
+
   <h2 id="coming"><span class="num">8</span>Coming as the course proceeds</h2>
 
   <p>
@@ -1635,14 +1761,15 @@
   </div>
 
   <div class="pending">
-    <b>Module 3 — Depth and light.</b> <span class="badge done">3.1–3.6 landed</span>
+    <b>Module 3 — Depth and light.</b> <span class="badge done">3.1–3.7 landed</span>
     Device depth and <code>1/w</code> affinity · the depth-precision budget ·
     perspective-correct interpolation · the near-plane crossing parameter · the signed-area
     facing test · the Euler characteristic and signed volume · <strong>Lambert's cosine law</strong> ·
-    <strong>the normal matrix</strong> (§7 above). Still ahead:
-    the halfway vector and Blinn-Phong · bilinear
-    filtering as a double lerp. (The reflection vector arrived early, in 1.8, because a bouncing
-    ball needed it before a specular highlight did.)
+    <strong>the normal matrix</strong> · <strong>the mirror direction</strong> ·
+    <strong>the halfway vector</strong> · <strong>the 4&times; exponent rule</strong> (§7 above).
+    Still ahead: bilinear filtering as a double lerp. (The reflection vector arrived early, in
+    1.8, because a bouncing ball needed it before a specular highlight did — and 3.7 turned out
+    to need it with the arrow pointing the other way.)
   </div>
 
   <div class="pending">

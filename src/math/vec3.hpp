@@ -126,4 +126,34 @@ constexpr vec3& operator/=(vec3& v, float s) { v.x /= s; v.y /= s; v.z /= s; ret
             a.x * b.y - a.y * b.x};
 }
 
+// ---- Reflection -------------------------------------------------------------
+
+/// Reflect `v` in a surface whose **unit** normal is `n` — a mirror bounce.
+///
+/// Word for word Lesson 1.8's `vec2` version, one component wider, and it is worth
+/// noticing that the derivation did not need touching. Split `v` into the part
+/// along `n` — its shadow, `dot(v, n) * n`, which is the part driving *into* the
+/// surface — and whatever is left, which runs *along* it. A bounce keeps the
+/// sideways part and flips the other, and flipping a part means subtracting it
+/// twice: once to cancel it, once more to send it back out.
+///
+///     reflect(v, n) = v - 2 * dot(v, n) * n
+///
+/// `n` must already be unit length. With `|n| = 1` the shadow is `dot(v, n) * n`
+/// with no division by `|n|²` — that division is the only thing missing from the
+/// line below, and it is missing on purpose. Pass a normal of length `k` and the
+/// correction is scaled by `k²`, so the bounce comes back too strong or too weak
+/// with nothing to warn you.
+///
+/// **Lesson 3.7 uses this from the other end.** A bouncing ball's velocity points
+/// *into* the surface; a light direction `l` points *away* from it, toward the
+/// source. Mirroring `l` about `n` is therefore the negation of this function —
+/// `mirror_direction` in `gfx/light.hpp` writes it out as `2*dot(n,l)*n - l` and
+/// says so. One operation, two sign conventions, and the sign is a consequence of
+/// which way the arrow was pointing rather than a thing to memorise.
+[[nodiscard]] constexpr vec3 reflect(vec3 v, vec3 n)
+{
+    return v - n * (2.0f * dot(v, n));
+}
+
 } // namespace engine

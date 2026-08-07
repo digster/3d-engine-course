@@ -1049,3 +1049,61 @@ and it fails silently — a wrong shared link throws nothing and renders an unst
 reads as unfinished rather than broken. `docs/_template/README.md` said to run `--check` when a
 page is added or moved; it also has to run after any merge that brings pages in from a branch cut
 at a different time.
+
+
+## 2026-08-07 — Lesson 3.7
+
+> Based on the STATE and the project's claude instructions, work on the next.
+
+`next: 3.7 — Specular and Blinn-Phong`. The first view-dependent term in the course, and the
+first one whose *evaluation point* is visibly wrong — which is what 3.8 exists to fix.
+
+### The claim that had to be re-derived
+
+The first draft repeated, in five places including a figure and its alt text, that Phong's
+highlight is cut off because **the mirror ray dips below the surface**. It cannot. `R` is `l`
+mirrored about `n`, so `dot(n, R) == dot(n, l)`: if the light is above the surface, so is `R`,
+always. The real condition is that `cos^p` answers only over the hemisphere *around* `R`, which is
+not the *visible* hemisphere — the visible wedge it misses is exactly as wide as the light's angle
+from the normal, so the trigger is "light and eye on the same side", which on a floor means the
+sun is behind you.
+
+Every measurement had passed while the explanation was wrong, because the numbers are equally
+consistent with either story. What forced the correction was adding the **control**: rendering the
+sun-*ahead* arrangement too, where Phong highlights all 30,806 pixels and there is no cut-off at
+all.
+
+### What the harnesses settled
+
+`verify_37` (nine sections) and `render_37` (six) produced every number the lesson quotes.
+`mirror_direction(n,l) == -reflect(l,n)` to 0.000000 over 20,000 pairs; `halfway` fed back through
+`mirror_direction` returns `v` to 6e−6; `β = α/2` to 0.000018°; the 4× exponent rule *fitted* at
+4.38× (p=4) falling to 4.01× (p=128); the hemisphere integrals `2π/(p+1)` and `2π/(p+2)` confirmed
+by quadrature; and a default `specular` reproducing Lesson 3.6 in 100,000 random configurations
+with **0 differing**.
+
+Three of those checks passed on the first run while measuring the wrong thing — the per-vertex
+peak on a mesh too dense to show the defect, the grazing comparison on a torus that already
+contains every incidence angle, and an `n·l` leak test whose geometry drove the term to zero for
+an unrelated reason. All three are written up in `LEARNINGS.md`.
+
+### The figure that passed every check and still hid its claim
+
+Figure 5 was a polar lobe plot on a linear radial scale. `check-page.js` said `pass: true`; no
+label overlapped; the geometry was exact. And the one thing it existed to show — Blinn returning
+0.063 at 90° where Phong returns nothing — was a dot fifteen pixels from the origin. It is now a
+Cartesian plot of value against angle, where 0.063 is 6% of the height. The lobe view stays in
+Figure 1, where the question is the *shape* of the spray rather than the size of the tail.
+
+Two smaller ones, also invisible to the checker: the lobe was drawn *below* the surface line in
+both Figure 1 and the widget (the function is defined there; the surface is not), and the widget's
+default exponent was high enough that both models read 0 in the cut-off region — refuting the
+widget's own caption if you dragged it.
+
+### What the code did and did not gain
+
+`raster.cpp` was untouched for the third lesson running: lighting still produces a vertex colour,
+and interpolating those has been the fill's job since 2.4. What *did* change is structural — the
+composed `view_from_model` is gone, because a highlight needs a world *position* and the two hops
+have to come apart. That optimisation existed because the shading was view-independent; a feature
+bought it out.

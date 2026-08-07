@@ -76,7 +76,7 @@ inventing one — but without paying framework ceremony before it buys anything.
 │   │   ├── colour.cpp
 │   │   ├── framebuffer.hpp # CPU pixel buffer, ARGB8888, row-major   [EXISTS from 1.5]
 │   │   ├── framebuffer.cpp
-│   │   ├── light.hpp       # directional light + Lambert diffuse     [EXISTS from 3.6]
+│   │   ├── light.hpp       # directional light, Lambert + specular    [EXISTS from 3.6]
 │   │   ├── depth_buffer.hpp# CPU depth attachment, [0,1], 0 = near  [EXISTS from 3.1]
 │   │   ├── depth_buffer.cpp
 │   │   ├── raster.hpp      # which pixels a SHAPE is made of         [EXISTS from 2.1]
@@ -851,6 +851,31 @@ Built roughly in dependency order — each module's milestone is the next module
   `(M⁻¹)ᵀ` preserves it. Critically, it is **identical to the model matrix for rotations and
   parallel to it for uniform scales**, so a codebase can carry the bug indefinitely while its
   hero assets look perfect; ours makes the failure a keypress and a pixel count.
+- **View dependence has a structural cost, and it is worth naming** (Module 3, Lesson 3.7).
+  Through 3.6 the vertex loop composed `view_from_world * world_from_model` once per object and
+  sent each vertex straight to view space — one matrix multiply instead of two. That optimisation
+  existed *because* the shading was view-independent: Lambert compares two directions and no world
+  position was ever needed. A specular highlight needs `eye - position`, so the composition comes
+  apart and every vertex pays a second multiply. Nothing regressed; a fast path was **bought out by
+  a feature**. The general shape — an optimisation is usually a simplifying assumption with a name,
+  and features cash those assumptions in — is worth carrying into Module 8's profiling work, where
+  "why is this slower than last month?" is usually answered by a feature nobody connected to the
+  loop it slowed.
+- **`specular` is the material system arriving one field at a time** (Module 3, Lesson 3.7). Two
+  fields — a highlight colour and a shininess — that belong to the *surface* and to nothing else:
+  not the light, not the rasterizer, not `fill_style`. It is deliberately not called `material`,
+  because a material is also the albedo, the cull mode, the blend mode, the textures and eventually
+  the shader, and inventing four fifths of that here would be guessing. This is the **fourth** pull
+  in the same direction (3.2's shading enum, 3.4's `closed`, 3.6's "`fill_style` is the wrong
+  home", now this), and Module 6 answers it with arguments rather than by accretion. Watching a
+  struct try to draw its neighbours in is the design telling you what it wants to be.
+- **Which shading model you evaluate is pipeline state; how shiny a surface is, is not** (Module 3,
+  Lesson 3.7). `specular_model` is a parameter to `shade()` rather than a field of `specular`,
+  because in a real engine the choice of Phong vs Blinn is baked into a shader at compile time and
+  a scene does not mix the two. It is a runtime knob here for exactly one reason: so both can be
+  rendered and the difference counted. The same distinction — per-material data versus
+  per-pipeline state — is what decides, in Module 6, which fields of a material become uniforms and
+  which become shader variants.
 - **Public API surface is a deliberate artifact,** not whatever headers happen to be reachable.
 
 ---

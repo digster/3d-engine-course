@@ -152,6 +152,24 @@ as though they were never squashed, with normals tilted by up to 68°. Why a nor
 direction you can transform like any other, derived from the one property that defines it, is
 [Lesson 3.6](docs/lessons/03-06-normals-and-lambert.html).
 
+Now press <kbd>H</kbd> and orbit again. A highlight slides across the surface — the first thing in
+this course that changes when you move your head, which is what makes a surface read as smooth and
+hard rather than as plaster. The icosahedron's highlight is **white** on an amber body and the
+slab's is **teal** on a teal body: one is a plastic and one is a metal, and no geometry or texture
+is doing that work. <kbd>H</kbd> also cycles to Phong's original model, and the HUD counts how
+many pixels the two disagree about *at matched exponents* — because Blinn's must be about 4× Phong's
+for the same tightness, a fact the lesson derives rather than quotes. The interesting part is
+where they differ: Phong's highlight switches off entirely when the light and your eye are on the
+same side of a surface's normal, which on a floor means the sun is behind you. Measured on a
+plane at 35° sun elevation: Phong lights **0 of 30,806** pixels and Blinn lights all of them.
+
+Then watch the `peak` number while something spins. On the 1,225-vertex torus it sits at 255; on
+the icosahedron it lurches, and on `cube.obj` the highlight is absent altogether in **157 of 180**
+frames — because per-vertex shading samples a very sharp function at a few points and draws
+straight lines between them. That is not a bug in the equation, it is a bug in where the equation
+is evaluated, and it is left standing on purpose: it is Lesson 3.8's entire argument.
+[Lesson 3.7](docs/lessons/03-07-specular-blinn-phong.html).
+
 Then hold <kbd>=</kbd> on that floor and walk *into* it. <kbd>K</kbd> cycles what happens to a
 triangle with a corner behind your eye: **clip** it (correct), **drop** it (the ground vanishes —
 31,747 pixels of 57,600), or divide anyway with **no guard** at all (the floor folds inside out and

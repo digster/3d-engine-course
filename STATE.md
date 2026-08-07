@@ -7,7 +7,7 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-08-06 (after Lesson 3.6, 32 of 94 lessons)
+updated: 2026-08-07 (after Lesson 3.7, 33 of 94 lessons)
 
 conventions:
   world: right-handed, Y-up, -Z forward
@@ -582,6 +582,82 @@ conventions:
             sources apart — 0 px — because 3.5's split already gave each of its 24
             vertices its own face's normal. A faceted mesh is faceted because of the
             SPLIT, not the shading model. (torus.obj: 5,576 px.)
+  specular: THE FIRST VIEW-DEPENDENT TERM IN THE COURSE. Settled in 3.7.
+            EVERYTHING BEFORE IT could be evaluated without knowing where the viewer
+            was standing, and 3.6 MEASURED that: one fixed point shades 0.83408 from
+            two different eyes, the same float. A highlight cannot, and the cost is
+            structural, not just arithmetic (see the world_pos note below).
+            MIRROR DIRECTION R = 2(n.l)n - l, and it IS -reflect(l,n) exactly (worst
+            |sum| over 20000 random pairs: 0.000000). The sign differs because a
+            velocity points INTO a surface and a light direction points OUT of it.
+            Both names ship; picking the wrong one puts the highlight on the far side.
+            R IS UNIT (R.R = 4c^2 - 4c^2 + 1 = 1, so no renormalise) and makes the
+            SAME ANGLE with n that l does (n.R = 2c - c = c). Consequence used below:
+            R CAN NEVER BE BELOW A SURFACE THE LIGHT IS ABOVE.
+            HALFWAY h = normalise(l+v) IS NOT AN APPROXIMATION. Demanding
+            mirror(h,l) == v gives 2(h.l)h = l+v, so h must lie along l+v and being
+            unit fixes it. Verified: worst |mirror(h,l) - v| = 6e-6 over 20000 pairs.
+            THAT is why dot(n,h) asks about the SURFACE ("how much of it faces this
+            way") rather than about a ray — the microfacet question, and Module 6's.
+            Zero when v == -l, so the term dies rather than peaking.
+            beta = alpha/2 EXACTLY (worst 0.000018 deg over a 33x33 sweep), because R
+            is fixed by the light while h bisects. Hence q ~ 4p, from
+            cos^k x ~ exp(-k x^2/2). FITTED: 4.38x at p=4 -> 4.01x at p=128. It is a
+            NEAR-PEAK match and gets WORSE for broad lobes — on the torus, matched
+            exponents differ on 85.5% of the object at p=2 and 3.3% at p=64.
+            ANY COMPARISON MUST CONVERT THE EXPONENT FIRST or it measures lobe width.
+            THE CUT-OFF, AND WHAT IT IS NOT. Phong returns 0 when |a+b| >= 90 deg,
+            i.e. when the light and eye are on the SAME SIDE of the normal (on a
+            floor: the sun BEHIND you). NOT "the mirror ray dips below the surface" —
+            it never does, see above; that folklore was in this lesson's first draft
+            and had to be re-derived. What happens is that cos^p only answers over the
+            hemisphere AROUND R, which is not the VISIBLE hemisphere, and the visible
+            wedge it misses is exactly as wide as the light's angle from n. Measured:
+            dot(R,v) <= 0 for 50.4% of above-surface pairs, dot(n,h) <= 0 for 0%.
+            Rendered on a plane, sun behind: at 35 deg elevation Phong highlights
+            0 of 30806 lit px and Blinn all 30806; at 60 deg, 6168 vs 30806 with
+            24638 px Phong paints black that Blinn does not (worst delta 27/255).
+            With the sun AHEAD (opposite sides) there is NO cut-off at all and both
+            cover the floor — that control is in render_37 on purpose.
+            BOTH TERMS CARRY n.l. The cosine law is about ARRIVAL and says nothing
+            about what the surface does with the light afterwards. Classic Phong omits
+            it: measured 0.608 of full strength on unlit geometry, over 400 of 701
+            unlit-but-visible normals. Including it also makes a separate "zero the
+            specular past the terminator" guard unnecessary.
+            AMBIENT GETS NO SPECULAR — it has no direction, so no mirror direction.
+            SPECULAR COLOUR IS NOT THE ALBEDO. A dielectric mirrors off a clear outer
+            layer without tinting (white highlight on a coloured body = plastic); a
+            metal has no such layer and tints what it reflects. Module 6 = F0.
+            NOT ENERGY CONSERVING, and said so with numbers: integral cos^p dw =
+            2pi/(p+1), and with the outgoing cosine 2pi/(p+2) (both confirmed by
+            quadrature). p 32 -> 64 halves the reflected light (x0.515) while the peak
+            stays at exactly 1.0 — backwards, since a smoother surface should
+            CONCENTRATE the same light. (m+8)/(8pi) is the usual normalisation:
+            0.4775 at m=4, 10.5042 at m=256, so it needs HDR and waits for Module 6.
+            THE HIGHLIGHT'S POSITION IS PREDICTABLE on a plane: p = e - R*(e_y/R_y),
+            because h == n exactly when v == R and R is the same everywhere on the
+            plane. Verified against a 1601^2 argmax, worst error 0.0107 (grid step
+            0.02). The peak is often BEHIND the camera, which is why the sun-behind
+            case shows only the far tail of the lobe.
+            THE CLAMP TO 1 IS REAL: dot of two unit vectors can round above 1 and pow
+            amplifies it (measured peak 1.00001). std::min(1.0f, .) makes the
+            advertised [0,1] range a fact. GPUs spell it saturate.
+            PER-VERTEX IS THE WRONG PLACE, MEASURED THREE WAYS (this is 3.8's case):
+              (a) CHORD ERROR. Interpolating the answer vs evaluating at the
+                  interpolated normal, over every triangle of the 48x24 torus: worst
+                  0.311 at shininess 32, 0.507 at 64, 0.722 at 128 — and 87.8% of the
+                  lit area differs at 128. THE ERROR GROWS WITH SHININESS, because a
+                  tighter highlight is a sharper feature and a chord approximates a
+                  sharp feature badly. Same shape as 2.4's bias and 3.2's affine uv.
+              (b) THE PEAK IS MISSED on coarse meshes: an 8x6 torus finds 0.0% of the
+                  true peak, 12x8 finds 8.5%, 24x12 73.6%, 48x24 99.6%. 96x48 also
+                  finds 99.6% — QUADRUPLING THE VERTICES IMPROVED NOTHING, because
+                  whether a vertex lands near the peak is luck.
+              (c) SO IT FLICKERS. Over 180 frames of a spin, the brightest pixel is no
+                  brighter than the diffuse-only render in 157 of 180 frames for
+                  cube.obj, 107 for the icosahedron, 58 for a 12x8 torus, 0 for 48x24.
+                  The CUBE is worst, and the reason is the lesson: on a flat face the
+                  peak sits in the MIDDLE and per-vertex only samples the corners.
   fill-rule: top-left. For a triangle oriented to POSITIVE area:
             top edge = (dy == 0 && dx > 0); left edge = (dy < 0). Bias -1 on the others,
             folded into the loop's starting value, so it costs NOTHING per pixel.
@@ -1486,6 +1562,49 @@ decisions:
     (draw_line_naive 2.1, pong swept_collision 1.8, blend_space::encoded 2.4, the w
     toggles 2.7, trs_order 2.8, interpolation::affine 3.2, near_mode 3.3).
 
+  - to_eye HAS NO DEFAULT on shade(), so every call site written before 3.7 is a
+    COMPILE ERROR rather than a silent highlight computed against a viewer who is
+    not there. Same bargain 3.1 made inserting z ahead of colour in `vertex`: when
+    a change must be noticed, make the compiler notice it. The SURFACE parameters
+    do default, because there the safe answer and the correct answer coincide —
+    a black highlight reproduces 3.6 BIT FOR BIT (0 of 100000 random configs differ).
+  - `specular` IS A MATERIAL AND IS DELIBERATELY NOT CALLED ONE. A material is also
+    the albedo, the cull mode, the blend mode, the textures and eventually the
+    shader; inventing four fifths of that here would be guessing. This is the
+    FOURTH pull in the same direction (3.2's shading enum, 3.4's `closed`, 3.6's
+    "fill_style is the wrong home", now this) and Module 6 answers it with
+    arguments rather than by accretion.
+  - specular_model IS A PARAMETER, NOT A FIELD OF `specular`. Which approximation
+    you evaluate is PIPELINE state — a real engine bakes it into a shader at
+    compile time and a scene does not mix the two. It is a runtime knob here for
+    exactly one reason: so both can be rendered and the difference counted.
+  - THE COMPARISON CONVERTS THE EXPONENT (matched_shininess, 4x). Comparing the two
+    models at one exponent mostly measures that one lobe is wider, which is true,
+    is 3.4's own point, and swamps the effect under test. A comparison is only
+    worth running once you have controlled for what you already know differs.
+  - THE COMPOSED view_from_model IS GONE, and that is worth naming rather than
+    absorbing. It existed BECAUSE the shading was view-independent; a highlight
+    needs the world POSITION, so the two hops come apart and every vertex pays a
+    second matrix multiply. A fast path was not lost to carelessness, it was BOUGHT
+    OUT by a feature. (The model-space dodge — move the eye into model space once
+    per object — is Exercise 3.7.4, and it is a win for one light and a loss for
+    many, which is why it fell out of fashion.)
+  - FLAT SHADING SAMPLES THE CENTROID. Flat used to need no position at all; with a
+    view-dependent term it does, because the specular varies across a face even
+    when the normal does not. The centre is the only point that privileges no corner.
+  - PHONG IS KEPT BEHIND [H] — the EIGHTH keep-the-wrong-thing bargain
+    (draw_line_naive 2.1, pong swept_collision 1.8, blend_space::encoded 2.4, the w
+    toggles 2.7, trs_order 2.8, interpolation::affine 3.2, near_mode 3.3,
+    cull_choice::back_by_forward 3.4). Note this one is not simply "wrong": it is a
+    real historical model with a real, provable failure, which is a better example.
+  - THE HUD READS THE BRIGHTEST CHANNEL IN THE VIEWPORT. One integer, and it tracks
+    the highlight without needing to know WHERE the highlight went — which is the
+    thing under investigation. The cheapest honest instrument in the demo.
+  - THE MISSING n.l IS AN EXERCISE, NOT A KEY. Three lighting toggles ([G], [J],
+    [H]) plus an exponent ([E]) is already at the limit of what one HUD line can
+    say, and the artifact is fully characterised numerically in verify_37 §E.
+    Restraint, on the same grounds 3.4 used for per-object cull modes.
+
 files:
   /: CLAUDE.md, README.md, ARCHITECTURE.md, LEARNINGS.md, PROMPT.md, LICENSE,
      .gitignore, CMakeLists.txt, STATE.md
@@ -1516,65 +1635,75 @@ files:
                  02-11-viewport.html, 02-12-wireframe-mesh.html,
                  03-01-z-buffer.html, 03-02-perspective-correct.html,
                  03-03-near-plane-clipping.html, 03-04-back-face-culling.html,
-                 03-05-obj-loader.html, 03-06-normals-and-lambert.html
+                 03-05-obj-loader.html, 03-06-normals-and-lambert.html,
+                 03-07-specular-blinn-phong.html
   docs/shared/: course.css, course.js      (THE stylesheet + page script; one copy each)
   docs/_template/: lesson-template.html, README.md, apply-shared.py, check-page.js
   memory/: 2026-07-16.md, 2026-07-18.md, 2026-07-21.md, 2026-07-22.md,
            2026-07-23.md, 2026-07-24.md, 2026-07-25.md, 2026-07-26.md,
            2026-07-27.md, 2026-07-28.md, 2026-07-29.md, 2026-07-30.md,
            2026-07-31.md, 2026-08-01.md, 2026-08-02.md, 2026-08-03.md,
-           2026-08-04.md, 2026-08-05.md, 2026-08-06.md
+           2026-08-04.md, 2026-08-05.md, 2026-08-06.md, 2026-08-07.md
   (retired: hello.cpp)
 
 
 
-next: 3.7 — Specular and Blinn-Phong
-      (planned filename: docs/lessons/03-07-specular-blinn-phong.html — 3.6 links to it)
-      EVERYTHING SO FAR IS VIEW-INDEPENDENT, and 3.6 proved it rather than claiming it:
-      orbit the camera and the brightest lit pixel does not change by one bit. That is
-      correct for a matte surface and wrong for almost every real one. A highlight is
-      light that bounced off in a PREFERRED direction, so the shading finally has to
-      know where the viewer is.
-        - START FROM THE MIRROR, NOT FROM A FORMULA. Perfect reflection is the whole
-          intuition: the reflection vector R = 2(n·l)n - l, which 1.8 ALREADY DERIVED
-          for a bouncing ball and which the math toolbox already carries. A mirror
-          returns light only when v == R exactly; a glossy surface returns some when v
-          is NEAR R. Phong is literally "how near", raised to a power.
-        - THEN THE HALFWAY VECTOR, and derive why it is not merely cheaper. h =
-          normalise(l + v) is the normal a microfacet would need in order to reflect l
-          straight at v — so dot(n, h) asks "what fraction of the surface is oriented
-          to send light at the viewer", which is a question about the SURFACE rather
-          than about the reflected ray. That reframing is what Module 6's microfacet
-          theory is built on, so it is worth the paragraph. Also note the exponents are
-          not comparable: Blinn's is roughly 4x Phong's for the same visual tightness.
-        - THE ARTIFACT TO SHOW FIRST. Phong's R·v goes wrong at grazing angles — the
-          highlight gets clipped off where R falls behind the surface — and Blinn-Phong
-          does not. That is a real, visible difference and the honest reason Blinn won,
-          not just speed.
-        - PER-VERTEX SPECULAR IS THE WRONG PLACE AND THIS IS WHERE 3.8 GETS ITS ARGUMENT.
-          A highlight smaller than a triangle FALLS BETWEEN VERTICES and vanishes or
-          flickers as the object turns. Diffuse survives per-vertex evaluation; specular
-          does not. Show it on the torus at 48x24, then say that this is exactly what
-          3.8 is about — do not solve it yet.
-        - ENERGY, HONESTLY. Blinn-Phong is not energy-conserving: crank the exponent and
-          the highlight gets tighter without getting brighter, when physically it should.
-          Say so, name the normalisation factor ((n+8)/8pi is the usual one), and hand
-          the debt to Module 6. Same discipline as 3.6's albedo/pi note.
-        - MATERIALS FINALLY STRAIN THE DESIGN. A specular term needs a shininess and a
-          specular colour PER OBJECT, and scene_object has neither. 3.2 predicted the
-          shading enum would strain; 3.6 noted fill_style is the wrong home for lighting;
-          this is where "these parameters travel together and belong to the surface"
-          becomes undeniable. Name it, add the two fields to scene_object, and point at
-          Module 6's material system rather than building it.
-        - VERIFY: (a) the highlight MOVES when the camera moves, and by the predicted
-          amount — the mirror direction is computable; (b) Phong and Blinn agree closely
-          face-on and diverge at grazing incidence, measured as an angle and a pixel
-          count; (c) exponent n and 4n look alike for Blinn vs Phong; (d) per-vertex
-          specular loses the highlight entirely at some orientations — count the frames
-          where the brightest pixel drops below the diffuse maximum; (e) nothing exceeds
-          light + ambient + specular_max.
-      Module 3 then finishes: 3.8 flat vs Gouraud vs per-pixel (where the specular
-      failure above is the motivating case), 3.9 texture mapping + bilinear (replacing
-      checker_at with a real sampler and settling the uv-origin question 3.5 left open),
-      3.10 profiling and the Module 3 capstone.
+next: 3.8 — Flat, Gouraud and Per-Pixel Shading
+      (planned filename: docs/lessons/03-08-shading-models.html — 3.7 links to the index
+      for now, so BOTH of 3.7's next links and its Recap need repointing when it lands)
+      3.7 DID NOT ARGUE FOR THIS LESSON, IT MEASURED IT. Everything in 3.7 §4.7 is a
+      property of WHERE the shading equation is evaluated, not of the equation: the
+      equation is right and we are sampling it in the wrong places. The three tables are
+      the whole motivation and they are already published — reuse the numbers, do not
+      re-derive them.
+        - THE TWO AXES HAVE BEEN TANGLED SINCE 3.6 AND THIS IS WHERE THEY SEPARATE.
+          WHERE THE NORMAL COMES FROM (per-face vs per-vertex, a property of the MESH
+          and its splits) is independent of WHERE THE EQUATION IS EVALUATED (per-face,
+          per-vertex, per-pixel, a property of the PIPELINE). 3.6's shade_mode enum
+          conflates them and says so in its own comment; 3.8 replaces it with two
+          knobs and the 2x3 grid is the lesson's spine. Note that some cells are
+          degenerate — a face normal evaluated per pixel gives flat shading again —
+          and saying WHICH and WHY is the check that the student has the distinction.
+        - GOURAUD IS A NAME FOR WHAT WE ALREADY DO. Do not introduce it as new
+          machinery: 2.4 built the interpolation, 3.6 fed it lit vertex colours, and
+          that combination IS Gouraud shading (1971). Naming something the student
+          already built is a good moment; it also sets up the honest question of what
+          per-pixel actually costs.
+        - THE COST IS THE POINT OF THE LESSON, NOT AN ASIDE. Per-pixel means the
+          rasterizer must interpolate a NORMAL and call shade() per fragment — the
+          first time raster.cpp has learned that light exists, after THREE lessons of
+          it not needing to (3.5, 3.6, 3.7 all left it untouched; 3.7 §4.7 says so
+          explicitly and predicts this). That is a real structural change: fill_style
+          finally does gain a field, the fill gains a branch, and the vertex/fragment
+          split stops being an observation and becomes code. Measure the cost per
+          frame; it is the honest reason hardware shades per pixel and 1970s software
+          did not.
+        - THE INTERPOLATED NORMAL IS NOT UNIT and must be renormalised per fragment.
+          2.4's header already warns about this ("returns an interpolated NORMAL that
+          is no longer unit length"); this is where the debt is paid. Show what
+          skipping it does — brightness scaled by |n|, worst in the middle of a
+          triangle where the interpolation is furthest from both ends.
+        - PHONG SHADING vs THE PHONG REFLECTION MODEL. Same man, two different things,
+          and students conflate them constantly. 3.7 taught the reflection model; 3.8
+          teaches the shading (interpolation) scheme. Say it in a callout, once,
+          plainly — and note that we use PHONG SHADING with the BLINN-PHONG REFLECTION
+          MODEL, which is the usual modern pairing and sounds contradictory until the
+          two axes are separated.
+        - THE MACH BAND is the artifact Gouraud has and per-pixel does not. Do not
+          hand-wave it: it is a perceptual effect (lateral inhibition) that makes a
+          piecewise-linear intensity ramp show visible edges at the C1 discontinuities
+          — i.e. at the triangle boundaries — even though the numbers are continuous.
+          That is a genuinely interesting "the bug is in the eye, not the buffer"
+          moment and it is worth a figure.
+        - VERIFY: (a) flat vs per-vertex on cube.obj is still 0 px (3.6's result — a
+          faceted mesh is faceted because of the SPLIT), and non-zero on the torus;
+          (b) per-pixel FIXES 3.7's flicker: the 157-of-180 blank frames for cube.obj
+          go to 0, which is the headline; (c) the chord error from 3.7's Table 5 falls
+          to the renormalisation error alone; (d) the per-frame cost, measured, of
+          moving shade() into the fragment loop; (e) with a CONSTANT normal across a
+          triangle, per-vertex and per-pixel must agree bit for bit — the control that
+          proves the difference is interpolation and not a second bug.
+      Module 3 then finishes: 3.9 texture mapping + bilinear (replacing checker_at with
+      a real sampler and settling the uv-origin question 3.5 left open), 3.10 profiling
+      and the Module 3 capstone.
 ```

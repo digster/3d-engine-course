@@ -1125,6 +1125,22 @@ struct scene_object
     /// drawn in one batch with one style — which is itself the honest lesson: two
     /// cull modes means two batches.
     bool closed = true;
+
+    /// How shiny this object is, and what colour its highlight comes out —
+    /// Lesson 3.7.
+    ///
+    /// **Look at what just happened to this struct.** `tint` was enough while a
+    /// surface was one colour; then 3.4 needed `closed`; now 3.7 needs two more
+    /// numbers, and all four describe the same thing — *the surface* — while
+    /// `xform` and `geometry` describe where it is and what shape it is. That is
+    /// two different kinds of data wearing one struct, and the second kind has a
+    /// name: a material. Module 6 gives it one. It is being left visible here
+    /// rather than fixed early, because a material invented before three lessons
+    /// have asked for one is a guess.
+    ///
+    /// Defaults to a black highlight, which is exactly Lesson 3.6's shading — so
+    /// every object that says nothing about shininess looks precisely as it did.
+    engine::specular surface{};
 };
 
 /// The three objects in the world, and why each one is here.
@@ -1483,7 +1499,7 @@ void load_model(model_state& m, model_choice c)
 /// from one authoritative `t` cannot drift, and it is the pattern the engine keeps
 /// (Module 5's transform component stores the *inputs*, never a running matrix).
 int build_scene(scene_object (&out)[k_max_objects], scene_kind kind, spin mode, float t,
-                const floor_geometry& floor, const model_state& model)
+                const floor_geometry& floor, const model_state& model, float shininess)
 {
     const engine::mat3 spinning = build_spin(mode, t);
 
@@ -1522,6 +1538,11 @@ int build_scene(scene_object (&out)[k_max_objects], scene_kind kind, spin mode, 
         out[0].geometry = model.data.view();
         out[0].name = name_of(model.choice);
         out[0].tint = k_amber;
+        // The torus is the one mesh in the demo dense enough for a per-vertex
+        // highlight to look like a highlight at all — 1,225 vertices against the
+        // icosahedron's 12. [L] to the coarser models and watch it fall apart, which
+        // is Lesson 3.8's argument arriving as a picture rather than a claim.
+        out[0].surface = {{0.85f, 0.85f, 0.85f}, shininess};
 
         // The 3.4 debt, paid. `closed` used to be a promise typed next to the
         // geometry; here it is the validator's answer. Note that it takes BOTH
@@ -1542,6 +1563,13 @@ int build_scene(scene_object (&out)[k_max_objects], scene_kind kind, spin mode, 
         out[0].name           = "icosahedron (uniform, spinning)";
         out[0].tint           = k_amber;
         out[0].closed         = true;
+        // A WHITE highlight on an amber body — which is what a plastic looks like,
+        // and not a stylistic choice. A dielectric (plastic, paint, glass, skin)
+        // mirrors light off its clear surface layer without tinting it, so its
+        // highlight is the colour of the LAMP; only the light that gets *inside*
+        // picks up the pigment, and that is the diffuse term. Module 6 gives this a
+        // name and a number (F0 ~ 0.04 for most dielectrics).
+        out[0].surface        = {{0.85f, 0.85f, 0.85f}, shininess};
 
         out[1].xform.scale    = {1.8f, 0.35f, 0.9f};
         out[1].xform.position = {-1.6f, 0.5f, 0.4f};
@@ -1550,6 +1578,12 @@ int build_scene(scene_object (&out)[k_max_objects], scene_kind kind, spin mode, 
         out[1].name           = "slab   (non-uniform, spinning)";
         out[1].tint           = k_teal;
         out[1].closed         = true;
+        // A TINTED highlight, and the contrast with the icosahedron is the point: a
+        // METAL colours what it reflects, because it has no clear layer over a
+        // pigmented interior — a metal is reflection all the way down. Gold is
+        // yellow in its highlight, copper orange. Compare the two objects under a
+        // white light and the difference is unmistakable.
+        out[1].surface        = {{0.30f, 0.72f, 0.66f}, shininess};
 
         out[2].xform.scale    = {1.2f, 0.25f, 1.2f};
         out[2].xform.position = {1.4f, 0.125f, 0.9f};
@@ -1558,6 +1592,10 @@ int build_scene(scene_object (&out)[k_max_objects], scene_kind kind, spin mode, 
         out[2].name           = "plinth (non-uniform, still)";
         out[2].tint           = k_violet;
         out[2].closed         = true;
+        // THE CONTROL. No highlight at all, so [H] and [E] must not change one pixel
+        // of it. Two of three objects were controls for the composition order in 2.8
+        // and for the normal matrix in 3.6; the habit is worth keeping.
+        out[2].surface        = {};
         return 3;
     }
 
@@ -1836,6 +1874,50 @@ enum class shade_mode
     return shade_mode::palette;
 }
 
+// ---------------------------------------------------------------------------
+// Lesson 3.7 — the highlight
+// ---------------------------------------------------------------------------
+
+[[nodiscard]] const char* name_of(engine::specular_model m)
+{
+    switch (m)
+    {
+    case engine::specular_model::none:  return "none (3.6, diffuse only)";
+    case engine::specular_model::phong: return "PHONG   dot(R,v)^p";
+    case engine::specular_model::blinn: return "BLINN   dot(n,h)^p";
+    }
+    return "?";
+}
+
+[[nodiscard]] engine::specular_model next_specular(engine::specular_model m)
+{
+    switch (m)
+    {
+    case engine::specular_model::none:  return engine::specular_model::phong;
+    case engine::specular_model::phong: return engine::specular_model::blinn;
+    case engine::specular_model::blinn: return engine::specular_model::none;
+    }
+    return engine::specular_model::none;
+}
+
+/// The exponent that makes the *other* model look about as tight as this one.
+///
+/// Lesson 3.7 §3.4: the halfway vector moves at half the rate the mirror direction
+/// does, so `dot(n,h)` falls off half as fast as `dot(R,v)` and needs roughly four
+/// times the exponent to match. Measured by fitting: 4.38x at p=4, converging to
+/// 4.01x by p=128.
+///
+/// This exists so the demo's Phong-vs-Blinn pixel count means something. Comparing
+/// them at the SAME exponent mostly measures that one lobe is wider than the other,
+/// which is not interesting; comparing them at the same visual tightness measures
+/// the thing that actually differs — the SHAPE of the tail, and the cut-off.
+[[nodiscard]] float matched_shininess(engine::specular_model from, float shininess)
+{
+    if (from == engine::specular_model::phong) { return shininess * 4.0f; }   // -> blinn
+    if (from == engine::specular_model::blinn) { return shininess * 0.25f; }  // -> phong
+    return shininess;
+}
+
 /// What this frame's normals did, for the HUD.
 struct normal_stats
 {
@@ -1962,6 +2044,24 @@ struct projection_scratch
     /// does not depend on where you are standing. (Specular does — Lesson 3.7.)
     std::vector<engine::vec3> world_normal;
     std::vector<Uint32> vertex_colour;
+
+    /// Lesson 3.7. The per-vertex WORLD positions.
+    ///
+    /// **Lambert never needed these, and specular does.** A directional light *is* a
+    /// direction, and Lambert asks only for the angle between two directions — so
+    /// through 3.6 this function could compose `view_from_world * world_from_model`
+    /// once and send each vertex straight into view space, never forming a world
+    /// position at all. A highlight has to know where the *eye* is relative to *this
+    /// point*, which is a question about places rather than directions, so the world
+    /// position now has to exist.
+    ///
+    /// It costs a second matrix multiply per vertex — model to world, then world to
+    /// view, rather than one combined hop. That is the honest price of view
+    /// dependence, and it is worth noticing that there is a price at all. (The usual
+    /// dodge is to transform the *eye* into model space once per object and shade
+    /// there, trading one matrix inverse per object against one multiply per vertex;
+    /// Exercise 3.7.4 works it out.)
+    std::vector<engine::vec3> world_pos;
 };
 
 /// What the near plane did to this frame's geometry. Purely for the HUD.
@@ -2005,7 +2105,8 @@ void collect_triangles(std::vector<raster_triangle>& out, projection_scratch& sc
                        const engine::mat4& view_from_world,
                        const projector& pr, trs_order order, clip_stats& stats,
                        cull_choice cull, shade_mode shading, const engine::lighting& lights,
-                       bool correct_normals, normal_stats* normals_out)
+                       bool correct_normals, normal_stats* normals_out,
+                       engine::vec3 eye_world, engine::specular_model spec_model)
 {
     out.clear();
     stats = {};
@@ -2013,8 +2114,13 @@ void collect_triangles(std::vector<raster_triangle>& out, projection_scratch& sc
 
     for (int i = 0; i < count; ++i)
     {
+        // Only the model matrix now. `view_from_model = view_from_world *
+        // world_from_model` used to be composed right here, and Lesson 3.7 deleted
+        // it: the shading needs each vertex's WORLD position, so the two hops have
+        // to be taken separately and there is nothing left for the composed matrix
+        // to do. The composition was a real optimisation; view-dependent shading is
+        // what bought it out.
         const engine::mat4 world_from_model = model_matrix(objects[i].xform, order);
-        const engine::mat4 view_from_model = view_from_world * world_from_model;
 
         // ---- Lesson 3.6: the matrix that transforms NORMALS ----------------
         //
@@ -2038,21 +2144,30 @@ void collect_triangles(std::vector<raster_triangle>& out, projection_scratch& sc
         std::vector<engine::vec4>& clip_pos = scratch.clip_pos;
         std::vector<engine::vec3>& world_normal = scratch.world_normal;
         std::vector<Uint32>& vertex_colour = scratch.vertex_colour;
+        std::vector<engine::vec3>& world_pos = scratch.world_pos;
         view_pos.clear();
         clip_pos.clear();
         world_normal.clear();
         vertex_colour.clear();
+        world_pos.clear();
         view_pos.reserve(vertex_count);
         clip_pos.reserve(vertex_count);
         world_normal.reserve(vertex_count);
         vertex_colour.reserve(vertex_count);
+        world_pos.reserve(vertex_count);
 
         const bool per_vertex_light = (shading == shade_mode::smooth);
 
         for (std::size_t v = 0; v < vertex_count; ++v)
         {
-            view_pos.push_back(engine::xyz(view_from_model
-                                         * engine::point(objects[i].geometry.vertices[v])));
+            // Lesson 3.7 split this hop in two. It used to be one multiply by the
+            // composed `view_from_model`; a highlight needs the world POSITION, so
+            // the composition has to be taken apart. Same destination, one more
+            // matrix multiply per vertex, and the extra multiply is what view
+            // dependence costs.
+            world_pos.push_back(engine::xyz(world_from_model
+                                          * engine::point(objects[i].geometry.vertices[v])));
+            view_pos.push_back(engine::xyz(view_from_world * engine::point(world_pos.back())));
             clip_pos.push_back(to_clip(view_pos.back(), pr.proj));
 
             // The authored normal, carried into world space. `normal_at` returns
@@ -2065,7 +2180,9 @@ void collect_triangles(std::vector<raster_triangle>& out, projection_scratch& sc
             if (per_vertex_light)
             {
                 vertex_colour.push_back(
-                    engine::shade_encoded(objects[i].tint, world_normal.back(), lights));
+                    engine::shade_encoded(objects[i].tint, world_normal.back(),
+                                          eye_world - world_pos.back(), lights,
+                                          objects[i].surface, spec_model));
             }
             else
             {
@@ -2136,7 +2253,17 @@ void collect_triangles(std::vector<raster_triangle>& out, projection_scratch& sc
                 // ONE normal for the whole triangle, so all three corners get the
                 // same colour and the fill interpolates between three equal
                 // values — which is a flat face, at no extra cost.
-                const Uint32 lit = engine::shade_encoded(objects[i].tint, face_world, lights);
+                //
+                // Lesson 3.7 has to say WHERE that one sample is taken, because the
+                // specular term varies across the face even when the normal does
+                // not. The centroid: a flat-shaded triangle is one sample of the
+                // surface, and the centre is the only point that does not privilege
+                // a corner.
+                const engine::vec3 centroid =
+                    (world_pos[a] + world_pos[b] + world_pos[c]) / 3.0f;
+                const Uint32 lit = engine::shade_encoded(objects[i].tint, face_world,
+                                                         eye_world - centroid, lights,
+                                                         objects[i].surface, spec_model);
                 colour_a = colour_b = colour_c = lit;
                 break;
             }
@@ -2146,7 +2273,9 @@ void collect_triangles(std::vector<raster_triangle>& out, projection_scratch& sc
                 const auto pick = [&](std::size_t vi) -> Uint32 {
                     if (world_normal[vi] != engine::vec3{}) { return vertex_colour[vi]; }
                     ++nstats.fell_back;
-                    return engine::shade_encoded(objects[i].tint, face_world, lights);
+                    return engine::shade_encoded(objects[i].tint, face_world,
+                                                 eye_world - world_pos[vi], lights,
+                                                 objects[i].surface, spec_model);
                 };
                 colour_a = pick(a);
                 colour_b = pick(b);
@@ -2396,6 +2525,39 @@ struct depth_range { float lo = 1.0f; float hi = 0.0f; };
         }
     }
     return differ;
+}
+
+/// The brightest single channel anywhere in the viewport, 0..255.
+///
+/// Lesson 3.7's cheapest honest instrument. A highlight is by definition the
+/// brightest thing on a surface, so one number tracks it: watch it climb as the
+/// camera swings into the mirror direction, and — on a coarse mesh — watch it
+/// COLLAPSE as the object turns and the peak falls between vertices. Reading the
+/// maximum rather than a named pixel means the measurement does not have to know
+/// where the highlight went, which is exactly the thing under investigation.
+///
+/// The value is an *encoded* channel (Lesson 1.6), because that is what the screen
+/// shows and what the reader can compare against the picture.
+[[nodiscard]] int brightest_channel(const engine::framebuffer& fb, const engine::viewport& vp)
+{
+    const int x0 = std::max(0, static_cast<int>(vp.x));
+    const int y0 = std::max(0, static_cast<int>(vp.y));
+    const int x1 = std::min(fb.width(), static_cast<int>(vp.x + vp.w));
+    const int y1 = std::min(fb.height(), static_cast<int>(vp.y + vp.h));
+
+    int peak = 0;
+    for (int y = y0; y < y1; ++y)
+    {
+        const Uint32* const row = fb.row(y);
+        for (int x = x0; x < x1; ++x)
+        {
+            const Uint32 c = row[x];
+            peak = std::max(peak, static_cast<int>(engine::red_of(c)));
+            peak = std::max(peak, static_cast<int>(engine::green_of(c)));
+            peak = std::max(peak, static_cast<int>(engine::blue_of(c)));
+        }
+    }
+    return peak;
 }
 
 // ---------------------------------------------------------------------------
@@ -2954,6 +3116,19 @@ int main(int argc, char* argv[])
     constexpr float k_light_elevation = 0.70f;     ///< ~40 degrees above the horizon
     engine::lighting lights;
 
+    // ---- Lesson 3.7 --------------------------------------------------------
+    engine::specular_model spec_model = engine::specular_model::blinn;   ///< [H]
+    int shininess_step = 4;                        ///< [E] indexes k_shininess below
+    int model_wrong = 0;                           ///< px Phong and Blinn disagree about
+    int spec_peak = 0;                             ///< brightest pixel in the viewport, 0..255
+
+    /// The exponents [E] cycles through. Powers of two, because that is how the
+    /// parameter behaves: each step roughly halves the width of the highlight, so a
+    /// linear slider would spend most of its travel on differences you cannot see.
+    /// 2 is a damp, broad sheen; 32 a polished plastic; 256 close to a mirror.
+    constexpr float k_shininess[] = {2.0f, 4.0f, 8.0f, 16.0f, 32.0f, 64.0f, 128.0f, 256.0f};
+    constexpr int k_shininess_count = static_cast<int>(std::size(k_shininess));
+
     // The control mesh, built once. `assets/torus.obj` was written from exactly this
     // call, so "loaded == generated" is a real end-to-end check of writer and reader
     // together — and it is a claim the demo re-tests on every frame it is shown.
@@ -3002,8 +3177,9 @@ int main(int argc, char* argv[])
     SDL_Log("  [L] load a model: torus.obj / cube.obj / twisted.obj / quirks.obj / generated");
     SDL_Log("  [G] shading: debug palette / Lambert flat / Lambert per-vertex");
     SDL_Log("  [J] normal matrix: inverse-transpose (correct) vs the naive model matrix");
-    SDL_Log("  [A]/[D] swing the light. Note the camera does NOT change the shading - Lambert");
-    SDL_Log("          is view-independent; 3.7's specular will be the first term that is not.");
+    SDL_Log("  [A]/[D] swing the light. With [H] off the camera does NOT change the shading -");
+    SDL_Log("          Lambert is view-independent. Turn [H] on and orbiting moves the highlight.");
+    SDL_Log("  [H] specular: none / Phong / Blinn-Phong   [E] shininess exponent");
     SDL_Log("  [arrows] orbit  [-]/[=] dolly  [P] persp/ortho  [O] model order  [X] object");
     SDL_Log("  [Z] rotation axis  [,] [.] t  [Space] spin  [W]/[N] the 2.7 w bugs");
     SDL_Log("[Tab] cycles demos: scene (2.6-3.3) -> basis (2.5) -> triangles -> lines -> Pong");
@@ -3089,6 +3265,11 @@ int main(int argc, char* argv[])
             if (in.key_pressed(SDL_SCANCODE_U)) { culling = next_cull(culling); }
             if (in.key_pressed(SDL_SCANCODE_G)) { shading = next_shade(shading); }
             if (in.key_pressed(SDL_SCANCODE_J)) { correct_normals = !correct_normals; }
+            if (in.key_pressed(SDL_SCANCODE_H)) { spec_model = next_specular(spec_model); }
+            if (in.key_pressed(SDL_SCANCODE_E))
+            {
+                shininess_step = (shininess_step + 1) % k_shininess_count;
+            }
             if (in.key_pressed(SDL_SCANCODE_L))
             {
                 // A real load, on a keypress, every time — not a cache lookup. It
@@ -3194,7 +3375,8 @@ int main(int argc, char* argv[])
 
             cube_m = build_spin(cube_mode, cube_t);
             build_floor(floor, floor_cells);
-            scene_count = build_scene(scene, scene_mode, cube_mode, cube_t, floor, model);
+            scene_count = build_scene(scene, scene_mode, cube_mode, cube_t, floor, model,
+                                      k_shininess[shininess_step]);
             if (selected >= scene_count) { selected = 0; }
 
             // The view matrix (2.9) and the projection matrix (2.10). The
@@ -3202,6 +3384,15 @@ int main(int argc, char* argv[])
             // the toggle isolates exactly what perspective changes.
             view_from_world = cam.view();
             const engine::mat4& proj = use_perspective ? scene_perspective : scene_orthographic;
+
+            // Lesson 3.7. The eye's WORLD position, which the shading now needs.
+            //
+            // Note that it is available *only* as an input to `look_at` — the view
+            // matrix contains it, but recovering it means an inverse, whereas the
+            // camera has been asked for it directly since 2.9. The general lesson is
+            // worth keeping: when a transform is built from meaningful inputs, keep
+            // the inputs. Module 5's camera stores a `transform` for this reason.
+            const engine::vec3 eye_world = cam.eye();
 
             // The floor needs the whole frame; everything else keeps the inset
             // rectangle it has had since Lesson 2.10, with the HUD beside it.
@@ -3243,6 +3434,8 @@ int main(int argc, char* argv[])
                 cull_wrong = 0;
                 normal_wrong = 0;
                 roundtrip_wrong = 0;
+                model_wrong = 0;
+                spec_peak = 0;
                 shown_depth = {};
                 scene_clip = {};
                 scene_cull = {};
@@ -3255,7 +3448,8 @@ int main(int argc, char* argv[])
                 // makes the pixel-for-pixel comparison honest.
                 collect_triangles(scene_tris, scratch, scene, scene_count,
                                   view_from_world, pr, order, scene_clip, culling,
-                                  shading, lights, correct_normals, &scene_normals);
+                                  shading, lights, correct_normals, &scene_normals,
+                                  eye_world, spec_model);
 
                 const bool want_painter = (hs == hidden_surface::painter);
                 const bool checkered = (scene_mode == scene_kind::floor);
@@ -3302,7 +3496,7 @@ int main(int argc, char* argv[])
                         collect_triangles(compare_tris, scratch, scene, scene_count,
                                           view_from_world, pr, order, ignored,
                                           cull_choice::none, shading, lights,
-                                          correct_normals, nullptr);
+                                          correct_normals, nullptr, eye_world, spec_model);
                         draw_triangles(scratch_fb, want_painter ? nullptr : &scratch_depth,
                                        compare_tris, want_painter, unculled);
                     }
@@ -3335,7 +3529,8 @@ int main(int argc, char* argv[])
                     clip_stats ignored;
                     collect_triangles(compare_tris, scratch, &control, 1,
                                       view_from_world, pr, order, ignored, culling,
-                                      shading, lights, correct_normals, nullptr);
+                                      shading, lights, correct_normals, nullptr,
+                                      eye_world, spec_model);
 
                     scratch_fb.clear(k_bg);
                     draw_world(scratch_fb, view_from_world, pr);
@@ -3364,7 +3559,8 @@ int main(int argc, char* argv[])
                     clip_stats ignored;
                     collect_triangles(compare_tris, scratch, scene, scene_count,
                                       view_from_world, pr, order, ignored, culling,
-                                      shading, lights, !correct_normals, nullptr);
+                                      shading, lights, !correct_normals, nullptr,
+                                      eye_world, spec_model);
 
                     scratch_fb.clear(k_bg);
                     draw_world(scratch_fb, view_from_world, pr);
@@ -3377,6 +3573,56 @@ int main(int argc, char* argv[])
                 {
                     normal_wrong = 0;
                 }
+
+                // ---- Lesson 3.7's own comparison --------------------------
+                // PHONG vs BLINN, AT THE SAME VISUAL TIGHTNESS. Render the scene
+                // again with the other model and count the pixels that differ.
+                //
+                // The exponent is CONVERTED, not held fixed, and that is what makes
+                // the number mean something. `dot(n,h)` falls off at half the rate
+                // of `dot(R,v)` (§3.4), so comparing the two at one exponent mostly
+                // measures that one lobe is wider than the other — which is true,
+                // uninteresting, and swamps the effect under test. Matching the
+                // widths first leaves only the real difference: the shape of the
+                // tail, and Phong's cut-off at grazing angles. Swing the camera and
+                // the light low and watch this count climb.
+                if (spec_model != engine::specular_model::none
+                    && shading != shade_mode::palette)
+                {
+                    scene_object other_scene[k_max_objects];
+                    for (int i = 0; i < scene_count; ++i)
+                    {
+                        other_scene[i] = scene[i];
+                        other_scene[i].surface.shininess =
+                            matched_shininess(spec_model, scene[i].surface.shininess);
+                    }
+
+                    clip_stats ignored;
+                    collect_triangles(compare_tris, scratch, other_scene, scene_count,
+                                      view_from_world, pr, order, ignored, culling,
+                                      shading, lights, correct_normals, nullptr,
+                                      eye_world,
+                                      spec_model == engine::specular_model::blinn
+                                          ? engine::specular_model::phong
+                                          : engine::specular_model::blinn);
+
+                    scratch_fb.clear(k_bg);
+                    draw_world(scratch_fb, view_from_world, pr);
+                    scratch_depth.clear();
+                    draw_triangles(scratch_fb, want_painter ? nullptr : &scratch_depth,
+                                   compare_tris, want_painter, style);
+                    model_wrong = count_differences(fb, scratch_fb, vp);
+                }
+                else
+                {
+                    model_wrong = 0;
+                }
+
+                // The brightest pixel on screen. One number, and on a coarse mesh it
+                // is the whole of Lesson 3.8's argument: spin the icosahedron and
+                // watch it lurch, because the highlight is being sampled at twelve
+                // points and interpolated in between.
+                spec_peak = brightest_channel(fb, vp);
 
                 // ---- The comparison ---------------------------------------
                 // Run the scene a second time with ONE THING CHANGED, over the
@@ -3410,7 +3656,8 @@ int main(int argc, char* argv[])
                     clip_stats reference_clip;
                     collect_triangles(compare_tris, scratch, scene, scene_count,
                                       view_from_world, reference, order, reference_clip,
-                                      culling, shading, lights, correct_normals, nullptr);
+                                      culling, shading, lights, correct_normals, nullptr,
+                                      eye_world, spec_model);
                     draw_triangles(scratch_fb, want_painter ? nullptr : &scratch_depth,
                                    compare_tris, want_painter, style);
                     near_wrong = count_differences(fb, scratch_fb, vp);
@@ -3868,6 +4115,31 @@ int main(int argc, char* argv[])
                         name_of(shading),
                         correct_normals ? "inv-transpose" : "NAIVE M",
                         static_cast<double>(scene_normals.max_tilt), normal_wrong);
+                }
+
+                // ---- Lesson 3.7's readout ---------------------------------
+                // Which model, at what exponent, how far it is from the other one
+                // AT THE SAME TIGHTNESS, and the brightest pixel on screen. That
+                // last number is the one to watch while the object spins.
+                if (hs != hidden_surface::wireframe && lit)
+                {
+                    const bool on = (spec_model != engine::specular_model::none);
+                    SDL_SetRenderDrawColor(renderer, on ? 226 : 150,
+                                                     on ? 206 : 152,
+                                                     on ? 130 : 170, 255);
+                    if (!on)
+                    {
+                        SDL_RenderDebugText(renderer, 6.0f, 306.0f,
+                            "[H] specular OFF - orbit the camera: nothing changes at all");
+                    }
+                    else
+                    {
+                        SDL_RenderDebugTextFormat(renderer, 6.0f, 306.0f,
+                            "[H] %-22s [E] p=%-5.0f vs other %d px   peak %d",
+                            name_of(spec_model),
+                            static_cast<double>(k_shininess[shininess_step]),
+                            model_wrong, spec_peak);
+                    }
                 }
             }
 

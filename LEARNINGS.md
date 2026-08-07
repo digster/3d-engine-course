@@ -2119,3 +2119,103 @@ Codemods, renames, lint-rule rollouts and dependency bumps all have it. The only
 is a checker that enumerates the current tree rather than the changed files — `apply-shared.py
 --check` does exactly that, which is why it found this in one run — and the discipline is to run it
 **after merges**, not only after the edits you remember making.
+
+## Folklore survives because nobody arranges the case that breaks it (Lesson 3.7)
+
+The first draft of this lesson said, in five places including a figure and its `alt` text, that
+Phong's highlight is cut off at grazing angles because **the mirror ray dips below the surface**.
+That is the standard explanation. It is also false, and one line of algebra says so: `R` is `l`
+mirrored about `n`, so `dot(n, R) == dot(n, l)` exactly — if the light is above the surface then
+`R` is above it too, always, without exception.
+
+What is actually happening is sharper and more useful. `cos^p` answers only over the hemisphere
+*around R*, and that is not the *visible* hemisphere. With the light `a` degrees off the normal,
+the visible directions the lobe fails to cover form a wedge exactly `a` degrees wide. So the
+condition is not "grazing" — it is **the light and the eye on the same side of the normal**, which
+on a floor means the sun is behind you.
+
+Two things made the error survive as long as it did:
+
+- **The measurements agreed with it.** Every number in the harness — `dot(R,v) <= 0` for 50.4% of
+  above-surface pairs, 0 of 30,806 lit pixels highlighted at 35° sun elevation — is correct and is
+  *equally* consistent with the wrong explanation. Passing tests confirm the arithmetic, not the
+  story you tell about it.
+- **The experiment was arranged to succeed.** The first plane render put the sun behind the
+  camera, which is the configuration that shows the cut-off. Adding the *other* arrangement — sun
+  ahead, the sunset-on-water case — showed Phong highlighting all 30,806 pixels with no cut-off at
+  all, and that contrast is what forced the re-derivation.
+
+The habit worth keeping: **when you find yourself repeating a phrase you did not derive, derive
+it.** And ship the control that could have embarrassed you; `render_37` §6 now runs both
+arrangements on purpose.
+
+
+## A figure can pass every automated check and still hide the claim (Lesson 3.7)
+
+`check-page.js` reported `pass: true` on a Figure 5 that was useless. It was a polar lobe plot on
+a linear radial scale, and the entire point of the figure — that Blinn still returns 0.063 at 90°
+where Phong returns nothing — was a dot fifteen pixels from the origin, indistinguishable from the
+dot for 0.004. No label overlapped, nothing spilled the viewBox, and the geometry was exactly
+right.
+
+The fix was to change what was plotted, not where the labels went: value against angle, on
+Cartesian axes, where 0.063 is 6% of the height and plainly visible. The polar view still earns
+its place in Figure 1, where the question is the *shape* of the spray rather than the size of the
+tail.
+
+Generalisable: a collision checker verifies that a figure is *legible*. Whether it is *informative*
+is a question about the mapping from data to ink, and the test is to state the figure's one claim
+in a sentence and ask whether a reader could extract it by measuring the picture. Lesson 3.6
+learned to compute a figure's coordinates rather than place them by eye; 3.7 adds that computing
+them correctly is not sufficient.
+
+Two smaller instances of the same thing in the same lesson, both invisible to the checker:
+
+- The lobe in Figure 1 and in the interactive widget was drawn **below the surface line**, because
+  `cos^p` is defined there. The function is; the surface is not. Both are now clipped at the
+  horizon.
+- The widget's default exponent was `p = 8`, at which *both* models read 0 in the cut-off region —
+  so the widget's own caption ("watch Phong go to zero while Blinn does not") was refuted by
+  dragging it. The default is now `p = 2`, and the caption explains that the difference between
+  the models is a *rough-surface* difference.
+
+
+## A fast path can be bought out by a feature, and it is worth naming when it happens (Lesson 3.7)
+
+Through 3.6, `collect_triangles` composed `view_from_world * world_from_model` once per object and
+sent each vertex straight to view space — one matrix multiply instead of two. That optimisation
+was available *because* the shading was view-independent: a directional light is a direction,
+Lambert compares two directions, and no world position was ever needed.
+
+A highlight needs `eye - position`, which is a question about places. So the composition comes
+apart and every vertex pays a second multiply.
+
+Nothing went wrong here. But the instinct to record is that **an optimisation is usually a
+simplifying assumption with a name**, and features cash those assumptions in. Being able to say
+which of your fast paths depend on which of your assumptions is most of what performance work
+actually is — and it is why "why is this slower than last month?" is so often answered by a
+feature that nobody connected to the loop it slowed down.
+
+
+## Passing tests do not mean the test measured the right thing (Lesson 3.7)
+
+Three of this lesson's checks passed on the first run while measuring something other than what
+they claimed:
+
+- **The per-vertex peak on a 48×24 torus.** The claim was "per-vertex evaluation misses the
+  highlight". The measurement found 99.6% of the true peak and looked like a refutation. It was
+  the wrong measurement: with 1,225 vertices some vertex almost always lands near the peak. The
+  real defect is the **chord error** *between* vertices (up to 0.722 of full strength at shininess
+  128, on 87.8% of the lit area) and the **flicker** on coarse meshes (`cube.obj`: no highlight at
+  all in 157 of 180 frames). Same claim, three different instruments, only two of them sensitive.
+- **The grazing comparison on a torus.** A torus presents every incidence angle at once, so
+  "lower the sun" changes nothing that was not already happening somewhere on the surface. The
+  experiment needs a *plane*, where the incidence angle is the sun's elevation.
+- **The `n·l` leak.** The first version parked the eye exactly on the mirror ray and swept the
+  light past the terminator, which drives `dot(n,h)` to −1 and returns 0 for the right reason
+  rather than the one under test. The geometry that exposes it is a fixed light and eye on
+  opposite sides with the *normal* sweeping between them.
+
+The pattern in all three: **the test was sensitive to something adjacent to the claim.** Before
+trusting a green check, ask what result would have falsified it — and if you cannot construct one,
+the test is decorative.

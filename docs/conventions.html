@@ -1169,8 +1169,9 @@
   <h2 id="lighting"><span class="num">7c</span>Lighting</h2>
 
   <p>
-    Settled in Lesson 3.6, and binding for every shading term the course adds after it &mdash;
-    Blinn-Phong in 3.7, the microfacet BRDF in Module 6. The model grows; these rules do not.
+    Settled in Lesson 3.6, extended in 3.7, and binding for every shading term the course adds
+    after them &mdash; the microfacet BRDF in Module 6 included. The model grows; these rules do
+    not.
   </p>
 
   <div class="tbl-scroll">
@@ -1218,6 +1219,71 @@
             <td><code>fill_style</code> is fragment state. Lighting produces a vertex colour and
                 the rasterizer interpolates it, which is the vertex/fragment split arriving on
                 its own &mdash; Module 4 makes it literal.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Specular &mdash; Lesson 3.7</h3>
+
+  <p>
+    The first view-dependent term in the course. Everything above 3.7 could be evaluated without
+    knowing where the viewer was standing; a highlight cannot, and that changes the shape of the
+    vertex pipeline as well as the arithmetic.
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>Rule</th><th>Value</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td>Default model</td><td><strong>Blinn-Phong</strong>, <code>dot(n, h)<sup>p</sup></code></td>
+            <td>Phong is kept behind a key so it can be watched failing, but it is not the
+                default. Blinn&rsquo;s question is about the <em>surface</em> rather than about a
+                reflected ray, and that is the question Module 6 answers properly.</td></tr>
+        <tr><td>Mirror direction</td><td><code>2(n&middot;l)n &minus; l</code>, and it is
+                <code>&minus;reflect(l, n)</code></td>
+            <td>Same operation as Lesson 1.8&rsquo;s bounce with the arrow reversed: a velocity
+                points <em>into</em> a surface, a light direction points <em>out</em> of it. Both
+                names exist so neither caller has to remember the other&rsquo;s convention.</td></tr>
+        <tr><td>Halfway vector</td><td><code>normalise(l + v)</code>, zero when <code>v = &minus;l</code></td>
+            <td>Exactly the normal that would send <code>l</code> into <code>v</code> &mdash;
+                derived, not approximated. The zero fallback makes the impossible configuration
+                return no highlight instead of a maximal one.</td></tr>
+        <tr><td>Exponents</td><td><strong>not interchangeable</strong>: Blinn &asymp; 4&times; Phong</td>
+            <td><code>&beta; = &alpha;/2</code> exactly, so <code>dot(n,h)</code> falls off half
+                as fast. A <em>near-peak</em> match: measured 4.38&times; at <code>p = 4</code>,
+                4.01&times; at <code>p = 128</code>. Any comparison between the two models must
+                convert first or it is measuring lobe width.</td></tr>
+        <tr><td>The cut-off</td><td>Phong returns 0 when <code>|a + b| &ge; 90&deg;</code></td>
+            <td>The light and the eye on the <strong>same side</strong> of the normal &mdash; on a
+                floor, the sun behind you. <strong>Not</strong> &ldquo;the mirror ray dips below
+                the surface&rdquo;: <code>R</code> is the same angle from the normal as
+                <code>l</code>, so it never does. The lobe covers the hemisphere around
+                <code>R</code>, which is not the visible hemisphere. Measured on a plane: at 35&deg;
+                sun elevation Phong highlights 0 of 30,806 lit pixels and Blinn all of them.</td></tr>
+        <tr><td>The incoming cosine</td><td><code>n&middot;l</code> multiplies
+                <strong>both</strong> terms</td>
+            <td>The cosine law is about how much light <em>arrives</em> and says nothing about
+                what the surface does with it. Omitting it (classic Phong) puts 0.608 of full
+                strength onto geometry the light cannot reach. It also makes the
+                &ldquo;zero the specular past the terminator&rdquo; guard unnecessary.</td></tr>
+        <tr><td>Specular colour</td><td>a <strong>ratio</strong>, and <em>not</em> the albedo</td>
+            <td>A dielectric mirrors light off a clear outer layer without tinting it, so its
+                highlight is the colour of the lamp; a metal has no such layer and tints what it
+                reflects. Module 6 names this <code>F<sub>0</sub></code>.</td></tr>
+        <tr><td>Ambient</td><td>gets <strong>no</strong> specular</td>
+            <td>Ambient has no direction, so there is no mirror direction it could have come
+                from. A reflection of the whole environment is image-based lighting, Module 6.</td></tr>
+        <tr><td>Energy</td><td><strong>not conserved</strong>, and knowingly so</td>
+            <td>Doubling the exponent halves the reflected light (&times;0.515 from 32 to 64)
+                while the peak stays at 1.0 &mdash; backwards, since a smoother surface should
+                concentrate the same light. <code>(m+8)/8&pi;</code> is the usual normalisation
+                and needs HDR to be usable (10.5&times; at <code>m = 256</code>), so it waits for
+                Module 6.</td></tr>
+        <tr><td>Surface parameters</td><td><code>specular{colour, shininess}</code>, defaulting to
+                <strong>black</strong></td>
+            <td>Black means no highlight, so a default <code>specular</code> reproduces Lesson
+                3.6 bit for bit (verified: 0 of 100,000 random configurations differ). These two
+                fields are the first two fields of a material; Module 6 builds the rest.</td></tr>
       </tbody>
     </table>
   </div>
