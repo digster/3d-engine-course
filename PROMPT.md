@@ -1107,3 +1107,50 @@ and interpolating those has been the fill's job since 2.4. What *did* change is 
 composed `view_from_model` is gone, because a highlight needs a world *position* and the two hops
 have to come apart. That optimisation existed because the shading was view-independent; a feature
 bought it out.
+
+
+## 2026-08-08 — Lesson 3.8
+
+> next
+
+`next: 3.8 — Flat, Gouraud and Per-Pixel Shading`. Lesson 3.7 did not argue for this lesson, it
+measured it: three tables of a highlight flickering, vanishing and arriving in the wrong shape,
+none of which was a defect in the shading equation.
+
+### The split
+
+Lesson 3.6's `shade_mode { palette, flat, smooth }` could not be extended, and the reason was not
+a missing value — it was holding two independent questions whose combinations form a grid. Where
+a normal comes from is a property of the mesh; where the equation is evaluated is a property of
+the pipeline. Two enums, six cells, and the cells have predictable behaviour a list could never
+have expressed.
+
+### Three predictions the harness overturned
+
+- **`face × gouraud` is not unconditionally degenerate.** With a face normal the normal is
+  constant, so all three evaluation points agree — but only while the shading is
+  view-independent, and 3.7 ended that. Measured: 761 differing pixels with the highlight on. The
+  corrected rule is *shorter* than the wrong one.
+- **Per-pixel does not fix `cube.obj`.** The plan said 157 blank frames out of 180 would go to
+  zero. They went to 157. Per-pixel fixes an interpolation error; a cube has six normals and no
+  evaluation point invents a seventh. The 12×8 torus, which has smooth normals, went 58 → 0. That
+  contrast is a better lesson than the one I planned, and it is the strongest argument for having
+  two axes.
+- **Per-pixel is cheaper than Gouraud below three pixels per triangle.** 0.91× at 320×180, rising
+  to 2.15× at 4K. The folklore's unstated assumption is that a triangle covers many pixels; ours
+  covers 2.8, so there are more vertices than covered pixels.
+
+### The engine change
+
+First change to `raster.cpp`'s inner loop since 3.2. `vertex` gained two varyings and stopped
+being just a position; the clipper had to learn to carry them; `raster.hpp` now includes
+`light.hpp`, which is a real layering violation shipped on purpose and written down, because the
+clean fix is a caller-supplied fragment function and that is Module 4's answer.
+
+### A figure that refuted its own caption
+
+Figure 4 was captioned "continuous but not smooth", plotted correctly, and passed `check-page.js`
+— and the Gouraud chord hugged the true curve so closely that it appeared to show the opposite.
+The content was in the derivative. Adding a slope panel underneath made it immediate: the true
+slope is a curve, Gouraud's is a staircase. Second lesson running where a figure passed every
+automated check while hiding its claim.

@@ -2219,3 +2219,108 @@ they claimed:
 The pattern in all three: **the test was sensitive to something adjacent to the claim.** Before
 trusting a green check, ask what result would have falsified it — and if you cannot construct one,
 the test is decorative.
+
+
+## A knob that will not extend is usually two knobs (Lesson 3.8)
+
+Lesson 3.6 shipped `shade_mode { palette, flat, smooth }` and could not add `per_pixel` to it.
+The instinct is to blame the missing value. The actual problem was that the enum held **two
+independent questions** — where the normal comes from, and where the shading equation is
+evaluated — and their combinations form a *grid*, which a list cannot represent.
+
+The tell was there in the code and was even written down. 3.6's own doc comment said
+"interpolating the *colour* across a triangle and interpolating the *normal* and shading each
+pixel are different things". A comment explaining why a type cannot express something is a
+comment describing a type that is the wrong shape.
+
+The generalisable version: **when a new case will not fit an enum, check whether the enum is
+enumerating one thing.** If two of its values differ in more than one respect, they are a
+product and not a sum. Splitting them is nearly always cheaper than it looks — here it also made
+three previously-invisible facts checkable, because a grid has cells you can predict and a list
+does not.
+
+
+## Predict, then measure — and write the prediction down where it can be wrong (Lesson 3.8)
+
+`verify_38` §A computes, for each of six cells, whether it *should* differ from per-pixel, and
+then measures. Writing the prediction as code rather than as a comment caught a real error within
+one run: I had claimed `face × gouraud` was degenerate unconditionally, and the harness found
+**761 differing pixels**.
+
+The reasoning that was wrong is worth keeping, because it was nearly right. With a face normal
+the normal is constant across the triangle, so the shading is constant, so all three evaluation
+points agree. True — while the shading depends only on the normal. Lesson 3.7 added a term that
+depends on the *position*, which varies across a face even when the normal does not, and the
+argument silently stopped holding one lesson earlier.
+
+Two habits come out of this:
+
+- **A degeneracy is a theorem with hypotheses.** When you assert that two configurations produce
+  identical output, list what the output depends on and check each item — rather than checking
+  the one that motivated the claim.
+- **The corrected rule was shorter than the wrong one.** `if (gouraud) return true;` became a
+  single condition covering both cells. A rule with a special case carved into it is often a rule
+  stated at the wrong level, and simplifying it is a signal you have found the right one.
+
+
+## The folklore about shading cost has a precondition nobody states (Lesson 3.8)
+
+"Per-vertex shading is cheaper than per-pixel" is universal, and at the sizes this engine renders
+it is **false**. Measured on one mesh with the resolution swept:
+
+| px / triangle | per-pixel ÷ Gouraud |
+|---|---|
+| 2.8 (320×180) | **0.91×** — cheaper |
+| 11.0 | 1.41× |
+| 44.1 | 1.84× |
+| 396.9 (4K) | 2.15× |
+
+The argument behind the folklore is sound: a mesh has fewer vertices than covered pixels, so
+per-vertex is fewer calls. The unstated assumption is that a triangle covers *many* pixels. Our
+torus has 2,304 triangles covering 6,346 pixels — 6,912 vertex shading calls against 6,346
+fragment ones — and the comparison inverts.
+
+Three things worth keeping:
+
+- **The asymptote is the number to quote** (2.15×), not any single measurement. A ratio taken at
+  one resolution is a ratio taken at one point on a curve.
+- **Always report the px/triangle ratio with a shading timing.** Without it the number is not
+  reproducible and not transferable, which makes it not a measurement.
+- Modern content lives near the crossover: a 50k-triangle character on a quarter of a 1080p
+  screen averages about ten pixels per triangle. This is why GPUs shade in 2×2 quads and why
+  "too many small triangles" is a named performance problem.
+
+
+## Fixing the wrong axis fixes nothing, however hard you push (Lesson 3.8)
+
+The plan for this lesson predicted that per-pixel shading would take `cube.obj` from 157 blank
+frames out of 180 to zero. It took it to **157**. The 12×8 torus went 58 → 0.
+
+Per-pixel shading fixes an *interpolation* error. A cube has six normals, and whether any of them
+points near the halfway vector is settled by the geometry before shading begins — so evaluating
+the equation ten thousand times instead of twenty-four changes nothing, because all ten thousand
+evaluations get the same normal.
+
+This is the same lesson 3.6 learned from the other direction ("a faceted mesh is faceted because
+of the split, not the shading model"), and it is the strongest argument for having separated the
+two axes at all: **each fixes a class of defect the other cannot touch.** When a fix does not
+work, the first question is not "did I implement it correctly" but "is this the axis the defect
+lives on".
+
+
+## A figure can be geometrically perfect and still refute its own caption (Lesson 3.8)
+
+Figure 4 was captioned "continuous but not smooth" and plotted the brightness across six facets
+under Gouraud against the true curve. Both were computed correctly. `check-page.js` passed. And
+the dashed line hugged the true curve so closely that the figure appeared to show the two were
+*the same* — the exact opposite of the point.
+
+The content was in the derivative, not the value. Adding a second panel underneath, plotting the
+slope of each, made it immediate: the true slope is a smooth curve, Gouraud's is a staircase that
+jumps at every knot. Same data, same claim, and now the reader can see it.
+
+This is the second time in two lessons that a figure passed every automated check while hiding
+its claim (3.7's Figure 5 buried a tail on a linear radial scale). The rule that has emerged:
+**state the figure's one claim in a sentence, then ask whether a reader could extract that exact
+sentence by measuring the picture.** If the claim is about a rate of change, plot the rate of
+change.

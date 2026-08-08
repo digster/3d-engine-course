@@ -1811,6 +1811,24 @@ struct raster_triangle
     /// test needs no storage at all — it is the sign of an area the rasterizer
     /// already computes, which is most of the argument for using it.
     bool front_by_forward = false;
+
+    /// The surface parameters this triangle should be shaded with — Lesson 3.8.
+    ///
+    /// **This field is a cheat, and the cheat is instructive.** Under per-pixel
+    /// shading the material is read inside the fragment loop, so it has to be
+    /// available per triangle; a GPU cannot do that, because a material is
+    /// pipeline state and changing it means ending the draw call and starting
+    /// another. Real renderers therefore **batch by material**, and a scene with
+    /// three materials is three draws.
+    ///
+    /// A software rasterizer can just carry the pointer along, and this one does,
+    /// because splitting the demo's single pass into per-object draws would break
+    /// the painter's-algorithm comparison that has run since 3.1 (that one needs a
+    /// sort ACROSS objects). It is named here rather than hidden: the moment this
+    /// engine reaches Module 4, this field stops being possible. That is the same
+    /// pressure 3.4 found with cull modes and 3.7 found with `specular`, arriving
+    /// for the third time and from a new direction.
+    engine::specular surface{};
 };
 
 /// Per-face brightness, so adjacent faces of a solid can be told apart.
@@ -1838,40 +1856,126 @@ struct raster_triangle
 // Lesson 3.6 — normals, and light that is actually light
 // ---------------------------------------------------------------------------
 
-/// Where the surface normal used for shading comes from. [G] cycles.
-///
-/// Note what is NOT in this enum: "per-pixel". Interpolating the *colour* across a
-/// triangle (which is what `smooth` does, via Lesson 2.4's machinery) and
-/// interpolating the *normal* and shading each pixel are different things, and
-/// comparing them properly is Lesson 3.8. Today's two real modes differ only in
-/// where the normal is fetched from.
-enum class shade_mode
+// LESSON 3.8 SPLIT THE OLD `shade_mode` IN TWO, and that split is the lesson.
+//
+// 3.6 shipped one enum with `palette / flat / smooth`, and its own doc comment
+// admitted the problem: "interpolating the COLOUR across a triangle and
+// interpolating the NORMAL and shading each pixel are different things". They are
+// different things because they are answers to two INDEPENDENT questions:
+//
+//   WHERE DOES THE NORMAL COME FROM?   a property of the MESH and how it was split
+//   WHERE IS THE EQUATION EVALUATED?   a property of the PIPELINE
+//
+// One enum could not hold both, because the combinations are a grid rather than a
+// list. Two enums can, and the grid has cells worth naming (see `is_degenerate`).
+
+/// Where the surface normal comes from. [Q] cycles.
+enum class normal_source
 {
-    palette,   ///< Lesson 3.1's debug ramp. No light, no normal. Kept for contrast.
-    flat,      ///< one normal per TRIANGLE, from the cross product of its own edges
-    smooth     ///< one normal per VERTEX, as authored — interpolated by the fill
+    /// One normal per TRIANGLE, from the cross product of its own two edges. Every
+    /// point on the face gets the same normal, so the face is flat by construction
+    /// whatever the evaluation does with it.
+    face,
+
+    /// One normal per VERTEX, as the mesh authored it. Shared vertices carry an
+    /// averaged normal, which is what makes a tessellated surface read as curved —
+    /// and is also why a mesh with SPLIT vertices (a cube's 24) stays faceted no
+    /// matter which evaluation is chosen. Lesson 3.6 measured that: 0 pixels differ
+    /// between the two sources on `cube.obj`.
+    vertex
 };
 
-[[nodiscard]] const char* name_of(shade_mode s)
+/// Where the shading equation is evaluated. [G] cycles.
+enum class shade_eval
 {
-    switch (s)
+    /// Lesson 3.1's debug ramp: no light, no normal, indexed by triangle number.
+    /// Not an evaluation point at all — kept in the same cycle because it is the
+    /// "off" position, and because a fake next to three real ones is instructive.
+    palette,
+
+    /// ONCE PER TRIANGLE, at the centroid. All three corners get that one answer,
+    /// so the fill interpolates between three equal values and the face comes out
+    /// uniform.
+    flat,
+
+    /// ONCE PER VERTEX, and the fill interpolates the ANSWERS. This is **Gouraud
+    /// shading** (1971) — and note that this engine has been doing it since 3.6
+    /// without the name. 2.4 built the interpolation; 3.6 fed it lit colours; that
+    /// combination is Gouraud, complete.
+    gouraud,
+
+    /// ONCE PER PIXEL, with the fill interpolating the NORMAL and the POSITION and
+    /// evaluating the equation itself. This is **Phong shading** — the
+    /// interpolation scheme, which is a different thing from the Phong reflection
+    /// model of 3.7 by the same author. We pair Phong *shading* with the
+    /// Blinn-Phong *reflection model*, which is the usual modern combination and
+    /// sounds like a contradiction until the two axes are separated.
+    per_pixel
+};
+
+[[nodiscard]] const char* name_of(normal_source n)
+{
+    switch (n)
     {
-    case shade_mode::palette: return "debug palette (3.1)";
-    case shade_mode::flat:    return "LAMBERT, flat";
-    case shade_mode::smooth:  return "LAMBERT, per-vertex";
+    case normal_source::face:   return "FACE   (cross product)";
+    case normal_source::vertex: return "VERTEX (as authored)";
     }
     return "?";
 }
 
-[[nodiscard]] shade_mode next_shade(shade_mode s)
+[[nodiscard]] const char* name_of(shade_eval e)
 {
-    switch (s)
+    switch (e)
     {
-    case shade_mode::palette: return shade_mode::flat;
-    case shade_mode::flat:    return shade_mode::smooth;
-    case shade_mode::smooth:  return shade_mode::palette;
+    case shade_eval::palette:   return "debug palette (3.1)";
+    case shade_eval::flat:      return "FLAT      per triangle";
+    case shade_eval::gouraud:   return "GOURAUD   per vertex";
+    case shade_eval::per_pixel: return "PER-PIXEL per fragment";
     }
-    return shade_mode::palette;
+    return "?";
+}
+
+[[nodiscard]] normal_source next_normal_source(normal_source n)
+{
+    return (n == normal_source::face) ? normal_source::vertex : normal_source::face;
+}
+
+[[nodiscard]] shade_eval next_eval(shade_eval e)
+{
+    switch (e)
+    {
+    case shade_eval::palette:   return shade_eval::flat;
+    case shade_eval::flat:      return shade_eval::gouraud;
+    case shade_eval::gouraud:   return shade_eval::per_pixel;
+    case shade_eval::per_pixel: return shade_eval::palette;
+    }
+    return shade_eval::palette;
+}
+
+/// Does this cell of the 2x3 grid produce the same picture as plain flat shading?
+///
+/// **With a face normal, ALL THREE evaluation points agree exactly — but only
+/// while the shading is view-independent.** That one sentence is the test of
+/// whether you have the two axes straight, and it is worth working through:
+///
+///   - A face normal is constant over the triangle, so the diffuse term depends on
+///     nothing that varies across it. Evaluate it once at the centroid, three times
+///     at the corners, or once per fragment: the same number comes out, and
+///     interpolating equal numbers gives that number back.
+///   - A SPECULAR term breaks it, because `to_eye = eye - position` varies across a
+///     face even when the normal does not. Now the corners genuinely differ, and
+///     flat / Gouraud / per-pixel are three different pictures.
+///
+/// **The first draft of this function got that wrong**, claiming `face x gouraud`
+/// was degenerate unconditionally. `verify_38` §A measured 761 differing pixels
+/// with the highlight on and settled it. The distinction is not pedantic: it is the
+/// difference between "the normal is the only input that varies" and "the normal is
+/// the only input", and 3.7 is exactly where the second stopped being true.
+[[nodiscard]] bool is_degenerate(normal_source n, shade_eval e, engine::specular_model m)
+{
+    if (n != normal_source::face) { return false; }
+    if (e == shade_eval::flat) { return false; }   // flat IS the thing compared against
+    return m == engine::specular_model::none;
 }
 
 // ---------------------------------------------------------------------------
@@ -2104,7 +2208,8 @@ void collect_triangles(std::vector<raster_triangle>& out, projection_scratch& sc
                        const scene_object* objects, int count,
                        const engine::mat4& view_from_world,
                        const projector& pr, trs_order order, clip_stats& stats,
-                       cull_choice cull, shade_mode shading, const engine::lighting& lights,
+                       cull_choice cull, normal_source nsrc, shade_eval eval,
+                       const engine::lighting& lights,
                        bool correct_normals, normal_stats* normals_out,
                        engine::vec3 eye_world, engine::specular_model spec_model)
 {
@@ -2156,7 +2261,11 @@ void collect_triangles(std::vector<raster_triangle>& out, projection_scratch& sc
         vertex_colour.reserve(vertex_count);
         world_pos.reserve(vertex_count);
 
-        const bool per_vertex_light = (shading == shade_mode::smooth);
+        // Shade at the vertices only when the evaluation point IS the vertex.
+        // Under `flat` the answer is computed once per triangle below, and under
+        // `per_pixel` the fill computes it — in which case the vertex colour must
+        // stay the raw albedo, because that is what the fragment multiplies.
+        const bool per_vertex_light = (eval == shade_eval::gouraud);
 
         for (std::size_t v = 0; v < vertex_count; ++v)
         {
@@ -2177,7 +2286,7 @@ void collect_triangles(std::vector<raster_triangle>& out, projection_scratch& sc
             const engine::vec3 n_model = objects[i].geometry.normal_at(v);
             world_normal.push_back(to_world_normal * n_model);
 
-            if (per_vertex_light)
+            if (per_vertex_light && nsrc == normal_source::vertex)
             {
                 vertex_colour.push_back(
                     engine::shade_encoded(objects[i].tint, world_normal.back(),
@@ -2207,8 +2316,13 @@ void collect_triangles(std::vector<raster_triangle>& out, projection_scratch& sc
         // screen-space type and this is the one conversion into it.
         const auto to_vertex = [&](const engine::clip_vertex& cv) {
             const screen_point s = screen_from_clip(cv.position, pr.vp);
+            // Lesson 3.8: the two varyings ride through unchanged. They are in
+            // WORLD space and the divide does not touch them — only the position
+            // is projected. A varying is data the fragment wants; the pipeline
+            // carries it and does not interpret it.
             return engine::vertex{to_pixel(s.xy.x), to_pixel(s.xy.y),
-                                  s.depth, s.inv_w, cv.uv.x, cv.uv.y, cv.colour};
+                                  s.depth, s.inv_w, cv.uv.x, cv.uv.y, cv.colour,
+                                  cv.normal, cv.world};
         };
 
         const std::span<const std::uint16_t> idx = objects[i].geometry.indices;
@@ -2237,57 +2351,96 @@ void collect_triangles(std::vector<raster_triangle>& out, projection_scratch& sc
             const engine::vec3 face_model = engine::cross(mv[b] - mv[a], mv[c] - mv[a]);
             const engine::vec3 face_world = to_world_normal * face_model;
 
+            // ---- Lesson 3.8: the normal each corner will be shaded with ----
+            //
+            // ONE axis of the grid, resolved here. `face` gives all three corners
+            // the triangle's own normal; `vertex` gives each its own, falling back
+            // to the face normal for a mesh that authored none (3.6's rule, and
+            // the fallback is counted so the HUD can say it happened).
+            const auto normal_for = [&](std::size_t vi) -> engine::vec3 {
+                if (nsrc == normal_source::face) { return face_world; }
+                if (world_normal[vi] != engine::vec3{}) { return world_normal[vi]; }
+                ++nstats.fell_back;
+                return face_world;
+            };
+            const engine::vec3 na = normal_for(a);
+            const engine::vec3 nb = normal_for(b);
+            const engine::vec3 nc = normal_for(c);
+
             Uint32 colour_a = 0;
             Uint32 colour_b = 0;
             Uint32 colour_c = 0;
-            switch (shading)
+            switch (eval)
             {
-            case shade_mode::palette:
+            case shade_eval::palette:
                 // Lesson 3.1's ramp: no normal, no light, indexed by triangle
                 // number. Kept so the comparison is one keypress away.
                 colour_a = colour_b = colour_c = face_shade(objects[i].tint, f);
                 break;
 
-            case shade_mode::flat:
+            case shade_eval::flat:
             {
-                // ONE normal for the whole triangle, so all three corners get the
-                // same colour and the fill interpolates between three equal
-                // values — which is a flat face, at no extra cost.
+                // ONE evaluation for the whole triangle, so all three corners get
+                // the same colour and the fill interpolates between three equal
+                // values — a flat face, at no extra cost.
                 //
-                // Lesson 3.7 has to say WHERE that one sample is taken, because the
-                // specular term varies across the face even when the normal does
-                // not. The centroid: a flat-shaded triangle is one sample of the
-                // surface, and the centre is the only point that does not privilege
-                // a corner.
+                // WHERE that one sample is taken has to be said out loud, because
+                // both inputs vary across a face. The centroid, for both: it is the
+                // only point that privileges no corner. With a face normal that is
+                // the face normal; with vertex normals it is their average, which
+                // is the normal the fill would have interpolated at the centre.
                 const engine::vec3 centroid =
                     (world_pos[a] + world_pos[b] + world_pos[c]) / 3.0f;
-                const Uint32 lit = engine::shade_encoded(objects[i].tint, face_world,
-                                                         eye_world - centroid, lights,
-                                                         objects[i].surface, spec_model);
-                colour_a = colour_b = colour_c = lit;
+                const engine::vec3 n_mid = (nsrc == normal_source::face)
+                                         ? face_world
+                                         : na + nb + nc;
+                colour_a = colour_b = colour_c =
+                    engine::shade_encoded(objects[i].tint, n_mid, eye_world - centroid,
+                                          lights, objects[i].surface, spec_model);
                 break;
             }
 
-            case shade_mode::smooth:
+            case shade_eval::gouraud:
             {
-                const auto pick = [&](std::size_t vi) -> Uint32 {
-                    if (world_normal[vi] != engine::vec3{}) { return vertex_colour[vi]; }
-                    ++nstats.fell_back;
-                    return engine::shade_encoded(objects[i].tint, face_world,
+                // ONE evaluation per corner, and the fill interpolates the ANSWERS.
+                // With vertex normals the per-vertex loop above already did the
+                // work — `vertex_colour[vi]` is that cached answer, computed once
+                // per vertex rather than once per corner-of-a-triangle, which is
+                // the saving indexed geometry bought in 2.12.
+                const auto pick = [&](std::size_t vi, engine::vec3 n) -> Uint32 {
+                    if (nsrc == normal_source::vertex
+                        && world_normal[vi] != engine::vec3{})
+                    {
+                        return vertex_colour[vi];
+                    }
+                    return engine::shade_encoded(objects[i].tint, n,
                                                  eye_world - world_pos[vi], lights,
                                                  objects[i].surface, spec_model);
                 };
-                colour_a = pick(a);
-                colour_b = pick(b);
-                colour_c = pick(c);
+                colour_a = pick(a, na);
+                colour_b = pick(b, nb);
+                colour_c = pick(c, nc);
                 break;
             }
+
+            case shade_eval::per_pixel:
+                // NO evaluation here at all. The corner colour stays the raw
+                // albedo, and the fill does the shading once per fragment from the
+                // interpolated normal and position. This is the only branch that
+                // sends the equation's INPUTS down the pipeline instead of its
+                // output — which is the whole of Lesson 3.8 in one case label.
+                colour_a = colour_b = colour_c = objects[i].tint;
+                break;
             }
 
+            // Lesson 3.8 adds the two varyings. They are attached HERE, before
+            // clipping, so a triangle cut by the near plane gets a correctly
+            // interpolated normal and position at its new corners — the clipper
+            // lerps every field with the one crossing parameter (3.3 §3.4).
             const engine::clip_vertex src[3] = {
-                {clip_pos[a], objects[i].geometry.uv_at(a), colour_a},
-                {clip_pos[b], objects[i].geometry.uv_at(b), colour_b},
-                {clip_pos[c], objects[i].geometry.uv_at(c), colour_c}};
+                {clip_pos[a], objects[i].geometry.uv_at(a), colour_a, na, world_pos[a]},
+                {clip_pos[b], objects[i].geometry.uv_at(b), colour_b, nb, world_pos[b]},
+                {clip_pos[c], objects[i].geometry.uv_at(c), colour_c, nc, world_pos[c]}};
 
             // How the triangle sits relative to the near plane — measured from the
             // geometry, not inferred from what the current mode does about it, so
@@ -2366,6 +2519,10 @@ void collect_triangles(std::vector<raster_triangle>& out, projection_scratch& sc
                 tri.v[1] = to_vertex(poly[k - 1]);
                 tri.v[2] = to_vertex(poly[k]);
                 tri.sort_key = key;
+                // The material travels with the geometry, because per-pixel
+                // shading reads it inside the fill. See `raster_triangle::surface`
+                // for why that is a cheat a GPU could not make.
+                tri.surface = objects[i].surface;
                 // Every piece of a clipped triangle lies in the SAME plane, so they
                 // share one face normal and one answer from the wrong test.
                 tri.front_by_forward = front_by_forward;
@@ -2433,10 +2590,16 @@ void draw_triangles(engine::framebuffer& fb, engine::depth_buffer* depth,
 
     for (const raster_triangle& t : tris)
     {
-        // Three identical corner colours, so the Gouraud interpolation of Lesson
-        // 2.4 delivers a flat face. That is not a waste to be optimised away yet:
-        // 3.6 gives the corners genuinely different colours (Gouraud shading) and
-        // this same call starts doing real work.
+        // Lesson 3.8: rebind the material per triangle when the fragment is the
+        // one reading it. `style` is taken BY VALUE, so this is a local edit to a
+        // local copy and the caller's pipeline object is untouched.
+        //
+        // Naming it again because it matters: a GPU cannot do this. Material
+        // parameters live in a bound pipeline or a uniform buffer, and changing
+        // them mid-draw means ending the draw. A renderer that shades per pixel
+        // therefore sorts its geometry by material and issues one draw per batch,
+        // and the reason this loop can be lazy is that it is not a GPU.
+        style.surface = t.surface;
         engine::fill_triangle(fb, depth, t.v[0], t.v[1], t.v[2], style);
     }
 }
@@ -3098,7 +3261,10 @@ int main(int argc, char* argv[])
     int roundtrip_wrong = 0;                       ///< px between the loaded and generated torus
 
     // ---- Lesson 3.6 --------------------------------------------------------
-    shade_mode shading = shade_mode::smooth;       ///< [G] — the debug palette is now a comparison
+    shade_eval eval = shade_eval::gouraud;         ///< [G] — palette / flat / Gouraud / per-pixel
+    normal_source nsrc = normal_source::vertex;    ///< [Q] — face vs vertex normals
+    int grid_wrong = 0;                            ///< px this cell differs from per-pixel by
+    double shade_ns = 0.0;                         ///< smoothed cost of the scene fill, ns
     bool correct_normals = true;                   ///< [J] — inverse transpose vs the naive M
     normal_stats scene_normals;                    ///< what the normals did this frame
     int normal_wrong = 0;                          ///< px the naive normal transform costs
@@ -3175,7 +3341,8 @@ int main(int argc, char* argv[])
     SDL_Log("  [K] near plane: clip / drop / none - on the floor scene, hold [=] to walk into it");
     SDL_Log("  [U] cull: none / back / front / back-by-dot(n,fwd) (the classic bug)");
     SDL_Log("  [L] load a model: torus.obj / cube.obj / twisted.obj / quirks.obj / generated");
-    SDL_Log("  [G] shading: debug palette / Lambert flat / Lambert per-vertex");
+    SDL_Log("  [G] evaluate: debug palette / flat / Gouraud (per-vertex) / PER-PIXEL");
+    SDL_Log("  [Q] normal source: face (cross product) / vertex (as authored)");
     SDL_Log("  [J] normal matrix: inverse-transpose (correct) vs the naive model matrix");
     SDL_Log("  [A]/[D] swing the light. With [H] off the camera does NOT change the shading -");
     SDL_Log("          Lambert is view-independent. Turn [H] on and orbiting moves the highlight.");
@@ -3263,7 +3430,8 @@ int main(int argc, char* argv[])
             }
             if (in.key_pressed(SDL_SCANCODE_K)) { near_handling = next_near(near_handling); }
             if (in.key_pressed(SDL_SCANCODE_U)) { culling = next_cull(culling); }
-            if (in.key_pressed(SDL_SCANCODE_G)) { shading = next_shade(shading); }
+            if (in.key_pressed(SDL_SCANCODE_G)) { eval = next_eval(eval); }
+            if (in.key_pressed(SDL_SCANCODE_Q)) { nsrc = next_normal_source(nsrc); }
             if (in.key_pressed(SDL_SCANCODE_J)) { correct_normals = !correct_normals; }
             if (in.key_pressed(SDL_SCANCODE_H)) { spec_model = next_specular(spec_model); }
             if (in.key_pressed(SDL_SCANCODE_E))
@@ -3436,6 +3604,7 @@ int main(int argc, char* argv[])
                 roundtrip_wrong = 0;
                 model_wrong = 0;
                 spec_peak = 0;
+                grid_wrong = 0;
                 shown_depth = {};
                 scene_clip = {};
                 scene_cull = {};
@@ -3448,7 +3617,7 @@ int main(int argc, char* argv[])
                 // makes the pixel-for-pixel comparison honest.
                 collect_triangles(scene_tris, scratch, scene, scene_count,
                                   view_from_world, pr, order, scene_clip, culling,
-                                  shading, lights, correct_normals, &scene_normals,
+                                  nsrc, eval, lights, correct_normals, &scene_normals,
                                   eye_world, spec_model);
 
                 const bool want_painter = (hs == hidden_surface::painter);
@@ -3457,18 +3626,42 @@ int main(int argc, char* argv[])
                 // One style for the whole batch — the pipeline-object model. The
                 // floor is shaded from its uvs; everything else from its vertex
                 // colours. Lesson 3.2 §4.1.
+                // Lesson 3.8. `lit` is the new third option, and note that it is
+                // chosen by the EVALUATION POINT rather than by anything about the
+                // geometry: flat and Gouraud both hand the fill a finished colour,
+                // and only per-pixel hands it the inputs.
+                //
+                // The floor still wins, because a checkered debug pattern has no
+                // albedo to light and 3.9 is where texture and lighting learn to
+                // multiply. Said here so the omission is a decision.
+                const bool shade_per_pixel = (eval == shade_eval::per_pixel) && !checkered;
                 const engine::fill_style style{
                     .interp = interp,
                     .shade = checkered ? engine::shading::uv_checker
-                                       : engine::shading::vertex_colour,
+                           : shade_per_pixel ? engine::shading::lit
+                                             : engine::shading::vertex_colour,
                     .space = engine::blend_space::linear,
-                    .cull = to_engine_cull(culling)};
+                    .cull = to_engine_cull(culling),
+                    .lights = shade_per_pixel ? &lights : nullptr,
+                    .surface = {},                      // rebound per triangle
+                    .model = spec_model,
+                    .eye = eye_world};
 
                 // Clearing to FAR is not optional and not cosmetic. Skip it and
                 // last frame's depths survive into this one; §7 has the picture.
                 scene_depth.clear();
+
+                // Lesson 3.8 times this one call, because "per-pixel shading is
+                // expensive" is a claim and a claim wants a number. It measures the
+                // FILL only — not the projection, not the clip, not the HUD — since
+                // that is the part the evaluation point actually changes. Smoothed
+                // over frames the way `clock::fps()` is, and for the same reason: a
+                // single frame's timing on a desktop OS is mostly noise.
+                const Uint64 fill_t0 = SDL_GetTicksNS();
                 draw_triangles(fb, want_painter ? nullptr : &scene_depth,
                                scene_tris, want_painter, style, &scene_cull);
+                const double fill_ns = static_cast<double>(SDL_GetTicksNS() - fill_t0);
+                shade_ns = (shade_ns == 0.0) ? fill_ns : shade_ns * 0.9 + fill_ns * 0.1;
 
                 // ---- Lesson 3.4's own comparison --------------------------
                 // Culling is an OPTIMISATION, so the claim to check is not "does
@@ -3495,7 +3688,7 @@ int main(int argc, char* argv[])
                         clip_stats ignored;
                         collect_triangles(compare_tris, scratch, scene, scene_count,
                                           view_from_world, pr, order, ignored,
-                                          cull_choice::none, shading, lights,
+                                          cull_choice::none, nsrc, eval, lights,
                                           correct_normals, nullptr, eye_world, spec_model);
                         draw_triangles(scratch_fb, want_painter ? nullptr : &scratch_depth,
                                        compare_tris, want_painter, unculled);
@@ -3529,7 +3722,7 @@ int main(int argc, char* argv[])
                     clip_stats ignored;
                     collect_triangles(compare_tris, scratch, &control, 1,
                                       view_from_world, pr, order, ignored, culling,
-                                      shading, lights, correct_normals, nullptr,
+                                      nsrc, eval, lights, correct_normals, nullptr,
                                       eye_world, spec_model);
 
                     scratch_fb.clear(k_bg);
@@ -3554,12 +3747,12 @@ int main(int argc, char* argv[])
                 // agree to the last bit, so there is nothing to render twice. That
                 // guard is also the lesson — the bug is invisible until something
                 // is squashed.
-                if (shading != shade_mode::palette && scene_normals.max_tilt > 0.0f)
+                if (eval != shade_eval::palette && scene_normals.max_tilt > 0.0f)
                 {
                     clip_stats ignored;
                     collect_triangles(compare_tris, scratch, scene, scene_count,
                                       view_from_world, pr, order, ignored, culling,
-                                      shading, lights, !correct_normals, nullptr,
+                                      nsrc, eval, lights, !correct_normals, nullptr,
                                       eye_world, spec_model);
 
                     scratch_fb.clear(k_bg);
@@ -3587,7 +3780,7 @@ int main(int argc, char* argv[])
                 // tail, and Phong's cut-off at grazing angles. Swing the camera and
                 // the light low and watch this count climb.
                 if (spec_model != engine::specular_model::none
-                    && shading != shade_mode::palette)
+                    && eval != shade_eval::palette)
                 {
                     scene_object other_scene[k_max_objects];
                     for (int i = 0; i < scene_count; ++i)
@@ -3600,7 +3793,7 @@ int main(int argc, char* argv[])
                     clip_stats ignored;
                     collect_triangles(compare_tris, scratch, other_scene, scene_count,
                                       view_from_world, pr, order, ignored, culling,
-                                      shading, lights, correct_normals, nullptr,
+                                      nsrc, eval, lights, correct_normals, nullptr,
                                       eye_world,
                                       spec_model == engine::specular_model::blinn
                                           ? engine::specular_model::phong
@@ -3616,6 +3809,41 @@ int main(int argc, char* argv[])
                 else
                 {
                     model_wrong = 0;
+                }
+
+                // ---- Lesson 3.8's own comparison --------------------------
+                // EVERY CELL OF THE GRID AGAINST PER-PIXEL, which is the reference
+                // because it is the one that evaluates the equation where the
+                // answer is used. Renders the same geometry with `shading::lit` and
+                // counts the pixels that differ.
+                //
+                // Two cells must read exactly 0, and checking that is how you know
+                // the two axes are wired up right: `face x gouraud` always, and
+                // `face x per_pixel` whenever the specular is off (§4.2). Any other
+                // reading there is a bug, not a shading difference.
+                if (eval != shade_eval::palette && !checkered
+                    && hs != hidden_surface::wireframe)
+                {
+                    engine::fill_style reference_style = style;
+                    reference_style.shade = engine::shading::lit;
+                    reference_style.lights = &lights;
+
+                    clip_stats ignored;
+                    collect_triangles(compare_tris, scratch, scene, scene_count,
+                                      view_from_world, pr, order, ignored, culling,
+                                      nsrc, shade_eval::per_pixel, lights,
+                                      correct_normals, nullptr, eye_world, spec_model);
+
+                    scratch_fb.clear(k_bg);
+                    draw_world(scratch_fb, view_from_world, pr);
+                    scratch_depth.clear();
+                    draw_triangles(scratch_fb, want_painter ? nullptr : &scratch_depth,
+                                   compare_tris, want_painter, reference_style);
+                    grid_wrong = count_differences(fb, scratch_fb, vp);
+                }
+                else
+                {
+                    grid_wrong = 0;
                 }
 
                 // The brightest pixel on screen. One number, and on a coarse mesh it
@@ -3656,7 +3884,7 @@ int main(int argc, char* argv[])
                     clip_stats reference_clip;
                     collect_triangles(compare_tris, scratch, scene, scene_count,
                                       view_from_world, reference, order, reference_clip,
-                                      culling, shading, lights, correct_normals, nullptr,
+                                      culling, nsrc, eval, lights, correct_normals, nullptr,
                                       eye_world, spec_model);
                     draw_triangles(scratch_fb, want_painter ? nullptr : &scratch_depth,
                                    compare_tris, want_painter, style);
@@ -4090,20 +4318,20 @@ int main(int argc, char* argv[])
             // which is the honest way to say "this bug hides".
             if (scene_mode != scene_kind::floor)
             {
-                const bool lit = (shading != shade_mode::palette);
+                const bool lit = (eval != shade_eval::palette);
                 SDL_SetRenderDrawColor(renderer, lit ? 122 : 236,
                                                  lit ? 196 : 196,
                                                  lit ? 152 : 110, 255);
                 if (hs == hidden_surface::wireframe)
                 {
                     SDL_RenderDebugTextFormat(renderer, 6.0f, 292.0f,
-                        "[G] %-20s (wireframe has no surfaces to light)", name_of(shading));
+                        "[G] %-22s (wireframe has no surfaces to light)", name_of(eval));
                 }
                 else if (!lit)
                 {
                     SDL_RenderDebugTextFormat(renderer, 6.0f, 292.0f,
-                        "[G] %-20s no light, no normal - it does NOT change as it spins",
-                        name_of(shading));
+                        "[G] %-22s no light, no normal - it does NOT change as it spins",
+                        name_of(eval));
                 }
                 else
                 {
@@ -4111,10 +4339,45 @@ int main(int argc, char* argv[])
                                                      correct_normals ? 196 : 92,
                                                      correct_normals ? 152 : 92, 255);
                     SDL_RenderDebugTextFormat(renderer, 6.0f, 292.0f,
-                        "[G] %-20s [J] %-13s tilt %4.1f deg  dif %d px",
-                        name_of(shading),
+                        "[J] %-13s tilt %4.1f deg  dif %d px",
                         correct_normals ? "inv-transpose" : "NAIVE M",
                         static_cast<double>(scene_normals.max_tilt), normal_wrong);
+                }
+
+                // ---- Lesson 3.8's readout ---------------------------------
+                // THE TWO AXES, ON TWO LINES, because they are two questions and
+                // one line reading "[G] smooth" was exactly the conflation this
+                // lesson exists to undo. Then the grid's own number: how far this
+                // cell is from per-pixel, which is 0 for per-pixel itself and for
+                // the two degenerate cells §4.2 names.
+                if (hs != hidden_surface::wireframe && lit)
+                {
+                    const bool degenerate = is_degenerate(nsrc, eval, spec_model);
+                    SDL_SetRenderDrawColor(renderer, 122, 196, 152, 255);
+                    SDL_RenderDebugTextFormat(renderer, 6.0f, 320.0f,
+                        "[G] %-22s [Q] %-22s", name_of(eval), name_of(nsrc));
+
+                    SDL_SetRenderDrawColor(renderer, degenerate ? 226 : 150,
+                                                     degenerate ? 206 : 152,
+                                                     degenerate ? 130 : 170, 255);
+                    if (eval == shade_eval::per_pixel)
+                    {
+                        SDL_RenderDebugTextFormat(renderer, 6.0f, 334.0f,
+                            "    the reference: shaded per fragment   %.1f us/frame",
+                            shade_ns / 1000.0);
+                    }
+                    else if (degenerate)
+                    {
+                        SDL_RenderDebugTextFormat(renderer, 6.0f, 334.0f,
+                            "    DEGENERATE cell = flat, %d px   %.1f us/frame",
+                            grid_wrong, shade_ns / 1000.0);
+                    }
+                    else
+                    {
+                        SDL_RenderDebugTextFormat(renderer, 6.0f, 334.0f,
+                            "    vs PER-PIXEL: %d px differ   %.1f us/frame",
+                            grid_wrong, shade_ns / 1000.0);
+                    }
                 }
 
                 // ---- Lesson 3.7's readout ---------------------------------

@@ -13,6 +13,13 @@
 
 #include "gfx/colour.hpp"   // linear_rgb: the space vertex colours are combined in
 
+// Lesson 3.8. A real include, not a forward declaration, and the difference is the
+// point: `fill_style` holds a `specular` BY VALUE and `shading::lit` calls
+// `shade()`, so the rasterizer needs the layout and the definitions, not just the
+// names. That is the dependency this lesson adds and Module 4's programmable
+// fragment stage removes. (`vec3` comes along with it.)
+#include "gfx/light.hpp"
+
 #include <SDL3/SDL.h>
 
 // Forward declarations, not includes: every function below takes a framebuffer
@@ -229,6 +236,37 @@ struct vertex
     float v = 0.0f;
 
     Uint32 colour = 0xFFFFFFFFu;     ///< ARGB8888 as stored — i.e. sRGB-encoded
+
+    /// The world-space surface normal at this corner — Lesson 3.8.
+    ///
+    /// **This is where `vertex` stops being a position and becomes a position plus
+    /// varyings.** Up to 3.7 every field here was either geometry (`x`, `y`, `z`,
+    /// `inv_w`) or a final answer (`colour`, `u`, `v`); this one is an *input* to a
+    /// calculation that has not happened yet, carried across the triangle so the
+    /// fragment can do it. That is exactly what a GPU vertex shader's output is,
+    /// and Module 4 gives it the name: a varying.
+    ///
+    /// Interpolated perspective-correctly like every other non-depth attribute, and
+    /// **renormalised in the fragment** — interpolating two unit vectors gives a
+    /// shorter one, worst in the middle. Left un-normalised here on purpose: the
+    /// clipper may have already produced this corner by interpolation, so a unit
+    /// length at the corner would not survive to the pixel anyway.
+    ///
+    /// Zero when the fill is not lighting anything, which costs three multiply-adds
+    /// per pixel in `shading::lit` and nothing at all in the other modes.
+    vec3 normal{};
+
+    /// The world-space position of this corner — Lesson 3.8.
+    ///
+    /// The specular term needs `eye - position` at the *fragment*, not at the
+    /// vertex, and neither `x, y` (pixels) nor `z` (device depth) can be turned
+    /// back into a world position without undoing the whole chain. So the world
+    /// position rides along as a second varying.
+    ///
+    /// Note the cost, because it is not small: these two fields take `vertex` from
+    /// 28 bytes to 52, and the fill interpolates six more floats per pixel. Lesson
+    /// 3.8 §4.6 measures what that is worth.
+    vec3 world{};
 };
 
 /// Is this triangle facing the camera?
@@ -327,6 +365,14 @@ enum class interpolation
 /// the function; Module 4 does exactly that, and calls it a fragment shader.
 /// Lesson 3.6 will add a lighting term and this enum will start to strain, which
 /// is the point at which the right structure will have earned itself.
+///
+/// **Lesson 3.8 is where it strained.** Adding `lit` made this header include
+/// `light.hpp`, so the rasterizer — which had no idea light existed for seven
+/// lessons — now depends on the lighting model. That is a real layering violation
+/// and it is being shipped deliberately, because the alternative (a callback the
+/// caller supplies) *is* the fragment shader, and inventing it here would be
+/// building Module 4's answer before the question is fully asked. Fixed-function
+/// hardware made exactly this trade, and lost exactly this way.
 enum class shading
 {
     /// The barycentric blend of the three corner colours — Gouraud, from
@@ -339,7 +385,21 @@ enum class shading
     /// Every engine ships something like it, because it is how you check a mesh's
     /// uv layout before there is any art to put on it. Lesson 3.9 replaces the
     /// rule with a lookup, and nothing else about the loop changes.
-    uv_checker
+    uv_checker,
+
+    /// **Evaluate the shading equation per pixel** — Lesson 3.8.
+    ///
+    /// Interpolate the normal and the world position, renormalise the normal, and
+    /// call `shade()` for every covered fragment. `vertex::colour` changes meaning
+    /// in this mode: it is the **albedo**, the surface's own colour, not a lit
+    /// result. That is not a wart — deciding what a varying means is the vertex
+    /// stage's job, and this is the first time this engine has had a varying whose
+    /// meaning depends on the pipeline it is bound to.
+    ///
+    /// Requires `fill_style::lights` to be non-null; with it null the fill falls
+    /// back to `vertex_colour`, so a misconfigured pipeline draws an unlit surface
+    /// rather than dereferencing nothing.
+    lit
 };
 
 /// Which space three vertex colours are combined in.
@@ -389,6 +449,37 @@ struct fill_style
     /// SDL_GPU makes the same call: a zero-initialised `SDL_GPURasterizerState` has
     /// `SDL_GPU_CULLMODE_NONE`.
     cull_mode cull = cull_mode::none;
+
+    // ---- Lesson 3.8: what `shading::lit` needs ----------------------------
+    //
+    // Four more fields, and they are a different KIND of thing from the four
+    // above. Those are pipeline state — how to rasterize. These are *uniforms*:
+    // values constant across a draw that the fragment calculation reads. A GPU
+    // keeps them in separate places for that reason, and Module 4 will too. They
+    // sit here because there is nowhere else yet, and that is worth noticing
+    // rather than tidying: `fill_style` is now two structs wearing one name.
+
+    /// The scene's lighting, or `nullptr` for none. A **non-owning** pointer, and
+    /// nullable because most fills have no lighting at all — the 2-D demos, the
+    /// HUD, the checkered floor. Same argument `fill_triangle`'s `depth_buffer*`
+    /// made in 3.1: what a reference cannot express here is optionality.
+    const lighting* lights = nullptr;
+
+    /// The surface's highlight colour and shininess (Lesson 3.7). Ignored unless
+    /// `shade == shading::lit`.
+    specular surface{};
+
+    /// Which specular approximation to evaluate — pipeline state proper, and in a
+    /// real engine a compile-time shader choice rather than a runtime branch.
+    specular_model model = specular_model::blinn;
+
+    /// The eye's world position, for the view-dependent term.
+    ///
+    /// One value for the whole draw, which is correct — the camera does not move
+    /// between two pixels of the same triangle. Note that this is the *position*,
+    /// not a direction: the direction is what varies per fragment, and computing
+    /// it is the fragment's job.
+    vec3 eye{};
 };
 
 /// Fill a triangle whose corners carry their own attributes — the shaded fill.

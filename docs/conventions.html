@@ -1288,6 +1288,88 @@
     </table>
   </div>
 
+  <h3>Shading models &mdash; Lesson 3.8</h3>
+
+  <p>
+    <strong>Two independent axes, and conflating them is the mistake this section exists to
+    prevent.</strong> Lesson 3.6 shipped them as one enum and could not extend it; 3.8 split it.
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>Rule</th><th>Value</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td>Axis 1 &mdash; normal source</td><td><strong>face</strong> or <strong>vertex</strong></td>
+            <td>A property of the <em>mesh</em>: decided by how it was authored and where its
+                vertices were split (Lesson 3.5). Nothing the renderer chooses.</td></tr>
+        <tr><td>Axis 2 &mdash; evaluation point</td><td><strong>flat</strong> / <strong>Gouraud</strong> / <strong>per-pixel</strong></td>
+            <td>A property of the <em>pipeline</em>: how many times the shading equation is
+                called and where. Identical for every mesh you draw.</td></tr>
+        <tr><td>Default</td><td>vertex normals, <strong>per-pixel</strong></td>
+            <td>Per-pixel is the reference the other two are measured against, because it
+                evaluates the equation where the answer is used.</td></tr>
+        <tr><td>The degenerate cells</td><td>face normal &rArr; all three evaluations agree <strong>exactly</strong></td>
+            <td>0 px, not &ldquo;close&rdquo; &mdash; the normal is constant across the triangle
+                and the albedo already was. <strong>Conditional on the shading being
+                view-independent:</strong> a specular term needs <code>eye &minus; position</code>,
+                which varies across a face, and then the row separates (1,231 px and 761 px
+                measured). This is the test of whether the two axes are straight in your
+                head.</td></tr>
+        <tr><td>Gouraud</td><td>= Lesson 2.4's interpolation + Lesson 3.6's lit vertices</td>
+            <td>Not new machinery, a <em>name</em>. Worth knowing so it is reconstructible
+                rather than memorised.</td></tr>
+        <tr><td>Naming</td><td>Phong <em>shading</em> &ne; the Phong <em>reflection model</em></td>
+            <td>Same 1975 paper, one on each axis. This engine runs <strong>Phong shading with
+                the Blinn-Phong reflection model</strong>, which is the standard modern pair and
+                sounds contradictory until the axes are separated.</td></tr>
+        <tr><td>Interpolated normals</td><td><strong>renormalise in the fragment</strong></td>
+            <td>The average of two unit normals <code>&theta;</code> apart has length
+                <code>cos(&theta;/2)</code> &mdash; 3.4% short at 30&deg;, 13.4% at 60&deg;. Zero
+                at the corners, worst in the middle: the chord signature. <code>shade()</code>
+                does it internally (a 3.6 decision), so this engine cannot exhibit the
+                bug.</td></tr>
+        <tr><td>What per-pixel cannot fix</td><td><strong>a missing normal</strong></td>
+            <td>It fixes an interpolation error. A cube has six normals and no evaluation point
+                invents a seventh: measured, <code>cube.obj</code> goes from 157 blank frames out
+                of 180 to 157. The <em>other</em> axis fixes that, by welding and averaging.</td></tr>
+        <tr><td>Cost</td><td><strong>report it with the px/triangle ratio</strong>, always</td>
+            <td>Per-pixel is 0.91&times; Gouraud at 2.8 px/triangle &mdash; <em>cheaper</em>,
+                because there are then more vertices than covered pixels &mdash; and 2.15&times;
+                at 4K. A shading cost quoted without the triangle density it was measured at is
+                not a number anyone can use.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Varyings &mdash; Lesson 3.8</h3>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>Rule</th><th>Value</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td>What they are</td><td>per-vertex data interpolated to the fragment</td>
+            <td><code>vertex</code> is a screen-space position <em>plus varyings</em> as of 3.8.
+                A varying is an <em>input</em> to a calculation that has not happened yet, as
+                against <code>colour</code> before it, which was an answer.</td></tr>
+        <tr><td>Space</td><td><strong>world</strong>, for <code>normal</code> and <code>world</code></td>
+            <td>Matches &sect;7c: lighting is evaluated in world space, so its inputs arrive in
+                world space. Only the position is projected.</td></tr>
+        <tr><td>Meaning</td><td><strong>set by the pipeline</strong>, not fixed</td>
+            <td><code>vertex::colour</code> is a lit result under
+                <code>shading::vertex_colour</code> and the <strong>albedo</strong> under
+                <code>shading::lit</code>. Deciding what a varying means is the vertex stage's
+                job.</td></tr>
+        <tr><td>Every stage must carry them</td><td>including the <strong>clipper</strong></td>
+            <td>The one that gets forgotten, because it usually does nothing. Miss it and shading
+                breaks only on triangles crossing the near plane &mdash; i.e. only when you walk
+                into something.</td></tr>
+        <tr><td>Interpolation</td><td>perspective-correct, like every non-depth attribute</td>
+            <td>Lesson 3.2's derivation never said what the attribute was, so it covers a normal
+                and a position with no new argument.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
   <h2 id="units"><span class="num">8</span>Units and angles</h2>
 
   <div class="tbl-scroll">

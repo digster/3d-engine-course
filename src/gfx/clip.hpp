@@ -75,6 +75,28 @@ struct clip_vertex
 
     vec2 uv{};                       ///< texture coordinate (Lesson 3.2)
     Uint32 colour = 0xFFFFFFFFu;     ///< ARGB8888 as stored — i.e. sRGB-encoded
+
+    /// The surface normal at this corner, in **world** space — Lesson 3.8.
+    ///
+    /// Not needed until the shading equation moved into the fragment loop. Up to
+    /// 3.7 the normal was consumed in the vertex stage and only its *result*, a
+    /// colour, travelled onward; per-pixel shading has to carry the input instead.
+    ///
+    /// **It must be clipped like everything else.** A clipped triangle's new corner
+    /// is a genuinely new surface point and needs the normal that belongs there —
+    /// forget it and every triangle crossing the near plane is lit from whatever
+    /// happened to be in the field, which is a bug that only appears when you walk
+    /// into geometry. It is interpolated linearly and left un-normalised; the
+    /// fragment renormalises anyway (§3.5), so doing it here would be work thrown
+    /// away twice.
+    vec3 normal{};
+
+    /// The position of this corner in **world** space — Lesson 3.8.
+    ///
+    /// The specular term needs `eye - position` per fragment, and `position` above
+    /// is in clip space, which is the wrong space and (before the divide) not even
+    /// a position yet. So the world position rides along as its own varying.
+    vec3 world{};
 };
 
 /// The most vertices a triangle can have after being clipped against **one** plane.

@@ -1744,6 +1744,42 @@
     </div>
   </div>
 
+  <div class="tool">
+    <h3>The average of two unit vectors is short <span class="from">Lesson 3.8</span></h3>
+    <div class="eq">
+      <span>\[ \left\|\tfrac{1}{2}\left(\mathbf{n}_0 + \mathbf{n}_1\right)\right\| = \cos\!\left(\tfrac{\theta}{2}\right) \]</span>
+      <span class="eq-plain">the length of the average of two unit vectors theta apart is cos(theta/2)</span>
+    </div>
+    <p>
+      <strong>A chord passes inside the circle.</strong> Two unit vectors have their tips on a
+      circle of radius 1; every interpolated value between them lies on the straight line joining
+      those tips, which is a chord, so every one of them is shorter than 1. By symmetry the
+      average lies along the bisector, and its length is the component of either vector along
+      that bisector &mdash; which is <code>cos(&theta;/2)</code>.
+    </p>
+    <p>
+      This is why an interpolated normal must be <strong>renormalised at the point of use</strong>.
+      An un-normalised normal scales brightness by its length (&sect;<a href="#meshes">7</a>,
+      Lesson 3.6), so the shortfall is a brightness error directly &mdash; and it has the
+      signature this page keeps meeting: <strong>zero at the endpoints, worst in the
+      middle</strong>, which is what makes it invisible to anyone checking vertex values.
+    </p>
+    <div class="worked">
+      <span class="label">Worked</span>
+      <p>
+        At <code>&theta; = 60&deg;</code>: <code>cos&nbsp;30&deg; = 0.86603</code>, so the
+        midpoint normal is <strong>13.4% short</strong> and the surface would be 13.4% too dim
+        there. At 30&deg; it is 3.4%; at 15&deg;, 0.9%. On the course's shipped torus the worst
+        case across all 2,304 triangles is <code>0.99051</code> &mdash; 0.95%, or about 2 codes
+        out of 255.
+      </p>
+      <p>
+        The same fact in another hat: this is why averaging unit vectors is not a rotation
+        average, and why slerp exists. Lesson 7.1 meets it again from that side.
+      </p>
+    </div>
+  </div>
+
   <h2 id="coming"><span class="num">8</span>Coming as the course proceeds</h2>
 
   <p>
@@ -1761,12 +1797,13 @@
   </div>
 
   <div class="pending">
-    <b>Module 3 — Depth and light.</b> <span class="badge done">3.1–3.7 landed</span>
+    <b>Module 3 — Depth and light.</b> <span class="badge done">3.1–3.8 landed</span>
     Device depth and <code>1/w</code> affinity · the depth-precision budget ·
     perspective-correct interpolation · the near-plane crossing parameter · the signed-area
     facing test · the Euler characteristic and signed volume · <strong>Lambert's cosine law</strong> ·
     <strong>the normal matrix</strong> · <strong>the mirror direction</strong> ·
-    <strong>the halfway vector</strong> · <strong>the 4&times; exponent rule</strong> (§7 above).
+    <strong>the halfway vector</strong> · <strong>the 4&times; exponent rule</strong> ·
+    <strong>the chord-shortening of an interpolated normal</strong> (§7 above).
     Still ahead: bilinear filtering as a double lerp. (The reflection vector arrived early, in
     1.8, because a bouncing ball needed it before a specular highlight did — and 3.7 turned out
     to need it with the arrow pointing the other way.)

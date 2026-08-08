@@ -7,7 +7,7 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-08-07 (after Lesson 3.7, 33 of 94 lessons)
+updated: 2026-08-08 (after Lesson 3.8, 34 of 94 lessons)
 
 conventions:
   world: right-handed, Y-up, -Z forward
@@ -658,6 +658,54 @@ conventions:
                   cube.obj, 107 for the icosahedron, 58 for a 12x8 torus, 0 for 48x24.
                   The CUBE is worst, and the reason is the lesson: on a flat face the
                   peak sits in the MIDDLE and per-vertex only samples the corners.
+  shading: TWO INDEPENDENT AXES, and 3.8 exists because 3.6 shipped them as one enum.
+        WHERE THE NORMAL COMES FROM (face vs vertex) is a property of the MESH and
+        its vertex splits. WHERE THE EQUATION IS EVALUATED (flat / Gouraud /
+        per-pixel) is a property of the PIPELINE. Six cells, not six pictures.
+        WITH A FACE NORMAL ALL THREE EVALUATION POINTS AGREE EXACTLY — 0 px, not
+        "close" — FOR EXACTLY AS LONG AS THE SHADING IS VIEW-INDEPENDENT. A face
+        normal makes the normal constant across the triangle; the albedo already
+        was; and under diffuse-only nothing else enters. A SPECULAR term breaks it
+        because to_eye varies across a face even when the normal does not: measured
+        1231 px (flat) and 761 px (Gouraud) against per-pixel with Blinn p=32.
+        (The first draft of is_degenerate() said face x gouraud was ALWAYS
+        degenerate. verify_38 §A found the 761 px. The corrected rule is SHORTER.)
+        GOURAUD IS A NAME FOR WHAT 2.4 + 3.6 ALREADY BUILT — interpolation plus lit
+        vertex colours. No new machinery, only a name.
+        PHONG SHADING != THE PHONG REFLECTION MODEL. Same 1975 paper, two things, one
+        on each axis. This engine now runs PHONG SHADING with the BLINN-PHONG
+        REFLECTION MODEL, which is the standard modern pair.
+        THE INTERPOLATED NORMAL IS SHORT: |lerp of two unit normals theta apart| =
+        cos(theta/2) — 3.4% at 30 deg, 13.4% at 60. Worst on the shipped torus
+        0.99051 (0.95%). ZERO AT THE CORNERS, MAXIMAL IN THE MIDDLE: the chord
+        signature again (2.4, 3.2, 3.7). This engine never pays it because 3.6 made
+        shade() normalise its own argument — a debt booked in 2.4's header and paid
+        two lessons before anyone could incur it.
+        MACH BANDS: Gouraud's ramp is C0 but not C1, and lateral inhibition turns
+        each slope break into an apparent stripe that IS NOT IN THE BUFFER. More
+        colour precision does nothing. Tessellation converges O(h^2) and never
+        terminates. Per-pixel removes them because a curve has no kinks.
+        PER-PIXEL CANNOT INVENT NORMALS A MESH DOES NOT HAVE. Measured over a
+        180-frame spin, frames with no highlight at all: torus 12x8 goes 58 -> 0,
+        but cube.obj stays at 157 -> 157 and the icosahedron 50 -> 51. Six normals
+        is six normals. THE TWO AXES FIX DIFFERENT THINGS and neither substitutes.
+        3.6's result survives: on cube.obj face vs vertex normals is still 0 px
+        (welded torus: 4122).
+        COST — AND THE FOLKLORE IS WRONG BELOW ~3 PIXELS PER TRIANGLE. Same mesh,
+        resolution swept, per-pixel / Gouraud: 0.91x at 320x180 (2.8 px/tri), 1.41x
+        at 640x360, 1.84x at 720p, 2.12x at 1440p, 2.15x at 4K. The asymptote 2.15x
+        is the real steady-state price; below the crossover there are MORE VERTICES
+        THAN COVERED PIXELS and per-vertex is the expensive one. Always report the
+        px/triangle ratio with a shading timing or the number is unusable.
+  varyings: vertex = position + VARYINGS as of 3.8. `normal` and `world` are inputs
+        to a calculation that has not happened yet, carried to the fragment.
+        vertex::colour CHANGES MEANING with the pipeline — a lit result under
+        vertex_colour, the ALBEDO under lit. That is what a varying is.
+        ANYTHING THE FRAGMENT READS MUST BE INTERPOLATED BY EVERY STAGE BETWEEN,
+        and the clipper is the one that gets forgotten because it usually does
+        nothing. Forget it and shading breaks only on triangles crossing the near
+        plane — i.e. only when you walk into something.
+        COST: vertex 28 -> 52 bytes, six more floats interpolated per pixel.
   fill-rule: top-left. For a triangle oriented to POSITIVE area:
             top edge = (dy == 0 && dx > 0); left edge = (dy < 0). Bias -1 on the others,
             folded into the loop's starting value, so it costs NOTHING per pixel.
@@ -1605,6 +1653,57 @@ decisions:
     say, and the artifact is fully characterised numerically in verify_37 §E.
     Restraint, on the same grounds 3.4 used for per-object cull modes.
 
+  - THE `shading` ENUM GREW A `lit` VALUE AND raster.hpp NOW INCLUDES light.hpp.
+    A real layering violation, shipped deliberately. The rasterizer's job is
+    coverage and interpolation; what a covered pixel LOOKS like is somebody else's.
+    The clean fix is to make the fragment calculation a PARAMETER — which is what a
+    fragment shader IS, and building it here means inventing Module 4's answer three
+    lessons early. Fixed-function hardware made the same trade and lost the same
+    way; the whole programmable-shader era is this debt being paid. 2.4's own header
+    predicted it ("a placeholder for a fragment shader").
+  - vertex GAINED TWO VARYINGS AND STOPPED BEING JUST A POSITION. `normal` and
+    `world` are INPUTS to a calculation that has not happened yet, as against every
+    earlier field which was geometry or an answer. Cost: 28 -> 52 bytes and six more
+    interpolated floats per pixel, paid in bandwidth to be saved in accuracy — the
+    same trade a GPU makes, which is why minimising varyings is a real optimisation
+    in Module 4.
+  - vertex::colour NOW MEANS DIFFERENT THINGS IN DIFFERENT PIPELINES: a lit result
+    under vertex_colour, the ALBEDO under lit. Not a wart — deciding what a varying
+    means is the vertex stage's job, and this is the first varying in this engine
+    whose meaning depends on what it is bound to.
+  - THE CLIPPER CARRIES THEM TOO, and this is the one that gets forgotten because
+    the clipper usually does nothing. Miss it and shading breaks ONLY on triangles
+    crossing the near plane — i.e. only when the player walks into something, which
+    is the same detection profile as 2.7's w bug. Exercise 3.8.2 makes it visible.
+  - THE NORMAL IS NOT RENORMALISED IN THE CLIPPER. The fill interpolates it again
+    on the way to the pixel and shortens it again, so normalising there fixes
+    nothing the fragment's own normalise would not. Two sqrt for one result.
+  - `lit` FORCES blend_space::linear AND IGNORES THE FIELD. There is no coherent
+    reading of "blend in encoded space" for a value about to be multiplied by a
+    quantity of light; honouring it would produce nonsense rather than a different
+    picture. Ignoring a knob is better than obeying it into meaninglessness — and
+    it is said in the code rather than left to be discovered.
+  - A NULL `lights` FALLS BACK TO THE UNLIT PATH rather than being a precondition.
+    A pipeline set to `lit` with no light is a configuration mistake; drawing an
+    unlit surface is diagnosable, and dereferencing null per fragment is not.
+  - THE MATERIAL RIDES ON raster_triangle AND IS REBOUND PER TRIANGLE. A cheat a
+    GPU cannot make: material parameters are pipeline state, so a real renderer
+    BATCHES BY MATERIAL and a scene with three materials is three draws. Taken
+    because splitting the single pass into per-object draws would break the
+    painter's-algorithm comparison running since 3.1 (that one must sort ACROSS
+    objects). Third time this pressure has appeared from a new direction — 3.4's
+    cull modes, 3.7's specular, now this.
+  - TWO KEYS FOR TWO AXES, [G] and [Q], and the HUD prints them on TWO LINES. A
+    single line reading "[G] smooth" was precisely the conflation the lesson undoes;
+    the layout is part of the argument.
+  - is_degenerate() WAS WRONG THE FIRST TIME and the corrected version is SHORTER.
+    It claimed face x gouraud was degenerate unconditionally. verify_38 §A measured
+    761 px with the highlight on. A rule with an exception carved into it is often a
+    rule stated at the wrong level.
+  - THE FILL IS TIMED, and only the fill — not the projection, the clip or the HUD,
+    because those do not change with the evaluation point. Smoothed like clock::fps()
+    for the same reason: one frame on a desktop OS is mostly noise.
+
 files:
   /: CLAUDE.md, README.md, ARCHITECTURE.md, LEARNINGS.md, PROMPT.md, LICENSE,
      .gitignore, CMakeLists.txt, STATE.md
@@ -1636,74 +1735,62 @@ files:
                  03-01-z-buffer.html, 03-02-perspective-correct.html,
                  03-03-near-plane-clipping.html, 03-04-back-face-culling.html,
                  03-05-obj-loader.html, 03-06-normals-and-lambert.html,
-                 03-07-specular-blinn-phong.html
+                 03-07-specular-blinn-phong.html, 03-08-shading-models.html
   docs/shared/: course.css, course.js      (THE stylesheet + page script; one copy each)
   docs/_template/: lesson-template.html, README.md, apply-shared.py, check-page.js
   memory/: 2026-07-16.md, 2026-07-18.md, 2026-07-21.md, 2026-07-22.md,
            2026-07-23.md, 2026-07-24.md, 2026-07-25.md, 2026-07-26.md,
            2026-07-27.md, 2026-07-28.md, 2026-07-29.md, 2026-07-30.md,
            2026-07-31.md, 2026-08-01.md, 2026-08-02.md, 2026-08-03.md,
-           2026-08-04.md, 2026-08-05.md, 2026-08-06.md, 2026-08-07.md
+           2026-08-04.md, 2026-08-05.md, 2026-08-06.md, 2026-08-07.md,
+           2026-08-08.md
   (retired: hello.cpp)
 
 
 
-next: 3.8 — Flat, Gouraud and Per-Pixel Shading
-      (planned filename: docs/lessons/03-08-shading-models.html — 3.7 links to the index
-      for now, so BOTH of 3.7's next links and its Recap need repointing when it lands)
-      3.7 DID NOT ARGUE FOR THIS LESSON, IT MEASURED IT. Everything in 3.7 §4.7 is a
-      property of WHERE the shading equation is evaluated, not of the equation: the
-      equation is right and we are sampling it in the wrong places. The three tables are
-      the whole motivation and they are already published — reuse the numbers, do not
-      re-derive them.
-        - THE TWO AXES HAVE BEEN TANGLED SINCE 3.6 AND THIS IS WHERE THEY SEPARATE.
-          WHERE THE NORMAL COMES FROM (per-face vs per-vertex, a property of the MESH
-          and its splits) is independent of WHERE THE EQUATION IS EVALUATED (per-face,
-          per-vertex, per-pixel, a property of the PIPELINE). 3.6's shade_mode enum
-          conflates them and says so in its own comment; 3.8 replaces it with two
-          knobs and the 2x3 grid is the lesson's spine. Note that some cells are
-          degenerate — a face normal evaluated per pixel gives flat shading again —
-          and saying WHICH and WHY is the check that the student has the distinction.
-        - GOURAUD IS A NAME FOR WHAT WE ALREADY DO. Do not introduce it as new
-          machinery: 2.4 built the interpolation, 3.6 fed it lit vertex colours, and
-          that combination IS Gouraud shading (1971). Naming something the student
-          already built is a good moment; it also sets up the honest question of what
-          per-pixel actually costs.
-        - THE COST IS THE POINT OF THE LESSON, NOT AN ASIDE. Per-pixel means the
-          rasterizer must interpolate a NORMAL and call shade() per fragment — the
-          first time raster.cpp has learned that light exists, after THREE lessons of
-          it not needing to (3.5, 3.6, 3.7 all left it untouched; 3.7 §4.7 says so
-          explicitly and predicts this). That is a real structural change: fill_style
-          finally does gain a field, the fill gains a branch, and the vertex/fragment
-          split stops being an observation and becomes code. Measure the cost per
-          frame; it is the honest reason hardware shades per pixel and 1970s software
-          did not.
-        - THE INTERPOLATED NORMAL IS NOT UNIT and must be renormalised per fragment.
-          2.4's header already warns about this ("returns an interpolated NORMAL that
-          is no longer unit length"); this is where the debt is paid. Show what
-          skipping it does — brightness scaled by |n|, worst in the middle of a
-          triangle where the interpolation is furthest from both ends.
-        - PHONG SHADING vs THE PHONG REFLECTION MODEL. Same man, two different things,
-          and students conflate them constantly. 3.7 taught the reflection model; 3.8
-          teaches the shading (interpolation) scheme. Say it in a callout, once,
-          plainly — and note that we use PHONG SHADING with the BLINN-PHONG REFLECTION
-          MODEL, which is the usual modern pairing and sounds contradictory until the
-          two axes are separated.
-        - THE MACH BAND is the artifact Gouraud has and per-pixel does not. Do not
-          hand-wave it: it is a perceptual effect (lateral inhibition) that makes a
-          piecewise-linear intensity ramp show visible edges at the C1 discontinuities
-          — i.e. at the triangle boundaries — even though the numbers are continuous.
-          That is a genuinely interesting "the bug is in the eye, not the buffer"
-          moment and it is worth a figure.
-        - VERIFY: (a) flat vs per-vertex on cube.obj is still 0 px (3.6's result — a
-          faceted mesh is faceted because of the SPLIT), and non-zero on the torus;
-          (b) per-pixel FIXES 3.7's flicker: the 157-of-180 blank frames for cube.obj
-          go to 0, which is the headline; (c) the chord error from 3.7's Table 5 falls
-          to the renormalisation error alone; (d) the per-frame cost, measured, of
-          moving shade() into the fragment loop; (e) with a CONSTANT normal across a
-          triangle, per-vertex and per-pixel must agree bit for bit — the control that
-          proves the difference is interpolation and not a second bug.
-      Module 3 then finishes: 3.9 texture mapping + bilinear (replacing checker_at with
-      a real sampler and settling the uv-origin question 3.5 left open), 3.10 profiling
-      and the Module 3 capstone.
+next: 3.9 — Texture Mapping and Bilinear Filtering
+      (planned filename: docs/lessons/03-09-textures.html — 3.8 links to the index for
+      now, so BOTH of 3.8's next links and its Recap need repointing when it lands)
+      THE FLOOR IS THE ONLY SURFACE 3.8 LEFT UNLIT, and it was left unlit on purpose:
+      `shading::uv_checker` computes a colour from a rule and there is no albedo for a
+      light to multiply. 3.9 is where texture and lighting learn to multiply, which is
+      the last structural gap in Module 3's fragment stage.
+        - REPLACE THE RULE WITH A SAMPLER. checker_at(u,v) becomes a lookup into an
+          image. Note what does NOT change: the uv interpolation (3.2), the
+          perspective correction, the fill loop's shape. 2.4's "the rasterizer never
+          learns what it carries" pays off one more time.
+        - SETTLE THE uv ORIGIN, which 3.5 explicitly deferred and STATE has carried as
+          an open question ever since: exporters write v bottom-up, SDL_GPU samples
+          top-down, and the loader stores the file's numbers unchanged. A sampler is
+          the first thing that makes the choice OBSERVABLE, so this is where it gets
+          decided — and it must be decided against SDL_GPU's convention, verified in
+          the header, because Module 4 is a port and not a redesign.
+        - WRAP MODES ARE A REAL CHOICE with a visible failure each: repeat, clamp,
+          mirror. The classic bug is a clamped texture showing a smeared edge row, or
+          a repeated one showing a seam because the last texel and the first are not
+          the same. Show, do not describe.
+        - BILINEAR AS A DOUBLE LERP, which is the math-toolbox's "three ideas wearing
+          different clothes" landing for the third time (barycentric = weighted
+          average, this = weighted average of weighted averages). Derive it as two
+          lerps along u then one along v, and note the order does not matter.
+        - THE HALF-TEXEL OFFSET is the subtle part and the source of most texture
+          bugs: a texel is a SAMPLE, not a square, and its centre is at (i+0.5)/N.
+          Getting it wrong shifts the image by half a texel and blurs a
+          nearest-neighbour lookup into a two-texel blend. Same family as 2.11's pixel
+          centres — say so.
+        - TEXTURE AND LIGHT MULTIPLY. The albedo comes from the texture and the
+          lighting scales it, which means `shading::lit` needs to sample rather than
+          read a vertex colour. That is the first time two fragment features have had
+          to compose, and it is worth noticing that the enum cannot express "both" —
+          more pressure toward Module 4's shader.
+        - MINIFICATION IS NOT SOLVED HERE and must be said so: bilinear fixes
+          magnification and does nothing for a texture sampled below its resolution,
+          which sparkles. Mipmaps are Module 6. Show the sparkle on the floor running
+          to the horizon — 3.2's scene is already the right test case.
+        - VERIFY: (a) a texture drawn 1:1 on screen is bit-identical to the source
+          image; (b) the uv origin is confirmed against SDL3's headers, not assumed;
+          (c) bilinear at texel centres equals nearest-neighbour exactly; (d) the
+          half-texel offset, measured as a sub-pixel shift; (e) texture x light on the
+          floor, against the same floor unlit.
+      Module 3 then finishes with 3.10: profiling and the Module 3 capstone.
 ```

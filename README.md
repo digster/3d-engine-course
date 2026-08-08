@@ -170,6 +170,23 @@ straight lines between them. That is not a bug in the equation, it is a bug in w
 is evaluated, and it is left standing on purpose: it is Lesson 3.8's entire argument.
 [Lesson 3.7](docs/lessons/03-07-specular-blinn-phong.html).
 
+So press <kbd>G</kbd> once more. It now cycles four evaluation points — the debug palette, flat,
+Gouraud, and **per-pixel** — while <kbd>Q</kbd> independently chooses whether the normal comes
+from the face or the vertex. Two keys, because those are two questions, and separating them is
+what Lesson 3.8 is about: where a normal comes from is a property of the *mesh*, and where the
+shading equation is evaluated is a property of the *pipeline*. The HUD prints how many pixels the
+current cell differs from per-pixel by, and with face normals selected and the highlight off it
+reads **0** — all three evaluation points give the identical picture, exactly, until you press
+<kbd>H</kbd> and the viewer starts to matter.
+
+Per-pixel is the first change in eight lessons to touch the rasterizer's inner loop: `vertex`
+grows two *varyings*, the clipper learns to carry them, and `fill_triangle` interpolates a normal
+and a position and calls the shading equation itself. What it costs is on the HUD in microseconds
+— and the answer contradicts the folklore. At 320×180 the torus covers 2.8 pixels per triangle,
+which means more vertices than covered pixels, and per-pixel shading is measured at **0.91×** the
+cost of Gouraud. It crosses over around three pixels per triangle and settles at 2.15× by 4K.
+[Lesson 3.8](docs/lessons/03-08-shading-models.html).
+
 Then hold <kbd>=</kbd> on that floor and walk *into* it. <kbd>K</kbd> cycles what happens to a
 triangle with a corner behind your eye: **clip** it (correct), **drop** it (the ground vanishes —
 31,747 pixels of 57,600), or divide anyway with **no guard** at all (the floor folds inside out and

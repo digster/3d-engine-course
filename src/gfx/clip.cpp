@@ -42,6 +42,15 @@ clip_vertex lerp(const clip_vertex& a, const clip_vertex& b, float t)
                              la.g + (lb.g - la.g) * t,
                              la.b + (lb.b - la.b) * t});
 
+    // Lesson 3.8's two varyings. Plain linear interpolation, and note what is NOT
+    // done to the normal: it is not renormalised. Interpolating two unit vectors
+    // gives a shorter one, and the honest place to fix that is where the value is
+    // used — the fragment — because the fill's own interpolation shortens it again
+    // between here and there. Normalising twice costs two square roots and fixes
+    // nothing the second one would not have.
+    out.normal = a.normal + (b.normal - a.normal) * t;
+    out.world = a.world + (b.world - a.world) * t;
+
     return out;
 }
 

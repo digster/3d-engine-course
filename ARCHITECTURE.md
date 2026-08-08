@@ -77,6 +77,7 @@ inventing one — but without paying framework ceremony before it buys anything.
 │   │   ├── framebuffer.hpp # CPU pixel buffer, ARGB8888, row-major   [EXISTS from 1.5]
 │   │   ├── framebuffer.cpp
 │   │   ├── light.hpp       # directional light, Lambert + specular    [EXISTS from 3.6]
+│   │   │                   #   NOTE: raster.hpp includes this as of 3.8 — see §5
 │   │   ├── depth_buffer.hpp# CPU depth attachment, [0,1], 0 = near  [EXISTS from 3.1]
 │   │   ├── depth_buffer.cpp
 │   │   ├── raster.hpp      # which pixels a SHAPE is made of         [EXISTS from 2.1]
@@ -876,6 +877,33 @@ Built roughly in dependency order — each module's milestone is the next module
   rendered and the difference counted. The same distinction — per-material data versus
   per-pipeline state — is what decides, in Module 6, which fields of a material become uniforms and
   which become shader variants.
+- **`vertex` is a position plus varyings, as of Module 3, Lesson 3.8.** Adding a world-space
+  normal and world position to it was not "two more fields": every field before them was either
+  geometry or a finished answer, and these are *inputs to a calculation that has not happened
+  yet*, carried across the triangle so the fragment can do it. That is what a GPU vertex shader
+  emits and what Module 4 will call a varying. Three consequences worth carrying: `vertex::colour`
+  now means different things under different pipelines (a lit result, or the albedo); **every
+  stage between the vertex and the fragment must interpolate them**, and the clipper is the one
+  that gets forgotten because it usually does nothing; and the cost is real — 28 bytes to 52, six
+  more interpolated floats per pixel — which is why minimising varyings is a genuine optimisation
+  on a GPU rather than a micro-concern.
+- **The rasterizer now depends on the lighting model, deliberately and temporarily** (Module 3,
+  Lesson 3.8). `raster.hpp` includes `light.hpp` and `shading::lit` calls `shade()` per fragment.
+  This is a layering violation: coverage and interpolation are the rasterizer's job, and what a
+  covered pixel should *look* like is not. The clean fix is to make the fragment calculation a
+  parameter the caller supplies — which is precisely what a fragment shader is, so building it
+  here would mean inventing Module 4's answer before the question is fully formed. Lesson 2.4's
+  header called the `shading` enum "a placeholder for a fragment shader" when it was created;
+  3.8 is where the placeholder started costing something. Fixed-function graphics hardware made
+  this exact trade and the programmable-shader era is the industry paying it off.
+- **Two axes, not one knob** (Module 3, Lesson 3.8). Where a normal comes from is a property of
+  the *mesh*; where the shading equation is evaluated is a property of the *pipeline*. Lesson 3.6
+  shipped them as one enum and could not extend it — a sure sign the type is enumerating a
+  product rather than a sum. Splitting them made three previously-invisible facts checkable,
+  because a grid has cells whose behaviour you can predict and a list does not: with a face normal
+  all three evaluation points agree to zero pixels, and *only* while the shading is
+  view-independent. The general rule for this codebase: **when a new case will not fit an enum,
+  check whether two of the existing values differ in more than one respect.**
 - **Public API surface is a deliberate artifact,** not whatever headers happen to be reachable.
 
 ---

@@ -481,13 +481,26 @@ void fill_triangle(framebuffer& fb, depth_buffer* depth,
     // the inner loop pays a multiply instead. Lesson 2.3 §4.
     const float inv_area = 1.0f / static_cast<float>(area);
 
+    // `lit` needs somewhere to read the light from. A null `lights` is not an
+    // error — it is a pipeline that was never given one — so fall back to the
+    // unlit path rather than dereferencing nothing. Decided once per triangle.
+    const bool lit = (style.shade == shading::lit) && (style.lights != nullptr);
+
+    // Under `lit` the corner colours are an ALBEDO that is about to be multiplied
+    // by a quantity of light, so they must be decoded whatever `blend_space` says.
+    // `blend_space::encoded` is a statement about how to *blend two colours*, and
+    // there is no coherent reading of it here: multiplying a stored sRGB byte by a
+    // cosine is not dim light, it is nothing at all (Lesson 1.6). So `lit` ignores
+    // the field rather than honouring it into nonsense.
+    const blend_space space = lit ? blend_space::linear : style.space;
+
     // Convert the corners **once per triangle**, not once per pixel. Three
     // conversions for a triangle covering eight thousand pixels; the interior is
     // then pure arithmetic. This hoist is the reason the correct path is
     // affordable at all — see §3.7 for what it costs when you forget it.
-    const rgb3 c0 = corner_in(v0.colour, style.space);
-    const rgb3 c1 = corner_in(v1.colour, style.space);
-    const rgb3 c2 = corner_in(v2.colour, style.space);
+    const rgb3 c0 = corner_in(v0.colour, space);
+    const rgb3 c1 = corner_in(v1.colour, space);
+    const rgb3 c2 = corner_in(v2.colour, space);
 
     // ---- Perspective correction (Lesson 3.2) -------------------------------
     //
@@ -515,6 +528,20 @@ void fill_triangle(framebuffer& fb, depth_buffer* depth,
     const float pu0 = v0.u * iw0, pv0 = v0.v * iw0;
     const float pu1 = v1.u * iw1, pv1 = v1.v * iw1;
     const float pu2 = v2.u * iw2, pv2 = v2.v * iw2;
+
+    // ---- Lesson 3.8: the two varyings per-pixel shading needs ---------------
+    //
+    // Pre-divided by w exactly like the colour and the uvs, and for exactly the
+    // same reason: what is affine in screen space is `a/w`, not `a`. Lesson 3.2's
+    // derivation never mentioned what `a` was, which is why it covers a normal and
+    // a position without a word of new argument.
+    //
+    // Hoisted out of the pixel loop and computed even when the fill is not lit,
+    // because six multiplies per triangle is not worth a branch. The PER-PIXEL
+    // work below is what is guarded.
+    const vec3 pn0 = v0.normal * iw0, pn1 = v1.normal * iw1, pn2 = v2.normal * iw2;
+    const vec3 pw0 = v0.world * iw0, pw1 = v1.world * iw1, pw2 = v2.world * iw2;
+
 
     int row_w0 = s.row_w0;
     int row_w1 = s.row_w1;
@@ -616,6 +643,51 @@ void fill_triangle(framebuffer& fb, depth_buffer* depth,
                         const float vv = (f0 * pv0 + f1 * pv1 + f2 * pv2) * w_recip;
                         row[x] = checker_at(uu, vv);
                     }
+                    else if (lit)
+                    {
+                        // ---- Per-pixel shading (Lesson 3.8) ----------------
+                        //
+                        // The whole lesson, in six lines. Interpolate the NORMAL
+                        // and the POSITION rather than the answer, then evaluate
+                        // the shading equation here — where the pixel is — instead
+                        // of at three corners and blending.
+                        //
+                        // The equation is byte-for-byte the one Lessons 3.6 and
+                        // 3.7 built. Nothing about the lighting changed; only
+                        // where it is called from. That is the distinction this
+                        // lesson exists to draw, and it is worth seeing that the
+                        // code says it too.
+                        const vec3 n{(f0 * pn0.x + f1 * pn1.x + f2 * pn2.x) * w_recip,
+                                     (f0 * pn0.y + f1 * pn1.y + f2 * pn2.y) * w_recip,
+                                     (f0 * pn0.z + f1 * pn1.z + f2 * pn2.z) * w_recip};
+                        const vec3 p{(f0 * pw0.x + f1 * pw1.x + f2 * pw2.x) * w_recip,
+                                     (f0 * pw0.y + f1 * pw1.y + f2 * pw2.y) * w_recip,
+                                     (f0 * pw0.z + f1 * pw1.z + f2 * pw2.z) * w_recip};
+
+                        // The albedo, interpolated by the same three multiply-adds
+                        // as any other attribute — because in this mode the corner
+                        // colours ARE the albedo. Note that it is taken in LINEAR
+                        // light and handed straight to `shade`, with no encode in
+                        // between: `blend_space` is ignored under `lit`, because
+                        // lighting arithmetic is linear by definition
+                        // (conventions §7c) and there is no meaning to give the
+                        // encoded variant here. One encode at the very end, which
+                        // is where an encode belongs.
+                        const linear_rgb albedo{
+                            (f0 * p0.r + f1 * p1.r + f2 * p2.r) * w_recip,
+                            (f0 * p0.g + f1 * p1.g + f2 * p2.g) * w_recip,
+                            (f0 * p0.b + f1 * p1.b + f2 * p2.b) * w_recip};
+
+                        // `shade` normalises `n` itself — a decision made in 3.6
+                        // ("a caller who forgets gets a brightness scaled by the
+                        // normal's length, which looks like a lighting bug and is
+                        // not one"), and this is the call site that cashes it in.
+                        // The interpolated normal is genuinely short here, worst in
+                        // the middle of the triangle; §3.5 measures by how much.
+                        row[x] = to_encoded(shade(albedo, n, style.eye - p,
+                                                  *style.lights, style.surface,
+                                                  style.model));
+                    }
                     else
                     {
                         // Three multiply-adds per channel, then the divide-back.
@@ -631,7 +703,7 @@ void fill_triangle(framebuffer& fb, depth_buffer* depth,
                         // the whole triangle. A branch predictor eats this for
                         // free; hoisting it would mean two copies of the loop,
                         // which is a worse trade at this size.
-                        row[x] = pixel_from(mixed, style.space);
+                        row[x] = pixel_from(mixed, space);
                     }
                 }
             }
