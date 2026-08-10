@@ -1137,7 +1137,7 @@ cl /std:c++20 /Bv /EP nul                      # MSVC is fiddlier; see docs</pre
         <code>_M_X64</code> (CPU). The engine uses exactly these to compile the right platform
         code — a Windows-specific window creation path behind <code>#if defined(_WIN32)</code>, say,
         or a NEON code path behind <code>__aarch64__</code>. This is the mechanism behind the
-        <a href="../ARCHITECTURE.md">platform layer</a>: the OS-specific code is quarantined behind
+        <a href="../../ARCHITECTURE.md">platform layer</a>: the OS-specific code is quarantined behind
         these macros so the rest of the engine never has to think about which system it is on. You
         have just met, in miniature, how one codebase targets three operating systems.
       </p>
