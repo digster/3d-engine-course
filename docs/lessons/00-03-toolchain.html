@@ -246,11 +246,14 @@ hello.cpp:33:1: error: unknown type name 'consteval'; did you mean 'constexpr'?
         <text x="530" y="46">hello.o</text>
       </g>
 
-      <!-- library joining at link -->
-      <rect x="512" y="150" width="138" height="36" rx="6" class="fill-soft" stroke="var(--axis-y)" stroke-width="1.4"/>
-      <text x="581" y="166" class="xs" text-anchor="middle" font-weight="700">C++ standard library</text>
-      <text x="581" y="178" class="xs muted" text-anchor="middle">+ C runtime</text>
-      <line x1="602" y1="148" x2="602" y2="106" class="ink-soft" stroke-width="1.3" marker-end="url(#tc-a)"/>
+      <!-- Library joining at link. It sits to the LEFT of the link → hello column, not
+           beneath it: that column is a through-route, so a box parked in it puts this
+           box and both its labels on top of the output arrow. Feed-in and feed-out
+           cannot share a corridor. The connector elbows right, then up into the linker. -->
+      <rect x="380" y="150" width="138" height="36" rx="6" class="fill-soft" stroke="var(--axis-y)" stroke-width="1.4"/>
+      <text x="449" y="166" class="xs" text-anchor="middle" font-weight="700">C++ standard library</text>
+      <text x="449" y="178" class="xs muted" text-anchor="middle">+ C runtime</text>
+      <path d="M518,168 H578 V106" fill="none" class="ink-soft" stroke-width="1.3" marker-end="url(#tc-a)"/>
 
       <!-- output -->
       <rect x="554" y="212" width="96" height="40" rx="6" class="fill-soft" stroke="var(--dia-hi)" stroke-width="1.8"/>
