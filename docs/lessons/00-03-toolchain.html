@@ -201,8 +201,9 @@ hello.cpp:33:1: error: unknown type name 'consteval'; did you mean 'constexpr'?
       <desc id="f1-d">A horizontal pipeline. hello.cpp enters the preprocessor, which produces a
         translation unit. That enters the compiler, which produces assembly. That enters the
         assembler, which produces an object file, hello.o. That plus the C++ standard library
-        enters the linker, which produces the executable, hello. A brace marks the first three
-        stages as "per source file" and the last as "once, over all objects".</desc>
+        enters the linker, which produces the executable, hello. A bracket under the first three
+        stages marks them "once per source file"; a second bracket under the linking column marks
+        it "once, over all objects".</desc>
       <defs>
         <marker id="tc-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
           <path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
@@ -265,8 +266,14 @@ hello.cpp:33:1: error: unknown type name 'consteval'; did you mean 'constexpr'?
       <path d="M128,118 V128 H508 V118" fill="none" class="ink-soft" stroke-width="1.2"/>
       <text x="318" y="142" class="xs muted" text-anchor="middle">once per source file — the "compile" step people mean</text>
 
-      <path d="M554,196 V204" fill="none" class="ink-soft" stroke-width="1.2"/>
-      <text x="602" y="276" class="xs muted" text-anchor="middle">once, over all objects</text>
+      <!-- The linking bracket, mirroring the one above: ticks pointing at what it groups,
+           caption directly beneath. It sits below the output box rather than under the link
+           box, because every band between y=104 and y=210 in this column is crossed by the
+           output arrow (and, higher up, by the library connector) — a run drawn there is cut
+           by the arrow, and the caption would land on it. This is why the mark was previously
+           a bare left tick with no horizontal run: there was nowhere for the run to go. -->
+      <path d="M554,260 V268 H650 V260" fill="none" class="ink-soft" stroke-width="1.2"/>
+      <text x="602" y="282" class="xs muted" text-anchor="middle">once, over all objects</text>
     </svg>
     <figcaption>
       <span class="fignum">Figure 1.</span> The four stages. The first three run once
