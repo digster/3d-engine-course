@@ -187,6 +187,29 @@ which means more vertices than covered pixels, and per-pixel shading is measured
 cost of Gouraud. It crosses over around three pixels per triangle and settles at 2.15× by 4K.
 [Lesson 3.8](docs/lessons/03-08-shading-models.html).
 
+Press <kbd>C</kbd> for the **FLOOR** and then <kbd>M</kbd>. The checkerboard that has run to the
+horizon since Lesson 3.2 was always a *formula* — `checker_at(u, v)` — and <kbd>M</kbd> swaps it
+for an actual image, one texel at a time. The picture barely moves, which is the point: the
+default image was chosen to match the rule, so everything that *does* change from here is the
+sampler's doing. <kbd>S</kbd> switches bilinear for nearest, <kbd>R</kbd> cycles repeat / mirrored
+/ clamp (watch clamp turn the tiling into four stretched streaks — the edge texels smeared
+outward forever, working exactly as designed), and <kbd>1</kbd> removes the half-texel offset.
+
+That last one is the lesson. A texel is a **sample, not a square**, so its value lives at
+`(i + 0.5)/N` — and forgetting the half shifts every bilinear sample by exactly half a texel,
+which the HUD counts. Then press <kbd>S</kbd> to nearest and the count drops to **0**, and the HUD
+says so in parentheses: nearest-neighbour sampling *cannot see this error*. Swept over 160,801
+sample positions, removing the offset changes 0 of them under nearest and 160,632 under bilinear.
+That is why the bug ships, and why the filter gets blamed for it.
+
+Then press <kbd>G</kbd> to per-pixel and swing the light with <kbd>A</kbd>/<kbd>D</kbd>. **The
+floor is lit** — for the first time, because a procedural rule computes a finished colour and has
+no *albedo* for a light to multiply, while a texture does. Texture × light is not a convention
+somebody chose: an albedo is a reflectance, a reflectance multiplies a quantity of light, and both
+have to be linear, which is why the sampler decodes sRGB *before* it filters. Get that order wrong
+and a black-and-white blend delivers 42.8% of the light it should.
+[Lesson 3.9](docs/lessons/03-09-textures.html).
+
 Then hold <kbd>=</kbd> on that floor and walk *into* it. <kbd>K</kbd> cycles what happens to a
 triangle with a corner behind your eye: **clip** it (correct), **drop** it (the ground vanishes —
 31,747 pixels of 57,600), or divide anyway with **no guard** at all (the floor folds inside out and

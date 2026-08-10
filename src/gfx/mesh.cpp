@@ -210,6 +210,18 @@ mesh_report validate(const mesh& m)
     return r;
 }
 
+void flip_uv_v(mesh_data& m)
+{
+    // One subtraction per uv, and no other consequence anywhere. Note in particular
+    // that it does NOT touch the indices: flipping a texture coordinate moves where
+    // a corner samples from, not which corners exist, so the vertex splits the
+    // loader worked out in 3.5 are unaffected. (Flipping the *image* instead would
+    // have been the other way to fix this, and it is worse: it duplicates work per
+    // texture rather than per mesh, and it makes the texels disagree with the file
+    // they came from.)
+    for (vec2& uv : m.uvs) { uv.y = 1.0f - uv.y; }
+}
+
 mesh_data make_torus(int major_segments, int minor_segments,
                      float major_radius, float minor_radius)
 {

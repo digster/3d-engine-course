@@ -1780,6 +1780,55 @@
     </div>
   </div>
 
+  <div class="tool">
+    <h3>Bilinear interpolation <span class="from">Lesson 3.9</span></h3>
+    <div class="eq">
+      <span>\[ f(t_u, t_v) = (1-t_u)(1-t_v)\,c_{00} + t_u(1-t_v)\,c_{10}
+                          + (1-t_u)t_v\,c_{01} + t_u t_v\,c_{11} \]</span>
+      <span class="eq-plain">f = (1-tu)(1-tv)*c00 + tu(1-tv)*c10 + (1-tu)tv*c01 + tu*tv*c11</span>
+    </div>
+    <p>
+      <strong>Two lerps along one axis, then one along the other</strong> &mdash; and the order of
+      the axes does not matter, because both routes multiply out to the four weights above.
+      That expansion is the whole derivation; there is nothing to memorise once you have done it
+      once.
+    </p>
+    <p>
+      The weights sum to 1:
+      <code>(1&minus;t<sub>v</sub>)[(1&minus;t<sub>u</sub>) + t<sub>u</sub>]
+      + t<sub>v</sub>[(1&minus;t<sub>u</sub>) + t<sub>u</sub>]
+      = (1&minus;t<sub>v</sub>) + t<sub>v</sub> = 1</code>. So this is an <strong>average</strong>,
+      and an average cannot brighten or darken &mdash; filtering a constant image returns the
+      constant exactly. That is the cheapest test there is for a weight bug, and it is the one a
+      busy test image will hide.
+    </p>
+    <p>
+      <strong>Where the sample point is</strong> is a separate question from how to blend, and it
+      is the one that produces bugs. A texel is a <em>sample</em>, so its value lives at
+      <code>(i + 0.5)/N</code>; the two centres bracketing a point are therefore found from
+      <code>x = u&middot;N &minus; 0.5</code>, not <code>u&middot;N</code>. Conventions
+      &sect;<a href="conventions.html#textures">7d</a> has the measured consequences.
+    </p>
+    <div class="worked">
+      <span class="label">Worked</span>
+      <p>
+        At <code>t<sub>u</sub> = 0.62</code>, <code>t<sub>v</sub> = 0.35</code>:
+        <code>0.38&times;0.65 = 0.2470</code>, <code>0.62&times;0.65 = 0.4030</code>,
+        <code>0.38&times;0.35 = 0.1330</code>, <code>0.62&times;0.35 = 0.2170</code>. Sum:
+        <strong>1.0000</strong>. The largest weight belongs to the top-right texel, and the sample
+        is indeed nearest that corner &mdash; a sanity check built into the numbers.
+      </p>
+      <p>
+        <strong>One difference from barycentric interpolation</strong>, and it matters. Barycentric
+        weights are <em>affine</em> in position, so interpolating a linear function is exact.
+        Bilinear weights contain the product <code>t<sub>u</sub>t<sub>v</sub></code>, which is not
+        affine &mdash; so bilinear is only <em>piecewise</em> smooth, and its derivative jumps at
+        every texel boundary. That discontinuity is the faint diamond quilt you see in a strongly
+        magnified texture, and it is what bicubic filtering exists to remove.
+      </p>
+    </div>
+  </div>
+
   <h2 id="coming"><span class="num">8</span>Coming as the course proceeds</h2>
 
   <p>
@@ -1797,7 +1846,7 @@
   </div>
 
   <div class="pending">
-    <b>Module 3 — Depth and light.</b> <span class="badge done">3.1–3.8 landed</span>
+    <b>Module 3 — Depth and light.</b> <span class="badge done">3.1–3.9 landed</span>
     Device depth and <code>1/w</code> affinity · the depth-precision budget ·
     perspective-correct interpolation · the near-plane crossing parameter · the signed-area
     facing test · the Euler characteristic and signed volume · <strong>Lambert's cosine law</strong> ·
@@ -1828,7 +1877,8 @@
       Almost everything above is one of three ideas wearing different clothes: <strong>a
       shadow</strong> (the dot product), <strong>a perpendicular</strong> (the cross product),
       and <strong>a weighted average</strong> (lerp). Barycentric coordinates are a weighted
-      average. Bilinear filtering is a weighted average of weighted averages. Lambert is a
+      average. Bilinear filtering &mdash; landed in Lesson 3.9 &mdash; is a weighted average of
+      weighted averages. Lambert is a
       shadow. Winding is a perpendicular's sign.
     </p>
     <p>

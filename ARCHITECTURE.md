@@ -80,14 +80,17 @@ inventing one — but without paying framework ceremony before it buys anything.
 │   │   │                   #   NOTE: raster.hpp includes this as of 3.8 — see §5
 │   │   ├── depth_buffer.hpp# CPU depth attachment, [0,1], 0 = near  [EXISTS from 3.1]
 │   │   ├── depth_buffer.cpp
+│   │   ├── texture.hpp     # image + sampler; SDL_GPUSampler-shaped   [EXISTS from 3.9]
+│   │   │                   #   NOTE: raster.hpp includes this too — see §5
+│   │   ├── texture.cpp     # wrap_texel, nearest + bilinear sampling
 │   │   ├── raster.hpp      # which pixels a SHAPE is made of         [EXISTS from 2.1]
 │   │   ├── raster.cpp      # lines (2.1) + triangles (2.2) + shading (2.4)
 │   │   │                   # + depth (3.1) + perspective correction (3.2)
-│   │   │                   # + back-face culling (3.4)
+│   │   │                   # + back-face culling (3.4) + texturing (3.9)
 │   │   ├── viewport.hpp    # NDC -> pixels + the y-flip           [EXISTS from 2.11]
 │   │   ├── mesh.hpp        # indexed geometry: verts + tri indices [EXISTS from 2.12]
 │   │   │                   # + normals, owning mesh_data, mesh_report (3.5)
-│   │   ├── mesh.cpp        # validate() + make_torus()             [EXISTS from 3.5]
+│   │   ├── mesh.cpp        # validate() + make_torus() + flip_uv_v   [EXISTS from 3.5]
 │   │   ├── obj.hpp         # Wavefront OBJ read/write, asset paths [EXISTS from 3.5]
 │   │   └── obj.cpp         # the index problem: (v, vt, vn) -> one vertex
 │   ├── game/               # NOT engine — game code, see §2.1.1        [EXISTS from 1.8]
@@ -887,8 +890,10 @@ Built roughly in dependency order — each module's milestone is the next module
   that gets forgotten because it usually does nothing; and the cost is real — 28 bytes to 52, six
   more interpolated floats per pixel — which is why minimising varyings is a genuine optimisation
   on a GPU rather than a micro-concern.
-- **The rasterizer now depends on the lighting model, deliberately and temporarily** (Module 3,
-  Lesson 3.8). `raster.hpp` includes `light.hpp` and `shading::lit` calls `shade()` per fragment.
+- **The rasterizer now depends on the lighting model *and* on textures, deliberately and
+  temporarily** (Module 3, Lessons 3.8 and 3.9). `raster.hpp` includes `light.hpp` and
+  `texture.hpp`; `shading::lit` calls `shade()` per fragment and `shading::textured` calls
+  `sample()`.
   This is a layering violation: coverage and interpolation are the rasterizer's job, and what a
   covered pixel should *look* like is not. The clean fix is to make the fragment calculation a
   parameter the caller supplies — which is precisely what a fragment shader is, so building it
@@ -904,6 +909,31 @@ Built roughly in dependency order — each module's milestone is the next module
   all three evaluation points agree to zero pixels, and *only* while the shading is
   view-independent. The general rule for this codebase: **when a new case will not fit an enum,
   check whether two of the existing values differ in more than one respect.**
+- **A sampler is an addressing scheme, not a lookup** (Module 3, Lesson 3.9). `src/gfx/texture.hpp`
+  mirrors `SDL_GPUSamplerCreateInfo` — same names, same enumerator order — so Module 4's port is a
+  rename. The one thing to carry structurally is *where the conversions live*: the **sRGB decode
+  is inside the sampler**, which puts it before the filter with no way for a call site to get the
+  order wrong, and is exactly what an `_SRGB` texture format does in hardware. Consequently
+  `sample()` returns `linear_rgb` and an image drops straight into the albedo slot of the shading
+  equation with no conversion at all — texture × light is then a consequence of what an albedo
+  *is* (a reflectance) rather than a convention anybody chose.
+- **Convention reconciliation belongs at the import boundary** (Module 3, Lesson 3.9). Wavefront
+  OBJ counts `v` upwards from the bottom; SDL_GPU counts it downwards from the top. Three places
+  could hold the flip and only one is right: not the **parser**, because Lesson 3.5 made a loader
+  a place where data must not differ from its source; not the **sampler**, because it has to match
+  hardware that will not flip anything for us; but the **import step**, which is where every real
+  engine puts it (Assimp's `aiProcess_FlipUVs`). `flip_uv_v(mesh_data&)` is that step, and the
+  rule generalises: *a loader must not alter its input; a pipeline may.* It must also be applied
+  to **every** mesh a load produces, in-memory ones included, or a round-trip test starts
+  measuring the import rather than the loader.
+- **The `shading` enum has stopped describing a fragment** (Module 3, Lesson 3.9), and this is the
+  clearest single signal that Module 4 is due. "Textured **and** lit" is not a value — it is `lit`
+  plus a binding. Lesson 3.8 fixed the previous instance of this by splitting one enum into two,
+  which worked because both questions had small closed answer sets; here the combinations of
+  albedo source × what is done with it × which of several textures are a *program*, not a grid,
+  and no third enum helps. Five pressures now point the same way (3.4 cull modes, 3.6 the wrong
+  home for `fill_style`, 3.7 specular, 3.8 per-triangle material, 3.9 this), and all five are
+  answered by the same thing: a fragment stage the caller programs.
 - **Public API surface is a deliberate artifact,** not whatever headers happen to be reachable.
 
 ---

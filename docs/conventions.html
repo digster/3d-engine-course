@@ -78,6 +78,7 @@
       <li><a href="#winding">Winding and culling</a></li>
       <li><a href="#assets">Geometry from disk &mdash; the asset contract</a></li>
       <li><a href="#lighting">Lighting</a></li>
+      <li><a href="#textures">Textures and sampling</a></li>
       <li><a href="#units">Units and angles</a></li>
       <li><a href="#simulation">The simulation contract</a></li>
       <li><a href="#colour">Colour and diagram conventions</a></li>
@@ -1130,12 +1131,16 @@
         <tr><td>Normals</td><td>stored <strong>as written</strong>, not normalised on load</td>
             <td>A loader is not a place where data may differ from its source. Normalise at the
                 point of use.</td></tr>
-        <tr><td>Texture coords</td><td>stored <strong>as written</strong>; the origin question is
-            <em>open</em></td>
-            <td>&#9888; Most exporters write <code>v</code> with the origin at the bottom-left,
-                while §<a href="#verified">11</a> records SDL_GPU sampling with the origin at the
-                top-left. We store the file&rsquo;s numbers unchanged and settle the flip in
-                Lesson 3.9, where a sampler first makes it observable.</td></tr>
+        <tr><td>Texture coords</td><td>stored <strong>as written</strong>; the flip happens at
+            <strong>import</strong> &mdash; <em>settled in Lesson 3.9</em></td>
+            <td>Wavefront writes <code>v</code> with the origin at the bottom-left; SDL_GPU
+                samples with the origin at the top-left (§<a href="#textures">7d</a>). The parser
+                still stores the file&rsquo;s numbers unchanged &mdash; that is this table&rsquo;s
+                own rule &mdash; and <code>flip_uv_v(mesh_data&amp;)</code> does
+                <code>v &rarr; 1 &minus; v</code> as a separate <em>import</em> step. Applied to
+                <strong>every</strong> mesh a load produces, including in-memory ones, because an
+                import applied to everything cannot break the 3.5 round trip and one applied to
+                some things silently can.</td></tr>
         <tr><td>Ownership</td><td><code>mesh_data</code> owns; <code>mesh</code> views</td>
             <td>Loaders fill a caller-owned out-parameter. Returning a <code>mesh</code> from a
                 function that built the data locally compiles and dangles.</td></tr>
@@ -1369,6 +1374,99 @@
       </tbody>
     </table>
   </div>
+
+  <!-- ===================================================================== -->
+  <h2 id="textures"><span class="num">7d</span>Textures and sampling</h2>
+
+  <p>
+    Settled in Lesson 3.9, and every field below mirrors <code>SDL_GPUSamplerCreateInfo</code>
+    &mdash; same names, same enumerator order &mdash; so Module 4&rsquo;s port is a rename rather
+    than a re-education.
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>Rule</th><th>Value</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td>What a texel <em>is</em></td><td>a <strong>sample</strong>, not a square. Its value
+            lives at <code>(i + 0.5) / N</code></td>
+            <td>Everything else in this table follows from this one sentence, including the
+                half-texel offset. A texel has a position and no extent; the little square you
+                draw when you picture a texture is a rendering convenience.</td></tr>
+        <tr><td>Origin</td><td><strong>top-left</strong>, <code>v</code> increasing
+            <strong>downwards</strong></td>
+            <td>Not a preference. <code>SDL3/SDL_gpu.h</code>, &ldquo;Coordinate System&rdquo;:
+                <em>&ldquo;Texture Coordinates: The top-left corner has an x,y coordinate of
+                (0, 0) and extends to the bottom-right corner at (1.0, 1.0). +Y is down.&rdquo;</em>
+                Agrees with the framebuffer (1.5) and the viewport flip (2.11).</td></tr>
+        <tr><td>Texel space</td><td><code>x = u &times; N</code>. Integers are texel
+            <strong>boundaries</strong>; <code>i + 0.5</code> is texel <code>i</code>&rsquo;s
+            <strong>centre</strong></td>
+            <td>Two questions, two answers. <em>Which texel contains this point</em> is
+                <code>floor(x)</code> and the half plays no part; <em>which two centres bracket
+                it</em> needs <code>x &minus; 0.5</code>.</td></tr>
+        <tr><td>Storage</td><td><code>Uint32</code> ARGB8888, <strong>sRGB-encoded</strong>, row 0
+            at the top</td>
+            <td>Byte-identical to a framebuffer pixel, so a 1:1 draw is a copy rather than a
+                conversion &mdash; which is what makes the bit-identity test possible.</td></tr>
+        <tr><td>Decode</td><td><strong>inside the sampler, before the filter</strong>.
+            <code>sample()</code> returns <code>linear_rgb</code></td>
+            <td>Filtering encoded bytes does not filter light: black and white blended wrongly
+                gives <strong>42.8%</strong> of the light it should, and the worst pair over all
+                65,536 is off by <strong>0.286</strong> of full range. This is exactly what an
+                <code>_SRGB</code> texture format does in hardware, for free.</td></tr>
+        <tr><td>Filter</td><td><code>nearest</code> | <code>linear</code>, matching
+            <code>SDL_GPUFilter</code>&rsquo;s order</td>
+            <td>One field where SDL has three (min / mag / mipmap). Without mipmaps there is
+                nothing different for a minification filter to do, and that <em>absence</em> is
+                this table&rsquo;s last row.</td></tr>
+        <tr><td>Addressing</td><td><code>repeat</code> | <code>mirrored_repeat</code> |
+            <code>clamp_to_edge</code>, <strong>per axis</strong>, matching
+            <code>SDL_GPUSamplerAddressMode</code></td>
+            <td>Per axis because a road strip repeats along its length and clamps across its
+                width. <code>i % n</code> is <strong>not</strong> repeat &mdash; C++ truncates
+                toward zero, so <code>&minus;1 % 4</code> is <code>&minus;1</code>. Mirroring is
+                one identity: index <code>&minus;1&minus;k</code> maps where index <code>k</code>
+                does, which forces the doubled edge texel.</td></tr>
+        <tr><td>Where addressing is applied</td><td>to <strong>each of the four texel indices
+            independently</strong>, after the neighbours are chosen</td>
+            <td>Wrap the <em>coordinate</em> first and a repeating texture blends the last texel
+                with itself &mdash; a hairline seam at every tile boundary, in the filtered mode
+                only. Measured seamless: <code>0.0000000</code> across both <code>u = 0</code> and
+                <code>u = 1</code>.</td></tr>
+        <tr><td>Bilinear</td><td>two lerps along <code>u</code>, one along <code>v</code>; weights
+            <code>(1&minus;t<sub>u</sub>)(1&minus;t<sub>v</sub>)</code> &hellip;</td>
+            <td>Order of the axes does not matter (both routes expand to the same four weights),
+                and the weights sum to <strong>1</strong> &mdash; so it is an average and cannot
+                brighten or darken. Third appearance of that shape after barycentric (2.3) and
+                Gouraud (2.4); the difference is that <code>t<sub>u</sub>t<sub>v</sub></code> is
+                not affine, so bilinear is only <em>piecewise</em> smooth.</td></tr>
+        <tr><td>1:1 is the identity</td><td>a texture drawn one screen pixel per texel is
+            <strong>bit-identical</strong> to its source</td>
+            <td>The strongest single check in the file: 0 of 4,096 texels differ under
+                <em>both</em> filters; the control with the offset removed differs on 1,779. Note
+                that the half-texel question exists at <strong>both</strong> ends &mdash; this
+                rasterizer samples attributes at integer pixel coordinates, so a 1:1 quad&rsquo;s
+                uvs run <code>0.5/N</code> to <code>1 + 0.5/N</code>.</td></tr>
+        <tr><td>Minification</td><td><strong>not solved.</strong> Bilinear reads four texels
+            however many the pixel covers</td>
+            <td>Traced on the floor: 0.60 texels per pixel at the bottom of the frame,
+                <strong>62.46</strong> two rows below the horizon &mdash; so the sampler sees
+                about 6.4% of the footprint there. And aliasing is caused not by a large
+                footprint but by a large footprint <em>containing disagreement</em>. Mipmaps are
+                Module 6.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    One consequence deserves stating on its own, because it is what makes the half-texel bug
+    survive in real pipelines: <strong>nearest-neighbour sampling cannot see it.</strong> Sweeping
+    160,801 sample positions, removing the offset changes <strong>0</strong> of them under nearest
+    and <strong>160,632</strong> under bilinear. A texture pipeline can therefore carry the bug for
+    years looking perfectly sharp, and reveal it the day somebody enables filtering &mdash; at
+    which point the filter gets blamed.
+  </p>
 
   <h2 id="units"><span class="num">8</span>Units and angles</h2>
 

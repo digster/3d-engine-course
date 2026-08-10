@@ -2324,3 +2324,121 @@ its claim (3.7's Figure 5 buried a tail on a linear radial scale). The rule that
 **state the figure's one claim in a sentence, then ask whether a reader could extract that exact
 sentence by measuring the picture.** If the claim is about a rate of change, plot the rate of
 change.
+
+---
+
+## A test failing is not evidence the code is wrong (Lesson 3.9)
+
+Five of `verify_39`'s checks failed on the first run. **Three were defects in the test.** That
+ratio is not unusual and it is worth internalising, because the instinct on a red test is to go
+and read the implementation.
+
+The three, and what each one was actually measuring:
+
+| Symptom | What the test was really measuring |
+|---|---|
+| The 1:1 blit test failed while its **control passed** — which is impossible if the test is sound | This rasterizer samples attributes at **integer** pixel coordinates, so pixel `i`'s sample point is `i`, not `i + 0.5`. Lining that up with a texel centre at `(i+0.5)/N` requires offsetting the quad's uvs by half a texel. |
+| Clamp addressing "smeared the wrong texel" | The probe sat at `v = 0.5`, which on an 8-texel image is **halfway between rows 3 and 4**. The sample was a blend of two rows, so comparing it against one texel was meaningless. |
+| 141 of 1,225 uvs "differed" after a uniform import step | `load_obj` numbers vertices by **order of first appearance** (Lesson 3.5); `make_torus` numbers them by its construction loop. `uvs[i]` named different vertices in the two arrays. Compared as sorted multisets: worst difference `0.000e+00`. |
+
+The rule: **when a test fails, first check that it is asking the question you think it is
+asking.** Two of the three above failed by not holding a second variable still — a test of one
+thing has to pin everything else at a value where it does nothing.
+
+A control that *passes* when the real test fails is the loudest possible version of this signal.
+It means the two are not measuring what their names say.
+
+## The half-texel question exists at both ends of a pipeline (Lesson 3.9)
+
+A texel is a **sample**, so its value lives at `(i + 0.5)/N`. That is the famous half.
+
+The one nobody mentions: a **framebuffer** has exactly the same question, and this engine
+answered it differently. `fill_triangle` steps its edge functions over integers, so a fragment's
+attributes are evaluated at the pixel's integer coordinate. Pixel `i`'s sample point is `i`.
+
+So a "1:1" blit is only bit-identical when *both* answers are reconciled — the quad's uvs must
+run `0.5/N` to `1 + 0.5/N`, not 0 to 1. Neither convention is wrong; assuming they agree is.
+
+Any time a continuous coordinate is mapped onto a discrete grid, ask where in the cell the value
+lives. There will be a half somewhere, and there may be two.
+
+## Nearest-neighbour sampling cannot see a half-texel error (Lesson 3.9)
+
+Measured over 160,801 sample positions: removing the half-texel offset changes **0** samples
+under nearest filtering and **160,632** under bilinear.
+
+This is why the bug ships. A texture pipeline can carry it for years while everything looks
+crisp and correct, and reveal it the day somebody enables filtering — at which point the symptom
+is "filtering makes everything soft and slightly misaligned" and **the filter gets blamed**.
+
+Generalises: a defect that only one of two modes can express will be attributed to whichever
+mode was switched on last. When a feature "introduces" a problem, check whether it merely made a
+pre-existing one visible.
+
+## Hold the confound constant, or your benchmark measures the wrong thing (Lesson 3.9)
+
+The obvious benchmark for "what does a texture fetch cost" compares a procedural rule against a
+texture lookup. It reported **5.04×** for nearest and **6.80×** for bilinear.
+
+Both numbers are nearly meaningless. `shading::uv_checker` returns a packed pixel and encodes
+nothing; `shading::textured` decodes texels and **re-encodes** the result, and `linear_to_srgb`
+calls `std::pow` — three per pixel. The benchmark was mostly measuring the sRGB transfer
+function.
+
+Making all three variants `shading::lit`, so every one pays exactly one encode, gives the honest
+numbers: a nearest fetch costs **1.12×** a lit fragment and bilinear **1.41×**, i.e. bilinear is
+**1.26×** nearest for four fetches and three lerps instead of one.
+
+Both tables are kept in `verify_39` §I, labelled. **A plausible benchmark that measures the wrong
+thing is more dangerous than no benchmark**, because it comes with a number and numbers end
+arguments. Before believing a ratio, list what *else* differs between the two things you timed.
+
+## Aliasing is not caused by a large footprint (Lesson 3.9)
+
+The usual explanation — "one pixel covers many texels, so it aliases" — is incomplete, and the
+measurement shows why. Four test images, all 64 texels wide, so the footprint at any given screen
+row is **identical** for all four: 62.46 texels per pixel two rows below the horizon. The sparkle
+under a sub-pixel camera nudge still went 8.0% → 16.2% → 32.6% → **64.8%** as the checker went
+from 4 to 32 cells.
+
+What changed was the **contrast inside the footprint**. Aliasing is caused by a pixel covering
+many texels *that disagree*, and the sampler having no way to average them. A large footprint over
+a smooth image is harmless.
+
+The practical consequence: if shimmer scales with texture *fineness* at a fixed camera distance,
+it is aliasing and not a filtering bug — and enabling bilinear will not help.
+
+## Duplicate SVG marker ids are silent, and stop being harmless later (Lesson 3.9)
+
+Every generated figure emitted the same `<defs>` block with the same four marker ids, so a page
+with six figures declared each id six times. `url(#e-i)` resolves to the **first** match, so every
+figure was quietly using figure 1's markers.
+
+Harmless while all six definitions are byte-identical — which is exactly what makes it a trap. The
+day one figure wants a different arrowhead, it silently gets somebody else's, and nothing in
+`check-page.js` looks for it. Marker ids are now namespaced per figure (`e-i-f391`); Lessons 3.7
+and 3.8 still carry the old pattern.
+
+Worth adding to a page check: `[...document.querySelectorAll('[id]')].map(e => e.id)` and look for
+repeats.
+
+## `.t-inv` needs an opposite, and the choice is a computation (Lesson 3.9)
+
+`course.css` provides `.t-inv` — a fixed white text fill — for labels sitting on a saturated
+shape, with the right justification: the shape is the same colour in both themes, so its label
+must **not** follow the theme's ink.
+
+The first draft of Lesson 3.9's figures used it for numerals on *every* swatch, including two pale
+ones (`#e2ded2`, `#c2bdae`), where white on light grey was barely readable. `check-page.js` cannot
+see this — it checks label *geometry*, not contrast.
+
+The fix is a page-local `.t-onlight` (fixed dark) and picking between them by **relative
+luminance** in the figure generator, not by eye:
+
+```python
+lum = 0.2126 * r + 0.7152 * g + 0.0722 * b
+return "t-onlight" if lum > 0.45 else "t-inv"
+```
+
+Contrast on generated figures is a computation, not a judgement call — and it is one of the
+things only a screenshot will catch.

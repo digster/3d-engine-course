@@ -56,6 +56,7 @@ add_executable(engine
     src/gfx/mesh.cpp
     src/gfx/obj.cpp
     src/gfx/raster.cpp
+    src/gfx/texture.cpp
 )
 
 # Make `src/` a root for our own includes, so a file says

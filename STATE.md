@@ -7,7 +7,7 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-08-08 (after Lesson 3.8, 34 of 94 lessons)
+updated: 2026-08-10 (after Lesson 3.9, 35 of 94 lessons)
 
 conventions:
   world: right-handed, Y-up, -Z forward
@@ -526,9 +526,12 @@ conventions:
             uint16 INDICES, ceiling 65536 = SDL_GPU_INDEXELEMENTSIZE_16BIT. Exceeding
             it is an ERROR; a silent wrap builds triangles from unrelated corners.
             NORMALS AND UVS STORED AS WRITTEN — a loader is not a place where data may
-            differ from its source. ⚠ THE uv ORIGIN IS STILL OPEN: exporters write v
-            bottom-up, SDL_GPU samples top-down; we store the file's numbers and
-            settle the flip in 3.9, where a sampler first makes it observable.
+            differ from its source. THE uv ORIGIN IS SETTLED (3.9): exporters write v
+            bottom-up, SDL_GPU samples top-down, and the flip is v -> 1 - v applied at
+            the IMPORT step (flip_uv_v), not in the parser and not in the sampler. The
+            parser's rule above is unchanged; a loader must not alter its input, but a
+            pipeline may. Applied to EVERY mesh a load produces, including in-memory
+            ones, or the 3.5 round trip starts measuring the import.
             MALFORMED IS FATAL, SILLY IS COUNTED. `f 1/x/2` stops the load with a line
             number; a zero-area face is dropped and reported. Both in the report.
             TOPOLOGY IS MEASURED ON THE WELDED MESH. A uv seam legitimately stores one
@@ -910,6 +913,70 @@ conventions:
          from conventions.html and math-toolbox.html. ANYTHING every page needs goes
          BETWEEN the markers.
 
+  textures: A TEXEL IS A SAMPLE, NOT A SQUARE — its value lives at (i + 0.5)/N. Settled
+        in 3.9, and every rule below follows from that one sentence.
+        ORIGIN TOP-LEFT, v DOWNWARDS. Not a preference: SDL3/SDL_gpu.h, "Coordinate
+        System" — "Texture Coordinates: The top-left corner has an x,y coordinate of
+        (0, 0) and extends to the bottom-right corner at (1.0, 1.0). +Y is down."
+        Agrees with the framebuffer (1.5) and the viewport flip (2.11).
+        TEXEL SPACE = u*N. Integers are texel BOUNDARIES, i+0.5 is the CENTRE. Two
+        questions, two answers: "which texel contains this point" is floor(u*N) and the
+        half plays NO part; "which two centres bracket it" needs u*N - 0.5.
+        THE HALF-TEXEL ERROR IS INVISIBLE TO NEAREST. 0 of 160801 samples change without
+        the offset; 160632 do under bilinear. So a pipeline carries it for years looking
+        sharp and reveals it the day filtering is switched on — and the FILTER gets
+        blamed. MEASURED: bilinear at a texel centre is that texel EXACTLY (worst error
+        0.000000000; 0.625 without). The shift is exactly -0.5000 texels.
+        1:1 IS THE IDENTITY and it is the strongest single check: 0 of 4096 texels differ
+        under BOTH filters, control 1779. Rests on the sRGB u8 round trip being exact
+        (measured: 0 of 256 values change).
+        THE HALF TEXEL EXISTS AT BOTH ENDS. This rasterizer samples attributes at INTEGER
+        pixel coordinates, so pixel i's sample point is i while a texel's value is at
+        (i+0.5)/N — a 1:1 quad's uvs run 0.5/N .. 1 + 0.5/N. Same family as 2.11's
+        pixel-centre question; a blit is exact only when both ends agree.
+        STORAGE: Uint32 ARGB8888, sRGB-ENCODED, row 0 at the TOP. Byte-identical to a
+        framebuffer pixel, so a 1:1 draw is a COPY rather than a conversion.
+        DECODE INSIDE THE SAMPLER, BEFORE THE FILTER. sample() returns linear_rgb, so the
+        order cannot be got wrong at a call site. Filtering encoded bytes: black+white
+        gives 0.2139 where 0.5 is wanted — 42.8% of the light; worst pair over all 65536
+        is (0,255), off by 0.286. THIS IS WHAT *_SRGB TEXTURE FORMATS DO, in hardware.
+        FILTER: nearest | linear, matching SDL_GPUFilter's order. ONE field where SDL has
+        three (min/mag/mipmap) — without mipmaps there is nothing different for a
+        minification filter to do, and that ABSENCE is the aliasing below.
+        ADDRESSING: repeat | mirrored_repeat | clamp_to_edge, PER AXIS, matching
+        SDL_GPUSamplerAddressMode's order. Per axis because a road strip repeats along its
+        length and clamps across its width.
+        `i % n` IS NOT REPEAT — C++ truncates toward zero, so -1 % 4 = -1. Fix:
+        m = i % n; if (m < 0) m += n. Adding n ONCE suffices. Getting it wrong paints a
+        one-texel stripe at exactly the boundary tiling was meant to cross.
+        MIRRORING IS ONE IDENTITY: index -1-k maps where index k does. That FORCES the
+        doubled edge texel rather than making it a choice. Period 2n.
+        THE FOUR TEXEL INDICES ARE ADDRESSED INDEPENDENTLY, after the neighbours are
+        chosen. Wrap the COORDINATE first and a repeating texture blends the last texel
+        with itself — a hairline seam at every tile boundary, in the FILTERED MODE ONLY.
+        MEASURED seamless: 0.0000000 across both u = 0 and u = 1.
+        BILINEAR = TWO LERPS ALONG u, ONE ALONG v. The four weights are (1-tu)(1-tv),
+        tu(1-tv), (1-tu)tv, tu*tv. ORDER OF THE AXES DOES NOT MATTER (5.96e-08 over
+        200000 samples) and THE WEIGHTS SUM TO 1, so it is an average and cannot brighten
+        or darken — filtering a CONSTANT image returns the constant exactly (0.000e+00
+        over 20000 samples), which is the test a busy image hides.
+        THIRD APPEARANCE of "weighted average, weights sum to one" (barycentric 2.3,
+        Gouraud 2.4, this). ONE REAL DIFFERENCE: barycentric weights are AFFINE; bilinear's
+        contain tu*tv and are not, so bilinear is only PIECEWISE smooth — the derivative
+        jumps at every texel boundary, which is the diamond quilt, and what bicubic fixes.
+        TEXTURE x LIGHT IS A CONSEQUENCE, NOT A CONVENTION. An albedo is a REFLECTANCE and
+        a reflectance multiplies a quantity of light, so both must be linear. MEASURED per
+        pixel over 32301 covered pixels: lit == albedo * light, 0 off by more than 0.02,
+        worst 0.0076 = two units of 8-bit quantisation.
+        MINIFICATION IS NOT SOLVED. Bilinear reads FOUR texels however many the pixel
+        covers. Traced footprint on the floor: 0.60 texels/px at the bottom of the frame,
+        62.46 two rows below the horizon; the curves cross at row ~103 and the sampler
+        sees 6.4% of the footprint at the horizon.
+        ALIASING IS NOT CAUSED BY A BIG FOOTPRINT, it is caused by a big footprint
+        CONTAINING DISAGREEMENT. All four test images are 64 texels wide so the footprint
+        is identical; sub-pixel-nudge sparkle still runs 8.0% / 16.2% / 32.6% / 64.8% for
+        4 / 8 / 16 / 32 cells. Mipmaps are Module 6.
+
 curriculum: 94 lessons, ~433 h, 9 modules
   M0:6  M1:8  M2:12  M3:10  M4:9  M5:10  M6:15  M7:13  M8:11
 
@@ -949,8 +1016,42 @@ completed:
   - 3.4  Back-Face Culling
   - 3.5  A Hand-Rolled OBJ Loader
   - 3.6  Normals and Lambert's Cosine Law
+  - 3.7  Specular and Blinn-Phong
+  - 3.8  Flat, Gouraud and Per-Pixel Shading
+  - 3.9  Texture Mapping and Bilinear Filtering
 
 capabilities:
+  - gfx 3.9: COLOUR FROM DATA. The last source of fragment colour that was not a rule.
+    src/gfx/texture.hpp/.cpp NEW — `texture` (owning, ARGB8888, sRGB-ENCODED, ROW 0 AT
+    THE TOP), `filter` / `address_mode` / `texel_origin`, `sampler`, `texture_binding`
+    (= SDL_GPUTextureSamplerBinding's pair, and a pair for the same reason: the same
+    image is read two ways in one frame and the same rules apply to a hundred images),
+    `wrap_texel`, and sample / sample_nearest / sample_bilinear RETURNING linear_rgb.
+    A TEXEL IS A SAMPLE, NOT A SQUARE, and every other rule here follows from it:
+    texel space is u*N, integers are BOUNDARIES, i+0.5 is the CENTRE. Nearest asks
+    floor(u*N) and the half plays no part; bilinear needs u*N - 0.5.
+    THE HALF-TEXEL ERROR IS INVISIBLE TO NEAREST — 0 of 160801 samples change, against
+    160632 under bilinear. That is why it ships, and why the filter gets blamed.
+    MEASURED: bilinear at a texel centre is that texel EXACTLY (worst error
+    0.000000000; 0.625 without the offset). The shift is -0.5000 texels, bisected on a
+    step image. A 1:1 draw is BIT-IDENTICAL: 0 of 4096 texels differ under BOTH filters,
+    control 1779. Rests on the sRGB u8 round trip being exact — measured, 0 of 256.
+    ONE `texel_filter` WHERE SDL HAS THREE (min/mag/mipmap), and the gap is NAMED: with
+    no mipmaps there is nothing different for a minification filter to do, and that
+    absence IS the aliasing.
+    src/gfx/mesh.hpp/.cpp — flip_uv_v(mesh_data&). One subtraction per uv; touches NO
+    indices, because a flip moves where a corner samples FROM, not which corners exist.
+    src/gfx/raster.hpp/.cpp — `shading::textured`, `fill_style::albedo`, four lines in
+    the fill loop, and the albedo source under `lit`. THE UVs ARE OBTAINED BY ARITHMETIC
+    IDENTICAL to uv_checker's — 2.4's "the rasterizer never learns what it carries",
+    collecting for the last time in Module 3. Nothing about interpolation, clipping,
+    perspective correction or the depth test changed.
+    src/main.cpp — albedo_source {rule, checker, uv_grid, fine}, texture_set, [M] image,
+    [S] filter, [R] address, [1] texel origin, [2] uv flip on import; texel_wrong and
+    filter_wrong.
+    THE FLOOR IS LIT. Since 3.6 it was the one surface light did not touch, because a
+    procedural rule computes a colour and has no ALBEDO for light to multiply. Module 3's
+    last structural gap in the fragment stage, closed.
   - gfx 3.6: LIGHT. face_shade's five-step ramp indexed by TRIANGLE NUMBER is retired to
     a key; surfaces now respond to which way they face.
     src/gfx/light.hpp NEW (header-only) — directional_light {direction, colour,
@@ -1361,6 +1462,85 @@ capabilities:
   - skills: reading SDL headers as source of truth; debugging with lldb/gdb/VS
 
 decisions:
+  - sample() RETURNS linear_rgb, NOT Uint32 (3.9). A texture is an albedo, an albedo is a
+    REFLECTANCE, and a reflectance multiplies a quantity of light — so both sides have to
+    be linear. Putting the decode inside the sampler also puts it BEFORE the filter with
+    no way to get the order wrong at a call site. MEASURED: black+white blended correctly
+    is 0.5 linear (stored 188); blended as bytes then decoded is 0.2139 (stored 128) —
+    42.8% of the light. Worst pair over all 65536: (0,255), off by 0.286 of full range.
+    THIS IS WHY *_SRGB TEXTURE FORMATS EXIST — hardware decodes in the sampler, for free.
+  - THE uv FLIP IS AT IMPORT, NOT IN THE PARSER OR THE SAMPLER (3.9). Resolves the tension
+    with 3.5's "a loader stores what the file says" by noticing the parser and the IMPORT
+    are different steps. A loader must not alter its input; a pipeline may. Not the
+    sampler either: the sampler is SDL_GPU's, and a sampler that "helpfully" flipped would
+    be correct here and wrong in Module 4 — the worst place to hide a convention.
+    THE FLIP COMMUTES WITH WRAPPING (worst 6.5e-06 over 100000 coords), which is what lets
+    it be applied once and forgotten. flip_uv_v is its own inverse, exactly.
+  - APPLIED TO EVERY BRANCH OF load_model, INCLUDING `generated`. An import applied to
+    everything cannot break 3.5's round trip; an import applied to some things silently
+    can. m.data is re-copied from m.generated each load, so nothing accumulates.
+  - uv_checker WAS KEPT, and 3.2 predicted it would be deleted. A procedural rule is not a
+    worse texture, it is a different thing: no memory, no sampler, and EXACT at any
+    magnification because there is no finite grid to run out of. Both one keypress apart
+    is the cleanest demonstration of what an image buys and what it costs.
+  - `textured` WITH NOTHING BOUND DRAWS MAGENTA while `lit` with nothing bound falls back
+    to vertex colours. Deliberately asymmetric: a lit fill with no texture is a legitimate
+    configuration; a textured fill with no texture is a mistake with no second reading.
+    Magenta beats black — black reads as "unlit" and sends you to the wrong file.
+  - "TEXTURED AND LIT" IS NOT AN ENUM VALUE, it is `lit` PLUS A BINDING — so `shading` no
+    longer describes a fragment on its own. 3.8 split an enum when one held two questions;
+    this is the same pressure and another enum will NOT do, because the combinations are a
+    PROGRAM rather than a grid. FIFTH pull toward Module 4's programmable fragment stage
+    (3.4 cull modes, 3.6 "fill_style is the wrong home", 3.7 specular, 3.8 per-triangle
+    material, now this).
+  - raster.hpp NOW INCLUDES texture.hpp AS WELL AS light.hpp. The rasterizer owns coverage,
+    interpolation, depth, lighting and texturing — five jobs a real pipeline splits into
+    "fixed function" and "whatever the shader says". Shipped deliberately, tracked, paid
+    in Module 4.
+  - THE HALF-TEXEL TOGGLE IS THE 9th KEEP-THE-WRONG-THING BARGAIN (draw_line_naive 2.1,
+    pong swept_collision 1.8, blend_space::encoded 2.4, the w toggles 2.7, trs_order 2.8,
+    interpolation::affine 3.2, near_mode 3.3, cull_choice::back_by_forward 3.4, Phong 3.7).
+    The most INVISIBLE of the nine: nearest cannot see it at all.
+  - THE SAMPLER COMPARISONS NEED NO SECOND collect_triangles, and that is worth naming: a
+    sampler is PIPELINE STATE, so changing it changes no geometry. Same fact that lets a
+    GPU swap a sampler without re-running the vertex stage.
+  - NO IMAGE DECODER (3.9). Decoding PNG is a COMPRESSION problem, not a graphics one, and
+    teaches nothing about rendering; stb_image is the approved answer and arrives with the
+    asset pipeline. Everything here takes an array of texels and does not care where it
+    came from — which is exactly why generating one in memory costs the lesson nothing.
+  - THE OBVIOUS BENCHMARK MEASURED THE WRONG THING, and both halves are kept in verify_39
+    §I so the trap is visible rather than quietly avoided. Unlit rule-vs-textured reads
+    5.04x / 6.80x — but uv_checker encodes NOTHING and textured re-encodes through
+    std::pow, three per pixel. Hold the encode constant (all three `lit`) and the real
+    numbers are 1.12x for a nearest fetch and 1.41x for bilinear, i.e. bilinear is 1.26x
+    nearest. NEVER QUOTE A FETCH COST WITHOUT SAYING WHAT ELSE DIFFERED BETWEEN THE RUNS.
+  - THREE OF verify_39's FIRST FIVE FAILURES WERE THE TEST, NOT THE CODE.
+    (a) The 1:1 test failed while its CONTROL passed — because this rasterizer samples
+        attributes at INTEGER pixel coordinates, so a 1:1 quad needs its uvs offset by half
+        a texel (0.5/N .. 1 + 0.5/N). THE HALF-TEXEL QUESTION EXISTS AT BOTH ENDS of the
+        pipeline; 2.11 answered one end and 3.9 answers the other.
+    (b) Probing clamp at v = 0.5 on an 8-texel image straddles two rows, so the sample was
+        a BLEND and comparing it against one texel was meaningless. A test of one thing has
+        to hold everything else where it does nothing.
+    (c) Comparing torus.obj's uvs against make_torus()'s INDEX BY INDEX reported 141 of
+        1225 differing — it was measuring the VERTEX NUMBERING, because load_obj numbers by
+        first appearance (3.5) and make_torus by its construction loop. As sorted multisets:
+        worst 0.000e+00.
+    RULE: when a test fails, check it is asking the question you think it is asking before
+    you go looking at the code.
+  - A FIGURE MEASURED ON THE WRONG SIGNAL. The half-texel shift first read -0.69 texels
+    because it fitted a "step" on the uv grid, which has darkened lines every N/8. Rebuilt
+    on a ONE-ROW step image it reads -0.5000 exactly. A measurement needs a signal whose
+    shape you can state in one sentence.
+  - SVG MARKER IDS ARE NOW NAMESPACED PER FIGURE (e-i-f391, …). Six figures on one page
+    declaring the same four ids is invalid HTML, and url(#e-i) resolves to the FIRST match
+    — so every figure quietly used figure 1's markers. Byte-identical definitions made that
+    harmless and would have made it baffling the first time one figure wanted a different
+    arrowhead. 3.7 and 3.8 still carry the old pattern.
+  - SWATCH NUMERALS PICK THEIR FILL BY RELATIVE LUMINANCE, not by eye: `.t-inv` (fixed
+    white) on dark swatches, a page-local `.t-onlight` (fixed dark) on pale ones. Both are
+    theme-INDEPENDENT for course.css's stated reason — the shape underneath is the same
+    colour in both themes, so the label must not follow the theme's ink.
   - input lives in src/core/, not src/platform/ — there is no platform layer until
     Module 5, and input is a state cache rather than a device driver. Revisit at the
     Module 5 refactor. Recorded in ARCHITECTURE.md §2.1.
@@ -1714,7 +1894,7 @@ files:
             depth_buffer.hpp, depth_buffer.cpp,
             framebuffer.hpp, framebuffer.cpp,
             mesh.hpp, mesh.cpp, obj.hpp, obj.cpp,
-            raster.hpp, raster.cpp, viewport.hpp
+            raster.hpp, raster.cpp, texture.hpp, texture.cpp, viewport.hpp
   src/math/: vec2.hpp, vec3.hpp, vec4.hpp, mat2.hpp, mat3.hpp, mat4.hpp, transform.hpp
   src/game/: pong.hpp, pong.cpp
   assets/: cube.obj, twisted.obj, quirks.obj, torus.obj
@@ -1735,7 +1915,8 @@ files:
                  03-01-z-buffer.html, 03-02-perspective-correct.html,
                  03-03-near-plane-clipping.html, 03-04-back-face-culling.html,
                  03-05-obj-loader.html, 03-06-normals-and-lambert.html,
-                 03-07-specular-blinn-phong.html, 03-08-shading-models.html
+                 03-07-specular-blinn-phong.html, 03-08-shading-models.html,
+                 03-09-textures.html
   docs/shared/: course.css, course.js      (THE stylesheet + page script; one copy each)
   docs/_template/: lesson-template.html, README.md, apply-shared.py, check-page.js
   memory/: 2026-07-16.md, 2026-07-18.md, 2026-07-21.md, 2026-07-22.md,
@@ -1748,49 +1929,34 @@ files:
 
 
 
-next: 3.9 — Texture Mapping and Bilinear Filtering
-      (planned filename: docs/lessons/03-09-textures.html — 3.8 links to the index for
-      now, so BOTH of 3.8's next links and its Recap need repointing when it lands)
-      THE FLOOR IS THE ONLY SURFACE 3.8 LEFT UNLIT, and it was left unlit on purpose:
-      `shading::uv_checker` computes a colour from a rule and there is no albedo for a
-      light to multiply. 3.9 is where texture and lighting learn to multiply, which is
-      the last structural gap in Module 3's fragment stage.
-        - REPLACE THE RULE WITH A SAMPLER. checker_at(u,v) becomes a lookup into an
-          image. Note what does NOT change: the uv interpolation (3.2), the
-          perspective correction, the fill loop's shape. 2.4's "the rasterizer never
-          learns what it carries" pays off one more time.
-        - SETTLE THE uv ORIGIN, which 3.5 explicitly deferred and STATE has carried as
-          an open question ever since: exporters write v bottom-up, SDL_GPU samples
-          top-down, and the loader stores the file's numbers unchanged. A sampler is
-          the first thing that makes the choice OBSERVABLE, so this is where it gets
-          decided — and it must be decided against SDL_GPU's convention, verified in
-          the header, because Module 4 is a port and not a redesign.
-        - WRAP MODES ARE A REAL CHOICE with a visible failure each: repeat, clamp,
-          mirror. The classic bug is a clamped texture showing a smeared edge row, or
-          a repeated one showing a seam because the last texel and the first are not
-          the same. Show, do not describe.
-        - BILINEAR AS A DOUBLE LERP, which is the math-toolbox's "three ideas wearing
-          different clothes" landing for the third time (barycentric = weighted
-          average, this = weighted average of weighted averages). Derive it as two
-          lerps along u then one along v, and note the order does not matter.
-        - THE HALF-TEXEL OFFSET is the subtle part and the source of most texture
-          bugs: a texel is a SAMPLE, not a square, and its centre is at (i+0.5)/N.
-          Getting it wrong shifts the image by half a texel and blurs a
-          nearest-neighbour lookup into a two-texel blend. Same family as 2.11's pixel
-          centres — say so.
-        - TEXTURE AND LIGHT MULTIPLY. The albedo comes from the texture and the
-          lighting scales it, which means `shading::lit` needs to sample rather than
-          read a vertex colour. That is the first time two fragment features have had
-          to compose, and it is worth noticing that the enum cannot express "both" —
-          more pressure toward Module 4's shader.
-        - MINIFICATION IS NOT SOLVED HERE and must be said so: bilinear fixes
-          magnification and does nothing for a texture sampled below its resolution,
-          which sparkles. Mipmaps are Module 6. Show the sparkle on the floor running
-          to the horizon — 3.2's scene is already the right test case.
-        - VERIFY: (a) a texture drawn 1:1 on screen is bit-identical to the source
-          image; (b) the uv origin is confirmed against SDL3's headers, not assumed;
-          (c) bilinear at texel centres equals nearest-neighbour exactly; (d) the
-          half-texel offset, measured as a sub-pixel shift; (e) texture x light on the
-          floor, against the same floor unlit.
-      Module 3 then finishes with 3.10: profiling and the Module 3 capstone.
+next: 3.10 — Profiling, and the Module 3 Capstone
+      (planned filename: docs/lessons/03-10-profiling-capstone.html — 3.9 links to the
+      index for now, so BOTH of 3.9's next links and its Recap need repointing when it
+      lands)
+      MODULE 3 FINISHES BY MEASURING WHAT IT BUILT. Every lesson since 3.1 has produced
+      one number on demand; 3.10 turns that habit into a method.
+        - MEASURE, DO NOT GUESS, and prove it by getting a prediction wrong on purpose
+          first. 3.8's per-pixel-is-cheaper-below-3px/tri and 3.9's benchmark-measured-
+          the-encode are both already in the bank; the lesson is the METHOD that
+          produced them.
+        - A FRAME BUDGET IS A DIVISION. 16.7 ms at 60 Hz, and where it currently goes:
+          projection, clip, cull, fill, HUD. Instrument each, and note that the answer
+          changes completely with resolution — px/triangle is the axis, not triangle
+          count, which 3.8 already showed inverts the folklore.
+        - THE FILL LOOP IS THE WHOLE COST, and the parts of it are not what people
+          expect. Candidates to measure: the per-pixel divide (3.2), the sRGB encode
+          (3.9 §I says three pow calls dominate an unlit textured fill), the depth test,
+          the four texel fetches.
+        - THE sRGB ENCODE IS ALREADY THE MEASURED HOTSPOT and there is a real fix worth
+          teaching: a lookup table cannot work in that direction (continuous input), but
+          a cheaper approximation, or deferring the encode, or 8-bit-target quantisation
+          all can. This is the first optimisation in the course with a measured before.
+        - CACHE BEHAVIOUR, FIRST CONTACT. vertex went 28 -> 52 bytes in 3.8; the depth
+          buffer and the colour buffer are two streams; a 64x64 texture is 16 KB and
+          fits in L1, a 1024x1024 one does not. Measure the cliff rather than assert it.
+        - CAPSTONE: the textured, lit, z-buffered scene, with a frame budget the student
+          can read and defend. Every capability Module 3 added, in one picture, and a
+          profile that accounts for it.
+      Module 4 then opens with SDL_GPU, and its first job is the debt this module has
+      been listing: a programmable fragment stage.
 ```

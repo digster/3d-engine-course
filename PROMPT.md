@@ -1154,3 +1154,51 @@ Figure 4 was captioned "continuous but not smooth", plotted correctly, and passe
 The content was in the derivative. Adding a slope panel underneath made it immediate: the true
 slope is a curve, Gouraud's is a staircase. Second lesson running where a figure passed every
 automated check while hiding its claim.
+
+---
+
+## 2026-08-10 — `next` (Lesson 3.9: Texture Mapping and Bilinear Filtering)
+
+> Based on the STATE and the project's claude instructions, work on the next.
+
+Resumed from `STATE.md`'s `next: 3.9`, following its planning notes. Delivered
+`docs/lessons/03-09-textures.html` (11,389 words of prose, 6 computed figures, an interactive
+sampler widget, 19 listings, 7 pitfalls, 5 exercises), `src/gfx/texture.{hpp,cpp}`,
+`flip_uv_v` on `mesh_data`, `shading::textured` + `fill_style::albedo` in the rasterizer, five
+new demo keys, and `scratch/verify_39.cpp` (9 sections, all pass).
+
+### What the lesson turns on
+
+**A texel is a sample, not a square.** Everything else is a consequence: the half-texel offset,
+which of two texels a point lies between, why a 1:1 blit can be bit-identical, and why nearest
+filtering cannot see the offset at all.
+
+### The three things I did not expect
+
+- **Three of `verify_39`'s first five failures were the test, not the code.** The loudest was the
+  1:1 blit failing while its *control passed* — impossible if the test is sound. Cause: this
+  rasterizer samples attributes at integer pixel coordinates, so the half-texel question exists at
+  **both ends** of the pipeline and a 1:1 quad needs its uvs offset too.
+- **The obvious benchmark measured the sRGB encode, not the fetch.** Rule-vs-textured read 5.04×,
+  which should not be believable for an array lookup that fits in L1. `uv_checker` encodes
+  nothing; `textured` re-encodes through three `std::pow` calls. Holding the encode constant gives
+  1.12× for a nearest fetch and 1.41× for bilinear. Both tables are kept and labelled.
+- **Aliasing is not caused by a large footprint.** All four test images are 64 texels wide, so the
+  footprint is identical at any given screen row — 62.46 texels per pixel near the horizon — yet
+  the sparkle still ran 8.0% → 64.8% as the checker got finer. What changes is the *contrast*
+  inside the footprint.
+
+### The convention this settles
+
+The uv origin, open since Lesson 3.5. Settled by quoting `SDL_gpu.h`'s "Coordinate System"
+section rather than by trying both, and the flip lands at the **import** step — not the parser
+(3.5: a loader must not alter its input) and not the sampler (which must match hardware). New
+rule for the codebase: *a loader must not alter its input; a pipeline may.*
+
+### The debt this adds, deliberately
+
+`raster.hpp` now includes `texture.hpp` as well as `light.hpp`, and "textured **and** lit" is not
+an enum value — it is `lit` plus a binding, so `shading` has stopped describing a fragment on its
+own. 3.8 fixed the previous instance by splitting one enum into two; this one cannot be fixed that
+way, because the combinations are a program rather than a grid. Fifth pressure pointing at Module
+4's programmable fragment stage.

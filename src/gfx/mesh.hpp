@@ -290,6 +290,44 @@ struct mesh_data
     [[nodiscard]] std::size_t triangle_count() const { return indices.size() / 3; }
 };
 
+/// Convert texture coordinates from **OBJ's** convention to **the texture's**:
+/// `v -> 1 - v`. Lesson 3.9.
+///
+/// Two conventions, both entirely reasonable, disagreeing about one axis:
+///
+///   - **Wavefront OBJ** puts `(0, 0)` at the **bottom** left of the image and
+///     `v` increases **upwards**. That is the mathematician's convention, and it is
+///     what every exporter writes.
+///   - **SDL_GPU** puts `(0, 0)` at the **top** left and `v` increases
+///     **downwards**. `SDL3/SDL_gpu.h`, "Coordinate System": *"Texture Coordinates:
+///     The top-left corner has an x,y coordinate of (0, 0) and extends to the
+///     bottom-right corner at (1.0, 1.0). +Y is down."*
+///
+/// So the two differ by a vertical flip, and something has to do it. **This
+/// function is where**, and where it is *not* is the more interesting half:
+///
+///   - **not in the parser.** Lesson 3.5 settled that a loader stores what the file
+///     says, so that two loads of a file are diffable and a loader is never a place
+///     where data quietly differs from its source. `load_obj` still stores `vt`
+///     verbatim.
+///   - **not in the sampler.** The sampler is SDL_GPU's, and SDL_GPU will not flip
+///     anything for us. A sampler that "helpfully" flipped would be correct in this
+///     renderer and wrong in Module 4's, which is the worst possible place to hide
+///     a convention.
+///
+/// It belongs to the **import step** — the boundary where somebody else's data
+/// becomes ours — which is exactly where every real engine puts it. Assimp calls it
+/// `aiProcess_FlipUVs`; Unity and Unreal do it on import and never mention it again.
+///
+/// **Correct for tiled coordinates too**, which is not obvious. `1 - v` is a
+/// reflection of the whole `v` axis about `0.5`, so a coordinate of 2.5 (two and a
+/// half tiles up) becomes -1.5, whose fractional part under `repeat` is 0.5 — half
+/// way down a tile, which is the same point of the same tile. The flip commutes with
+/// wrapping, so it can be applied once at load and forgotten.
+///
+/// A mesh with no uvs is left alone; there is nothing to flip.
+void flip_uv_v(mesh_data& m);
+
 /// **The index-space ceiling.** `mesh::indices` is `std::uint16_t`, so a mesh can
 /// name at most 65,536 distinct vertices. That is not a limitation we invented: GPU
 /// index buffers come in exactly these two widths, and SDL_GPU spells them

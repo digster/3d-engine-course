@@ -32,6 +32,7 @@
 #include "gfx/mesh.hpp"
 #include "gfx/obj.hpp"
 #include "gfx/raster.hpp"
+#include "gfx/texture.hpp"
 #include "gfx/viewport.hpp"
 #include "math/mat2.hpp"
 #include "math/mat3.hpp"
@@ -1432,6 +1433,12 @@ struct model_state
     engine::mesh_report check;     ///< …and whether it is safe to draw
     double load_ms = 0.0;          ///< wall-clock cost of the last load
 
+    /// Whether `flip_uv_v` was applied on the way in — Lesson 3.9. Recorded rather
+    /// than inferred, because "are these uvs in OBJ space or texture space?" is
+    /// exactly the question a mesh cannot answer by looking at its own numbers, and
+    /// every convention bug in a pipeline is somebody assuming the answer.
+    bool uv_flipped = true;
+
     /// `make_torus()`, built once. The control for the round-trip comparison, and
     /// the source `assets/torus.obj` was written from.
     engine::mesh_data generated;
@@ -1444,9 +1451,18 @@ struct model_state
 /// ask the second question at all. Its answer feeds `scene_object::closed`, so the
 /// demo's back-face culling is now gated on a MEASUREMENT rather than on a promise —
 /// which is the debt Lesson 3.4 §3.6 left, paid.
-void load_model(model_state& m, model_choice c)
+///
+/// **Lesson 3.9 adds the uv flip**, and adds it here rather than inside the parser:
+/// OBJ writes `v` from the bottom up and a texture is addressed from the top down
+/// (`mesh.hpp`'s `flip_uv_v` quotes SDL_gpu.h on the point), so somebody has to
+/// reconcile them and the import step is the somebody. `apply_uv_flip` is a
+/// parameter rather than a constant so the disagreement can be switched back on
+/// with [2] and looked at — it is not subtle when you can see it, and it is nearly
+/// invisible when you cannot.
+void load_model(model_state& m, model_choice c, bool apply_uv_flip)
 {
     m.choice = c;
+    m.uv_flipped = apply_uv_flip;
 
     const Uint64 t0 = SDL_GetTicksNS();
     if (c == model_choice::generated)
@@ -1466,6 +1482,23 @@ void load_model(model_state& m, model_choice c)
         const std::string path = engine::asset_path(file_of(c));
         m.load = engine::load_obj(path.c_str(), m.data);
     }
+    // OBJ space -> texture space, before anything measures or draws the mesh.
+    //
+    // Applied to EVERY branch, including `generated`, and that uniformity is what
+    // keeps the round-trip comparison honest: `assets/torus.obj` was written from
+    // `make_torus()`, so if the file's copy were flipped and the in-memory copy were
+    // not, `roundtrip_wrong` would start counting the import step instead of the
+    // loader. An import applied to everything cannot break a round trip; an import
+    // applied to some things silently can. `m.data` is re-copied from `m.generated`
+    // on every load, so nothing accumulates.
+    //
+    // Inside the timed region on purpose: it is part of what importing an asset
+    // costs, and the HUD's load time should not quietly exclude the steps that
+    // happen after the parse. (It is 24 subtractions on the cube and 2,352 on the
+    // torus, so the answer is "nothing measurable" — which is worth knowing rather
+    // than assuming.)
+    if (apply_uv_flip) { engine::flip_uv_v(m.data); }
+
     const Uint64 t1 = SDL_GetTicksNS();
     m.load_ms = static_cast<double>(t1 - t0) / 1.0e6;
 
@@ -1977,6 +2010,132 @@ enum class shade_eval
     if (e == shade_eval::flat) { return false; }   // flat IS the thing compared against
     return m == engine::specular_model::none;
 }
+
+// ---------------------------------------------------------------------------
+// Lesson 3.9 — where a fragment's colour comes from
+// ---------------------------------------------------------------------------
+
+/// Which image the surface reads its albedo from. [M] cycles.
+///
+/// The first entry is not an image at all, and keeping it first is the argument:
+/// a procedural rule and a texture lookup answer the same question, and putting
+/// them one keypress apart is the cheapest way to see what the array buys (art you
+/// could not have written a formula for) and what it costs (a finite grid, which
+/// runs out under magnification and aliases under minification).
+enum class albedo_source
+{
+    /// `shading::uv_checker` — Lesson 3.2's formula. No memory, no sampler, and
+    /// **exact at every magnification**, because there is no grid to run out of.
+    rule,
+
+    /// A 64x64 checkerboard of 8x8 squares: the same pattern as `rule`, now as
+    /// texels. Chosen so the two can be compared directly — every visible
+    /// difference between them is the sampler's doing and nothing else's.
+    checker,
+
+    /// The orientation chart. Four coloured quadrants and a white top-left mark,
+    /// so "which way is v" is a thing you read rather than reason about.
+    uv_grid,
+
+    /// A 64x64 checkerboard of 32x32 squares — two texels per square. Deliberately
+    /// finer than the screen can resolve at any distance, so the floor running to
+    /// the horizon sparkles. That sparkle is §7's subject and mipmaps are Module 6.
+    fine
+};
+
+[[nodiscard]] const char* name_of(albedo_source a)
+{
+    switch (a)
+    {
+    case albedo_source::rule:    return "RULE (procedural, 3.2)";
+    case albedo_source::checker: return "checker 64px/8 cells";
+    case albedo_source::uv_grid: return "uv grid (orientation)";
+    case albedo_source::fine:    return "fine 64px/32 cells";
+    }
+    return "?";
+}
+
+[[nodiscard]] albedo_source next_albedo(albedo_source a)
+{
+    switch (a)
+    {
+    case albedo_source::rule:    return albedo_source::checker;
+    case albedo_source::checker: return albedo_source::uv_grid;
+    case albedo_source::uv_grid: return albedo_source::fine;
+    case albedo_source::fine:    return albedo_source::rule;
+    }
+    return albedo_source::rule;
+}
+
+[[nodiscard]] const char* name_of(engine::filter f)
+{
+    switch (f)
+    {
+    case engine::filter::nearest: return "NEAREST";
+    case engine::filter::linear:  return "BILINEAR";
+    }
+    return "?";
+}
+
+[[nodiscard]] const char* name_of(engine::address_mode m)
+{
+    switch (m)
+    {
+    case engine::address_mode::repeat:          return "repeat";
+    case engine::address_mode::mirrored_repeat: return "mirrored";
+    case engine::address_mode::clamp_to_edge:   return "clamp";
+    }
+    return "?";
+}
+
+[[nodiscard]] engine::address_mode next_address(engine::address_mode m)
+{
+    switch (m)
+    {
+    case engine::address_mode::repeat:          return engine::address_mode::mirrored_repeat;
+    case engine::address_mode::mirrored_repeat: return engine::address_mode::clamp_to_edge;
+    case engine::address_mode::clamp_to_edge:   return engine::address_mode::repeat;
+    }
+    return engine::address_mode::repeat;
+}
+
+/// The three images, built once at startup.
+///
+/// Owned by the demo, like `floor_geometry` and for the same reason and with the
+/// same complaint: there is still nothing in this engine whose job is to own
+/// assets. Two lessons running have now noted it. Module 5's asset system is the
+/// answer, and the pressure is being allowed to accumulate rather than relieved
+/// early with a guess.
+struct texture_set
+{
+    engine::texture checker;
+    engine::texture uv_grid;
+    engine::texture fine;
+
+    void build()
+    {
+        // 64x64: big enough that magnification is visible on a 320x180 framebuffer
+        // and small enough that a whole image fits comfortably in L1, which is what
+        // keeps the per-pixel fetch honest rather than a cache-miss benchmark.
+        checker = engine::make_checker(64, 8, 0xFFE8E2D6u, 0xFF3A4058u);
+        uv_grid = engine::make_uv_grid(64);
+        fine = engine::make_checker(64, 32, 0xFFE8E2D6u, 0xFF3A4058u);
+    }
+
+    /// The image for a choice, or `nullptr` for `rule` — which is not an error, it
+    /// is the mode that has no image by definition.
+    [[nodiscard]] const engine::texture* pick(albedo_source a) const
+    {
+        switch (a)
+        {
+        case albedo_source::rule:    return nullptr;
+        case albedo_source::checker: return &checker;
+        case albedo_source::uv_grid: return &uv_grid;
+        case albedo_source::fine:    return &fine;
+        }
+        return nullptr;
+    }
+};
 
 // ---------------------------------------------------------------------------
 // Lesson 3.7 — the highlight
@@ -3295,11 +3454,21 @@ int main(int argc, char* argv[])
     constexpr float k_shininess[] = {2.0f, 4.0f, 8.0f, 16.0f, 32.0f, 64.0f, 128.0f, 256.0f};
     constexpr int k_shininess_count = static_cast<int>(std::size(k_shininess));
 
+    // ---- Lesson 3.9 --------------------------------------------------------
+    albedo_source albedo = albedo_source::checker;   ///< [M] — which image, or the rule
+    engine::sampler samp;                            ///< [S] filter, [R] address, [1] origin
+    bool uv_flip_on_load = true;                     ///< [2] — OBJ v-up to texture v-down
+    texture_set textures;                            ///< the three images, built once
+    int texel_wrong = 0;                             ///< px the half-texel error costs
+    int filter_wrong = 0;                            ///< px bilinear and nearest disagree about
+
+    textures.build();
+
     // The control mesh, built once. `assets/torus.obj` was written from exactly this
     // call, so "loaded == generated" is a real end-to-end check of writer and reader
     // together — and it is a claim the demo re-tests on every frame it is shown.
     model.generated = engine::make_torus(48, 24, 1.0f, 0.4f);
-    load_model(model, model_choice::torus);
+    load_model(model, model_choice::torus, uv_flip_on_load);
 
     xform basis_mode = xform::rotate;   ///< Lesson 2.5
     float basis_t = 0.6f;               ///< the one parameter every mode reads
@@ -3347,6 +3516,10 @@ int main(int argc, char* argv[])
     SDL_Log("  [A]/[D] swing the light. With [H] off the camera does NOT change the shading -");
     SDL_Log("          Lambert is view-independent. Turn [H] on and orbiting moves the highlight.");
     SDL_Log("  [H] specular: none / Phong / Blinn-Phong   [E] shininess exponent");
+    SDL_Log("  [M] albedo: procedural rule / checker / uv grid / fine checker (on floor + model)");
+    SDL_Log("  [S] filter: bilinear / nearest   [R] address: repeat / mirrored / clamp");
+    SDL_Log("  [1] texel origin: centre (correct) vs corner - half a texel, invisible under [S] nearest");
+    SDL_Log("  [2] uv v flip on import: OBJ counts v upwards, a texture counts it downwards");
     SDL_Log("  [arrows] orbit  [-]/[=] dolly  [P] persp/ortho  [O] model order  [X] object");
     SDL_Log("  [Z] rotation axis  [,] [.] t  [Space] spin  [W]/[N] the 2.7 w bugs");
     SDL_Log("[Tab] cycles demos: scene (2.6-3.3) -> basis (2.5) -> triangles -> lines -> Pong");
@@ -3444,9 +3617,42 @@ int main(int argc, char* argv[])
                 // costs about half a millisecond for the torus and the HUD says so,
                 // which is the honest way to introduce the fact that asset loading
                 // is work. Module 5 caches; today we measure.
-                load_model(model, next_model(model.choice));
+                load_model(model, next_model(model.choice), uv_flip_on_load);
                 scene_mode = scene_kind::model;
                 selected = 0;
+            }
+
+            // ---- Lesson 3.9 ---------------------------------------------
+            if (in.key_pressed(SDL_SCANCODE_M)) { albedo = next_albedo(albedo); }
+            if (in.key_pressed(SDL_SCANCODE_S))
+            {
+                samp.texel_filter = (samp.texel_filter == engine::filter::linear)
+                                  ? engine::filter::nearest
+                                  : engine::filter::linear;
+            }
+            if (in.key_pressed(SDL_SCANCODE_R))
+            {
+                // Both axes together. They are separate fields because a real
+                // sampler needs them separate (a road strip repeats along its length
+                // and clamps across its width), but one key that changes both is
+                // what makes the three modes legible on a floor — cycling them
+                // independently mostly produces pictures that are hard to name.
+                samp.address_u = next_address(samp.address_u);
+                samp.address_v = samp.address_u;
+            }
+            if (in.key_pressed(SDL_SCANCODE_1))
+            {
+                samp.origin = (samp.origin == engine::texel_origin::centre)
+                            ? engine::texel_origin::corner
+                            : engine::texel_origin::centre;
+            }
+            if (in.key_pressed(SDL_SCANCODE_2))
+            {
+                // Re-imports the current model, because the flip happens at import
+                // and a toggle that only affected the NEXT load would be a knob that
+                // appears not to work.
+                uv_flip_on_load = !uv_flip_on_load;
+                load_model(model, model.choice, uv_flip_on_load);
             }
             if (in.key_pressed(SDL_SCANCODE_B))
             {
@@ -3605,6 +3811,8 @@ int main(int argc, char* argv[])
                 model_wrong = 0;
                 spec_peak = 0;
                 grid_wrong = 0;
+                texel_wrong = 0;
+                filter_wrong = 0;
                 shown_depth = {};
                 scene_clip = {};
                 scene_cull = {};
@@ -3621,7 +3829,28 @@ int main(int argc, char* argv[])
                                   eye_world, spec_model);
 
                 const bool want_painter = (hs == hidden_surface::painter);
-                const bool checkered = (scene_mode == scene_kind::floor);
+
+                // ---- Lesson 3.9: what supplies this draw's albedo? ---------
+                //
+                // `nullptr` under `albedo_source::rule`, which is what makes the
+                // rule and the lookup a single keypress apart. `texture_binding`
+                // holds a non-owning pointer, and `textures` lives for the whole
+                // program, so there is nothing here that can dangle.
+                const engine::texture* image = textures.pick(albedo);
+
+                // Which surfaces read a texture at all. The FLOOR always: it is the
+                // one mesh in the demo with uvs authored for tiling, and it has been
+                // the uv testbed since 3.2. The MODEL too, because its uvs came off
+                // a disk and are therefore the only ones that can demonstrate the
+                // OBJ-versus-texture-space disagreement.
+                const bool uv_surface = (scene_mode == scene_kind::floor)
+                                     || (scene_mode == scene_kind::model);
+
+                // Only the floor still falls back to the procedural rule when no
+                // image is bound; the model has no uv-derived colour to show and
+                // reads its vertex tint instead.
+                const bool checkered = (scene_mode == scene_kind::floor)
+                                    && (image == nullptr);
 
                 // One style for the whole batch — the pipeline-object model. The
                 // floor is shaded from its uvs; everything else from its vertex
@@ -3634,18 +3863,34 @@ int main(int argc, char* argv[])
                 // The floor still wins, because a checkered debug pattern has no
                 // albedo to light and 3.9 is where texture and lighting learn to
                 // multiply. Said here so the omission is a decision.
+                // Lesson 3.9 closes that gap. An image bound to a `lit` fill IS the
+                // albedo, so texture and light finally multiply — and the three-way
+                // choice below is the whole of §6 in one expression:
+                //
+                //   lit      an image (or a vertex colour) times a quantity of light
+                //   textured an image, unlit
+                //   checker  a formula, unlit
+                //
+                // Note that "textured AND lit" is not a fourth value. It is `lit`
+                // with a binding, which is precisely the point 3.8 made about one
+                // enum holding two questions — arriving again, and this time the
+                // answer is Module 4's programmable fragment stage rather than
+                // another enum.
+                const bool bind_texture = uv_surface && (image != nullptr);
                 const bool shade_per_pixel = (eval == shade_eval::per_pixel) && !checkered;
                 const engine::fill_style style{
                     .interp = interp,
                     .shade = checkered ? engine::shading::uv_checker
                            : shade_per_pixel ? engine::shading::lit
+                           : bind_texture    ? engine::shading::textured
                                              : engine::shading::vertex_colour,
                     .space = engine::blend_space::linear,
                     .cull = to_engine_cull(culling),
                     .lights = shade_per_pixel ? &lights : nullptr,
                     .surface = {},                      // rebound per triangle
                     .model = spec_model,
-                    .eye = eye_world};
+                    .eye = eye_world,
+                    .albedo = {bind_texture ? image : nullptr, samp}};
 
                 // Clearing to FAR is not optional and not cosmetic. Skip it and
                 // last frame's depths survive into this one; §7 has the picture.
@@ -3844,6 +4089,56 @@ int main(int argc, char* argv[])
                 else
                 {
                     grid_wrong = 0;
+                }
+
+                // ---- Lesson 3.9's own comparisons -------------------------
+                //
+                // The cheapest comparisons in the demo, and cheap for a reason worth
+                // saying out loud: a sampler is PIPELINE STATE. Changing it changes
+                // no geometry at all, so unlike every comparison above there is no
+                // second `collect_triangles` — the same `scene_tris` is redrawn with
+                // one field of `style` altered. That is the same fact that lets a
+                // GPU swap a sampler without re-running the vertex stage.
+                if (bind_texture)
+                {
+                    // THE HALF TEXEL, IN PIXELS. Flip `texel_origin` and count. The
+                    // number is zero under NEAREST — necessarily, because nearest
+                    // asks which texel contains the point and the offset does not
+                    // change the answer — and it is large under BILINEAR, because
+                    // every sample lands half a texel from where it belongs. A knob
+                    // whose effect depends on another knob is exactly the sort of
+                    // thing worth measuring rather than asserting.
+                    engine::fill_style other = style;
+                    other.albedo.samp.origin =
+                        (samp.origin == engine::texel_origin::centre)
+                            ? engine::texel_origin::corner
+                            : engine::texel_origin::centre;
+
+                    scratch_fb.clear(k_bg);
+                    draw_world(scratch_fb, view_from_world, pr);
+                    scratch_depth.clear();
+                    draw_triangles(scratch_fb, want_painter ? nullptr : &scratch_depth,
+                                   scene_tris, want_painter, other);
+                    texel_wrong = count_differences(fb, scratch_fb, vp);
+
+                    // ...and what the filter itself is worth, by the same method.
+                    engine::fill_style flipped = style;
+                    flipped.albedo.samp.texel_filter =
+                        (samp.texel_filter == engine::filter::linear)
+                            ? engine::filter::nearest
+                            : engine::filter::linear;
+
+                    scratch_fb.clear(k_bg);
+                    draw_world(scratch_fb, view_from_world, pr);
+                    scratch_depth.clear();
+                    draw_triangles(scratch_fb, want_painter ? nullptr : &scratch_depth,
+                                   scene_tris, want_painter, flipped);
+                    filter_wrong = count_differences(fb, scratch_fb, vp);
+                }
+                else
+                {
+                    texel_wrong = 0;
+                    filter_wrong = 0;
                 }
 
                 // The brightest pixel on screen. One number, and on a coarse mesh it
@@ -4468,6 +4763,51 @@ int main(int argc, char* argv[])
                     "[U] cull  [K] near  [I] interp  [T] tessellate  [C] scene  [arrows] orbit  [-][=] dolly");
             }
 
+            // ---- Lesson 3.9's readout -------------------------------------
+            // One line, on the two scenes that have uvs worth sampling. Which
+            // line depends on what is on trial, the same discipline the floor's
+            // sky commentary follows: stacking every explanation at once is how a
+            // HUD becomes wallpaper nobody reads.
+            {
+                const engine::texture* hud_image = textures.pick(albedo);
+                const bool hud_uv = (scene_mode == scene_kind::floor
+                                  || scene_mode == scene_kind::model);
+
+                if (hud_uv && hs != hidden_surface::wireframe)
+                {
+                    if (hud_image == nullptr)
+                    {
+                        SDL_SetRenderDrawColor(renderer, 150, 152, 170, 255);
+                        SDL_RenderDebugText(renderer, 6.0f, 348.0f,
+                            "[M] RULE - a formula, not an image: no memory, no sampler, exact at any zoom");
+                    }
+                    else if (samp.origin == engine::texel_origin::corner)
+                    {
+                        // Amber, because this is a mode that exists to be wrong.
+                        // The parenthetical is the finding: nearest-neighbour
+                        // sampling cannot see this error AT ALL, so a texture
+                        // pipeline can carry it for years and only reveal it the
+                        // day somebody switches filtering on.
+                        SDL_SetRenderDrawColor(renderer, 236, 196, 110, 255);
+                        SDL_RenderDebugTextFormat(renderer, 6.0f, 348.0f,
+                            "[1] TEXEL CORNER (wrong) - half a texel off: %d px%s",
+                            texel_wrong,
+                            samp.texel_filter == engine::filter::nearest
+                                ? "  (0 under NEAREST - it cannot see this)" : "");
+                    }
+                    else
+                    {
+                        SDL_SetRenderDrawColor(renderer, 122, 196, 152, 255);
+                        SDL_RenderDebugTextFormat(renderer, 6.0f, 348.0f,
+                            "[M] %-21s [S] %-8s [R] %-8s  vs %s: %d px",
+                            name_of(albedo), name_of(samp.texel_filter),
+                            name_of(samp.address_u),
+                            samp.texel_filter == engine::filter::linear ? "nearest" : "bilinear",
+                            filter_wrong);
+                    }
+                }
+            }
+
             // Everything below writes into the column of pixels beside the inset
             // viewport, which the floor scene does not have. Guarded rather than
             // skipped with a `continue`, so that anything added to the end of the
@@ -4631,6 +4971,20 @@ int main(int argc, char* argv[])
                                 SDL_RenderDebugText(renderer, 380.0f, 318.0f,
                                     "[U] cull back -> a hole");
                             }
+
+                            // ---- Lesson 3.9 -------------------------------
+                            // Which uv convention this mesh's coordinates are in.
+                            // The mesh cannot answer that by looking at its own
+                            // numbers — 0.7 is a perfectly good coordinate in
+                            // either — so the importer has to remember, and the
+                            // HUD has to say. Every convention bug in a pipeline
+                            // is somebody assuming this.
+                            SDL_SetRenderDrawColor(renderer, model.uv_flipped ? 150 : 236,
+                                                             model.uv_flipped ? 152 : 196,
+                                                             model.uv_flipped ? 170 : 110, 255);
+                            SDL_RenderDebugText(renderer, 380.0f, 332.0f,
+                                model.uv_flipped ? "[2] uv v: flipped (texture)"
+                                                 : "[2] uv v: RAW OBJ - upside down");
                         }
                         else if (scene_mode == scene_kind::zfight)
                         {

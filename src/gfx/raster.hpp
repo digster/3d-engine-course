@@ -20,6 +20,14 @@
 // fragment stage removes. (`vec3` comes along with it.)
 #include "gfx/light.hpp"
 
+// Lesson 3.9, and the same kind of dependency for the same kind of reason:
+// `fill_style` holds a `texture_binding` by value and the fragment path calls
+// `sample()`, so the layout and the definitions are both needed. Note what this
+// makes the file: a rasterizer that knows about coverage, interpolation, depth,
+// lighting AND texturing — four responsibilities that a real pipeline separates
+// into "fixed function" and "the fragment shader". Module 4 does the separating.
+#include "gfx/texture.hpp"
+
 #include <SDL3/SDL.h>
 
 // Forward declarations, not includes: every function below takes a framebuffer
@@ -383,9 +391,29 @@ enum class shading
     ///
     /// A **debug pattern**, not a texture: no image, no sampler, no filtering.
     /// Every engine ships something like it, because it is how you check a mesh's
-    /// uv layout before there is any art to put on it. Lesson 3.9 replaces the
-    /// rule with a lookup, and nothing else about the loop changes.
+    /// uv layout before there is any art to put on it.
+    ///
+    /// **Kept, and not superseded** — Lesson 3.9 adds `textured` beside it rather
+    /// than replacing it. A rule is not a worse texture, it is a different kind of
+    /// thing: it costs no memory, it is exact at every magnification, and it never
+    /// needs an artist. That is why the checkerboard survives in every engine's
+    /// debug menu long after real textures arrive. Having both one keystroke apart
+    /// is also what lets §5.1 compare a lookup against a formula that computes the
+    /// same pattern.
     uv_checker,
+
+    /// **Sample `fill_style::albedo`** at the interpolated `(u, v)` — Lesson 3.9.
+    ///
+    /// Unlit: the sampled colour goes straight to the pixel. What changes from
+    /// `uv_checker` is only *where the colour comes from*; the uv interpolation
+    /// (3.2), the perspective correction, and the shape of the fill loop are
+    /// untouched. Lesson 2.4's claim that "the rasterizer never learns what it
+    /// carries" is collecting for the last time in Module 3.
+    ///
+    /// With nothing bound this draws the sampler's debug magenta rather than
+    /// falling back to vertex colours, because a `textured` fill with no texture is
+    /// a mistake and there is no second thing it could have meant.
+    textured,
 
     /// **Evaluate the shading equation per pixel** — Lesson 3.8.
     ///
@@ -399,6 +427,18 @@ enum class shading
     /// Requires `fill_style::lights` to be non-null; with it null the fill falls
     /// back to `vertex_colour`, so a misconfigured pipeline draws an unlit surface
     /// rather than dereferencing nothing.
+    ///
+    /// **Lesson 3.9: bind `fill_style::albedo` and the albedo comes from the
+    /// texture instead of from the vertex colour.** Everything else is identical —
+    /// the same `shade()`, the same normal, the same light. Texture and light
+    /// simply multiply, which is what "albedo" meant all along.
+    ///
+    /// And notice what that does to this enum, because it is the point: "textured
+    /// AND lit" is not a value here. It is `lit` *plus a binding*, which means the
+    /// enum no longer describes the fragment on its own. Lesson 3.8 split
+    /// `shade_mode` in two when one enum tried to hold two questions; this is the
+    /// same pressure arriving a second time, and this time the honest answer is not
+    /// another enum. It is a fragment shader (Module 4).
     lit
 };
 
@@ -480,6 +520,20 @@ struct fill_style
     /// not a direction: the direction is what varies per fragment, and computing
     /// it is the fragment's job.
     vec3 eye{};
+
+    /// The image `shading::textured` reads, and the albedo `shading::lit` uses when
+    /// one is bound — Lesson 3.9.
+    ///
+    /// An image **and** its sampler, because they are independent: the same floor
+    /// texture is repeated here and clamped there, and the same clamped-bilinear
+    /// rules apply to a hundred different images. `SDL_GPUTextureSamplerBinding` is
+    /// this exact pair, for this exact reason.
+    ///
+    /// Unbound by default, so every fill written before 3.9 behaves identically —
+    /// the same bargain `vertex::inv_w = 1` made in 3.2 and `lights = nullptr` made
+    /// in 3.8. A default that changes nothing is what lets a feature be added to a
+    /// pipeline object without auditing its call sites.
+    texture_binding albedo{};
 };
 
 /// Fill a triangle whose corners carry their own attributes — the shaded fill.

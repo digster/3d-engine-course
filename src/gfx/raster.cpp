@@ -1,8 +1,8 @@
 // src/gfx/raster.cpp — the software rasterizer's implementation.
 //
 // Three line algorithms (Lesson 2.1), then triangles by edge function (2.2),
-// barycentric coordinates (2.3), attribute interpolation (2.4), and the depth
-// test (3.1).
+// barycentric coordinates (2.3), attribute interpolation (2.4), the depth test
+// (3.1), per-pixel shading (3.8) and texturing (3.9).
 //
 // Read the line routines in the order they appear. Each one fixes something the
 // one above it got wrong, and the last one is the only one that should ever be
@@ -294,8 +294,14 @@ struct rgb3
 ///
 /// Fixed colours, deliberately. This is a debug pattern with one job — showing
 /// you where texture space lands on a surface — and a configurable palette would
-/// be a knob nobody turns. Lesson 3.9 replaces the whole function with a texture
-/// lookup and this argument goes away with it.
+/// be a knob nobody turns.
+///
+/// **Lesson 3.9 did not delete this**, which was the plan when 3.2 wrote it. A
+/// procedural rule is not a worse texture; it is a different thing with different
+/// costs — no memory, no sampler, no filtering, and *exact at every
+/// magnification*, because there is no finite grid of texels to run out of. That
+/// last property is why it stays: `shading::textured` right next to it is the
+/// cleanest possible demonstration of what a texture buys and what it costs.
 [[nodiscard]] Uint32 checker_at(float u, float v)
 {
     const float cu = std::floor(u);
@@ -486,6 +492,12 @@ void fill_triangle(framebuffer& fb, depth_buffer* depth,
     // unlit path rather than dereferencing nothing. Decided once per triangle.
     const bool lit = (style.shade == shading::lit) && (style.lights != nullptr);
 
+    // Is there an image to read? Decided ONCE PER TRIANGLE, like every other
+    // question whose answer is constant across a fill. `bound()` folds together
+    // "nobody bound one" and "somebody bound an empty one", because from the
+    // fragment's point of view those are the same situation.
+    const bool textured = style.albedo.bound();
+
     // Under `lit` the corner colours are an ALBEDO that is about to be multiplied
     // by a quantity of light, so they must be decoded whatever `blend_space` says.
     // `blend_space::encoded` is a statement about how to *blend two colours*, and
@@ -643,6 +655,26 @@ void fill_triangle(framebuffer& fb, depth_buffer* depth,
                         const float vv = (f0 * pv0 + f1 * pv1 + f2 * pv2) * w_recip;
                         row[x] = checker_at(uu, vv);
                     }
+                    else if (style.shade == shading::textured)
+                    {
+                        // ---- The lookup (Lesson 3.9) ------------------------
+                        //
+                        // Compare these four lines against the four above them.
+                        // The uvs are obtained by IDENTICAL arithmetic — the same
+                        // three multiply-adds, the same perspective divide-back —
+                        // and the only difference is what the pair of numbers is
+                        // handed to: a formula, or an array somebody painted.
+                        //
+                        // That is the entire structural content of this lesson.
+                        // Nothing about interpolation changed, because nothing
+                        // needed to: 2.4 built a machine for carrying attributes
+                        // without knowing what they are, and this is the last
+                        // attribute Module 3 asks it to carry.
+                        const float uu = (f0 * pu0 + f1 * pu1 + f2 * pu2) * w_recip;
+                        const float vv = (f0 * pv0 + f1 * pv1 + f2 * pv2) * w_recip;
+                        row[x] = to_encoded(
+                            sample(*style.albedo.image, style.albedo.samp, uu, vv));
+                    }
                     else if (lit)
                     {
                         // ---- Per-pixel shading (Lesson 3.8) ----------------
@@ -664,19 +696,46 @@ void fill_triangle(framebuffer& fb, depth_buffer* depth,
                                      (f0 * pw0.y + f1 * pw1.y + f2 * pw2.y) * w_recip,
                                      (f0 * pw0.z + f1 * pw1.z + f2 * pw2.z) * w_recip};
 
-                        // The albedo, interpolated by the same three multiply-adds
-                        // as any other attribute — because in this mode the corner
-                        // colours ARE the albedo. Note that it is taken in LINEAR
-                        // light and handed straight to `shade`, with no encode in
-                        // between: `blend_space` is ignored under `lit`, because
-                        // lighting arithmetic is linear by definition
-                        // (conventions §7c) and there is no meaning to give the
-                        // encoded variant here. One encode at the very end, which
-                        // is where an encode belongs.
-                        const linear_rgb albedo{
-                            (f0 * p0.r + f1 * p1.r + f2 * p2.r) * w_recip,
-                            (f0 * p0.g + f1 * p1.g + f2 * p2.g) * w_recip,
-                            (f0 * p0.b + f1 * p1.b + f2 * p2.b) * w_recip};
+                        // The albedo, from one of two places — Lesson 3.9.
+                        //
+                        // WITH A TEXTURE BOUND it is a sample, and `sample` already
+                        // returns linear light, so it drops straight into the same
+                        // slot with no conversion at all. That is not a coincidence
+                        // and it is worth pausing on: `sample` returns linear
+                        // *because* this is what a texture is for. An albedo is a
+                        // reflectance — the fraction of arriving light a surface
+                        // sends back — and a fraction has to multiply a quantity of
+                        // light, which means both have to be linear. Texture and
+                        // light multiply, and that one multiply is Module 3's last
+                        // structural gap closing.
+                        //
+                        // WITHOUT ONE it is the interpolated corner colour, by the
+                        // same three multiply-adds as any other attribute, exactly
+                        // as 3.8 left it. Note that it is taken in LINEAR light and
+                        // handed straight to `shade`, with no encode in between:
+                        // `blend_space` is ignored under `lit`, because lighting
+                        // arithmetic is linear by definition (conventions §7c) and
+                        // there is no meaning to give the encoded variant here. One
+                        // encode at the very end, which is where an encode belongs.
+                        // Written as one branch rather than "interpolate, then
+                        // overwrite if textured", because the interpolation is nine
+                        // multiply-adds and a discarded result is still a paid one.
+                        // `textured` is constant for the whole triangle, so the
+                        // predictor eats the branch itself for free — it is only
+                        // the WORK behind it that is worth not doing.
+                        linear_rgb albedo{};
+                        if (textured)
+                        {
+                            const float uu = (f0 * pu0 + f1 * pu1 + f2 * pu2) * w_recip;
+                            const float vv = (f0 * pv0 + f1 * pv1 + f2 * pv2) * w_recip;
+                            albedo = sample(*style.albedo.image, style.albedo.samp, uu, vv);
+                        }
+                        else
+                        {
+                            albedo = {(f0 * p0.r + f1 * p1.r + f2 * p2.r) * w_recip,
+                                      (f0 * p0.g + f1 * p1.g + f2 * p2.g) * w_recip,
+                                      (f0 * p0.b + f1 * p1.b + f2 * p2.b) * w_recip};
+                        }
 
                         // `shade` normalises `n` itself — a decision made in 3.6
                         // ("a caller who forgets gets a brightness scaled by the
