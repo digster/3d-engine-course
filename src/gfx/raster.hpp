@@ -534,6 +534,20 @@ struct fill_style
     /// in 3.8. A default that changes nothing is what lets a feature be added to a
     /// pipeline object without auditing its call sites.
     texture_binding albedo{};
+
+    /// Which sRGB encode the fragment's final write uses — Lesson 3.10.
+    ///
+    /// **Defaults to `exact`, and that default is a decision about the course, not
+    /// about renderers.** For real-time work `fast` is the right answer and the
+    /// demo selects it; but every measured claim in Lessons 3.1 through 3.9 —
+    /// "0 of 4096 texels differ", "bit-identical", "17275 px, 0 differ" — was made
+    /// against the exact encode, and a default that silently moved 0.60% of those
+    /// pixels by one code would quietly falsify nine lessons' worth of arithmetic.
+    ///
+    /// Same bargain as `vertex::inv_w = 1` (3.2), `lights = nullptr` (3.8) and an
+    /// unbound `albedo` (3.9): a default that changes nothing is what lets a
+    /// feature be added to a pipeline object without auditing its call sites.
+    encode_mode encode = encode_mode::exact;
 };
 
 /// Fill a triangle whose corners carry their own attributes — the shaded fill.

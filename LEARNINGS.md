@@ -2442,3 +2442,229 @@ return "t-onlight" if lum > 0.45 else "t-inv"
 
 Contrast on generated figures is a computation, not a judgement call — and it is one of the
 things only a screenshot will catch.
+
+## The clock is coarser than it is expensive, and that inverts the rule (Lesson 3.10)
+
+Two independent properties decide what you may measure, and the intuitive one is not the binding
+one. On the reference machine (Apple M4 Pro):
+
+| | |
+|---|---|
+| `SDL_GetPerformanceFrequency()` | **24 MHz** → a tick every **41.667 ns** |
+| one `SDL_GetPerformanceCounter()` call | **5.42 ns** |
+| one `scope_timer` (two reads + an add) | **13.46 ns** |
+
+**Reading the clock is roughly eight times faster than the clock changes.** So the limit on what
+can be timed is the *tick*, not the overhead — the cheap operation is the one that stops you.
+
+One sRGB encode takes 9.3 ns, which means four and a half of them fit inside a single tick, and
+bracketing exactly one returns **0.00 ns or 41.67 ns and never 9.3**. Measured, twelve trials at
+N = 1: min 0.00, max 666.67.
+
+The rule that falls out: **never instrument anything shorter than `100 × max(tick, timer)`** — the
+duration at which quantisation and overhead are both under 1%. That is 4.17 µs here, and it is why
+`profiler` exposes `resolution_ns()` and `overhead_ns()` and calibrates itself at construction
+rather than carrying a number in a comment. Do not assume 1 GHz: the frequency is 24 MHz here, 1e7
+on Windows, 1e9 on modern Linux.
+
+A corollary worth keeping: **a zone that reads 0.00 is either work you are not doing or work you
+cannot measure, and the two look identical in a table.** `zone::build` reads zero for the second
+reason and is kept, deliberately, as the rule appearing in the engine's own output.
+
+## Instrumentation makes things slower *and* under-reports, at the same time (Lesson 3.10)
+
+Putting a `scope_timer` around each iteration of a loop measured 9.71 → **18.08 ns/iteration**,
+a 1.86× slowdown. That much is expected. The part that is not:
+
+**The reported total is also too small.** The closing clock read happens *inside* the interval it
+is trying to close, so it cannot be part of what it measures. The instrument therefore makes the
+program run twice as slow while claiming it ran faster than it did — two errors, in opposite
+directions, from one decision.
+
+Fine-grained answers come from **subtraction**, not from finer instruments: two variants differing
+by exactly one thing, both timed coarsely. The resolution comes from the experiment's design
+rather than from the clock's.
+
+## A differential benchmark without a control is a story (Lesson 3.10)
+
+This lesson's first draft reported that a texture fetch costs **6.40×** more in situ than in a
+microbenchmark. The number was produced by comparing a loop containing *fetch + encode + two
+stores* against a loop containing *fetch*, and attributing the entire difference to the fetch.
+
+With a proper control — the same loop, the same encode, the same two stores, and only the fetch
+replaced by a value that varies the same way — the honest figure is **2.27×**:
+
+```
+fetch alone, tight loop:          2.26 ns
+fetch + encode + 2 stores:       14.60 ns
+CONTROL: same, minus the fetch:   9.47 ns
+-> the fetch IN SITU costs 5.13 ns, against 2.26 alone (2.27x)
+```
+
+Still a striking result, and it has the advantage of being true. **A function's cost is not a
+property of the function**: in a tight loop consecutive fetches overlap in the pipeline, and in
+situ each one sits in a dependency chain — its uv comes from the perspective divide, its result
+feeds the encode — with nothing to overlap with.
+
+The general shape, and this is the second sighting (Lesson 3.9 §5.1 was the first): **when a
+measured ratio is much larger than you can explain, the two sides differ in more than one way.**
+
+## Median for a frame, minimum for a kernel — never the mean (Lesson 3.10)
+
+Timing noise is **one-sided**. The machine can always be slower than your code deserves — a
+context switch, a core migration, a page fault, a frequency drop — and can never be faster. So the
+distribution is a hard floor with a long right tail, and the mean, which assumes symmetry, is
+wrong for both cases:
+
+- **A kernel benchmark takes the minimum.** There is one true cost and everything above it is
+  interference, so the smallest observation is the closest you got to running uncontended.
+- **A frame budget takes the median.** There is *no* single true cost — a frame genuinely varies —
+  and the question is what a typical frame costs. One 40 ms hitch moves a mean of 120 frames by a
+  third of a millisecond and moves the median by nothing.
+
+Say which one you used. A performance number quoted without it is a rumour.
+
+## The unmeasured remainder is the most important row in a budget (Lesson 3.10)
+
+Six honest bars that sum to 60% of a frame look like a complete picture, right up to the moment
+you make the biggest one twice as fast and the frame improves by nine percent. **Display the
+remainder.** Ours is 0.2% of the frame — *because it is displayed*, which is the only reason it
+stayed small.
+
+Two related rules. Zones must be **disjoint**: two live timers count the same nanoseconds twice,
+so nesting is an error rather than a feature (`zones_overlapped()` catches it). And a **sum of
+medians is not the median of a sum** — they differ whenever two zones peak on different frames.
+Leave the discrepancy visible; deriving one number from the others so the table adds up perfectly
+is how a budget stops being a measurement.
+
+## Triangle count is close to irrelevant; pixels per triangle is the axis (Lesson 3.10)
+
+The prediction everyone makes, including the first draft of this lesson: the 2,304-triangle torus
+must cost about a thousand times the 2-triangle floor. Measured:
+
+| | triangles | covered px | fill | ns/triangle | ns/px |
+|---|---|---|---|---|---|
+| floor | 2 | 30,882 | **1,390.14 µs** | 695,069 | 45.01 |
+| torus | 2,304 | 2,678 | **171.78 µs** | 74.6 | 64.14 |
+
+**The floor is eight times more expensive with 1,152× fewer triangles.** The only column where the
+two objects resemble each other is the last one, and that is what the fill is paid for.
+
+The two phases sit on perpendicular axes, and both were swept to confirm it: 16× the pixels moved
+`collect` by 3.7% (noise) and `fill` by 15×; at constant screen coverage, 36 → 36,864 triangles
+moved `collect` by 840× and `fill` by 3×. **The two curves cross near one pixel per triangle**,
+and that crossing is the only place on either axis where "optimise the fill" stops being right —
+with nothing about the renderer changing to get there.
+
+Consequence for how numbers get recorded: **quote ns per covered pixel and ns per triangle, never
+ms per frame.** The first two are properties of the fill loop and the vertex stage and transfer
+between machines and resolutions; the third is a fact about one scene on one computer, and it is
+the only one most people write down. Reference values: **45.47 ns/px**, **23.0 ns/triangle**.
+
+## Cost does not follow attention (Lesson 3.10)
+
+The differential ladder over the fragment loop, in ns per covered pixel:
+
+```
+coverage + colour interpolation   2.682
++ perspective divide              2.664   (-0.018 — FREE, below the noise)
++ depth test & write              2.936   (+0.272)
++ sRGB encode (std::pow)          9.024   (+6.088)  <-- the largest single item
+```
+
+The perspective divide had a 5,000-word lesson written about it (3.2, which warned it would cost
+you) and is free — it hides entirely behind other latency. The depth test has a lesson named after
+it and costs a quarter of a nanosecond. `to_encoded` is a one-line call at the end of the fragment
+that nobody has thought about since Lesson 2.4, and it is **2.1× everything above it combined**.
+
+## Judge an approximation before rounding, not after (Lesson 3.10)
+
+Four implementations of `linear_to_srgb`, all four passing the sRGB round trip on all 256 stored
+values:
+
+| candidate | ns/call | speedup | error (codes, un-rounded) | worst rounded | % differing |
+|---|---|---|---|---|---|
+| exact `std::pow` | 3.497 | 1.00× | — | 0 | 0.00% |
+| **fitted sqrt chain** | **1.856** | **1.88×** | **0.0115** | 1 | 0.60% |
+| threshold table + bsearch | 6.919 | 0.51× | exact | 1 | 0.00% |
+| uniform input table, 4096 | 0.994 | 3.52× | 0.4022 | 1 | 3.66% |
+
+Two findings worth carrying:
+
+**The exactly-correct table is slower than `pow`.** Tabulating the 255 *output* thresholds and
+binary-searching them is exact by construction and a genuinely good idea — and eight dependent L1
+loads is a longer latency chain than a modern `powf`. It exists in the harness only because
+somebody timed it instead of shipping the argument for it.
+
+**The "worst rounded code" column cannot decide anything.** It saturates: every candidate accurate
+to better than half a code reports 1. The column that separates them is the error *before*
+rounding — 0.0115 against 0.4022, a factor of 35 — and that gap becomes the entire answer the
+moment the target stops being 8-bit: at 16 bits they are **3.0 and 103.4 codes**. An approximation
+that is only good enough because the output format is coarse has an expiry date.
+
+## A hypothesis that fails should ship with its result, not be deleted (Lesson 3.10)
+
+The argument for rejecting the fastest sRGB candidate wrote itself: a 4,096-entry table occupies
+16 KiB of cache, and a fill loop is already dragging four megabytes of colour and depth buffers
+past the same cache, so its microbenchmark advantage should evaporate in situ.
+
+Measured, with a framebuffer-sized stream running alongside each candidate:
+
+```
+exact (std::pow)                 3.492     3.576     1.02x
+fitted sqrt chain                1.853     1.870     1.01x
+threshold table + bsearch        6.959     7.234     1.04x
+uniform input table, 4096        1.020     1.003     0.98x
+```
+
+**No penalty, for any of them.** This machine's L2 is large enough that 16 KiB alongside four
+megabytes of streaming costs nothing measurable. The hypothesis is false here — and it is kept, in
+the harness and in the lesson, *with its result*, because shipping the right decision with the
+reasoning that failed is exactly how folklore gets manufactured. The next person inherits "tables
+blow the cache" as received wisdom with a measurement sitting right there that says otherwise.
+
+The real reason the polynomial ships is the accuracy column above, and the comment in
+`colour.cpp` says so.
+
+## The cache cliff is not where the folklore puts it (Lesson 3.10)
+
+A texture-size sweep at constant sample count and constant access pattern — 2²¹ random samples,
+so only the working-set size varies:
+
+```
+   size        KiB   nearest ns   vs 32x32
+  32x32          4         2.25      1.00x
+ 128x128        64         2.32      1.03x
+ 512x512      1024         2.29      1.02x
+1024x1024     4096         2.34      1.04x
+2048x2048    16384         3.88      1.72x
+```
+
+Everything up to **four megabytes** is free on this machine. "The texture must fit in L1" is advice
+for a different computer, and repeating it here would be quoting somebody else's constants.
+
+Two method notes. Sample **randomly**, not sequentially — a sequential walk is prefetched perfectly
+and measures the prefetcher. And hold the sample count fixed, so the only thing varying is where
+the data lives.
+
+## Amdahl's law is an arithmetic check on your own work, not a slogan (Lesson 3.10)
+
+`speedup = 1 / ((1 − p) + p/s)`. Use it in both directions, and the second is the one people skip:
+
+- **Before** — as a filter. Measure `p`, compute the ceiling `1/(1 − p)`, and decide whether the
+  work is worth starting at all. A phase that is half your frame can never buy more than 2×.
+- **After** — as a check on yourself. `p`, `s` and the whole-frame speedup are *not independent*.
+  If the frame improved by more than the formula allows, you mismeasured something. Verified in
+  `verify_310` §H: ceiling 1.284×, measured 1.287×.
+
+## An engine-wide default is a decision about the repository, not about renderers (Lesson 3.10)
+
+`fill_style::encode` defaults to `exact` even though the demo selects `fast` and `fast` is the
+right answer for any real-time renderer. The reason is not technical: every measured claim in
+Lessons 3.1–3.9 — "0 of 4096 texels differ", "bit-identical", "17,275 px, 0 differ" — was made
+against the exact encode, and a default that silently moved 0.60% of those pixels by one code
+would quietly falsify nine lessons' arithmetic.
+
+Same bargain as `vertex::inv_w = 1` (3.2), `lights = nullptr` (3.8) and an unbound `albedo`
+(3.9): **a default that changes nothing is what lets a feature be added to a pipeline object
+without auditing its call sites.**

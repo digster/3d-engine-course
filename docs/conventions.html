@@ -79,6 +79,7 @@
       <li><a href="#assets">Geometry from disk &mdash; the asset contract</a></li>
       <li><a href="#lighting">Lighting</a></li>
       <li><a href="#textures">Textures and sampling</a></li>
+      <li><a href="#measurement">Measurement</a></li>
       <li><a href="#units">Units and angles</a></li>
       <li><a href="#simulation">The simulation contract</a></li>
       <li><a href="#colour">Colour and diagram conventions</a></li>
@@ -1466,6 +1467,103 @@
     and <strong>160,632</strong> under bilinear. A texture pipeline can therefore carry the bug for
     years looking perfectly sharp, and reveal it the day somebody enables filtering &mdash; at
     which point the filter gets blamed.
+  </p>
+
+  <h2 id="measurement"><span class="num">7e</span>Measurement</h2>
+
+  <p>
+    Settled in Lesson 3.10. These are rules about how this course states performance facts, and
+    they exist because a performance number quoted the wrong way is worse than no number &mdash;
+    it is a number somebody will act on.
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>Rule</th><th>Value</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td>Which instrument</td>
+            <td><strong>budget</strong> for phases, <strong>differential benchmark</strong> for
+                lines, <strong>counter</strong> for work</td>
+            <td>Three different questions. A budget cannot resolve a line and a microbenchmark
+                cannot rank a frame. The counter is the one people undervalue: it is not a
+                timing, it is exactly reproducible, and it is what <em>explains</em> the other
+                two.</td></tr>
+        <tr><td>The floor on instrumenting</td>
+            <td><code>100 &times; max(tick, timer)</code> &mdash; <strong>4.17&nbsp;&micro;s</strong>
+                on the reference machine</td>
+            <td>Derived from measurement, never assumed: the counter ticks every 41.667&nbsp;ns
+                (24&nbsp;MHz) while a read costs 5.42&nbsp;ns, so the <em>cheaper</em> operation is
+                the limiting one. <code>profiler</code> exposes both so the number is computed on
+                the machine being measured.</td></tr>
+        <tr><td>Batches, never iterations</td>
+            <td>time <em>N</em> and divide</td>
+            <td>One encode takes 9.3&nbsp;ns and one tick is 41.667, so a single measurement
+                reports 0 or 41.67 and never 9.3. At <em>N</em>&nbsp;=&nbsp;1000 twelve trials
+                agree to 0.12&nbsp;ns.</td></tr>
+        <tr><td>Summary statistic</td>
+            <td><strong>median</strong> for a frame, <strong>minimum</strong> for a kernel, never
+                the mean</td>
+            <td>Timing noise is one-sided &mdash; the machine can be slower than your code and
+                never faster. A kernel has one true cost and everything above it is interference;
+                a frame genuinely varies and you want the typical one. One 40&nbsp;ms hitch moves
+                a mean of 120 frames by 0.3&nbsp;ms and the median by nothing.</td></tr>
+        <tr><td>Zones</td>
+            <td><strong>disjoint</strong> and <strong>covering</strong>; the remainder is
+                displayed</td>
+            <td>Two live timers count the same nanoseconds twice, so nesting is an error rather
+                than a feature (<code>zones_overlapped()</code> checks it). And six honest bars
+                summing to 60% of a frame look complete until you double the biggest and gain
+                9%.</td></tr>
+        <tr><td>Frame boundaries</td>
+            <td>start <strong>before</strong> the event drain, end <strong>before</strong>
+                <code>SDL_RenderPresent</code></td>
+            <td>Draining events is work the frame does. Presenting blocks on vsync, and a bar
+                reading &ldquo;waiting for the monitor&rdquo; says nothing about the renderer
+                &mdash; which is also why an fps counter cannot tell you that you made anything
+                faster.</td></tr>
+        <tr><td>Which numbers transfer</td>
+            <td><strong>ns per covered pixel</strong> and <strong>ns per triangle</strong>, never
+                ms per frame</td>
+            <td>The first two are properties of the fill loop and the vertex stage. Total
+                milliseconds is a fact about one scene at one resolution on one computer, and it
+                is the only one most people record. Reference values:
+                <strong>45.47&nbsp;ns/px</strong>, <strong>23.0&nbsp;ns/triangle</strong>.</td></tr>
+        <tr><td>The axis</td>
+            <td><strong>pixels per triangle</strong></td>
+            <td>Per-vertex work scales with triangles, per-pixel work with covered pixels, and
+                their ratio is this one number. Measured: 16&times; the pixels moved
+                <code>collect</code> by 3.7% and <code>fill</code> by 15&times;; and at constant
+                screen size the two curves <em>cross</em> near 1&nbsp;px/triangle.</td></tr>
+        <tr><td>Before optimising</td>
+            <td>compute the Amdahl ceiling <code>1/(1&nbsp;&minus;&nbsp;p)</code></td>
+            <td>Use it twice: as a filter beforehand, and afterwards as an arithmetic check that
+                the measured whole-frame speedup is one the parts could have produced. Verified:
+                ceiling 1.284&times;, measured 1.287&times;.</td></tr>
+        <tr><td>Judging an approximation</td>
+            <td>the error <strong>before</strong> rounding</td>
+            <td>The worst-rounded-code column saturates &mdash; everything under half a code
+                reports 1 &mdash; so it cannot separate 0.0115 from 0.4022, which is the whole
+                question. At a 16-bit target those become 3.0 and 103.4.</td></tr>
+        <tr><td>Benchmark hygiene</td>
+            <td><code>volatile</code> sink, <code>-O2</code>, both variants in one run</td>
+            <td>Without a sink the compiler deletes the work. A debug profile is a ranking of a
+                <em>different program</em> (1.5 measured 5.1&times; at <code>-O0</code> against
+                14.8&times; at <code>-O2</code>). And thermal and scheduling state drift between
+                runs but not within one.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    Two rules deserve stating on their own, because both were learned the expensive way.
+    <strong>A differential benchmark needs a control.</strong> Isolating a feature by adding it
+    works only if nothing else changed; where it cannot, isolate it by <em>removing</em> it from
+    an otherwise identical loop. Lesson 3.10 first reported a texture fetch at 6.40&times; its
+    microbenchmark cost, a figure produced by adding an encode and two stores alongside the fetch
+    and attributing all three to it; with the control the honest answer is 2.27&times;. And
+    <strong>a function&rsquo;s cost is not a property of the function</strong> &mdash; the same
+    fetch runs at 2.26&nbsp;ns in a tight loop and 5.13&nbsp;ns in situ, because consecutive
+    fetches overlap in one and sit in a dependency chain in the other.
   </p>
 
   <h2 id="units"><span class="num">8</span>Units and angles</h2>

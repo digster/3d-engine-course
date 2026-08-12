@@ -64,7 +64,9 @@ inventing one — but without paying framework ceremony before it buys anything.
 │   │   ├── clock.hpp       # monotonic frame timing, clamped dt      [EXISTS from 1.3]
 │   │   ├── clock.cpp
 │   │   ├── fixed_step.hpp  # simulation accumulator + alpha          [EXISTS from 1.4]
-│   │   └── fixed_step.cpp
+│   │   ├── fixed_step.cpp
+│   │   ├── profile.hpp     # zones, scope_timer, the frame budget  [EXISTS from 3.10]
+│   │   └── profile.cpp     # tick conversion, the ring, medians
 │   ├── math/               # vec2/3/4, mat2/3/4, transform, quaternion — hand-rolled, no GLM
 │   │   ├── vec2.hpp        # header-only; dot, normalise, reflect     [EXISTS from 1.7]
 │   │   ├── vec3/4.hpp, mat2/3/4.hpp  # header-only 3-D maths          [EXISTS from 2.5–2.6]
@@ -73,7 +75,7 @@ inventing one — but without paying framework ceremony before it buys anything.
 │   │   ├── clip.hpp        # near-plane clipping, in CLIP space     [EXISTS from 3.3]
 │   │   ├── clip.cpp        # Sutherland–Hodgman; segments and polygons
 │   │   ├── colour.hpp      # pack/unpack, sRGB transfer functions   [EXISTS from 1.6]
-│   │   ├── colour.cpp
+│   │   ├── colour.cpp      # + the fitted fast encode + encode_mode        (3.10)
 │   │   ├── framebuffer.hpp # CPU pixel buffer, ARGB8888, row-major   [EXISTS from 1.5]
 │   │   ├── framebuffer.cpp
 │   │   ├── light.hpp       # directional light, Lambert + specular    [EXISTS from 3.6]
@@ -87,6 +89,7 @@ inventing one — but without paying framework ceremony before it buys anything.
 │   │   ├── raster.cpp      # lines (2.1) + triangles (2.2) + shading (2.4)
 │   │   │                   # + depth (3.1) + perspective correction (3.2)
 │   │   │                   # + back-face culling (3.4) + texturing (3.9)
+│   │   │                   # + fill_style::encode (3.10)
 │   │   ├── viewport.hpp    # NDC -> pixels + the y-flip           [EXISTS from 2.11]
 │   │   ├── mesh.hpp        # indexed geometry: verts + tri indices [EXISTS from 2.12]
 │   │   │                   # + normals, owning mesh_data, mesh_report (3.5)
@@ -931,9 +934,50 @@ Built roughly in dependency order — each module's milestone is the next module
   plus a binding. Lesson 3.8 fixed the previous instance of this by splitting one enum into two,
   which worked because both questions had small closed answer sets; here the combinations of
   albedo source × what is done with it × which of several textures are a *program*, not a grid,
-  and no third enum helps. Five pressures now point the same way (3.4 cull modes, 3.6 the wrong
-  home for `fill_style`, 3.7 specular, 3.8 per-triangle material, 3.9 this), and all five are
-  answered by the same thing: a fragment stage the caller programs.
+  and no third enum helps. Six pressures now point the same way (3.4 cull modes, 3.6 the wrong
+  home for `fill_style`, 3.7 specular, 3.8 per-triangle material, 3.9 this, and 3.10's
+  `encode_mode` — a per-fragment branch on a draw-constant value, which is a compile-time
+  shader variant in a runtime disguise), and all six are answered by the same thing: a
+  fragment stage the caller programs.
+- **The engine measures itself, and the instrument is calibrated before it is trusted** (Module 3,
+  Lesson 3.10). `src/core/profile.hpp` lives in `core/` rather than `gfx/` because measuring time
+  is not a graphics concern — the physics step and the asset loader will each want a zone without
+  including a rasterizer to get one, and that is the first placement in this codebase decided by
+  Module 5's argument rather than by convenience. The design turns on three facts that are
+  *measured*, not assumed: the counter's tick (41.667 ns on the reference machine) is eight times
+  *longer* than the cost of reading it, so the cheap operation is the limiting one; a zone must
+  therefore last 100× that before its number means anything; and instrumenting anything finer
+  destroys what it measures (1.86× slower, while simultaneously under-reporting, because the
+  closing clock read sits inside the interval it closes). Fine-grained answers come from
+  **subtraction** instead — a ladder of variants differing by one thing each, which is a harness
+  concern (`scratch/verify_310.cpp`) and deliberately not an engine one. Zones are a **partition**,
+  not a call tree, and the unmeasured remainder is displayed beside them, because six honest bars
+  summing to 60% of a frame look complete right up until you double the biggest one and gain 9%.
+- **Cost is paid per pixel, and the axis is pixels per triangle** (Module 3, Lesson 3.10). The
+  renderer's work happens at exactly two frequencies — per-vertex, scaling with triangles, and
+  per-pixel, scaling with covered pixels — and every performance surprise in this codebase so far
+  has come from attributing a cost to the wrong one. Measured: the **2-triangle floor costs eight
+  times what the 2,304-triangle torus does**, and sixteen times the pixels moved the vertex stage
+  by 3.7% while moving the fill by 15×. The two curves *cross* near one pixel per triangle, which
+  is the only place on either axis where "optimise the fill" stops being right — and nothing about
+  the renderer has to change to move across it. Consequently this repository quotes **ns per
+  covered pixel** and **ns per triangle**, never milliseconds per frame: the first two are
+  properties of the fill loop and the vertex stage, and the third is a fact about one scene at one
+  resolution on one computer.
+- **An optimisation ships with its error, or it does not ship** (Module 3, Lesson 3.10).
+  `encode_mode` is the first knob in this engine that is neither right nor wrong —
+  `blend_space::encoded`, `interpolation::affine` and `draw_line_naive` are all kept so a *mistake*
+  can be summoned, whereas this is a defensible speed/accuracy point. Three rules came out of
+  choosing it. Judge an approximation by its error **before** rounding, because the worst-rounded
+  column saturates and cannot separate 0.0115 of a code from 0.4022 — a distinction that becomes
+  3.0 against 103.4 the moment Module 6 stops being 8-bit. Time every candidate rather than
+  reasoning about it: the *exactly correct* threshold table turned out to be **slower than
+  `std::pow`**, because eight dependent L1 loads is a longer latency chain than a modern `powf`.
+  And `fill_style::encode` defaults to `exact` even though the demo selects `fast`, because every
+  measured claim in Lessons 3.1–3.9 was made against the exact encode and a default that silently
+  moved 0.60% of those pixels would falsify nine lessons' arithmetic — the same bargain as
+  `vertex::inv_w = 1` and an unbound `albedo`: *a default that changes nothing is what lets a
+  feature be added to a pipeline object without auditing its call sites.*
 - **Public API surface is a deliberate artifact,** not whatever headers happen to be reachable.
 
 ---
@@ -980,6 +1024,31 @@ HLSL under `shaders/` → SDL_shadercross → SPIR-V / DXIL / MSL, compiled **of
 build step. Compiled artifacts are gitignored: HLSL is source, everything else is derived. Never
 commit bytecode — stale bytecode that silently disagrees with its source is a miserable bug.
 
+### Measuring
+
+```sh
+# The harness for a lesson, built against the configured SDL3 tree.
+c++ -std=c++20 -O2 -Wall -Wextra -I src -I build/_deps/sdl3-src/include \
+    scratch/verify_310.cpp src/core/profile.cpp \
+    src/gfx/{mesh,obj,clip,raster,texture,framebuffer,depth_buffer,colour}.cpp \
+    -L build/_deps/sdl3-build -lSDL3 -Wl,-rpath,build/_deps/sdl3-build \
+    -o scratch/verify_310 && ./scratch/verify_310
+```
+
+Three rules, all of which have caught something (Lesson 3.10, conventions §7e):
+
+- **`-O2`, never a debug build.** A debug build is not slower by a constant factor; it is slower
+  by a factor that varies per function, so profiling one produces a ranking of a *different
+  program*. Lesson 1.5 measured `put_pixel` versus a row pointer at 5.1× under `-O0` and 14.8×
+  under `-O2`.
+- **A `volatile` sink**, or the compiler deletes the work whose cost you are measuring.
+- **Both variants in the same run**, back to back, because thermal and scheduling state drift
+  between runs and not within one.
+
+In the engine itself, `[3]` shows the frame budget and `[4]` toggles the sRGB encode. Read the
+engine time rather than the wall clock: with vsync on, the wall clock is pinned to the refresh
+interval and an fps counter cannot tell you that you made anything faster.
+
 ### Debugging
 
 - **CPU:** the debugger from day one (Module 0), not printf. Breakpoints, watch, stepping.
@@ -1009,6 +1078,9 @@ Full detail with diagrams in [`docs/conventions.html`](docs/conventions.html); t
 | Units | 1 unit = 1 metre; **radians** internally, degrees only at UI edges |
 | Axis colours | x/y/z = **red/green/blue**, course-wide, in every diagram |
 | Angles | Radians. Always. |
+| Performance units | **ns per covered pixel** and **ns per triangle** — never ms/frame |
+| Timing statistic | **median** for a frame, **minimum** for a kernel, never the mean |
+| Instrumentation floor | `100 × max(clock tick, timer cost)` — measured per machine, not assumed |
 
 Right-handed world space was chosen to match glTF 2.0 (Module 6 loads it with zero axis
 conversion) and every reference the course cites. Matching the references matters more than

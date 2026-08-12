@@ -94,6 +94,7 @@
       <li><a href="#depth">Depth and screen-space interpolation</a></li>
       <li><a href="#intersection">Geometry and intersection</a></li>
       <li><a href="#meshes">Measuring a mesh</a></li>
+      <li><a href="#performance">Reasoning about cost</a></li>
       <li><a href="#coming">Coming as the course proceeds</a></li>
     </ol>
   </details>
@@ -1829,7 +1830,109 @@
     </div>
   </div>
 
-  <h2 id="coming"><span class="num">8</span>Coming as the course proceeds</h2>
+  <h2 id="performance"><span class="num">8</span>Reasoning about cost</h2>
+
+  <p>
+    Two tools that are not geometry at all. They arrived in Lesson 3.10, when Module 3 stopped
+    asking whether the picture was right and started asking what it cost &mdash; and both are the
+    kind of arithmetic that decides where a week goes.
+  </p>
+
+  <div class="tool">
+    <h3>The two-frequency cost model <span class="from">Lesson 3.10</span></h3>
+    <div class="eq">
+      <span>\[ T_{\text{frame}} \;\approx\; n_{\text{tri}} \cdot c_{\text{vertex}}
+                                  \;+\; n_{\text{px}} \cdot c_{\text{pixel}} \]</span>
+      <span class="eq-plain">frame ≈ triangles × cost-per-triangle + covered pixels × cost-per-pixel</span>
+    </div>
+    <p>
+      <strong>Work in a renderer happens at exactly two frequencies</strong>, and almost every
+      performance surprise comes from attributing a cost to the wrong one. The ratio between the
+      two terms is set by a single number &mdash; <strong>pixels per triangle</strong> &mdash; and
+      that number, not the triangle count, is the axis to reason on.
+    </p>
+    <p>
+      Worked: the reference machine measures
+      <code>c<sub>pixel</sub> = 45.47&nbsp;ns</code> and
+      <code>c<sub>triangle</sub> = 23.0&nbsp;ns</code>. A 2-triangle floor covering 30,882 px
+      therefore costs about <code>2(23) + 30882(45.47) = 1.40&nbsp;ms</code>, and a
+      2,304-triangle torus covering 2,678 px costs about
+      <code>2304(23) + 2678(45.47) = 0.18&nbsp;ms</code>. Measured: 1.390&nbsp;ms and
+      0.172&nbsp;ms. <strong>The mesh with 1,152 times the triangles is eight times
+      cheaper.</strong>
+    </p>
+    <p>
+      The model breaks down in one predictable place, and knowing where is part of using it: as
+      triangles shrink below a few pixels each, <code>c<sub>pixel</sub></code> stops being
+      constant, because per-triangle setup gets amortised over fewer and fewer pixels. Measured at
+      1.2&nbsp;px/triangle the effective per-pixel cost rises by 1.42&times;.
+    </p>
+  </div>
+
+  <div class="tool">
+    <h3>Amdahl&rsquo;s law <span class="from">Lesson 3.10</span></h3>
+    <div class="eq">
+      <span>\[ S \;=\; \frac{1}{(1 - p) + p/s}
+              \qquad\text{so}\qquad S_{\max} = \frac{1}{1 - p} \]</span>
+      <span class="eq-plain">speedup = 1 / ((1 − p) + p/s); as s → ∞ it stops at 1/(1 − p)</span>
+    </div>
+    <p>
+      <strong>Speed up a fraction <em>p</em> of something by a factor <em>s</em>, and the whole
+      thing gets faster by <em>S</em>.</strong> Derive it rather than quoting it, because the
+      derivation is the content: the work took 1 unit, of which <em>p</em> now takes
+      <code>p/s</code> and <code>1&nbsp;&minus;&nbsp;p</code> takes exactly what it always did.
+      <em>The part you did not speed up does not go away.</em>
+    </p>
+    <p>
+      Worked: our fill was <code>p = 0.96</code> of the frame and got <code>s = 1.30</code>
+      times faster, so
+      <code>S = 1/(0.04 + 0.96/1.30) = 1/0.778 = 1.285</code>. Measured: <strong>1.287</strong>.
+      And the ceiling: <code>1/(1 − 0.96) = 25</code>, so deleting the entire fill would buy
+      25&times; and no more.
+    </p>
+    <p>
+      Use it in both directions. <strong>Beforehand</strong> it is a filter &mdash; measure
+      <em>p</em>, compute the ceiling, and decide whether the work is worth starting.
+      <strong>Afterwards</strong> it is a check on your own measurements: <em>p</em>, <em>s</em>
+      and <em>S</em> are not independent, so a whole that improved by more than the formula
+      permits means something was mismeasured, not that something wonderful happened.
+    </p>
+  </div>
+
+  <div class="tool">
+    <h3>Fitting a cheap curve to an expensive one <span class="from">Lesson 3.10</span></h3>
+    <div class="eq">
+      <span>\[ f(x) \;\approx\; a\sqrt{x} + b\sqrt[4]{x} + c\sqrt[8]{x} + dx \]</span>
+      <span class="eq-plain">approximate f by a weighted sum of nested square roots, plus x itself</span>
+    </div>
+    <p>
+      <strong>An approximation is chosen by two numbers, not one</strong>: what it costs and what
+      it is wrong by. The basis matters as much as the coefficients &mdash; nested square roots
+      are used here because <code>sqrt</code> is a single hardware instruction where
+      <code>pow</code> is a library call containing a logarithm and an exponential.
+    </p>
+    <p>Three rules that made this fit work, each of which cost something when omitted:</p>
+    <ul>
+      <li><strong>Do not fit what you can keep exactly.</strong> sRGB&rsquo;s linear toe is one
+          multiply, and every basis function above has an <em>infinite</em> slope at zero where
+          the truth has 12.92. A fit forced to cover the toe spends all its freedom there and is
+          three times worse everywhere else: 3 codes against 0.0115.</li>
+      <li><strong>Least squares minimises the average; you care about the worst.</strong>
+          Reweighting each pass by the current error drives the fit toward equioscillation, which
+          is what minimax looks like. The residual then <em>crosses zero repeatedly</em> &mdash; a
+          wobble rather than a bias.</li>
+      <li><strong>Constrain the endpoints you will be judged on.</strong> Every basis function
+          here is 1 at <code>x = 1</code>, so demanding
+          <code>a + b + c + d = 1</code> makes white exact and removes one unknown.</li>
+    </ul>
+    <p>
+      And measure the error <em>before</em> quantisation. Once rounded to an 8-bit code, an error
+      of 0.0115 and an error of 0.4022 both report &ldquo;worst case 1 code&rdquo; and look
+      identical &mdash; while at 16 bits they are 3.0 and 103.4.
+    </p>
+  </div>
+
+  <h2 id="coming"><span class="num">9</span>Coming as the course proceeds</h2>
 
   <p>
     This page is reissued at every module boundary. Each entry lands here only once its lesson
@@ -1846,14 +1949,16 @@
   </div>
 
   <div class="pending">
-    <b>Module 3 — Depth and light.</b> <span class="badge done">3.1–3.9 landed</span>
+    <b>Module 3 — Depth and light.</b> <span class="badge done">complete</span>
     Device depth and <code>1/w</code> affinity · the depth-precision budget ·
     perspective-correct interpolation · the near-plane crossing parameter · the signed-area
     facing test · the Euler characteristic and signed volume · <strong>Lambert's cosine law</strong> ·
     <strong>the normal matrix</strong> · <strong>the mirror direction</strong> ·
     <strong>the halfway vector</strong> · <strong>the 4&times; exponent rule</strong> ·
     <strong>the chord-shortening of an interpolated normal</strong> (§7 above).
-    Still ahead: bilinear filtering as a double lerp. (The reflection vector arrived early, in
+    Plus <strong>bilinear interpolation as a double lerp</strong> (§6) and, from 3.10,
+    <strong>the two-frequency cost model</strong>, <strong>Amdahl's law</strong> and
+    <strong>minimax curve fitting</strong> (§8). (The reflection vector arrived early, in
     1.8, because a bouncing ball needed it before a specular highlight did — and 3.7 turned out
     to need it with the arrow pointing the other way.)
   </div>

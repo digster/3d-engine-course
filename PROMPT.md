@@ -1202,3 +1202,62 @@ an enum value — it is `lit` plus a binding, so `shading` has stopped describin
 own. 3.8 fixed the previous instance by splitting one enum into two; this one cannot be fixed that
 way, because the combinations are a program rather than a grid. Fifth pressure pointing at Module
 4's programmable fragment stage.
+
+---
+
+## 2026-08-12 — `next` (Lesson 3.10: Profiling, and the Module 3 Capstone)
+
+> Based on the STATE and the project's claude instructions, work on the next.
+
+Resumed from `STATE.md`'s `next: 3.10`, following its planning notes. Delivered
+`docs/lessons/03-10-profiling-capstone.html` (6 computed figures, an interactive Amdahl explorer,
+30 listings, 7 pitfalls, 6 exercises), `src/core/profile.hpp/.cpp`, the fitted sRGB encode in
+`src/gfx/colour`, `fill_style::encode`, six instrumented zones and a budget panel in the demo, and
+`scratch/verify_310.cpp` (9 sections, all checks pass). **Module 3 complete** — 36 of 94 lessons,
+and Stage A of the two-stage spine is finished.
+
+### The lesson's spine
+
+Three instruments for three different questions — a frame budget for phases, a differential
+benchmark for lines, a counter for work — and the discipline that keeps each honest. The
+measurements are the content, and three of them contradict what the code looks like:
+
+- **The 2-triangle floor costs 8× what the 2,304-triangle torus does.** 1,390 µs against 172.
+  Rasterization is paid per pixel; ns/px are 45.01 and 64.14, while ns/triangle differ by 9,300×.
+  The prediction was written into §1 first, so getting it wrong is on the page.
+- **The perspective divide is free** (−0.018 ns/px, below the noise) and the **sRGB encode costs
+  6.09 ns/px** — 2.1× coverage, interpolation, the divide and the depth test combined. The
+  hotspot is a one-line call nobody has thought about since Lesson 2.4.
+- **The clock ticks more slowly than it is expensive to read**: 41.667 ns per tick against 5.42 ns
+  per read, so the *cheap* operation is the limiting one and nothing under 4.17 µs can be
+  instrumented. The profiler calibrates itself and logs the number at startup.
+
+### The optimisation, and the two arguments that were wrong
+
+A four-term fit in nested square roots, coefficients derived in `scratch/fit_srgb.py` rather than
+copied: 1.88× on the function, **1.30× on the fill, 1.29× on the frame**, checked against Amdahl's
+law (ceiling 1.284×, measured 1.287×), costing 0.56% of pixels one code out of 255.
+
+Two claims in the first draft did not survive their own harness, and both are kept with their
+results rather than deleted:
+
+- **The cache argument against the faster candidate is false on this machine.** A 16 KiB table
+  measured a 0.98–1.04× penalty with four megabytes of framebuffer streaming past it. The real
+  reason the polynomial ships is the *un-rounded* error — 0.0115 codes against 0.4022, which
+  becomes 3.0 against 103.4 at a 16-bit target, i.e. the moment Module 6 stops being 8-bit.
+- **A texture fetch is 2.27× more expensive in situ, not 6.40×.** The first figure came from
+  adding an encode and two stores alongside the fetch and attributing all three to it. A control
+  that removes only the fetch fixed it. Second sighting of the pattern 3.9 §5.1 found.
+
+Also measured and rejected: an *exactly correct* sRGB encode built by tabulating the 255 output
+thresholds and binary-searching them. It is **slower than `std::pow`** — eight dependent L1 loads
+is a longer latency chain than a modern `powf`. Timed rather than shipped on the strength of the
+argument for it.
+
+### The debt this adds, deliberately
+
+`encode_mode` is a per-fragment branch on a value that is constant for an entire draw — a
+compile-time shader variant in a runtime disguise, and the **sixth** pressure pointing at Module
+4's programmable fragment stage. `fill_style::encode` nevertheless defaults to `exact`, because
+every measured claim in 3.1–3.9 was made against it and a default that moved 0.60% of those pixels
+by one code would falsify nine lessons' arithmetic.

@@ -31,6 +31,46 @@ float linear_to_srgb(float linear)
     return 1.055f * std::pow(linear, 1.0f / 2.4f) - 0.055f;
 }
 
+// ---- The approximate encode (Lesson 3.10) -----------------------------------
+
+namespace {
+
+// The fit, from scratch/fit_srgb.py. Four coefficients over
+// {sqrt(x), x^1/4, x^1/8, x}, constrained to sum to exactly 1 so that white
+// encodes to white — the one value a reader will check against a screenshot.
+//
+// Note that they very nearly cancel: 0.643 + 0.712 - 0.337 - 0.018. That is not
+// an accident, it is what fitting a curve that passes through (0,0) and (1,1) in
+// a basis of functions that ALL pass through (0,0) and (1,1) has to look like.
+constexpr float k_srgb_a = +0.64266026f;   // * x^(1/2)
+constexpr float k_srgb_b = +0.71185470f;   // * x^(1/4)
+constexpr float k_srgb_c = -0.33677658f;   // * x^(1/8)
+constexpr float k_srgb_d = -0.01773836f;   // * x
+
+} // namespace
+
+float linear_to_srgb_fast(float linear)
+{
+    // Same toe as the exact function, and exactly the same arithmetic: one
+    // multiply, and the two agree bit-for-bit below the threshold. Keeping it is
+    // free and it is what lets the fit above be as good as it is.
+    if (linear <= 0.0031308f)
+    {
+        return linear * 12.92f;
+    }
+
+    // Three CHAINED square roots — each one's input is the previous one's output,
+    // so they cannot overlap in the pipeline and this is a latency chain of about
+    // three instructions' worth, not a throughput win of three. That is still an
+    // order of magnitude better than a `pow`, which is a library call containing a
+    // logarithm, a multiply and an exponential.
+    const float s1 = std::sqrt(linear);
+    const float s2 = std::sqrt(s1);
+    const float s3 = std::sqrt(s2);
+
+    return k_srgb_a * s1 + k_srgb_b * s2 + k_srgb_c * s3 + k_srgb_d * linear;
+}
+
 namespace {
 
 /// Decoding table for all 256 possible encoded values, built once at startup.
@@ -100,6 +140,19 @@ Uint8 linear_to_srgb_u8(float linear)
     return static_cast<Uint8>(encoded * 255.0f + 0.5f);
 }
 
+Uint8 linear_to_srgb_u8_fast(float linear)
+{
+    // The NaN guard and the clamp are IDENTICAL to the exact version's, and that
+    // is deliberate rather than duplicated by accident: they are not part of the
+    // approximation, they are part of what "encode a float into a byte" means.
+    // `std::sqrt` of a negative is a NaN too, so skipping the guard here would
+    // reintroduce exactly the undefined cast Lesson 3.3 closed.
+    if (!(linear > 0.0f)) { return 0; }
+
+    const float encoded = linear_to_srgb_fast(std::clamp(linear, 0.0f, 1.0f));
+    return static_cast<Uint8>(encoded * 255.0f + 0.5f);
+}
+
 linear_rgb to_linear(Uint32 encoded)
 {
     // Three table loads. The table is the reason this is cheap enough to call
@@ -109,14 +162,27 @@ linear_rgb to_linear(Uint32 encoded)
             srgb_to_linear_u8(blue_of(encoded))};
 }
 
-Uint32 to_encoded(linear_rgb light)
+Uint32 to_encoded(linear_rgb light, encode_mode mode)
 {
     // The expensive direction, and it is worth knowing why the asymmetry
     // exists. Decoding has 256 possible inputs, so it fits in a table. Encoding
     // takes a continuous float, so it runs the real `pow` — around thirty times
     // the cost of a load. Lesson 2.4 §3.7 measures what that means when it
-    // happens once per pixel, and Exercise 2.4.3 builds the table that removes
-    // it, with the error bound worked out rather than hoped for.
+    // happens once per pixel; Lesson 3.10 measures it again inside a real frame,
+    // finds it is the largest single item in an unlit textured fill, and offers
+    // `encode_mode::fast` as the answer.
+    //
+    // ONE BRANCH FOR THREE CHANNELS, not one per channel. The mode is constant
+    // for a whole draw, so this is free in practice — but writing it per channel
+    // would have put three unpredictable-looking branches in the hottest loop in
+    // the engine for no reason at all.
+    if (mode == encode_mode::fast)
+    {
+        return pack_argb(linear_to_srgb_u8_fast(light.r),
+                         linear_to_srgb_u8_fast(light.g),
+                         linear_to_srgb_u8_fast(light.b),
+                         255);
+    }
     return pack_argb(linear_to_srgb_u8(light.r),
                      linear_to_srgb_u8(light.g),
                      linear_to_srgb_u8(light.b),

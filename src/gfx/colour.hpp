@@ -60,6 +60,42 @@ namespace engine {
 /// Linear light -> encoded 8-bit channel, clamped and rounded.
 [[nodiscard]] Uint8 linear_to_srgb_u8(float linear);
 
+// ---- The same encode, without the pow (Lesson 3.10) -------------------------
+//
+// `linear_to_srgb` above runs `std::pow`, and Lesson 3.10 measures what that
+// costs: with a texture bound and no lighting, the encode is the single largest
+// item in the fill loop — larger than the depth test, the perspective divide and
+// the four texel fetches together.
+//
+// The obvious fix does not exist. Decoding fits in a table because it has 256
+// possible inputs; encoding takes a continuous float, so there is nothing to
+// index. What is available instead is an APPROXIMATION, and the honest way to
+// ship one is to state its error rather than to call it "fast":
+//
+//   * Below the toe (`linear <= 0.0031308`) the exact function is `12.92 * x`.
+//     One multiply. It is kept exactly, which costs nothing and removes the
+//     hardest part of the curve — the part with a finite slope at zero, where
+//     every square root has an infinite one — from the approximation's job.
+//   * Above it, a four-term fit in `{sqrt(x), x^1/4, x^1/8, x}`. Three CHAINED
+//     square roots, each a single hardware instruction, and four multiply-adds.
+//
+// MEASURED (scratch/fit_srgb.py, then scratch/verify_310.cpp §F): worst error
+// 0.0000451 in [0,1] — about one hundredth of an 8-bit code — and yet **0.60% of
+// inputs still come out one code different**, because rounding is a cliff and an
+// error of a hundredth of a code flips the answer for every input that lands
+// within a hundredth of a halfway point. Exact at 0 and exact at 1.
+//
+// The coefficients were FITTED for this course, by least squares reweighted
+// toward minimax, and constrained to be exact at white. They are not magic
+// numbers to be copied around: `scratch/fit_srgb.py` derives them and prints the
+// error, and re-running it is how you would change the trade.
+
+/// Linear light [0,1] -> encoded sRGB [0,1], approximately. See above for the error.
+[[nodiscard]] float linear_to_srgb_fast(float linear);
+
+/// Linear light -> encoded 8-bit channel, via `linear_to_srgb_fast`.
+[[nodiscard]] Uint8 linear_to_srgb_u8_fast(float linear);
+
 // ---- Linear-light colour ----------------------------------------------------
 
 /// A colour as the three quantities of light it represents, each in [0,1].
@@ -89,8 +125,28 @@ struct linear_rgb
 /// be linear in light. Carry it separately if you need it.
 [[nodiscard]] linear_rgb to_linear(Uint32 encoded);
 
+/// Which sRGB encode a fill uses — Lesson 3.10.
+///
+/// This is a **speed/accuracy point**, not a right-and-wrong pair, which makes it
+/// the first knob in this engine that is neither. `blend_space::encoded`,
+/// `interpolation::affine` and `draw_line_naive` are all kept so a *mistake* can
+/// be summoned; this one is kept because both answers are defensible and the
+/// choice belongs to whoever knows what the pixels are for.
+enum class encode_mode
+{
+    /// `std::pow`, to the last bit of the standard. What an offline renderer, a
+    /// texture compressor or a test that compares against a reference wants.
+    exact,
+
+    /// The square-root fit. **The default for real-time work**, because it is
+    /// several times cheaper and its worst error is one 8-bit code on 0.60% of
+    /// inputs — a difference that is, by construction, at the very limit of what
+    /// the output format can even represent.
+    fast
+};
+
 /// Encode light back into a stored pixel — clamped to [0,1], alpha 255.
-[[nodiscard]] Uint32 to_encoded(linear_rgb light);
+[[nodiscard]] Uint32 to_encoded(linear_rgb light, encode_mode mode = encode_mode::exact);
 
 // ---- Mixing -----------------------------------------------------------------
 

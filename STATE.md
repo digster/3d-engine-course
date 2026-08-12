@@ -7,7 +7,7 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-08-10 (after Lesson 3.9, 35 of 94 lessons)
+updated: 2026-08-12 (after Lesson 3.10 — MODULE 3 COMPLETE, 36 of 94 lessons)
 
 conventions:
   world: right-handed, Y-up, -Z forward
@@ -977,6 +977,137 @@ conventions:
         is identical; sub-pixel-nudge sparkle still runs 8.0% / 16.2% / 32.6% / 64.8% for
         4 / 8 / 16 / 32 cells. Mipmaps are Module 6.
 
+  measurement: THREE INSTRUMENTS, THREE QUESTIONS (3.10). BUDGET = which phase costs
+        what (coarse, always on, in the engine). DIFFERENTIAL = what one line costs
+        (offline, by SUBTRACTION, with a control). COUNTER = how much work there is
+        (free, exactly reproducible, and the only one that EXPLAINS the other two).
+        THE CLOCK HAS TWO PROPERTIES AND THE SLOWER ONE IS NOT THE ONE YOU GUESS.
+        Measured (M4 Pro): SDL_GetPerformanceFrequency = 24 MHz, so the counter TICKS
+        every 41.667 ns, while one READ costs 5.42 ns and a whole scope_timer 13.46.
+        Reading the clock is ~8x faster than the clock changes. So one encode (9.3 ns)
+        cannot be timed at all: 4.5 fit in a tick, and a single measurement reports
+        0.00 or 41.67 and never 9.3.
+        TIME A BATCH AND DIVIDE. N=1 spans 0..16 ticks; N=1000 spans ~230 and twelve
+        trials agree to 0.12 ns. THE RULE: never instrument anything shorter than
+        100 * max(tick, timer) = 4.17 us here. profiler exposes resolution_ns() and
+        overhead_ns() so the number is DERIVED on the machine being measured.
+        A ZONE THAT READS ZERO is either work you are not doing or work you cannot
+        measure, and the two look identical. `build` reads 0.00 for the second reason
+        and is KEPT, as the rule appearing in the engine's own output.
+        OBSERVER EFFECT, MEASURED: a scope_timer per iteration takes 9.71 -> 18.08
+        ns/iter (1.86x) AND UNDER-REPORTS, because the closing clock read is inside the
+        interval it closes. Both errors at once, in opposite directions. The fix is not
+        a finer clock, it is SUBTRACTION.
+        STATISTICS: timing noise is ONE-SIDED (the machine can be slower than your code,
+        never faster), so the mean is wrong for both cases. MINIMUM for a kernel (one
+        true cost, everything above is interference); MEDIAN for a frame (no single true
+        cost; one 40 ms hitch moves a mean of 120 by 0.3 ms and the median by nothing).
+        SAY WHICH ONE YOU USED — a number quoted without it is a rumour.
+        BENCHMARK HYGIENE: volatile sink or the compiler deletes the work; -O2 always
+        (1.5 measured 5.1x at -O0 vs 14.8x at -O2, so a debug profile ranks a DIFFERENT
+        PROGRAM); both variants in the SAME RUN so thermal/scheduling state cannot drift.
+        A DIFFERENTIAL BENCHMARK NEEDS A CONTROL. 3.10 first reported a texture fetch at
+        6.40x its microbenchmark cost — produced by adding an encode and two stores
+        alongside the fetch and attributing all three to it. With the control: 2.27x.
+        WHEN A MEASURED RATIO IS BIGGER THAN YOU CAN EXPLAIN, the two sides differ in
+        more than one way. (3.9 §5.1 was the first sighting; this is the second.)
+  frame-budget: SIX DISJOINT ZONES THAT COVER THE FRAME — build / collect / sort / fill
+        / overlay / present, in the order they happen. DISJOINT IS ARITHMETIC, not
+        tidiness: two live timers count the same nanoseconds twice (zones_overlapped()).
+        THE UNMEASURED REMAINDER IS THE MOST IMPORTANT ROW, and the one everybody omits:
+        six honest bars summing to 60% of a frame look complete until you double the
+        biggest and gain 9%. Ours is 0.2% BECAUSE IT IS DISPLAYED. Drawn to the END of
+        the stacked bar in a grey that deliberately does not look like a phase.
+        A SUM OF MEDIANS IS NOT THE MEDIAN OF A SUM; the disagreement is left visible
+        rather than derived away.
+        FRAME STARTS BEFORE THE EVENT DRAIN (draining is work) and ENDS BEFORE
+        SDL_RenderPresent (which blocks on vsync). The HUD prints engine AND wall time,
+        because WITH VSYNC ON AN FPS COUNTER CANNOT TELL YOU THAT YOU MADE ANYTHING
+        FASTER.
+        NOT EVERY PHASE IS A LEXICAL SCOPE — the HUD uses an explicit now_ticks()/add()
+        pair, which is why profiler::add is public. A zone is a CATEGORY of work, not a
+        point in time; `overlay` accumulates from two places in the frame.
+        INSTRUMENTATION SHAPES THE CODE IT MEASURES. sort_back_to_front left
+        draw_triangles so the sort could be timed apart from the fill; the harness stages
+        all triangles before filling so collect and fill cannot interleave. Say so.
+        MEASURED, 320x180: build 0.00, collect 53.08, sort 0.00, fill 1547.29 (96.1%),
+        overlay 4.08, present 3.25, other 3.17, FRAME 1610.88 us (621 fps).
+        MEASURED, 1280x720: fill 23243.92 (99.2%), collect 55.04, FRAME 23423.62 (43 fps).
+  px-per-triangle: THE AXIS. Work happens at two frequencies — per-VERTEX (triangles)
+        and per-PIXEL (covered pixels) — and their ratio is one number.
+        THE PREDICTION EVERYONE GETS WRONG: the 2-triangle floor costs 1390.14 us and
+        the 2304-triangle torus 171.78. THE FLOOR IS 8x MORE EXPENSIVE WITH 1152x FEWER
+        TRIANGLES. ns/tri 695069 vs 74.6; ns/px 45.01 vs 64.14 (1.42x, and that residue
+        is real — tiny triangles pay fill_triangle's setup against ~1.2 px).
+        TWO SLOPES, MEASURED. 16x the pixels: collect 53.08 -> 55.04 (noise), fill
+        1.55 -> 23.24 ms. Same screen size, 36 -> 36864 triangles: collect 1.15 ->
+        967.62 us (840x), fill only 338 -> 1070. THE TWO LINES CROSS near 1 px/triangle,
+        and "optimise the fill" is right on one side and wrong on the other with NOTHING
+        about the renderer changed.
+        QUOTE ns/PX AND ns/TRIANGLE, NEVER ms/frame: 45.47 ns/covered px, 23.0 ns/tri.
+        Total milliseconds is a fact about one scene at one resolution on one machine.
+  amdahl: speedup = 1/((1-p) + p/s); s -> infinity gives 1/(1-p) and no more. USE IT
+        TWICE — BEFORE as a filter (compute the ceiling, decide whether to start), AFTER
+        as a check ON YOURSELF (p, s and the whole-frame speedup are NOT independent, so
+        a frame that beat the formula means you mismeasured). VERIFIED: ceiling 1.284x,
+        measured 1.287x. Our fill is p = 0.96, ceiling 25x.
+  fill-anatomy: ns PER COVERED PIXEL, 2 triangles over 272223 px at 960x540:
+        coverage+colour 2.682 · +perspective divide 2.664 (-0.018, FREE) · +depth test
+        2.936 (+0.272) · +sRGB encode 9.024 (+6.088) · textured nearest 18.186 ·
+        bilinear 25.076 · lit 33.048 · lit+textured 46.456 · lit+textured FAST 35.212.
+        THE ENCODE ALONE IS 2.1x COVERAGE + DIVIDE + DEPTH COMBINED. 3.2 warned its
+        per-pixel divide was "the honest cost of this lesson"; the measurement says the
+        warning was unnecessary — it hides entirely behind other latency.
+        COST DOES NOT DISTRIBUTE ITSELF ACCORDING TO HOW MUCH YOU THOUGHT ABOUT
+        SOMETHING: to_encoded has been an unremarked one-liner since 2.4.
+  srgb-encode: FOUR CANDIDATES (ns/call, speedup, UN-ROUNDED error in 8-bit codes,
+        % differing, round-trip failures of 256):
+          exact std::pow             3.497  1.00x       —     0.00%  0/256
+          FITTED SQRT CHAIN          1.856  1.88x  0.0115     0.60%  0/256  <- SHIPS
+          threshold table + bsearch  6.919  0.51x   exact     0.00%  0/256
+          uniform input table 4096   0.994  3.52x  0.4022     3.66%  0/256
+        THE EXACT TABLE IS SLOWER THAN pow — 8 dependent L1 loads is a longer latency
+        chain than a modern powf. A beautiful idea, timed and rejected.
+        JUDGE THE ERROR BEFORE ROUNDING. "Worst code" SATURATES: everything under half a
+        code reports 1, so it cannot separate 0.0115 from 0.4022, which is the whole
+        question. At a 16-bit target those become 3.0 and 103.4 — and Module 6 stops
+        being 8-bit, so only one of the two survives it.
+        THE CACHE ARGUMENT AGAINST THE TABLE IS FALSE ON THIS MACHINE, MEASURED: with a
+        framebuffer-sized stream alongside, all four read 0.98-1.04x. KEPT WITH ITS
+        RESULT rather than dropped — shipping the right decision with the reasoning that
+        failed is how folklore is manufactured.
+        THE FIT: toe kept EXACT (12.92*x below 0.0031308 — one multiply, and every basis
+        function has infinite slope at 0 where the truth has 12.92, so fitting the toe
+        costs 3 codes instead of 0.0115). Above it a*sqrt(x) + b*x^1/4 + c*x^1/8 + d*x,
+        three CHAINED sqrts (latency chain of ~3, not a throughput win of 3).
+        Coefficients FITTED in scratch/fit_srgb.py — least squares reweighted toward
+        minimax, constrained to sum to 1 so white is exact. Worst |err| 0.0000451; the
+        error OSCILLATES about zero (a wobble, not a bias).
+        THE NaN GUARD AND CLAMP ARE REPEATED DELIBERATELY: they are not part of the
+        approximation, they are what "encode a float into a byte" means. sqrt of a
+        negative is a NaN too (3.3's undefined cast).
+        encode_mode {exact, fast} IS THE FIRST KNOB IN THIS ENGINE THAT IS NEITHER RIGHT
+        NOR WRONG — blend_space::encoded / interpolation::affine / draw_line_naive are
+        kept so a MISTAKE can be summoned; this is a defensible speed/accuracy point.
+        fill_style::encode DEFAULTS TO exact, a decision about the COURSE not about
+        renderers: every measured claim in 3.1-3.9 was made against it, and a default
+        moving 0.60% of those pixels by one code would falsify nine lessons. The DEMO
+        selects fast. (Same bargain as inv_w=1 in 3.2, lights=nullptr in 3.8, an unbound
+        albedo in 3.9.)
+        RESULT: fill 1.30x, FRAME 1.29x (1.29x/1.28x at 720p), costing 2657 of 473199
+        shaded px differing by exactly 1 code (0.56%).
+  cache: MEASURE THE CLIFF, DO NOT ASSERT IT. 2^21 random samples, count and pattern
+        held fixed: 32x32 through 1024x1024 all read 2.25-2.38 ns/fetch and only
+        2048x2048 (16 MiB) jumps to 3.88 (1.72x). THE CLIFF IS NOT WHERE THE FOLKLORE
+        PUTS IT — this machine's L2 makes a few MiB free, so "the texture must fit in
+        L1" is advice for a different computer. RANDOM, NOT SEQUENTIAL: a sequential
+        walk is prefetched perfectly and measures the prefetcher.
+        A FUNCTION'S COST IS NOT A PROPERTY OF THE FUNCTION. The same 64x64 nearest
+        fetch costs 2.26 ns in a tight loop and 5.13 ns in situ (2.27x), isolated with a
+        control that keeps the encode and both stores and removes only the fetch. In a
+        tight loop consecutive fetches overlap; in situ each sits in a dependency chain
+        (uv from the divide, result into the encode) with nothing to overlap with.
+
 curriculum: 94 lessons, ~433 h, 9 modules
   M0:6  M1:8  M2:12  M3:10  M4:9  M5:10  M6:15  M7:13  M8:11
 
@@ -1019,8 +1150,46 @@ completed:
   - 3.7  Specular and Blinn-Phong
   - 3.8  Flat, Gouraud and Per-Pixel Shading
   - 3.9  Texture Mapping and Bilinear Filtering
+  - 3.10 Profiling, and the Module 3 Capstone
+  ===> MODULE 3 COMPLETE — Stage A (the CPU software rasterizer) is DONE <===
 
 capabilities:
+  - core 3.10: THE ENGINE CAN MEASURE ITSELF. src/core/profile.hpp/.cpp NEW — `zone`
+    (build/collect/sort/fill/overlay/present + a `count` sentinel), `profiler` (a ring
+    of 120 frames, medians via std::nth_element, other_ns(), zones_overlapped(),
+    resolution_ns(), overhead_ns(), to_ns()), and `scope_timer` (RAII, ALL FOUR
+    copy/move operations DELETED so a double-count is unwritable — the same move
+    `vertex` made in 2.4).
+    IN core/, NOT gfx/, and that is the first placement in this codebase decided by
+    Module 5's argument rather than by convenience: measuring time is not a graphics
+    concern, and the physics step and the asset loader will each want a zone without
+    including a rasterizer to get one.
+    THE PROFILER CALIBRATES ITSELF AT CONSTRUCTION — 100000 empty scope_timers — and
+    main() logs the result, so the shortest instrumentable interval is a MEASURED
+    property of the machine rather than a number in a comment.
+    std::nth_element, not sort: O(n), and the ordering it does not produce is
+    information we would discard. COPIES the ring first — sorting it in place would
+    destroy the history that makes it one.
+    to_ns MULTIPLIES BEFORE DIVIDING. `ticks / freq * 1e9` truncates to whole seconds
+    first, so every interval under a second reports zero: a profiler in which every
+    zone is free, which compiles and runs.
+  - gfx 3.10: THE FIRST OPTIMISATION IN THE COURSE WITH A MEASURED BEFORE.
+    src/gfx/colour.hpp/.cpp — linear_to_srgb_fast (toe exact, then a four-term fit in
+    nested square roots), linear_to_srgb_u8_fast, and `encode_mode {exact, fast}`;
+    to_encoded now takes a mode, with ONE branch for three channels because the mode is
+    constant for a whole draw.
+    src/gfx/raster.hpp/.cpp — fill_style::encode threaded to three call sites
+    (shading::textured, shading::lit, and pixel_from, which gained a parameter).
+    NOTHING ELSE IN THE RASTERIZER CHANGED: not the interpolation, not the depth test,
+    not the sampler. The hotspot was the last line of the fragment, and it had been an
+    unremarked one-liner since 2.4.
+  - demo 3.10: six zones instrumented; sort_back_to_front EXTRACTED from draw_triangles
+    so the painter's sort is timed apart from the fill (one rule, one place, two callers
+    — 3.4's is_front_facing discipline); a stacked budget panel on [3] with the
+    unmeasured remainder drawn to the end of the bar; engine time and wall time side by
+    side; and [4] toggling the encode with a live count of the pixels that differ.
+    THE PANEL COVERS THE RENDER, deliberately: that is what a profiler HUD is, which is
+    also why its own cost is charged to `overlay` rather than being quietly free.
   - gfx 3.9: COLOUR FROM DATA. The last source of fragment colour that was not a rule.
     src/gfx/texture.hpp/.cpp NEW — `texture` (owning, ARGB8888, sRGB-ENCODED, ROW 0 AT
     THE TOP), `filter` / `address_mode` / `texel_origin`, `sampler`, `texture_binding`
@@ -1889,7 +2058,7 @@ files:
      .gitignore, CMakeLists.txt, STATE.md
   src/: main.cpp
   src/core/: input.hpp, input.cpp, clock.hpp, clock.cpp,
-            fixed_step.hpp, fixed_step.cpp
+            fixed_step.hpp, fixed_step.cpp, profile.hpp, profile.cpp
   src/gfx/: clip.hpp, clip.cpp, colour.hpp, colour.cpp,
             depth_buffer.hpp, depth_buffer.cpp,
             framebuffer.hpp, framebuffer.cpp,
@@ -1916,7 +2085,7 @@ files:
                  03-03-near-plane-clipping.html, 03-04-back-face-culling.html,
                  03-05-obj-loader.html, 03-06-normals-and-lambert.html,
                  03-07-specular-blinn-phong.html, 03-08-shading-models.html,
-                 03-09-textures.html
+                 03-09-textures.html, 03-10-profiling-capstone.html
   docs/shared/: course.css, course.js      (THE stylesheet + page script; one copy each)
   docs/_template/: lesson-template.html, README.md, apply-shared.py, check-page.js
   memory/: 2026-07-16.md, 2026-07-18.md, 2026-07-21.md, 2026-07-22.md,
@@ -1924,39 +2093,46 @@ files:
            2026-07-27.md, 2026-07-28.md, 2026-07-29.md, 2026-07-30.md,
            2026-07-31.md, 2026-08-01.md, 2026-08-02.md, 2026-08-03.md,
            2026-08-04.md, 2026-08-05.md, 2026-08-06.md, 2026-08-07.md,
-           2026-08-08.md
+           2026-08-08.md, 2026-08-10.md, 2026-08-12.md
   (retired: hello.cpp)
 
 
 
-next: 3.10 — Profiling, and the Module 3 Capstone
-      (planned filename: docs/lessons/03-10-profiling-capstone.html — 3.9 links to the
-      index for now, so BOTH of 3.9's next links and its Recap need repointing when it
-      lands)
-      MODULE 3 FINISHES BY MEASURING WHAT IT BUILT. Every lesson since 3.1 has produced
-      one number on demand; 3.10 turns that habit into a method.
-        - MEASURE, DO NOT GUESS, and prove it by getting a prediction wrong on purpose
-          first. 3.8's per-pixel-is-cheaper-below-3px/tri and 3.9's benchmark-measured-
-          the-encode are both already in the bank; the lesson is the METHOD that
-          produced them.
-        - A FRAME BUDGET IS A DIVISION. 16.7 ms at 60 Hz, and where it currently goes:
-          projection, clip, cull, fill, HUD. Instrument each, and note that the answer
-          changes completely with resolution — px/triangle is the axis, not triangle
-          count, which 3.8 already showed inverts the folklore.
-        - THE FILL LOOP IS THE WHOLE COST, and the parts of it are not what people
-          expect. Candidates to measure: the per-pixel divide (3.2), the sRGB encode
-          (3.9 §I says three pow calls dominate an unlit textured fill), the depth test,
-          the four texel fetches.
-        - THE sRGB ENCODE IS ALREADY THE MEASURED HOTSPOT and there is a real fix worth
-          teaching: a lookup table cannot work in that direction (continuous input), but
-          a cheaper approximation, or deferring the encode, or 8-bit-target quantisation
-          all can. This is the first optimisation in the course with a measured before.
-        - CACHE BEHAVIOUR, FIRST CONTACT. vertex went 28 -> 52 bytes in 3.8; the depth
-          buffer and the colour buffer are two streams; a 64x64 texture is 16 KB and
-          fits in L1, a 1024x1024 one does not. Measure the cliff rather than assert it.
-        - CAPSTONE: the textured, lit, z-buffered scene, with a frame budget the student
-          can read and defend. Every capability Module 3 added, in one picture, and a
-          profile that accounts for it.
-      Module 4 then opens with SDL_GPU, and its first job is the debt this module has
-      been listing: a programmable fragment stage.
+next: 4.1 — How GPUs Actually Work
+      (planned filename: docs/lessons/04-01-how-gpus-work.html — 3.10 links to the index
+      for now, so BOTH of 3.10's next links need repointing when it lands)
+      MODULE 4 OPENS, AND STAGE A IS FINISHED. Every debt Module 3 listed comes due at
+      once, and all five resolve to the same thing:
+        - raster.hpp includes light.hpp AND texture.hpp — a rasterizer that knows about
+          coverage, interpolation, depth, lighting and texturing (3.9);
+        - `shading` has a combination it cannot name: "textured and lit" is `lit` plus a
+          binding, so the enum no longer describes a fragment on its own (3.9);
+        - fill_style is TWO STRUCTS WEARING ONE NAME — pipeline state and uniforms (3.8);
+        - a material rides on a triangle and is rebound per triangle, which no GPU can
+          do (3.8);
+        - and NEW IN 3.10: encode_mode is a per-fragment branch on a value that is
+          constant for an entire draw — a compile-time shader variant in a runtime
+          disguise.
+      THE ANSWER TO ALL FIVE IS A FRAGMENT STAGE THE CALLER PROGRAMS.
+        - SIMT intuition: why a GPU is not "a fast CPU", what a warp/wavefront is, why
+          divergence costs, and why a sub-pixel triangle wastes three of every four
+          fragment lanes (2x2 quads — the hardware version of 3.10's px/triangle axis).
+          GROUND IT IN THE NUMBER THE STUDENT JUST MEASURED: 45.47 ns per covered pixel.
+          The GPU's advantage is thousands at once, not cleverer arithmetic per fragment,
+          and saying so is what stops the port feeling like magic.
+        - WHY STATE LIVES IN IMMUTABLE PIPELINE OBJECTS. fill_style has BEEN a pipeline
+          object since 3.2 without the name; SDL_GPUGraphicsPipelineCreateInfo is the
+          same struct, several times larger. Validating and compiling that state per
+          draw call would be ruinous — that is the argument to make properly here.
+        - MAP EVERY STAGE BACK TO WHAT EXISTS: coverage -> the rasterizer, barycentrics
+          -> interpolators, depth_buffer -> the depth attachment, sampler -> sampler,
+          shade() -> the fragment shader, viewport -> SDL_GPUViewport (already
+          field-for-field, 2.11). The port is an API CHANGE, NOT A MATHS CHANGE, and the
+          reason is the NDC-parity decision taken back in Module 2 (conventions §5).
+        - PIN DOWN SDL_GPU's COORDINATE, DEPTH-RANGE AND WINDING CONVENTIONS FROM THE
+          HEADERS BEFORE ANYTHING IS BUILT ON THEM (master prompt §10). Already verified
+          and recorded in LEARNINGS.md and conventions.html §4; 4.1 is where the student
+          is walked through CHECKING it rather than trusting it.
+        - The honest sidebar on why not OpenGL: legacy design, deprecated on macOS, and
+          SDL_GPU is SDL3's flagship path.
 ```

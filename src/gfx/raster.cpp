@@ -268,11 +268,11 @@ struct rgb3
 }
 
 /// The weighted average, back to a storable pixel.
-[[nodiscard]] Uint32 pixel_from(rgb3 mixed, blend_space space)
+[[nodiscard]] Uint32 pixel_from(rgb3 mixed, blend_space space, encode_mode mode)
 {
     if (space == blend_space::linear)
     {
-        return to_encoded({mixed.r, mixed.g, mixed.b});
+        return to_encoded({mixed.r, mixed.g, mixed.b}, mode);
     }
 
     // Already in stored units, so there is nothing to encode — which is exactly
@@ -672,8 +672,13 @@ void fill_triangle(framebuffer& fb, depth_buffer* depth,
                         // attribute Module 3 asks it to carry.
                         const float uu = (f0 * pu0 + f1 * pu1 + f2 * pu2) * w_recip;
                         const float vv = (f0 * pv0 + f1 * pv1 + f2 * pv2) * w_recip;
+                        // `to_encoded` is the largest single item in THIS branch —
+                        // three `pow` calls against one bilinear fetch — which is
+                        // Lesson 3.10's measured headline and the reason
+                        // `style.encode` exists.
                         row[x] = to_encoded(
-                            sample(*style.albedo.image, style.albedo.samp, uu, vv));
+                            sample(*style.albedo.image, style.albedo.samp, uu, vv),
+                            style.encode);
                     }
                     else if (lit)
                     {
@@ -745,7 +750,8 @@ void fill_triangle(framebuffer& fb, depth_buffer* depth,
                         // the middle of the triangle; §3.5 measures by how much.
                         row[x] = to_encoded(shade(albedo, n, style.eye - p,
                                                   *style.lights, style.surface,
-                                                  style.model));
+                                                  style.model),
+                                            style.encode);
                     }
                     else
                     {
@@ -762,7 +768,7 @@ void fill_triangle(framebuffer& fb, depth_buffer* depth,
                         // the whole triangle. A branch predictor eats this for
                         // free; hoisting it would mean two copies of the loop,
                         // which is a worse trade at this size.
-                        row[x] = pixel_from(mixed, space);
+                        row[x] = pixel_from(mixed, space, style.encode);
                     }
                 }
             }

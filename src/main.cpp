@@ -23,6 +23,7 @@
 #include "core/clock.hpp"
 #include "core/fixed_step.hpp"
 #include "core/input.hpp"
+#include "core/profile.hpp"   // Lesson 3.10: the frame budget
 #include "game/pong.hpp"
 #include "gfx/clip.hpp"
 #include "gfx/colour.hpp"
@@ -2708,6 +2709,24 @@ void collect_triangles(std::vector<raster_triangle>& out, projection_scratch& sc
 ///               bind a pipeline, draw everything that uses it, then bind
 ///               another. A scene with two materials is two batches, and sorting
 ///               draws by pipeline is a real optimisation in Module 6.
+/// Sort the painter's algorithm's triangles, furthest first.
+///
+/// Extracted from `draw_triangles` in Lesson 3.10 so that the demo can run it
+/// under `zone::sort` and `draw_triangles` can still do it for callers that do
+/// not care. **One rule, one place, two callers** — the same discipline
+/// `is_front_facing` established in 3.4: instrumentation may duplicate the
+/// question, never the answer.
+void sort_back_to_front(std::vector<raster_triangle>& tris)
+{
+    // Furthest first. View-space z is NEGATIVE in front of the camera, so
+    // "furthest" is "most negative" and plain ascending order is what we want.
+    // Getting this backwards paints the scene inside out, which at least fails
+    // loudly — unlike everything else about this algorithm.
+    std::sort(tris.begin(), tris.end(),
+              [](const raster_triangle& a, const raster_triangle& b)
+              { return a.sort_key < b.sort_key; });
+}
+
 void draw_triangles(engine::framebuffer& fb, engine::depth_buffer* depth,
                     std::vector<raster_triangle>& tris, bool sorted,
                     engine::fill_style style, cull_stats* culled = nullptr)
@@ -2736,16 +2755,7 @@ void draw_triangles(engine::framebuffer& fb, engine::depth_buffer* depth,
         }
     }
 
-    if (sorted)
-    {
-        // Furthest first. View-space z is NEGATIVE in front of the camera, so
-        // "furthest" is "most negative" and plain ascending order is what we
-        // want. Getting this backwards paints the scene inside out, which at
-        // least fails loudly — unlike everything else about this algorithm.
-        std::sort(tris.begin(), tris.end(),
-                  [](const raster_triangle& a, const raster_triangle& b)
-                  { return a.sort_key < b.sort_key; });
-    }
+    if (sorted) { sort_back_to_front(tris); }
 
     for (const raster_triangle& t : tris)
     {
@@ -3257,6 +3267,141 @@ void draw_fan(engine::framebuffer& fb, line_fn draw, float phase)
     return true;
 }
 
+// ===========================================================================
+// Lesson 3.10 — the frame budget, on screen
+// ===========================================================================
+
+/// One colour per zone, plus one for the unaccounted remainder.
+///
+/// The remainder is drawn in a **desaturated grey**, deliberately: it is not a
+/// phase, it is the part of the frame nobody is measuring, and giving it a
+/// cheerful colour of its own would suggest otherwise.
+struct zone_colour { Uint8 r, g, b; };
+
+[[nodiscard]] zone_colour colour_of(engine::zone z)
+{
+    switch (z)
+    {
+    case engine::zone::build:   return {120, 200, 140};
+    case engine::zone::collect: return {235, 200, 100};
+    case engine::zone::sort:    return {220, 140, 200};
+    case engine::zone::fill:    return {235, 120, 110};
+    case engine::zone::overlay: return {120, 180, 235};
+    case engine::zone::present: return {150, 150, 220};
+    case engine::zone::count:   break;
+    }
+    return {110, 112, 128};
+}
+
+/// Draw the frame budget: a stacked bar, then the numbers behind it.
+///
+/// **A stacked bar rather than one bar per zone**, and the choice is the whole
+/// design. Separate bars answer "how big is fill?"; a stacked bar answers "what is
+/// a frame made of?", which is the question a budget exists for — and it makes the
+/// unaccounted remainder impossible to overlook, because it is the gap at the end
+/// rather than a row you can skip reading.
+///
+/// Coordinates are in the HUD's 2x text space, so they line up with
+/// `SDL_RenderDebugText` without any conversion.
+void draw_budget(SDL_Renderer* r, const engine::profiler& prof, float wall_ns,
+                 int covered_px, double fill_ns_per_px,
+                 engine::encode_mode encode, int encode_wrong,
+                 float x, float y)
+{
+    const double total = static_cast<double>(prof.median_frame_ns());
+    if (total <= 0.0) { return; }
+
+    constexpr float k_bar_w = 400.0f;
+    constexpr float k_bar_h = 8.0f;
+    constexpr float k_col_w = 268.0f;   ///< two columns of zone rows, to stay short
+    constexpr int k_rows = 4;
+
+    // A backing panel, because this is drawn OVER the render. That is not a
+    // compromise for want of screen space — it is what a profiler HUD is: it
+    // covers the thing it is measuring, which is why it lives on a key ([3]) and
+    // why its own cost is charged to `overlay` rather than being free.
+    SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(r, 10, 12, 18, 225);
+    const SDL_FRect panel{x - 5.0f, y - 5.0f, 550.0f, 92.0f};
+    SDL_RenderFillRect(r, &panel);
+    SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_NONE);
+
+    // ENGINE TIME AND WALL TIME, SIDE BY SIDE, and the gap between them is the
+    // point: with vsync on, the wall clock reads 16.7 ms no matter what the
+    // renderer does, so a frame-rate counter cannot tell you that you have made
+    // anything faster. That is why this panel exists and the fps counter does not
+    // replace it.
+    SDL_SetRenderDrawColor(r, 210, 212, 220, 255);
+    SDL_RenderDebugTextFormat(r, x, y,
+        "FRAME BUDGET  engine %8.2f us   wall %8.2f us   %5.1f%% of 16.7 ms",
+        total / 1000.0, static_cast<double>(wall_ns) / 1000.0,
+        100.0 * total / 16666667.0);
+
+    // The stacked bar. Zones in enum order, so it reads left-to-right as the
+    // order the work happens in.
+    float cursor = x;
+    for (int i = 0; i < engine::k_zone_count; ++i)
+    {
+        const auto z = static_cast<engine::zone>(i);
+        const float w = static_cast<float>(k_bar_w * static_cast<double>(prof.median_ns(z)) / total);
+        const zone_colour c = colour_of(z);
+        SDL_SetRenderDrawColor(r, c.r, c.g, c.b, 255);
+        const SDL_FRect seg{cursor, y + 11.0f, w, k_bar_h};
+        SDL_RenderFillRect(r, &seg);
+        cursor += w;
+    }
+    // Whatever is left is the remainder, drawn to the end of the bar so the bar
+    // is always exactly full. A budget that does not add up to the frame is not
+    // a budget.
+    SDL_SetRenderDrawColor(r, 110, 112, 128, 255);
+    const SDL_FRect rest{cursor, y + 11.0f, std::max(0.0f, x + k_bar_w - cursor), k_bar_h};
+    SDL_RenderFillRect(r, &rest);
+
+    // The numbers, in two columns so the panel stays short enough to sit between
+    // the lesson's own HUD lines. `other` is the seventh entry and gets the same
+    // treatment as a real zone, which is the whole reason it is displayed.
+    const auto row_at = [&](int i, const char* label, Uint64 ns, zone_colour c,
+                            const char* note) {
+        const float rx = x + static_cast<float>(i / k_rows) * k_col_w;
+        const float ry = y + 23.0f + static_cast<float>(i % k_rows) * 11.0f;
+        SDL_SetRenderDrawColor(r, c.r, c.g, c.b, 255);
+        const SDL_FRect swatch{rx, ry + 1.0f, 6.0f, 6.0f};
+        SDL_RenderFillRect(r, &swatch);
+        SDL_RenderDebugTextFormat(r, rx + 11.0f, ry, "%-8s %8.2f us %5.1f%% %s",
+                                  label, static_cast<double>(ns) / 1000.0,
+                                  100.0 * static_cast<double>(ns) / total, note);
+    };
+
+    for (int i = 0; i < engine::k_zone_count; ++i)
+    {
+        const auto z = static_cast<engine::zone>(i);
+        row_at(i, engine::zone_name(z), prof.median_ns(z), colour_of(z), "");
+    }
+    row_at(engine::k_zone_count, "other", prof.other_ns(), {110, 112, 128},
+           "<- unmeasured");
+
+    // THE UNIT COST, and the optimisation, on one line. Total microseconds are a
+    // fact about this machine at this resolution; nanoseconds per pixel is a fact
+    // about the fill loop, and it is the one that survives being quoted elsewhere.
+    // The pixel count beside it is what a speedup costs — a speedup quoted without
+    // its error is half a claim.
+    const bool fast = (encode == engine::encode_mode::fast);
+    SDL_SetRenderDrawColor(r, 235, 120, 110, 255);
+    SDL_RenderDebugTextFormat(r, x, y + 74.0f,
+                              "fill %5.2f ns/px over %6d px", fill_ns_per_px, covered_px);
+    SDL_SetRenderDrawColor(r, fast ? 140 : 210, fast ? 210 : 212, fast ? 150 : 220, 255);
+    SDL_RenderDebugTextFormat(r, x + k_col_w, y + 74.0f,
+                              "[4] encode %-5s  %5d px differ by 1 code",
+                              fast ? "FAST" : "exact", encode_wrong);
+
+    if (prof.zones_overlapped())
+    {
+        SDL_SetRenderDrawColor(r, 240, 120, 110, 255);
+        SDL_RenderDebugText(r, x, y + 85.0f,
+                            "ZONES OVERLAPPED - two timers alive at once");
+    }
+}
+
 /// Turn the keyboard into the two numbers Pong's simulation wants.
 [[nodiscard]] game::intent read_intent(const engine::input& in, bool right_is_ai)
 {
@@ -3462,6 +3607,19 @@ int main(int argc, char* argv[])
     int texel_wrong = 0;                             ///< px the half-texel error costs
     int filter_wrong = 0;                            ///< px bilinear and nearest disagree about
 
+    // ---- Lesson 3.10 -------------------------------------------------------
+    engine::profiler prof;                           ///< the frame budget
+    bool show_budget = true;                         ///< [3]
+    engine::encode_mode encode = engine::encode_mode::fast;   ///< [4]
+    int encode_wrong = 0;                            ///< px the fast encode moves
+    double fill_ns_per_px = 0.0;                     ///< the fill's own unit cost
+    int covered_px = 0;                              ///< how many pixels the scene painted
+
+    SDL_Log("profiler: counter resolves to %.2f ns, a scope_timer costs %.2f ns "
+            "-> instrument nothing shorter than %.2f us",
+            prof.resolution_ns(), prof.overhead_ns(),
+            std::max(prof.resolution_ns(), prof.overhead_ns()) * 100.0 / 1000.0);
+
     textures.build();
 
     // The control mesh, built once. `assets/torus.obj` was written from exactly this
@@ -3520,6 +3678,8 @@ int main(int argc, char* argv[])
     SDL_Log("  [S] filter: bilinear / nearest   [R] address: repeat / mirrored / clamp");
     SDL_Log("  [1] texel origin: centre (correct) vs corner - half a texel, invisible under [S] nearest");
     SDL_Log("  [2] uv v flip on import: OBJ counts v upwards, a texture counts it downwards");
+    SDL_Log("  [3] the frame budget: which phase the frame is actually spent in");
+    SDL_Log("  [4] sRGB encode: fitted sqrt chain (fast) vs std::pow (exact) - watch `fill`");
     SDL_Log("  [arrows] orbit  [-]/[=] dolly  [P] persp/ortho  [O] model order  [X] object");
     SDL_Log("  [Z] rotation axis  [,] [.] t  [Space] spin  [W]/[N] the 2.7 w bugs");
     SDL_Log("[Tab] cycles demos: scene (2.6-3.3) -> basis (2.5) -> triangles -> lines -> Pong");
@@ -3528,6 +3688,14 @@ int main(int argc, char* argv[])
     bool running = true;
     while (running)
     {
+        // Lesson 3.10. The frame starts HERE — before the event drain, because
+        // draining events is work the frame does and a budget that starts after it
+        // has a hole in it by construction. It ends just before SDL_RenderPresent,
+        // so the total is *our* work and does not include the vsync wait; the HUD
+        // prints the wall-clock frame time beside it so the gap between the two is
+        // visible rather than hidden.
+        prof.begin_frame();
+
         SDL_Event event;
         while (SDL_PollEvent(&event))
         {
@@ -3654,6 +3822,14 @@ int main(int argc, char* argv[])
                 uv_flip_on_load = !uv_flip_on_load;
                 load_model(model, model.choice, uv_flip_on_load);
             }
+            // ---- Lesson 3.10 --------------------------------------------
+            if (in.key_pressed(SDL_SCANCODE_3)) { show_budget = !show_budget; }
+            if (in.key_pressed(SDL_SCANCODE_4))
+            {
+                encode = (encode == engine::encode_mode::fast)
+                       ? engine::encode_mode::exact
+                       : engine::encode_mode::fast;
+            }
             if (in.key_pressed(SDL_SCANCODE_B))
             {
                 depth_fmt = next_depth_format(depth_fmt);
@@ -3747,10 +3923,18 @@ int main(int argc, char* argv[])
                 lights.key.intensity = 1.0f;
             }
 
-            cube_m = build_spin(cube_mode, cube_t);
-            build_floor(floor, floor_cells);
-            scene_count = build_scene(scene, scene_mode, cube_mode, cube_t, floor, model,
-                                      k_shininess[shininess_step]);
+            {
+                // zone::build — placing the objects. It will read 0.00 us, and
+                // that is not a bug: §2.2 measured this machine's counter at a
+                // 41.7 ns tick, so anything under about 4 us cannot be resolved.
+                // A zone that reads zero is either work you are not doing or work
+                // you cannot measure, and this one is the second.
+                const engine::scope_timer z{prof, engine::zone::build};
+                cube_m = build_spin(cube_mode, cube_t);
+                build_floor(floor, floor_cells);
+                scene_count = build_scene(scene, scene_mode, cube_mode, cube_t, floor, model,
+                                          k_shininess[shininess_step]);
+            }
             if (selected >= scene_count) { selected = 0; }
 
             // The view matrix (2.9) and the projection matrix (2.10). The
@@ -3790,7 +3974,15 @@ int main(int argc, char* argv[])
             // and it is why the grid vanishes correctly behind solid objects here
             // without a depth value of its own. Giving lines a real depth test is
             // Exercise 3.1.4.
-            draw_world(fb, view_from_world, pr);
+            //
+            // zone::overlay — debug draw. It is timed with the HUD rather than with
+            // the scene because it is the same KIND of work: things drawn so a human
+            // can see what the engine is doing, which ship disabled and must
+            // therefore be budgeted separately from the things that do not.
+            {
+                const engine::scope_timer z{prof, engine::zone::overlay};
+                draw_world(fb, view_from_world, pr);
+            }
 
             if (hs == hidden_surface::wireframe)
             {
@@ -3813,6 +4005,9 @@ int main(int argc, char* argv[])
                 grid_wrong = 0;
                 texel_wrong = 0;
                 filter_wrong = 0;
+                encode_wrong = 0;
+                covered_px = 0;
+                fill_ns_per_px = 0.0;
                 shown_depth = {};
                 scene_clip = {};
                 scene_cull = {};
@@ -3823,12 +4018,30 @@ int main(int argc, char* argv[])
                 // Project the whole scene ONCE, into one flat list. Both
                 // algorithms below then run on identical geometry, which is what
                 // makes the pixel-for-pixel comparison honest.
-                collect_triangles(scene_tris, scratch, scene, scene_count,
-                                  view_from_world, pr, order, scene_clip, culling,
-                                  nsrc, eval, lights, correct_normals, &scene_normals,
-                                  eye_world, spec_model);
+                {
+                    // zone::collect — the vertex stage. Everything from the model
+                    // matrix to a screen-space triangle: transform, clip, per-vertex
+                    // lighting. §3.3 shows this bar is flat in resolution and linear
+                    // in triangle count, which is the whole of why it is a separate
+                    // zone from the one below it.
+                    const engine::scope_timer z{prof, engine::zone::collect};
+                    collect_triangles(scene_tris, scratch, scene, scene_count,
+                                      view_from_world, pr, order, scene_clip, culling,
+                                      nsrc, eval, lights, correct_normals, &scene_normals,
+                                      eye_world, spec_model);
+                }
 
                 const bool want_painter = (hs == hidden_surface::painter);
+
+                // zone::sort — the painter's algorithm, and only then. Hoisted out
+                // of `draw_triangles` so it can be timed apart from the fill;
+                // `sort_back_to_front` is the single copy of the rule, called from
+                // here and from there.
+                if (want_painter)
+                {
+                    const engine::scope_timer z{prof, engine::zone::sort};
+                    sort_back_to_front(scene_tris);
+                }
 
                 // ---- Lesson 3.9: what supplies this draw's albedo? ---------
                 //
@@ -3890,23 +4103,37 @@ int main(int argc, char* argv[])
                     .surface = {},                      // rebound per triangle
                     .model = spec_model,
                     .eye = eye_world,
-                    .albedo = {bind_texture ? image : nullptr, samp}};
+                    .albedo = {bind_texture ? image : nullptr, samp},
+                    // Lesson 3.10. The demo defaults to `fast` because it is a
+                    // real-time renderer and that is the right answer for one;
+                    // `fill_style`'s own default stays `exact` so that nothing
+                    // written in Lessons 3.1-3.9 changes by a single code.
+                    .encode = encode};
 
                 // Clearing to FAR is not optional and not cosmetic. Skip it and
                 // last frame's depths survive into this one; §7 has the picture.
                 scene_depth.clear();
 
-                // Lesson 3.8 times this one call, because "per-pixel shading is
-                // expensive" is a claim and a claim wants a number. It measures the
-                // FILL only — not the projection, not the clip, not the HUD — since
-                // that is the part the evaluation point actually changes. Smoothed
-                // over frames the way `clock::fps()` is, and for the same reason: a
-                // single frame's timing on a desktop OS is mostly noise.
-                const Uint64 fill_t0 = SDL_GetTicksNS();
-                draw_triangles(fb, want_painter ? nullptr : &scene_depth,
-                               scene_tris, want_painter, style, &scene_cull);
-                const double fill_ns = static_cast<double>(SDL_GetTicksNS() - fill_t0);
-                shade_ns = (shade_ns == 0.0) ? fill_ns : shade_ns * 0.9 + fill_ns * 0.1;
+                // zone::fill — the fragment stage, and on this scene about 96% of
+                // the frame.
+                //
+                // Lesson 3.8 timed this one call by hand, with SDL_GetTicksNS and
+                // an exponential smoothing, because "per-pixel shading is
+                // expensive" is a claim and a claim wants a number. Lesson 3.10
+                // retires that: it is the same measurement, taken by the same kind
+                // of instrument, but now it sits in a budget beside its neighbours
+                // instead of floating alone — and it is a MEDIAN rather than a
+                // running average, so one scheduling hiccup no longer drags it.
+                //
+                // Note that `sorted` is now false even under the painter's
+                // algorithm: the sort happened above, under its own zone, so that
+                // this bar measures rasterization and nothing else.
+                {
+                    const engine::scope_timer z{prof, engine::zone::fill};
+                    draw_triangles(fb, want_painter ? nullptr : &scene_depth,
+                                   scene_tris, false, style, &scene_cull);
+                }
+                shade_ns = static_cast<double>(prof.median_ns(engine::zone::fill));
 
                 // ---- Lesson 3.4's own comparison --------------------------
                 // Culling is an OPTIMISATION, so the claim to check is not "does
@@ -4140,6 +4367,55 @@ int main(int argc, char* argv[])
                     texel_wrong = 0;
                     filter_wrong = 0;
                 }
+
+                // ---- Lesson 3.10's own comparison -------------------------
+                //
+                // What does the approximate encode actually cost, on THIS frame, in
+                // pixels? The same method as every comparison above — redraw with
+                // one thing changed and count — and it is the only honest way to
+                // present an optimisation, because a speedup without its error is
+                // half a claim.
+                //
+                // Note that it is the CURRENT setting against the other one, not
+                // "fast against exact": pressing [4] must move the number to zero
+                // and back, which is what proves the toggle is actually reaching the
+                // rasterizer rather than the HUD lying about a knob that does
+                // nothing. The pixels differ by at most one code (verify_310 §I),
+                // and one code is invisible — so the counter is the only way to see
+                // that anything happened at all.
+                {
+                    engine::fill_style other_encode = style;
+                    other_encode.encode = (encode == engine::encode_mode::fast)
+                                        ? engine::encode_mode::exact
+                                        : engine::encode_mode::fast;
+
+                    scratch_fb.clear(k_bg);
+                    draw_world(scratch_fb, view_from_world, pr);
+                    scratch_depth.clear();
+                    draw_triangles(scratch_fb, want_painter ? nullptr : &scratch_depth,
+                                   scene_tris, want_painter, other_encode);
+                    encode_wrong = count_differences(fb, scratch_fb, vp);
+                }
+
+                // The fill's UNIT cost, which is the number that transfers between
+                // machines and resolutions — total microseconds do not. Counting
+                // covered pixels is itself a pass over the viewport, so it happens
+                // here, outside every zone, and is not part of the budget.
+                covered_px = 0;
+                {
+                    const int x0 = static_cast<int>(vp.x);
+                    const int y0 = static_cast<int>(vp.y);
+                    const int x1 = std::min(fb.width(), static_cast<int>(vp.x + vp.w));
+                    const int y1 = std::min(fb.height(), static_cast<int>(vp.y + vp.h));
+                    for (int y = y0; y < y1; ++y)
+                    {
+                        const Uint32* const row = fb.row(y);
+                        for (int x = x0; x < x1; ++x) { if (row[x] != k_bg) { ++covered_px; } }
+                    }
+                }
+                fill_ns_per_px = (covered_px > 0)
+                    ? static_cast<double>(prof.median_ns(engine::zone::fill)) / covered_px
+                    : 0.0;
 
                 // The brightest pixel on screen. One number, and on a coarse mesh it
                 // is the whole of Lesson 3.8's argument: spin the icosahedron and
@@ -4435,14 +4711,29 @@ int main(int argc, char* argv[])
             else                         { doubled_px = draw_coverage(fb, use_fill_rule); }
         }
 
-        if (!upload(screen_texture, fb))
+        // zone::present — the part of presenting that is OURS. The row-by-row copy
+        // into the locked streaming texture (Lesson 1.5) and the two draw calls
+        // that put it on screen. `SDL_RenderPresent` is deliberately outside: on a
+        // vsynced frame it blocks until the display is ready, and a bar that is
+        // 90% "waiting for the monitor" tells you nothing about your renderer.
         {
-            SDL_Log("SDL_LockTexture failed: %s", SDL_GetError());
+            const engine::scope_timer z{prof, engine::zone::present};
+            if (!upload(screen_texture, fb))
+            {
+                SDL_Log("SDL_LockTexture failed: %s", SDL_GetError());
+            }
+
+            SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+            SDL_RenderClear(renderer);
+            SDL_RenderTexture(renderer, screen_texture, nullptr, nullptr);
         }
 
-        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-        SDL_RenderClear(renderer);
-        SDL_RenderTexture(renderer, screen_texture, nullptr, nullptr);
+        // The HUD is a phase, but it is not a lexical scope: it runs to the bottom
+        // of this loop through several hundred lines of per-demo text. So it is
+        // timed with an explicit pair rather than a `scope_timer` — which is why
+        // `profiler::add` is public. The two calls are three lines apart in intent
+        // and far apart in the file, and that is exactly the case RAII cannot cover.
+        const Uint64 hud_t0 = engine::profiler::now_ticks();
 
         // A text coordinate is exactly twice a framebuffer coordinate: 2x text
         // scale over a 4x framebuffer scale.
@@ -5015,7 +5306,7 @@ int main(int argc, char* argv[])
                         SDL_RenderDebugText(renderer, 6.0f, 314.0f,
                                             "[F] hidden surface  [C] scene  [B] depth  [I] interp  [T] tessellate");
                         SDL_RenderDebugText(renderer, 6.0f, 328.0f,
-                                            "[arrows] orbit  [-][=] dolly  [P] proj  [O] order  [Tab] demo");
+                                            "[arrows] orbit  [-][=] dolly  [3] budget  [4] encode  [Tab] demo");
             }
         }
         else if (which == demo::basis)
@@ -5188,7 +5479,22 @@ int main(int argc, char* argv[])
                                 "[M] blend  [ ] bands  [R] rule  [Space] spin  [Tab] demo  [Esc] quit");
         }
 
+        // Over the render, deliberately — see draw_budget. Drawn last so nothing
+        // else can paint over it, and only in the demo whose frame it describes.
+        if (which == demo::scene && show_budget)
+        {
+            draw_budget(renderer, prof, clk.raw_dt() * 1.0e9f, covered_px, fill_ns_per_px,
+                        encode, encode_wrong, 6.0f, 176.0f);
+        }
+
         SDL_SetRenderScale(renderer, 1.0f, 1.0f);
+
+        prof.add(engine::zone::overlay,
+                 prof.to_ns(engine::profiler::now_ticks() - hud_t0));
+
+        // The frame ends here, before the blocking call. See `begin_frame` above.
+        prof.end_frame();
+
         SDL_RenderPresent(renderer);
 
         // The frame throttle moved from [T] to [Y] in Lesson 3.2, because [T]

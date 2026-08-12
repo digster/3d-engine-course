@@ -7,7 +7,7 @@ There is no engine to download here and no framework doing the interesting parts
 write the math library, the rasterizer, the ECS, the renderer, the physics, and the editor. By
 the end you have a real engine and a game built on its public API.
 
-**Status:** curriculum and conventions published; lessons in progress. Start at
+**Status:** curriculum and conventions published; lessons in progress — **Modules 0–3 are complete** (36 of 94 lessons), so the CPU software rasterizer is finished end to end. Start at
 [`docs/index.html`](docs/index.html).
 
 ---
@@ -209,6 +209,27 @@ somebody chose: an albedo is a reflectance, a reflectance multiplies a quantity 
 have to be linear, which is why the sampler decodes sRGB *before* it filters. Get that order wrong
 and a black-and-white blend delivers 42.8% of the light it should.
 [Lesson 3.9](docs/lessons/03-09-textures.html).
+
+Now press <kbd>3</kbd>, and the picture acquires a **frame budget**: six coloured segments in one
+stacked bar, the whole frame divided into the phases that made it, with the part nobody is
+measuring drawn on the end so it cannot be overlooked. Read the engine time against the wall time
+beside it — with vsync on, the wall clock says 16.7 ms no matter what the renderer does, which is
+why an fps counter cannot tell you that you have made anything faster.
+
+One segment is essentially the whole bar. It is the fill, at **96.1%** of the frame, and the
+numbers underneath are the ones worth arguing with. The 2-triangle floor costs *eight times* what
+the 2,304-triangle torus does, because rasterization is paid per **pixel**: 45.01 against 64.14
+nanoseconds per covered pixel, while the per-triangle figures differ by a factor of 9,300. Inside
+the fragment loop, the perspective divide that Lesson 3.2 warned would cost you is **free**, the
+depth test costs a quarter of a nanosecond, and the largest single item is `std::pow` in the sRGB
+conversion — more than coverage, interpolation, the divide and the depth test *combined*.
+
+So press <kbd>4</kbd>. That swaps the exact encode for a four-term approximation in nested square
+roots, fitted for this course rather than copied from anywhere: the fill drops by **1.30×** and
+the frame with it, and the picture does not change — 0.56% of pixels move by one code out of 255,
+which the HUD counts because one code is invisible and a counter is the only evidence anything
+happened. [Lesson 3.10](docs/lessons/03-10-profiling-capstone.html), which is also where
+Module 3's capstone lives: everything above, in one picture, with every microsecond accounted for.
 
 Then hold <kbd>=</kbd> on that floor and walk *into* it. <kbd>K</kbd> cycles what happens to a
 triangle with a corner behind your eye: **clip** it (correct), **drop** it (the ground vanishes —
