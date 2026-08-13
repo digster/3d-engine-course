@@ -343,6 +343,73 @@ enum class cull_mode
     back
 };
 
+/// **How the rasterizer walks a triangle** — Lesson 4.1.
+///
+/// This is the one piece of *hardware behaviour* the software rasterizer
+/// deliberately imitates rather than merely mirrors in its naming. Every other
+/// GPU-shaped decision in this file (pipeline state, cull modes, the depth
+/// attachment) was adopted because it produces the same picture more cleanly;
+/// this one produces the same picture and **costs measurably more**, which is
+/// exactly why it is worth being able to switch on.
+enum class traversal
+{
+    /// Row by row, pixel by pixel, shading only pixels the triangle covers.
+    /// **The default**, because it is what a CPU rasterizer should do and what
+    /// Lessons 2.2 through 3.10 measured.
+    scanline,
+
+    /// In aligned **2×2 blocks**, shading all four lanes of any block with at
+    /// least one covered pixel and discarding the rest.
+    ///
+    /// This is what every GPU does, and it is not an implementation detail that
+    /// could have gone the other way: a fragment shader can ask for the rate of
+    /// change of any value across the screen (`ddx`/`ddy` in HLSL), and those are
+    /// computed by *subtracting neighbouring lanes*. A lane therefore needs its
+    /// neighbours to have run the same shader — even where the triangle does not
+    /// cover them. Lesson 4.1 §3.2 measures what that costs; the short version is
+    /// that it is free on large triangles and catastrophic on small ones.
+    ///
+    /// **Produces a bit-identical image to `scanline`.** Helper lanes are shaded
+    /// and thrown away; they never write colour and never write depth. Verified
+    /// in `scratch/verify_41.cpp` §B over a scene of 2,304 triangles.
+    quad,
+
+    /// `quad`, but the helper lanes are **written** in debug magenta instead of
+    /// discarded, so the waste is visible rather than counted.
+    ///
+    /// Not a rendering mode — a picture of one. The silhouette of every triangle
+    /// lights up, and the width of that fringe is the whole argument.
+    quad_debug
+};
+
+/// What one draw's quad traversal did — Lesson 4.1.
+///
+/// **An output, not pipeline state**, which is why it is a separate parameter to
+/// `fill_triangle` rather than a field of `fill_style`. A pipeline object
+/// describes how to draw; this describes what happened. Mixing the two is how a
+/// "render state" struct ends up with a mutable counter in it that nobody can
+/// safely share between threads.
+struct quad_stats
+{
+    long quads = 0;        ///< 2×2 blocks with at least one covered lane
+    long shaded = 0;       ///< lanes the fragment function actually ran for
+    long covered = 0;      ///< lanes genuinely inside the triangle
+    long helpers = 0;      ///< lanes shaded and discarded — the waste
+    long off_target = 0;   ///< lanes outside the render target; never shaded
+
+    /// Covered lanes as a fraction of lanes shaded. **1.0 is perfect.**
+    [[nodiscard]] double efficiency() const
+    {
+        return (shaded > 0) ? static_cast<double>(covered) / static_cast<double>(shaded) : 0.0;
+    }
+
+    void operator+=(const quad_stats& o)
+    {
+        quads += o.quads;   shaded += o.shaded;  covered += o.covered;
+        helpers += o.helpers; off_target += o.off_target;
+    }
+};
+
 /// Whether attributes are corrected for perspective.
 ///
 /// Like `blend_space` and `draw_line_naive`, the wrong one is kept so it can be
@@ -548,6 +615,11 @@ struct fill_style
     /// unbound `albedo` (3.9): a default that changes nothing is what lets a
     /// feature be added to a pipeline object without auditing its call sites.
     encode_mode encode = encode_mode::exact;
+
+    /// How the triangle is walked — Lesson 4.1. Defaults to `scanline`, which is
+    /// what a CPU rasterizer should do; `quad` imitates the hardware and is here
+    /// to be measured, not to be used.
+    traversal traverse = traversal::scanline;
 };
 
 /// Fill a triangle whose corners carry their own attributes — the shaded fill.
@@ -598,9 +670,12 @@ struct fill_style
 ///
 /// @param depth  the depth attachment to test and write against, or `nullptr`.
 /// @param style  interpolation, shading, blend space and cull mode.
+/// @param stats  where to accumulate quad-traversal counts, or `nullptr`. Only
+///               written under `traversal::quad` / `quad_debug`; **accumulates**
+///               rather than assigns, so one `quad_stats` can total a whole draw.
 void fill_triangle(framebuffer& fb, depth_buffer* depth,
                    const vertex& a, const vertex& b, const vertex& c,
-                   fill_style style = {});
+                   fill_style style = {}, quad_stats* stats = nullptr);
 
 /// The same fill with no depth attachment — `fill_triangle(fb, nullptr, …)`.
 ///

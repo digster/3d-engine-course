@@ -2668,3 +2668,118 @@ would quietly falsify nine lessons' arithmetic.
 Same bargain as `vertex::inv_w = 1` (3.2), `lights = nullptr` (3.8) and an unbound `albedo`
 (3.9): **a default that changes nothing is what lets a feature be added to a pipeline object
 without auditing its call sites.**
+
+## I fell into 3.10's own pitfall within a day (Lesson 4.1)
+
+Extracting the fragment body of `fill_triangle` into a lambda (so the scanline and
+quad traversals could share it) appeared to make the fill **10% faster** — 46.46 → 40.46 ns per
+covered pixel on the lit-and-textured rung. A behaviour-preserving refactor with a free 10% is a
+result worth reporting, so it got measured properly first: two binaries differing *only* by the
+extraction, run alternately in one session.
+
+```
+        old      new
+     41.309   40.314
+     41.608   41.446
+     41.628   42.209
+     42.231   41.968
+     43.083   42.536
+
+old  min 41.309  median 41.628
+new  min 40.314  median 41.968
+```
+
+**The minimums say 2.5% faster and the medians say 1% slower**, which together say *no measurable
+difference*. The 10% was entirely session drift — note that both columns climb monotonically
+through the run as the machine warms up, which is the drift made visible.
+
+The original comparison broke the rule Lesson 3.10 states in its own pitfalls section: *never
+compare two numbers taken hours apart; measure both variants in the same run, back to back.* It
+took one day to violate it, on the code that lesson was written about.
+
+Two consequences worth keeping. **Lesson 3.10's published numbers stand** — nothing needed
+restating. And a refactor's performance claim needs the same control as a feature's: "it should
+be the same speed" is a prediction, and predictions get measured.
+
+## Helper lanes are not waste, they are what derivatives cost (Lesson 4.1)
+
+Every GPU shades fragments in **aligned 2×2 blocks**. A triangle covering one pixel of a block
+makes all four lanes run the fragment shader; the three it misses are *helper lanes* and their
+results are discarded.
+
+This looks like an inefficiency to engineer away, and it cannot be, because `ddx`/`ddy` — the
+screen-space derivatives every automatic mipmap selection depends on — are computed as
+**differences between neighbouring lanes**: `ddx` is lane 1 minus lane 0, `ddy` is lane 2 minus
+lane 0. A lane cannot subtract against a neighbour that never ran.
+
+Two consequences worth carrying:
+
+- **A derivative inside a divergent branch is undefined.** If the neighbouring lane took the other
+  side, it has no value at that point in the program. Sample outside the branch, or use an
+  explicit-gradient sample.
+- **Lane efficiency is a function of triangle SIZE, not count.** Covered lanes live in the area
+  and helpers along the perimeter, so efficiency ≈ `A/(A + cP)`. Measured over 32 rotations:
+
+| circumradius | 64 px | 16 px | 8 px | 4 px | 1 px |
+|---|---|---|---|---|---|
+| efficiency | 96.3% | 86.7% | 78.5% | 67.8% | **25.0%** |
+
+At one pixel, three lanes in four are thrown away. **That is the precise content of "small
+triangles are expensive"** — and note it says nothing about how many there are.
+
+Our numbers *understate* it: `vertex::x`/`y` are integers, so a sub-pixel triangle rounds away and
+draws nothing at all. Real hardware rasterizes at ~1/256 px and draws them, at efficiencies below
+25%.
+
+**Why 2×2 and not wider**, measured at r = 8: 2×2 keeps 75.5%, 4×4 48.7%, 8×8 30.4%, 16×16 8.9%.
+The choice is forced from both ends — 2×2 is the smallest block containing a neighbour in x and
+one in y, and every wider block wastes more. A 32-lane warp is *eight quads*, possibly from eight
+different triangles: the grouping for scheduling and the grouping for derivatives are different
+things, and only the second is 2×2.
+
+## Divergence costs what your DATA decides, not what your code says (Lesson 4.1)
+
+Lanes in a warp share a program counter, so a warp whose lanes disagree at a branch executes
+**every side any lane takes**, masking the rest. Measured against a warp that never diverges:
+
+| coherence (px in a run) | 1024 | 64 | 16 | 8 and below |
+|---|---|---|---|---|
+| cost | 1.00× | 1.03× | 1.52× | **1.93×** |
+
+**The step falls exactly at the warp width of 32**, which is the check that says the model is
+right rather than merely plausible.
+
+So the same shader, with the same branch and the same work, is fast or slow depending on how the
+two sides are *arranged across the screen*. Branching on a material id is fine when whole objects
+share materials and ruinous when the id comes out of a texture. This is why "sort draws by
+material" and "use separate pipelines instead of a branch" are real advice.
+
+**Report the controlled ratio.** The first draft compared the SIMT loop against a plain CPU loop
+and published a 5.0× penalty; those are two different loops, so that figure carries the
+emulation's own overhead. Comparing the SIMT loop against *itself* on data that never diverges
+gives 1.93×, which is the number that means something.
+
+## The reason state lives in a pipeline object is not the one everybody gives (Lesson 4.1)
+
+The folk explanation for immutable pipeline objects is that they spare the inner loop from
+branching on state that never changes during a draw. It is testable, and our fill loop is the
+test — it branches per pixel on `style.shade`, which is constant for the whole draw:
+
+```
+per-element branch on draw-constant state: 0.458 ns
+the same loop, specialised:                0.492 ns  (0.93x)
+```
+
+**Nothing.** A perfectly predicted branch is free, so that cannot be the reason.
+
+The real reason is that the driver must **validate** the state combination (is this blend mode
+legal with this target format, does this vertex layout match the shader) and **compile** machine
+code specialised to it, because a GPU has no runtime "depth test on/off" switch — that decision is
+compiled in. Both are measured in milliseconds: free once per pipeline, ruinous per draw call.
+SDL's own header says it, listing pipelines under things created once and used over and over:
+*"Render pipelines (precalculated rendering state)"*.
+
+Worth knowing the scale of what would have to be compiled: `engine::fill_style` already spans
+**96 combinations** (4 shading × 2 encode × 2 interpolation × 2 blend space × 3 traversal), every
+one of which our loop decides at runtime, per pixel. A GPU compiles the one you asked for. That
+is what a shader is.

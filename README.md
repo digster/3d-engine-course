@@ -7,7 +7,7 @@ There is no engine to download here and no framework doing the interesting parts
 write the math library, the rasterizer, the ECS, the renderer, the physics, and the editor. By
 the end you have a real engine and a game built on its public API.
 
-**Status:** curriculum and conventions published; lessons in progress — **Modules 0–3 are complete** (36 of 94 lessons), so the CPU software rasterizer is finished end to end. Start at
+**Status:** curriculum and conventions published; lessons in progress — **Modules 0–3 are complete** and Module 4 has opened (37 of 94 lessons), so the CPU software rasterizer is finished end to end and the GPU arc has begun. Start at
 [`docs/index.html`](docs/index.html).
 
 ---
@@ -230,6 +230,22 @@ the frame with it, and the picture does not change — 0.56% of pixels move by o
 which the HUD counts because one code is invisible and a counter is the only evidence anything
 happened. [Lesson 3.10](docs/lessons/03-10-profiling-capstone.html), which is also where
 Module 3's capstone lives: everything above, in one picture, with every microsecond accounted for.
+
+Finally, press <kbd>5</kbd>. The picture does not change — and that is the result. The rasterizer
+is now walking triangles in **2×2 quads** the way every GPU does, shading the lanes each triangle
+*misses* and throwing the answers away, and the budget panel counts them: on this scene it shades
+166,360 lanes to cover 145,355, for **87.4% efficiency**. Press <kbd>5</kbd> again and the wasted
+lanes are painted magenta instead of discarded, so you can see the fringe around every triangle.
+Then press <kbd>T</kbd> to subdivide, and watch the fringe stop being a fringe.
+
+Those lanes are not waste to be engineered away. `ddx` is lane 1 minus lane 0, so a screen-space
+derivative — and therefore every automatic mipmap selection ever made — is a subtraction between
+neighbours, and a lane cannot subtract against a neighbour that never ran. Efficiency falls from
+96.3% on a 64-pixel triangle to **25.0%** on a one-pixel one, which is what "small triangles are
+expensive" has always actually meant. Why a GPU is *slower per lane* than your CPU and wins
+anyway, why a branch costs 1.93× when it is incoherent and nothing when it is not, and why render
+state lives in an immutable pipeline object — with the usual explanation for that measured and
+found **false** — is [Lesson 4.1](docs/lessons/04-01-how-gpus-work.html).
 
 Then hold <kbd>=</kbd> on that floor and walk *into* it. <kbd>K</kbd> cycles what happens to a
 triangle with a corner behind your eye: **clip** it (correct), **drop** it (the ground vanishes —

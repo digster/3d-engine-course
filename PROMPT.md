@@ -1261,3 +1261,58 @@ compile-time shader variant in a runtime disguise, and the **sixth** pressure po
 4's programmable fragment stage. `fill_style::encode` nevertheless defaults to `exact`, because
 every measured claim in 3.1–3.9 was made against it and a default that moved 0.60% of those pixels
 by one code would falsify nine lessons' arithmetic.
+
+---
+
+## 2026-08-12 — `next` (Lesson 4.1: How GPUs Actually Work)
+
+> next
+
+Resumed from `STATE.md`'s `next: 4.1`, following its planning notes. Delivered
+`docs/lessons/04-01-how-gpus-work.html` (6 computed figures, 14 listings, 5 pitfalls, 5
+exercises), a 2×2 quad traversal in `src/gfx/raster`, `[5]` and a lane-efficiency row in the demo,
+and `scratch/verify_41.cpp` (7 sections, all checks pass). **Module 4 opens** — 37 of 94 lessons.
+
+### The lesson's spine
+
+A GPU is not a fast CPU: per lane it is *slower*, and it wins anyway. Three reasons, each measured
+on the software rasterizer rather than asserted:
+
+- **Wide, not fast.** One dependent sqrt chain runs at 3.124 ns/step; eight interleaved at 0.443
+  (7.05×) and 32 at 0.112 (27.88×). Same arithmetic — only the amount of independent work changed.
+  That is occupancy.
+- **Lockstep.** A warp runs every side of a branch any of its lanes takes. Measured against a warp
+  that never diverges: 1.00× at 1024 px of coherence, **1.93×** at 8 and below, with the step
+  falling exactly at the warp width of 32.
+- **2×2 quads.** The fragment shader runs on lanes the triangle misses, because `ddx` is lane 1
+  minus lane 0. Efficiency falls from 96.3% (r = 64 px) to **25.0%** (r = 1 px), and 1/efficiency
+  predicts the measured slowdown to within 0.09× across a 560× range of triangle counts.
+
+### The code
+
+`fill_style::traverse {scanline, quad, quad_debug}` plus `quad_stats`. Extracting the fragment
+body into a lambda so both traversals could share it revealed what it had been since 3.6 — a
+function from barycentrics to a colour with pipeline state captured, i.e. a fragment shader whose
+only defect is that the caller cannot supply it. It also had to become *total*, since it now runs
+outside the triangle; it already was, because of guards written in 3.3 and 3.9.
+
+The quad walk is **bit-identical in colour and depth** over 2,306 triangles while shading 21,005
+lanes whose results go nowhere. That pair of facts is the lesson.
+
+### Two findings that contradict the received wisdom
+
+- **The usual justification for immutable pipeline objects is false.** "State is baked in so the
+  inner loop need not branch on it" — hoisting our per-pixel branch on draw-constant state measured
+  **0.93×**, i.e. nothing. The real reason is driver validation and shader compilation, which SDL's
+  header states directly by calling pipelines "precalculated rendering state". `fill_style` already
+  spans 96 combinations; a GPU compiles the one you asked for.
+- **`fill_style` has 10 top-level fields and `SDL_GPUGraphicsPipelineCreateInfo` has 9.** Counted
+  from the pinned headers. We did not approximate a pipeline object; we built one.
+
+### The mistake this lesson records
+
+Extracting the fragment appeared to make the fill 10% faster than 3.10's published figure. Two
+binaries differing only by the extraction, run alternately in one session: minimums say 2.5%
+faster, medians say 1% slower — no measurable difference, and the 10% was session drift visible in
+the data as both columns warming up. That broke 3.10's own pitfall ("never compare two numbers
+taken hours apart") within a day, on the code that lesson was written about. 3.10's numbers stand.

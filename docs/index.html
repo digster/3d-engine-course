@@ -117,7 +117,7 @@ table.lessons .d { color: var(--text-muted); font-size: 0.95em; line-height: 1.4
     <div class="stat"><span class="n">94</span><span class="l">lessons</span></div>
     <div class="stat"><span class="n">9</span><span class="l">modules</span></div>
     <div class="stat"><span class="n">~436</span><span class="l">hours</span></div>
-    <div class="stat"><span class="n">36</span><span class="l">published</span></div>
+    <div class="stat"><span class="n">37</span><span class="l">published</span></div>
   </div>
 
   <p>
@@ -453,7 +453,7 @@ table.lessons .d { color: var(--text-muted); font-size: 0.95em; line-height: 1.4
   <details class="module">
     <summary>
       <span class="m-num">Module 4</span>
-      <span class="m-name">To the GPU: SDL_GPU <span class="stage-tag b">GPU</span></span>
+      <span class="m-name">To the GPU: SDL_GPU <span class="stage-tag b">GPU</span> <span class="badge new">in progress</span></span>
       <span class="m-meta">9 lessons · ~40 h</span>
     </summary>
     <div class="m-body">
@@ -465,7 +465,7 @@ table.lessons .d { color: var(--text-muted); font-size: 0.95em; line-height: 1.4
       <div class="tbl-scroll">
         <table class="lessons">
           <tbody>
-            <tr><td class="id">4.1</td><td><span class="t">How GPUs Actually Work</span><span class="d">SIMT intuition, pipeline stages, and why divergence costs you. Why GPU state lives in immutable pipeline objects instead of setters.</span></td><td class="hrs">4 h</td></tr>
+            <tr><td class="id">4.1</td><td><span class="t"><a href="lessons/04-01-how-gpus-work.html">How GPUs Actually Work</a> <span class="badge done">published</span></span><span class="d">A GPU is not a fast CPU &mdash; <em>per lane it is slower</em>, and it wins anyway. Three reasons, all measured on the rasterizer you already own. <strong>Wide, not fast:</strong> eight interleaved chains of identical work run 7&times; faster than one dependent chain and 32 run <strong>27.88&times;</strong>, which is what occupancy means. <strong>Lockstep:</strong> a warp runs <em>both</em> sides of a branch its lanes disagree about &mdash; measured 1.93&times; when incoherent, 1.00&times; when coherent, with the step falling exactly at the warp width of 32. <strong>2&times;2 quads:</strong> the fragment shader runs on lanes the triangle misses, because <code>ddx</code> is lane 1 minus lane 0 &mdash; so efficiency falls from 96.3% on a 64-pixel triangle to <strong>25.0%</strong> on a one-pixel one, and that is what &ldquo;small triangles are expensive&rdquo; actually means. Your rasterizer gains a quad traversal that produces a <strong>bit-identical</strong> image in colour <em>and</em> depth while shading 21,005 lanes whose results go nowhere. Ends by counting the eleven pipeline stages you have already written, and by measuring the usual justification for immutable pipeline objects and finding it <em>false</em> &mdash; the real reason is validation and compilation, not branch cost.</span></td><td class="hrs">4 h</td></tr>
             <tr><td class="id">4.2</td><td><span class="t">The SDL_GPU Mental Model</span><span class="d">Device, swapchain, command buffers, render passes, pipelines, buffers, textures, samplers — each mapped to the thing you already built. An honest sidebar on why not OpenGL.</span></td><td class="hrs">5 h</td></tr>
             <tr><td class="id">4.3</td><td><span class="t">The Shader Toolchain</span><span class="d">HLSL through SDL_shadercross to SPIR-V, DXIL, and MSL, wired into CMake for offline precompilation. Includes an honest note: shadercross is still pre-1.0.</span></td><td class="hrs">5 h</td></tr>
             <tr><td class="id">4.4</td><td><span class="t">The First Triangle</span><span class="d">Celebrated properly — it is more code than you expect, and every line of it earns its place.</span></td><td class="hrs">4 h</td></tr>

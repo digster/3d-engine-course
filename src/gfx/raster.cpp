@@ -435,7 +435,7 @@ void fill_triangle(framebuffer& fb,
 
 void fill_triangle(framebuffer& fb, depth_buffer* depth,
                    const vertex& a, const vertex& b, const vertex& c,
-                   fill_style style)
+                   fill_style style, quad_stats* stats)
 {
     // Local copies, because reorienting reorders the vertices — and this is the
     // whole reason a vertex is a struct. `std::swap` on the struct moves the
@@ -555,233 +555,393 @@ void fill_triangle(framebuffer& fb, depth_buffer* depth,
     const vec3 pw0 = v0.world * iw0, pw1 = v1.world * iw1, pw2 = v2.world * iw2;
 
 
-    int row_w0 = s.row_w0;
-    int row_w1 = s.row_w1;
-    int row_w2 = s.row_w2;
+    // ---- The fragment, as a function (Lesson 4.1) --------------------------
+    //
+    // Everything below was written inline in the pixel loop until Lesson 4.1
+    // needed two different loops to share it. Look at what extracting it
+    // revealed: a function from three barycentric weights to a colour, with every
+    // piece of pipeline state captured. **That is a fragment shader.** The only
+    // thing separating it from one is that the caller cannot supply it — which is
+    // Module 4's opening argument, and the reason this refactor belongs to a
+    // lesson rather than to a tidying commit.
+    //
+    // It is called for lanes the triangle does NOT cover (see the quad traversal
+    // below), so it has to be total. Barycentric weights go negative outside the
+    // triangle — Lesson 2.3 said so and called it useful — `w_recip` can come back
+    // enormous or negative, and a uv can land anywhere at all. Nothing here reads
+    // out of bounds on such a lane (`wrap_texel` folds any index into range,
+    // `linear_to_srgb_u8` refuses a NaN), and whatever it computes is discarded.
+    const auto fragment = [&](float f0, float f1, float f2) -> Uint32 {
+        // ---- Perspective correction, per pixel (Lesson 3.2) ----
+        //
+        // Interpolate 1/w with the same weights as everything else —
+        // it is affine in screen space (Lesson 3.1 §3.4) — and its
+        // reciprocal is the factor that turns every interpolated
+        // `a/w` back into an `a`.
+        //
+        // ONE DIVIDE PER PIXEL, and it is the honest cost of this
+        // lesson. It is paid once, not once per attribute, so it
+        // amortises the moment a fragment carries more than one
+        // thing — which from Lesson 3.6 onwards it always will.
+        // In affine mode every iw is 1, so this sum is 1 and the
+        // reciprocal is a no-op that we pay for anyway; keeping one
+        // loop is worth more than saving a divide on a mode that
+        // exists only to be shown failing.
+        const float w_recip = 1.0f / (f0 * iw0 + f1 * iw1 + f2 * iw2);
 
-    for (int y = s.min_y; y <= s.max_y; ++y)
-    {
-        int w0 = row_w0;
-        int w1 = row_w1;
-        int w2 = row_w2;
-
-        Uint32* const row = fb.row(y);
-
-        // The matching row of the depth attachment, or nullptr when there is no
-        // attachment. Hoisted out of the inner loop for the same reason the
-        // colour row is: the row index does not change across a scanline, so
-        // resolving it per pixel would be paying for an answer we already have.
-        float* const zrow = (depth != nullptr) ? depth->row(y) : nullptr;
-
-        for (int x = s.min_x; x <= s.max_x; ++x)
+        if (style.shade == shading::uv_checker)
         {
-            if (w0 >= 0 && w1 >= 0 && w2 >= 0)
+            const float uu = (f0 * pu0 + f1 * pu1 + f2 * pu2) * w_recip;
+            const float vv = (f0 * pv0 + f1 * pv1 + f2 * pv2) * w_recip;
+            return checker_at(uu, vv);
+        }
+        else if (style.shade == shading::textured)
+        {
+            // ---- The lookup (Lesson 3.9) ------------------------
+            //
+            // Compare these four lines against the four above them.
+            // The uvs are obtained by IDENTICAL arithmetic — the same
+            // three multiply-adds, the same perspective divide-back —
+            // and the only difference is what the pair of numbers is
+            // handed to: a formula, or an array somebody painted.
+            //
+            // That is the entire structural content of this lesson.
+            // Nothing about interpolation changed, because nothing
+            // needed to: 2.4 built a machine for carrying attributes
+            // without knowing what they are, and this is the last
+            // attribute Module 3 asks it to carry.
+            const float uu = (f0 * pu0 + f1 * pu1 + f2 * pu2) * w_recip;
+            const float vv = (f0 * pv0 + f1 * pv1 + f2 * pv2) * w_recip;
+            // `to_encoded` is the largest single item in THIS branch —
+            // three `pow` calls against one bilinear fetch — which is
+            // Lesson 3.10's measured headline and the reason
+            // `style.encode` exists.
+            return to_encoded(
+                sample(*style.albedo.image, style.albedo.samp, uu, vv),
+                style.encode);
+        }
+        else if (lit)
+        {
+            // ---- Per-pixel shading (Lesson 3.8) ----------------
+            //
+            // The whole lesson, in six lines. Interpolate the NORMAL
+            // and the POSITION rather than the answer, then evaluate
+            // the shading equation here — where the pixel is — instead
+            // of at three corners and blending.
+            //
+            // The equation is byte-for-byte the one Lessons 3.6 and
+            // 3.7 built. Nothing about the lighting changed; only
+            // where it is called from. That is the distinction this
+            // lesson exists to draw, and it is worth seeing that the
+            // code says it too.
+            const vec3 n{(f0 * pn0.x + f1 * pn1.x + f2 * pn2.x) * w_recip,
+                         (f0 * pn0.y + f1 * pn1.y + f2 * pn2.y) * w_recip,
+                         (f0 * pn0.z + f1 * pn1.z + f2 * pn2.z) * w_recip};
+            const vec3 p{(f0 * pw0.x + f1 * pw1.x + f2 * pw2.x) * w_recip,
+                         (f0 * pw0.y + f1 * pw1.y + f2 * pw2.y) * w_recip,
+                         (f0 * pw0.z + f1 * pw1.z + f2 * pw2.z) * w_recip};
+
+            // The albedo, from one of two places — Lesson 3.9.
+            //
+            // WITH A TEXTURE BOUND it is a sample, and `sample` already
+            // returns linear light, so it drops straight into the same
+            // slot with no conversion at all. That is not a coincidence
+            // and it is worth pausing on: `sample` returns linear
+            // *because* this is what a texture is for. An albedo is a
+            // reflectance — the fraction of arriving light a surface
+            // sends back — and a fraction has to multiply a quantity of
+            // light, which means both have to be linear. Texture and
+            // light multiply, and that one multiply is Module 3's last
+            // structural gap closing.
+            //
+            // WITHOUT ONE it is the interpolated corner colour, by the
+            // same three multiply-adds as any other attribute, exactly
+            // as 3.8 left it. Note that it is taken in LINEAR light and
+            // handed straight to `shade`, with no encode in between:
+            // `blend_space` is ignored under `lit`, because lighting
+            // arithmetic is linear by definition (conventions §7c) and
+            // there is no meaning to give the encoded variant here. One
+            // encode at the very end, which is where an encode belongs.
+            // Written as one branch rather than "interpolate, then
+            // overwrite if textured", because the interpolation is nine
+            // multiply-adds and a discarded result is still a paid one.
+            // `textured` is constant for the whole triangle, so the
+            // predictor eats the branch itself for free — it is only
+            // the WORK behind it that is worth not doing.
+            linear_rgb albedo{};
+            if (textured)
             {
-                // **Unbias, then divide.** The accumulators carry the top-left
-                // rule's -1 on any edge that is not top-or-left; that -1 is a
-                // statement about who owns a boundary pixel, and it is not a
-                // statement about where the pixel is. Left in, it displaces the
-                // whole attribute field by 1/edge_length of a pixel and stops
-                // the three weights summing to 1. Taking it back out is one
-                // integer subtraction against a value that is *exact* — these
-                // are the stepped integers, so there is no accumulated drift to
-                // undo, only a known constant. Lesson 2.4 §3.5.
-                const float f0 = static_cast<float>(w0 - s.bias0) * inv_area;
-                const float f1 = static_cast<float>(w1 - s.bias1) * inv_area;
-                const float f2 = static_cast<float>(w2 - s.bias2) * inv_area;
+                const float uu = (f0 * pu0 + f1 * pu1 + f2 * pu2) * w_recip;
+                const float vv = (f0 * pv0 + f1 * pv1 + f2 * pv2) * w_recip;
+                albedo = sample(*style.albedo.image, style.albedo.samp, uu, vv);
+            }
+            else
+            {
+                albedo = {(f0 * p0.r + f1 * p1.r + f2 * p2.r) * w_recip,
+                          (f0 * p0.g + f1 * p1.g + f2 * p2.g) * w_recip,
+                          (f0 * p0.b + f1 * p1.b + f2 * p2.b) * w_recip};
+            }
 
-                // ---- The depth test (Lesson 3.1) --------------------------
-                //
-                // Depth is interpolated by exactly the same three multiply-adds
-                // as a colour channel, with exactly the same weights, and that
-                // is not an approximation: the projective divide has already
-                // made device depth an AFFINE function of the pixel position, so
-                // barycentric interpolation of it is the exact answer. (Lesson
-                // 3.1 §3.4 derives it; §3.5 shows what interpolating view-space
-                // z instead would do, which is to put the midpoint of a
-                // near-to-far edge 25x too far away.)
-                //
-                // Quantise BEFORE comparing, because that is the order the
-                // hardware uses: the fragment's depth is converted to the
-                // attachment's format, then tested against a value already in
-                // it. For a full-precision buffer this is the identity.
-                //
-                // With no attachment bound, `visible` stays true and not one
-                // instruction of depth work happens — the 2-D fills of Lessons
-                // 2.2-2.4 pay nothing for a feature they do not use.
-                bool visible = true;
-                if (zrow != nullptr)
+            // `shade` normalises `n` itself — a decision made in 3.6
+            // ("a caller who forgets gets a brightness scaled by the
+            // normal's length, which looks like a lighting bug and is
+            // not one"), and this is the call site that cashes it in.
+            // The interpolated normal is genuinely short here, worst in
+            // the middle of the triangle; §3.5 measures by how much.
+            return to_encoded(shade(albedo, n, style.eye - p,
+                                      *style.lights, style.surface,
+                                      style.model),
+                                style.encode);
+        }
+        else
+        {
+            // Three multiply-adds per channel, then the divide-back.
+            // This is the interpolation, and it is the same three
+            // lines whatever the attribute turns out to be — texture
+            // coordinates just above, normals in 3.6. The rasterizer
+            // never learns what it carries.
+            const rgb3 mixed{(f0 * p0.r + f1 * p1.r + f2 * p2.r) * w_recip,
+                             (f0 * p0.g + f1 * p1.g + f2 * p2.g) * w_recip,
+                             (f0 * p0.b + f1 * p1.b + f2 * p2.b) * w_recip};
+
+            // One branch per pixel on a value that is constant for
+            // the whole triangle. A branch predictor eats this for
+            // free; hoisting it would mean two copies of the loop,
+            // which is a worse trade at this size.
+            return pixel_from(mixed, space, style.encode);
+        }
+    };
+
+    // ---- The depth test, also as a function --------------------------------
+    //
+    // Shared by both traversals, because two copies of a rule are two rules.
+    // Returns whether the fragment survives and writes the new depth if it does,
+    // so it must only be called for lanes that are genuinely covered.
+    const auto depth_test = [&](float* zrow, int x, float f0, float f1, float f2) -> bool {
+        // With no attachment bound not one instruction of depth work happens —
+        // the 2-D fills of Lessons 2.2-2.4 pay nothing for a feature they do not
+        // use.
+        if (zrow == nullptr) { return true; }
+
+        // NOTE the asymmetry with the fragment above: `z` is interpolated
+        // DIRECTLY, with no perspective correction, because the projection has
+        // already made device depth an affine function of the pixel position, so
+        // barycentric interpolation of it is the exact answer. Correcting it here
+        // would be actively wrong — and it is the single easiest mistake to make
+        // once you have learnt Lesson 3.2's trick and start applying it
+        // everywhere. Depth is the one attribute that arrives pre-corrected.
+        // (Lesson 3.1 §3.4 derives it; Lesson 3.2 §3.5 has the asymmetry.)
+        //
+        // Quantise BEFORE comparing, because that is the order the hardware uses:
+        // the fragment's depth is converted to the attachment's format, then
+        // tested against a value already in it. For a full-precision buffer this
+        // is the identity.
+        const float z = depth->quantise(f0 * v0.z + f1 * v1.z + f2 * v2.z);
+
+        // Smaller is nearer. `<` and not `<=`: on a tie the pixel already there
+        // keeps it, so a surface drawn twice does not flicker between two
+        // identical answers, and coplanar geometry has one stable winner — the
+        // first one drawn.
+        if (!(z < zrow[x])) { return false; }
+        zrow[x] = z;
+        return true;
+    };
+
+    // **Unbias, then divide** — needed by both traversals and spelt once. The
+    // accumulators carry the top-left rule's -1 on any edge that is not
+    // top-or-left; that -1 is a statement about who owns a boundary pixel, and it
+    // is not a statement about where the pixel is. Left in, it displaces the whole
+    // attribute field by 1/edge_length of a pixel and stops the three weights
+    // summing to 1. Taking it back out is one integer subtraction against a value
+    // that is *exact* — these are the stepped integers, so there is no accumulated
+    // drift to undo, only a known constant. Lesson 2.4 §3.5.
+    const auto weights = [&](int w0, int w1, int w2, float& f0, float& f1, float& f2) {
+        f0 = static_cast<float>(w0 - s.bias0) * inv_area;
+        f1 = static_cast<float>(w1 - s.bias1) * inv_area;
+        f2 = static_cast<float>(w2 - s.bias2) * inv_area;
+    };
+
+    if (style.traverse == traversal::scanline)
+    {
+        // ---- One pixel at a time (Lessons 2.2 - 3.10) ----------------------
+        //
+        // Shades exactly the pixels the triangle covers, which is the right thing
+        // for a CPU to do and is what every measurement before Lesson 4.1 was
+        // taken against.
+        int row_w0 = s.row_w0;
+        int row_w1 = s.row_w1;
+        int row_w2 = s.row_w2;
+
+        for (int y = s.min_y; y <= s.max_y; ++y)
+        {
+            int w0 = row_w0;
+            int w1 = row_w1;
+            int w2 = row_w2;
+
+            // The whole row is in bounds by construction, so this takes the
+            // documented fast path from Lesson 1.5 and skips put_pixel's
+            // per-pixel bounds check and index multiply.
+            Uint32* const row = fb.row(y);
+
+            // The matching row of the depth attachment, or nullptr when there is
+            // no attachment. Hoisted for the same reason the colour row is: the
+            // row index does not change across a scanline, so resolving it per
+            // pixel would be paying for an answer we already have.
+            float* const zrow = (depth != nullptr) ? depth->row(y) : nullptr;
+
+            for (int x = s.min_x; x <= s.max_x; ++x)
+            {
+                // Inside all three half-planes at once. That is the entire test,
+                // and it is the same three numbers for every pixel — only their
+                // values change.
+                if (w0 >= 0 && w1 >= 0 && w2 >= 0)
                 {
-                    // NOTE the asymmetry with everything below: `z` is
-                    // interpolated DIRECTLY, with no perspective correction,
-                    // because the projection has already made device depth affine
-                    // in screen space. Correcting it here would be actively
-                    // wrong — and it is the single easiest mistake to make once
-                    // you have learnt Lesson 3.2's trick and start applying it
-                    // everywhere. Depth is the one attribute that arrives
-                    // pre-corrected. Lesson 3.2 §3.5.
-                    const float z = depth->quantise(f0 * v0.z + f1 * v1.z + f2 * v2.z);
+                    float f0, f1, f2;
+                    weights(w0, w1, w2, f0, f1, f2);
 
-                    // Smaller is nearer. `<` and not `<=`: on a tie the pixel
-                    // already there keeps it, so a surface drawn twice does not
-                    // flicker between two identical answers, and coplanar
-                    // geometry has one stable winner — the first one drawn.
-                    visible = z < zrow[x];
-                    if (visible) { zrow[x] = z; }
+                    if (depth_test(zrow, x, f0, f1, f2))
+                    {
+                        row[x] = fragment(f0, f1, f2);
+                    }
                 }
 
-                if (visible)
+                w0 += s.step_x0;
+                w1 += s.step_x1;
+                w2 += s.step_x2;
+            }
+
+            row_w0 += s.step_y0;
+            row_w1 += s.step_y1;
+            row_w2 += s.step_y2;
+        }
+        return;
+    }
+
+    // ---- 2x2 quads, the way hardware does it (Lesson 4.1) ------------------
+    //
+    // Three things change, and only the first is visible in the output:
+    //
+    //   1. NOTHING. The image is bit-identical to the loop above. Helper lanes
+    //      are shaded and thrown away; they never write colour and never write
+    //      depth. `verify_41` §B checks this over a 2,304-triangle scene.
+    //   2. The fragment function runs for lanes the triangle does not cover.
+    //   3. Those lanes are counted, and the count is the lesson.
+    //
+    // QUADS ARE ALIGNED TO EVEN COORDINATES IN THE RENDER TARGET, not to the
+    // triangle. That is not a detail: it is why a triangle cannot arrange to be
+    // cheap by being positioned well, and why the waste depends on a triangle's
+    // size and perimeter rather than on where it happens to land.
+    const int qx0 = s.min_x & ~1;
+    const int qy0 = s.min_y & ~1;
+
+    // Edge values at the aligned corner. Stepping back from `s.min_x/min_y` to
+    // the even boundary is exact, because an edge function is affine and the step
+    // is a constant — the same fact the row stepping rests on.
+    int quad_w0 = s.row_w0 + (qx0 - s.min_x) * s.step_x0 + (qy0 - s.min_y) * s.step_y0;
+    int quad_w1 = s.row_w1 + (qx0 - s.min_x) * s.step_x1 + (qy0 - s.min_y) * s.step_y1;
+    int quad_w2 = s.row_w2 + (qx0 - s.min_x) * s.step_x2 + (qy0 - s.min_y) * s.step_y2;
+
+    const bool show_helpers = (style.traverse == traversal::quad_debug);
+    quad_stats local{};
+
+    for (int qy = qy0; qy <= s.max_y; qy += 2)
+    {
+        int lane_w0 = quad_w0;
+        int lane_w1 = quad_w1;
+        int lane_w2 = quad_w2;
+
+        for (int qx = qx0; qx <= s.max_x; qx += 2)
+        {
+            // The four lanes' edge values, derived by adding one step in x, one
+            // in y, and both. Lane order is the usual one: top-left, top-right,
+            // bottom-left, bottom-right — which is also why `ddx` is lane 1 minus
+            // lane 0 and `ddy` is lane 2 minus lane 0.
+            const int lw0[4] = {lane_w0, lane_w0 + s.step_x0,
+                                lane_w0 + s.step_y0, lane_w0 + s.step_x0 + s.step_y0};
+            const int lw1[4] = {lane_w1, lane_w1 + s.step_x1,
+                                lane_w1 + s.step_y1, lane_w1 + s.step_x1 + s.step_y1};
+            const int lw2[4] = {lane_w2, lane_w2 + s.step_x2,
+                                lane_w2 + s.step_y2, lane_w2 + s.step_x2 + s.step_y2};
+
+            bool covered[4];
+            bool any = false;
+            for (int i = 0; i < 4; ++i)
+            {
+                covered[i] = (lw0[i] >= 0 && lw1[i] >= 0 && lw2[i] >= 0);
+                any = any || covered[i];
+            }
+
+            // THE ONE EARLY-OUT HARDWARE HAS. A quad with no covered lane is
+            // never issued, which is what keeps the cost proportional to the
+            // triangle rather than to its bounding box. Everything past this
+            // point is paid for.
+            if (any)
+            {
+                ++local.quads;
+
+                for (int i = 0; i < 4; ++i)
                 {
-                    // ---- Perspective correction, per pixel (Lesson 3.2) ----
-                    //
-                    // Interpolate 1/w with the same weights as everything else —
-                    // it is affine in screen space (Lesson 3.1 §3.4) — and its
-                    // reciprocal is the factor that turns every interpolated
-                    // `a/w` back into an `a`.
-                    //
-                    // ONE DIVIDE PER PIXEL, and it is the honest cost of this
-                    // lesson. It is paid once, not once per attribute, so it
-                    // amortises the moment a fragment carries more than one
-                    // thing — which from Lesson 3.6 onwards it always will.
-                    // In affine mode every iw is 1, so this sum is 1 and the
-                    // reciprocal is a no-op that we pay for anyway; keeping one
-                    // loop is worth more than saving a divide on a mode that
-                    // exists only to be shown failing.
-                    const float w_recip = 1.0f / (f0 * iw0 + f1 * iw1 + f2 * iw2);
+                    const int lx = qx + (i & 1);
+                    const int ly = qy + (i >> 1);
 
-                    if (style.shade == shading::uv_checker)
+                    // Outside the render target. Real hardware clips
+                    // rasterization to the target as well, so these lanes do not
+                    // run; counted separately because they are not waste, they
+                    // are simply absent.
+                    if (lx >= fb.width() || ly >= fb.height())
                     {
-                        const float uu = (f0 * pu0 + f1 * pu1 + f2 * pu2) * w_recip;
-                        const float vv = (f0 * pv0 + f1 * pv1 + f2 * pv2) * w_recip;
-                        row[x] = checker_at(uu, vv);
+                        ++local.off_target;
+                        continue;
                     }
-                    else if (style.shade == shading::textured)
+
+                    float f0, f1, f2;
+                    weights(lw0[i], lw1[i], lw2[i], f0, f1, f2);
+
+                    // THE DEPTH TEST IS FOR COVERED LANES ONLY. A helper lane is
+                    // not on the surface, so it must not write depth — and this
+                    // is the line that keeps the output bit-identical.
+                    float* const zrow = (depth != nullptr) ? depth->row(ly) : nullptr;
+                    const bool visible = covered[i] && depth_test(zrow, lx, f0, f1, f2);
+
+                    // AND HERE IS THE WHOLE LESSON. The fragment runs whether or
+                    // not this lane is covered, because its neighbours may need to
+                    // difference against it. Moving this call inside the
+                    // `if (visible)` below would make the quad traversal cheap and
+                    // would stop it modelling anything at all.
+                    const Uint32 colour = fragment(f0, f1, f2);
+                    ++local.shaded;
+
+                    if (covered[i]) { ++local.covered; } else { ++local.helpers; }
+
+                    if (visible)
                     {
-                        // ---- The lookup (Lesson 3.9) ------------------------
-                        //
-                        // Compare these four lines against the four above them.
-                        // The uvs are obtained by IDENTICAL arithmetic — the same
-                        // three multiply-adds, the same perspective divide-back —
-                        // and the only difference is what the pair of numbers is
-                        // handed to: a formula, or an array somebody painted.
-                        //
-                        // That is the entire structural content of this lesson.
-                        // Nothing about interpolation changed, because nothing
-                        // needed to: 2.4 built a machine for carrying attributes
-                        // without knowing what they are, and this is the last
-                        // attribute Module 3 asks it to carry.
-                        const float uu = (f0 * pu0 + f1 * pu1 + f2 * pu2) * w_recip;
-                        const float vv = (f0 * pv0 + f1 * pv1 + f2 * pv2) * w_recip;
-                        // `to_encoded` is the largest single item in THIS branch —
-                        // three `pow` calls against one bilinear fetch — which is
-                        // Lesson 3.10's measured headline and the reason
-                        // `style.encode` exists.
-                        row[x] = to_encoded(
-                            sample(*style.albedo.image, style.albedo.samp, uu, vv),
-                            style.encode);
+                        fb.row(ly)[lx] = colour;
                     }
-                    else if (lit)
+                    else if (show_helpers && !covered[i])
                     {
-                        // ---- Per-pixel shading (Lesson 3.8) ----------------
-                        //
-                        // The whole lesson, in six lines. Interpolate the NORMAL
-                        // and the POSITION rather than the answer, then evaluate
-                        // the shading equation here — where the pixel is — instead
-                        // of at three corners and blending.
-                        //
-                        // The equation is byte-for-byte the one Lessons 3.6 and
-                        // 3.7 built. Nothing about the lighting changed; only
-                        // where it is called from. That is the distinction this
-                        // lesson exists to draw, and it is worth seeing that the
-                        // code says it too.
-                        const vec3 n{(f0 * pn0.x + f1 * pn1.x + f2 * pn2.x) * w_recip,
-                                     (f0 * pn0.y + f1 * pn1.y + f2 * pn2.y) * w_recip,
-                                     (f0 * pn0.z + f1 * pn1.z + f2 * pn2.z) * w_recip};
-                        const vec3 p{(f0 * pw0.x + f1 * pw1.x + f2 * pw2.x) * w_recip,
-                                     (f0 * pw0.y + f1 * pw1.y + f2 * pw2.y) * w_recip,
-                                     (f0 * pw0.z + f1 * pw1.z + f2 * pw2.z) * w_recip};
-
-                        // The albedo, from one of two places — Lesson 3.9.
-                        //
-                        // WITH A TEXTURE BOUND it is a sample, and `sample` already
-                        // returns linear light, so it drops straight into the same
-                        // slot with no conversion at all. That is not a coincidence
-                        // and it is worth pausing on: `sample` returns linear
-                        // *because* this is what a texture is for. An albedo is a
-                        // reflectance — the fraction of arriving light a surface
-                        // sends back — and a fraction has to multiply a quantity of
-                        // light, which means both have to be linear. Texture and
-                        // light multiply, and that one multiply is Module 3's last
-                        // structural gap closing.
-                        //
-                        // WITHOUT ONE it is the interpolated corner colour, by the
-                        // same three multiply-adds as any other attribute, exactly
-                        // as 3.8 left it. Note that it is taken in LINEAR light and
-                        // handed straight to `shade`, with no encode in between:
-                        // `blend_space` is ignored under `lit`, because lighting
-                        // arithmetic is linear by definition (conventions §7c) and
-                        // there is no meaning to give the encoded variant here. One
-                        // encode at the very end, which is where an encode belongs.
-                        // Written as one branch rather than "interpolate, then
-                        // overwrite if textured", because the interpolation is nine
-                        // multiply-adds and a discarded result is still a paid one.
-                        // `textured` is constant for the whole triangle, so the
-                        // predictor eats the branch itself for free — it is only
-                        // the WORK behind it that is worth not doing.
-                        linear_rgb albedo{};
-                        if (textured)
-                        {
-                            const float uu = (f0 * pu0 + f1 * pu1 + f2 * pu2) * w_recip;
-                            const float vv = (f0 * pv0 + f1 * pv1 + f2 * pv2) * w_recip;
-                            albedo = sample(*style.albedo.image, style.albedo.samp, uu, vv);
-                        }
-                        else
-                        {
-                            albedo = {(f0 * p0.r + f1 * p1.r + f2 * p2.r) * w_recip,
-                                      (f0 * p0.g + f1 * p1.g + f2 * p2.g) * w_recip,
-                                      (f0 * p0.b + f1 * p1.b + f2 * p2.b) * w_recip};
-                        }
-
-                        // `shade` normalises `n` itself — a decision made in 3.6
-                        // ("a caller who forgets gets a brightness scaled by the
-                        // normal's length, which looks like a lighting bug and is
-                        // not one"), and this is the call site that cashes it in.
-                        // The interpolated normal is genuinely short here, worst in
-                        // the middle of the triangle; §3.5 measures by how much.
-                        row[x] = to_encoded(shade(albedo, n, style.eye - p,
-                                                  *style.lights, style.surface,
-                                                  style.model),
-                                            style.encode);
-                    }
-                    else
-                    {
-                        // Three multiply-adds per channel, then the divide-back.
-                        // This is the interpolation, and it is the same three
-                        // lines whatever the attribute turns out to be — texture
-                        // coordinates just above, normals in 3.6. The rasterizer
-                        // never learns what it carries.
-                        const rgb3 mixed{(f0 * p0.r + f1 * p1.r + f2 * p2.r) * w_recip,
-                                         (f0 * p0.g + f1 * p1.g + f2 * p2.g) * w_recip,
-                                         (f0 * p0.b + f1 * p1.b + f2 * p2.b) * w_recip};
-
-                        // One branch per pixel on a value that is constant for
-                        // the whole triangle. A branch predictor eats this for
-                        // free; hoisting it would mean two copies of the loop,
-                        // which is a worse trade at this size.
-                        row[x] = pixel_from(mixed, space, style.encode);
+                        // Not a rendering mode — a picture of the waste. Magenta
+                        // is this engine's "this value is not real" convention
+                        // (`checker_at` in 3.2, an unbound sampler in 3.9), used
+                        // for a third time and for the same reason: no real
+                        // surface is ever this colour by accident.
+                        fb.row(ly)[lx] = pack_argb(255, 0, 255);
                     }
                 }
             }
 
-            w0 += s.step_x0;
-            w1 += s.step_x1;
-            w2 += s.step_x2;
+            lane_w0 += 2 * s.step_x0;
+            lane_w1 += 2 * s.step_x1;
+            lane_w2 += 2 * s.step_x2;
         }
 
-        row_w0 += s.step_y0;
-        row_w1 += s.step_y1;
-        row_w2 += s.step_y2;
+        quad_w0 += 2 * s.step_y0;
+        quad_w1 += 2 * s.step_y1;
+        quad_w2 += 2 * s.step_y2;
     }
+
+    // ACCUMULATE, never assign: one `quad_stats` totals a whole draw, and a
+    // per-triangle lane efficiency is not a number anybody wants.
+    if (stats != nullptr) { *stats += local; }
 }
 
 void draw_triangle(framebuffer& fb,

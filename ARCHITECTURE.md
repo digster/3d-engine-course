@@ -90,6 +90,7 @@ inventing one — but without paying framework ceremony before it buys anything.
 │   │   │                   # + depth (3.1) + perspective correction (3.2)
 │   │   │                   # + back-face culling (3.4) + texturing (3.9)
 │   │   │                   # + fill_style::encode (3.10)
+│   │   │                   # + 2x2 quad traversal + quad_stats (4.1)
 │   │   ├── viewport.hpp    # NDC -> pixels + the y-flip           [EXISTS from 2.11]
 │   │   ├── mesh.hpp        # indexed geometry: verts + tri indices [EXISTS from 2.12]
 │   │   │                   # + normals, owning mesh_data, mesh_report (3.5)
@@ -978,6 +979,37 @@ Built roughly in dependency order — each module's milestone is the next module
   moved 0.60% of those pixels would falsify nine lessons' arithmetic — the same bargain as
   `vertex::inv_w = 1` and an unbound `albedo`: *a default that changes nothing is what lets a
   feature be added to a pipeline object without auditing its call sites.*
+- **The rasterizer can imitate the hardware, so the hardware's costs can be measured** (Module 4,
+  Lesson 4.1). `fill_style::traverse` adds a 2×2 quad walk beside the scanline one: it shades the
+  lanes a triangle *misses*, discards them, and counts them. The output is bit-identical in colour
+  **and** depth — verified over 2,306 triangles — so the only thing that changes is how much work
+  was done, which is what makes it an *instrument* rather than a feature. Its default is
+  `scanline`, because that is what a CPU rasterizer should do and what every measurement before
+  4.1 was taken against. The reason the model cannot be avoided on real hardware is that
+  `ddx`/`ddy` are differences between neighbouring lanes, so the neighbours must run — which is
+  also why a derivative inside a divergent branch is undefined, and why mipmap selection is paid
+  for out of wasted lanes. Measured lane efficiency falls from 96.3% on a 64-pixel triangle to
+  25.0% on a one-pixel one, and 1/efficiency predicts the slowdown to within 0.09× across a 560×
+  range of triangle counts. **This is the precise content of "small triangles are expensive", and
+  it is a statement about size in pixels rather than count.**
+- **Extracting the fragment revealed what it had been since Lesson 3.6** (Module 4, Lesson 4.1).
+  Two traversals needed to share the per-pixel work, so it came out of the loop into a lambda —
+  and what came out is a function from three barycentric weights to a colour with all pipeline
+  state captured, which is a **fragment shader**. The only thing separating it from the real
+  article is that the caller cannot supply it. It also acquired a new obligation, because it now
+  runs for lanes outside the triangle: it must be **total**, which it is only because
+  `wrap_texel` folds any index into range (3.9) and `linear_to_srgb_u8` refuses a NaN (3.3). Both
+  guards were written for other reasons and both are load-bearing here.
+- **`fill_style` is a pipeline object, and the usual justification for pipeline objects is wrong**
+  (Module 4, Lesson 4.1). Ten top-level fields against `SDL_GPUGraphicsPipelineCreateInfo`'s nine
+  (53 once its nested state structs are expanded) — the same object, by deliberate design since
+  3.2. The folk explanation is that baking state in saves the inner loop a branch; our loop
+  branches per pixel on draw-constant state, and hoisting it measured **0.93×**, i.e. nothing. A
+  perfectly predicted branch is free. The real reason is that the driver must *validate* the
+  combination and *compile* a shader specialised to it — milliseconds, ruinous per draw and free
+  once, which SDL's own header states by calling pipelines "precalculated rendering state". Our
+  `fill_style` already spans 96 combinations decided at runtime per pixel; a GPU compiles the one
+  you asked for, and that is what a shader is.
 - **Public API surface is a deliberate artifact,** not whatever headers happen to be reachable.
 
 ---

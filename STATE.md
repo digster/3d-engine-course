@@ -7,7 +7,7 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-08-12 (after Lesson 3.10 — MODULE 3 COMPLETE, 36 of 94 lessons)
+updated: 2026-08-12 (after Lesson 4.1 — MODULE 4 OPENS, 37 of 94 lessons)
 
 conventions:
   world: right-handed, Y-up, -Z forward
@@ -1108,6 +1108,129 @@ conventions:
         tight loop consecutive fetches overlap; in situ each sits in a dependency chain
         (uv from the divide, result into the encode) with nothing to overlap with.
 
+  gpu-model: A GPU IS NOT A FAST CPU. Per lane it is SLOWER — lower clock, shorter
+        pipeline, no branch predictor worth the name, far less cache. It finishes
+        first for three structural reasons, all measurable on a CPU:
+        (1) WIDE, NOT FAST. A dependent chain runs at the LATENCY of its operation
+        however many units are idle: measured 3.124 ns/step for one sqrt chain,
+        0.443 for eight interleaved (7.05x), 0.112 for 32 (27.88x). Same
+        arithmetic in every row; only the amount of INDEPENDENT work changed.
+        That is the whole architecture, and it is why a shader using fewer
+        registers runs faster — more groups resident, more latency hidden.
+        OCCUPANCY IS THAT TABLE.
+        NAME THE SECOND MECHANISM: past ~8 chains the compiler also vectorises, so
+        the last rows combine interleaving WITH SIMD. Those are the two things a
+        GPU combines, but they are two, and saying so is the difference between a
+        demonstration and a conjuring trick.
+        (2) LOCKSTEP. Lanes are grouped (32 = a warp/wavefront; 32 or 64 on AMD)
+        and share one program counter. One decoder and one scheduler for 32 lanes
+        is what buys the width.
+        (3) 2x2 QUADS. See below.
+  divergence: A WARP RUNS BOTH SIDES OF A BRANCH ITS LANES DISAGREE ABOUT, with the
+        inactive lanes MASKED. Measured against a warp that never diverges:
+        1.00x at 1024 px of coherence, 1.03x at 64, 1.52x at 16, 1.93x at 8 and
+        below. THE STEP IS EXACTLY AT THE WARP WIDTH, which is what makes the model
+        right rather than merely plausible.
+        REPORT `vs coherent`, NOT `vs CPU`. The CPU comparison is two different
+        loops and carries the emulation's own overhead; the first draft published
+        5.0x that way, and the controlled figure is 1.9x.
+        COHERENCE IS A PROPERTY OF YOUR DATA, NOT YOUR CODE. The same shader is
+        fast or slow depending on how the branch is arranged across the SCREEN —
+        which is why "sort by material" and "use separate pipelines" are real
+        advice, and why a branch benchmarked on a test scene can cost 30% in a
+        real one.
+  quads: FRAGMENTS ARE SHADED IN ALIGNED 2x2 BLOCKS, ALWAYS. Lanes the triangle
+        misses are HELPER LANES: they run the fragment shader and their results are
+        discarded.
+        NOT WASTE TO BE ENGINEERED AWAY — it is where ddx/ddy come from. ddx is
+        lane 1 minus lane 0, ddy is lane 2 minus lane 0, so a lane needs its
+        neighbours to have run the same code. EVERY AUTOMATIC MIP SELECTION ON
+        EARTH IS PAID FOR BY HELPER LANES (and 3.9's minification gap is what they
+        buy). Consequence: a derivative inside a divergent branch is undefined,
+        because the neighbouring lane has no value at that point in the program.
+        ALIGNED TO EVEN COORDINATES IN THE RENDER TARGET, not to the triangle — so
+        a triangle cannot arrange to be cheap by being positioned well, and the
+        waste depends on its SIZE, not its placement.
+        LANE EFFICIENCY ~ A/(A + cP): covered lanes live in the AREA, helpers along
+        the PERIMETER. MEASURED over 32 rotations, circumradius -> efficiency:
+        64 px 96.3% · 32 px 93.0% · 16 px 86.7% · 8 px 78.5% · 4 px 67.8% ·
+        2 px 41.5% · 1 px 25.0%. The r/(r+4) model is optimistic by a few points
+        throughout but gets the shape right.
+        OUR NUMBERS UNDERSTATE IT: vertex::x/y are INTEGERS, so a sub-pixel
+        triangle rounds away and draws nothing. Real hardware rasterizes at ~1/256
+        px, so it draws them, at efficiencies below 25%.
+        WHY 2x2 AND NOT WIDER, measured at r = 8: 2x2 75.5% · 4x4 48.7% ·
+        8x8 30.4% · 16x16 8.9%. 2x2 is the SMALLEST block that can produce a
+        screen-space derivative (one neighbour in x, one in y) and every wider one
+        wastes more — forced from both ends. A 32-lane warp is EIGHT QUADS, possibly
+        from eight different triangles: the grouping for SCHEDULING and the grouping
+        for DERIVATIVES are different things, and only the second is 2x2.
+        THE COST, MEASURED on the capstone scene: 87.4% efficient, and the quad
+        traversal is 1.04x - 1.38x slower than scanline as tessellation rises from
+        66 to 36,866 triangles. 1/efficiency PREDICTS every row to within 0.09x;
+        where measurement exceeds prediction the gap is the quad walk's own
+        overhead (four coverage tests and a mask per block), not the shading.
+        THIS IS WHAT "SMALL TRIANGLES ARE EXPENSIVE" ACTUALLY MEANS, and it is a
+        statement about SIZE IN PIXELS, not about count (3.10's floor-vs-torus).
+  traversal: fill_style::traverse {scanline, quad, quad_debug}, defaulting to
+        SCANLINE — what a CPU rasterizer should do, and what every measurement
+        before 4.1 was taken against. `quad` is an INSTRUMENT, not a feature: it is
+        here to be measured, not used.
+        IT MUST CHANGE NOTHING IT WRITES. Verified bit-identical in BOTH colour and
+        depth over 2,306 triangles at 640x360 — 0 of 230,400 px, 0 of 230,400
+        depths — while shading 21,005 lanes whose results went nowhere. The line
+        that guarantees it: THE DEPTH TEST IS FOR COVERED LANES ONLY, because a
+        helper lane is not on the surface.
+        ONE EARLY-OUT, the one hardware has: a quad with no covered lane is never
+        issued. Without it the cost would be the bounding box, not the triangle.
+        THE FRAGMENT IS NOW A FUNCTION (a lambda from three barycentric weights to
+        a colour, with pipeline state captured) — WHICH IS A FRAGMENT SHADER, and
+        has been since 3.6. The only thing separating it from one is that the
+        CALLER CANNOT SUPPLY IT. It must now be TOTAL, because it runs for lanes
+        outside the triangle: negative barycentrics (2.3 called that useful), a
+        w_recip that can be enormous or negative, a uv anywhere at all. Nothing
+        reads out of bounds — wrap_texel folds any index (3.9), linear_to_srgb_u8
+        refuses a NaN (3.3) — and both guards were written for other reasons.
+        quad_stats is an OUT-PARAMETER, not a fill_style field: a pipeline object
+        describes how to draw, and this describes what happened. It ACCUMULATES,
+        because a per-triangle lane efficiency is not a number anybody wants.
+  pipeline-object: RENDER STATE IS AN IMMUTABLE OBJECT, and we have had one since
+        3.2 without the name. fill_style has 10 top-level fields;
+        SDL_GPUGraphicsPipelineCreateInfo has 9 (53 once its nested state structs
+        are expanded). THEY ARE THE SAME OBJECT — deliberately, since 3.2/3.4/3.9
+        mirrored SDL's field names and enumerator orders.
+        THE FOLK EXPLANATION IS WRONG, AND IT WAS MEASURED. "State is baked in so
+        the inner loop need not branch on it" — our loop branches per pixel on
+        draw-constant state, and hoisting that branch is worth 0.93x, i.e. nothing.
+        A perfectly predicted branch is free.
+        THE REAL REASON is that the driver must VALIDATE the combination and
+        COMPILE a shader specialised to it — milliseconds, ruinous per draw and
+        free once. SDL's own header calls pipelines "precalculated rendering
+        state", under things "created once and used over and over".
+        OUR fill_style ALREADY HAS 96 COMBINATIONS (4 shading x 2 encode x 2
+        interp x 2 blend space x 3 traversal), every one decided at runtime, per
+        pixel. A GPU compiles the one you asked for. THAT IS WHAT A SHADER IS.
+  pipeline-stages: ELEVEN, AND THE STUDENT HAS WRITTEN ALL ELEVEN.
+        vertex shader -> collect_triangles (2.8-2.10) · primitive assembly ->
+        index triples (2.12) · clipping -> clip_polygon_near (3.3) · perspective
+        divide -> /w (2.10) · viewport -> viewport::to_screen (2.11) · face culling
+        -> is_front_facing (3.4) · rasterization -> edge functions + quads (2.2,
+        4.1) · interpolation -> barycentric x 1/w (2.4, 3.2) · depth test ->
+        depth_buffer (3.1) · fragment shader -> the fragment lambda (3.6-3.9) ·
+        blend/write -> row[x] = colour (1.5).
+        MODULE 4 DOES NOT TEACH A PIPELINE. It hands yours to hardware, and the
+        port is a rename because of the NDC-parity decision taken in Module 2.
+  measurement: A REFACTOR'S PERFORMANCE CLAIM NEEDS THE SAME CONTROL AS A
+        FEATURE'S. Extracting the fragment into a lambda appeared to gain 10%
+        (46.46 -> 40.46 ns/px) against 3.10's published figure. Two binaries
+        differing ONLY by the extraction, run alternately in one session: minimums
+        say 2.5% faster, medians say 1% slower — i.e. NO MEASURABLE DIFFERENCE. The
+        10% was session drift, visible in the data as both columns climbing
+        monotonically as the machine warmed.
+        THIS BROKE 3.10's OWN PITFALL ("never compare two numbers taken hours
+        apart") WITHIN A DAY, on the code that lesson was written about. 3.10's
+        published numbers STAND; nothing needed restating.
+
 curriculum: 94 lessons, ~433 h, 9 modules
   M0:6  M1:8  M2:12  M3:10  M4:9  M5:10  M6:15  M7:13  M8:11
 
@@ -1152,8 +1275,26 @@ completed:
   - 3.9  Texture Mapping and Bilinear Filtering
   - 3.10 Profiling, and the Module 3 Capstone
   ===> MODULE 3 COMPLETE — Stage A (the CPU software rasterizer) is DONE <===
+  - 4.1  How GPUs Actually Work
 
 capabilities:
+  - gfx 4.1: THE RASTERIZER CAN IMITATE THE HARDWARE, AND COUNT WHAT THAT COSTS.
+    src/gfx/raster.hpp — `traversal {scanline, quad, quad_debug}` and `quad_stats`
+    {quads, shaded, covered, helpers, off_target, efficiency()}; fill_triangle
+    gains a `quad_stats*` out-parameter.
+    src/gfx/raster.cpp — the fragment body and the depth test EXTRACTED into
+    lambdas shared by both traversals (one rule, one place), plus a 2x2 quad walk
+    that shades helper lanes and discards them. Bit-identical output in colour AND
+    depth, verified.
+    NO NEW FILES. Everything is a change to machinery that already existed, which
+    is itself the argument Module 4 opens with.
+  - demo 4.1: [5] cycles the traversal, `quad_debug` writes helper lanes in debug
+    magenta (the engine's third use of that convention — checker_at 3.2, unbound
+    sampler 3.9, helper lanes now), and the budget panel gains a lane-efficiency
+    row that appears ONLY under a quad traversal — under scanline every lane is
+    covered by construction, and "100% efficient" would be announcing that the
+    feature is off, dressed up as a result.
+
   - core 3.10: THE ENGINE CAN MEASURE ITSELF. src/core/profile.hpp/.cpp NEW — `zone`
     (build/collect/sort/fill/overlay/present + a `count` sentinel), `profiler` (a ring
     of 120 frames, medians via std::nth_element, other_ns(), zones_overlapped(),
@@ -2085,7 +2226,8 @@ files:
                  03-03-near-plane-clipping.html, 03-04-back-face-culling.html,
                  03-05-obj-loader.html, 03-06-normals-and-lambert.html,
                  03-07-specular-blinn-phong.html, 03-08-shading-models.html,
-                 03-09-textures.html, 03-10-profiling-capstone.html
+                 03-09-textures.html, 03-10-profiling-capstone.html,
+                 04-01-how-gpus-work.html
   docs/shared/: course.css, course.js      (THE stylesheet + page script; one copy each)
   docs/_template/: lesson-template.html, README.md, apply-shared.py, check-page.js
   memory/: 2026-07-16.md, 2026-07-18.md, 2026-07-21.md, 2026-07-22.md,
@@ -2098,41 +2240,30 @@ files:
 
 
 
-next: 4.1 — How GPUs Actually Work
-      (planned filename: docs/lessons/04-01-how-gpus-work.html — 3.10 links to the index
-      for now, so BOTH of 3.10's next links need repointing when it lands)
-      MODULE 4 OPENS, AND STAGE A IS FINISHED. Every debt Module 3 listed comes due at
-      once, and all five resolve to the same thing:
-        - raster.hpp includes light.hpp AND texture.hpp — a rasterizer that knows about
-          coverage, interpolation, depth, lighting and texturing (3.9);
-        - `shading` has a combination it cannot name: "textured and lit" is `lit` plus a
-          binding, so the enum no longer describes a fragment on its own (3.9);
-        - fill_style is TWO STRUCTS WEARING ONE NAME — pipeline state and uniforms (3.8);
-        - a material rides on a triangle and is rebound per triangle, which no GPU can
-          do (3.8);
-        - and NEW IN 3.10: encode_mode is a per-fragment branch on a value that is
-          constant for an entire draw — a compile-time shader variant in a runtime
-          disguise.
-      THE ANSWER TO ALL FIVE IS A FRAGMENT STAGE THE CALLER PROGRAMS.
-        - SIMT intuition: why a GPU is not "a fast CPU", what a warp/wavefront is, why
-          divergence costs, and why a sub-pixel triangle wastes three of every four
-          fragment lanes (2x2 quads — the hardware version of 3.10's px/triangle axis).
-          GROUND IT IN THE NUMBER THE STUDENT JUST MEASURED: 45.47 ns per covered pixel.
-          The GPU's advantage is thousands at once, not cleverer arithmetic per fragment,
-          and saying so is what stops the port feeling like magic.
-        - WHY STATE LIVES IN IMMUTABLE PIPELINE OBJECTS. fill_style has BEEN a pipeline
-          object since 3.2 without the name; SDL_GPUGraphicsPipelineCreateInfo is the
-          same struct, several times larger. Validating and compiling that state per
-          draw call would be ruinous — that is the argument to make properly here.
-        - MAP EVERY STAGE BACK TO WHAT EXISTS: coverage -> the rasterizer, barycentrics
-          -> interpolators, depth_buffer -> the depth attachment, sampler -> sampler,
-          shade() -> the fragment shader, viewport -> SDL_GPUViewport (already
-          field-for-field, 2.11). The port is an API CHANGE, NOT A MATHS CHANGE, and the
-          reason is the NDC-parity decision taken back in Module 2 (conventions §5).
-        - PIN DOWN SDL_GPU's COORDINATE, DEPTH-RANGE AND WINDING CONVENTIONS FROM THE
-          HEADERS BEFORE ANYTHING IS BUILT ON THEM (master prompt §10). Already verified
-          and recorded in LEARNINGS.md and conventions.html §4; 4.1 is where the student
-          is walked through CHECKING it rather than trusting it.
-        - The honest sidebar on why not OpenGL: legacy design, deprecated on macOS, and
-          SDL_GPU is SDL3's flagship path.
+next: 4.2 — The SDL_GPU Mental Model
+      (planned filename: docs/lessons/04-02-sdl-gpu-model.html — 4.1 links to the
+      index for now, so BOTH of 4.1's next links need repointing when it lands)
+      THE OBJECT MODEL, and every object mapped onto something that already exists.
+        - DEVICE (SDL_CreateGPUDevice + SDL_ClaimWindowForGPUDevice), SWAPCHAIN
+          (SDL_WaitAndAcquireGPUSwapchainTexture — the framebuffer, but the
+          display owns it and hands it back), COMMAND BUFFER (recording, not
+          executing: "commands only begin execution once SDL_SubmitGPUCommandBuffer
+          is called" — quote the header), RENDER PASS (up to four colour targets
+          and one depth target; ending one ends the render state), PIPELINE (4.1
+          §3.4 already made this argument — here it becomes a call), BUFFERS,
+          TEXTURES, SAMPLERS (3.9's sampler struct, field for field).
+        - THE ASYNCHRONY IS THE NEW IDEA. Everything in Modules 1-3 happened when
+          the call was made. From here, a call RECORDS work that happens later, on
+          another processor, and the fence/acquire dance exists because two
+          machines are involved. That, not the API surface, is what 4.2 has to
+          teach.
+        - MAP IT BACK: framebuffer -> swapchain texture, depth_buffer -> depth
+          attachment, fill_style -> graphics pipeline, texture+sampler ->
+          SDL_GPUTextureSamplerBinding (3.9 already named this).
+        - THE HONEST SIDEBAR ON WHY NOT OpenGL: legacy design, deprecated on
+          macOS, and SDL_GPU is SDL3's flagship path. Say what OpenGL is still good
+          for rather than dismissing it.
+        - VERIFY EVERY SIGNATURE AGAINST SDL_gpu.h (master prompt §10). The header
+          is at build/_deps/sdl3-src/include/SDL3/SDL_gpu.h at the pinned
+          release-3.4.12.
 ```

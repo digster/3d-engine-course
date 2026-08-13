@@ -2729,7 +2729,8 @@ void sort_back_to_front(std::vector<raster_triangle>& tris)
 
 void draw_triangles(engine::framebuffer& fb, engine::depth_buffer* depth,
                     std::vector<raster_triangle>& tris, bool sorted,
-                    engine::fill_style style, cull_stats* culled = nullptr)
+                    engine::fill_style style, cull_stats* culled = nullptr,
+                    engine::quad_stats* quads = nullptr)
 {
     // The HUD's numbers, and a note on why they are gathered HERE rather than
     // returned by the rasterizer. `fill_triangle` culls internally — that is where
@@ -2769,7 +2770,10 @@ void draw_triangles(engine::framebuffer& fb, engine::depth_buffer* depth,
         // therefore sorts its geometry by material and issues one draw per batch,
         // and the reason this loop can be lazy is that it is not a GPU.
         style.surface = t.surface;
-        engine::fill_triangle(fb, depth, t.v[0], t.v[1], t.v[2], style);
+        // Lesson 4.1: `quads` accumulates across the whole draw, which is why
+        // fill_triangle adds to it rather than assigning. A per-triangle lane
+        // efficiency is not a number anybody wants.
+        engine::fill_triangle(fb, depth, t.v[0], t.v[1], t.v[2], style, quads);
     }
 }
 
@@ -3306,6 +3310,7 @@ struct zone_colour { Uint8 r, g, b; };
 void draw_budget(SDL_Renderer* r, const engine::profiler& prof, float wall_ns,
                  int covered_px, double fill_ns_per_px,
                  engine::encode_mode encode, int encode_wrong,
+                 engine::traversal walk, const engine::quad_stats& quads,
                  float x, float y)
 {
     const double total = static_cast<double>(prof.median_frame_ns());
@@ -3322,7 +3327,7 @@ void draw_budget(SDL_Renderer* r, const engine::profiler& prof, float wall_ns,
     // why its own cost is charged to `overlay` rather than being free.
     SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
     SDL_SetRenderDrawColor(r, 10, 12, 18, 225);
-    const SDL_FRect panel{x - 5.0f, y - 5.0f, 550.0f, 92.0f};
+    const SDL_FRect panel{x - 5.0f, y - 5.0f, 550.0f, 104.0f};
     SDL_RenderFillRect(r, &panel);
     SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_NONE);
 
@@ -3394,10 +3399,24 @@ void draw_budget(SDL_Renderer* r, const engine::profiler& prof, float wall_ns,
                               "[4] encode %-5s  %5d px differ by 1 code",
                               fast ? "FAST" : "exact", encode_wrong);
 
+    // ---- Lesson 4.1 --------------------------------------------------------
+    //
+    // Only under a quad traversal. Under `scanline` every lane is covered by
+    // construction, so a row reading "100% efficient" would be announcing that
+    // the feature is switched off, dressed up as a result.
+    if (walk != engine::traversal::scanline && quads.shaded > 0)
+    {
+        SDL_SetRenderDrawColor(r, 120, 180, 235, 255);
+        SDL_RenderDebugTextFormat(r, x, y + 86.0f,
+            "[5] 2x2 QUADS%s  %ld lanes shaded, %ld wasted on helpers -> %.1f%% efficient",
+            walk == engine::traversal::quad_debug ? " (helpers in magenta)" : "",
+            quads.shaded, quads.helpers, 100.0 * quads.efficiency());
+    }
+
     if (prof.zones_overlapped())
     {
         SDL_SetRenderDrawColor(r, 240, 120, 110, 255);
-        SDL_RenderDebugText(r, x, y + 85.0f,
+        SDL_RenderDebugText(r, x, y + 98.0f,
                             "ZONES OVERLAPPED - two timers alive at once");
     }
 }
@@ -3607,6 +3626,10 @@ int main(int argc, char* argv[])
     int texel_wrong = 0;                             ///< px the half-texel error costs
     int filter_wrong = 0;                            ///< px bilinear and nearest disagree about
 
+    // ---- Lesson 4.1 --------------------------------------------------------
+    engine::traversal walk = engine::traversal::scanline;   ///< [5]
+    engine::quad_stats scene_quads;                  ///< lanes shaded vs covered
+
     // ---- Lesson 3.10 -------------------------------------------------------
     engine::profiler prof;                           ///< the frame budget
     bool show_budget = true;                         ///< [3]
@@ -3680,6 +3703,7 @@ int main(int argc, char* argv[])
     SDL_Log("  [2] uv v flip on import: OBJ counts v upwards, a texture counts it downwards");
     SDL_Log("  [3] the frame budget: which phase the frame is actually spent in");
     SDL_Log("  [4] sRGB encode: fitted sqrt chain (fast) vs std::pow (exact) - watch `fill`");
+    SDL_Log("  [5] traversal: scanline / 2x2 quads / quads with the helper lanes shown");
     SDL_Log("  [arrows] orbit  [-]/[=] dolly  [P] persp/ortho  [O] model order  [X] object");
     SDL_Log("  [Z] rotation axis  [,] [.] t  [Space] spin  [W]/[N] the 2.7 w bugs");
     SDL_Log("[Tab] cycles demos: scene (2.6-3.3) -> basis (2.5) -> triangles -> lines -> Pong");
@@ -3822,6 +3846,14 @@ int main(int argc, char* argv[])
                 uv_flip_on_load = !uv_flip_on_load;
                 load_model(model, model.choice, uv_flip_on_load);
             }
+            // ---- Lesson 4.1 ---------------------------------------------
+            if (in.key_pressed(SDL_SCANCODE_5))
+            {
+                walk = (walk == engine::traversal::scanline) ? engine::traversal::quad
+                     : (walk == engine::traversal::quad)     ? engine::traversal::quad_debug
+                                                             : engine::traversal::scanline;
+            }
+
             // ---- Lesson 3.10 --------------------------------------------
             if (in.key_pressed(SDL_SCANCODE_3)) { show_budget = !show_budget; }
             if (in.key_pressed(SDL_SCANCODE_4))
@@ -4006,6 +4038,7 @@ int main(int argc, char* argv[])
                 texel_wrong = 0;
                 filter_wrong = 0;
                 encode_wrong = 0;
+                scene_quads = {};
                 covered_px = 0;
                 fill_ns_per_px = 0.0;
                 shown_depth = {};
@@ -4108,7 +4141,10 @@ int main(int argc, char* argv[])
                     // real-time renderer and that is the right answer for one;
                     // `fill_style`'s own default stays `exact` so that nothing
                     // written in Lessons 3.1-3.9 changes by a single code.
-                    .encode = encode};
+                    .encode = encode,
+                    // Lesson 4.1. `scanline` unless [5] asks otherwise — the quad
+                    // walk is here to be measured, not to be used.
+                    .traverse = walk};
 
                 // Clearing to FAR is not optional and not cosmetic. Skip it and
                 // last frame's depths survive into this one; §7 has the picture.
@@ -4128,10 +4164,11 @@ int main(int argc, char* argv[])
                 // Note that `sorted` is now false even under the painter's
                 // algorithm: the sort happened above, under its own zone, so that
                 // this bar measures rasterization and nothing else.
+                scene_quads = {};
                 {
                     const engine::scope_timer z{prof, engine::zone::fill};
                     draw_triangles(fb, want_painter ? nullptr : &scene_depth,
-                                   scene_tris, false, style, &scene_cull);
+                                   scene_tris, false, style, &scene_cull, &scene_quads);
                 }
                 shade_ns = static_cast<double>(prof.median_ns(engine::zone::fill));
 
@@ -5484,7 +5521,7 @@ int main(int argc, char* argv[])
         if (which == demo::scene && show_budget)
         {
             draw_budget(renderer, prof, clk.raw_dt() * 1.0e9f, covered_px, fill_ns_per_px,
-                        encode, encode_wrong, 6.0f, 176.0f);
+                        encode, encode_wrong, walk, scene_quads, 6.0f, 170.0f);
         }
 
         SDL_SetRenderScale(renderer, 1.0f, 1.0f);

@@ -80,6 +80,7 @@
       <li><a href="#lighting">Lighting</a></li>
       <li><a href="#textures">Textures and sampling</a></li>
       <li><a href="#measurement">Measurement</a></li>
+      <li><a href="#gpu">The GPU execution model</a></li>
       <li><a href="#units">Units and angles</a></li>
       <li><a href="#simulation">The simulation contract</a></li>
       <li><a href="#colour">Colour and diagram conventions</a></li>
@@ -1544,6 +1545,13 @@
             <td>The worst-rounded-code column saturates &mdash; everything under half a code
                 reports 1 &mdash; so it cannot separate 0.0115 from 0.4022, which is the whole
                 question. At a 16-bit target those become 3.0 and 103.4.</td></tr>
+        <tr><td>Refactors</td>
+            <td>a performance claim needs the <strong>same control as a feature's</strong></td>
+            <td>&ldquo;It should be the same speed&rdquo; is a prediction, and predictions get
+                measured. Lesson 4.1 saw an apparent 10% gain from a behaviour-preserving
+                extraction; two binaries differing only by it, run alternately, gave 2.5% faster
+                on minimums and 1% slower on medians &mdash; i.e. nothing. The 10% was session
+                drift.</td></tr>
         <tr><td>Benchmark hygiene</td>
             <td><code>volatile</code> sink, <code>-O2</code>, both variants in one run</td>
             <td>Without a sink the compiler deletes the work. A debug profile is a ranking of a
@@ -1564,6 +1572,79 @@
     <strong>a function&rsquo;s cost is not a property of the function</strong> &mdash; the same
     fetch runs at 2.26&nbsp;ns in a tight loop and 5.13&nbsp;ns in situ, because consecutive
     fetches overlap in one and sit in a dependency chain in the other.
+  </p>
+
+  <h2 id="gpu"><span class="num">7f</span>The GPU execution model</h2>
+
+  <p>
+    Established in Lesson 4.1, and measured rather than asserted &mdash; the software rasterizer
+    can be made to behave the way the hardware does, which is how these numbers exist at all.
+    Nothing here is an SDL_GPU convention; it is how the machine underneath works, and every
+    decision from Module 4 onward is downstream of it.
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>Rule</th><th>Value</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td>What a GPU is</td>
+            <td><strong>wide, not fast</strong></td>
+            <td>Per lane it is slower than a CPU core. Measured: one dependent chain runs at
+                3.124&nbsp;ns/step, eight interleaved at 0.443 (7.05&times;) and 32 at 0.112
+                (27.88&times;) &mdash; same arithmetic, more independent work. Occupancy is that
+                table, and it is why fewer registers per shader means faster.</td></tr>
+        <tr><td>Lane grouping</td>
+            <td><strong>32</strong> (a warp / wavefront; 32 or 64 on AMD)</td>
+            <td>One decoder, one program counter and one scheduler for 32 lanes is what buys the
+                width.</td></tr>
+        <tr><td>Branches</td>
+            <td>a warp runs <strong>every side any lane takes</strong>, masked</td>
+            <td>Measured against a warp that never diverges: 1.00&times; at 1024&nbsp;px of
+                coherence, 1.03&times; at 64, <strong>1.93&times;</strong> at 8 and below &mdash;
+                with the step exactly at the warp width. <strong>Coherence is a property of your
+                data, not your code.</strong></td></tr>
+        <tr><td>Fragment grouping</td>
+            <td><strong>aligned 2&times;2 quads, always</strong></td>
+            <td>Lanes the triangle misses (<em>helper lanes</em>) run the shader and are
+                discarded, because <code>ddx</code> is lane&nbsp;1 minus lane&nbsp;0 and
+                <code>ddy</code> is lane&nbsp;2 minus lane&nbsp;0. Every automatic mip selection
+                is paid for out of them &mdash; and a derivative inside a divergent branch is
+                undefined for the same reason.</td></tr>
+        <tr><td>Quad alignment</td>
+            <td>to <strong>even coordinates in the render target</strong></td>
+            <td>Not to the triangle &mdash; so a triangle cannot be cheap by being positioned
+                well, and the waste depends on its size.</td></tr>
+        <tr><td>Lane efficiency</td>
+            <td><code>A / (A + cP)</code></td>
+            <td>Covered lanes live in the <em>area</em>, helpers along the <em>perimeter</em>.
+                Measured by circumradius: 64&nbsp;px 96.3%, 16&nbsp;px 86.7%, 4&nbsp;px 67.8%,
+                1&nbsp;px <strong>25.0%</strong>. <em>That</em> is what &ldquo;small triangles are
+                expensive&rdquo; means, and it is about size in pixels, not count.</td></tr>
+        <tr><td>Why 2&times;2 and not wider</td>
+            <td>forced from both ends</td>
+            <td>It is the smallest block containing a neighbour in x and one in y, so the cheapest
+                shape that can produce a derivative; and every wider block wastes more &mdash;
+                at r&nbsp;=&nbsp;8, measured 75.5% for 2&times;2 against 8.9% for 16&times;16. A
+                32-lane warp is <em>eight quads</em>, possibly from eight triangles: scheduling
+                width and derivative width are different things.</td></tr>
+        <tr><td>Render state</td>
+            <td>an <strong>immutable pipeline object</strong></td>
+            <td><code>fill_style</code> has 10 top-level fields and
+                <code>SDL_GPUGraphicsPipelineCreateInfo</code> has 9 (53 expanded). The usual
+                justification &mdash; saving the inner loop a branch &mdash; was measured and is
+                <strong>false</strong> (0.93&times;, i.e. nothing). The real reason is that the
+                driver must validate the combination and compile a shader specialised to it:
+                milliseconds, ruinous per draw and free once.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    One limitation of our own measurements is worth carrying: <code>vertex::x</code> and
+    <code>vertex::y</code> are <strong>integers</strong>, so a sub-pixel triangle rounds away and
+    draws nothing. Real hardware rasterizes at roughly 1/256 of a pixel and therefore draws them,
+    at efficiencies below the 25% our smallest case reports. The right-hand end of every
+    efficiency table in this course is the <em>optimistic</em> case.
   </p>
 
   <h2 id="units"><span class="num">8</span>Units and angles</h2>
