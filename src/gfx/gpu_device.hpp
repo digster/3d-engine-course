@@ -124,14 +124,22 @@ public:
     gpu_device(gpu_device&& other) noexcept;
     gpu_device& operator=(gpu_device&& other) noexcept;
 
-    /// Create the device and claim `window`.
+    /// Create the device and, if given a window, claim it.
     ///
     /// Both halves, deliberately, because a half-built device is a state nobody
     /// wants to handle: if the claim fails the device is destroyed before this
     /// returns, and the object is left exactly as invalid as it started.
     ///
-    /// @param window The window to draw into. Must not already belong to an
-    ///               `SDL_Renderer` — SDL will refuse the claim if it does.
+    /// @param window The window to draw into, or **`nullptr` for a device with no
+    ///               window at all**. That is not a degenerate case: SDL_gpu.h
+    ///               says outright that you "can render offscreen entirely,
+    ///               perhaps for image processing, and not use a window at all",
+    ///               and Lesson 4.3's harness uses exactly that to load shaders
+    ///               with nothing on screen. A windowless device has no
+    ///               swapchain, so `swapchain_format` and the present-mode fields
+    ///               of the report stay at their defaults.
+    ///               Must not already belong to an `SDL_Renderer` — SDL will
+    ///               refuse the claim if it does.
     /// @param debug  Turn on the backend's validation layer. It catches API
     ///               misuse that would otherwise be a black screen, and it costs
     ///               real time, so it is a parameter rather than a constant.

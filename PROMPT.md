@@ -1374,3 +1374,62 @@ chosen, because a window cannot be owned by both an SDL_GPU device and an `SDL_R
 HUD in Modules 1–3 is `SDL_RenderDebugText`. It puts the software rasterizer's picture on screen
 carried entirely by SDL_GPU, with no shader anywhere, plus a live frame graph drawn with
 `fill_rect` because text needs a font and a shader and both are later lessons.
+
+## 2026-08-15 — `next` (Lesson 4.3: The Shader Toolchain)
+
+Resumed from `STATE.md`. Built the shader pipeline into the build, four HLSL sources, a shader
+loader, and the measurements behind every claim.
+
+### What the lesson turns on
+
+**One source, three binaries, and SPIR-V in the middle.** The pipeline has two stages and only
+the first is a compiler: HLSL→SPIR-V (12.3 ms) then SPIR-V→MSL/DXIL/JSON (1.5 ms each). Because
+everything right of the hub is a *translation from SPIR-V*, losing the front end costs the whole
+toolchain rather than one backend — which is not a hypothetical: the machine this was written on
+has a shadercross built without DXC, and it cannot read HLSL at all.
+
+### The correction this session made
+
+LEARNINGS.md said shadercross "ships as 3.0.0-preview". Checked: the header macros, the pkgconfig
+file and upstream's own CMakeLists all say a plain **3.0.0**, and upstream has **no tags and no
+releases**. So the note was imprecise and, more usefully, the rule it implied is impossible —
+`CMakeLists.txt` pins SDL to `release-3.4.12` with a comment saying "never a branch name", and
+there is no tag here to name. Corrected in place: **pin a commit SHA**.
+
+### Three failures, measured, with opposite temperaments
+
+- **A wrong register space** compiles, translates, loads and runs, then reads whatever is bound at
+  the slot it named. Verified the correct mapping on our own output — `space1`→set 1,
+  `space2`→set 2, `space3`→set 3 — with `spirv-dis | grep DescriptorSet`.
+- **A wrong entry point is refused at creation**, with a message. Our HLSL says `main`; the
+  generated MSL says `main0`, because `main` is reserved in MSL. `"main"` → REFUSED.
+- **Wrong resource counts are accepted, all of them** — including 99 samplers on a shader with
+  one. SDL's own FAQ names this as the commonest cause of a broken shader and nothing in the
+  creation path catches it. Hence: read them from the reflection JSON, and *refuse to load* when
+  it is missing rather than defaulting to zero.
+
+So the API **checks the name and not the numbers**, and the two need opposite defences.
+
+### The number that could not be true
+
+`SDL_CreateGPUShader` measured **0.008 ms cold** — identical to the ninth call, so not a cache —
+against 61.2 ms of build-time compilation. Eight microseconds cannot be MSL → machine code. The
+first version of that measurement took the minimum of eight runs and reported 0.005 ms, which was
+measuring the driver's cache by construction: the same error class as 4.2's flat-texture
+bandwidth, caught by the same habit. Rewritten to report cold and repeat side by side.
+
+**The prediction is published in the lesson rather than resolved in it:** the compile happens at
+pipeline creation, because only there does the driver know the formats and layout the code must be
+specialised to. 4.4's STATE entry requires that to be answered either way.
+
+### What was built
+
+`shaders/{triangle,textured}.{vert,frag}.hlsl` (new), `cmake/Shaders.cmake` (new — the first file
+in `cmake/`, which ARCHITECTURE has listed as planned since Module 0), `src/gfx/gpu_shader.{hpp,cpp}`
+(new), `src/gfx/gpu_device.{hpp,cpp}` (modified — `create(nullptr, …)` now gives a windowless
+device, which SDL supports and a shader harness wants), `src/main.cpp` and `CMakeLists.txt`.
+
+The CMake module **probes the tool at configure time** and prints which of three routes it got, a
+technique worth keeping: when behaviour depends on how a tool was built, run it rather than reason
+about it. Also recorded: an `add_custom_command(OUTPUT)` with nothing depending on its output never
+runs, and the build succeeds with an empty directory.

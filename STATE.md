@@ -7,9 +7,76 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-08-15 (after Lesson 4.2 — 38 of 94 lessons)
+updated: 2026-08-15 (after Lesson 4.3 — 39 of 94 lessons)
 
 conventions:
+  shaders: ONE SOURCE, THREE BINARIES, AND SPIR-V IN THE MIDDLE. HLSL is the
+        course's shader language; SDL_shadercross is the sanctioned tool. The
+        pipeline has exactly TWO stages and only the first is a compiler:
+          HLSL --DXC (or glslc)--> SPIR-V --SPIRV-Cross--> MSL / DXIL / JSON
+        EVERYTHING RIGHT OF SPIR-V IS A TRANSLATION FROM IT, so a missing front
+        end costs the WHOLE toolchain, not one backend. Measured, one shader:
+        HLSL->SPIR-V 12.3 ms, SPIR-V->MSL 1.5, SPIR-V->JSON 1.5; four shaders,
+        all hops, 61.2 ms.
+        OFFLINE, NOT AT RUNTIME — and not for speed. 61 ms at every launch would
+        be invisible. The reasons are that runtime translation ships the compiler
+        (SPIRV-Cross alone is 6.7 MB here, DXC is an LLVM fork) and moves a
+        failure that would happen on YOUR machine to the user's.
+  shadercross-version: header says 3.0.0, package metadata says 3.0.0, and
+        UPSTREAM HAS NO TAGS AND NO RELEASES (checked 2026-08-15). So the
+        "pin an exact tag, never a branch" rule CMakeLists.txt applies to SDL
+        CANNOT be applied here — pin a COMMIT SHA. (This supersedes the earlier
+        "3.0.0-preview" note in LEARNINGS.md, which was imprecise.)
+        A BUILD WITHOUT DXC CANNOT READ HLSL AT ALL — not "cannot emit DXIL".
+        The version number does not reveal this; only running the tool does,
+        which is why cmake/Shaders.cmake PROBES at configure time. Clone with
+        --recursive or you get exactly that half-equipped build.
+  shader-spaces: THE REGISTER SPACE IS FIXED BY SDL, PER STAGE, and is not a
+        choice. vertex: t/s in space0, cbuffer in space1. fragment: t/s in
+        space2, cbuffer in space3. Verified on our own output with
+        `spirv-dis x.spv | grep DescriptorSet` — space1 -> set 1, space2 -> set 2,
+        space3 -> set 3, exactly as SDL_gpu.h's SPIR-V rules require.
+        A WRONG SPACE IS SILENT: valid HLSL, compiles, translates, loads, runs,
+        and reads whatever is bound at the slot named. Check with the
+        disassembler when you write the declaration, not from the picture later.
+  shader-semantics: EVERY non-system-value semantic is TEXCOORDn, numbered from
+        0, no gaps — SDL_gpu.h says it assumes this. SV_Position (clip space, the
+        vec4 from 2.10) and SV_Target0 (the pass's first colour target) are
+        system values and mean something; the TEXCOORD names do not.
+  shader-counts: SDL_GPUShaderCreateInfo WANTS FOUR COUNTS AND VALIDATES NONE OF
+        THEM. Measured on textured.frag (really 1 sampler, 1 uniform buffer):
+        correct -> created, too low -> created, too high -> created, 99 of each
+        -> CREATED. SDL's own FAQ names wrong counts as the commonest cause of a
+        shader that does not work, and nothing in the creation path catches it.
+        THEREFORE NEVER TYPE THEM. shadercross emits a JSON reflection with
+        exactly those four keys; read it, and REFUSE TO LOAD if it is missing
+        rather than defaulting to zero — a default of zero silently builds the
+        exact bug the file exists to prevent.
+  shader-entrypoint: THE ENTRY POINT IS A PROPERTY OF THE FORMAT, NOT THE SHADER.
+        Our HLSL declares `main`; SPIRV-Cross renames it to `main0` in MSL
+        because `main` is reserved there. SPIR-V keeps `main`. Measured:
+        "main0" -> created, "main" -> REFUSED, nonsense -> REFUSED. This one SDL
+        does check, at creation, with a message ("Creating MTLFunction failed").
+        Note the temperament: it checks the NAME and not the NUMBERS.
+  shader-compile-timing: SDL_CreateGPUShader IS NOT WHERE THE COMPILE HAPPENS.
+        Measured 0.008 ms per shader COLD (identical to the ninth run, so not a
+        cache); all four in 0.028 ms against 61.2 ms of build-time compilation.
+        Eight microseconds cannot be MSL -> machine code.
+        PREDICTION FOR 4.4, WRITTEN DOWN BEFORE IT IS CHECKED: the compile happens
+        at PIPELINE creation, because only there does the driver know the target
+        formats, depth/blend state and vertex layout the code must be specialised
+        to. That is 4.1's measured reason pipeline objects exist and what
+        SDL_gpu.h means by "precalculated rendering state".
+  build-probes: WHEN A TOOL'S BEHAVIOUR DEPENDS ON HOW IT WAS BUILT, RUN IT.
+        cmake/Shaders.cmake runs shadercross once at configure time on a real
+        shader and reads the exit code, then PRINTS which of three routes it got.
+        A version number cannot answer the question and a silent fallback is
+        discovered months later on a build machine.
+        add_custom_command(OUTPUT) DECLARES HOW TO MAKE A FILE; it does not build
+        one. With no target depending on the output, the rule never runs and the
+        build SUCCEEDS with an empty directory. Wrap outputs in a custom target
+        and add_dependencies() it — and note CMake target names cannot contain a
+        dot, so `triangle.vert` needs string(REPLACE "." "_" ...).
   gpu-async: A CALL RECORDS WORK; IT DOES NOT PERFORM IT. This is the whole of
         Module 4's difficulty and every new object exists to manage it. MEASURED:
         one command buffer of 48 blits of 2048^2 costs the CPU 0.1879 ms to
@@ -1357,8 +1424,42 @@ completed:
   ===> MODULE 3 COMPLETE — Stage A (the CPU software rasterizer) is DONE <===
   - 4.1  How GPUs Actually Work
   - 4.2  The SDL_GPU Mental Model
+  - 4.3  The Shader Toolchain
 
 capabilities:
+  - gfx 4.3: THE ENGINE CAN LOAD A SHADER. Two new files, four new HLSL sources,
+    one new CMake module, and no drawing whatsoever.
+    shaders/triangle.{vert,frag}.hlsl NEW — the pair 4.4 will draw with; no
+    resources at all, so every count is zero.
+    shaders/textured.{vert,frag}.hlsl NEW — one uniform buffer (space1) in the
+    vertex stage; texture + sampler (space2) and uniform buffer (space3) in the
+    fragment stage. They exist so the register rules appear in real code and the
+    counts are not all zero. `mul(clip_from_model, float4(pos, 1))` is our
+    column-vector convention from 2.5, and HLSL packs cbuffer matrices
+    column-major by default, so mat4's bytes cross untouched.
+    cmake/Shaders.cmake NEW — the first file in cmake/, which ARCHITECTURE has
+    listed as planned since Module 0. find_program for shadercross and glslc, a
+    loader-path fix for installs missing an rpath, a CONFIGURE-TIME CAPABILITY
+    PROBE, and add_hlsl_shader(target name stage) producing .spv/.msl/(.dxil)/.json.
+    src/gfx/gpu_shader.hpp/.cpp NEW — `shader_stage` (parity-checked against
+    SDL_GPUShaderStage), `shader_resources` (the four counts and NOTHING ELSE:
+    the type's edge is drawn at "what must be discovered"), `shader_target`
+    {format, extension, entrypoint}, `choose_shader_target(granted)`,
+    `shader_path()`, `parse_shader_reflection()` and the move-only `gpu_shader`.
+    THE JSON SCANNER IS ~30 LINES AND THAT IS DELIBERATE: this file is a build
+    artefact we generated seconds ago, not a trust boundary — the opposite
+    decision to 3.5's parse_obj, and for the opposite reason. It still REFUSES
+    (missing key, non-numeric, empty, and the "num_samplers" substring trap).
+    src/gfx/gpu_device.hpp/.cpp MODIFIED — create(nullptr, debug) now gives a
+    device with NO WINDOW. Not a degenerate case: SDL_gpu.h says offscreen
+    rendering with no window is supported, and it is what a shader harness wants.
+    The swapchain fields of the report stay at their defaults.
+  - demo 4.3: `engine --gpu` loads all four shaders, logs the format chosen, the
+    entry point, the byte count and the four resource counts per shader, and
+    draws ONE SMALL SQUARE PER SHADER at the top left — green for loaded, red for
+    not. The graph is still the HUD; text needs a font and a shader, and we have
+    only just produced the shaders. NOTHING IS DRAWN WITH THEM. A shader that
+    exists and a shader that draws are two different achievements.
   - gfx 4.2: THE ENGINE CAN TALK TO A GPU. Four new files, no shaders anywhere.
     src/gfx/gpu_device.hpp/.cpp NEW — `gpu_status` {ok, no_device,
     window_not_claimed}, `gpu_report` (driver, shader formats asked AND granted,
@@ -2307,6 +2408,9 @@ decisions:
 files:
   /: CLAUDE.md, README.md, ARCHITECTURE.md, LEARNINGS.md, PROMPT.md, LICENSE,
      .gitignore, CMakeLists.txt, STATE.md
+  cmake/: Shaders.cmake
+  shaders/: triangle.vert.hlsl, triangle.frag.hlsl,
+            textured.vert.hlsl, textured.frag.hlsl
   src/: main.cpp
   src/core/: input.hpp, input.cpp, clock.hpp, clock.cpp,
             fixed_step.hpp, fixed_step.cpp, profile.hpp, profile.cpp
@@ -2315,6 +2419,7 @@ files:
             framebuffer.hpp, framebuffer.cpp,
             gpu_device.hpp, gpu_device.cpp,
             gpu_present.hpp, gpu_present.cpp,
+            gpu_shader.hpp, gpu_shader.cpp,
             mesh.hpp, mesh.cpp, obj.hpp, obj.cpp,
             raster.hpp, raster.cpp, texture.hpp, texture.cpp, viewport.hpp
   src/math/: vec2.hpp, vec3.hpp, vec4.hpp, mat2.hpp, mat3.hpp, mat4.hpp, transform.hpp
@@ -2339,7 +2444,8 @@ files:
                  03-05-obj-loader.html, 03-06-normals-and-lambert.html,
                  03-07-specular-blinn-phong.html, 03-08-shading-models.html,
                  03-09-textures.html, 03-10-profiling-capstone.html,
-                 04-01-how-gpus-work.html, 04-02-sdl-gpu-model.html
+                 04-01-how-gpus-work.html, 04-02-sdl-gpu-model.html,
+                 04-03-shader-toolchain.html
   docs/shared/: course.css, course.js      (THE stylesheet + page script; one copy each)
   docs/_template/: lesson-template.html, README.md, apply-shared.py, check-page.js
   memory/: 2026-07-16.md, 2026-07-18.md, 2026-07-21.md, 2026-07-22.md,
@@ -2348,35 +2454,35 @@ files:
            2026-07-31.md, 2026-08-01.md, 2026-08-02.md, 2026-08-03.md,
            2026-08-04.md, 2026-08-05.md, 2026-08-06.md, 2026-08-07.md,
            2026-08-08.md, 2026-08-10.md, 2026-08-12.md,
-           2026-08-12-b.md, 2026-08-15.md
+           2026-08-12-b.md, 2026-08-15.md, 2026-08-15-b.md
   (retired: hello.cpp)
 
 
 
-next: 4.3 — The Shader Toolchain
-      (planned filename: docs/lessons/04-03-shader-toolchain.html — 4.2 links to
-      the index for now, so BOTH of 4.2's next links need repointing when it lands)
-      ONE HLSL SOURCE, THREE BINARY FORMATS, WIRED INTO CMAKE.
-        - THE HOOK IS ALREADY PLANTED: 4.2 §4.2 logs `shaders granted` and the
-          lesson says outright that 4.3 needs THAT answer — not the mask we asked
-          with — to decide which file to load. Pay it off explicitly.
-        - SDL_shadercross: HLSL -> SPIR-V / DXIL / MSL, offline via its CLI, wired
-          into CMake so a shader edit is a build step and not a ritual. Teach the
-          CLI first, then the CMake integration, then say plainly that runtime
-          cross-compilation exists and why we are not using it.
-        - BE HONEST THAT SDL_shadercross IS PRE-1.0 and versioned separately from
-          SDL itself; pin it the way CMakeLists.txt pins SDL (release tag, never a
-          branch), and say what to do when the pin needs moving.
-        - SDL_CreateGPUShader's create-info wants counts of samplers, uniform
-          buffers, storage buffers and storage textures, and the header's own FAQ
-          names getting those wrong as the commonest cause of "my shader does not
-          work". Reflection vs hand-counting is a real decision — make it, and
-          justify it.
-        - RESOURCE REGISTER LAYOUT IS BACKEND-SPECIFIC AND STRICT. Verify against
-          SDL_gpu.h's SDL_CreateGPUShader docs at the pinned release-3.4.12; do not
-          reconstruct it from memory.
-        - ENDS RUNNABLE, but NOT with a triangle — that is 4.4's celebration and
-          taking it early would spend the payoff twice. Compile the shaders, load
-          them, create the SDL_GPUShader objects, report what was produced for each
-          backend, and release them.
+next: 4.4 — The First Triangle
+      (planned filename: docs/lessons/04-04-first-triangle.html — 4.3 links to
+      the index for now, so BOTH of 4.3's next links need repointing when it lands)
+      THE PIPELINE OBJECT, AND THREE VERTICES.
+        - PAY OFF 4.3's WRITTEN-DOWN PREDICTION FIRST-CLASS: SDL_CreateGPUShader
+          measured 0.008 ms, which cannot include a compile. TIME
+          SDL_CreateGPUGraphicsPipeline and report whether the milliseconds show
+          up there. If they do, 4.1's argument about why pipeline objects exist
+          is confirmed end to end (4.1 measured the folk reason FALSE; 4.3
+          located the real work; 4.4 catches it). If they DO NOT, say so and go
+          looking — a prediction published in 4.3 must be answered in 4.4 either
+          way.
+        - SDL_GPUGraphicsPipelineCreateInfo, field by field, against 4.1's
+          fill_style: 9 top-level fields, 53 expanded. The colour target format
+          MUST equal the swapchain format 4.2 logged, or creation fails.
+        - The triangle's vertices arrive already in clip space (triangle.vert
+          applies no matrix), so 4.4 is about the API and 4.5 is about buffers.
+          Decide honestly whether to use a vertex buffer at all or to start with
+          SV_VertexID; the course's own shader already declares inputs, so a
+          vertex buffer is probably the honest path and 4.5 then deepens it.
+        - CULLING AND WINDING: conventions §7 fixes CCW-front/cull-back and
+          LEARNINGS records that a zero-initialised rasterizer state means
+          CULLMODE_NONE. Set both explicitly on the pipeline and say why.
+        - CELEBRATE IT PROPERLY (master prompt §5, Module 4): this is the first
+          pixel the GPU has ever computed for us. Compare it to Lesson 2.2's
+          first CPU triangle, side by side.
 ```

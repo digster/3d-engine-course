@@ -84,16 +84,47 @@ matching the clip space, since the projection matrix mediates between them anywa
 
 ---
 
-## SDL_shadercross is pre-1.0
+## SDL_shadercross has no releases — pin a commit (corrected in Lesson 4.3)
 
 `SDL_shadercross` (HLSL → SPIR-V / DXIL / MSL) is real, actively maintained by libsdl-org, and
-the sanctioned path for SDL_GPU shaders — but as of this writing it ships as **3.0.0-preview**.
-Present it honestly as preview software; its API may move. Pin the version. Do not imply
-stability it does not claim.
+the sanctioned path for SDL_GPU shaders. An earlier version of this note said it "ships as
+3.0.0-preview"; that was imprecise, and here is what was actually checked on 2026-08-15:
+
+| Asked | Answer |
+|---|---|
+| `SDL_shadercross.h` version macros | `3`, `0`, `0` — no preview suffix |
+| `sdl3-shadercross.pc` | `Version: 3.0.0` |
+| upstream `CMakeLists.txt` | `VERSION 3.0.0`, no suffix |
+| upstream tags | **none** |
+| upstream releases | **none** |
+
+So the version *string* is a plain 3.0.0, and there is nothing to pin it to. Our `CMakeLists.txt`
+pins SDL with `GIT_TAG release-3.4.12` and a comment reading "never a branch name" — that rule
+cannot be followed here, because no tag exists. **Pin a commit SHA**, which is exactly as
+reproducible.
 
 It is built on **SPIRV-Cross** (SPIR-V → high-level source) and **DirectXShaderCompiler** (HLSL
 → SPIR-V or DXIL), and offers both a runtime library and an offline CLI. We use the offline CLI
 via CMake, with runtime translation mentioned but not relied upon.
+
+### A build without DXC cannot read HLSL at all
+
+Not "cannot emit DXIL" — cannot read the source language. Both dependencies are optional at
+build time and a clone without `--recursive` produces exactly this. The machine Lesson 4.3 was
+written on has such a build:
+
+```
+ERROR: Failed to compile SPIR-V From HLSL: Shadercross was not built with DXC support,
+       cannot compile using DXC!
+```
+
+**The version number does not reveal this**, which is why `cmake/Shaders.cmake` runs the tool
+once at configure time on a real shader and reads the exit code. When a tool's behaviour depends
+on how it was built, run it; do not reason about it.
+
+The fallback for the first hop is `glslc -x hlsl` (shaderc), which compiles HLSL to SPIR-V and is
+already on many machines via the Vulkan SDK. You lose DXIL — that hop *is* DXC — and nothing
+else.
 
 ---
 
@@ -2869,3 +2900,43 @@ twice. Table 3 of Lesson 4.2 was retaken that way after the false result.
 **Two things to check before believing any vsynced measurement:** which display the window is on,
 and what that display's refresh rate is. `SDL_GetWindowSizeInPixels` and the swapchain dimensions
 will not tell you — they were identical in both runs.
+
+## Shader facts verified at SDL 3.4.12 + shadercross 3.0.0 (Lesson 4.3)
+
+| Fact | Value | How it was established |
+|---|---|---|
+| Register spaces → SPIR-V sets | `space1`→set 1, `space2`→set 2, `space3`→set 3 | `spirv-dis x.spv \| grep DescriptorSet` on our own compiled shaders. |
+| A wrong register space | **compiles, translates, loads and runs** | Nothing in the chain objects; the shader reads the slot it named. |
+| MSL entry point | **`main0`**, not `main` | SPIRV-Cross renames it; `main` is reserved in MSL. Read it in the generated `.msl`. |
+| Passing `"main"` to an MSL shader | **REFUSED** at creation | `SDL_CreateGPUShader` returns null, SDL logs `Creating MTLFunction failed`. |
+| Wrong resource counts | **accepted**, every variant | Including `num_samplers = 99` on a shader with one. Nothing validates them at creation. |
+| shadercross `-d JSON` | the four counts SDL wants, plus inputs/outputs | `{ "samplers": 1, "storage_textures": 0, "storage_buffers": 0, "uniform_buffers": 1, ... }` |
+| `SDL_SetGPUShaderName` | **does not exist** | Only buffers and textures have name setters; a shader is named via `SDL_PROP_GPU_SHADER_CREATE_NAME_STRING` at creation. Assuming the setter existed cost one compile error. |
+| `SDL_CreateGPUShader` cost | **0.008 ms** cold, all four in 0.028 ms | Against 61.2 ms of build-time compilation. Cold equals repeat, so not a cache. |
+
+**The API checks the name and not the numbers.** A wrong entry point fails immediately, at
+creation, with a message. A wrong resource count sails through and fails later, somewhere else,
+possibly on someone else's machine. They need opposite defences: get the name right, and never
+type the numbers at all — read them from the reflection file, and refuse to load when it is
+missing rather than defaulting to zero.
+
+**Where the compile happens is an open question, deliberately.** Eight microseconds cannot be MSL
+→ machine code. The prediction written into Lesson 4.3, for 4.4 to check: it happens at
+*pipeline* creation, because only there does the driver know the target formats, depth and blend
+state and vertex layout that the code must be specialised to. That is 4.1's measured reason
+pipeline objects exist and what SDL_gpu.h means by "precalculated rendering state".
+
+## Two CMake facts that cost time (Lesson 4.3)
+
+**`add_custom_command(OUTPUT ...)` declares a recipe, it does not schedule work.** With no target
+depending on the named output, the rule never runs — and the build *succeeds*, with an empty
+output directory and no diagnostic. Wrap the outputs in `add_custom_target` and
+`add_dependencies(exe that_target)`. Note also that CMake target names may not contain a dot, so
+a shader called `triangle.vert` needs `string(REPLACE "." "_" ...)` before it can name a target.
+
+**A tool can be installed and still not runnable.** `/usr/local/bin/shadercross` on this machine
+fails with `dyld: Library not loaded: @rpath/libSDL3_shadercross.0.dylib — no LC_RPATH's found`:
+the install placed the binary and its library correctly but recorded no search path.
+`cmake/Shaders.cmake` derives the prefix from the executable's own location and adds
+`<prefix>/lib` to the platform's loader variable (`DYLD_LIBRARY_PATH`, `LD_LIBRARY_PATH`, or
+`PATH`), which is harmless when it is unnecessary.

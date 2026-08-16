@@ -56,6 +56,7 @@ add_executable(engine
     src/gfx/framebuffer.cpp
     src/gfx/gpu_device.cpp
     src/gfx/gpu_present.cpp
+    src/gfx/gpu_shader.cpp
     src/gfx/mesh.cpp
     src/gfx/obj.cpp
     src/gfx/raster.cpp
@@ -94,6 +95,42 @@ add_custom_command(TARGET engine POST_BUILD
             "${CMAKE_CURRENT_SOURCE_DIR}/assets"
             "$<TARGET_FILE_DIR:engine>/assets"
     COMMENT "Copying assets/ next to the executable"
+    VERBATIM)
+
+# ---- Shaders ---------------------------------------------------------------
+# Lesson 4.3. One HLSL source per stage, compiled to every format this machine's
+# toolchain can produce — plus a JSON reflection file per shader, because
+# SDL_GPUShaderCreateInfo wants four resource counts and guessing them is the
+# first thing SDL_gpu.h's FAQ tells you not to do.
+#
+# cmake/Shaders.cmake probes the toolchain at configure time rather than assuming
+# it: SDL_shadercross can be built WITHOUT DirectXShaderCompiler, and such a build
+# cannot read HLSL at all. Read its configure-time message; it says which path
+# you got.
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+include(Shaders)
+
+add_hlsl_shader(engine triangle.vert vertex)
+add_hlsl_shader(engine triangle.frag fragment)
+add_hlsl_shader(engine textured.vert vertex)
+add_hlsl_shader(engine textured.frag fragment)
+
+# Compiled shaders live beside the executable for the same reason assets do: the
+# program finds them with SDL_GetBasePath(), never relative to the working
+# directory.
+#
+# This copy must not fail when the toolchain was missing and no shader was built.
+# It does not, and the reason is one line in cmake/Shaders.cmake: the output
+# directory is created at configure time, BEFORE the function decides whether it
+# can compile anything, so the worst case here is copying an empty directory. The
+# program then reports the absence at startup — a better error, in a lesson about
+# acquiring a tool, than a build that stops.
+add_custom_command(TARGET engine POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:engine>/shaders"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_CURRENT_BINARY_DIR}/shaders"
+            "$<TARGET_FILE_DIR:engine>/shaders"
+    COMMENT "Copying compiled shaders next to the executable"
     VERBATIM)
 
 # Our warning discipline (see cpp-style §9) — applied to OUR target only, never

@@ -789,6 +789,13 @@ td code { font-size: 0.82em; }
 /* ---- Further reading ----------------------------------------------------- */
 .reading { font-size: 0.92rem; }
 .reading li { margin-bottom: 0.6em; }
+
+/* A bare URL is one long unbreakable word, and a reading list is full of them.
+   At 375 px, `wiki.libsdl.org/SDL3/SDL_CreateGPUShader` measured 335 px and
+   pushed the whole page 7 px wide — a horizontal scrollbar on every page of the
+   course, caused by one link in one lesson. `anywhere` lets the browser break
+   inside the word only when it must, so nothing changes on a wide screen. */
+.reading a { overflow-wrap: anywhere; }
 .reading .src {
   font-family: var(--font-ui);
   font-size: 0.68rem;

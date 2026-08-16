@@ -31,6 +31,7 @@
 #include "gfx/framebuffer.hpp"
 #include "gfx/gpu_device.hpp"    // Lesson 4.2: the device, and the window claim
 #include "gfx/gpu_present.hpp"   // Lesson 4.2: a framebuffer, carried by the GPU
+#include "gfx/gpu_shader.hpp"    // Lesson 4.3: HLSL, compiled and on the device
 #include "gfx/light.hpp"
 #include "gfx/mesh.hpp"
 #include "gfx/obj.hpp"
@@ -3467,6 +3468,20 @@ void draw_budget(SDL_Renderer* r, const engine::profiler& prof, float wall_ns,
 // goes. Watching the orange band appear the instant you press [4] is the whole
 // lesson in one gesture.
 
+/// What Lesson 4.3's shader loading produced, in the form the picture needs.
+///
+/// The probe has no text — that needs a font and a shader, and 4.3 has only just
+/// produced the shaders — so "did the toolchain work" has to be a SHAPE. One
+/// square per shader is the smallest honest answer.
+struct shader_status
+{
+    static constexpr int k_max = 8;
+
+    int count = 0;
+    bool loaded[k_max] = {};
+    const char* names[k_max] = {};
+};
+
 /// One frame's worth of timings, in milliseconds. A ring of these is the graph.
 struct probe_sample
 {
@@ -3492,7 +3507,7 @@ struct probe_sample
 /// its output to the screen.
 void draw_probe_scene(engine::framebuffer& fb, float t,
                       const probe_sample* ring, int ring_count, int ring_head,
-                      bool fence_each_frame)
+                      bool fence_each_frame, const shader_status& shaders)
 {
     // ---- Background --------------------------------------------------------
     fb.clear(engine::pack_argb(10, 12, 18));
@@ -3528,6 +3543,25 @@ void draw_probe_scene(engine::framebuffer& fb, float t,
     engine::fill_style style;
     style.shade = engine::shading::vertex_colour;
     engine::fill_triangle(fb, v[0], v[1], v[2], style);
+
+    // ---- Lesson 4.3: one square per shader ---------------------------------
+    //
+    // Green means SDL_CreateGPUShader returned an object: the HLSL compiled, the
+    // right binary format was chosen for this device, the entry point was named
+    // correctly, and the resource counts came out of the reflection file. Red
+    // means one of those failed and the log says which.
+    //
+    // Nothing is DRAWN with them. A shader that exists and a shader that draws
+    // are two different achievements, and this lesson claims only the first.
+    for (int i = 0; i < shaders.count; ++i)
+    {
+        const int x = 8 + i * 14;
+        const Uint32 fill = shaders.loaded[i] ? engine::pack_argb(90, 200, 120)
+                                              : engine::pack_argb(235, 90, 80);
+        fb.fill_rect(x, 8, 10, 10, fill);
+        fb.fill_rect(x + 2, 10, 6, 6, engine::pack_argb(10, 12, 18));
+        fb.fill_rect(x + 3, 11, 4, 4, fill);
+    }
 
     // ---- The graph ---------------------------------------------------------
     //
@@ -3648,6 +3682,52 @@ int run_gpu_probe(SDL_Window* window)
     }
     SDL_Log("  present target  : %dx%d as %s",
             present.width(), present.height(), engine::name_of(present.format()));
+
+    // ---- Lesson 4.3: the shaders --------------------------------------------
+    //
+    // Loaded, reported, and held for the rest of the run — and NOT drawn with.
+    // Lesson 4.4 binds them into a pipeline; the achievement here is that four
+    // HLSL files became objects on the device, in a binary format chosen from
+    // what the device said it accepts, with resource counts read from the
+    // compiler's own reflection rather than guessed.
+    struct shader_load
+    {
+        const char* name;
+        engine::shader_stage stage;
+    };
+    const shader_load wanted[] = {
+        {"triangle.vert", engine::shader_stage::vertex},
+        {"triangle.frag", engine::shader_stage::fragment},
+        {"textured.vert", engine::shader_stage::vertex},
+        {"textured.frag", engine::shader_stage::fragment},
+    };
+
+    engine::gpu_shader shaders[shader_status::k_max];
+    shader_status shader_state;
+    shader_state.count = static_cast<int>(SDL_arraysize(wanted));
+
+    const engine::shader_target chosen = engine::choose_shader_target(gpu.report().granted);
+    SDL_Log("  shader format   : %s (.%s), entry point \"%s\"",
+            engine::name_of(chosen.format), chosen.extension, chosen.entrypoint);
+
+    for (int i = 0; i < shader_state.count; ++i)
+    {
+        shader_state.names[i] = wanted[i].name;
+        shader_state.loaded[i] = shaders[i].load(gpu, wanted[i].name, wanted[i].stage);
+        if (shader_state.loaded[i])
+        {
+            const engine::shader_resources& r = shaders[i].resources();
+            SDL_Log("    %-14s %5zu bytes   samplers %u  storage tex %u  storage buf %u"
+                    "  uniform buf %u",
+                    wanted[i].name, shaders[i].code_bytes(), r.samplers,
+                    r.storage_textures, r.storage_buffers, r.uniform_buffers);
+        }
+        else
+        {
+            SDL_Log("    %-14s NOT LOADED - see the message above", wanted[i].name);
+        }
+    }
+
     SDL_Log("Keys: [1] filter  [2] present mode  [3] frames in flight"
             "  [4] wait on a fence every frame  [Esc] quit");
     SDL_Log("Graph: green = software raster, cyan = recording, blue = waiting for a"
@@ -3742,7 +3822,7 @@ int run_gpu_probe(SDL_Window* window)
 
         // ---- 1. The picture, made on the CPU -------------------------------
         const Uint64 t_draw0 = SDL_GetPerformanceCounter();
-        draw_probe_scene(fb, spin, ring, k_ring, ring_head, fence_each_frame);
+        draw_probe_scene(fb, spin, ring, k_ring, ring_head, fence_each_frame, shader_state);
         const Uint64 t_draw1 = SDL_GetPerformanceCounter();
         sample.draw = ticks_to_ms(t_draw0, t_draw1);
 
@@ -3876,6 +3956,12 @@ int run_gpu_probe(SDL_Window* window)
     // in this order is not enough on its own — `present` is declared after `gpu`,
     // so C++ destroys it first anyway — but saying it explicitly makes the
     // dependency visible rather than accidental.
+    // Shaders first, then the present target, then the device — every GPU object
+    // must be released before the device that created it. The array's destructors
+    // would do this anyway (they are declared after `gpu`, so C++ destroys them
+    // first), and saying it explicitly is the same choice 4.2 made: a dependency
+    // that is visible is a dependency that survives the next edit.
+    for (engine::gpu_shader& shader : shaders) { shader.destroy(); }
     present.destroy();
     gpu.destroy();
     return 0;

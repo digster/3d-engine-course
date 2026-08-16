@@ -119,30 +119,43 @@ gpu_report gpu_device::create(SDL_Window* window, bool debug)
         return r;
     }
 
-    if (!SDL_ClaimWindowForGPUDevice(device_, window))
+    // A null window means "no window, and none wanted" — Lesson 4.3. SDL_gpu.h
+    // states that rendering entirely offscreen is supported, and a headless
+    // device is how the shader harness runs with nothing on screen.
+    if (window != nullptr)
     {
-        // Leave nothing half-built. A device with no window is a perfectly legal
-        // object — offscreen rendering uses one — but it is not what the caller
-        // asked for, and returning it would make `ok()` a lie.
-        SDL_Log("SDL_ClaimWindowForGPUDevice failed: %s", SDL_GetError());
-        SDL_DestroyGPUDevice(device_);
-        device_ = nullptr;
-        r.status = gpu_status::window_not_claimed;
-        report_ = r;
-        return r;
+        if (!SDL_ClaimWindowForGPUDevice(device_, window))
+        {
+            // Leave nothing half-built. A device with no window is a perfectly
+            // legal object, but it is not what THIS caller asked for, and
+            // returning it would make `ok()` a lie.
+            SDL_Log("SDL_ClaimWindowForGPUDevice failed: %s", SDL_GetError());
+            SDL_DestroyGPUDevice(device_);
+            device_ = nullptr;
+            r.status = gpu_status::window_not_claimed;
+            report_ = r;
+            return r;
+        }
+        window_ = window;
     }
-
-    window_ = window;
 
     // ---- Now ask the device what it is ------------------------------------
     r.status = gpu_status::ok;
     r.driver = SDL_GetGPUDeviceDriver(device_);
     r.granted = SDL_GetGPUShaderFormats(device_);
-    r.swapchain_format = SDL_GetGPUSwapchainTextureFormat(device_, window);
-    r.supports_immediate =
-        SDL_WindowSupportsGPUPresentMode(device_, window, SDL_GPU_PRESENTMODE_IMMEDIATE);
-    r.supports_mailbox =
-        SDL_WindowSupportsGPUPresentMode(device_, window, SDL_GPU_PRESENTMODE_MAILBOX);
+
+    // Everything below is a property of the PAIRING, so with no window there is
+    // nothing to ask and the fields keep their defaults. Asking anyway would mean
+    // calling swapchain functions with a null window, which is not a question
+    // with an answer.
+    if (window != nullptr)
+    {
+        r.swapchain_format = SDL_GetGPUSwapchainTextureFormat(device_, window);
+        r.supports_immediate =
+            SDL_WindowSupportsGPUPresentMode(device_, window, SDL_GPU_PRESENTMODE_IMMEDIATE);
+        r.supports_mailbox =
+            SDL_WindowSupportsGPUPresentMode(device_, window, SDL_GPU_PRESENTMODE_MAILBOX);
+    }
     r.frames_in_flight = 2;   // SDL's documented default at device creation
 
     report_ = r;

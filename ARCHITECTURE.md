@@ -53,7 +53,8 @@ inventing one — but without paying framework ceremony before it buys anything.
 ├── PROMPT.md               # prompt log
 ├── LICENSE                 # MIT, digster
 ├── CMakeLists.txt          # root build — written by the student in Module 0
-├── cmake/                  # helper modules (warnings, shader compilation)
+├── cmake/                  # helper modules                            [EXISTS from 4.3]
+│   └── Shaders.cmake       # HLSL -> spv/msl/dxil/json + a capability probe
 ├── memory/                 # dated session summaries
 ├── docs/                   # THE COURSE (see §3)
 ├── src/                    # the engine-to-be, single executable  [EXISTS from 0.5]
@@ -89,6 +90,8 @@ inventing one — but without paying framework ceremony before it buys anything.
 │   │   ├── gpu_device.cpp  #   gpu_report: every fact ASKED, none assumed
 │   │   ├── gpu_present.hpp # a framebuffer's device-side mirror       [EXISTS from 4.2]
 │   │   ├── gpu_present.cpp #   memcpy -> transfer buffer -> texture -> blit
+│   │   ├── gpu_shader.hpp  # a compiled shader + its reflection      [EXISTS from 4.3]
+│   │   ├── gpu_shader.cpp  #   format choice, the JSON counts, CreateGPUShader
 │   │   ├── raster.hpp      # which pixels a SHAPE is made of         [EXISTS from 2.1]
 │   │   ├── raster.cpp      # lines (2.1) + triangles (2.2) + shading (2.4)
 │   │   │                   # + depth (3.1) + perspective correction (3.2)
@@ -105,7 +108,11 @@ inventing one — but without paying framework ceremony before it buys anything.
 │   │   ├── pong.hpp        # the Module 1 checkpoint game
 │   │   └── pong.cpp
 │   └── platform/           # window + event pumping (Module 5; see the note below)
-├── shaders/                # HLSL sources (Module 4+). Compiled output is gitignored.
+├── shaders/                # HLSL sources (Module 4+)                   [EXISTS from 4.3]
+│   ├── triangle.vert.hlsl  # 4.4 draws with this pair; no resources at all
+│   ├── triangle.frag.hlsl
+│   ├── textured.vert.hlsl  # 4.6/4.7's pair — the register spaces, in real code
+│   └── textured.frag.hlsl  # Compiled output goes to build/ and is gitignored.
 ├── assets/                 # meshes, textures, fonts                   [EXISTS from 3.5]
 │   ├── cube.obj            # 20 readable lines; the index problem, by hand
 │   ├── twisted.obj         # …with one face reversed: 3.4's precondition, violated
@@ -759,6 +766,23 @@ Lesson 4.2's own contribution to the spine is that the *presentation* path is pr
 before any shader exists: framebuffer → transfer buffer → texture → blit → swapchain, checked
 bit-identical over a full image. When Module 4 ports the geometry, presentation is already
 known-good, so a black screen can only be the new code.
+
+**The shader toolchain, as of Lesson 4.3.** Shaders are authored once in HLSL and compiled at
+build time into every format the local toolchain can produce, plus a JSON reflection file:
+
+```
+shaders/x.hlsl  --DXC or glslc-->  build/shaders/x.spv  --SPIRV-Cross-->  x.msl, x.dxil, x.json
+```
+
+Two structural points. **SPIR-V is the hub** — everything else is translated from it, so a
+missing front end costs the whole toolchain rather than one backend. And **the build probes the
+tool at configure time** rather than assuming it: SDL_shadercross can be built without
+DirectXShaderCompiler, in which case it cannot read HLSL at all, and only running it reveals
+that. `cmake/Shaders.cmake` prints which of three routes it took.
+
+Compiled shaders land beside the executable, like assets, and are found with `SDL_GetBasePath()`.
+The four resource counts `SDL_GPUShaderCreateInfo` demands are read from the reflection file and
+never typed by hand — SDL validates none of them, so the file is the only check that exists.
 
 See [LEARNINGS.md](LEARNINGS.md) for the verified SDL_GPU convention table.
 
