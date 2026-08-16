@@ -2783,3 +2783,89 @@ Worth knowing the scale of what would have to be compiled: `engine::fill_style` 
 **96 combinations** (4 shading × 2 encode × 2 interpolation × 2 blend space × 3 traversal), every
 one of which our loop decides at runtime, per pixel. A GPU compiles the one you asked for. That
 is what a shader is.
+
+## SDL_GPU facts verified at release-3.4.12 (Lesson 4.2)
+
+Everything below came out of `scratch/verify_42.cpp` running against the pinned headers, not out
+of memory. Numbers are one machine's (Apple M4 Pro, Metal); the *facts* are not.
+
+| Fact | Value | How it was established |
+|---|---|---|
+| `SDL_GetGPUShaderFormats` ≠ the mask you passed | asked `SPIRV\|DXIL\|MSL` (0x1a), granted `MSL\|METALLIB` (0x30) | The mask says what the app can supply; the query says what the device accepts. Lesson 4.3 needs the second. |
+| A `_UNORM` clear | `byte == round(255 * v)`, exactly, at all five test values | Clear a 1×1 target, download it, read the byte. |
+| A `_UNORM_SRGB` clear | the sRGB encode — 0.5 → **188** where `_UNORM` gives 128 | Same method; matches our own `engine::linear_to_srgb_u8` to the code. |
+| The sRGB encode and alpha | **RGB only.** One clear of (.5,.5,.5,.5) gives R=188, A=128 | Alpha is coverage, not colour. Measured rather than assumed from the format's name. |
+| Out-of-range clear values | **clamped, not wrapped** (−0.5 → 0, 1.5 → 255) | Same method. |
+| `SDL_PIXELFORMAT_ARGB8888` in GPU terms | `SDL_GPU_TEXTUREFORMAT_B8G8R8A8_UNORM` (enum 12) | `SDL_GetGPUTextureFormatFromPixelFormat`. ARGB8888 is *packed*, so the byte order is endianness-dependent — ask, never reason. |
+| Upload → 1:1 nearest blit → download | **bit-identical**, 921,600 bytes | `memcmp` against the source framebuffer. |
+| `SDL_GPUTextureTransferInfo::pixels_per_row` | a count of **pixels**, not a pitch | Passing `width * 4` shears the image — Lesson 1.5's bug, four modules on. |
+| Reading a download before the fence | wrong **64 / 64** | Destination poisoned to `0xAB` first, so "not written yet" is visible. 0/64 wrong after `SDL_WaitForGPUFences`. |
+| `SDL_ReleaseGPU*(dev, NULL)` | **not documented as safe at 3.4.12** | The null-safety wording exists on `main` but not in the pinned release. `gpu_present.cpp` null-checks rather than relying on it. |
+
+**Present-mode support is per window, not per platform.** This Mac reports VSYNC and IMMEDIATE and
+**not MAILBOX**. A program that hard-codes MAILBOX works on the developer's Linux box and fails at
+startup elsewhere; `SDL_WindowSupportsGPUPresentMode` is the only honest way to find out.
+
+**A window is measured in points and a swapchain in pixels.** They agree only when the window was
+created *without* `SDL_WINDOW_HIGH_PIXEL_DENSITY` — which ours is, so both read 1280×720 here. Use
+the width and height `SDL_WaitAndAcquireGPUSwapchainTexture` fills in; they are out-parameters
+precisely so nobody has to compute them.
+
+## The cost of a GPU sync is the overlap you gave up, not the wait (Lesson 4.2)
+
+Two measurements, and shipping either one alone would teach something false.
+
+**GPU-bound** — 32 submissions of 8 blits at 1024², waiting on every fence against waiting only on
+the last: 9.438 ms vs 5.904 ms, **1.60×**. The pipelined figure works out to 0.184 ms per
+submission, which *is* the GPU time per submission — pipelined, the GPU never idles.
+
+**Display-bound** — the probe at 60 Hz, with and without a full fence wait every frame:
+
+| | draw | record | acquire | fence | frame |
+|---|---|---|---|---|---|
+| fence off | 0.301 | 0.226 | **16.002** | — | 16.667 |
+| fence on | 0.284 | 0.223 | **15.272** | 0.761 | 16.667 |
+
+The fence costs 0.761 ms and the acquire falls by 0.730. **The frame time does not change.** There
+was 16 ms of waiting already there, so a sync had nothing to take.
+
+That second row is why this bug ships: a renderer that syncs every frame measures perfectly on a
+simple scene and falls apart the moment the GPU becomes the limit.
+
+## A bandwidth figure above the bus is a broken benchmark, twice over (Lesson 4.2)
+
+The first version of §C reported **763 GB/s** on a machine whose memory bandwidth is **273**. Two
+independent causes, found in that order:
+
+1. **Elision.** Blitting src → dst 48 times is 48 copies of one answer, and the driver is entitled
+   to notice. Fixed by ping-ponging, so blit *i+1* reads what blit *i* wrote.
+2. **Lossless render-target compression.** Both textures were cleared to a *flat colour*, which
+   compresses to nearly nothing — the copy was real, the bytes were not. Fixed by filling with
+   xorshift noise.
+
+| texture | flat GB/s | noise GB/s | ratio |
+|---|---|---|---|
+| 512² | 129.6 | 124.9 | 1.04× |
+| 1024² | 466.0 | 399.9 | 1.17× |
+| 2048² | 686.3 | 309.1 | 2.22× |
+| 4096² | 797.9 | **277.6** | 2.87× |
+
+The noise column converges on the published 273 GB/s, which is the strongest evidence a benchmark
+can offer: it landed on a number nobody in the experiment chose. The flat column is not an error
+once you know what it is — it is the compressor, and it is why a cleared render target is cheaper
+to work with than a busy one. **Check that the number can be true** costs nothing and has now
+caught more errors in this course than any other habit.
+
+## A vsync measurement is only comparable on the same display (Lesson 4.2)
+
+An unchanged binary measured **120 fps** and then **60 fps** minutes apart, and for a few minutes
+this course believed it had found that fencing halves the frame rate. The window had opened on a
+different monitor: a 120 Hz laptop panel first, a 60 Hz external one afterwards.
+
+This is Lesson 3.10's rule about comparing numbers taken hours apart, on a new axis. The fix is
+the same: build the variants as separate binaries and run them **alternately in one session**,
+twice. Table 3 of Lesson 4.2 was retaken that way after the false result.
+
+**Two things to check before believing any vsynced measurement:** which display the window is on,
+and what that display's refresh rate is. `SDL_GetWindowSizeInPixels` and the swapchain dimensions
+will not tell you — they were identical in both runs.

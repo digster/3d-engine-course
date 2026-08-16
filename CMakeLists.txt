@@ -54,6 +54,8 @@ add_executable(engine
     src/gfx/colour.cpp
     src/gfx/depth_buffer.cpp
     src/gfx/framebuffer.cpp
+    src/gfx/gpu_device.cpp
+    src/gfx/gpu_present.cpp
     src/gfx/mesh.cpp
     src/gfx/obj.cpp
     src/gfx/raster.cpp

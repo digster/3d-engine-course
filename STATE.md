@@ -7,9 +7,89 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-08-12 (after Lesson 4.1 — MODULE 4 OPENS, 37 of 94 lessons)
+updated: 2026-08-15 (after Lesson 4.2 — 38 of 94 lessons)
 
 conventions:
+  gpu-async: A CALL RECORDS WORK; IT DOES NOT PERFORM IT. This is the whole of
+        Module 4's difficulty and every new object exists to manage it. MEASURED:
+        one command buffer of 48 blits of 2048^2 costs the CPU 0.1879 ms to
+        acquire + record + submit, and the work takes 4.7815 ms — 25.45x. One
+        SDL_BlitGPUTexture is RECORDED in 0.0038 ms.
+        THE FOUR NEW OBJECTS ARE ONE IDEA. device = the connection to another
+        processor; command buffer = a message to it; transfer buffer = shared
+        ground because its memory is not ours; fence = how we learn it finished.
+        A software rasterizer needed none of them because it was one machine.
+        FIVE OF THE NINE ARE RENAMES: framebuffer->swapchain texture,
+        texture+sampler->SDL_GPUTexture+SDL_GPUSampler, depth_buffer->depth-stencil
+        target, fill_style->SDL_GPUGraphicsPipeline, the fill loop->render pass +
+        draw. Checked, not asserted: verify_42 §G tests enumerator parity for
+        engine::filter, engine::address_mode and engine::cull_mode against SDL's.
+        KEEP THAT TEST — if SDL inserts an enumerator it must fail there, with a
+        line number, not later as a wrong picture.
+  gpu-fence: A FENCE IS ONE BIT FOR ONE SUBMISSION: not yet, or done. It does not
+        say how far along, does not order anything, and does not apply to the
+        device. READ BEFORE THE FENCE AND THE DATA IS WRONG — measured 64/64 with
+        the transfer buffer poisoned to 0xAB first, 0/64 after the wait.
+        THE COST OF A SYNC IS THE OVERLAP YOU GAVE UP, NOT THE DURATION OF THE
+        WAIT. Two regimes, both measured:
+          GPU-BOUND: 32 submissions waiting on every fence 9.438 ms, waiting only
+          on the last 5.904 ms -> 1.60x. The pipelined figure equals the GPU work
+          per submission exactly (0.184 ms), i.e. the GPU never idles.
+          DISPLAY-BOUND: a full sync every frame costs NOTHING MEASURABLE. Fence
+          0.761 ms, acquire falls 16.002 -> 15.272, frame unchanged at 16.667 ms.
+        THAT SECOND RESULT IS THE DANGEROUS ONE — it is why the bug ships.
+  gpu-cycle: `cycle = true` MEANS "IF THIS IS BUSY, GIVE ME A FRESH ONE". Resources
+        are ring buffers wearing the disguise of one object. Pass false on a
+        per-frame write and the corruption appears ONLY when the GPU falls behind:
+        a flickering band of the previous frame, on someone else's machine.
+        NEVER cycle a resource you intend to update only partially — cycling makes
+        the WHOLE resource undefined.
+  gpu-clear: THE CLEAR COLOUR IS ALWAYS LINEAR LIGHT; THE FORMAT DECIDES WHAT IS
+        STORED. Measured by clearing a 1x1 target and downloading the byte:
+          _UNORM      : byte = round(255*v) EXACTLY, at all five test values.
+          _UNORM_SRGB : byte = the sRGB encode, matching OUR engine::linear_to_srgb_u8
+                        to the code. 0.5 -> 128 and 0.5 -> 188 respectively.
+        Out of range is CLAMPED, not wrapped (-0.5 -> 0, 1.5 -> 255). The encode
+        applies to RGB ONLY — measured: clear (.5,.5,.5,.5) into _UNORM_SRGB gives
+        R=188, A=128. Alpha is coverage, not colour.
+        NEVER PRE-ENCODE A CLEAR COLOUR. Double encode = washed-out darks (128 ->
+        188 -> 226), which is Module 6's artifact arriving early.
+  gpu-present: A SWAPCHAIN TEXTURE IS BORROWED, NOT OWNED. Ask each frame, give it
+        back by submitting; write-only, cannot be sampled or read back; may be
+        NULL (minimised) and that is not an error. THE ACQUIRE IS WHERE A VSYNCED
+        FRAME WAITS — 16.002 of 16.667 ms measured. Not the submit; SDL_GPU has no
+        present call at all, presentation is implied by having acquired.
+        A WINDOW IS POINTS, A SWAPCHAIN IS PIXELS. They agree only without
+        SDL_WINDOW_HIGH_PIXEL_DENSITY. Use the sizes the acquire fills in.
+  gpu-memory: A TEXTURE CANNOT BE memcpy'd INTO — it is tiled (2x2 quads adjacent),
+        possibly swizzled, possibly compressed, and the scheme is vendor-specific.
+        Hence the transfer buffer: a plainly-laid-out region both processors can
+        see. THREE COPIES per frame, in TWO time frames: memcpy (now, CPU,
+        0.0028 ms at 320x180), upload (recorded), blit (recorded).
+        SDL_GPUTextureTransferInfo::pixels_per_row IS PIXELS, NOT A PITCH. Give it
+        width*4 and the image shears — Lesson 1.5's bug, four modules later.
+        SDL_PIXELFORMAT_ARGB8888 -> B8G8R8A8_UNORM (enum 12), ASKED via
+        SDL_GetGPUTextureFormatFromPixelFormat because the answer is
+        endianness-dependent. Round trip up-and-back is BIT-IDENTICAL.
+  gpu-flight: throughput = 1/max(C,G) for F>=2; latency ~ F*max(C,G). GOING FROM 1
+        TO 2 BUYS THROUGHPUT; 2 TO 3 BUYS ONLY LATENCY, which is why SDL's default
+        is 2. SDL_SetGPUAllowedFramesInFlight "will stall and flush the command
+        queue" — once, at a settings change, never per frame.
+  measurement (extends 3.10 §7e): CHECK THAT THE NUMBER CAN BE TRUE. The first
+        bandwidth figure in 4.2 was 763 GB/s on a machine whose bus is 273. TWO
+        causes, found in order: (1) ELISION — blitting src->dst N times is N copies
+        of one answer; fixed by ping-ponging so blit i+1 depends on blit i.
+        (2) LOSSLESS RENDER-TARGET COMPRESSION — both textures were cleared FLAT,
+        which compresses to nearly nothing, so the copy was real and the bytes were
+        not; fixed with xorshift noise. Flat vs noise: 1.04x at 512^2 rising to
+        2.87x at 4096^2, and noise converges on 277.6 GB/s against a published 273.
+        A MEASUREMENT THAT LANDS ON AN INDEPENDENTLY KNOWN NUMBER IS THE STRONGEST
+        EVIDENCE A BENCHMARK CAN OFFER.
+        NEW AXIS FOR THE SAME OLD RULE: the same binary measured 120 fps and then
+        60 fps minutes apart because the window opened on a DIFFERENT DISPLAY, and
+        produced a briefly exciting false conclusion that fencing halves the frame
+        rate. Table 3's numbers were retaken as three binaries run ALTERNATELY,
+        twice.
   world: right-handed, Y-up, -Z forward
   clip: left-handed, +Y up, z in [0,1] (SDL_GPU-fixed; projection absorbs the flip)
   sw-rasterizer: targets SDL_GPU's exact NDC (Module 4 port = API change, not maths change)
@@ -1276,8 +1356,38 @@ completed:
   - 3.10 Profiling, and the Module 3 Capstone
   ===> MODULE 3 COMPLETE — Stage A (the CPU software rasterizer) is DONE <===
   - 4.1  How GPUs Actually Work
+  - 4.2  The SDL_GPU Mental Model
 
 capabilities:
+  - gfx 4.2: THE ENGINE CAN TALK TO A GPU. Four new files, no shaders anywhere.
+    src/gfx/gpu_device.hpp/.cpp NEW — `gpu_status` {ok, no_device,
+    window_not_claimed}, `gpu_report` (driver, shader formats asked AND granted,
+    swapchain format, present-mode support, frames in flight — every field a query,
+    none an assumption), `gpu_device` owning BOTH the device and the window claim
+    because their orders are opposite (claim after create, release before destroy).
+    Move-only; two-phase create() returning the report, since a constructor cannot
+    fail without exceptions. handle() is public ON PURPOSE: the wrapper exists for
+    LIFETIME, not concealment — wrapping ninety SDL functions would hide the API
+    this course is about.
+    src/gfx/gpu_present.hpp/.cpp NEW — `blit_rect`, `fit_centred` (letterboxing by
+    integer cross-multiplication, no divide-by-zero, tested in verify_42 §H), and
+    `gpu_present_target` owning the device texture + its staging buffer.
+    upload() holds BOTH TIME FRAMES IN ONE FUNCTION: memcpy happens now, the copy
+    pass happens later. blit_onto() is outside any pass, because a blit IS a pass.
+    THE FORMAT IS DERIVED, NOT PICKED: byte layout from SDL, sRGB-ness matched to
+    the swapchain so a decode on read cancels an encode on write.
+  - demo 4.2: `engine --gpu` is a SECOND PROGRAM in the same binary. Forced, not
+    chosen: a window is owned by an SDL_GPU device OR an SDL_Renderer, and every
+    HUD in Modules 1-3 is SDL_RenderDebugText. Deleting the five demos [Tab] cycles to
+    make room was not a trade worth making, so the flag is parsed at the top of
+    main and the branch is taken before SDL_CreateRenderer is ever reached.
+    INVERTS AT 4.8, when the GPU path becomes the default.
+    Draws the Module 3 rasterizer's picture — checkerboard, spinning
+    vertex-coloured triangle — carried to the display by SDL_GPU, plus a live
+    stacked graph of draw / record / acquire / fence per frame built entirely from
+    framebuffer::fill_rect. THE GRAPH IS THE HUD, because text needs a font and a
+    shader and both are later. [1] filter, [2] present mode, [3] frames in flight,
+    [4] fence every frame.
   - gfx 4.1: THE RASTERIZER CAN IMITATE THE HARDWARE, AND COUNT WHAT THAT COSTS.
     src/gfx/raster.hpp — `traversal {scanline, quad, quad_debug}` and `quad_stats`
     {quads, shaded, covered, helpers, off_target, efficiency()}; fill_triangle
@@ -2203,6 +2313,8 @@ files:
   src/gfx/: clip.hpp, clip.cpp, colour.hpp, colour.cpp,
             depth_buffer.hpp, depth_buffer.cpp,
             framebuffer.hpp, framebuffer.cpp,
+            gpu_device.hpp, gpu_device.cpp,
+            gpu_present.hpp, gpu_present.cpp,
             mesh.hpp, mesh.cpp, obj.hpp, obj.cpp,
             raster.hpp, raster.cpp, texture.hpp, texture.cpp, viewport.hpp
   src/math/: vec2.hpp, vec3.hpp, vec4.hpp, mat2.hpp, mat3.hpp, mat4.hpp, transform.hpp
@@ -2227,7 +2339,7 @@ files:
                  03-05-obj-loader.html, 03-06-normals-and-lambert.html,
                  03-07-specular-blinn-phong.html, 03-08-shading-models.html,
                  03-09-textures.html, 03-10-profiling-capstone.html,
-                 04-01-how-gpus-work.html
+                 04-01-how-gpus-work.html, 04-02-sdl-gpu-model.html
   docs/shared/: course.css, course.js      (THE stylesheet + page script; one copy each)
   docs/_template/: lesson-template.html, README.md, apply-shared.py, check-page.js
   memory/: 2026-07-16.md, 2026-07-18.md, 2026-07-21.md, 2026-07-22.md,
@@ -2235,35 +2347,36 @@ files:
            2026-07-27.md, 2026-07-28.md, 2026-07-29.md, 2026-07-30.md,
            2026-07-31.md, 2026-08-01.md, 2026-08-02.md, 2026-08-03.md,
            2026-08-04.md, 2026-08-05.md, 2026-08-06.md, 2026-08-07.md,
-           2026-08-08.md, 2026-08-10.md, 2026-08-12.md
+           2026-08-08.md, 2026-08-10.md, 2026-08-12.md,
+           2026-08-12-b.md, 2026-08-15.md
   (retired: hello.cpp)
 
 
 
-next: 4.2 — The SDL_GPU Mental Model
-      (planned filename: docs/lessons/04-02-sdl-gpu-model.html — 4.1 links to the
-      index for now, so BOTH of 4.1's next links need repointing when it lands)
-      THE OBJECT MODEL, and every object mapped onto something that already exists.
-        - DEVICE (SDL_CreateGPUDevice + SDL_ClaimWindowForGPUDevice), SWAPCHAIN
-          (SDL_WaitAndAcquireGPUSwapchainTexture — the framebuffer, but the
-          display owns it and hands it back), COMMAND BUFFER (recording, not
-          executing: "commands only begin execution once SDL_SubmitGPUCommandBuffer
-          is called" — quote the header), RENDER PASS (up to four colour targets
-          and one depth target; ending one ends the render state), PIPELINE (4.1
-          §3.4 already made this argument — here it becomes a call), BUFFERS,
-          TEXTURES, SAMPLERS (3.9's sampler struct, field for field).
-        - THE ASYNCHRONY IS THE NEW IDEA. Everything in Modules 1-3 happened when
-          the call was made. From here, a call RECORDS work that happens later, on
-          another processor, and the fence/acquire dance exists because two
-          machines are involved. That, not the API surface, is what 4.2 has to
-          teach.
-        - MAP IT BACK: framebuffer -> swapchain texture, depth_buffer -> depth
-          attachment, fill_style -> graphics pipeline, texture+sampler ->
-          SDL_GPUTextureSamplerBinding (3.9 already named this).
-        - THE HONEST SIDEBAR ON WHY NOT OpenGL: legacy design, deprecated on
-          macOS, and SDL_GPU is SDL3's flagship path. Say what OpenGL is still good
-          for rather than dismissing it.
-        - VERIFY EVERY SIGNATURE AGAINST SDL_gpu.h (master prompt §10). The header
-          is at build/_deps/sdl3-src/include/SDL3/SDL_gpu.h at the pinned
-          release-3.4.12.
+next: 4.3 — The Shader Toolchain
+      (planned filename: docs/lessons/04-03-shader-toolchain.html — 4.2 links to
+      the index for now, so BOTH of 4.2's next links need repointing when it lands)
+      ONE HLSL SOURCE, THREE BINARY FORMATS, WIRED INTO CMAKE.
+        - THE HOOK IS ALREADY PLANTED: 4.2 §4.2 logs `shaders granted` and the
+          lesson says outright that 4.3 needs THAT answer — not the mask we asked
+          with — to decide which file to load. Pay it off explicitly.
+        - SDL_shadercross: HLSL -> SPIR-V / DXIL / MSL, offline via its CLI, wired
+          into CMake so a shader edit is a build step and not a ritual. Teach the
+          CLI first, then the CMake integration, then say plainly that runtime
+          cross-compilation exists and why we are not using it.
+        - BE HONEST THAT SDL_shadercross IS PRE-1.0 and versioned separately from
+          SDL itself; pin it the way CMakeLists.txt pins SDL (release tag, never a
+          branch), and say what to do when the pin needs moving.
+        - SDL_CreateGPUShader's create-info wants counts of samplers, uniform
+          buffers, storage buffers and storage textures, and the header's own FAQ
+          names getting those wrong as the commonest cause of "my shader does not
+          work". Reflection vs hand-counting is a real decision — make it, and
+          justify it.
+        - RESOURCE REGISTER LAYOUT IS BACKEND-SPECIFIC AND STRICT. Verify against
+          SDL_gpu.h's SDL_CreateGPUShader docs at the pinned release-3.4.12; do not
+          reconstruct it from memory.
+        - ENDS RUNNABLE, but NOT with a triangle — that is 4.4's celebration and
+          taking it early would spend the payoff twice. Compile the shaders, load
+          them, create the SDL_GPUShader objects, report what was produced for each
+          backend, and release them.
 ```

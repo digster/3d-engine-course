@@ -29,6 +29,8 @@
 #include "gfx/colour.hpp"
 #include "gfx/depth_buffer.hpp"
 #include "gfx/framebuffer.hpp"
+#include "gfx/gpu_device.hpp"    // Lesson 4.2: the device, and the window claim
+#include "gfx/gpu_present.hpp"   // Lesson 4.2: a framebuffer, carried by the GPU
 #include "gfx/light.hpp"
 #include "gfx/mesh.hpp"
 #include "gfx/obj.hpp"
@@ -3436,12 +3438,462 @@ void draw_budget(SDL_Renderer* r, const engine::profiler& prof, float wall_ns,
     return wanted;
 }
 
+// ============================================================================
+// LESSON 4.2 — THE GPU PROBE
+// ============================================================================
+//
+// A second program inside this executable, reached with `engine --gpu`, and the
+// reason it is separate rather than a key on the demo is a hard constraint
+// rather than a preference: **a window can be claimed by an SDL_GPU device or
+// driven by an SDL_Renderer, never both**. Everything above draws its HUD with
+// SDL_RenderDebugText, so taking the window for the GPU would delete the HUD from
+// every demo in Modules 1 to 3. Deleting working functionality to make room for
+// new functionality is the one thing this codebase has refused to do since 2.12.
+//
+// So: the window is created first, and whoever claims it does so before any
+// renderer exists. From Lesson 4.8 the GPU path becomes the default and this
+// branch inverts; until then the software demo is what `engine` means.
+//
+// WHAT IT DRAWS. The same software rasterizer, into the same 320x180 framebuffer,
+// carried to the display by SDL_GPU instead of SDL_Renderer. The picture is
+// deliberately unimpressive — a checkerboard, a spinning vertex-coloured triangle
+// from Lesson 2.4, and a live graph. Nothing here is a GPU *drawing* anything;
+// there are no shaders in this lesson, and a triangle drawn by hardware is
+// Lesson 4.4.
+//
+// WHAT THE GRAPH IS FOR. There is no text in this mode, because text needs a
+// font and a shader, and both are later. The graph is the HUD: each column is one
+// frame, and the three stacked bands are the three places a frame's time actually
+// goes. Watching the orange band appear the instant you press [4] is the whole
+// lesson in one gesture.
+
+/// One frame's worth of timings, in milliseconds. A ring of these is the graph.
+struct probe_sample
+{
+    float draw = 0.0f;      ///< the software rasterizer, on the CPU
+    float record = 0.0f;    ///< building the command buffer: upload, pass, blit
+    float acquire = 0.0f;   ///< blocked in WaitAndAcquireGPUSwapchainTexture
+    float fence = 0.0f;     ///< blocked in WaitForGPUFences, when [4] is on
+    float frame = 0.0f;     ///< wall clock, for scale
+};
+
+/// Milliseconds between two `SDL_GetPerformanceCounter` readings.
+[[nodiscard]] float ticks_to_ms(Uint64 a, Uint64 b)
+{
+    static const double period =
+        1000.0 / static_cast<double>(SDL_GetPerformanceFrequency());
+    return static_cast<float>(static_cast<double>(b - a) * period);
+}
+
+/// The probe's picture: a checkerboard, a spinning triangle, and the graph.
+///
+/// Everything in it is Module 1-3 machinery, called from a Module 4 program, and
+/// that is the point being made — the rasterizer did not change, only who carries
+/// its output to the screen.
+void draw_probe_scene(engine::framebuffer& fb, float t,
+                      const probe_sample* ring, int ring_count, int ring_head,
+                      bool fence_each_frame)
+{
+    // ---- Background --------------------------------------------------------
+    fb.clear(engine::pack_argb(10, 12, 18));
+    for (int y = 0; y < fb.height(); y += 16)
+    {
+        for (int x = 0; x < fb.width(); x += 16)
+        {
+            if (((x / 16) + (y / 16)) % 2 == 0) { continue; }
+            fb.fill_rect(x, y, 16, 16, engine::pack_argb(18, 21, 30));
+        }
+    }
+
+    // ---- A spinning triangle, Lesson 2.4's interpolation --------------------
+    const float cx = static_cast<float>(fb.width()) * 0.5f;
+    const float cy = 58.0f;
+    const float radius = 42.0f;
+    const float two_pi = 6.28318531f;
+
+    engine::vertex v[3];
+    const Uint32 corner_colour[3] = {
+        engine::pack_argb(235, 90, 80),
+        engine::pack_argb(90, 210, 130),
+        engine::pack_argb(95, 150, 240)
+    };
+    for (int i = 0; i < 3; ++i)
+    {
+        const float a = t + two_pi * static_cast<float>(i) / 3.0f;
+        v[i].x = static_cast<int>(cx + radius * std::cos(a));
+        v[i].y = static_cast<int>(cy + radius * std::sin(a));
+        v[i].colour = corner_colour[i];
+    }
+
+    engine::fill_style style;
+    style.shade = engine::shading::vertex_colour;
+    engine::fill_triangle(fb, v[0], v[1], v[2], style);
+
+    // ---- The graph ---------------------------------------------------------
+    //
+    // Bottom 64 rows. One column per frame, newest at the right, stacked bands:
+    //
+    //   pale grey   the whole frame, wall clock — the envelope everything fits in
+    //   green       CPU: the software rasterizer
+    //   cyan        CPU: recording commands (upload + render pass + blit)
+    //   blue        blocked waiting for a swapchain image — this is vsync
+    //   orange      blocked waiting on a fence — this is [4], and it is a choice
+    //
+    // Full height is 20 ms, with a line at the 60 Hz budget of 16.667 ms.
+    const int graph_h = 64;
+    const int graph_y = fb.height() - graph_h;
+    const float ms_full = 20.0f;
+    const float px_per_ms = static_cast<float>(graph_h) / ms_full;
+
+    fb.fill_rect(0, graph_y, fb.width(), graph_h, engine::pack_argb(6, 7, 11));
+
+    const auto bar = [&](int col, int from_ms_px, int height_px, Uint32 colour)
+    {
+        if (height_px <= 0) { return; }
+        fb.fill_rect(col, graph_y + graph_h - from_ms_px - height_px, 2, height_px, colour);
+    };
+
+    const int columns = fb.width() / 2;
+    for (int c = 0; c < columns; ++c)
+    {
+        // Oldest on the left. `ring_head` is where the NEXT sample will be
+        // written, so head-1 is the newest.
+        const int age = columns - 1 - c;
+        const int idx = ((ring_head - 1 - age) % ring_count + ring_count) % ring_count;
+        const probe_sample& s = ring[idx];
+        if (s.frame <= 0.0f) { continue; }
+
+        const int col = c * 2;
+        const auto px = [&](float ms) { return static_cast<int>(ms * px_per_ms); };
+
+        bar(col, 0, px(s.frame), engine::pack_argb(30, 33, 42));
+
+        int base = 0;
+        bar(col, base, px(s.draw), engine::pack_argb(90, 200, 120));
+        base += px(s.draw);
+        bar(col, base, px(s.record), engine::pack_argb(90, 205, 215));
+        base += px(s.record);
+        bar(col, base, px(s.acquire), engine::pack_argb(80, 130, 230));
+        base += px(s.acquire);
+        bar(col, base, px(s.fence), engine::pack_argb(240, 150, 70));
+    }
+
+    // The 60 Hz budget line, and a brighter one when [4] is on so the mode is
+    // visible in a screenshot without the log beside it.
+    const int budget_row = graph_y + graph_h - static_cast<int>(16.667f * px_per_ms);
+    for (int x = 0; x < fb.width(); x += 4)
+    {
+        fb.put_pixel(x, budget_row, engine::pack_argb(120, 124, 140));
+    }
+    if (fence_each_frame)
+    {
+        fb.fill_rect(0, graph_y, fb.width(), 1, engine::pack_argb(240, 150, 70));
+    }
+}
+
+/// Average a ring, ignoring the samples never written.
+[[nodiscard]] probe_sample average(const probe_sample* ring, int count)
+{
+    probe_sample sum;
+    int n = 0;
+    for (int i = 0; i < count; ++i)
+    {
+        if (ring[i].frame <= 0.0f) { continue; }
+        sum.draw += ring[i].draw;
+        sum.record += ring[i].record;
+        sum.acquire += ring[i].acquire;
+        sum.fence += ring[i].fence;
+        sum.frame += ring[i].frame;
+        ++n;
+    }
+    if (n == 0) { return sum; }
+    const float inv = 1.0f / static_cast<float>(n);
+    sum.draw *= inv;
+    sum.record *= inv;
+    sum.acquire *= inv;
+    sum.fence *= inv;
+    sum.frame *= inv;
+    return sum;
+}
+
+/// Lesson 4.2's runnable program. Returns a process exit code.
+int run_gpu_probe(SDL_Window* window)
+{
+    SDL_SetWindowTitle(window, "The SDL_GPU Mental Model - Lesson 4.2");
+
+    // ---- The device, and the claim -----------------------------------------
+    //
+    // debug = true. The validation layer costs real time and catches API misuse
+    // that would otherwise be a black window with no message at all, which is the
+    // worst failure mode in graphics programming. Lesson 4.9 turns it off to
+    // measure; until then, leave it on and read what it says.
+    engine::gpu_device gpu;
+    const engine::gpu_report rep = gpu.create(window, true);
+    if (!rep.ok())
+    {
+        SDL_Log("GPU probe cannot start: %s", engine::name_of(rep.status));
+        SDL_Log("Run without --gpu for the software demo.");
+        return 1;
+    }
+    gpu.log_report();
+
+    // ---- The framebuffer, and its device-side mirror ------------------------
+    engine::framebuffer fb(k_fb_width, k_fb_height);
+
+    engine::gpu_present_target present;
+    if (!present.create(gpu, fb.width(), fb.height()))
+    {
+        SDL_Log("GPU probe cannot start: the present target could not be created.");
+        return 1;
+    }
+    SDL_Log("  present target  : %dx%d as %s",
+            present.width(), present.height(), engine::name_of(present.format()));
+    SDL_Log("Keys: [1] filter  [2] present mode  [3] frames in flight"
+            "  [4] wait on a fence every frame  [Esc] quit");
+    SDL_Log("Graph: green = software raster, cyan = recording, blue = waiting for a"
+            " swapchain image, orange = waiting on a fence.");
+
+    engine::clock clk;
+    engine::input in;
+
+    constexpr int k_ring = 160;
+    probe_sample ring[k_ring] = {};
+    int ring_head = 0;
+
+    bool running = true;
+    bool logged_swapchain_size = false;
+    bool smooth = false;
+    bool fence_each_frame = false;
+    int present_mode_index = 0;
+    Uint32 frames_in_flight = 2;
+    float spin = 0.0f;
+    Uint64 last_log = SDL_GetTicks();
+
+    const SDL_GPUPresentMode modes[3] = {
+        SDL_GPU_PRESENTMODE_VSYNC,
+        SDL_GPU_PRESENTMODE_IMMEDIATE,
+        SDL_GPU_PRESENTMODE_MAILBOX
+    };
+    const char* mode_names[3] = {"VSYNC", "IMMEDIATE", "MAILBOX"};
+
+    while (running)
+    {
+        const Uint64 frame_t0 = SDL_GetPerformanceCounter();
+
+        SDL_Event event;
+        while (SDL_PollEvent(&event))
+        {
+            in.feed_event(event);
+            if (event.type == SDL_EVENT_QUIT) { running = false; }
+        }
+
+        clk.tick();
+        in.update();
+
+        if (in.key_pressed(SDL_SCANCODE_ESCAPE) || in.key_pressed(SDL_SCANCODE_Q))
+        {
+            running = false;
+        }
+
+        if (in.key_pressed(SDL_SCANCODE_1))
+        {
+            smooth = !smooth;
+            SDL_Log("[1] blit filter: %s", smooth ? "LINEAR" : "NEAREST");
+        }
+        if (in.key_pressed(SDL_SCANCODE_2))
+        {
+            // Try each mode in turn until one is accepted. Asking and being told
+            // no is the supported way to discover support, so a refusal here is
+            // information rather than an error.
+            for (int step = 1; step <= 3; ++step)
+            {
+                const int next = (present_mode_index + step) % 3;
+                if (gpu.set_present_mode(modes[next]))
+                {
+                    present_mode_index = next;
+                    SDL_Log("[2] present mode: %s", mode_names[next]);
+                    break;
+                }
+                SDL_Log("[2] present mode %s is not supported on this window",
+                        mode_names[next]);
+            }
+        }
+        if (in.key_pressed(SDL_SCANCODE_3))
+        {
+            const Uint32 next = frames_in_flight % 3 + 1;
+            if (gpu.set_frames_in_flight(next))
+            {
+                frames_in_flight = next;
+                SDL_Log("[3] frames in flight: %u  (this call stalls and flushes"
+                        " the queue, so the next frame's numbers are junk)", next);
+            }
+        }
+        if (in.key_pressed(SDL_SCANCODE_4))
+        {
+            fence_each_frame = !fence_each_frame;
+            SDL_Log("[4] wait on a fence every frame: %s%s",
+                    fence_each_frame ? "ON" : "off",
+                    fence_each_frame ? "  <- the CPU now finishes when the GPU does" : "");
+        }
+
+        spin += clk.dt() * 0.8f;
+
+        probe_sample sample;
+
+        // ---- 1. The picture, made on the CPU -------------------------------
+        const Uint64 t_draw0 = SDL_GetPerformanceCounter();
+        draw_probe_scene(fb, spin, ring, k_ring, ring_head, fence_each_frame);
+        const Uint64 t_draw1 = SDL_GetPerformanceCounter();
+        sample.draw = ticks_to_ms(t_draw0, t_draw1);
+
+        // ---- 2. Recording ---------------------------------------------------
+        //
+        // Nothing below this line executes when it is written. Every call appends
+        // to a list, and the list runs later, on another processor. That sentence
+        // is the whole of Lesson 4.2, and the graph is what it costs.
+        SDL_GPUCommandBuffer* cb = SDL_AcquireGPUCommandBuffer(gpu.handle());
+        if (cb == nullptr)
+        {
+            SDL_Log("SDL_AcquireGPUCommandBuffer failed: %s", SDL_GetError());
+            break;
+        }
+
+        const Uint64 t_rec0 = SDL_GetPerformanceCounter();
+        present.upload(cb, fb);
+        const Uint64 t_rec1 = SDL_GetPerformanceCounter();
+
+        // ---- 3. The swapchain image ----------------------------------------
+        //
+        // THIS is where a vsynced program actually waits, and putting the upload
+        // above it is not an accident: the copy is recorded into the command
+        // buffer while the display is still busy with the previous frame.
+        SDL_GPUTexture* swap = nullptr;
+        Uint32 swap_w = 0;
+        Uint32 swap_h = 0;
+        const Uint64 t_acq0 = SDL_GetPerformanceCounter();
+        const bool acquired =
+            SDL_WaitAndAcquireGPUSwapchainTexture(cb, window, &swap, &swap_w, &swap_h);
+        const Uint64 t_acq1 = SDL_GetPerformanceCounter();
+        sample.acquire = ticks_to_ms(t_acq0, t_acq1);
+
+        if (!acquired)
+        {
+            SDL_Log("SDL_WaitAndAcquireGPUSwapchainTexture failed: %s", SDL_GetError());
+            break;
+        }
+
+        // Printed once, because the relationship is not the one people assume. A
+        // window is measured in POINTS and a swapchain in PIXELS, and whether
+        // those are the same number depends on the window: without
+        // SDL_WINDOW_HIGH_PIXEL_DENSITY they agree even on a Retina display,
+        // which is what this window does and what the line below reports. Ask for
+        // that flag and they stop agreeing — and code that assumed they were equal
+        // then renders into a quarter of the window and looks for the bug in its
+        // projection matrix. The acquire hands back the real numbers; use those.
+        if (!logged_swapchain_size && swap != nullptr)
+        {
+            logged_swapchain_size = true;
+            int win_w = 0;
+            int win_h = 0;
+            SDL_GetWindowSize(window, &win_w, &win_h);
+            const engine::blit_rect fit =
+                engine::fit_centred(static_cast<Uint32>(fb.width()),
+                                    static_cast<Uint32>(fb.height()), swap_w, swap_h);
+            SDL_Log("  window %dx%d points -> swapchain %ux%u pixels;"
+                    " %dx%d framebuffer lands at %u,%u size %ux%u",
+                    win_w, win_h, swap_w, swap_h, fb.width(), fb.height(),
+                    fit.x, fit.y, fit.w, fit.h);
+        }
+
+        const Uint64 t_rec2 = SDL_GetPerformanceCounter();
+        if (swap != nullptr)
+        {
+            // A NULL texture is not an error — a minimised window has nothing to
+            // present to. The documented behaviour is to skip the frame, and
+            // submitting the command buffer anyway keeps the upload's cycling
+            // bookkeeping consistent.
+
+            // The render pass exists to CLEAR, and only to clear. It has no
+            // pipeline bound and issues no draw, which is legal and is exactly
+            // what a load op is for: clearing is not a draw, it is a property of
+            // beginning a pass. Without it the letterbox bars are undefined.
+            SDL_GPUColorTargetInfo target{};
+            target.texture = swap;
+            target.clear_color = SDL_FColor{0.02f, 0.02f, 0.03f, 1.0f};
+            target.load_op = SDL_GPU_LOADOP_CLEAR;
+            target.store_op = SDL_GPU_STOREOP_STORE;
+
+            SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(cb, &target, 1, nullptr);
+            SDL_EndGPURenderPass(pass);
+
+            // Outside the pass, because a blit is itself a pass.
+            present.blit_onto(cb, swap, swap_w, swap_h, smooth);
+        }
+        const Uint64 t_rec3 = SDL_GetPerformanceCounter();
+        sample.record = ticks_to_ms(t_rec0, t_rec1) + ticks_to_ms(t_rec2, t_rec3);
+
+        // ---- 4. Submit, and optionally wait ---------------------------------
+        if (fence_each_frame)
+        {
+            SDL_GPUFence* fence = SDL_SubmitGPUCommandBufferAndAcquireFence(cb);
+            if (fence == nullptr)
+            {
+                SDL_Log("submit failed: %s", SDL_GetError());
+                break;
+            }
+            const Uint64 t_f0 = SDL_GetPerformanceCounter();
+            SDL_WaitForGPUFences(gpu.handle(), true, &fence, 1);
+            const Uint64 t_f1 = SDL_GetPerformanceCounter();
+            SDL_ReleaseGPUFence(gpu.handle(), fence);
+            sample.fence = ticks_to_ms(t_f0, t_f1);
+        }
+        else if (!SDL_SubmitGPUCommandBuffer(cb))
+        {
+            SDL_Log("SDL_SubmitGPUCommandBuffer failed: %s", SDL_GetError());
+            break;
+        }
+
+        sample.frame = ticks_to_ms(frame_t0, SDL_GetPerformanceCounter());
+        ring[ring_head] = sample;
+        ring_head = (ring_head + 1) % k_ring;
+
+        // A log line a second, because the graph has no numbers on it.
+        const Uint64 now = SDL_GetTicks();
+        if (now - last_log >= 1000)
+        {
+            last_log = now;
+            const probe_sample avg = average(ring, k_ring);
+            SDL_Log("%5.1f fps | draw %5.3f  record %5.3f  acquire %6.3f  fence %6.3f"
+                    "  frame %6.3f ms | %s, %s, %u in flight, fence %s",
+                    clk.fps(), avg.draw, avg.record, avg.acquire, avg.fence, avg.frame,
+                    mode_names[present_mode_index], smooth ? "LINEAR" : "NEAREST",
+                    frames_in_flight, fence_each_frame ? "ON" : "off");
+        }
+    }
+
+    // Destruction order is the reverse of creation and it matters: the present
+    // target's texture belongs to the device, so it must go first. Writing them
+    // in this order is not enough on its own — `present` is declared after `gpu`,
+    // so C++ destroys it first anyway — but saying it explicitly makes the
+    // dependency visible rather than accidental.
+    present.destroy();
+    gpu.destroy();
+    return 0;
+}
+
 } // namespace
 
 int main(int argc, char* argv[])
 {
-    (void)argc;
-    (void)argv;
+    // Lesson 4.2. One flag, and the only one this executable has: `--gpu` runs the
+    // GPU probe instead of the software demo. A flag rather than a key, because
+    // the choice has to be made before the window belongs to anybody — see the
+    // comment above `run_gpu_probe`.
+    bool want_gpu = false;
+    for (int i = 1; i < argc; ++i)
+    {
+        if (SDL_strcmp(argv[i], "--gpu") == 0) { want_gpu = true; }
+    }
 
     if (!SDL_Init(SDL_INIT_VIDEO))
     {
@@ -3463,6 +3915,19 @@ int main(int argc, char* argv[])
         SDL_Quit();
         return 1;
     }
+
+    // Lesson 4.2's fork in the road, and it has to be here — before any renderer
+    // exists. A window can be claimed by an SDL_GPU device or driven by an
+    // SDL_Renderer, and there is no order of operations in which it is both.
+    if (want_gpu)
+    {
+        const int rc = run_gpu_probe(window);
+        SDL_DestroyWindow(window);
+        SDL_Quit();
+        return rc;
+    }
+
+    SDL_Log("Software demo. Run with --gpu for Lesson 4.2's GPU probe.");
 
     SDL_Renderer* renderer = SDL_CreateRenderer(window, nullptr);
     if (renderer == nullptr)

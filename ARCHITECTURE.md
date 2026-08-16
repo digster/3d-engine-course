@@ -85,6 +85,10 @@ inventing one — but without paying framework ceremony before it buys anything.
 │   │   ├── texture.hpp     # image + sampler; SDL_GPUSampler-shaped   [EXISTS from 3.9]
 │   │   │                   #   NOTE: raster.hpp includes this too — see §5
 │   │   ├── texture.cpp     # wrap_texel, nearest + bilinear sampling
+│   │   ├── gpu_device.hpp  # the SDL_GPU device + the window claim   [EXISTS from 4.2]
+│   │   ├── gpu_device.cpp  #   gpu_report: every fact ASKED, none assumed
+│   │   ├── gpu_present.hpp # a framebuffer's device-side mirror       [EXISTS from 4.2]
+│   │   ├── gpu_present.cpp #   memcpy -> transfer buffer -> texture -> blit
 │   │   ├── raster.hpp      # which pixels a SHAPE is made of         [EXISTS from 2.1]
 │   │   ├── raster.cpp      # lines (2.1) + triangles (2.2) + shading (2.4)
 │   │   │                   # + depth (3.1) + perspective correction (3.2)
@@ -736,6 +740,25 @@ need re-deriving exactly when the student is already loaded down with a new API.
 The cost, stated honestly in the lessons: our projection matrix is the D3D-style `[0,1]`-depth
 one, so it differs in the third row from the matrix in most tutorials the student will find
 online. Paid gladly.
+
+**Where the two stages meet, as of Lesson 4.2.** Stage B has started, and the two stages coexist
+inside one executable rather than replacing one another:
+
+```
+./engine          Stage A — the software demo of Modules 1–3, SDL_Renderer, HUD and all
+./engine --gpu    Stage B — the GPU probe: the same framebuffer, carried by SDL_GPU
+```
+
+The split is **forced, not stylistic**. A window can be claimed by an SDL_GPU device *or* driven
+by an `SDL_Renderer`, never both, and every HUD in Modules 1–3 is drawn with
+`SDL_RenderDebugText`. So the flag is parsed at the top of `main` and the branch is taken before
+`SDL_CreateRenderer` is reached. **This inverts at Lesson 4.8**, when the ported scene makes the
+GPU path the default; the flag is scaffolding with a known removal date.
+
+Lesson 4.2's own contribution to the spine is that the *presentation* path is proven on the GPU
+before any shader exists: framebuffer → transfer buffer → texture → blit → swapchain, checked
+bit-identical over a full image. When Module 4 ports the geometry, presentation is already
+known-good, so a black screen can only be the new code.
 
 See [LEARNINGS.md](LEARNINGS.md) for the verified SDL_GPU convention table.
 

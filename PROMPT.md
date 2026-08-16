@@ -1316,3 +1316,61 @@ binaries differing only by the extraction, run alternately in one session: minim
 faster, medians say 1% slower — no measurable difference, and the 10% was session drift visible in
 the data as both columns warming up. That broke 3.10's own pitfall ("never compare two numbers
 taken hours apart") within a day, on the code that lesson was written about. 3.10's numbers stand.
+
+## 2026-08-15 — "Based on the STATE and the project's claude instructions, work on the next."
+
+Resumed from `STATE.md`, whose `next:` named **4.2 — The SDL_GPU Mental Model**. Produced the
+lesson, four new source files, and the measurements behind every claim in it.
+
+### The sentence the lesson turns on
+
+**A call records work; it does not perform it.** Measured: 0.1879 ms of CPU calls describe
+4.7815 ms of GPU work — **25.45×** — so the processor that issued the work is free for 96% of the
+time it takes. Every object that is new in SDL_GPU exists to manage that one fact: the device is
+the connection to a second processor, the command buffer the message, the transfer buffer the
+shared ground, the fence the acknowledgement. The other five of the nine are renames of things
+Modules 1–3 already built, and `verify_42` §G *tests* that claim rather than asserting it.
+
+### The result that contradicts the advice
+
+A full GPU sync every frame — the thing every guide forbids — costs **nothing measurable** when the
+frame is display-bound: fence 0.761 ms, acquire falls 16.002 → 15.272, frame unchanged at 16.667.
+On a GPU-bound workload the same sync costs **1.60×**. So the rule is neither "syncing is slow" nor
+"syncing is free": **a sync costs the overlap you gave up**, and which regime you are in is a
+measurement. The first version is why the bug reaches production — it measures perfectly until the
+GPU becomes the limit.
+
+### Settled three modules before Module 6 argues it
+
+An `SDL_FColor` clear of 0.5 lands as byte **128** into a `_UNORM` target and **188** into a
+`_UNORM_SRGB` one, and the second matches *our own* `linear_to_srgb_u8` at all five test values.
+The encode reaches RGB only — one clear of (.5,.5,.5,.5) gives R=188, A=128 — and out-of-range
+values are clamped, not wrapped. Hence the rule: **the clear colour is always linear light and the
+format decides what is stored**, which is also why `gpu_present_target` picks its texture format to
+match the swapchain's sRGB-ness. Get that wrong and the picture is washed out.
+
+### The benchmark that could not be true
+
+The first bandwidth figure was **763 GB/s on a machine whose bus is 273**. Two independent causes,
+found in that order: the driver elided 48 identical blits (fixed by ping-ponging so each depends on
+the last), and both textures were cleared *flat*, which lossless render-target compression squeezes
+to nearly nothing (fixed with xorshift noise). After both, 4096² measures **277.6 GB/s** against a
+published 273 — a benchmark landing on a number nobody in the experiment chose. Kept in the lesson
+with both reasons, because "check that the number can be true" is the transferable part.
+
+### The mistake this session records
+
+An unchanged binary measured **120 fps and then 60 fps** minutes apart, briefly producing the very
+exciting and completely false conclusion that fencing halves the frame rate. The window had opened
+on a different display. That is 3.10's rule about comparing numbers taken hours apart, on a new
+axis — and the fix was the same one 4.1 used: three binaries, run alternately in one session,
+twice. It is now a pitfall in the lesson and an entry in LEARNINGS.md.
+
+### What was built
+
+`src/gfx/gpu_device.{hpp,cpp}` and `src/gfx/gpu_present.{hpp,cpp}` (new), `src/main.cpp` and
+`CMakeLists.txt` (modified). `engine --gpu` runs a second program in the same binary — forced, not
+chosen, because a window cannot be owned by both an SDL_GPU device and an `SDL_Renderer`, and every
+HUD in Modules 1–3 is `SDL_RenderDebugText`. It puts the software rasterizer's picture on screen
+carried entirely by SDL_GPU, with no shader anywhere, plus a live frame graph drawn with
+`fill_rect` because text needs a font and a shader and both are later lessons.

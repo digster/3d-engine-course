@@ -81,6 +81,7 @@
       <li><a href="#textures">Textures and sampling</a></li>
       <li><a href="#measurement">Measurement</a></li>
       <li><a href="#gpu">The GPU execution model</a></li>
+      <li><a href="#gpu-api">Talking to the GPU &mdash; the SDL_GPU contract</a></li>
       <li><a href="#units">Units and angles</a></li>
       <li><a href="#simulation">The simulation contract</a></li>
       <li><a href="#colour">Colour and diagram conventions</a></li>
@@ -1574,6 +1575,20 @@
     fetches overlap in one and sit in a dependency chain in the other.
   </p>
 
+  <p>
+    Lesson 4.2 adds a third, which costs nothing and has caught more errors than either:
+    <strong>check that the number can be true.</strong> Bandwidth has a published ceiling; frame
+    time has a floor set by the refresh rate; a speedup cannot exceed the fraction of time you
+    changed. 4.2&rsquo;s first bandwidth figure was <strong>763&nbsp;GB/s on a machine whose bus
+    is 273</strong>, and the two causes behind it are both worth knowing: the driver had elided
+    repeated identical work, and the textures were cleared <em>flat</em>, which lossless
+    render-target compression squeezes to nearly nothing &mdash; so the copy was real and the
+    bytes were not. Ping-ponging fixed the first and incompressible noise the second, after which
+    the figure lands on 277.6 against a published 273. And the same lesson found a new axis for
+    3.10&rsquo;s rule about comparing numbers taken hours apart: an unchanged binary measured
+    120&nbsp;fps and then 60, because the window had opened on a <em>different display</em>.
+  </p>
+
   <h2 id="gpu"><span class="num">7f</span>The GPU execution model</h2>
 
   <p>
@@ -1645,6 +1660,97 @@
     draws nothing. Real hardware rasterizes at roughly 1/256 of a pixel and therefore draws them,
     at efficiencies below the 25% our smallest case reports. The right-hand end of every
     efficiency table in this course is the <em>optimistic</em> case.
+  </p>
+
+  <h2 id="gpu-api"><span class="num">7g</span>Talking to the GPU &mdash; the SDL_GPU contract</h2>
+
+  <p>
+    Established in Lesson 4.2. Where &sect;7f is how the hardware works, this is how we
+    <em>address</em> it, and the whole section follows from one sentence: <strong>a call records
+    work; it does not perform it.</strong> Every number below was measured on this course's
+    machine, and the harness that produced them is <code>scratch/verify_42.cpp</code>.
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>Rule</th><th>Value</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td>What a call does</td>
+            <td><strong>records, does not execute</strong></td>
+            <td>Measured: 0.1879&nbsp;ms of CPU calls &mdash; acquire, 48 blits, submit &mdash;
+                describe 4.7815&nbsp;ms of GPU work, a factor of <strong>25.45</strong>. The CPU
+                is free for 96% of the time the work takes, and an engine that does not use that
+                time is discarding most of its frame.</td></tr>
+        <tr><td>When a result may be read</td>
+            <td><strong>after the fence, never before</strong></td>
+            <td>A fence is one bit for one submission: not yet, or done. Reading a download
+                before waiting was wrong <strong>64 of 64</strong> trials with the destination
+                poisoned to <code>0xAB</code> first, and 0 of 64 after. It says nothing about
+                ordering or progress &mdash; only that this submission finished.</td></tr>
+        <tr><td>What a sync costs</td>
+            <td><strong>the overlap, not the wait</strong></td>
+            <td>Two regimes, both measured. Display-bound: a full sync every frame costs
+                <em>nothing</em> &mdash; fence 0.761&nbsp;ms, acquire falls 16.002&nbsp;&rarr;&nbsp;15.272,
+                frame unchanged at 16.667. GPU-bound: <strong>1.60&times;</strong>. Never learn
+                one of those without the other.</td></tr>
+        <tr><td>Writing a per-frame resource</td>
+            <td><code>cycle = true</code></td>
+            <td>&ldquo;If this is busy, give me a fresh one.&rdquo; Pass <code>false</code> and the
+                corruption appears only when the GPU falls behind &mdash; a flickering band of
+                last frame, on someone else's machine. Never cycle a resource you intend to
+                update only partially: cycling makes the <em>whole</em> resource undefined.</td></tr>
+        <tr><td>A clear colour</td>
+            <td><strong>always linear light</strong></td>
+            <td>The format decides what is stored. Measured: 0.5 &rarr; <strong>128</strong> into
+                <code>_UNORM</code> (exactly <code>round(255v)</code>) and <strong>188</strong>
+                into <code>_UNORM_SRGB</code>, matching our own
+                <code>linear_to_srgb_u8</code>. RGB only &mdash; alpha stays linear (188 / 128
+                from one clear). Out of range is clamped, not wrapped. <strong>Never
+                pre-encode.</strong></td></tr>
+        <tr><td>The swapchain texture</td>
+            <td><strong>borrowed, write-only, may be NULL</strong></td>
+            <td>Asked for each frame, returned by submitting; cannot be sampled or read back;
+                <code>NULL</code> on a minimised window is not an error. The acquire is where a
+                vsynced frame waits &mdash; 16.002 of 16.667&nbsp;ms &mdash; not the submit, and
+                SDL_GPU has no present call at all.</td></tr>
+        <tr><td>Window size vs swapchain size</td>
+            <td><strong>points vs pixels</strong></td>
+            <td>Equal only without <code>SDL_WINDOW_HIGH_PIXEL_DENSITY</code>. Use the width and
+                height the acquire fills in; assuming they match renders into a quarter of the
+                window and looks like a projection bug.</td></tr>
+        <tr><td>Getting pixels to the device</td>
+            <td><strong>always via a transfer buffer</strong></td>
+            <td>A texture is tiled, possibly swizzled, possibly compressed, in a layout only the
+                driver knows &mdash; so there is no pointer to it and cannot be. Three copies per
+                frame in two time frames: <code>memcpy</code> (now), upload (recorded), blit
+                (recorded). <code>pixels_per_row</code> is <strong>pixels, not a pitch</strong>;
+                giving it <code>width&nbsp;*&nbsp;4</code> shears the image, exactly as in Lesson
+                1.5.</td></tr>
+        <tr><td>Frames in flight</td>
+            <td><strong>2</strong> (SDL's default; 1&ndash;3 allowed)</td>
+            <td>throughput = 1/max(C,&nbsp;G) once F&nbsp;&ge;&nbsp;2; latency &asymp;
+                F&nbsp;&times;&nbsp;max(C,&nbsp;G). Going from 1 to 2 buys throughput; 2 to 3 buys
+                only latency. The call &ldquo;will stall and flush the command queue&rdquo; &mdash;
+                once, at a settings change, never per frame.</td></tr>
+        <tr><td>Shader formats</td>
+            <td><strong>asked &ne; granted</strong></td>
+            <td>The mask passed to <code>SDL_CreateGPUDevice</code> says what we can supply;
+                <code>SDL_GetGPUShaderFormats</code> answers what the device accepts. Measured
+                here: asked <code>SPIRV&nbsp;|&nbsp;DXIL&nbsp;|&nbsp;MSL</code>, granted
+                <code>MSL&nbsp;|&nbsp;METALLIB</code>. Lesson 4.3 needs the second.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    The object model itself is <strong>five renames and four new ideas</strong>, and the four are
+    one idea wearing four names: there are two processors now. A device is the connection, a
+    command buffer the message, a transfer buffer the shared ground, a fence the acknowledgement.
+    That the other five are renames is a <em>test</em>, not a claim &mdash;
+    <code>verify_42</code>&nbsp;&sect;G asserts that <code>engine::filter</code>,
+    <code>engine::address_mode</code> and <code>engine::cull_mode</code> still have SDL's
+    enumerator values, so an inserted enumerator fails there rather than as a wrong picture six
+    lessons later.
   </p>
 
   <h2 id="units"><span class="num">8</span>Units and angles</h2>

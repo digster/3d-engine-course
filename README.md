@@ -7,7 +7,7 @@ There is no engine to download here and no framework doing the interesting parts
 write the math library, the rasterizer, the ECS, the renderer, the physics, and the editor. By
 the end you have a real engine and a game built on its public API.
 
-**Status:** curriculum and conventions published; lessons in progress — **Modules 0–3 are complete** and Module 4 has opened (37 of 94 lessons), so the CPU software rasterizer is finished end to end and the GPU arc has begun. Start at
+**Status:** curriculum and conventions published; lessons in progress — **Modules 0–3 are complete** and Module 4 is under way (38 of 94 lessons), so the CPU software rasterizer is finished end to end and the engine now talks to a real GPU. Start at
 [`docs/index.html`](docs/index.html).
 
 ---
@@ -246,6 +246,23 @@ expensive" has always actually meant. Why a GPU is *slower per lane* than your C
 anyway, why a branch costs 1.93× when it is incoherent and nothing when it is not, and why render
 state lives in an immutable pipeline object — with the usual explanation for that measured and
 found **false** — is [Lesson 4.1](docs/lessons/04-01-how-gpus-work.html).
+
+Now run it a second way: `./engine --gpu`. Same window, same 320×180 framebuffer, same software
+rasterizer — but nothing on screen came through `SDL_Renderer` any more. The picture is uploaded
+to a **GPU texture** through a transfer buffer and **blitted** onto the swapchain, with no shader
+anywhere in the program, and the bottom strip is a live graph of where the frame's time went:
+green for the rasterizer, cyan for recording commands, blue for waiting on the display. Almost the
+whole column is blue, which is the first thing worth knowing about GPU programming.
+
+Press <kbd>4</kbd>. A full GPU sync — a fence wait — now happens every single frame, the thing
+every guide tells you never to do. An orange band appears and **the columns do not get taller**:
+the fence costs 0.761 ms, the acquire falls by 0.730, and the frame is unchanged at 16.667. There
+was 16 ms of waiting already there for a sync to hide in. Make the GPU the limit instead and the
+same sync costs **1.60×**, because a sync costs you the overlap you had, not the duration of the
+wait. That, plus why reading a download before the fence is wrong **64 times out of 64**, why an
+`SDL_FColor` of 0.5 lands as byte 128 or 188 depending only on the target's format, and a
+benchmark that reported **763 GB/s on a 273 GB/s bus** (kept in the lesson, with both reasons it
+was wrong), is [Lesson 4.2](docs/lessons/04-02-sdl-gpu-model.html).
 
 Then hold <kbd>=</kbd> on that floor and walk *into* it. <kbd>K</kbd> cycles what happens to a
 triangle with a corner behind your eye: **clip** it (correct), **drop** it (the ground vanishes —

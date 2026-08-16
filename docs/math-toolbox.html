@@ -95,6 +95,7 @@
       <li><a href="#intersection">Geometry and intersection</a></li>
       <li><a href="#meshes">Measuring a mesh</a></li>
       <li><a href="#performance">Reasoning about cost</a></li>
+      <li><a href="#pipelining">Two processors, overlapped</a></li>
       <li><a href="#coming">Coming as the course proceeds</a></li>
     </ol>
   </details>
@@ -1929,6 +1930,62 @@
       And measure the error <em>before</em> quantisation. Once rounded to an 8-bit code, an error
       of 0.0115 and an error of 0.4022 both report &ldquo;worst case 1 code&rdquo; and look
       identical &mdash; while at 16 bits they are 3.0 and 103.4.
+    </p>
+  </div>
+
+  <h2 id="pipelining"><span class="num">8b</span>Two processors, overlapped</h2>
+
+  <div class="card">
+    <h3>Frames in flight &mdash; throughput against latency</h3>
+    <p>
+      Lesson 4.2. Let the CPU take <em>C</em> milliseconds to prepare a frame and the GPU take
+      <em>G</em> to execute it, with <em>F</em> frames allowed to be pending at once.
+    </p>
+    <div class="eq">
+      \[ \text{throughput} = \frac{1}{\max(C,\,G)} \;\;(F \ge 2), \qquad
+         \text{latency} \approx F \cdot \max(C,\,G) \]
+      <span class="eq-plain">throughput = 1 / max(C, G) once F &ge; 2; latency &asymp; F &times; max(C, G)</span>
+    </div>
+    <p>
+      In words: once two frames may be in flight, the CPU and GPU overlap and the frame rate is
+      set by whichever is slower &mdash; but the picture on screen was prepared <em>F</em> frames
+      ago. With <code>C = 4</code> and <code>G = 6</code>: <em>F</em>&nbsp;=&nbsp;1 gives
+      <code>4 + 6 = 10&nbsp;ms</code> a frame; <em>F</em>&nbsp;=&nbsp;2 gives 6&nbsp;ms, a
+      <strong>1.67&times;</strong> gain; <em>F</em>&nbsp;=&nbsp;3 gives 6&nbsp;ms still, and
+      18&nbsp;ms of latency. <strong>The second frame buys throughput; the third buys only
+      delay.</strong>
+    </p>
+    <p>
+      The same arithmetic explains why a synchronisation is sometimes free. Waiting costs you the
+      overlap, so on a frame that was already waiting for the display there is nothing to lose
+      &mdash; measured at 0.000&nbsp;ms of frame time for a full GPU sync &mdash; and on a
+      GPU-bound one there is nothing else to do &mdash; measured at 1.60&times;.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>Fitting a rectangle inside a rectangle</h3>
+    <p>
+      Letterboxing, from Lesson 4.2. The source is proportionally wider than the target when
+      <code>src_w / src_h &gt; dst_w / dst_h</code>; multiplying through by the positive quantity
+      <code>src_h &times; dst_h</code> removes both divisions:
+    </p>
+    <div class="eq">
+      \[ \frac{w_s}{h_s} > \frac{w_d}{h_d} \iff w_s h_d > w_d h_s \]
+      <span class="eq-plain">src_w / src_h &gt; dst_w / dst_h  &lt;=&gt;  src_w &times; dst_h &gt; dst_w &times; src_h</span>
+    </div>
+    <p>
+      Wider means fill the width: <code>w = dst_w</code>, <code>h = dst_w &times; src_h / src_w</code>.
+      Otherwise fill the height. Centre with <code>x = (dst_w &minus; w) / 2</code>. Worked:
+      320&times;180 into 1024&times;768 gives <code>320&nbsp;&times;&nbsp;768 = 245,760</code>
+      against <code>1024&nbsp;&times;&nbsp;180 = 184,320</code>, so fill the width &mdash;
+      <code>h = 1024 &times; 180 / 320 = 576</code>, <code>y = (768 &minus; 576) / 2 = 96</code>.
+      The result is 1024/576 = 16:9, the source&rsquo;s ratio, preserved exactly.
+    </p>
+    <p>
+      Doing it in integers is not fussiness: the comparison has no rounding, and the
+      <code>&times;</code>-before-<code>&divide;</code> ordering keeps the result exact for every
+      size a window can be.
     </p>
   </div>
 
