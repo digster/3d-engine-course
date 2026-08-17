@@ -90,6 +90,10 @@ inventing one — but without paying framework ceremony before it buys anything.
 │   │   ├── gpu_device.cpp  #   gpu_report: every fact ASKED, none assumed
 │   │   ├── gpu_present.hpp # a framebuffer's device-side mirror       [EXISTS from 4.2]
 │   │   ├── gpu_present.cpp #   memcpy -> transfer buffer -> texture -> blit
+│   │   ├── gpu_buffer.hpp  # geometry on the device                  [EXISTS from 4.4]
+│   │   ├── gpu_buffer.cpp  #   create + a one-shot staged upload
+│   │   ├── gpu_pipeline.hpp# ALL render state, in one object        [EXISTS from 4.4]
+│   │   ├── gpu_pipeline.cpp#   pipeline_desc owns the arrays the create-info points at
 │   │   ├── gpu_shader.hpp  # a compiled shader + its reflection      [EXISTS from 4.3]
 │   │   ├── gpu_shader.cpp  #   format choice, the JSON counts, CreateGPUShader
 │   │   ├── raster.hpp      # which pixels a SHAPE is made of         [EXISTS from 2.1]
@@ -783,6 +787,18 @@ that. `cmake/Shaders.cmake` prints which of three routes it took.
 Compiled shaders land beside the executable, like assets, and are found with `SDL_GetBasePath()`.
 The four resource counts `SDL_GPUShaderCreateInfo` demands are read from the reflection file and
 never typed by hand — SDL validates none of them, so the file is the only check that exists.
+
+**Stage B draws, as of Lesson 4.4.** The GPU path now has the full chain — device, shaders,
+pipeline, vertex buffer, draw — and the probe's frame composes both stages into one window:
+
+```
+render pass 1: CLEAR  ->  blit the software framebuffer  ->  render pass 2: LOAD + draw
+```
+
+That composition is deliberate rather than transitional. It puts the CPU rasterizer's output and
+the GPU's output side by side in one image, which is how Lesson 4.4 compares them — and the
+comparison is the point of the two-stage spine: **zero disagreements in the triangle's interior**,
+102 boundary pixels apart, the difference being a fill rule.
 
 See [LEARNINGS.md](LEARNINGS.md) for the verified SDL_GPU convention table.
 

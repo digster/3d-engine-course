@@ -7,7 +7,7 @@ There is no engine to download here and no framework doing the interesting parts
 write the math library, the rasterizer, the ECS, the renderer, the physics, and the editor. By
 the end you have a real engine and a game built on its public API.
 
-**Status:** curriculum and conventions published; lessons in progress — **Modules 0–3 are complete** and Module 4 is under way (39 of 94 lessons), so the CPU software rasterizer is finished end to end and the engine now talks to a real GPU. Start at
+**Status:** curriculum and conventions published; lessons in progress — **Modules 0–3 are complete** and Module 4 is under way (40 of 94 lessons), so the CPU software rasterizer is finished end to end and the engine now talks to a real GPU. Start at
 [`docs/index.html`](docs/index.html).
 
 ---
@@ -273,6 +273,19 @@ also finds the three ways a correct-looking shader fails silently, and one numbe
 true: `SDL_CreateGPUShader` takes **8 microseconds**, so whatever it is doing, it is not
 compiling anything. [Lesson 4.3](docs/lessons/04-03-shader-toolchain.html) writes down where the
 compile must actually be happening, and Lesson 4.4 goes to check.
+
+It goes to check, and the answer is **about 2.4 ms per new state permutation at pipeline creation
+against 0.031 for the shader** — the compile was there all along. How much you pay depends on the
+driver's cache, which lives on disk and outlives your process; two separate wrong conclusions were
+drawn from that call in drafts of the lesson, and both are kept in it. By then there is a
+triangle on screen with red, green and blue corners, drawn by the GPU, sharing a window with the
+software rasterizer's picture — and that is what Module 2 was for. Render the *same* triangle
+both ways and compare: **zero disagreements anywhere in the interior**, twenty thousand pixels of
+exact agreement, and 102 boundary pixels where the two use different tie-breaking rules. You did
+not write a toy rasterizer. You wrote a rasterizer.
+[Lesson 4.4](docs/lessons/04-04-first-triangle.html) also shows why a first triangle is usually
+invisible: reversing two vertices does not flip it, it deletes it — 20,808 pixels to zero — and
+there is a two-minute test that tells you so.
 
 Then hold <kbd>=</kbd> on that floor and walk *into* it. <kbd>K</kbd> cycles what happens to a
 triangle with a corner behind your eye: **clip** it (correct), **drop** it (the ground vanishes —

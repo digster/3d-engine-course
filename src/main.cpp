@@ -32,6 +32,8 @@
 #include "gfx/gpu_device.hpp"    // Lesson 4.2: the device, and the window claim
 #include "gfx/gpu_present.hpp"   // Lesson 4.2: a framebuffer, carried by the GPU
 #include "gfx/gpu_shader.hpp"    // Lesson 4.3: HLSL, compiled and on the device
+#include "gfx/gpu_buffer.hpp"    // Lesson 4.4: three vertices, on the device
+#include "gfx/gpu_pipeline.hpp"  // Lesson 4.4: every piece of render state, in one object
 #include "gfx/light.hpp"
 #include "gfx/mesh.hpp"
 #include "gfx/obj.hpp"
@@ -3468,6 +3470,35 @@ void draw_budget(SDL_Renderer* r, const engine::profiler& prof, float wall_ns,
 // goes. Watching the orange band appear the instant you press [4] is the whole
 // lesson in one gesture.
 
+/// One vertex, in the layout `shaders/triangle.vert.hlsl` declares.
+///
+/// THIS STRUCT AND THAT SHADER ARE ONE DECLARATION SPLIT IN TWO, and nothing
+/// checks that the halves agree. `position` is TEXCOORD0 and `colour` is
+/// TEXCOORD1 over there; here they are bytes 0 and 12. The pipeline's vertex
+/// attributes are how the two are joined, and `offsetof` is how we avoid writing
+/// 12 by hand — a literal offset is right until somebody inserts a field.
+struct gpu_vertex
+{
+    float x, y, z;      ///< CLIP SPACE already: triangle.vert applies no matrix.
+    float r, g, b, a;   ///< linear, 0..1 — an SDL_FColor by another name
+};
+
+/// The first triangle the GPU will ever draw for us.
+///
+/// Clip space, so x and y run -1..+1 with +Y UP (conventions §4), and z = 0 is
+/// the near plane. Placed on the RIGHT half of the screen on purpose: the
+/// software rasterizer's triangle is on the left, and the point of this lesson is
+/// to see both at once.
+///
+/// COUNTER-CLOCKWISE as seen on screen, because the pipeline says CCW is
+/// front-facing and culls the back. Reverse any two of these and the triangle
+/// vanishes — which is Lesson 3.4's winding test, now enforced by hardware.
+constexpr gpu_vertex k_triangle[3] = {
+    {  0.15f, -0.55f, 0.0f,  0.92f, 0.35f, 0.31f, 1.0f },   // bottom left,  red
+    {  0.85f, -0.55f, 0.0f,  0.35f, 0.82f, 0.47f, 1.0f },   // bottom right, green
+    {  0.50f,  0.55f, 0.0f,  0.37f, 0.59f, 0.92f, 1.0f },   // top,          blue
+};
+
 /// What Lesson 4.3's shader loading produced, in the form the picture needs.
 ///
 /// The probe has no text — that needs a font and a shader, and 4.3 has only just
@@ -3728,8 +3759,59 @@ int run_gpu_probe(SDL_Window* window)
         }
     }
 
+    // ---- Lesson 4.4: the pipeline, and three vertices -----------------------
+    //
+    // Two objects and one measurement. The pipeline gathers every piece of render
+    // state into something immutable (4.1's argument, now a call); the buffer
+    // holds the geometry. The measurement is 4.3's unanswered question — that
+    // lesson found SDL_CreateGPUShader takes eight microseconds, which cannot
+    // include a compile, and predicted the compile happens HERE.
+    engine::pipeline_desc desc(gpu, shaders[0].handle(), shaders[1].handle());
+    desc.vertex_buffer(0, sizeof(gpu_vertex))
+        .attribute(0, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, offsetof(gpu_vertex, x))
+        .attribute(1, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, offsetof(gpu_vertex, r));
+
+    engine::gpu_pipeline triangle_pipeline;
+    const bool pipeline_ok = shader_state.loaded[0] && shader_state.loaded[1]
+                          && triangle_pipeline.create(gpu, desc.info());
+
+    if (pipeline_ok)
+    {
+        // EXPECT THIS NUMBER TO VARY ENORMOUSLY BETWEEN RUNS, and do not read it
+        // as "the cost of creating a pipeline". Measured on one machine: ~42 ms
+        // the first time these shaders were ever compiled, ~32 ms for the first
+        // pipeline in a fresh process, ~2.4 ms for a state permutation the driver
+        // has not seen, and under 0.1 ms once it has — because Metal caches
+        // compiled pipelines ON DISK and the cache outlives the process.
+        // Lesson 4.4 §4.4 is the whole story, including the two wrong conclusions
+        // drawn from this line before it was measured properly.
+        SDL_Log("  pipeline        : created in %.3f ms  (varies hugely with the driver's"
+                " pipeline cache — see 4.4 §4.4)", triangle_pipeline.create_ms());
+    }
+    else
+    {
+        SDL_Log("  pipeline        : NOT created - the triangle will be missing");
+    }
+
+    engine::gpu_buffer triangle_vertices;
+    bool geometry_ok = triangle_vertices.create(gpu, SDL_GPU_BUFFERUSAGE_VERTEX,
+                                                sizeof(k_triangle), "triangle vertices");
+    if (geometry_ok)
+    {
+        // The upload needs a command buffer of its own, submitted before the
+        // first frame that draws from it. A frame's command buffer would work
+        // too — the copy would simply happen at the start of that frame — but a
+        // one-off upload belongs in a one-off submission, where it is obviously
+        // not per-frame work.
+        SDL_GPUCommandBuffer* upload_cb = SDL_AcquireGPUCommandBuffer(gpu.handle());
+        geometry_ok = triangle_vertices.upload(upload_cb, k_triangle, sizeof(k_triangle));
+        if (!SDL_SubmitGPUCommandBuffer(upload_cb)) { geometry_ok = false; }
+        SDL_Log("  geometry        : %zu bytes, %zu vertices%s", sizeof(k_triangle),
+                SDL_arraysize(k_triangle), geometry_ok ? "" : "  - UPLOAD FAILED");
+    }
+
     SDL_Log("Keys: [1] filter  [2] present mode  [3] frames in flight"
-            "  [4] wait on a fence every frame  [Esc] quit");
+            "  [4] wait on a fence every frame  [5] GPU triangle  [Esc] quit");
     SDL_Log("Graph: green = software raster, cyan = recording, blue = waiting for a"
             " swapchain image, orange = waiting on a fence.");
 
@@ -3742,6 +3824,7 @@ int run_gpu_probe(SDL_Window* window)
 
     bool running = true;
     bool logged_swapchain_size = false;
+    bool draw_gpu_triangle = true;
     bool smooth = false;
     bool fence_each_frame = false;
     int present_mode_index = 0;
@@ -3807,6 +3890,11 @@ int run_gpu_probe(SDL_Window* window)
                 SDL_Log("[3] frames in flight: %u  (this call stalls and flushes"
                         " the queue, so the next frame's numbers are junk)", next);
             }
+        }
+        if (in.key_pressed(SDL_SCANCODE_5))
+        {
+            draw_gpu_triangle = !draw_gpu_triangle;
+            SDL_Log("[5] GPU triangle: %s", draw_gpu_triangle ? "ON" : "off");
         }
         if (in.key_pressed(SDL_SCANCODE_4))
         {
@@ -3908,6 +3996,37 @@ int run_gpu_probe(SDL_Window* window)
 
             // Outside the pass, because a blit is itself a pass.
             present.blit_onto(cb, swap, swap_w, swap_h, smooth);
+
+            // ---- Lesson 4.4: the GPU draws ---------------------------------
+            //
+            // A SECOND render pass, loading what the blit just wrote rather than
+            // clearing it, so the CPU's picture and the GPU's triangle share one
+            // window. That is the comparison this lesson is for: everything on
+            // the left was computed by code you wrote, and the triangle on the
+            // right by hardware running a shader you wrote.
+            if (draw_gpu_triangle && pipeline_ok && geometry_ok)
+            {
+                SDL_GPUColorTargetInfo over{};
+                over.texture = swap;
+                over.load_op = SDL_GPU_LOADOP_LOAD;    // keep the blit
+                over.store_op = SDL_GPU_STOREOP_STORE;
+
+                SDL_GPURenderPass* draw_pass = SDL_BeginGPURenderPass(cb, &over, 1, nullptr);
+
+                SDL_BindGPUGraphicsPipeline(draw_pass, triangle_pipeline.handle());
+
+                SDL_GPUBufferBinding binding{};
+                binding.buffer = triangle_vertices.handle();
+                binding.offset = 0;
+                SDL_BindGPUVertexBuffers(draw_pass, 0, &binding, 1);
+
+                // Three vertices, one instance, starting at the beginning of
+                // both. The last two arguments are what Lesson 4.5's instancing
+                // will make interesting; today they are 1 and 0.
+                SDL_DrawGPUPrimitives(draw_pass, 3, 1, 0, 0);
+
+                SDL_EndGPURenderPass(draw_pass);
+            }
         }
         const Uint64 t_rec3 = SDL_GetPerformanceCounter();
         sample.record = ticks_to_ms(t_rec0, t_rec1) + ticks_to_ms(t_rec2, t_rec3);
@@ -3961,6 +4080,8 @@ int run_gpu_probe(SDL_Window* window)
     // would do this anyway (they are declared after `gpu`, so C++ destroys them
     // first), and saying it explicitly is the same choice 4.2 made: a dependency
     // that is visible is a dependency that survives the next edit.
+    triangle_vertices.destroy();
+    triangle_pipeline.destroy();
     for (engine::gpu_shader& shader : shaders) { shader.destroy(); }
     present.destroy();
     gpu.destroy();

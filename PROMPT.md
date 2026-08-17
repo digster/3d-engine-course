@@ -1433,3 +1433,61 @@ The CMake module **probes the tool at configure time** and prints which of three
 technique worth keeping: when behaviour depends on how a tool was built, run it rather than reason
 about it. Also recorded: an `add_custom_command(OUTPUT)` with nothing depending on its output never
 runs, and the build succeeds with an empty directory.
+
+## 2026-08-17 — `next` (Lesson 4.4: The First Triangle)
+
+Resumed from `STATE.md`. Built the pipeline, the vertex buffer and the draw, and paid off the
+prediction Lesson 4.3 published.
+
+### The debt, settled — on the third attempt
+
+4.3 predicted the compile happens at pipeline creation. **Confirmed**: `SDL_CreateGPUShader` is
+~0.031 ms in every run and configuration, and pipeline creation never is — ~32 ms for the first in
+a process, ~2.4 ms per new state permutation, 0.01–0.6 ms for one already compiled.
+
+### The two wrong conclusions I nearly published
+
+Timed one pipeline then the same description again and called the difference the compile; then
+compared release (0.5 ms) against `debug = true` (33.5 ms) and called the difference the
+**validation layer, at 66×**, with a figure and three paragraphs. Both were the same confound:
+**Metal caches compiled pipelines on disk**, so the second measurement of anything is warm and a
+"cold" run is only cold once per machine. Measured with a run-unique blend permutation in both
+configurations, validation costs almost nothing (31.8 vs 34.5 ms).
+
+Caught by running the engine again and seeing 0.077 ms where the log had said 42.376. Both wrong
+versions are kept in the lesson, because the confound is more instructive than the conclusion.
+
+### What creation does and does not catch
+
+A colour format the target does not have: **created**, and the frame drew. An attribute the
+shader never declared: **created**. No vertex layout while the shader has inputs: refused, with
+an excellent message. And a shader in the wrong slot is worse than an error — vertex-in-fragment
+leaves Metal's compiler service broken so the *next* creation crashes, fragment-in-vertex
+segfaults outright. Both reproduced three times in an isolated one-trial program, then removed
+from the harness, because a test that destabilises the process is not a test.
+
+### The comparison Module 2 was for
+
+The same triangle through `engine::fill_triangle` and through the GPU, rendered offscreen,
+downloaded, compared per pixel: both 20,808; GPU-only **0**; ours-only 102; **disagreements
+strictly inside the triangle: zero**. Our coverage is a strict superset and every extra pixel is
+on one edge, one per row — a fill rule, not a bug. Figure 5 is drawn from that actual comparison,
+via a patch the harness dumps, and the first attempt at that dump sampled a stretch where the two
+agree exactly and produced a rectangle of solid agreement that argued nothing.
+
+Also: coverage matched the geometry's area to 0.9922, and the centroid read 85/86/85 where a third
+of 255 is 85 — Lesson 2.4's barycentric interpolation, in silicon, to one code.
+
+### Verified in pixels rather than by eye
+
+Screen capture is unavailable on this machine, so the engine's frame composition — clear, blit,
+then a second pass that LOADs and draws over it — is checked by rebuilding it offscreen and
+counting: 22,364 + 22,364 + 20,808 = 65,536 = 256². Every pixel attributable to one operation.
+That is a better test than a screenshot anyway.
+
+### What was built
+
+`src/gfx/gpu_pipeline.{hpp,cpp}` (new) — `pipeline_desc` is a *class* because
+`SDL_GPUGraphicsPipelineCreateInfo` holds pointers and a function returning one by value returns a
+struct aimed at dead stack. `src/gfx/gpu_buffer.{hpp,cpp}` (new), `src/main.cpp` and
+`CMakeLists.txt` modified. `[5]` toggles the triangle.

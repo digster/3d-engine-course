@@ -7,9 +7,87 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-08-15 (after Lesson 4.3 — 39 of 94 lessons)
+updated: 2026-08-17 (after Lesson 4.4 — 40 of 94 lessons)
 
 conventions:
+  pipelines: EVERY PIECE OF RENDER STATE, IN ONE IMMUTABLE OBJECT — 9 top-level
+        fields, 53 expanded, which is exactly the count 4.1 predicted from
+        fill_style. It IS fill_style's argument list, hoisted out of the call and
+        frozen; that is why 3.8's per-triangle material rebind is a thing a GPU
+        cannot do.
+        SET THE RASTERIZER STATE EXPLICITLY. Every enum in it has its first
+        enumerator at 0, so a zero-initialised state means "CCW front, cull
+        nothing" — a forgotten cull_mode is NOT an error, it is no culling.
+        Course default: FILLMODE_FILL, CULLMODE_BACK, FRONTFACE_CCW.
+        THE COLOUR TARGET FORMAT IS NOT A CHOICE — it must equal the format of the
+        texture rendered into. pipeline_desc reads it from the device's report
+        (4.2 logged it for this), and colour_target_format() overrides for
+        offscreen targets, which Module 6 will live on.
+        CREATION VALIDATES ALMOST NOTHING. Measured: a colour format the target
+        does not have -> CREATED (and the frame drew); an attribute the shader
+        never declared -> CREATED; only "no vertex layout while the shader has
+        inputs" is REFUSED, with an excellent message. A SHADER IN THE WRONG SLOT
+        IS WORSE THAN AN ERROR: vertex-in-fragment is refused but leaves Metal's
+        compiler service broken so the NEXT creation crashes, and
+        fragment-in-vertex SEGFAULTS immediately. Both reproduced 3x in an
+        isolated one-trial program. The type system cannot help — both are
+        SDL_GPUShader*.
+  pipeline-compile: 4.3's PREDICTION IS CONFIRMED — the compile is at PIPELINE
+        creation, not shader creation. SDL_CreateGPUShader is ~0.031 ms in every
+        run and configuration; pipeline creation is never that cheap.
+        HOW MUCH MORE DEPENDS ON THE DRIVER'S CACHE, WHICH IS ON DISK AND OUTLIVES
+        THE PROCESS. Measured on one machine: ~32 ms for the FIRST pipeline in a
+        process (one-time driver/compiler setup), ~2.4 ms per NEW state
+        permutation (the compile, ~80x a shader), 0.01-0.6 ms for one compiled
+        before — including in a previous RUN.
+        TWO WRONG CONCLUSIONS WERE DRAWN FROM THIS CALL BEFORE IT WAS MEASURED
+        PROPERLY, and both are kept in the lesson: (1) timing one pipeline then
+        the same description again and calling the difference the compile;
+        (2) comparing a release run with a debug run — 0.5 vs 33.5 ms — and
+        calling the difference the VALIDATION LAYER, at 66x. Both were the disk
+        cache. Measured with a run-unique blend permutation in both configs,
+        validation costs almost nothing: 31.8 vs 34.5 ms for a first pipeline.
+        WHAT CAUGHT IT: running the engine again the next day and seeing 0.077 ms
+        where the log had said 42. A number that moves 500x between runs of an
+        unchanged binary is a property of what happened before the call.
+        CONSEQUENCE FOR ENGINES: build every pipeline at load time (2.4 ms is 15%
+        of a 60 Hz frame), and remember that STATE PERMUTATIONS ARE COMPILATIONS —
+        a material system with five booleans is 32 pipelines and ~80 ms of
+        startup. This is what "shader compilation stutter" means in patch notes.
+  create-info-lifetime: SDL_GPUGraphicsPipelineCreateInfo HOLDS POINTERS — the
+        vertex buffer descriptions, the attributes, the colour target
+        descriptions. A function that fills one in and RETURNS IT returns a struct
+        pointing at its own dead stack frame, and the compiler says nothing. Hence
+        pipeline_desc is a CLASS that owns the arrays, and info() returns a CONST
+        REFERENCE. Same shape as a dangling string_view or span; same fix, which
+        is to give the view and the viewed one lifetime (3.5's mesh_data/mesh).
+  vertex-layout: THE VERTEX IS DECLARED TWICE, IN TWO LANGUAGES, AND NOTHING
+        CHECKS THEY AGREE. HLSL says `float3 position : TEXCOORD0; float4 colour :
+        TEXCOORD1`; C++ says pitch 28, FLOAT3 at 0, FLOAT4 at 12. Use sizeof and
+        offsetof, never literals. A wrong pitch walks the buffer at the wrong rate
+        and draws a smear; a wrong offset feeds colour into position. 4.3's
+        reflection JSON already holds the shader's half (`inputs`), and checking
+        one against the other is exercise 4.4.4 and the first piece of a material
+        system.
+  draw-calls: A DRAW CALL SAYS ALMOST NOTHING — SDL_DrawGPUPrimitives(pass, 3, 1,
+        0, 0) is "three vertices, one instance, from the start". No geometry, no
+        shader, no target: all of it was BOUND beforehand. Even the MEANING of
+        three vertices is pipeline state — measured from one buffer:
+        TRIANGLELIST 20,808 px, LINESTRIP 410, POINTLIST 0 (the last one flagged
+        ⚠ VERIFY: probably Metal needing a written point size; measurement real,
+        explanation a hypothesis).
+        BIND ORDER: pipeline, then vertex buffers, then draw. The pipeline
+        describes what a vertex IS.
+  gpu-vs-ours: THE TWO RASTERIZERS COMPUTE THE SAME TRIANGLE. Identical geometry
+        through engine::fill_triangle and through the hardware, compared per
+        pixel: both 20,808; GPU-only 0; OURS-ONLY 102 (0.49%); DISAGREEMENTS
+        STRICTLY INSIDE THE TRIANGLE: **ZERO**. Our coverage is a strict superset,
+        and every extra pixel is on one edge, one per row.
+        THE DIFFERENCE IS A FILL RULE, not a bug: hardware uses top-left, our 2.2
+        edge test uses >= 0 and includes every boundary pixel. On a lone triangle
+        that is 102 px; on two triangles sharing an edge it is a seam or a double
+        draw. Sub-pixel precision differs too (our vertices are integers; hardware
+        rasterizes at ~1/256 px), so exercise 4.4.2 cannot reach zero.
   shaders: ONE SOURCE, THREE BINARIES, AND SPIR-V IN THE MIDDLE. HLSL is the
         course's shader language; SDL_shadercross is the sanctioned tool. The
         pipeline has exactly TWO stages and only the first is a compiler:
@@ -1425,8 +1503,26 @@ completed:
   - 4.1  How GPUs Actually Work
   - 4.2  The SDL_GPU Mental Model
   - 4.3  The Shader Toolchain
+  - 4.4  The First Triangle
 
 capabilities:
+  - gfx 4.4: THE ENGINE CAN DRAW. Four new files and the first hardware-computed
+    pixel in the course.
+    src/gfx/gpu_pipeline.hpp/.cpp NEW — `pipeline_desc`, which owns the arrays the
+    create-info POINTS AT (see create-info-lifetime) and pre-fills the course's
+    conventions; `gpu_pipeline`, move-only, which TIMES ITS OWN CREATION because
+    4.3 published a prediction about that call. colour_target_format() for
+    offscreen targets — Module 6 needs it, 4.4's harness needed it first.
+    src/gfx/gpu_buffer.hpp/.cpp NEW — create + one-shot upload through a staging
+    buffer, released while the copy that reads it is still only RECORDED (safe by
+    documentation: SDL frees "as soon as it is safe to do so"). cycle = false
+    here, deliberately, against gpu_present_target's true — the hazard does not
+    exist for geometry written once.
+  - demo 4.4: `engine --gpu` draws a gradient triangle in a SECOND render pass,
+    LOADOP_LOAD over the blitted software picture, so both rasterizers' output
+    shares one window — the comparison Module 2 has been heading towards. [5]
+    toggles it. Vertices are in CLIP SPACE because triangle.vert applies no
+    matrix; 4.6 gives it a uniform buffer and it starts moving.
   - gfx 4.3: THE ENGINE CAN LOAD A SHADER. Two new files, four new HLSL sources,
     one new CMake module, and no drawing whatsoever.
     shaders/triangle.{vert,frag}.hlsl NEW — the pair 4.4 will draw with; no
@@ -2419,6 +2515,8 @@ files:
             framebuffer.hpp, framebuffer.cpp,
             gpu_device.hpp, gpu_device.cpp,
             gpu_present.hpp, gpu_present.cpp,
+            gpu_buffer.hpp, gpu_buffer.cpp,
+            gpu_pipeline.hpp, gpu_pipeline.cpp,
             gpu_shader.hpp, gpu_shader.cpp,
             mesh.hpp, mesh.cpp, obj.hpp, obj.cpp,
             raster.hpp, raster.cpp, texture.hpp, texture.cpp, viewport.hpp
@@ -2445,7 +2543,7 @@ files:
                  03-07-specular-blinn-phong.html, 03-08-shading-models.html,
                  03-09-textures.html, 03-10-profiling-capstone.html,
                  04-01-how-gpus-work.html, 04-02-sdl-gpu-model.html,
-                 04-03-shader-toolchain.html
+                 04-03-shader-toolchain.html, 04-04-first-triangle.html
   docs/shared/: course.css, course.js      (THE stylesheet + page script; one copy each)
   docs/_template/: lesson-template.html, README.md, apply-shared.py, check-page.js
   memory/: 2026-07-16.md, 2026-07-18.md, 2026-07-21.md, 2026-07-22.md,
@@ -2454,35 +2552,31 @@ files:
            2026-07-31.md, 2026-08-01.md, 2026-08-02.md, 2026-08-03.md,
            2026-08-04.md, 2026-08-05.md, 2026-08-06.md, 2026-08-07.md,
            2026-08-08.md, 2026-08-10.md, 2026-08-12.md,
-           2026-08-12-b.md, 2026-08-15.md, 2026-08-15-b.md
+           2026-08-12-b.md, 2026-08-15.md, 2026-08-15-b.md,
+           2026-08-17.md
   (retired: hello.cpp)
 
 
 
-next: 4.4 — The First Triangle
-      (planned filename: docs/lessons/04-04-first-triangle.html — 4.3 links to
-      the index for now, so BOTH of 4.3's next links need repointing when it lands)
-      THE PIPELINE OBJECT, AND THREE VERTICES.
-        - PAY OFF 4.3's WRITTEN-DOWN PREDICTION FIRST-CLASS: SDL_CreateGPUShader
-          measured 0.008 ms, which cannot include a compile. TIME
-          SDL_CreateGPUGraphicsPipeline and report whether the milliseconds show
-          up there. If they do, 4.1's argument about why pipeline objects exist
-          is confirmed end to end (4.1 measured the folk reason FALSE; 4.3
-          located the real work; 4.4 catches it). If they DO NOT, say so and go
-          looking — a prediction published in 4.3 must be answered in 4.4 either
-          way.
-        - SDL_GPUGraphicsPipelineCreateInfo, field by field, against 4.1's
-          fill_style: 9 top-level fields, 53 expanded. The colour target format
-          MUST equal the swapchain format 4.2 logged, or creation fails.
-        - The triangle's vertices arrive already in clip space (triangle.vert
-          applies no matrix), so 4.4 is about the API and 4.5 is about buffers.
-          Decide honestly whether to use a vertex buffer at all or to start with
-          SV_VertexID; the course's own shader already declares inputs, so a
-          vertex buffer is probably the honest path and 4.5 then deepens it.
-        - CULLING AND WINDING: conventions §7 fixes CCW-front/cull-back and
-          LEARNINGS records that a zero-initialised rasterizer state means
-          CULLMODE_NONE. Set both explicitly on the pipeline and say why.
-        - CELEBRATE IT PROPERLY (master prompt §5, Module 4): this is the first
-          pixel the GPU has ever computed for us. Compare it to Lesson 2.2's
-          first CPU triangle, side by side.
+next: 4.5 — Vertex Buffers and Layouts
+      (planned filename: docs/lessons/04-05-vertex-buffers.html — 4.4 links to the
+      index for now, so BOTH of 4.4's next links need repointing when it lands)
+      REAL GEOMETRY ON THE DEVICE.
+        - INTERLEAVED vs SEPARATE arrays, WITH THE MEMORY LAYOUT DRAWN (master
+          prompt §7 names memory layouts as a required diagram genre). Tie it to
+          4.1's cache-line argument: an interleaved vertex is one cache line's
+          worth of everything a vertex shader needs.
+        - WHAT A WRONG PITCH ACTUALLY DOES — measure it, do not describe it. 4.4
+          §3.2 promised this lesson would make a bigger point of it.
+        - INDEX BUFFERS: 2.12's icosahedron has 12 vertices and 20 triangles, so
+          indexed drawing is 12 vertex-shader invocations instead of 60. MEASURE
+          the invocation count if the backend will report it, or measure the time.
+          SDL_GPU_INDEXELEMENTSIZE_16BIT is why mesh.hpp caps at 65536 (3.5).
+        - MULTIPLE BUFFER SLOTS, since pipeline_desc already supports 4 — the
+          honest use case is per-instance data, which sets up instancing.
+        - PORT A REAL MESH: torus.obj through the same path, so 4.8's scene port
+          is a matter of matrices rather than of plumbing.
+        - EXERCISE 4.4.4 (checking the C++ layout against the shader's reflection)
+          is the natural opener if it was not done — the layout contract is this
+          lesson's whole subject.
 ```

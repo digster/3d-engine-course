@@ -2940,3 +2940,110 @@ the install placed the binary and its library correctly but recorded no search p
 `cmake/Shaders.cmake` derives the prefix from the executable's own location and adds
 `<prefix>/lib` to the platform's loader variable (`DYLD_LIBRARY_PATH`, `LD_LIBRARY_PATH`, or
 `PATH`), which is harmless when it is unnecessary.
+
+## Pipeline facts, verified at SDL 3.4.12 (Lesson 4.4)
+
+**The shader compile happens at pipeline creation.** Predicted in 4.3 from the fact that
+`SDL_CreateGPUShader` takes ~0.03 ms; confirmed here, because pipeline creation is never that
+cheap and is sometimes tens of milliseconds.
+
+**How much it costs depends on the driver's cache, and that cache is on disk.**
+
+| what is created | cost |
+|---|---|
+| a shader object | 0.031 ms — in every run, every configuration |
+| the **first** pipeline in a process | ~32 ms — one-time driver and compiler setup |
+| each **new state permutation** after it | ~2.4 ms — the compile, about 80× a shader |
+| a description compiled before, *including in a previous run* | 0.01–0.6 ms |
+
+**Two wrong conclusions were drawn from this call before it was measured properly**, and both are
+worth recording because the confound is the same and it is easy to fall into:
+
+1. Timing one pipeline, then timing the same description again, and calling the difference the
+   compile. The second measurement is a cache hit.
+2. Comparing a release run (0.5 ms) with a `debug = true` run (33.5 ms) and concluding that the
+   **validation layer costs sixty-six times the compile it checks**. It does not. That run was
+   simply the first time those shaders had ever been compiled on the machine. Measured with a
+   freshly-generated blend permutation in both configurations, validation costs almost nothing:
+   **31.8 ms against 34.5** for a first pipeline, and ~2.5 against ~2.4 for each one after.
+
+What caught it: running the engine again the next day and seeing **0.077 ms** where the log had
+said 42. *A number that moves five hundredfold between runs of an unchanged binary is not a
+property of the call.* To measure a real compile, vary something the driver must specialise for —
+the harness uses a run-unique blend permutation — so that "new" means new.
+
+**Consequences for an engine.** Build every pipeline at load time: 2.4 ms is fifteen percent of a
+60 Hz frame. And **state permutations are compilations** — a material system with five booleans is
+thirty-two pipelines and roughly eighty milliseconds of startup, which is what "shader compilation
+stutter" means when you read it in patch notes.
+
+### Pipeline creation validates almost nothing
+
+| description | result |
+|---|---|
+| correct | created |
+| a colour target format the target texture does not have | **created** — and the frame drew |
+| an attribute at a location the shader never declared | **created** |
+| no vertex layout while the shader has inputs | REFUSED: *"Vertex function has input attributes but no vertex descriptor was set."* |
+
+When it does refuse, the driver's message is excellent. When it does not, you get silence — the
+same temperament 4.3 found in shader creation, which checked the entry-point name and not the
+resource counts.
+
+**A shader in the wrong slot is worse than an error.** Reproduced three times in an isolated
+one-trial program, because it cannot be tested inside a harness that has other work to do:
+
+- a **vertex** shader in the fragment slot → refused, with a Metal error about an interrupted
+  compiler connection — after which the *next* pipeline creation in that process crashed;
+- a **fragment** shader in the vertex slot → **SIGSEGV**, no error, no return.
+
+Both are `SDL_GPUShader*`, so the type system cannot help, and SDL does not check which stage a
+shader was compiled for.
+
+### `SDL_GPUGraphicsPipelineCreateInfo` holds pointers
+
+Its vertex input state points at two arrays and its target info at a third. **A function that
+fills one in and returns it by value returns a struct aimed at its own dead stack frame**, and
+nothing warns. Hence `pipeline_desc` is a class that owns the arrays and returns the create-info
+by `const&`. Same shape as a dangling `string_view` or `span`; same fix as 3.5's
+`mesh_data`/`mesh` pair — give the view and the viewed one lifetime.
+
+## Our rasterizer and the hardware compute the same triangle (Lesson 4.4)
+
+The identical triangle through `engine::fill_triangle` and through the GPU, rendered into a
+256×256 offscreen target, downloaded, and compared pixel by pixel:
+
+| | pixels |
+|---|---|
+| covered by both | 20,808 |
+| the GPU only | **0** |
+| ours only | 102 (0.49%) |
+| disagreements strictly inside the triangle | **0** |
+
+Our coverage is a strict superset, and every extra pixel is on one edge, one per row — the
+pattern is in the lesson's Figure 5, drawn from the actual comparison.
+
+**The difference is a fill rule, not a bug.** Hardware uses the top-left rule; Lesson 2.2's edge
+test uses `>= 0` and includes every boundary pixel. On a lone triangle that is 102 pixels; on two
+triangles sharing an edge it is a seam or a double-draw. Sub-pixel precision differs too — our
+vertices are integers, hardware rasterizes at roughly 1/256 of a pixel — so the two can never
+agree exactly, and they do not need to.
+
+Also measured, and worth having: **coverage matched the geometry's area to 0.9922** (20,808
+against 20,972 predicted by ½ × 204.8 × 204.8), and **the centroid read 85, 86, 85** where one
+third of 255 is 85 — Lesson 2.4's barycentric interpolation, in silicon, agreeing to one code.
+
+## Reversing two vertices deletes a triangle (Lesson 4.4)
+
+With `cull_mode = BACK` and `front_face = CCW`: counter-clockwise vertices cover 20,808 pixels,
+the same three points in clockwise order cover **0**, and with culling set to `NONE` the
+clockwise order covers 20,808 again — *identical* to the first case.
+
+That last measurement is what makes this diagnosable: **if setting `CULLMODE_NONE` brings the
+triangle back unchanged, the problem is winding and nothing else.** It is the two-minute test for
+the commonest "my first triangle is invisible", and it rules out geometry, transforms, buffers and
+formats in one step.
+
+Related, and the reason we set all three rasterizer fields explicitly: every enum in
+`SDL_GPURasterizerState` has its first enumerator at zero, so a zero-initialised state means "CCW
+front, cull nothing" — a forgotten `cull_mode` is not an error, it is no culling at all.
