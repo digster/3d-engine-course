@@ -82,6 +82,7 @@
       <li><a href="#measurement">Measurement</a></li>
       <li><a href="#gpu">The GPU execution model</a></li>
       <li><a href="#gpu-api">Talking to the GPU &mdash; the SDL_GPU contract</a></li>
+      <li><a href="#vertex-layout">Vertex layouts &mdash; the contract nothing checks</a></li>
       <li><a href="#units">Units and angles</a></li>
       <li><a href="#simulation">The simulation contract</a></li>
       <li><a href="#colour">Colour and diagram conventions</a></li>
@@ -1753,6 +1754,109 @@
     lessons later.
   </p>
 
+  <h2 id="vertex-layout"><span class="num">7h</span>Vertex layouts &mdash; the contract nothing checks</h2>
+
+  <p>
+    Established in Lesson 4.5, and the reason it earns its own section is the first row of the
+    table: <strong>almost nothing here is validated by anything.</strong> A vertex layout is three
+    numbers and one formula, evaluated by fixed-function hardware that has no way to know whether
+    the numbers are right. Every measurement below comes from
+    <code>scratch/verify_45.cpp</code>.
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>Rule</th><th>Value</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td>The fetch</td>
+            <td><code>base + i&nbsp;&times;&nbsp;pitch + offset</code></td>
+            <td>Three numbers per attribute and one formula. Any pitch produces addresses, any
+                addresses produce bytes, any bytes produce floats. <strong>The picture is the only
+                place a mistake becomes visible.</strong></td></tr>
+        <tr><td>Writing a layout</td>
+            <td><code>sizeof</code> for pitch, <code>offsetof</code> for every offset &mdash;
+                <strong>never a literal</strong></td>
+            <td>A literal <code>12</code> is correct until somebody inserts a field above it, at
+                which point every vertex reads the wrong bytes and nothing reports an error.
+                <code>gpu_mesh::describe</code> and <code>describe_instances</code> are the only
+                two places in the engine that name a layout.</td></tr>
+        <tr><td>What creation refuses</td>
+            <td><strong>one of six</strong></td>
+            <td>Measured: pitch four bytes short &rarr; created; four long &rarr; created;
+                position/normal offsets swapped &rarr; created; an attribute the shader never
+                declares &rarr; created. Only <em>a shader input nothing supplies</em> is refused
+                &mdash; with an excellent message naming the location.</td></tr>
+        <tr><td>What our own check catches</td>
+            <td><strong>three of five</strong>, and it says so</td>
+            <td><code>pipeline_desc::check_layout</code> compares against the reflection JSON:
+                it catches a too-short pitch, an undeclared location, an unsupplied location,
+                duplicate locations and a base-type mismatch. It <em>cannot</em> catch a too-long
+                pitch or swapped offsets. A checker that implies it caught everything is worse
+                than none.</td></tr>
+        <tr><td>A wrong pitch</td>
+            <td><strong>shatters, progressively</strong></td>
+            <td>The error is <em>i</em>&nbsp;&times;&nbsp;(pitch error), so it accumulates: 4 bytes
+                at vertex 1, 4,896 by vertex 1,224 &mdash; and <strong>zero at vertex 0</strong>,
+                which is how the bug survives a three-vertex test. Too long and too short look
+                the same; do not read the direction out of the picture.</td></tr>
+        <tr><td>A wrong offset</td>
+            <td><strong>deforms, coherently</strong></td>
+            <td>Each vertex is still read from its own record, just from the wrong bytes of it.
+                Reading a normal as a position collapses the mesh onto a unit sphere. Scattered
+                means the pitch; coherent but wrong means an offset.</td></tr>
+        <tr><td>A vertex element format</td>
+            <td><strong>answers two questions</strong></td>
+            <td>Bytes in the buffer and type in the shader are not the same question.
+                <code>UBYTE4_NORM</code> is <strong>4 bytes</strong> and a
+                <strong><code>float4</code></strong>; the divide by 255 happens in the fetch unit,
+                free. That gap made Lesson 4.4's vertex 43% smaller with the shader
+                untouched.</td></tr>
+        <tr><td>Supplying fewer components</td>
+            <td><code>FLOAT3</code> into a <code>float4</code> &rarr; <strong>w = 1</strong></td>
+            <td>Legal and defined. Measured on Metal by making the missing component the scale:
+                the <code>FLOAT3</code> draw covered 9,944&nbsp;px, exactly equal to a
+                <code>FLOAT4</code> draw at scale 1.0. Matches Vulkan's and D3D12's
+                <code>(0,&nbsp;0,&nbsp;0,&nbsp;1)</code> rule. <strong>&#9888; VERIFY</strong> on
+                other backends.</td></tr>
+        <tr><td>Attribute locations</td>
+            <td><strong>unique, and numbered across the pipeline</strong></td>
+            <td>SDL's header requires uniqueness and does not say what happens otherwise. They are
+                numbered across the whole <em>pipeline</em>, not per buffer &mdash; slot 1's
+                attributes start at 3 because slot 0 used 0, 1, 2.</td></tr>
+        <tr><td>Interleaved or separate</td>
+            <td><strong>interleaved by default; hybrid in production</strong></td>
+            <td>Measured on 1,225 vertices with 64-byte lines: one vertex costs
+                <strong>1</strong> line interleaved and up to <strong>5</strong> separate, while a
+                positions-only sweep costs <strong>613</strong> interleaved against
+                <strong>230</strong>. Both true. A &ldquo;separate&rdquo; layout is simply more
+                <code>vertex_buffer</code> slots, so the hybrid costs no new concepts.</td></tr>
+        <tr><td>Index width</td>
+            <td><strong>16-bit</strong>, ceiling 65,536</td>
+            <td>Where <code>k_max_mesh_vertices</code> comes from. On our torus, indices are
+                <strong>4.17&times;</strong> smaller than expanding, and the picture is identical
+                to the pixel. The element size is passed <em>at bind time</em>, not baked into the
+                pipeline: binding 16-bit indices as <code>_32BIT</code> reads pairs as single
+                enormous values.</td></tr>
+        <tr><td>Vertex-shader invocations</td>
+            <td><strong>a range, not a figure</strong></td>
+            <td>Indexed: 1,225&ndash;6,912 on our torus, depending on the post-transform cache.
+                Expanded: 6,912 exactly, with no reuse possible. This is what vertex-cache
+                optimisation optimises.</td></tr>
+        <tr><td>Instancing</td>
+            <td><code>input_rate = _INSTANCE</code> &mdash; <strong>one enum value</strong></td>
+            <td>Same buffer type, same bind call, same attributes, same locations. The shader
+                cannot tell. <code>instance_step_rate</code> is reserved and must be 0. And the
+                default trap again: every enum in the description starts at 0, so a
+                zero-initialised description means <code>_VERTEX</code>.</td></tr>
+        <tr><td>The viewport</td>
+            <td><strong>render-pass state, not pipeline state</strong></td>
+            <td><code>SDL_SetGPUViewport</code> survives a pipeline change, so a second draw in
+                the same pass inherits it. Put it back if the next draw wants the whole
+                target.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
   <h2 id="units"><span class="num">8</span>Units and angles</h2>
 
   <div class="tbl-scroll">
@@ -1913,6 +2017,11 @@
         <tr><td>Whole-file write</td><td><code>bool SDL_SaveFile(const char *file, const void *data, size_t datasize)</code></td><td><code>SDL3/SDL_iostream.h</code></td></tr>
         <tr><td>Number parsing</td><td><code>SDL_strtod</code> makes <strong>fewer guarantees than the C runtime</strong>: handling of scientific and hexadecimal notation is <em>unspecified</em>. Not usable for asset parsing — we use <code>std::strtof</code>.</td><td><code>SDL3/SDL_stdinc.h</code></td></tr>
         <tr><td>Index element size</td><td><code>SDL_GPUIndexElementSize</code> = <code>{_16BIT, _32BIT}</code> — the reason <code>mesh::indices</code> is <code>uint16_t</code> and has a ceiling</td><td><code>SDL3/SDL_gpu.h</code></td></tr>
+        <tr><td>Vertex buffer description</td><td><code>SDL_GPUVertexBufferDescription { slot, pitch, input_rate, instance_step_rate }</code> — <code>instance_step_rate</code> is <strong>reserved and must be 0</strong></td><td><code>SDL3/SDL_gpu.h</code></td></tr>
+        <tr><td>Vertex input rate</td><td><code>SDL_GPUVertexInputRate</code> = <code>{VERTEX = 0, INSTANCE}</code> — so a zero-initialised description means per-vertex</td><td><code>SDL3/SDL_gpu.h</code></td></tr>
+        <tr><td>Attribute locations</td><td>&ldquo;All vertex attribute locations provided to an <code>SDL_GPUVertexInputState</code> must be <strong>unique</strong>.&rdquo; No stated consequence if they are not.</td><td><code>SDL3/SDL_gpu.h</code></td></tr>
+        <tr><td>Indexed draw</td><td><code>SDL_DrawGPUIndexedPrimitives(pass, num_indices, num_instances, first_index, vertex_offset, first_instance)</code> — <code>vertex_offset</code> is <code>Sint32</code> and is added to every index</td><td><code>SDL3/SDL_gpu.h</code></td></tr>
+        <tr><td>Index binding</td><td><code>SDL_BindGPUIndexBuffer(pass, binding, index_element_size)</code> — the width is bound <strong>with the buffer</strong>, not baked into the pipeline</td><td><code>SDL3/SDL_gpu.h</code></td></tr>
       </tbody>
     </table>
   </div>

@@ -7,7 +7,7 @@ There is no engine to download here and no framework doing the interesting parts
 write the math library, the rasterizer, the ECS, the renderer, the physics, and the editor. By
 the end you have a real engine and a game built on its public API.
 
-**Status:** curriculum and conventions published; lessons in progress — **Modules 0–3 are complete** and Module 4 is under way (40 of 94 lessons), so the CPU software rasterizer is finished end to end and the engine now talks to a real GPU. Start at
+**Status:** curriculum and conventions published; lessons in progress — **Modules 0–3 are complete** and Module 4 is under way (41 of 94 lessons), so the CPU software rasterizer is finished end to end and the engine now draws real geometry on a real GPU. Start at
 [`docs/index.html`](docs/index.html).
 
 ---
@@ -286,6 +286,23 @@ not write a toy rasterizer. You wrote a rasterizer.
 [Lesson 4.4](docs/lessons/04-04-first-triangle.html) also shows why a first triangle is usually
 invisible: reversing two vertices does not flip it, it deletes it — 20,808 pixels to zero — and
 there is a two-minute test that tells you so.
+
+Press <kbd>6</kbd> and seven lit, spinning tori appear, from **one vertex buffer, one index
+buffer and one draw call**. Getting real geometry onto a device raises a question three hand-typed
+vertices never could: a vertex layout is three numbers and one formula — `base + i×pitch +
+offset` — evaluated by hardware that has no way to know whether the numbers are right. Hand
+pipeline creation six broken layouts and **it refuses exactly one**. So
+[Lesson 4.5](docs/lessons/04-05-vertex-buffers.html) builds the missing check out of the
+reflection JSON the build has been emitting since 4.3, and is honest that it catches three of the
+five. Then it breaks the layout on purpose and photographs the wreckage: <kbd>8</kbd> puts the
+pitch four bytes wrong and the torus shatters *progressively*, because the error is *i*×4 — which
+is also why vertex 0 is always fine and the bug survives a three-vertex test. A wrong *offset*,
+by contrast, collapses the mesh onto a unit sphere; the symptom names the mistake. Along the way
+a vertex element format turns out to answer **two** questions with different answers, which makes
+Lesson 4.4's vertex **43% smaller with the shader untouched**; index buffers turn out to be
+**4.17× smaller** on this mesh and to convert a fixed 6,912 vertex-shader invocations into a
+range; and instancing turns out to cost **one enum value** — 196 bytes a frame against 53,024
+that never move again.
 
 Then hold <kbd>=</kbd> on that floor and walk *into* it. <kbd>K</kbd> cycles what happens to a
 triangle with a corner behind your eye: **clip** it (correct), **drop** it (the ground vanishes —

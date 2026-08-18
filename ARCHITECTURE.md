@@ -91,9 +91,14 @@ inventing one — but without paying framework ceremony before it buys anything.
 │   │   ├── gpu_present.hpp # a framebuffer's device-side mirror       [EXISTS from 4.2]
 │   │   ├── gpu_present.cpp #   memcpy -> transfer buffer -> texture -> blit
 │   │   ├── gpu_buffer.hpp  # geometry on the device                  [EXISTS from 4.4]
-│   │   ├── gpu_buffer.cpp  #   create + a one-shot staged upload
+│   │   ├── gpu_buffer.cpp  #   one-shot upload + gpu_stream_buffer (4.5): the
+│   │   │                   #   difference is HOW OFTEN, not what it holds
+│   │   ├── gpu_mesh.hpp    # a mesh in the shape hardware wants      [EXISTS from 4.5]
+│   │   ├── gpu_mesh.cpp    #   interleave/expand, 16-bit indices, and describe() —
+│   │   │                   #   the ONE place the vertex layout is named
 │   │   ├── gpu_pipeline.hpp# ALL render state, in one object        [EXISTS from 4.4]
 │   │   ├── gpu_pipeline.cpp#   pipeline_desc owns the arrays the create-info points at
+│   │   │                   # + instance_buffer + check_layout (4.5)
 │   │   ├── gpu_shader.hpp  # a compiled shader + its reflection      [EXISTS from 4.3]
 │   │   ├── gpu_shader.cpp  #   format choice, the JSON counts, CreateGPUShader
 │   │   ├── raster.hpp      # which pixels a SHAPE is made of         [EXISTS from 2.1]
@@ -116,7 +121,9 @@ inventing one — but without paying framework ceremony before it buys anything.
 │   ├── triangle.vert.hlsl  # 4.4 draws with this pair; no resources at all
 │   ├── triangle.frag.hlsl
 │   ├── textured.vert.hlsl  # 4.6/4.7's pair — the register spaces, in real code
-│   └── textured.frag.hlsl  # Compiled output goes to build/ and is gitignored.
+│   ├── textured.frag.hlsl
+│   ├── mesh.vert.hlsl      # 4.5: six inputs across two buffers, a frozen camera
+│   └── mesh.frag.hlsl      # Compiled output goes to build/ and is gitignored.
 ├── assets/                 # meshes, textures, fonts                   [EXISTS from 3.5]
 │   ├── cube.obj            # 20 readable lines; the index problem, by hand
 │   ├── twisted.obj         # …with one face reversed: 3.4's precondition, violated
@@ -799,6 +806,25 @@ That composition is deliberate rather than transitional. It puts the CPU rasteri
 the GPU's output side by side in one image, which is how Lesson 4.4 compares them — and the
 comparison is the point of the two-stage spine: **zero disagreements in the triangle's interior**,
 102 boundary pixels apart, the difference being a fill rule.
+
+**Stage B draws real geometry, as of Lesson 4.5.** `assets/torus.obj` — the same file Module 3
+rendered on the CPU — now goes through `gpu_mesh`, which converts Lesson 3.5's parallel arrays
+into one interleaved 32-byte-per-vertex buffer plus a 16-bit index buffer, and is drawn seven
+times from one call with per-instance data in a second buffer slot. Three architectural points
+follow from that lesson and outlive it:
+
+- **The vertex layout is named in exactly two places** — `gpu_mesh::describe` and
+  `describe_instances` — and both are written entirely in `sizeof` and `offsetof`. A literal
+  offset is correct until somebody inserts a field, at which point nothing reports an error.
+- **`pipeline_desc::check_layout` is the only thing in the engine that checks a layout at all.**
+  SDL refuses one of six broken layouts; the compiler cannot help, because the two halves are in
+  different languages. The reflection JSON that Lesson 4.3's build already emits is the third
+  document that joins them, and the check is honest that it catches three of five mistakes.
+- **Two kinds of device buffer, distinguished by write frequency rather than by contents.**
+  `gpu_buffer` is written once at load with per-upload staging and `cycle = false`;
+  `gpu_stream_buffer` is written every frame with permanent staging and `cycle = true` on both
+  hops. Getting it backwards wastes memory in one direction and corrupts data in the other — and
+  only on a machine slower than the one it was written on.
 
 See [LEARNINGS.md](LEARNINGS.md) for the verified SDL_GPU convention table.
 

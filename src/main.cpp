@@ -34,6 +34,7 @@
 #include "gfx/gpu_shader.hpp"    // Lesson 4.3: HLSL, compiled and on the device
 #include "gfx/gpu_buffer.hpp"    // Lesson 4.4: three vertices, on the device
 #include "gfx/gpu_pipeline.hpp"  // Lesson 4.4: every piece of render state, in one object
+#include "gfx/gpu_mesh.hpp"      // Lesson 4.5: a real mesh, interleaved and indexed
 #include "gfx/light.hpp"
 #include "gfx/mesh.hpp"
 #include "gfx/obj.hpp"
@@ -3473,15 +3474,42 @@ void draw_budget(SDL_Renderer* r, const engine::profiler& prof, float wall_ns,
 /// One vertex, in the layout `shaders/triangle.vert.hlsl` declares.
 ///
 /// THIS STRUCT AND THAT SHADER ARE ONE DECLARATION SPLIT IN TWO, and nothing
-/// checks that the halves agree. `position` is TEXCOORD0 and `colour` is
-/// TEXCOORD1 over there; here they are bytes 0 and 12. The pipeline's vertex
-/// attributes are how the two are joined, and `offsetof` is how we avoid writing
-/// 12 by hand — a literal offset is right until somebody inserts a field.
+/// checks that the halves agree — except, since Lesson 4.5, `check_layout`, which
+/// reads the shader's half out of the reflection JSON and compares.
+///
+/// **LESSON 4.5 SHRANK THIS STRUCT FROM 28 BYTES TO 16, AND CHANGED NOTHING ELSE.**
+/// The colour was four floats; it is now four bytes, declared to the pipeline as
+/// `UBYTE4_NORM`. `shaders/triangle.vert.hlsl` was not touched: it still says
+/// `float4 colour : TEXCOORD1`, and it still receives a `float4`, because the
+/// hardware divides each byte by 255 on the way in at no cost. That is the whole
+/// distinction between what a buffer STORES and what a shader RECEIVES, and it is
+/// worth 43% of this vertex.
 struct gpu_vertex
 {
-    float x, y, z;      ///< CLIP SPACE already: triangle.vert applies no matrix.
-    float r, g, b, a;   ///< linear, 0..1 — an SDL_FColor by another name
+    float x, y, z;              ///< CLIP SPACE already: triangle.vert applies no matrix.
+    Uint8 r, g, b, a;           ///< 0..255, arriving in the shader as 0..1 floats
 };
+
+/// One instance of the mesh: where it goes, how big, which way up, what colour.
+///
+/// Lesson 4.5. **28 bytes**, rewritten every frame, against 39,200 bytes of torus
+/// that is uploaded once and never touched again. That ratio — 0.07% of the data
+/// moving per frame — is the argument for instancing stated as a number.
+///
+/// A real engine sends a MATRIX here (or a 4x3, or a quaternion and a scale). We
+/// send a rotation about one axis as its cosine and sine, because a matrix has to
+/// be built somewhere and the somewhere is a uniform buffer, which is Lesson 4.6.
+/// The shape of the idea is identical; only the amount of it is smaller.
+struct gpu_instance
+{
+    float ox, oy, oz;   ///< world offset
+    float scale;        ///< uniform — which is why the shader may reuse the rotation
+    float spin_c;       ///< cos of the rotation about x
+    float spin_s;       ///< sin of it
+    Uint8 r, g, b, a;   ///< tint, four bytes, arriving as a float4
+};
+
+static_assert(sizeof(gpu_instance) == 28, "the pitch declared for slot 1 is this size");
 
 /// The first triangle the GPU will ever draw for us.
 ///
@@ -3494,10 +3522,98 @@ struct gpu_vertex
 /// front-facing and culls the back. Reverse any two of these and the triangle
 /// vanishes — which is Lesson 3.4's winding test, now enforced by hardware.
 constexpr gpu_vertex k_triangle[3] = {
-    {  0.15f, -0.55f, 0.0f,  0.92f, 0.35f, 0.31f, 1.0f },   // bottom left,  red
-    {  0.85f, -0.55f, 0.0f,  0.35f, 0.82f, 0.47f, 1.0f },   // bottom right, green
-    {  0.50f,  0.55f, 0.0f,  0.37f, 0.59f, 0.92f, 1.0f },   // top,          blue
+    // The same three colours Lesson 4.4 drew, quantised to eight bits per channel:
+    // 0.92 * 255 = 234.6 -> 235, and so on. The picture differs from the float
+    // version by at most one code out of 255, which `verify_45` §G measures rather
+    // than assumes.
+    {  0.15f, -0.55f, 0.0f,  235,  89,  79, 255 },   // bottom left,  red
+    {  0.85f, -0.55f, 0.0f,   89, 209, 120, 255 },   // bottom right, green
+    {  0.50f,  0.55f, 0.0f,   94, 150, 235, 255 },   // top,          blue
 };
+
+// ---- Lesson 4.5: the scene the mesh is drawn in ---------------------------
+//
+// Seven places: one at the origin and six on a ring around it. The camera in
+// `shaders/mesh.vert.hlsl` is frozen looking at this arrangement, so the numbers
+// here and the constants there are one decision written in two files — the same
+// split the vertex layout has, and worth noticing for the same reason.
+constexpr int k_max_instances = 7;
+constexpr float k_ring_radius = 2.25f;
+constexpr float k_instance_scale = 0.62f;
+
+/// Tints for the seven, walked around the hue circle so that neighbouring rings
+/// are distinguishable at a glance. Stored as bytes because that is what the
+/// vertex layout wants (see `gpu_instance`).
+constexpr Uint8 k_instance_tint[k_max_instances][3] = {
+    {236, 214, 168},   // centre — pale, so it reads as the odd one out
+    {232, 118, 102},
+    {236, 176,  86},
+    {154, 208, 122},
+    { 96, 198, 190},
+    {112, 156, 232},
+    {186, 134, 226},
+};
+
+/// Fill `out` with `count` instances at time `t`.
+///
+/// The ONLY per-frame work the mesh path does on the CPU, and it is 28 bytes per
+/// instance of arithmetic. Everything the shape of the torus is made of was
+/// uploaded once, at startup, and is not read by this function at all.
+void place_instances(gpu_instance (&out)[k_max_instances], int count, float t)
+{
+    const float two_pi = 6.28318531f;
+
+    for (int i = 0; i < count && i < k_max_instances; ++i)
+    {
+        // Index 0 sits at the origin; 1..6 walk the ring. Fixing the ring position
+        // by the instance's index rather than by its ordinal means the arrangement
+        // does not rearrange itself when the count changes, which makes [9] a
+        // comparison rather than a shuffle.
+        const float a = two_pi * static_cast<float>(i - 1) / 6.0f;
+        const float radius = (i == 0) ? 0.0f : k_ring_radius;
+
+        // Each spins at its own rate, so a stopped frame still shows seven
+        // different orientations — which is what makes it obvious at a glance that
+        // one buffer of geometry is being drawn seven times rather than seven
+        // buffers being drawn once.
+        const float rate = 0.55f + 0.13f * static_cast<float>(i);
+        const float angle = t * rate + 0.9f * static_cast<float>(i);
+
+        out[i].ox = radius * std::cos(a);
+        out[i].oy = 0.0f;
+        out[i].oz = radius * std::sin(a);
+        out[i].scale = k_instance_scale;
+        out[i].spin_c = std::cos(angle);
+        out[i].spin_s = std::sin(angle);
+        out[i].r = k_instance_tint[i][0];
+        out[i].g = k_instance_tint[i][1];
+        out[i].b = k_instance_tint[i][2];
+        out[i].a = 255;
+    }
+}
+
+/// Describe `gpu_instance` to a pipeline — one buffer at slot 1, three attributes.
+///
+/// The twin of `gpu_mesh::describe`, and the only line that differs in kind is the
+/// first: `instance_buffer` rather than `vertex_buffer`. Locations 3, 4 and 5
+/// continue where the mesh's 0, 1 and 2 stopped, because **locations are numbered
+/// across the whole pipeline, not per buffer** — a shader has one input list, and
+/// which slot each entry is fetched from is exactly what these calls decide.
+engine::pipeline_desc& describe_instances(engine::pipeline_desc& desc, Uint32 slot = 1)
+{
+    // Location 3 is a FLOAT4 covering FOUR fields — `ox, oy, oz, scale` — because
+    // they are four contiguous floats and the shader wants them as one `float4`.
+    // That is a deliberate pack, not a coincidence: three floats and a lone float
+    // would be two attributes and two fetches for the same eight cache lines.
+    desc.instance_buffer(slot, static_cast<Uint32>(sizeof(gpu_instance)))
+        .attribute(3, slot, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4,
+                   static_cast<Uint32>(offsetof(gpu_instance, ox)))
+        .attribute(4, slot, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2,
+                   static_cast<Uint32>(offsetof(gpu_instance, spin_c)))
+        .attribute(5, slot, SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4_NORM,
+                   static_cast<Uint32>(offsetof(gpu_instance, r)));
+    return desc;
+}
 
 /// What Lesson 4.3's shader loading produced, in the form the picture needs.
 ///
@@ -3731,6 +3847,11 @@ int run_gpu_probe(SDL_Window* window)
         {"triangle.frag", engine::shader_stage::fragment},
         {"textured.vert", engine::shader_stage::vertex},
         {"textured.frag", engine::shader_stage::fragment},
+        // Lesson 4.5. Indices 4 and 5, and the ORDER MATTERS because the pipeline
+        // built below indexes this array — which is exactly the kind of implicit
+        // coupling Module 5's asset system replaces with a handle.
+        {"mesh.vert", engine::shader_stage::vertex},
+        {"mesh.frag", engine::shader_stage::fragment},
     };
 
     engine::gpu_shader shaders[shader_status::k_max];
@@ -3810,8 +3931,127 @@ int run_gpu_probe(SDL_Window* window)
                 SDL_arraysize(k_triangle), geometry_ok ? "" : "  - UPLOAD FAILED");
     }
 
+    // ---- Lesson 4.5: a real mesh, its layout, and its instances -------------
+    //
+    // Everything below happens ONCE. The torus is read off disk, converted from
+    // Lesson 3.5's parallel arrays into interleaved vertices, and pushed to the
+    // device; from then on the only thing that moves per frame is 28 bytes per
+    // instance. That sentence is the lesson.
+    engine::mesh_data torus;
+    const engine::obj_report torus_report =
+        engine::load_obj(engine::asset_path("torus.obj").c_str(), torus);
+
+    engine::gpu_mesh mesh_indexed;
+    engine::gpu_mesh mesh_expanded;
+    bool mesh_ok = false;
+
+    if (!torus_report.ok())
+    {
+        SDL_Log("  mesh            : torus.obj did not load (%s) - [6] will do nothing",
+                engine::name_of(torus_report.status));
+    }
+    else
+    {
+        // Lesson 3.9's flip, applied at the import boundary as always: OBJ counts v
+        // upwards from the bottom, every GPU texture counts it downwards from the
+        // top, and the grid in `mesh.frag.hlsl` would be a mirror image without it.
+        engine::flip_uv_v(torus);
+
+        SDL_GPUCommandBuffer* mesh_cb = SDL_AcquireGPUCommandBuffer(gpu.handle());
+        const engine::mesh view = torus.view();
+
+        // BOTH FORMS OF THE SAME MESH, so that [7] is a comparison rather than a
+        // claim. `expanded` writes three vertices per triangle and keeps no index
+        // buffer — what a renderer without index buffers is forced to do.
+        const bool a_ok = mesh_indexed.create(gpu, mesh_cb, view,
+                                              engine::index_mode::indexed, "torus (indexed)");
+        const bool b_ok = mesh_expanded.create(gpu, mesh_cb, view,
+                                               engine::index_mode::expanded, "torus (expanded)");
+        mesh_ok = a_ok && b_ok && SDL_SubmitGPUCommandBuffer(mesh_cb);
+
+        SDL_Log("  mesh            : torus.obj  %zu vertices, %zu triangles",
+                torus.vertices.size(), torus.triangle_count());
+        SDL_Log("    indexed       : %6u vertices + %6u indices = %6u bytes"
+                "  (%u-%u shader invocations)",
+                mesh_indexed.vertex_count(), mesh_indexed.index_count(),
+                mesh_indexed.total_bytes(),
+                mesh_indexed.best_case_invocations(), mesh_indexed.worst_case_invocations());
+        SDL_Log("    expanded      : %6u vertices + %6u indices = %6u bytes"
+                "  (%u shader invocations, no reuse possible)",
+                mesh_expanded.vertex_count(), mesh_expanded.index_count(),
+                mesh_expanded.total_bytes(), mesh_expanded.best_case_invocations());
+        if (mesh_indexed.total_bytes() > 0)
+        {
+            SDL_Log("    the index buffer costs %u bytes and saves %u: %.2fx",
+                    mesh_indexed.index_bytes(),
+                    mesh_expanded.vertex_bytes() - mesh_indexed.vertex_bytes(),
+                    static_cast<double>(mesh_expanded.total_bytes())
+                        / static_cast<double>(mesh_indexed.total_bytes()));
+        }
+    }
+
+    // ---- Three pipelines that differ in ONE NUMBER --------------------------
+    //
+    // The pitch: 32 bytes (right), 28 (too small), 36 (too large). Nothing else
+    // about them differs, none of the three fails to create, and two of the three
+    // draw a mesh made of noise. Lesson 4.5 §4 is what [8] cycles through.
+    constexpr Uint32 k_right_pitch = static_cast<Uint32>(sizeof(engine::gpu_vertex_pnu));
+    const Uint32 pitches[3] = {k_right_pitch, k_right_pitch - 4u, k_right_pitch + 4u};
+    const char* pitch_names[3] = {"32 (correct)", "28 (four bytes short)", "36 (four bytes long)"};
+
+    engine::gpu_pipeline mesh_pipelines[3];
+    bool mesh_pipeline_ok = false;
+
+    if (shader_state.loaded[4] && shader_state.loaded[5])
+    {
+        for (int i = 0; i < 3; ++i)
+        {
+            engine::pipeline_desc mdesc(gpu, shaders[4].handle(), shaders[5].handle());
+
+            // Slot 0 by hand rather than through `gpu_mesh::describe`, because the
+            // pitch is what varies and describe() would (rightly) refuse to lie
+            // about it. The attributes are identical in all three.
+            mdesc.vertex_buffer(0, pitches[i])
+                 .attribute(0, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,
+                            static_cast<Uint32>(offsetof(engine::gpu_vertex_pnu, px)))
+                 .attribute(1, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,
+                            static_cast<Uint32>(offsetof(engine::gpu_vertex_pnu, nx)))
+                 .attribute(2, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2,
+                            static_cast<Uint32>(offsetof(engine::gpu_vertex_pnu, u)));
+            describe_instances(mdesc);
+
+            // THE CHECK LESSON 4.4 SAID NOTHING PERFORMS. It catches the 28-byte
+            // pitch, because the uv at offset 24 then ends at byte 32 of a 28-byte
+            // vertex. It does NOT catch the 36-byte one — every attribute fits
+            // inside an over-long vertex — and being clear about what a check
+            // cannot see is most of what makes it trustworthy.
+            const engine::layout_report lr =
+                mdesc.check_layout(shaders[4].inputs(), pitch_names[i]);
+            if (!lr.ok())
+            {
+                SDL_Log("  layout %s: %d problem(s) — see above",
+                        pitch_names[i], lr.problems());
+            }
+
+            if (!mesh_pipelines[i].create(gpu, mdesc.info()))
+            {
+                SDL_Log("  mesh pipeline %s: NOT created", pitch_names[i]);
+            }
+        }
+        mesh_pipeline_ok = mesh_pipelines[0].valid();
+    }
+
+    // ---- The per-instance buffer -------------------------------------------
+    engine::gpu_stream_buffer instance_buffer;
+    const bool instances_ok =
+        instance_buffer.create(gpu, SDL_GPU_BUFFERUSAGE_VERTEX,
+                               static_cast<Uint32>(sizeof(gpu_instance)) * k_max_instances,
+                               "instance placements");
+
     SDL_Log("Keys: [1] filter  [2] present mode  [3] frames in flight"
-            "  [4] wait on a fence every frame  [5] GPU triangle  [Esc] quit");
+            "  [4] wait on a fence every frame  [5] GPU triangle");
+    SDL_Log("      [6] the mesh  [7] indexed/expanded  [8] the pitch  [9] instances"
+            "  [Esc] quit");
     SDL_Log("Graph: green = software raster, cyan = recording, blue = waiting for a"
             " swapchain image, orange = waiting on a fence.");
 
@@ -3825,6 +4065,10 @@ int run_gpu_probe(SDL_Window* window)
     bool running = true;
     bool logged_swapchain_size = false;
     bool draw_gpu_triangle = true;
+    bool draw_mesh = true;                 // [6]
+    bool mesh_use_indices = true;          // [7]
+    int mesh_pitch_choice = 0;             // [8] — index into `pitches`
+    int instance_count = k_max_instances;  // [9]
     bool smooth = false;
     bool fence_each_frame = false;
     int present_mode_index = 0;
@@ -3896,6 +4140,37 @@ int run_gpu_probe(SDL_Window* window)
             draw_gpu_triangle = !draw_gpu_triangle;
             SDL_Log("[5] GPU triangle: %s", draw_gpu_triangle ? "ON" : "off");
         }
+        if (in.key_pressed(SDL_SCANCODE_6))
+        {
+            draw_mesh = !draw_mesh;
+            SDL_Log("[6] mesh: %s", draw_mesh ? "ON" : "off");
+        }
+        if (in.key_pressed(SDL_SCANCODE_7))
+        {
+            mesh_use_indices = !mesh_use_indices;
+            const engine::gpu_mesh& m = mesh_use_indices ? mesh_indexed : mesh_expanded;
+            SDL_Log("[7] %s: %u vertices, %u indices, %u bytes on the device —"
+                    " and the picture is IDENTICAL",
+                    mesh_use_indices ? "INDEXED " : "EXPANDED",
+                    m.vertex_count(), m.index_count(), m.total_bytes());
+        }
+        if (in.key_pressed(SDL_SCANCODE_8))
+        {
+            mesh_pitch_choice = (mesh_pitch_choice + 1) % 3;
+            SDL_Log("[8] vertex pitch: %s%s", pitch_names[mesh_pitch_choice],
+                    mesh_pitch_choice == 0 ? ""
+                        : "  <- the layout now walks the buffer at the wrong rate");
+        }
+        if (in.key_pressed(SDL_SCANCODE_9))
+        {
+            // 1, 4, 7 — the same buffer of geometry, drawn a different number of
+            // times by changing ONE ARGUMENT of the draw call.
+            instance_count = (instance_count == 1) ? 4 : (instance_count == 4 ? 7 : 1);
+            SDL_Log("[9] instances: %d  (%zu bytes of per-instance data per frame,"
+                    " against %u bytes of geometry that has not moved since startup)",
+                    instance_count, sizeof(gpu_instance) * static_cast<std::size_t>(instance_count),
+                    mesh_indexed.total_bytes());
+        }
         if (in.key_pressed(SDL_SCANCODE_4))
         {
             fence_each_frame = !fence_each_frame;
@@ -3928,6 +4203,18 @@ int run_gpu_probe(SDL_Window* window)
 
         const Uint64 t_rec0 = SDL_GetPerformanceCounter();
         present.upload(cb, fb);
+
+        // Lesson 4.5. The whole of this frame's geometry work: 196 bytes at most,
+        // recorded into a copy pass that runs before the draw that reads it. The
+        // torus itself was uploaded once, before the loop, and is not touched.
+        if (draw_mesh && instances_ok)
+        {
+            gpu_instance placements[k_max_instances] = {};
+            place_instances(placements, instance_count, spin);
+            (void)instance_buffer.write(cb, placements,
+                                        static_cast<Uint32>(sizeof(gpu_instance))
+                                            * static_cast<Uint32>(instance_count));
+        }
         const Uint64 t_rec1 = SDL_GetPerformanceCounter();
 
         // ---- 3. The swapchain image ----------------------------------------
@@ -3997,14 +4284,18 @@ int run_gpu_probe(SDL_Window* window)
             // Outside the pass, because a blit is itself a pass.
             present.blit_onto(cb, swap, swap_w, swap_h, smooth);
 
-            // ---- Lesson 4.4: the GPU draws ---------------------------------
+            // ---- Lessons 4.4 and 4.5: the GPU draws -------------------------
             //
             // A SECOND render pass, loading what the blit just wrote rather than
-            // clearing it, so the CPU's picture and the GPU's triangle share one
-            // window. That is the comparison this lesson is for: everything on
-            // the left was computed by code you wrote, and the triangle on the
-            // right by hardware running a shader you wrote.
-            if (draw_gpu_triangle && pipeline_ok && geometry_ok)
+            // clearing it, so the CPU's picture and the GPU's geometry share one
+            // window. That is the comparison Module 4 is for: everything under it
+            // was computed by code you wrote, and everything drawn into it by
+            // hardware running a shader you wrote.
+            const bool want_triangle = draw_gpu_triangle && pipeline_ok && geometry_ok;
+            const bool want_mesh = draw_mesh && mesh_ok && mesh_pipeline_ok && instances_ok
+                                && mesh_pipelines[mesh_pitch_choice].valid();
+
+            if (want_triangle || want_mesh)
             {
                 SDL_GPUColorTargetInfo over{};
                 over.texture = swap;
@@ -4013,17 +4304,69 @@ int run_gpu_probe(SDL_Window* window)
 
                 SDL_GPURenderPass* draw_pass = SDL_BeginGPURenderPass(cb, &over, 1, nullptr);
 
-                SDL_BindGPUGraphicsPipeline(draw_pass, triangle_pipeline.handle());
+                if (want_mesh)
+                {
+                    // THE VIEWPORT, and it is not decoration. `mesh.vert.hlsl`
+                    // bakes an aspect ratio of 16:9 into its projection, and this
+                    // window is resizable. Restricting the draw to the same
+                    // letterboxed rectangle the blit used makes the shader's
+                    // assumption true instead of nearly true — and it is Lesson
+                    // 2.11's viewport transform, handed to the hardware as a
+                    // struct rather than performed by us.
+                    const engine::blit_rect fit =
+                        engine::fit_centred(static_cast<Uint32>(fb.width()),
+                                            static_cast<Uint32>(fb.height()), swap_w, swap_h);
 
-                SDL_GPUBufferBinding binding{};
-                binding.buffer = triangle_vertices.handle();
-                binding.offset = 0;
-                SDL_BindGPUVertexBuffers(draw_pass, 0, &binding, 1);
+                    SDL_GPUViewport vp{};
+                    vp.x = static_cast<float>(fit.x);
+                    vp.y = static_cast<float>(fit.y);
+                    vp.w = static_cast<float>(fit.w);
+                    vp.h = static_cast<float>(fit.h);
+                    vp.min_depth = 0.0f;
+                    vp.max_depth = 1.0f;   // SDL_GPU's depth range (conventions §4)
+                    SDL_SetGPUViewport(draw_pass, &vp);
 
-                // Three vertices, one instance, starting at the beginning of
-                // both. The last two arguments are what Lesson 4.5's instancing
-                // will make interesting; today they are 1 and 0.
-                SDL_DrawGPUPrimitives(draw_pass, 3, 1, 0, 0);
+                    SDL_BindGPUGraphicsPipeline(draw_pass,
+                                                mesh_pipelines[mesh_pitch_choice].handle());
+
+                    const engine::gpu_mesh& m = mesh_use_indices ? mesh_indexed : mesh_expanded;
+                    m.bind(draw_pass, 0);
+
+                    // Slot 1: the per-instance buffer. Bound with the SAME call as
+                    // the geometry, because at this level there is no difference
+                    // between them — `input_rate` in the pipeline is the only place
+                    // that knows one advances per vertex and the other per instance.
+                    SDL_GPUBufferBinding ib{};
+                    ib.buffer = instance_buffer.handle();
+                    ib.offset = 0;
+                    SDL_BindGPUVertexBuffers(draw_pass, 1, &ib, 1);
+
+                    m.draw(draw_pass, static_cast<Uint32>(instance_count));
+
+                    // Put the viewport back for anything drawn after us. Viewport
+                    // is PASS state, not pipeline state: it survives a pipeline
+                    // change, which is exactly the sort of thing that makes a
+                    // second draw mysteriously land in the wrong rectangle.
+                    SDL_GPUViewport full{};
+                    full.w = static_cast<float>(swap_w);
+                    full.h = static_cast<float>(swap_h);
+                    full.max_depth = 1.0f;
+                    SDL_SetGPUViewport(draw_pass, &full);
+                }
+
+                if (want_triangle)
+                {
+                    SDL_BindGPUGraphicsPipeline(draw_pass, triangle_pipeline.handle());
+
+                    SDL_GPUBufferBinding binding{};
+                    binding.buffer = triangle_vertices.handle();
+                    binding.offset = 0;
+                    SDL_BindGPUVertexBuffers(draw_pass, 0, &binding, 1);
+
+                    // Three vertices, one instance, starting at the beginning of
+                    // both. The `1` is what the mesh above passes seven of.
+                    SDL_DrawGPUPrimitives(draw_pass, 3, 1, 0, 0);
+                }
 
                 SDL_EndGPURenderPass(draw_pass);
             }
@@ -4080,6 +4423,10 @@ int run_gpu_probe(SDL_Window* window)
     // would do this anyway (they are declared after `gpu`, so C++ destroys them
     // first), and saying it explicitly is the same choice 4.2 made: a dependency
     // that is visible is a dependency that survives the next edit.
+    instance_buffer.destroy();
+    mesh_indexed.destroy();
+    mesh_expanded.destroy();
+    for (engine::gpu_pipeline& mp : mesh_pipelines) { mp.destroy(); }
     triangle_vertices.destroy();
     triangle_pipeline.destroy();
     for (engine::gpu_shader& shader : shaders) { shader.destroy(); }

@@ -111,7 +111,89 @@ bool read_count(std::string_view json, std::string_view key, Uint32& out)
     return true;
 }
 
+/// Read `"key": "value"` within `span`, where the value is a bare identifier.
+///
+/// No escape handling, and that is a statement about the input rather than a
+/// shortcut: these values are HLSL identifiers and type names emitted by our own
+/// build three seconds ago. A backslash in one would mean the file is not the
+/// file we think it is, and the caller's job then is to fail, not to cope.
+bool read_string(std::string_view span, std::string_view key, std::string& out)
+{
+    std::string quoted;
+    quoted.reserve(key.size() + 2);
+    quoted += '"';
+    quoted += key;
+    quoted += '"';
+
+    const std::size_t at = span.find(quoted);
+    if (at == std::string_view::npos) { return false; }
+
+    std::size_t i = span.find('"', at + quoted.size());   // opening quote of the VALUE
+    if (i == std::string_view::npos) { return false; }
+    ++i;
+
+    const std::size_t end = span.find('"', i);
+    if (end == std::string_view::npos) { return false; }
+
+    out.assign(span.substr(i, end - i));
+    return true;
+}
+
 } // namespace
+
+bool parse_shader_inputs(std::string_view json, shader_inputs& out)
+{
+    out.clear();
+
+    // ---- Bound the scan to the inputs array ---------------------------------
+    //
+    // THIS BOUND IS THE WHOLE CORRECTNESS ARGUMENT. The same file also contains
+    // an `outputs` array with byte-identical key names, so a scanner that simply
+    // looked for `"location"` would happily walk out of one array and into the
+    // other and report a vertex shader as taking three inputs when it declares
+    // two. Find the array, find its end, and never read past it.
+    const std::size_t key = json.find("\"inputs\"");
+    if (key == std::string_view::npos) { return true; }   // no inputs is an answer
+
+    const std::size_t open = json.find('[', key);
+    if (open == std::string_view::npos) { return false; }
+
+    const std::size_t close = json.find(']', open);
+    if (close == std::string_view::npos) { return false; }
+
+    const std::string_view array = json.substr(open + 1, close - open - 1);
+
+    // ---- One object at a time ------------------------------------------------
+    std::size_t i = 0;
+    while (true)
+    {
+        const std::size_t obj_open = array.find('{', i);
+        if (obj_open == std::string_view::npos) { break; }
+
+        const std::size_t obj_close = array.find('}', obj_open);
+        if (obj_close == std::string_view::npos) { return false; }
+
+        const std::string_view object = array.substr(obj_open, obj_close - obj_open + 1);
+
+        shader_input entry;
+        if (!read_string(object, "name", entry.name)
+            || !read_string(object, "type", entry.type)
+            || !read_count(object, "location", entry.location))
+        {
+            // An object that is present but incomplete IS an error, unlike an
+            // absent array. Half a description is worse than none: it would let
+            // `check_layout` report a clean bill of health for a contract it
+            // never actually read.
+            out.clear();
+            return false;
+        }
+
+        out.push_back(std::move(entry));
+        i = obj_close + 1;
+    }
+
+    return true;
+}
 
 bool parse_shader_reflection(std::string_view json, shader_resources& out)
 {
@@ -136,11 +218,13 @@ gpu_shader::~gpu_shader()
 
 gpu_shader::gpu_shader(gpu_shader&& other) noexcept
     : device_(other.device_), shader_(other.shader_), resources_(other.resources_),
-      target_(other.target_), code_bytes_(other.code_bytes_), name_(std::move(other.name_))
+      inputs_(std::move(other.inputs_)), target_(other.target_),
+      code_bytes_(other.code_bytes_), name_(std::move(other.name_))
 {
     other.device_ = nullptr;
     other.shader_ = nullptr;
     other.resources_ = {};
+    other.inputs_.clear();   // moved-from vectors are valid but UNSPECIFIED
     other.target_ = {};
     other.code_bytes_ = 0;
 }
@@ -153,12 +237,14 @@ gpu_shader& gpu_shader::operator=(gpu_shader&& other) noexcept
         device_ = other.device_;
         shader_ = other.shader_;
         resources_ = other.resources_;
+        inputs_ = std::move(other.inputs_);
         target_ = other.target_;
         code_bytes_ = other.code_bytes_;
         name_ = std::move(other.name_);
         other.device_ = nullptr;
         other.shader_ = nullptr;
         other.resources_ = {};
+        other.inputs_.clear();
         other.target_ = {};
         other.code_bytes_ = 0;
     }
@@ -209,8 +295,21 @@ bool gpu_shader::load(const gpu_device& dev, const char* name, shader_stage stag
         return false;
     }
 
-    const bool parsed = parse_shader_reflection(
-        std::string_view(static_cast<const char*>(json), json_size), resources_);
+    const std::string_view json_text(static_cast<const char*>(json), json_size);
+
+    const bool parsed = parse_shader_reflection(json_text, resources_);
+
+    // Lesson 4.5. The inputs are read from the same text, and a failure here is
+    // logged rather than fatal: a shader still loads and still draws with an
+    // unread input list. What is lost is only the ability to CHECK the layout,
+    // and losing a check silently is the thing worth refusing to do.
+    if (!parse_shader_inputs(json_text, inputs_))
+    {
+        SDL_Log("shader '%s': the reflection's \"inputs\" array is malformed —"
+                " the layout cannot be checked against it", name);
+        inputs_.clear();
+    }
+
     SDL_free(json);
 
     if (!parsed)
@@ -281,6 +380,7 @@ void gpu_shader::destroy()
     device_ = nullptr;
     shader_ = nullptr;
     resources_ = {};
+    inputs_.clear();
     target_ = {};
     code_bytes_ = 0;
     name_.clear();

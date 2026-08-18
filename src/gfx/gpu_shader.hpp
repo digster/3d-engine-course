@@ -33,6 +33,7 @@
 #include <cstddef>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace engine {
 
@@ -64,6 +65,35 @@ struct shader_resources
         return samplers + storage_textures + storage_buffers + uniform_buffers;
     }
 };
+
+/// One vertex input a shader declares, exactly as shadercross reports it.
+///
+/// Lesson 4.5. Lesson 4.4 ended with the vertex layout declared **twice, in two
+/// languages, with nothing checking that the halves agree** — HLSL says
+/// `float3 position : TEXCOORD0`, C++ says `FLOAT3 at offset 0` — and left the
+/// cross-check as an exercise. This is that exercise, promoted to a feature,
+/// because the same JSON file that already saves us from guessing the resource
+/// counts has been carrying the answer since Lesson 4.3:
+///
+///     "inputs": [{ "name": "input.position", "type": "float3", "location": 0 },
+///                { "name": "input.colour",   "type": "float4", "location": 1 }]
+///
+/// `location` is the semantic index — `TEXCOORD0` is location 0 — and it is the
+/// only field SDL matches on. The name is for humans and for error messages.
+struct shader_input
+{
+    std::string name;       ///< "input.position" — SPIRV-Cross's spelling, struct prefix and all
+    std::string type;       ///< "float3", "float4", "uint" — what the SHADER receives
+    Uint32 location = 0;    ///< the TEXCOORD index
+};
+
+/// Every vertex input one shader declares, in the order the reflection lists them.
+///
+/// A `std::vector` rather than the fixed array `pipeline_desc` uses, and the
+/// asymmetry is deliberate: the pipeline's arrays are pointed at by a create-info
+/// and must never reallocate (Lesson 4.4's dangling-pointer trap), while this one
+/// is read once at load time and never handed to SDL at all.
+using shader_inputs = std::vector<shader_input>;
 
 /// Which compiled artefact to load on this device, and what its entry point is
 /// called once it gets there.
@@ -111,6 +141,18 @@ struct shader_target
 ///         it is, and guessing would be worse than failing.
 [[nodiscard]] bool parse_shader_reflection(std::string_view json, shader_resources& out);
 
+/// Read the `inputs` array out of the same JSON.
+///
+/// Separate from `parse_shader_reflection` because the two have different
+/// contracts. The four counts are **mandatory** — a shader created without them
+/// is a shader that reads garbage — so a missing key there is a hard failure. The
+/// input list is *diagnostic*: a shader with no inputs at all is perfectly legal
+/// (Lesson 4.4's fragment stage is one), so an absent or empty array is an answer,
+/// not an error.
+///
+/// @return false only if the array is present and malformed.
+[[nodiscard]] bool parse_shader_inputs(std::string_view json, shader_inputs& out);
+
 /// Owns one `SDL_GPUShader`.
 ///
 /// Move-only, like every device resource in this engine. A shader is *immutable
@@ -144,6 +186,14 @@ public:
     [[nodiscard]] bool valid() const { return shader_ != nullptr; }
     [[nodiscard]] SDL_GPUShader* handle() const { return shader_; }
     [[nodiscard]] const shader_resources& resources() const { return resources_; }
+
+    /// The vertex inputs this shader declares — empty for a fragment stage that
+    /// takes none, and for any stage whose reflection did not list them.
+    ///
+    /// Lesson 4.5 feeds this straight to `pipeline_desc::check_layout`, which is
+    /// the only place in the engine where the two halves of the vertex
+    /// declaration are ever compared.
+    [[nodiscard]] const shader_inputs& inputs() const { return inputs_; }
     [[nodiscard]] const shader_target& target() const { return target_; }
 
     /// Bytes of compiled code loaded — the interesting half of "what did that
@@ -156,6 +206,7 @@ private:
     SDL_GPUDevice* device_ = nullptr;   ///< NOT owned; gpu_device owns it
     SDL_GPUShader* shader_ = nullptr;   ///< owning by contract
     shader_resources resources_{};
+    shader_inputs inputs_;
     shader_target target_{};
     std::size_t code_bytes_ = 0;
     std::string name_;

@@ -7,9 +7,141 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-08-17 (after Lesson 4.4 — 40 of 94 lessons)
+updated: 2026-08-18 (after Lesson 4.5 — 41 of 94 lessons)
 
 conventions:
+  vertex-fetch: A LAYOUT IS THREE NUMBERS AND ONE FORMULA — address = base +
+        i*pitch + offset — evaluated by fixed-function hardware with no way to
+        know whether the numbers are right. Any pitch produces addresses, any
+        addresses produce bytes, any bytes produce floats. THE PICTURE IS THE
+        ONLY PLACE A MISTAKE BECOMES VISIBLE.
+        SIZEOF FOR THE PITCH, OFFSETOF FOR EVERY OFFSET, NEVER A LITERAL.
+        gpu_mesh::describe and main.cpp's describe_instances are the only two
+        places in the engine that name a layout.
+        A WRONG PITCH SHATTERS, A WRONG OFFSET DEFORMS, and the difference is
+        diagnostic. Pitch error is i*(error), so it ACCUMULATES — 4 bytes at
+        vertex 1, 4,896 by vertex 1,224, and EXACTLY ZERO AT VERTEX 0, which is
+        how the bug survives a three-vertex test. Measured: pitch 32 -> 3,696 px
+        in an 88x52 box; 28 -> 5,076 px in 88x84; 36 -> 5,027 px in 88x84 —
+        coverage goes UP, and too-long and too-short look the SAME, so do not
+        read the direction out of the picture. A wrong OFFSET reads the wrong
+        bytes of the RIGHT vertex: position pointed at the normal collapses the
+        mesh onto a unit sphere (3,126 px, 62x64).
+  vertex-format: A FORMAT ANSWERS TWO QUESTIONS AND THE ANSWERS DIFFER.
+        engine::size_of is bytes IN THE BUFFER; engine::shader_type_of is the
+        type IN THE SHADER. UBYTE4_NORM is 4 bytes and a float4 — the divide by
+        255 is done by the fetch unit, free. Also SHORT2_NORM -> float2 (/32767),
+        HALF4 -> float4. The plain integer forms (UBYTE4, SHORT4) do NOT convert.
+        CASHED IT: 4.4's gpu_vertex went 28 -> 16 bytes (-43%) with
+        triangle.vert.hlsl UNCHANGED. Same 47,124 px covered; 22,494 of them
+        differ by AT MOST 1 code of 255 — below the precision of an 8-bit target.
+        UBYTE4 vs UBYTE4_NORM is SIX CHARACTERS and the same four bytes: the
+        first delivers 0..255 into a float (white), the second 0..1.
+  layout-check: THE REFLECTION JSON IS THE NOTARY, AND IT CATCHES 3 OF 5.
+        shadercross has emitted an `inputs` array (name/type/location) since 4.3
+        and we read only the four counts. parse_shader_inputs reads the rest;
+        pipeline_desc::check_layout compares. SETTLES EXERCISE 4.4.4.
+        BOUND THE SCAN TO THE ARRAY — the same file has an `outputs` array with
+        byte-identical keys, so an unbounded scan for "location" walks out of one
+        and into the other. Absent `inputs` is an ANSWER (true); malformed is an
+        ERROR (false), because half a description would let the check give a
+        clean bill of health to a contract it never read.
+        CATCHES: a too-short pitch (attribute end > pitch), a location nothing
+        declares, a location nothing supplies, duplicate locations, a base-type
+        mismatch. CANNOT CATCH: a too-long pitch, swapped offsets. Saying so is
+        what makes it worth reading — a check that implies total coverage is
+        worse than none.
+        AND SDL CATCHES ONE OF SIX. Measured: pitch 4 short -> CREATED, 4 long ->
+        CREATED, offsets swapped -> CREATED, an attribute the shader never
+        declares -> CREATED. Only "a shader input nothing supplies" is REFUSED,
+        with an excellent message ("Vertex attribute input_uv(2) is missing from
+        the vertex descriptor") — and it is the one that would have been obvious
+        anyway. Same temperament as 4.3's shader creation: names checked,
+        numbers not.
+        WIDENING IS A NOTE, NOT A PROBLEM. FLOAT3 into a float4 is legal and the
+        hardware fills the rest. MEASURED ON METAL: w = 1 — the FLOAT3 draw
+        covered 9,944 px, EXACTLY equal to a FLOAT4 draw at scale 1.0 (the
+        missing component IS the scale, so coverage reads the answer off the
+        screen). Agrees with Vulkan/D3D12's (0,0,0,1). ⚠ VERIFY elsewhere.
+  interleave: INTERLEAVED BY DEFAULT, HYBRID IN PRODUCTION, AND BOTH NUMBERS ARE
+        MEASURED on our 1,225-vertex torus with 64-byte lines. Fetching ONE
+        vertex: 1 line interleaved (32 B is half a line exactly, so it never
+        straddles), up to 5 separate. Sweeping every POSITION: 613 lines
+        interleaved against 230 separate — 2.7x THE OTHER WAY, because an
+        interleaved line carries 12 useful bytes in 32.
+        SO IT IS A TRADE, NOT A RULE. The production layout is position in its
+        own buffer and everything else interleaved, which makes a depth-only pass
+        fast without slowing the main pass. NOT BUILT — there is no depth pass to
+        justify it until Module 6 — and it costs no new concepts when it comes,
+        because a "separate" layout is just more vertex_buffer slots.
+        PAYS OFF 3.2's PROMISE: mesh.hpp said parallel arrays were right for a
+        CPU loop and that Module 4 would revisit with the diagram the decision
+        deserves. gpu_mesh::interleave is the revisit; it converts once, at load.
+  index-buffers: 16-BIT, AND THAT IS WHERE k_max_mesh_vertices COMES FROM.
+        SDL_GPUIndexElementSize has exactly two values; 16 bits names 65,536,
+        which mesh.hpp has declared since 3.5 with a justification and which
+        gpu_mesh::create is the first line to DEPEND on.
+        ON OUR TORUS: 1,225 vertices + 6,912 indices = 53,024 bytes against 6,912
+        expanded vertices = 221,184. 4.17x. The index buffer COSTS 13,824 and
+        SAVES 181,984, because an index is 2 bytes and a vertex is 32.
+        THE PICTURES ARE IDENTICAL — 0 differing pixels, max channel delta 0,
+        proven by drawing both through one pipeline into one target. A test that
+        can only ever return zero is worth writing: a nonzero result has exactly
+        one explanation.
+        INVOCATIONS ARE A RANGE, NOT A FIGURE: indexed 1,225..6,912 depending on
+        the post-transform cache; expanded 6,912 exactly, no reuse possible. This
+        is what vertex-cache optimisation (Forsyth) optimises. 4.9's RenderDoc
+        capture is where the real number appears.
+        1,152 POSITIONS IN THE FILE, 1,225 VERTICES AFTER LOADING — the uv seam
+        splits every vertex where u wraps 1 -> 0. 3.5 §3's argument, on the mesh
+        that was built to contain it.
+        THE ELEMENT SIZE IS PASSED AT BIND TIME, not baked into the pipeline and
+        not carried by the buffer. 16-bit indices bound as _32BIT read pairs as
+        single enormous values: glass shards, no error.
+  instancing: ONE ENUM VALUE. input_rate = _INSTANCE instead of _VERTEX; same
+        buffer type, same usage bit, same SDL_BindGPUVertexBuffers, same
+        attributes at ordinary locations. THE SHADER CANNOT TELL —
+        mesh.vert.hlsl declares six inputs in one struct and nothing marks 3/4/5
+        as per-instance. Every tool built for layouts (formats, check_layout, the
+        reflection) therefore works on instance data unchanged.
+        LOCATIONS ARE NUMBERED ACROSS THE PIPELINE, NOT PER BUFFER. Slot 1's are
+        3, 4, 5 because slot 0 used 0, 1, 2.
+        instance_step_rate IS RESERVED AND MUST BE 0 — not exposed by
+        instance_buffer(), because a setter for a field with one legal value is
+        an invitation to a bug.
+        THE DEFAULT IS THE TRAP AGAIN: every enum in the description has its
+        first enumerator at 0, so a zero-initialised description means _VERTEX.
+        Identical in shape to 4.4's cull_mode finding.
+        THE NUMBER: 28 bytes/instance x 7 = 196 bytes rewritten per frame against
+        53,024 bytes of geometry uploaded once — 0.370%. That ratio IS the
+        argument for instancing.
+        A REAL ENGINE SENDS A MATRIX HERE. We send a cos/sin pair for one axis,
+        because a matrix has to come from a uniform buffer and that is 4.6.
+  stream-buffers: TWO KINDS OF BUFFER, AND THE DIFFERENCE IS HOW OFTEN THEY ARE
+        WRITTEN, NOT WHAT THEY HOLD. gpu_buffer: written once at load, staging
+        created and released per upload, cycle = FALSE (no reader to race, and
+        cycling would allocate a second copy of 39 KB of torus).
+        gpu_stream_buffer NEW: written every frame, staging KEPT for the object's
+        lifetime, cycle = TRUE on BOTH the map and the upload.
+        GETTING IT BACKWARDS COSTS MEMORY IN ONE DIRECTION AND CORRECTNESS IN THE
+        OTHER — and the correctness bug appears only when the GPU falls behind,
+        i.e. on somebody else's slower machine. Same hazard gpu_present_target
+        faced in 4.2, now on the geometry side.
+  gpu-viewport: SDL_SetGPUViewport IS RENDER-PASS STATE, NOT PIPELINE STATE. It
+        survives a pipeline change, so a second draw in the same pass inherits
+        it — put it back if that draw wants the whole target. Used because
+        mesh.vert.hlsl bakes 16:9 into its projection and the window is
+        resizable: the mesh pass is restricted to the same letterboxed rect the
+        blit uses. This is 2.11's viewport transform handed to hardware as a
+        struct, min_depth/max_depth 0..1 per conventions §4.
+  no-uniforms-yet: mesh.vert.hlsl's camera is a pile of `static const` floats and
+        the projection is LESSON 2.10's MATRIX WRITTEN OUT AS ARITHMETIC, line
+        for line: clip.x = (t/a)*view.x, clip.y = t*view.y, clip.z =
+        R*(view.z + n), clip.w = -view.z, with t = 1/tan(fovY/2) and R = f/(n-f).
+        Nothing is simplified away; only the DELIVERY is deferred to 4.6.
+        Consequences to undo next lesson: the camera cannot move, the
+        per-instance rotation is a cos/sin pair rather than a matrix, and the
+        aspect ratio is a constant that the viewport has to make true.
   pipelines: EVERY PIECE OF RENDER STATE, IN ONE IMMUTABLE OBJECT — 9 top-level
         fields, 53 expanded, which is exactly the count 4.1 predicted from
         fill_style. It IS fill_style's argument list, hoisted out of the call and
@@ -69,6 +201,9 @@ conventions:
         reflection JSON already holds the shader's half (`inputs`), and checking
         one against the other is exercise 4.4.4 and the first piece of a material
         system.
+        SUPERSEDED IN SCOPE BY 4.5: the exercise was done. See `vertex-fetch`,
+        `vertex-format` and `layout-check` above, which measure what this entry
+        only asserted.
   draw-calls: A DRAW CALL SAYS ALMOST NOTHING — SDL_DrawGPUPrimitives(pass, 3, 1,
         0, 0) is "three vertices, one instance, from the start". No geometry, no
         shader, no target: all of it was BOUND beforehand. Even the MEANING of
@@ -1504,8 +1639,38 @@ completed:
   - 4.2  The SDL_GPU Mental Model
   - 4.3  The Shader Toolchain
   - 4.4  The First Triangle
+  - 4.5  Vertex Buffers and Layouts
 
 capabilities:
+  - gfx 4.5: THE ENGINE CAN DRAW A REAL MESH, MANY TIMES. Two new files, two new
+    shaders, four modified.
+    src/gfx/gpu_mesh.hpp/.cpp NEW — gpu_vertex_pnu (32 B, position+normal+uv,
+    half a cache line exactly); interleave() and expand(), the second existing to
+    be MEASURED rather than used; gpu_mesh owning a vertex buffer and a 16-bit
+    index buffer, knowing which of the two draw calls applies, and enforcing
+    k_max_mesh_vertices; describe(), the ONE place the vertex layout is named,
+    written entirely in sizeof and offsetof.
+    src/gfx/gpu_buffer.hpp/.cpp — adds gpu_stream_buffer (persistent staging,
+    cycle = true on both hops) beside the one-shot gpu_buffer.
+    src/gfx/gpu_pipeline.hpp/.cpp — instance_buffer(); check_layout() returning a
+    layout_report (checked/missing/extra/type_mismatch/overrun/duplicate, plus
+    `widening` which is deliberately NOT a problem); size_of() and
+    shader_type_of(), the two different questions a format answers.
+    src/gfx/gpu_shader.hpp/.cpp — shader_input/shader_inputs and
+    parse_shader_inputs(), bounded to the `inputs` array. A malformed array is
+    logged and cleared rather than fatal: a shader still draws without the check,
+    and what is lost is only the ability to CHECK, which must not be lost
+    silently.
+    shaders/mesh.{vert,frag}.hlsl NEW — six inputs across two buffers, a frozen
+    camera, 2.10's projection as arithmetic, 3.6's Lambert, and a uv grid whose
+    only job is to make attribute 2 visible (nothing samples a texture until 4.7,
+    so a scrambled uv would otherwise look exactly like a correct one).
+  - demo 4.5: `engine --gpu` loads assets/torus.obj, uploads it BOTH ways, builds
+    THREE mesh pipelines differing only in pitch (32/28/36), and draws seven
+    instances. [6] mesh, [7] indexed/expanded (no visible change — that is the
+    point), [8] the pitch, [9] 1/4/7 instances. The startup log prints the byte
+    counts, the invocation range and the layout report, so the lesson's claims
+    are visible without the harness. 4.4's gpu_vertex shrank 28 -> 16 B.
   - gfx 4.4: THE ENGINE CAN DRAW. Four new files and the first hardware-computed
     pixel in the course.
     src/gfx/gpu_pipeline.hpp/.cpp NEW — `pipeline_desc`, which owns the arrays the
@@ -2079,6 +2244,33 @@ capabilities:
   - skills: reading SDL headers as source of truth; debugging with lldb/gdb/VS
 
 decisions:
+  - INDEX BUFFERS MOVED FROM 4.6 INTO 4.5, and docs/index.html's 4.6 was retitled
+    "Uniform Data and the Matrix Upload". Porting a real mesh without indices
+    would have meant deliberately uploading 5x the data and undoing it a lesson
+    later; 4.6 has a full lesson in uniforms alone (push vs buffers, alignment,
+    the column-major payoff). NO PUBLISHED LESSON WAS RENUMBERED.
+  - THE HARNESS RENDERS TO A 16:9 OFFSCREEN TARGET (512x288), not a square, and
+    the demo SETS A VIEWPORT, because mesh.vert.hlsl's aspect ratio is a compile-
+    time constant. Two ways of making the same assumption true.
+  - THE `expanded` MODE EXISTS TO BE MEASURED, NOT USED. It is not dead code and
+    it is not a fallback: [7] toggles it live, the harness proves the pictures are
+    identical, and the byte counts are the argument for the indexed path. There
+    IS one real use — per-face data cannot live on a shared vertex, which is
+    exactly what 3.8's flat shading hit on the CPU.
+  - THE uv GRID IN mesh.frag.hlsl IS A DEBUGGING DEVICE WEARING A STYLE. Attribute
+    2 is fetched and interpolated and nothing samples a texture until 4.7, so
+    without it a scrambled uv is invisible. `groove`, not `line`, because `line`
+    is a reserved word in HLSL and the parse error points at the semicolon.
+  - THREE PIPELINES AT STARTUP RATHER THAN ONE REBUILT ON A KEYPRESS. 4.4
+    measured a new state permutation at ~2.4 ms, which is 15% of a 60 Hz frame;
+    building all three at load is the same advice the lesson gives.
+  - check_layout DOES NOT GATE PIPELINE CREATION. It logs and returns a tally, and
+    the caller decides. Every disagreement it finds is a bug, but several of them
+    draw a picture, and a lesson about layouts wants those pictures.
+  - THE FIRST BOUNDING-BOX ASSERTION IN THE HARNESS CHECKS THAT NOTHING IS
+    CLIPPED BY THE FRAME, because "does the scene fit" is a question with a
+    numeric answer and screen capture is unavailable on this machine (4.4's
+    finding, still true).
   - sample() RETURNS linear_rgb, NOT Uint32 (3.9). A texture is an albedo, an albedo is a
     REFLECTANCE, and a reflectance multiplies a quantity of light — so both sides have to
     be linear. Putting the decode inside the sampler also puts it BEFORE the filter with
@@ -2506,7 +2698,8 @@ files:
      .gitignore, CMakeLists.txt, STATE.md
   cmake/: Shaders.cmake
   shaders/: triangle.vert.hlsl, triangle.frag.hlsl,
-            textured.vert.hlsl, textured.frag.hlsl
+            textured.vert.hlsl, textured.frag.hlsl,
+            mesh.vert.hlsl, mesh.frag.hlsl
   src/: main.cpp
   src/core/: input.hpp, input.cpp, clock.hpp, clock.cpp,
             fixed_step.hpp, fixed_step.cpp, profile.hpp, profile.cpp
@@ -2516,6 +2709,7 @@ files:
             gpu_device.hpp, gpu_device.cpp,
             gpu_present.hpp, gpu_present.cpp,
             gpu_buffer.hpp, gpu_buffer.cpp,
+            gpu_mesh.hpp, gpu_mesh.cpp,
             gpu_pipeline.hpp, gpu_pipeline.cpp,
             gpu_shader.hpp, gpu_shader.cpp,
             mesh.hpp, mesh.cpp, obj.hpp, obj.cpp,
@@ -2543,7 +2737,8 @@ files:
                  03-07-specular-blinn-phong.html, 03-08-shading-models.html,
                  03-09-textures.html, 03-10-profiling-capstone.html,
                  04-01-how-gpus-work.html, 04-02-sdl-gpu-model.html,
-                 04-03-shader-toolchain.html, 04-04-first-triangle.html
+                 04-03-shader-toolchain.html, 04-04-first-triangle.html,
+                 04-05-vertex-buffers.html
   docs/shared/: course.css, course.js      (THE stylesheet + page script; one copy each)
   docs/_template/: lesson-template.html, README.md, apply-shared.py, check-page.js
   memory/: 2026-07-16.md, 2026-07-18.md, 2026-07-21.md, 2026-07-22.md,
@@ -2553,30 +2748,38 @@ files:
            2026-08-04.md, 2026-08-05.md, 2026-08-06.md, 2026-08-07.md,
            2026-08-08.md, 2026-08-10.md, 2026-08-12.md,
            2026-08-12-b.md, 2026-08-15.md, 2026-08-15-b.md,
-           2026-08-17.md
+           2026-08-17.md, 2026-08-18.md
   (retired: hello.cpp)
 
 
 
-next: 4.5 — Vertex Buffers and Layouts
-      (planned filename: docs/lessons/04-05-vertex-buffers.html — 4.4 links to the
-      index for now, so BOTH of 4.4's next links need repointing when it lands)
-      REAL GEOMETRY ON THE DEVICE.
-        - INTERLEAVED vs SEPARATE arrays, WITH THE MEMORY LAYOUT DRAWN (master
-          prompt §7 names memory layouts as a required diagram genre). Tie it to
-          4.1's cache-line argument: an interleaved vertex is one cache line's
-          worth of everything a vertex shader needs.
-        - WHAT A WRONG PITCH ACTUALLY DOES — measure it, do not describe it. 4.4
-          §3.2 promised this lesson would make a bigger point of it.
-        - INDEX BUFFERS: 2.12's icosahedron has 12 vertices and 20 triangles, so
-          indexed drawing is 12 vertex-shader invocations instead of 60. MEASURE
-          the invocation count if the backend will report it, or measure the time.
-          SDL_GPU_INDEXELEMENTSIZE_16BIT is why mesh.hpp caps at 65536 (3.5).
-        - MULTIPLE BUFFER SLOTS, since pipeline_desc already supports 4 — the
-          honest use case is per-instance data, which sets up instancing.
-        - PORT A REAL MESH: torus.obj through the same path, so 4.8's scene port
-          is a matter of matrices rather than of plumbing.
-        - EXERCISE 4.4.4 (checking the C++ layout against the shader's reflection)
-          is the natural opener if it was not done — the layout contract is this
-          lesson's whole subject.
+next: 4.6 — Uniform Data and the Matrix Upload
+      (planned filename: docs/lessons/04-06-uniforms.html — 4.5 links to the index
+      for now, so BOTH of 4.5's next links need repointing when it lands.
+      RETITLED from "Index Buffers and Uniform Data" because index buffers landed
+      in 4.5; docs/index.html row 4.6 already reflects this.)
+      THE CAMERA LEARNS TO MOVE.
+        - SDL_PushGPUVertexUniformData / _PushGPUFragmentUniformData against
+          uniform BUFFERS: what each is for, and the size at which the answer
+          changes. Note that "uniform buffer" in SDL_GPU means the pushed kind;
+          the storage-buffer path is a different thing and worth naming.
+        - THE ALIGNMENT RULES, WITH THE FAILURE SHOWN. A float3 followed by a
+          float in a cbuffer is NOT what a C++ struct of the same fields is. This
+          is the "matrix arrives shuffled" bug and it must be MEASURED offscreen,
+          the way 4.5 measured the pitch — a description is not enough. The
+          readback trick from 4.5 §F (make the unknown value decide coverage)
+          generalises: make it decide a colour and read the pixel.
+        - WHERE COLUMN-MAJOR PAYS OFF. 2.6 chose column-major storage; HLSL packs
+          cbuffer matrices column-major by default, so mat4's sixteen floats cross
+          unchanged. DEMONSTRATE by uploading and reading back, not by asserting.
+          (4.3's textured.vert.hlsl already contains the mul() that assumes this.)
+        - THE REGISTER SPACE IS FIXED PER STAGE (4.3): vertex cbuffer in space1,
+          fragment cbuffer in space3, and a wrong space is SILENT — valid HLSL
+          that reads whatever is bound at the slot named.
+        - RETIRE mesh.vert.hlsl's `static const` camera and its baked 16:9, and
+          give the probe the orbit camera main.cpp has had since 2.9. The viewport
+          call can then stop compensating for a constant.
+        - shader_resources.uniform_buffers has been read from the reflection since
+          4.3 and has been 0 for every shader we actually draw with. It stops
+          being 0 here — the first time that number does any work.
 ```

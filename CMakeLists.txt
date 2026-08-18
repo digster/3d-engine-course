@@ -56,6 +56,7 @@ add_executable(engine
     src/gfx/framebuffer.cpp
     src/gfx/gpu_buffer.cpp
     src/gfx/gpu_device.cpp
+    src/gfx/gpu_mesh.cpp
     src/gfx/gpu_pipeline.cpp
     src/gfx/gpu_present.cpp
     src/gfx/gpu_shader.cpp
@@ -116,6 +117,8 @@ add_hlsl_shader(engine triangle.vert vertex)
 add_hlsl_shader(engine triangle.frag fragment)
 add_hlsl_shader(engine textured.vert vertex)
 add_hlsl_shader(engine textured.frag fragment)
+add_hlsl_shader(engine mesh.vert vertex)      # Lesson 4.5
+add_hlsl_shader(engine mesh.frag fragment)    # Lesson 4.5
 
 # Compiled shaders live beside the executable for the same reason assets do: the
 # program finds them with SDL_GetBasePath(), never relative to the working

@@ -18,16 +18,72 @@
 //
 // `pipeline_desc` owns those arrays and hands out the create-info that points
 // into them, so the pointers stay valid exactly as long as the object does.
+//
+// LESSON 4.5 adds the two things a real mesh needs and one thing every project
+// eventually wishes it had written on day one:
+//
+//   * `instance_buffer` — a binding whose attributes advance once per INSTANCE
+//     instead of once per vertex. One field of one struct; that is all instancing
+//     costs at this level.
+//   * `check_layout` — the cross-check Lesson 4.4 said nothing performs, run
+//     against the reflection JSON the build has been emitting since Lesson 4.3.
+//     SDL validates almost nothing here (4.4 §B measured it), so this is the only
+//     thing standing between a mistyped offset and an evening of confusion.
 
 #pragma once
 
 #include "gfx/gpu_device.hpp"
+#include "gfx/gpu_shader.hpp"
 
 #include <SDL3/SDL.h>
 
 #include <array>
 
 namespace engine {
+
+/// Bytes one attribute of this format occupies **in the buffer**.
+///
+/// Lesson 4.5. Needed for exactly one thing: deciding whether the attributes you
+/// declared actually fit inside the pitch you declared. Every silent layout bug
+/// is an arithmetic disagreement, and this is the arithmetic.
+[[nodiscard]] Uint32 size_of(SDL_GPUVertexElementFormat format);
+
+/// The HLSL type the **shader** receives when an attribute of this format arrives.
+///
+/// NOT the same question as `size_of`, and the gap between them is the single
+/// most useful thing on this page. `UBYTE4_NORM` occupies four bytes in the
+/// buffer and arrives in the shader as a `float4` — four bytes of storage, sixteen
+/// bytes of register, and a divide by 255 performed by fixed-function hardware on
+/// the way. That conversion is free, which is why a vertex colour has no business
+/// being four floats, and why Lesson 4.5 shrinks ours.
+///
+/// @return a static string like "float3"; "" for `INVALID`.
+[[nodiscard]] const char* shader_type_of(SDL_GPUVertexElementFormat format);
+
+/// What `check_layout` found. Zero problems is the only good answer.
+struct layout_report
+{
+    int checked = 0;        ///< attributes compared against a shader input
+    int missing = 0;        ///< the shader declares a location nothing supplies
+    int extra = 0;          ///< we supply a location the shader never declares
+    int type_mismatch = 0;  ///< float bits arriving where the shader reads an int, or vice versa
+    int overrun = 0;        ///< the attribute does not fit inside its buffer's pitch
+    int duplicate = 0;      ///< two attributes at the same location — SDL requires unique
+
+    /// Same base type, **fewer components** than the shader declares — `FLOAT3`
+    /// supplied to a `float4`. Reported and deliberately NOT counted as a
+    /// problem: it is a legal and widely-used layout, and the components you did
+    /// not supply are filled in by fixed-function hardware. What they are filled
+    /// with is measured in `verify_45` §F rather than assumed, because SDL's
+    /// header does not say and the three backends could in principle differ.
+    int widening = 0;
+
+    [[nodiscard]] int problems() const
+    {
+        return missing + extra + type_mismatch + overrun + duplicate;
+    }
+    [[nodiscard]] bool ok() const { return problems() == 0; }
+};
 
 /// Builds an `SDL_GPUGraphicsPipelineCreateInfo` and owns the arrays it points at.
 ///
@@ -64,6 +120,36 @@ public:
     /// no gaps.
     pipeline_desc& attribute(Uint32 location, Uint32 buffer_slot,
                              SDL_GPUVertexElementFormat format, Uint32 offset);
+
+    /// Describe one **per-instance** buffer binding: same slot-and-pitch shape as
+    /// `vertex_buffer`, and one field different.
+    ///
+    /// That field is `input_rate`. A `VERTEX`-rate buffer advances by `pitch`
+    /// once per vertex; an `INSTANCE`-rate buffer advances once per *instance*,
+    /// so every vertex of instance 7 reads element 7. Nothing else changes — same
+    /// buffer type, same attributes, same `SDL_BindGPUVertexBuffers` — which is
+    /// why instancing costs so much less machinery than it sounds like it should.
+    ///
+    /// `instance_step_rate` is **not** exposed, because SDL's header says it is
+    /// reserved and must be zero. A setter for a field with one legal value is an
+    /// invitation to a bug.
+    pipeline_desc& instance_buffer(Uint32 slot, Uint32 pitch);
+
+    /// Compare the layout declared here against the inputs the shader declares.
+    ///
+    /// **This is the check Lesson 4.4 said nothing performs.** SDL does not
+    /// perform it — Lesson 4.4 measured an attribute at a location the shader
+    /// never declared being accepted without complaint — and the compiler cannot,
+    /// because the two halves are written in different languages. So we do it,
+    /// from the reflection JSON that Lesson 4.3's build already produces.
+    ///
+    /// Diagnostic, not a gate: it logs what it finds and returns the tally, and
+    /// the caller decides. Every disagreement it can find is a bug, but some of
+    /// them draw a picture anyway, and a lesson about layout wants those pictures.
+    ///
+    /// @param label prefix for the log lines — the shader's name reads best.
+    [[nodiscard]] layout_report check_layout(const shader_inputs& inputs,
+                                             const char* label) const;
 
     /// Render to something other than the swapchain.
     ///

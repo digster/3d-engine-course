@@ -3047,3 +3047,177 @@ formats in one step.
 Related, and the reason we set all three rasterizer fields explicitly: every enum in
 `SDL_GPURasterizerState` has its first enumerator at zero, so a zero-initialised state means "CCW
 front, cull nothing" — a forgotten `cull_mode` is not an error, it is no culling at all.
+
+---
+
+## Vertex-layout facts, verified at SDL 3.4.12 (Lesson 4.5)
+
+Measured with `scratch/verify_45.cpp` on Metal, one machine. Every row is a thing the API does
+not tell you and does not check.
+
+| Fact | Value |
+|---|---|
+| The fetch | `address = base + i × pitch + offset`, in fixed-function silicon |
+| `SDL_GPUVertexBufferDescription` | `{ slot, pitch, input_rate, instance_step_rate }` |
+| `instance_step_rate` | **reserved, must be 0** |
+| `SDL_GPUVertexInputRate` | `{ VERTEX = 0, INSTANCE }` — so a zeroed description is per-vertex |
+| Attribute locations | must be **unique**; SDL states the rule and no consequence |
+| Locations are numbered | across the **pipeline**, not per buffer |
+| `SDL_BindGPUIndexBuffer` | takes the element size — the width is **not** in the buffer or the pipeline |
+| `SDL_DrawGPUIndexedPrimitives` | `(pass, num_indices, num_instances, first_index, vertex_offset, first_instance)`; `vertex_offset` is `Sint32` and is added to every index |
+| `SDL_SetGPUViewport` | **render-pass state** — survives a pipeline change |
+
+### Pipeline creation refuses one broken layout in six
+
+| the layout | `SDL_CreateGPUGraphicsPipeline` |
+|---|---|
+| correct | created |
+| pitch four bytes short | **created** |
+| pitch four bytes long | **created** |
+| position and normal offsets swapped | **created** |
+| an attribute the shader never declares | **created** |
+| a shader input nothing supplies | REFUSED — *"Vertex attribute input_uv(2) is missing from the vertex descriptor"* |
+
+The one it catches is the one that would have been obvious anyway: an unfed input draws geometry
+stretching to infinity. The four silent ones draw a plausible wrong picture. Same temperament as
+Lesson 4.3's shader creation, which validates the entry point's name and none of the four
+resource counts.
+
+**Our own `check_layout` catches three of the five, and says so.** It reads the `inputs` array
+out of the reflection JSON the build has emitted since Lesson 4.3 and compares. It catches a
+too-short pitch (attribute end > pitch), an undeclared location, an unsupplied location,
+duplicate locations, and a base-type mismatch. It **cannot** catch a too-long pitch or swapped
+offsets — nothing about either declaration is inconsistent; they are simply wrong. A checker
+that implies total coverage is worse than no checker.
+
+**Bound the scan to the array.** The same JSON has an `outputs` array with byte-identical key
+names, so an unbounded search for `"location"` walks out of one and into the other and reports a
+six-input shader as having nine.
+
+### A wrong pitch shatters; a wrong offset deforms
+
+| layout | pixels | bounding box |
+|---|---|---|
+| pitch 32 (correct) | 3,696 | 88 × 52 |
+| pitch 28 | 5,076 | 88 × 84 |
+| pitch 36 | 5,027 | 88 × 84 |
+| position reads the normal's bytes | 3,126 | 62 × 64 |
+
+Three things worth knowing before you next see this:
+
+1. **Coverage goes up, not down.** The instinct on a wrong picture is to check culling, winding
+   and the near plane. A wrong pitch draws *more* than the correct one, because the garbage
+   sprays outward.
+2. **The error accumulates**: it is *i* × (pitch error), so vertex 1 is 4 bytes off and vertex
+   1,224 is 4,896 off. **Vertex 0 is always right**, which is exactly how this bug passes a
+   three-vertex test and fails on a real mesh.
+3. **Too long and too short look the same.** The symptom says *that* the pitch is wrong, not
+   which way. Print `sizeof`.
+
+A wrong **offset** is diagnostically different, and the difference is useful: every vertex is
+still read from its own record, just from the wrong bytes of it. A normal is a unit vector, so
+reading it as a position collapses the whole mesh onto a sphere of radius 1. **Scattered means
+the pitch; coherent but wrong means an offset.**
+
+### A vertex element format answers two different questions
+
+`size_of` is bytes in the buffer; `shader_type_of` is the type in the shader. They are not the
+same question:
+
+| format | bytes | shader type | conversion |
+|---|---|---|---|
+| `FLOAT3` | 12 | `float3` | none |
+| `UBYTE4` | 4 | `uint4` | none — integers stay integers |
+| `UBYTE4_NORM` | **4** | **`float4`** | ÷ 255, in the fetch unit, free |
+| `SHORT2_NORM` | 4 | `float2` | ÷ 32,767 |
+| `HALF4` | 8 | `float4` | 16-bit → 32-bit float |
+
+Cashed in: Lesson 4.4's vertex went **28 → 16 bytes (−43%)** by changing one enum, with
+`triangle.vert.hlsl` untouched. Same 47,124 pixels covered; 22,494 of them differ by **at most 1
+code out of 255**, which is below the precision of the 8-bit render target they are written to.
+
+`UBYTE4` versus `UBYTE4_NORM` is six characters and the same four bytes. Use the first where you
+meant the second and a colour arrives as 235.0, 89.0, 79.0 — white after clamping.
+
+### Supplying fewer components than the shader declares
+
+`FLOAT3` into a `float4` input is legal. The hardware fills the missing components, and SDL's
+header does not say with what. **Measured on Metal: w = 1**, by making the missing component the
+instance scale so coverage reads the answer off the screen — the `FLOAT3` draw covered 9,944
+pixels, *exactly* equal to a `FLOAT4` draw at scale 1.0. This matches the `(0, 0, 0, 1)` rule
+Vulkan and D3D12 both require. **⚠ VERIFY on other backends** before relying on it.
+
+### What an index buffer buys, on a real mesh
+
+`assets/torus.obj`: 1,225 vertices, 2,304 triangles, 6,912 index slots — every vertex named 5.64
+times on average.
+
+| | vertices | vertex bytes | index bytes | total |
+|---|---|---|---|---|
+| indexed | 1,225 | 39,200 | 13,824 | **53,024** |
+| expanded | 6,912 | 221,184 | 0 | **221,184** |
+
+**4.17× smaller**, and note the shape of the win: the index buffer costs 13,824 bytes and removes
+181,984, because an index is 2 bytes and a vertex is 32. The two draws produce **0 differing
+pixels, maximum channel delta 0** — worth testing precisely because the only possible result is
+zero, so a nonzero one has exactly one explanation.
+
+**Vertex-shader invocations are a range, not a figure.** Indexed: 1,225–6,912, depending on how
+often the post-transform cache hits, which is a property of the order the triangles appear in.
+Expanded: 6,912 exactly, with no reuse possible. That range is what vertex-cache optimisation
+(Forsyth's linear-speed algorithm) exists to narrow.
+
+**Where `k_max_mesh_vertices` came from.** `SDL_GPUIndexElementSize` has exactly two values;
+16 bits names 65,536 vertices. `mesh.hpp` has declared the ceiling since Lesson 3.5 with that
+justification, and `gpu_mesh::create` is the first line in the engine that depends on it.
+
+### Instancing is one enum value
+
+`input_rate = SDL_GPU_VERTEXINPUTRATE_INSTANCE`, and nothing else changes: same buffer type, same
+`SDL_GPU_BUFFERUSAGE_VERTEX` bit, same `SDL_BindGPUVertexBuffers`, same attributes at ordinary
+locations. **The shader cannot tell** — `mesh.vert.hlsl` declares six inputs in one struct and
+nothing marks three of them as per-instance. Every tool built for vertex layouts therefore works
+on instance data unchanged.
+
+The default is the trap, again, exactly as with `rasterizer_state.cull_mode` in Lesson 4.4: every
+enum in the description has its first enumerator at 0, so a zero-initialised description means
+per-vertex. At vertex rate, instance 0's *vertices* walk the placement buffer and every instance
+past the first reads off the end.
+
+The number that makes the case: **196 bytes of placement rewritten per frame against 53,024 bytes
+of geometry that never moves again — 0.370%.**
+
+### Two kinds of device buffer, and the difference is write frequency
+
+Not what they hold — how often they are written.
+
+| | staging | `cycle` | for |
+|---|---|---|---|
+| `gpu_buffer` | created and released per upload | `false` | geometry, written once at load |
+| `gpu_stream_buffer` | created once, kept | `true` on both hops | per-instance data, written every frame |
+
+Getting it backwards costs memory in one direction and correctness in the other — and the
+correctness bug appears only when the GPU falls behind, which is to say on a machine slower than
+the one you are testing on. Same hazard `gpu_present_target` faced in Lesson 4.2, arriving on the
+geometry side.
+
+### Interleaved or separate: both answers are right, for different passes
+
+Measured on 1,225 vertices with 64-byte cache lines:
+
+| | interleaved | separate |
+|---|---|---|
+| cache lines to fetch one vertex | **1** | up to **5** |
+| cache lines for a positions-only sweep | 613 | **230** |
+
+A 32-byte vertex is half a line exactly, so it never straddles a boundary and two consecutive
+vertices share a line with nothing wasted. But an interleaved line carries 12 useful bytes in 32
+when a shadow or depth pass reads positions only — and separate wins that by 2.7×. The production
+answer is a hybrid (position in its own buffer, the rest interleaved), and it costs no new
+concepts in SDL_GPU, because a "separate" layout is simply more `vertex_buffer` slots.
+
+### `line` is a reserved word in HLSL
+
+`const float line = smoothstep(...)` fails to compile, and the error points at the semicolon
+rather than at the name — `error: ';' : Expected` at the column after `float`. It names a
+geometry-shader primitive type. Two minutes lost; recorded so it is zero next time.

@@ -1491,3 +1491,71 @@ That is a better test than a screenshot anyway.
 `SDL_GPUGraphicsPipelineCreateInfo` holds pointers and a function returning one by value returns a
 struct aimed at dead stack. `src/gfx/gpu_buffer.{hpp,cpp}` (new), `src/main.cpp` and
 `CMakeLists.txt` modified. `[5]` toggles the triangle.
+
+---
+
+## 2026-08-18 — "Based on the STATE and the project's claude instructions, work on the next."
+
+Lesson 4.5 — Vertex Buffers and Layouts. Real geometry on the device: `assets/torus.obj` through
+an interleaved vertex buffer and a 16-bit index buffer, drawn seven times from one call.
+
+### One scope decision, taken and recorded
+
+The STATE block's plan for 4.5 asked for index buffers here; `docs/index.html` still listed them
+under 4.6, "Index Buffers and Uniform Data". Followed the STATE note — porting a real mesh without
+indices would have meant deliberately uploading 5× the data and undoing it a lesson later — and
+retitled 4.6 to "Uniform Data and the Matrix Upload", which is a full lesson on its own (push
+constants versus buffers, the alignment rules, the column-major payoff). No published lesson was
+renumbered.
+
+### The lesson's spine: nothing checks a vertex layout
+
+Six deliberately broken layouts through `SDL_CreateGPUGraphicsPipeline`, and **it refuses exactly
+one** — a shader input nothing supplies, which is also the one that would have been obvious
+anyway. A pitch four bytes wrong in either direction, swapped offsets and a bogus attribute are
+all created without a word.
+
+So exercise 4.4.4 was promoted to a feature: `parse_shader_inputs` reads the `inputs` array out of
+the reflection JSON the build has emitted since 4.3, and `pipeline_desc::check_layout` compares it
+against the C++ layout. It catches three of the five, and the lesson says which two it cannot see
+(a too-long pitch, swapped offsets) — a checker that implies total coverage is worse than none.
+
+### Failure modes photographed rather than described
+
+Three pipelines differing in one integer, rendered offscreen and downloaded. Pitch 32 draws a
+torus in 3,696 px; 28 and 36 each draw a shattered cloud of about 5,000 — coverage goes *up*. The
+error is *i* × (pitch error), so it accumulates, and **vertex 0 is always right**, which is how
+this bug passes a three-vertex test. A wrong *offset* is diagnostically different: every vertex is
+read from its own record, so pointing position at the normal collapses the mesh onto a unit
+sphere. Scattered means the pitch; coherent but wrong means an offset.
+
+### Numbers the lesson is built on
+
+- **Indices:** 53,024 bytes against 221,184 expanded — 4.17×, and the index buffer removes 13× its
+  own size. **0 differing pixels** between the two, max channel delta 0.
+- **Invocations are a range**: 1,225–6,912 indexed against 6,912 exactly expanded.
+- **A format answers two questions.** `UBYTE4_NORM` is 4 bytes and a `float4`. Cashed in by
+  shrinking 4.4's vertex 28 → 16 bytes with the shader untouched: same 47,124 px covered, 22,494
+  of them differing by at most 1 code of 255.
+- **Widening measured, not assumed**: `FLOAT3` into a `float4` fills w with **1** on Metal —
+  proven by making the missing component the instance scale, so coverage reads the answer (9,944
+  px, exactly equal to a scale-1.0 reference).
+- **Cache lines, both directions**: one vertex costs 1 line interleaved and up to 5 separate; a
+  positions-only sweep costs 613 interleaved against 230 separate. Both true, which is why the
+  production answer is a hybrid.
+- **Instancing**: 196 bytes a frame against 53,024 that never move again — 0.370%.
+
+### What was built
+
+`src/gfx/gpu_mesh.{hpp,cpp}` and `shaders/mesh.{vert,frag}.hlsl` new; `gpu_buffer` gains
+`gpu_stream_buffer` (persistent staging, `cycle = true`), `gpu_pipeline` gains `instance_buffer`,
+`check_layout`, `size_of` and `shader_type_of`, `gpu_shader` gains the input reflection. Keys
+`[6]`–`[9]` in `engine --gpu`. Harness: `scratch/verify_45.cpp`, eight sections, all pass.
+
+### Two things worth remembering
+
+`line` is a reserved word in HLSL and the parse error points at the semicolon. And the figure
+pipeline needed a palette-snapping quantiser before run-length encoding did anything: quantising
+channels independently across a smoothly shaded surface produces hundreds of near-identical
+colours and no runs at all — 185 KB of SVG became 45 KB once the snap matched hue first and
+brightness second.
