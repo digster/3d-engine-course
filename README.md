@@ -7,7 +7,7 @@ There is no engine to download here and no framework doing the interesting parts
 write the math library, the rasterizer, the ECS, the renderer, the physics, and the editor. By
 the end you have a real engine and a game built on its public API.
 
-**Status:** curriculum and conventions published; lessons in progress — **Modules 0–3 are complete** and Module 4 is under way (41 of 94 lessons), so the CPU software rasterizer is finished end to end and the engine now draws real geometry on a real GPU. Start at
+**Status:** curriculum and conventions published; lessons in progress — **Modules 0–3 are complete** and Module 4 is under way (42 of 94 lessons), so the CPU software rasterizer is finished end to end and the engine now draws real geometry on a real GPU, from a camera you can fly. Start at
 [`docs/index.html`](docs/index.html).
 
 ---
@@ -303,6 +303,22 @@ Lesson 4.4's vertex **43% smaller with the shader untouched**; index buffers tur
 **4.17× smaller** on this mesh and to convert a fixed 6,912 vertex-shader invocations into a
 range; and instancing turns out to cost **one enum value** — 196 bytes a frame against 53,024
 that never move again.
+
+Then press an arrow key and the camera moves. Lesson 4.5's shader had its camera welded in as
+seven `static const` floats, because there was no way to send it anything;
+[Lesson 4.6](docs/lessons/04-06-uniforms.html) fixes that and finds a mechanism unlike any other
+in the API — **SDL_GPU has no uniform buffer object**, no `UNIFORM` usage bit, nothing to create
+or bind or release. You push bytes onto the command buffer and every draw after them reads them.
+What then matters is whether the bytes land where the shader looks, and there the lesson finds
+two things worth the trip: the packing rule in force is **HLSL's, not the std140 SDL's own header
+cites**, so a C++ struct written without thought delivers a trailing `float3` as **(242, 243, 0)**
+where (241, 242, 243) was written — shifted one float, silently, with every earlier field intact.
+And a claim this course has carried since Lesson 2.6 without ever checking it finally gets
+checked: push a matrix, read all sixteen elements back one pixel at a time, and there is **no
+transpose anywhere** — even though the compiled SPIR-V says `RowMajor`, which turns out to be the
+toolchain describing your data in its own vocabulary rather than a contradiction. Orbit the new
+camera until two tori overlap and you will also see exactly why Lesson 4.7 is about the depth
+test.
 
 Then hold <kbd>=</kbd> on that floor and walk *into* it. <kbd>K</kbd> cycles what happens to a
 triangle with a corner behind your eye: **clip** it (correct), **drop** it (the ground vanishes —

@@ -7,9 +7,114 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-08-18 (after Lesson 4.5 — 41 of 94 lessons)
+updated: 2026-08-22 (after Lesson 4.6 — 42 of 94 lessons)
 
 conventions:
+  uniform-data: THERE IS NO UNIFORM BUFFER OBJECT IN SDL_GPU. Look for
+        SDL_GPU_BUFFERUSAGE_UNIFORM in SDL_gpu.h: it is not there. The six bits
+        are VERTEX, INDEX, INDIRECT, GRAPHICS_STORAGE_READ, COMPUTE_STORAGE_READ,
+        COMPUTE_STORAGE_WRITE. Instead you PUSH bytes onto the COMMAND BUFFER —
+        SDL_PushGPU{Vertex,Fragment}UniformData(cb, slot, data, bytes) — and every
+        draw recorded after that point reads them.
+        CONSEQUENCES, ALL SIMPLIFICATIONS: no lifetime (no create/release, no
+        move-only wrapper — the only GPU thing in this engine that needed none);
+        no cycling hazard (the bytes are copied at the call, into a command buffer
+        that is not executing); ordering is the only rule. MEASURED: push 201,
+        draw, push 77, draw — the second draw reads 77, nothing rebound.
+        THE THIRD RATE. Per-vertex is 8,575 writes a frame here, per-instance 7,
+        per-frame 1. The first two are FETCHES (the hardware indexes an array with
+        a counter it already keeps); the third is not an array at all, which is
+        why it is not a buffer.
+  uniform-packing: THE RULE IS HLSL'S, NOT std140 — AND SDL'S HEADER SAYS std140.
+        SDL: "The data being pushed must respect std140 layout conventions... vec3
+        and vec4 fields are 16-byte aligned." What our toolchain actually emits is
+        HLSL constant-buffer packing: fields in order, packed tightly, except that
+        A VECTOR MAY NOT STRADDLE A 16-BYTE REGISTER BOUNDARY — if it would, it
+        moves to the next one. A scalar is never moved.
+        MEASURED, from the Offset decorations in our own compiled SPIR-V:
+        float4x4 at 0, float at 64, float3 at 68 (std140 would say 80), float at
+        80, float2 at 84, float3 at 96 (92 would straddle).
+        FOLLOW SDL'S ADVICE ANYWAY: std140 is a SUPERSET, so a layout satisfying
+        it also satisfies HLSL packing, and the question of which rule applies
+        stops mattering — including under a GLSL front end later.
+        THE HABIT: PAIR EVERY float3 WITH A float. The two fill a register
+        exactly, so nothing can straddle and both rules agree. light_uniforms is
+        float3/float/float3/float = 32 bytes, two registers, no padding.
+        THE FAILURE CORRUPTS THE TAIL. A naive C++ struct put the last float3 at
+        92; the shader reads 96; it arrived as (242, 243, 0) where (241, 242, 243)
+        was written — shifted one float, zero on the end, EVERY EARLIER FIELD
+        FINE. Note this is the mirror image of 4.5's pitch bug, where vertex 0 was
+        always right and it got worse further in. Both look fine at the start.
+        packed_offset() in gpu_uniform.hpp IS the rule, constexpr, and every block
+        static_asserts its offsets against it — a rule you can execute cannot
+        drift from the code it describes, and a comment cannot fail.
+  matrix-upload: THE MATRIX CROSSES UNTOUCHED, AND 2.6's CLAIM IS NOW CHECKED.
+        mat4 stores four columns contiguously; pushed as a cbuffer float4x4, the
+        element we wrote at (row, col) arrives as m[row][col] — ALL SIXTEEN
+        verified individually by a probe shader that reports one element per
+        pixel. memcpy is the entire conversion, no transpose anywhere.
+        DO NOT BELIEVE THE INTERMEDIATE. The compiled SPIR-V says
+        "OpMemberDecorate %Camera 0 RowMajor", which looks exactly like the
+        transpose that is demonstrably not happening. It is an artefact of how DXC
+        maps HLSL packing onto SPIR-V's naming. AN INTERMEDIATE REPRESENTATION IS
+        ALLOWED TO DESCRIBE YOUR DATA IN ITS OWN VOCABULARY — measure the endpoint.
+        `mul(M, v)` is column-vector convention (2.5), and float4(world, 1.0f):
+        w = 0 there makes it a DIRECTION, so the fourth column — the camera's
+        translation — is multiplied by zero and the scene spins about a point the
+        camera never leaves. Distinctive enough to diagnose by sight.
+        projection * view, IN THAT ORDER, because A*B applies B first.
+  uniform-space: A WRONG REGISTER SPACE IS CAUGHT BY THE BUILD, NOT THE
+        REFLECTION — which REVISES 4.3's guess that it would be silent. Asked of
+        each tool with the fragment cbuffer moved to space0:
+          glslc HLSL -> SPIR-V        accepted, does not care
+          the JSON reflection         BYTE-IDENTICAL to the correct shader
+          spirv-dis | grep DescriptorSet   0 instead of 3 — visible
+          shadercross SPIR-V -> MSL   REFUSED: "Descriptor set index for graphics
+                                      uniform buffer must be 1 or 3!"
+        So 4.3's "compile offline" argument pays off from a new direction: it
+        moved a would-be black screen into a build error on your own machine.
+        THE REFLECTION CANNOT SEE IT, so 4.5's cross-check is no help here.
+        ⚠ VERIFY: a Vulkan build consumes SPIR-V directly, so nothing translates
+        and nothing refuses. Untested — no Vulkan device on this machine.
+        verify_46 §D reads the DescriptorSet decorations out of the .spv IN THE
+        HARNESS (a five-word header, then (wordcount<<16)|opcode; OpDecorate is
+        71, the DescriptorSet decoration is 34) — turning 4.3's advice from
+        something a person must remember into something that runs.
+  push-cost: A PUSH IS A COPY, SO IT IS SMALL DATA. Best of seven runs of 256
+        pushes: 108 bytes 0.015 us (7.1 GB/s), 4 KB 0.058 us (70.3), 16 KB 0.259
+        us (63.4). Read as ~14 ns of call overhead plus a memcpy at ~65 GB/s,
+        which is what "copied into the command buffer" predicts.
+        THE FIRST VERSION OF THIS MEASUREMENT WAS WRONG AND SAID SO: scaled rep
+        counts, one run each, and 16 KB came out at 43 GB/s against 4 KB at 3.8 —
+        an 11x difference in the throughput of a memcpy, which cannot be true.
+        Fixed with a fixed rep count and best-of-seven (the minimum, because every
+        source of error adds time). 4.4's rule caught it: check the number CAN be
+        true.
+        AND THERE IS AN UNDOCUMENTED CEILING THAT CRASHES SILENTLY. Repeating a
+        LARGE push into one command buffer kills the process with NO message — no
+        SDL error, no validation output. Measured in an isolated program: 16,000
+        pushes of 4 KB (62 MB) fine; 64 KB pushes die between 24 and 32 of them,
+        AND NOT AT THE SAME COUNT TWICE. Non-determinism at a resource boundary is
+        the signature of a pool being exhausted rather than a limit enforced. KEPT
+        OUT OF THE HARNESS per 4.4's rule: a test that destabilises the process is
+        not a test.
+        FOR BULK DATA USE A STORAGE BUFFER: GRAPHICS_STORAGE_READ, declared as a
+        StructuredBuffer in space0/space2, BOUND rather than pushed, so the bytes
+        move once instead of once per draw. Module 6.
+  uniform-probe: READING A UNIFORM BACK IS NOT A THING AN API OFFERS, so ask the
+        shader and let it answer in the only currency it has — the colour of a
+        pixel. shaders/uniform_probe.{vert,frag}.hlsl: pixel (x, y) reports one
+        field, encoded value/255 into a _UNORM target so a value of n returns as
+        the byte n.
+        SV_Position IS THE PIXEL CENTRE, so the first pixel is (0.5, 0.5):
+        TRUNCATE, do not round. Rounding shifts the whole probe by one and
+        produces a table that looks plausible and is wrong in every entry.
+        THE PROBE HAS NO VERTEX BUFFER — SV_VertexID generates the three corners
+        (-1,-1), (3,-1), (-1,3), a triangle twice the target's size in each
+        direction. Partly convenience, mostly hygiene: an instrument with a vertex
+        layout might be measuring one by accident (4.5).
+        ONE triangle, not two: no shared edge means no seam and no pixel
+        rasterised twice, which on a probe would mean a value written twice.
   vertex-fetch: A LAYOUT IS THREE NUMBERS AND ONE FORMULA — address = base +
         i*pitch + offset — evaluated by fixed-function hardware with no way to
         know whether the numbers are right. Any pitch produces addresses, any
@@ -142,6 +247,11 @@ conventions:
         Consequences to undo next lesson: the camera cannot move, the
         per-instance rotation is a cos/sin pair rather than a matrix, and the
         aspect ratio is a constant that the viewport has to make true.
+        SETTLED IN 4.6: all seven constants and the eleven lines of arithmetic are
+        gone, replaced by one cbuffer and one mul(). The viewport call stayed but
+        its JOB CHANGED — from making a compile-time aspect ratio true to sharing
+        a rectangle with the blitted software picture. A workaround that becomes a
+        decision is a sign the design moved the right way.
   pipelines: EVERY PIECE OF RENDER STATE, IN ONE IMMUTABLE OBJECT — 9 top-level
         fields, 53 expanded, which is exactly the count 4.1 predicted from
         fill_style. It IS fill_style's argument list, hoisted out of the call and
@@ -1640,8 +1750,36 @@ completed:
   - 4.3  The Shader Toolchain
   - 4.4  The First Triangle
   - 4.5  Vertex Buffers and Layouts
+  - 4.6  Uniform Data and the Matrix Upload
 
 capabilities:
+  - gfx 4.6: THE CAMERA CAN MOVE. One new header, two new shaders, two rewritten.
+    src/gfx/gpu_uniform.hpp NEW — camera_uniforms (a bare mat4, 64 B) and
+    light_uniforms (float3/float/float3/float, 32 B, two registers exactly), plus
+    packed_offset(), which is HLSL's packing rule as a constexpr function so that
+    every block can static_assert its offsets against THE RULE rather than against
+    numbers somebody worked out once. NO WRAPPER CLASS ANYWHERE IN THIS FILE —
+    there is no object to own.
+    shaders/uniform_probe.{vert,frag}.hlsl NEW — the instrument: a full-target
+    triangle from SV_VertexID with no vertex layout, and a fragment stage that
+    reports one uniform field per pixel. Every measurement in the lesson came
+    through it.
+    shaders/mesh.vert.hlsl — seven `static const` camera constants and eleven
+    lines of hand-written projection deleted; one cbuffer in space1 and one mul().
+    shaders/mesh.frag.hlsl — a lighting block in space3, and the ambient term is
+    now TINTED by a sky colour rather than grey: one multiply, visibly better, and
+    a one-sample approximation of the hemisphere that Module 6 replaces properly.
+  - demo 4.6: `engine --gpu` grows a camera you can fly. probe_view holds the
+    orbit_camera main.cpp has had since 2.9 (finally reachable from the GPU path),
+    a lamp on one angle, and the fovy/near/far the Module 3 scene uses so the two
+    pictures are comparable. Arrows or WASD orbit, [Z]/[X] dolly, [0] resets, [L]
+    sets the lamp orbiting. Held keys x dt, not per frame (1.3); elevation clamped
+    to 1.5 rad, JUST UNDER pi/2, because look_at's cross(up, backward) degenerates
+    there (2.9).
+    AND IT EXPOSES THE MISSING DEPTH TEST. 4.5's fixed camera hid it by arranging
+    the scene so nothing overlapped; orbit now and the later instance wins
+    regardless of distance. A limitation you have designed around stops being
+    visible and starts being load-bearing. 4.7 fixes it.
   - gfx 4.5: THE ENGINE CAN DRAW A REAL MESH, MANY TIMES. Two new files, two new
     shaders, four modified.
     src/gfx/gpu_mesh.hpp/.cpp NEW — gpu_vertex_pnu (32 B, position+normal+uv,
@@ -2244,6 +2382,39 @@ capabilities:
   - skills: reading SDL headers as source of truth; debugging with lldb/gdb/VS
 
 decisions:
+  - THE PROBE SHADERS SHIP; THE DELIBERATELY-BROKEN ONE DOES NOT. A space0 variant
+    was written to measure "what does a wrong space do", and shadercross REFUSES
+    to translate it, so it cannot live in the build. Deleted; the finding is
+    recorded, verify_46 §D prints the exact reproduction commands, and the harness
+    instead checks the SHIPPED shaders' descriptor sets on every run. A file in
+    the repo that does not build is a liability (CLAUDE.md §8 wants whole files).
+  - packed_offset IS A constexpr FUNCTION RATHER THAN A COMMENT, and that is the
+    general principle: when a rule is simple enough to write as code, writing it
+    as code is better than writing it as prose, because a comment describing a
+    layout cannot fail. The prose then explains WHY instead of restating WHAT.
+  - THE PUSH HAPPENS BEFORE SDL_BeginGPURenderPass, though it is legal inside one.
+    A push applies to the COMMAND BUFFER, and putting it outside the pass makes
+    that visible rather than implied.
+  - THE ASPECT RATIO IS COMPUTED FROM THE LETTERBOX RECT rather than being a
+    constant. That is the whole difference 4.6 makes to 4.5's viewport call, and
+    it is why the viewport stops being a workaround.
+  - NO gpu_uniform WRAPPER CLASS, deliberately, against the pattern every other
+    GPU resource in this engine follows. There is no handle, no lifetime and no
+    hazard; inventing a class would be ceremony around two function calls.
+  - CHANGING mesh.{vert,frag}.hlsl BROKE verify_45, AND FIXING IT PROPERLY MEANT
+    GIVING IT THE OLD CAMERA. 4.5's harness draws with those shaders; once they
+    wanted a uniform block it got a zero matrix and drew nothing. It now pushes
+    EXACTLY the camera the deleted `static const` floats encoded — eye (0,2.3,5.0)
+    at (0,-0.8,0), 55 deg, 16:9 — so every pixel count in Lesson 4.5 is still the
+    number the program prints (3,696 / 5,076 / 5,027 / 3,126 / 1,990 / 9,944 /
+    32,006, all bounding boxes identical, all six figure SVGs regenerate byte for
+    byte). A harness that stops reproducing its own lesson's figures has quietly
+    become a different experiment. CHECK THE PREVIOUS LESSON'S HARNESS whenever a
+    shared shader or header changes.
+  - THE HARNESS DOES NOT REPRODUCE THE PUSH-CEILING CRASH. 4.4 settled the policy
+    when vertex/fragment shader swapping segfaulted: a test that destabilises the
+    process is not a test. Measured in an isolated program, reported in prose,
+    exercise 4.6.5 hands it to the student with the same warning.
   - INDEX BUFFERS MOVED FROM 4.6 INTO 4.5, and docs/index.html's 4.6 was retitled
     "Uniform Data and the Matrix Upload". Porting a real mesh without indices
     would have meant deliberately uploading 5x the data and undoing it a lesson
@@ -2699,7 +2870,8 @@ files:
   cmake/: Shaders.cmake
   shaders/: triangle.vert.hlsl, triangle.frag.hlsl,
             textured.vert.hlsl, textured.frag.hlsl,
-            mesh.vert.hlsl, mesh.frag.hlsl
+            mesh.vert.hlsl, mesh.frag.hlsl,
+            uniform_probe.vert.hlsl, uniform_probe.frag.hlsl
   src/: main.cpp
   src/core/: input.hpp, input.cpp, clock.hpp, clock.cpp,
             fixed_step.hpp, fixed_step.cpp, profile.hpp, profile.cpp
@@ -2710,6 +2882,7 @@ files:
             gpu_present.hpp, gpu_present.cpp,
             gpu_buffer.hpp, gpu_buffer.cpp,
             gpu_mesh.hpp, gpu_mesh.cpp,
+            gpu_uniform.hpp,
             gpu_pipeline.hpp, gpu_pipeline.cpp,
             gpu_shader.hpp, gpu_shader.cpp,
             mesh.hpp, mesh.cpp, obj.hpp, obj.cpp,
@@ -2738,7 +2911,7 @@ files:
                  03-09-textures.html, 03-10-profiling-capstone.html,
                  04-01-how-gpus-work.html, 04-02-sdl-gpu-model.html,
                  04-03-shader-toolchain.html, 04-04-first-triangle.html,
-                 04-05-vertex-buffers.html
+                 04-05-vertex-buffers.html, 04-06-uniforms.html
   docs/shared/: course.css, course.js      (THE stylesheet + page script; one copy each)
   docs/_template/: lesson-template.html, README.md, apply-shared.py, check-page.js
   memory/: 2026-07-16.md, 2026-07-18.md, 2026-07-21.md, 2026-07-22.md,
@@ -2748,38 +2921,40 @@ files:
            2026-08-04.md, 2026-08-05.md, 2026-08-06.md, 2026-08-07.md,
            2026-08-08.md, 2026-08-10.md, 2026-08-12.md,
            2026-08-12-b.md, 2026-08-15.md, 2026-08-15-b.md,
-           2026-08-17.md, 2026-08-18.md
+           2026-08-17.md, 2026-08-18.md, 2026-08-22.md
   (retired: hello.cpp)
 
 
 
-next: 4.6 — Uniform Data and the Matrix Upload
-      (planned filename: docs/lessons/04-06-uniforms.html — 4.5 links to the index
-      for now, so BOTH of 4.5's next links need repointing when it lands.
-      RETITLED from "Index Buffers and Uniform Data" because index buffers landed
-      in 4.5; docs/index.html row 4.6 already reflects this.)
-      THE CAMERA LEARNS TO MOVE.
-        - SDL_PushGPUVertexUniformData / _PushGPUFragmentUniformData against
-          uniform BUFFERS: what each is for, and the size at which the answer
-          changes. Note that "uniform buffer" in SDL_GPU means the pushed kind;
-          the storage-buffer path is a different thing and worth naming.
-        - THE ALIGNMENT RULES, WITH THE FAILURE SHOWN. A float3 followed by a
-          float in a cbuffer is NOT what a C++ struct of the same fields is. This
-          is the "matrix arrives shuffled" bug and it must be MEASURED offscreen,
-          the way 4.5 measured the pitch — a description is not enough. The
-          readback trick from 4.5 §F (make the unknown value decide coverage)
-          generalises: make it decide a colour and read the pixel.
-        - WHERE COLUMN-MAJOR PAYS OFF. 2.6 chose column-major storage; HLSL packs
-          cbuffer matrices column-major by default, so mat4's sixteen floats cross
-          unchanged. DEMONSTRATE by uploading and reading back, not by asserting.
-          (4.3's textured.vert.hlsl already contains the mul() that assumes this.)
-        - THE REGISTER SPACE IS FIXED PER STAGE (4.3): vertex cbuffer in space1,
-          fragment cbuffer in space3, and a wrong space is SILENT — valid HLSL
-          that reads whatever is bound at the slot named.
-        - RETIRE mesh.vert.hlsl's `static const` camera and its baked 16:9, and
-          give the probe the orbit camera main.cpp has had since 2.9. The viewport
-          call can then stop compensating for a constant.
-        - shader_resources.uniform_buffers has been read from the reflection since
-          4.3 and has been 0 for every shader we actually draw with. It stops
-          being 0 here — the first time that number does any work.
+next: 4.7 — Textures, Samplers, and Depth
+      (planned filename: docs/lessons/04-07-textures-and-depth.html — 4.6 links to
+      the index for now, so BOTH of 4.6's next links need repointing when it lands.)
+      TWO RE-ENCOUNTERS AND TWO GENUINELY NEW THINGS.
+        - THE DEPTH TEST IS OVERDUE AND 4.6 MADE IT VISIBLE. Orbiting the free
+          camera shows the later instance winning regardless of distance. It is
+          3.1's algorithm as three fields of SDL_GPUDepthStencilState we have been
+          zero-filling since 4.4 (enable_depth_test, enable_depth_write,
+          compare_op) plus a depth target on the render pass.
+        - THE DEPTH FORMAT IS A REAL CHOICE: D16_UNORM / D24_UNORM / D32_FLOAT.
+          Precision is NOT uniform across the range — 2.10's z_ndc = (Az+B)/(-z)
+          concentrates it near the near plane — so MEASURE it: render two surfaces
+          a known small distance apart at several depths and find where each
+          format stops separating them. That is z-fighting with a number on it.
+          SDL_GPUTextureSupportsFormat before assuming any of them exists.
+        - TEXTURES: the transfer path 4.2 built for the framebuffer, now for an
+          asset. stb_image is the sanctioned decoder (CLAUDE.md §4) and this is
+          where it enters — with the "why we don't hand-roll this" paragraph.
+        - SAMPLERS ARE OBJECTS, unlike anything in 3.9: filter, address mode,
+          mip settings, created once and BOUND with the texture as a pair
+          (SDL_GPUTextureSamplerBinding, t0 with s0). 3.9's engine::filter and
+          engine::address_mode already mirror SDL's enumerator values and
+          verify_42 §G asserts it, so this should be a rename — CHECK that it is.
+        - THE uv HAS BEEN TRAVELLING SINCE 4.5 AND ONLY DRAWN A GRID. This is
+          where it does its job, and where mesh.frag's grid can retire or become
+          a toggle.
+        - space2 FOR THE FRAGMENT TEXTURE+SAMPLER (4.3's table), and the counts in
+          SDL_GPUShaderCreateInfo stop being samplers=0 for a shader we draw with.
+        - CHECK whether the uv flip (3.9, applied at import) is still correct now
+          that a real texture is sampled — it has never been tested against an
+          actual image on the GPU path.
 ```

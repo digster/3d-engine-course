@@ -119,6 +119,8 @@ add_hlsl_shader(engine textured.vert vertex)
 add_hlsl_shader(engine textured.frag fragment)
 add_hlsl_shader(engine mesh.vert vertex)      # Lesson 4.5
 add_hlsl_shader(engine mesh.frag fragment)    # Lesson 4.5
+add_hlsl_shader(engine uniform_probe.vert vertex)    # Lesson 4.6 — the instrument
+add_hlsl_shader(engine uniform_probe.frag fragment)
 
 # Compiled shaders live beside the executable for the same reason assets do: the
 # program finds them with SDL_GetBasePath(), never relative to the working

@@ -96,6 +96,8 @@ inventing one — but without paying framework ceremony before it buys anything.
 │   │   ├── gpu_mesh.hpp    # a mesh in the shape hardware wants      [EXISTS from 4.5]
 │   │   ├── gpu_mesh.cpp    #   interleave/expand, 16-bit indices, and describe() —
 │   │   │                   #   the ONE place the vertex layout is named
+│   │   ├── gpu_uniform.hpp # per-frame data, and where each byte goes [EXISTS from 4.6]
+│   │   │                   #   header-only: there is no object to own
 │   │   ├── gpu_pipeline.hpp# ALL render state, in one object        [EXISTS from 4.4]
 │   │   ├── gpu_pipeline.cpp#   pipeline_desc owns the arrays the create-info points at
 │   │   │                   # + instance_buffer + check_layout (4.5)
@@ -122,8 +124,10 @@ inventing one — but without paying framework ceremony before it buys anything.
 │   ├── triangle.frag.hlsl
 │   ├── textured.vert.hlsl  # 4.6/4.7's pair — the register spaces, in real code
 │   ├── textured.frag.hlsl
-│   ├── mesh.vert.hlsl      # 4.5: six inputs across two buffers, a frozen camera
-│   └── mesh.frag.hlsl      # Compiled output goes to build/ and is gitignored.
+│   ├── mesh.vert.hlsl      # 4.5: six inputs across two buffers; 4.6: a real camera
+│   ├── mesh.frag.hlsl      # 4.6: a lighting block in space3
+│   ├── uniform_probe.vert.hlsl  # 4.6's instrument: a triangle from SV_VertexID,
+│   └── uniform_probe.frag.hlsl  #   and one uniform field per pixel, read back
 ├── assets/                 # meshes, textures, fonts                   [EXISTS from 3.5]
 │   ├── cube.obj            # 20 readable lines; the index problem, by hand
 │   ├── twisted.obj         # …with one face reversed: 3.4's precondition, violated
@@ -825,6 +829,23 @@ follow from that lesson and outlive it:
   `gpu_stream_buffer` is written every frame with permanent staging and `cycle = true` on both
   hops. Getting it backwards wastes memory in one direction and corrupts data in the other — and
   only on a machine slower than the one it was written on.
+
+**Stage B has a camera, as of Lesson 4.6.** The third rate of change — data shared by every vertex
+of every instance — reaches the shader by a mechanism with no counterpart elsewhere in this
+engine: `SDL_PushGPU{Vertex,Fragment}UniformData` writes into the **command buffer**, and every
+draw recorded after it reads those bytes. There is no resource, so `src/gfx/gpu_uniform.hpp` is
+the one GPU header here with no move-only wrapper class in it — only the two blocks the engine
+sends, and `packed_offset`, which is HLSL's constant-buffer packing rule written as a `constexpr`
+function so that each block can `static_assert` its field offsets against the rule rather than
+against remembered numbers.
+
+That header is where the engine's answer to a recurring shape lives. Three times now a layout has
+been declared twice in two languages with nothing checking the halves — vertex attributes (4.5),
+uniform blocks (4.6), and textures still to come (4.7) — and the engine's response has been
+different each time because the available evidence is different: `offsetof` and the reflection
+JSON for vertex layouts, a `constexpr` rule and `static_assert` for uniforms. The reflection
+carries no cbuffer offsets, so 4.5's cross-check has no counterpart here; the compiled SPIR-V does
+carry them, which is what exercise 4.6.2 is for.
 
 See [LEARNINGS.md](LEARNINGS.md) for the verified SDL_GPU convention table.
 

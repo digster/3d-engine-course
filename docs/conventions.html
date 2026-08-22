@@ -83,6 +83,7 @@
       <li><a href="#gpu">The GPU execution model</a></li>
       <li><a href="#gpu-api">Talking to the GPU &mdash; the SDL_GPU contract</a></li>
       <li><a href="#vertex-layout">Vertex layouts &mdash; the contract nothing checks</a></li>
+      <li><a href="#uniform-data">Uniform data &mdash; the push, and the packing rule</a></li>
       <li><a href="#units">Units and angles</a></li>
       <li><a href="#simulation">The simulation contract</a></li>
       <li><a href="#colour">Colour and diagram conventions</a></li>
@@ -1857,6 +1858,93 @@
     </table>
   </div>
 
+  <h2 id="uniform-data"><span class="num">7i</span>Uniform data &mdash; the push, and the packing rule</h2>
+
+  <p>
+    Established in Lesson 4.6. Data that is the same for every vertex of a draw reaches the shader
+    by a mechanism unlike anything else in SDL_GPU, and the rule that decides where each byte
+    lands is not the one SDL's own header names. Every measurement below comes from
+    <code>scratch/verify_46.cpp</code>.
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>Rule</th><th>Value</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td>The mechanism</td>
+            <td><strong>a push, not a buffer</strong></td>
+            <td>There is no <code>SDL_GPU_BUFFERUSAGE_UNIFORM</code>; the six bits are VERTEX,
+                INDEX, INDIRECT and the three STORAGE ones.
+                <code>SDL_PushGPU{Vertex,Fragment}UniformData(cb, slot, data, bytes)</code> writes
+                into the <strong>command buffer</strong>, and every draw recorded after it reads
+                them. Measured: push 201, draw, push 77, draw &mdash; the second draw reads 77,
+                with nothing bound or rebound.</td></tr>
+        <tr><td>Lifetime and hazards</td>
+            <td><strong>none of either</strong></td>
+            <td>No create, no release, no wrapper class &mdash; the only GPU thing in this engine
+                that needs none. And no cycling: the bytes are copied at the call, into a command
+                buffer that is not executing yet.</td></tr>
+        <tr><td>The packing rule</td>
+            <td><strong>HLSL's, not std140</strong></td>
+            <td>SDL's header says std140; our toolchain emits HLSL constant-buffer packing.
+                Fields go in order, packed tightly, except that <strong>a vector may not straddle
+                a 16-byte register boundary</strong> &mdash; if it would, it moves to the next.
+                Measured offsets: matrix 0, float 64, <code>float3</code> <strong>68</strong>
+                (std140 would say 80), float 80, <code>float2</code> 84, <code>float3</code>
+                <strong>96</strong> (92 would straddle).</td></tr>
+        <tr><td>What to do about it</td>
+            <td><strong>pair every <code>float3</code> with a <code>float</code></strong></td>
+            <td>std140 is a superset of HLSL packing, so following SDL's advice is safe and makes
+                the question stop mattering. A <code>float3</code> + <code>float</code> pair fills
+                a register exactly. <code>engine::packed_offset</code> is the rule as a
+                <code>constexpr</code> function, and every block <code>static_assert</code>s its
+                offsets against it.</td></tr>
+        <tr><td>A layout mistake</td>
+            <td><strong>corrupts the TAIL</strong></td>
+            <td>Everything before the first straddling field arrives correctly. Measured: a
+                trailing <code>float3</code> written as (241, 242, 243) arrived as
+                <strong>(242, 243, 0)</strong> &mdash; shifted one float, zero on the end, no
+                error anywhere. The mirror image of Lesson 4.5's pitch bug, where vertex 0 was
+                always right.</td></tr>
+        <tr><td>A matrix</td>
+            <td><strong>crosses untouched</strong></td>
+            <td>All sixteen elements checked individually: the element we wrote at
+                <em>(row,&nbsp;col)</em> arrives as <code>m[row][col]</code>.
+                <code>memcpy</code> is the whole conversion, which is what &sect;6's column-major
+                storage was chosen for. <strong>Do not believe the intermediate</strong>: the
+                SPIR-V decorates it <code>RowMajor</code>, which is the toolchain's vocabulary
+                rather than a transpose.</td></tr>
+        <tr><td>Multiplication order</td>
+            <td><code>projection * view</code></td>
+            <td>Column vectors, so <code>A*B</code> applies <code>B</code> first. And
+                <code>float4(world, <strong>1.0f</strong>)</code>: a <code>w</code> of 0 makes it
+                a direction, so the camera's translation is multiplied away and the scene spins
+                about a point the camera never leaves.</td></tr>
+        <tr><td>A wrong register space</td>
+            <td><strong>caught by the BUILD</strong></td>
+            <td>Revises Lesson 4.3's guess that it would be silent.
+                <code>glslc</code> accepts it; the JSON reflection is <strong>byte-identical</strong>,
+                so Lesson 4.5's cross-check cannot see it; <code>spirv-dis</code> shows it; and
+                SPIR-V&nbsp;&rarr;&nbsp;MSL <strong>refuses</strong> &mdash; <em>"Descriptor set
+                index for graphics uniform buffer must be 1 or 3!"</em>
+                <strong>&#9888; VERIFY</strong> on Vulkan, which has no translation step to
+                refuse.</td></tr>
+        <tr><td>What a push costs</td>
+            <td><strong>~14&nbsp;ns + a memcpy at ~65&nbsp;GB/s</strong></td>
+            <td>Best of seven runs of 256 pushes: 108&nbsp;B in 0.015&nbsp;&micro;s, 4&nbsp;KB in
+                0.058, 16&nbsp;KB in 0.259. Small pushes are overhead-bound, large ones
+                bandwidth-bound.</td></tr>
+        <tr><td>How much is too much</td>
+            <td><strong>an undocumented ceiling that crashes silently</strong></td>
+            <td>Repeating a large push into one command buffer kills the process with no message
+                at all. Measured: 16,000 pushes of 4&nbsp;KB are fine; 64&nbsp;KB pushes die
+                between 24 and 32 of them, and not at the same count twice &mdash; the signature
+                of a pool exhausted rather than a limit enforced. For bulk data use a
+                <strong>storage buffer</strong>, bound rather than pushed.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
   <h2 id="units"><span class="num">8</span>Units and angles</h2>
 
   <div class="tbl-scroll">
@@ -2022,6 +2110,10 @@
         <tr><td>Attribute locations</td><td>&ldquo;All vertex attribute locations provided to an <code>SDL_GPUVertexInputState</code> must be <strong>unique</strong>.&rdquo; No stated consequence if they are not.</td><td><code>SDL3/SDL_gpu.h</code></td></tr>
         <tr><td>Indexed draw</td><td><code>SDL_DrawGPUIndexedPrimitives(pass, num_indices, num_instances, first_index, vertex_offset, first_instance)</code> — <code>vertex_offset</code> is <code>Sint32</code> and is added to every index</td><td><code>SDL3/SDL_gpu.h</code></td></tr>
         <tr><td>Index binding</td><td><code>SDL_BindGPUIndexBuffer(pass, binding, index_element_size)</code> — the width is bound <strong>with the buffer</strong>, not baked into the pipeline</td><td><code>SDL3/SDL_gpu.h</code></td></tr>
+        <tr><td>Uniform push</td><td><code>SDL_PushGPUVertexUniformData(cb, slot, data, length)</code> and the fragment twin — the first parameter is a <strong>command buffer</strong>, not a device or a pass</td><td><code>SDL3/SDL_gpu.h</code></td></tr>
+        <tr><td>Buffer usage flags</td><td>VERTEX, INDEX, INDIRECT, GRAPHICS_STORAGE_READ, COMPUTE_STORAGE_READ, COMPUTE_STORAGE_WRITE — <strong>there is no UNIFORM bit</strong></td><td><code>SDL3/SDL_gpu.h</code></td></tr>
+        <tr><td>Uniform layout, per SDL</td><td>"must respect std140 layout conventions… vec3 and vec4 fields are 16-byte aligned" — <strong>stricter than what the HLSL toolchain emits</strong>, and safe for that reason</td><td><code>SDL3/SDL_gpu.h</code></td></tr>
+        <tr><td>Register spaces, per stage</td><td>vertex: t/s <code>space0</code>, cbuffer <code>space1</code>. fragment: t/s <code>space2</code>, cbuffer <code>space3</code>. Storage buffers share space0/space2 <em>after</em> sampled and storage textures.</td><td><code>SDL3/SDL_gpu.h</code>, <code>SDL_CreateGPUShader</code></td></tr>
       </tbody>
     </table>
   </div>

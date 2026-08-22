@@ -35,6 +35,7 @@
 #include "gfx/gpu_buffer.hpp"    // Lesson 4.4: three vertices, on the device
 #include "gfx/gpu_pipeline.hpp"  // Lesson 4.4: every piece of render state, in one object
 #include "gfx/gpu_mesh.hpp"      // Lesson 4.5: a real mesh, interleaved and indexed
+#include "gfx/gpu_uniform.hpp"   // Lesson 4.6: data that is the same for every vertex
 #include "gfx/light.hpp"
 #include "gfx/mesh.hpp"
 #include "gfx/obj.hpp"
@@ -3615,6 +3616,76 @@ engine::pipeline_desc& describe_instances(engine::pipeline_desc& desc, Uint32 sl
     return desc;
 }
 
+/// The GPU probe's camera and light, and the keys that move them.
+///
+/// Lesson 4.6. Everything in here was a `static const` inside
+/// `shaders/mesh.vert.hlsl` an hour ago. Moving it to the CPU is what a uniform
+/// buffer buys: not new capability in the shader, but the ability for anything
+/// outside the shader to have an opinion.
+struct probe_view
+{
+    orbit_camera camera{{0.0f, 0.0f, 0.0f}, 5.8f, 0.55f, 0.42f};
+
+    /// Where the lamp is, as an angle rather than a vector, so that one number
+    /// drives it and the vector is derived at the point of use.
+    float light_azimuth = 0.9f;
+    bool light_orbits = false;
+
+    /// Field of view, near and far — the same numbers Module 3's scene camera
+    /// uses, so the two pictures are comparable.
+    static constexpr float k_fovy = 55.0f * 3.14159265358979f / 180.0f;
+    static constexpr float k_near = 0.3f;
+    static constexpr float k_far = 100.0f;
+
+    /// One matrix per frame, built from two that have existed since Lessons 2.9
+    /// and 2.10.
+    ///
+    /// **`projection * view`, in that order**, because our convention is column
+    /// vectors — `v' = M*v`, so `A*B` applies B first, and the view has to happen
+    /// before the projection. Reverse them and the scene is not subtly wrong, it
+    /// is unrecognisable.
+    [[nodiscard]] engine::mat4 clip_from_world(float aspect) const
+    {
+        return engine::perspective(k_fovy, aspect, k_near, k_far) * camera.view();
+    }
+
+    /// Toward the lamp, unit length — Lesson 3.6's convention, so the dot product
+    /// with a normal is directly the cosine.
+    [[nodiscard]] engine::vec3 to_light() const
+    {
+        constexpr float elevation = 0.95f;
+        const float ce = std::cos(elevation);
+        return engine::normalised(engine::vec3{ce * std::sin(light_azimuth),
+                                               std::sin(elevation),
+                                               ce * std::cos(light_azimuth)});
+    }
+
+    /// Held keys, applied per second rather than per frame — Lesson 1.3's rule,
+    /// which is why this takes `dt` and multiplies by it.
+    void update(const engine::input& in, float dt)
+    {
+        constexpr float k_turn = 1.6f;    // radians per second
+        constexpr float k_zoom = 4.0f;    // units per second
+
+        if (in.key_down(SDL_SCANCODE_LEFT)  || in.key_down(SDL_SCANCODE_A)) { camera.azimuth -= k_turn * dt; }
+        if (in.key_down(SDL_SCANCODE_RIGHT) || in.key_down(SDL_SCANCODE_D)) { camera.azimuth += k_turn * dt; }
+        if (in.key_down(SDL_SCANCODE_UP)    || in.key_down(SDL_SCANCODE_W)) { camera.elevation += k_turn * dt; }
+        if (in.key_down(SDL_SCANCODE_DOWN)  || in.key_down(SDL_SCANCODE_S)) { camera.elevation -= k_turn * dt; }
+        if (in.key_down(SDL_SCANCODE_Z)) { camera.radius -= k_zoom * dt; }
+        if (in.key_down(SDL_SCANCODE_X)) { camera.radius += k_zoom * dt; }
+
+        // CLAMPED, and the elevation clamp is not cosmetic: `look_at` builds its
+        // right vector from `cross(up, backward)`, which is the zero vector when
+        // the camera looks straight up. Lesson 2.9 named that degeneracy; this is
+        // the line that keeps the demo out of it.
+        constexpr float k_limit = 1.5f;   // just under pi/2
+        camera.elevation = std::clamp(camera.elevation, -k_limit, k_limit);
+        camera.radius = std::clamp(camera.radius, 2.2f, 24.0f);
+
+        if (light_orbits) { light_azimuth += 0.7f * dt; }
+    }
+};
+
 /// What Lesson 4.3's shader loading produced, in the form the picture needs.
 ///
 /// The probe has no text — that needs a font and a shader, and 4.3 has only just
@@ -4050,7 +4121,8 @@ int run_gpu_probe(SDL_Window* window)
 
     SDL_Log("Keys: [1] filter  [2] present mode  [3] frames in flight"
             "  [4] wait on a fence every frame  [5] GPU triangle");
-    SDL_Log("      [6] the mesh  [7] indexed/expanded  [8] the pitch  [9] instances"
+    SDL_Log("      [6] the mesh  [7] indexed/expanded  [8] the pitch  [9] instances");
+    SDL_Log("      arrows or WASD orbit  [Z]/[X] dolly  [0] reset  [L] orbit the lamp"
             "  [Esc] quit");
     SDL_Log("Graph: green = software raster, cyan = recording, blue = waiting for a"
             " swapchain image, orange = waiting on a fence.");
@@ -4064,6 +4136,7 @@ int run_gpu_probe(SDL_Window* window)
 
     bool running = true;
     bool logged_swapchain_size = false;
+    probe_view view;                       // [6] arrows/WASD, [Z]/[X], [0], [L]
     bool draw_gpu_triangle = true;
     bool draw_mesh = true;                 // [6]
     bool mesh_use_indices = true;          // [7]
@@ -4139,6 +4212,20 @@ int run_gpu_probe(SDL_Window* window)
         {
             draw_gpu_triangle = !draw_gpu_triangle;
             SDL_Log("[5] GPU triangle: %s", draw_gpu_triangle ? "ON" : "off");
+        }
+        // Lesson 4.6: the camera and the lamp, which existed as `static const`
+        // floats inside the vertex shader until this lesson.
+        view.update(in, clk.dt());
+
+        if (in.key_pressed(SDL_SCANCODE_0))
+        {
+            view = probe_view{};
+            SDL_Log("[0] camera reset");
+        }
+        if (in.key_pressed(SDL_SCANCODE_L))
+        {
+            view.light_orbits = !view.light_orbits;
+            SDL_Log("[L] the lamp orbits: %s", view.light_orbits ? "ON" : "off");
         }
         if (in.key_pressed(SDL_SCANCODE_6))
         {
@@ -4302,17 +4389,49 @@ int run_gpu_probe(SDL_Window* window)
                 over.load_op = SDL_GPU_LOADOP_LOAD;    // keep the blit
                 over.store_op = SDL_GPU_STOREOP_STORE;
 
+                // ---- Lesson 4.6: the per-FRAME data ---------------------
+                //
+                // Pushed onto the COMMAND BUFFER, not bound to the pass, and
+                // deliberately before the pass begins: every draw recorded after
+                // this point in this command buffer reads it. There is no object
+                // to create and nothing to release, which is why this is three
+                // lines rather than a resource type.
+                //
+                // The aspect ratio comes from the rectangle we are about to draw
+                // into. Lesson 4.5 could not do that — it had no way to send a
+                // number to a shader, so 16:9 was compiled in and the viewport
+                // had to make it true.
+                if (want_mesh)
+                {
+                    const engine::blit_rect fit =
+                        engine::fit_centred(static_cast<Uint32>(fb.width()),
+                                            static_cast<Uint32>(fb.height()), swap_w, swap_h);
+                    const float aspect = (fit.h > 0)
+                        ? static_cast<float>(fit.w) / static_cast<float>(fit.h)
+                        : 16.0f / 9.0f;
+
+                    const engine::camera_uniforms camera{view.clip_from_world(aspect)};
+                    SDL_PushGPUVertexUniformData(cb, 0, &camera, sizeof(camera));
+
+                    engine::light_uniforms light{};
+                    light.to_light = view.to_light();
+                    light.ambient = 0.22f;
+                    light.sky = engine::vec3{0.62f, 0.74f, 1.0f};   // a blue sky, not grey
+                    light.diffuse = 0.90f;
+                    SDL_PushGPUFragmentUniformData(cb, 0, &light, sizeof(light));
+                }
+
                 SDL_GPURenderPass* draw_pass = SDL_BeginGPURenderPass(cb, &over, 1, nullptr);
 
                 if (want_mesh)
                 {
-                    // THE VIEWPORT, and it is not decoration. `mesh.vert.hlsl`
-                    // bakes an aspect ratio of 16:9 into its projection, and this
-                    // window is resizable. Restricting the draw to the same
-                    // letterboxed rectangle the blit used makes the shader's
-                    // assumption true instead of nearly true — and it is Lesson
-                    // 2.11's viewport transform, handed to the hardware as a
-                    // struct rather than performed by us.
+                    // THE VIEWPORT. Lesson 4.5 needed this to make a compile-time
+                    // aspect ratio true; Lesson 4.6 does not, because the aspect
+                    // is now a number we compute and put in the matrix. It stays
+                    // for the reason it should have been there all along: the
+                    // GPU's picture and the blitted software picture share a
+                    // window, and they should share a rectangle. Lesson 2.11's
+                    // viewport transform, handed to hardware as a struct.
                     const engine::blit_rect fit =
                         engine::fit_centred(static_cast<Uint32>(fb.width()),
                                             static_cast<Uint32>(fb.height()), swap_w, swap_h);

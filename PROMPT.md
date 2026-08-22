@@ -1559,3 +1559,71 @@ pipeline needed a palette-snapping quantiser before run-length encoding did anyt
 channels independently across a smoothly shaded surface produces hundreds of near-identical
 colours and no runs at all — 185 KB of SVG became 45 KB once the snap matched hue first and
 brightness second.
+
+---
+
+## 2026-08-22 — `next` (Lesson 4.6: Uniform Data and the Matrix Upload)
+
+Data that is the same for every vertex of a draw. The camera stops being seven `static const`
+floats inside `mesh.vert.hlsl` and becomes something the program decides per frame.
+
+### Two findings measured before a word was written
+
+Both were checked first because both could have made the lesson wrong.
+
+**The SPIR-V says `RowMajor` where the course has claimed column-major since Lesson 2.6.** Rather
+than reason about it, I wrote a probe shader that reports one matrix element per pixel, pushed a
+matrix whose element at *(row, col)* is `16·row + col + 1`, and read the 4×4 patch back. Every
+element landed where our storage put it — **no transpose** — so 2.6's claim survives and the
+`RowMajor` decoration is DXC's vocabulary rather than a statement about the bytes. That became
+Figure 4 and a callout about not believing intermediates.
+
+**SDL's header says uniform data "must respect std140", and our toolchain does not.** The
+`Offset` decorations in our own compiled SPIR-V put a `float3` at 68 where std140 requires 80.
+The rule in force is HLSL's constant-buffer packing — a vector may not *straddle* a 16-byte
+boundary, but need not *start* on one. SDL's advice is still worth following because std140 is a
+superset, and that is what the lesson recommends, with the reason.
+
+### The failure, measured
+
+A C++ struct with the same fields in the same order puts the trailing `float3` at 92; the shader
+reads it at 96. Wrote (241, 242, 243), got **(242, 243, 0)** — shifted one float, zero on the
+end, and every earlier field intact. A uniform layout bug corrupts the **tail**, which is the
+mirror image of 4.5's pitch bug where vertex 0 was always right.
+
+### A revision to 4.3
+
+4.3 inferred that a wrong register space would be silent. Half right: `glslc` accepts it and the
+JSON reflection is *byte-identical*, so 4.5's cross-check cannot see it — but SPIR-V → MSL
+**refuses** it outright ("Descriptor set index for graphics uniform buffer must be 1 or 3!"). So
+the build catches it, which is 4.3's own "compile offline" argument paying off from a direction
+it did not anticipate. A deliberately-broken shader was written to measure this and then deleted,
+because it cannot live in a build that must succeed; `verify_46` §D instead parses the
+`DescriptorSet` decorations out of the shipped `.spv` files directly — twenty lines, no
+dependency — so 4.3's advice now runs rather than being remembered.
+
+### One measurement I published wrong and caught
+
+The push-cost table first said 16 KB pushes ran at 43 GB/s and 4 KB at 3.8 — an elevenfold
+difference in the throughput of a `memcpy`. That cannot be true, which is 4.4's rule. Fixed with
+a fixed repetition count and best-of-seven; the honest numbers are ~14 ns of call overhead plus
+~65 GB/s, and the comment in the harness records the wrong version and why it was wrong.
+
+Separately: repeating a *large* push kills the process with no message at all, non-deterministically
+between 24 and 32 pushes of 64 KB. Measured in an isolated program and deliberately kept out of
+the harness — 4.4 settled that a test which destabilises the process is not a test — and handed
+to the student as exercise 4.6.5 with the same warning.
+
+### What was built
+
+`src/gfx/gpu_uniform.hpp` (new) — two blocks and `packed_offset`, HLSL's packing rule as a
+`constexpr` function so every block `static_assert`s against the rule rather than remembered
+numbers. **No wrapper class**, deliberately, against the pattern every other GPU resource follows:
+there is no handle and no lifetime. `shaders/uniform_probe.{vert,frag}.hlsl` (new) — the
+instrument, with no vertex buffer at all so it cannot be measuring a layout by accident.
+`mesh.{vert,frag}.hlsl` rewritten; `main.cpp` gains `probe_view` and the orbit camera it has had
+since 2.9 but could not reach from the GPU path.
+
+Also: giving the camera freedom immediately exposed the missing depth test, which 4.5 had hidden
+by arranging the scene so nothing overlapped. That is in the expected-result section as something
+to go and look at, and it is what 4.7 opens on.

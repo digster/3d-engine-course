@@ -3221,3 +3221,161 @@ concepts in SDL_GPU, because a "separate" layout is simply more `vertex_buffer` 
 `const float line = smoothstep(...)` fails to compile, and the error points at the semicolon
 rather than at the name — `error: ';' : Expected` at the column after `float`. It names a
 geometry-shader primitive type. Two minutes lost; recorded so it is zero next time.
+
+---
+
+## Uniform-data facts, verified at SDL 3.4.12 (Lesson 4.6)
+
+Measured with `scratch/verify_46.cpp` on Metal, one machine.
+
+### There is no uniform buffer object
+
+The complete list of what a buffer can be: `VERTEX`, `INDEX`, `INDIRECT`,
+`GRAPHICS_STORAGE_READ`, `COMPUTE_STORAGE_READ`, `COMPUTE_STORAGE_WRITE`. **No `UNIFORM` bit.**
+Uniform data reaches a shader through `SDL_PushGPUVertexUniformData(cb, slot, data, bytes)` and
+its fragment twin, whose first parameter is a **command buffer** — you are recording bytes into
+the command stream, not binding a resource.
+
+Three consequences, all simplifications: no lifetime to manage (the only GPU thing in this engine
+that needs no wrapper class), no cycling hazard (the bytes are copied at the call, into a command
+buffer that is not executing), and ordering as the only rule. Measured: push 201, draw, push 77,
+draw — the second draw reads 77, with nothing bound or rebound in between.
+
+For bulk data — many object transforms, a bone palette — the answer is a **storage buffer**:
+`GRAPHICS_STORAGE_READ`, declared as a `StructuredBuffer` in space0 or space2, *bound* rather than
+pushed, so the bytes move once instead of once per draw.
+
+### The packing rule is HLSL's, not the std140 SDL's header names
+
+SDL says: *"The data being pushed must respect std140 layout conventions… vec3 and vec4 fields are
+16-byte aligned."* What the HLSL toolchain actually emits is HLSL constant-buffer packing:
+
+> Fields are placed in declaration order and packed tightly, except that **a vector may not
+> straddle a 16-byte register boundary** — if it would, it starts at the next boundary. A scalar
+> is never moved.
+
+Measured, from the `Offset` decorations in our own compiled SPIR-V:
+
+| field | HLSL packing | std140 would say |
+|---|---|---|
+| `float4x4 m` | 0 | 0 |
+| `float a` | 64 | 64 |
+| `float3 b` | **68** | 80 |
+| `float c` | 80 | 96 |
+| `float2 d` | 84 | 100 |
+| `float3 e` | **96** | 112 |
+
+**Follow SDL's advice anyway**, because std140 is a *superset*: a layout satisfying it also
+satisfies HLSL packing, so the question of which rule applies stops mattering — including under a
+GLSL front end later. The habit that achieves it: **pair every `float3` with a `float`.** The two
+fill a register exactly, nothing can straddle, and both rules agree.
+
+`engine::packed_offset` in `gpu_uniform.hpp` is that rule as a `constexpr` function, so blocks
+`static_assert` against the rule rather than against numbers someone worked out once. A comment
+describing a layout cannot fail; a `static_assert` can.
+
+### A uniform layout bug corrupts the TAIL
+
+Wrote `e = (241, 242, 243)`:
+
+| the struct | e.x | e.y | e.z |
+|---|---|---|---|
+| naive, no padding | 242 | 243 | **0** |
+| padded to 96 | 241 | 242 | 243 |
+
+Shifted by exactly one float, with a zero where the read ran past what was written — and **every
+field before the divergence arrived intact**. That is the mirror image of Lesson 4.5's vertex
+pitch bug, where vertex 0 was always right and things degraded further in. Both present as "the
+beginning looks fine", for opposite reasons.
+
+### The matrix crosses untouched — and the SPIR-V lies about it
+
+Lesson 2.6 chose column-major `mat4` storage and claimed it was what HLSL constant buffers want.
+Checked at last, by pushing a matrix whose element at written *(row, col)* is `16·row + col + 1`
+and having a probe shader report `m[row][col]` one element per pixel:
+
+```
+         col 0  col 1  col 2  col 3
+  row 0      1      2      3      4
+  row 1     17     18     19     20
+  row 2     33     34     35     36
+  row 3     49     50     51     52
+```
+
+Every element where our storage put it. **No transpose. `memcpy` is the entire conversion.**
+
+And the trap: the compiled SPIR-V decorates the member `RowMajor`, which looks exactly like the
+transpose that table proves is not happening. It is an artefact of how DXC maps HLSL's packing
+onto SPIR-V's naming. **An intermediate representation is allowed to describe your data in its own
+vocabulary** — measure the endpoint you actually care about.
+
+Related traps in the same family: `mul(M, v)` is the column-vector convention (2.5), and
+`float4(world, 1.0f)` — a `w` of 0 makes it a direction, so the matrix's fourth column is
+multiplied away and the scene spins about a point the camera never leaves. `projection * view`,
+in that order, because `A*B` applies `B` first.
+
+### A wrong register space is caught by the BUILD, not the reflection
+
+This **revises** Lesson 4.3's inference that a wrong space would be silent. Moving the fragment
+`cbuffer` to `space0` and asking each tool in the chain:
+
+| tool | verdict |
+|---|---|
+| `glslc`, HLSL → SPIR-V | accepted — it does not care |
+| the JSON reflection | **byte-identical** to the correct shader |
+| `spirv-dis \| grep DescriptorSet` | 0 instead of 3 — visible |
+| `shadercross`, SPIR-V → MSL | **REFUSED**: *"Descriptor set index for graphics uniform buffer must be 1 or 3!"* |
+
+So Lesson 4.3's argument for compiling offline pays off from an unexpected direction: it moved a
+would-be black screen into a build error on your own machine. The reflection cannot see it, so
+Lesson 4.5's cross-check is no help. **⚠ VERIFY:** a Vulkan build consumes the SPIR-V directly,
+with no translation step to refuse — untested here.
+
+`verify_46` §D reads the `DescriptorSet` decorations out of the `.spv` itself, in about twenty
+lines with no dependency: SPIR-V is a five-word header followed by instructions whose first word
+packs `(word_count << 16) | opcode`; `OpDecorate` is 71 and the `DescriptorSet` decoration is 34.
+That turns Lesson 4.3's advice from something a person must remember into something that runs.
+
+### What a push costs, and the ceiling that crashes silently
+
+Best of seven runs of 256 pushes each:
+
+| pushed | per call | effective rate |
+|---|---|---|
+| 108 bytes | 0.015 µs | 7.1 GB/s |
+| 4 KB | 0.058 µs | 70.3 GB/s |
+| 16 KB | 0.259 µs | 63.4 GB/s |
+
+Roughly 14 ns of call overhead plus a `memcpy` at ~65 GB/s — which is what "copied into the
+command buffer" predicts, and a sign the measurement is measuring the right thing.
+
+**The first version of this measurement was wrong and said so**: scaled rep counts, one run each,
+and 16 KB came out at 43 GB/s against 4 KB at 3.8 — an elevenfold difference in the throughput of
+a `memcpy`, which cannot be true. Fixed with a fixed rep count and best-of-seven, taking the
+*minimum* because every source of error here adds time. Lesson 4.4's rule caught it: check the
+number *can* be true before writing it down.
+
+**And there is an undocumented ceiling.** Repeating a large push into one command buffer exhausts
+something and the process dies with **no message at all** — no SDL error, no validation output.
+Measured in an isolated program: 16,000 pushes of 4 KB (62 MB) are fine, while 64 KB pushes die
+somewhere between 24 and 32 of them, and *not at the same count twice*. Non-determinism at a
+resource boundary is the signature of a pool being exhausted rather than a limit being enforced.
+Kept out of the harness per Lesson 4.4's rule: a test that destabilises the process is not a test.
+
+### Reading a uniform back, when no API offers it
+
+Uniform data goes one way, so the only way to find out what arrived is to ask the shader and let
+it answer in the one currency it has — the colour of a pixel. `uniform_probe.frag.hlsl` reports
+one field per pixel, encoded `value / 255.0` into a `_UNORM` target so a value of *n* returns as
+the byte *n*.
+
+Two details that make it trustworthy:
+
+- **`SV_Position` is the pixel centre**, so the first pixel is (0.5, 0.5). **Truncate, do not
+  round** — rounding shifts the whole probe by one and produces a table that looks plausible and
+  is wrong in every entry.
+- **The probe has no vertex buffer.** `SV_VertexID` generates the three corners of a full-target
+  triangle, so the pipeline needs no vertex layout — partly convenience, mostly hygiene, since an
+  instrument with a vertex layout might be measuring one by accident (4.5). One triangle rather
+  than two also means no shared edge, so no pixel is rasterised twice and no value is written
+  twice.
