@@ -36,6 +36,8 @@
 #include "gfx/gpu_pipeline.hpp"  // Lesson 4.4: every piece of render state, in one object
 #include "gfx/gpu_mesh.hpp"      // Lesson 4.5: a real mesh, interleaved and indexed
 #include "gfx/gpu_uniform.hpp"   // Lesson 4.6: data that is the same for every vertex
+#include "gfx/gpu_texture.hpp"   // Lesson 4.7: an image on the device, and the depth target
+#include "gfx/image.hpp"         // Lesson 4.7: stb_image, behind our own interface
 #include "gfx/light.hpp"
 #include "gfx/mesh.hpp"
 #include "gfx/obj.hpp"
@@ -3631,6 +3633,12 @@ struct probe_view
     float light_azimuth = 0.9f;
     bool light_orbits = false;
 
+    // ---- Lesson 4.7 --------------------------------------------------------
+    bool show_texture = true;     ///< [T] — false brings 4.5's diagnostic grid back
+    bool depth_test = true;       ///< [C] — false is what every lesson before this looked like
+    bool smooth_texture = true;   ///< [F] — linear or nearest, the same enum 3.9 defined
+    float uv_repeat = 2.0f;       ///< [R] — how many times the image tiles across a torus
+
     /// Field of view, near and far — the same numbers Module 3's scene camera
     /// uses, so the two pictures are comparable.
     static constexpr float k_fovy = 55.0f * 3.14159265358979f / 180.0f;
@@ -4061,6 +4069,22 @@ int run_gpu_probe(SDL_Window* window)
         }
     }
 
+    // ASK, DO NOT ASSUME. SDL guarantees exactly one depth format — D16_UNORM —
+    // and this machine turns out not to support D24_UNORM at all, which is
+    // precisely the assumption a desktop renderer would have made.
+    const SDL_GPUTextureFormat depth_wanted[] = {
+        SDL_GPU_TEXTUREFORMAT_D32_FLOAT,
+        SDL_GPU_TEXTUREFORMAT_D24_UNORM,
+        SDL_GPU_TEXTUREFORMAT_D16_UNORM,
+    };
+    const SDL_GPUTextureFormat depth_format =
+        engine::supported_depth_format(gpu, depth_wanted, SDL_arraysize(depth_wanted));
+
+    SDL_Log("  depth format    : %s (%d bits)%s", engine::name_of(depth_format),
+            engine::depth_bits(depth_format),
+            depth_format == SDL_GPU_TEXTUREFORMAT_INVALID ? "  - NO DEPTH TEST" : "");
+
+
     // ---- Three pipelines that differ in ONE NUMBER --------------------------
     //
     // The pitch: 32 bytes (right), 28 (too small), 36 (too large). Nothing else
@@ -4071,6 +4095,7 @@ int run_gpu_probe(SDL_Window* window)
     const char* pitch_names[3] = {"32 (correct)", "28 (four bytes short)", "36 (four bytes long)"};
 
     engine::gpu_pipeline mesh_pipelines[3];
+    engine::gpu_pipeline mesh_pipeline_nodepth;   // Lesson 4.7, for [C]
     bool mesh_pipeline_ok = false;
 
     if (shader_state.loaded[4] && shader_state.loaded[5])
@@ -4091,6 +4116,20 @@ int run_gpu_probe(SDL_Window* window)
                             static_cast<Uint32>(offsetof(engine::gpu_vertex_pnu, u)));
             describe_instances(mdesc);
 
+            // Lesson 4.7: the three fields we have been zero-filling since 4.4.
+            // `enable_depth_write` is documented as ignored while the test is off,
+            // so the two travel together; `LESS` is Lesson 3.1's comparison, and
+            // the reason it is LESS is that SDL_GPU's NDC puts 0 at the near
+            // plane (conventions §4) — smaller is nearer.
+            if (depth_format != SDL_GPU_TEXTUREFORMAT_INVALID)
+            {
+                mdesc.raw().target_info.has_depth_stencil_target = true;
+                mdesc.raw().target_info.depth_stencil_format = depth_format;
+                mdesc.raw().depth_stencil_state.enable_depth_test = true;
+                mdesc.raw().depth_stencil_state.enable_depth_write = true;
+                mdesc.raw().depth_stencil_state.compare_op = SDL_GPU_COMPAREOP_LESS;
+            }
+
             // THE CHECK LESSON 4.4 SAID NOTHING PERFORMS. It catches the 28-byte
             // pitch, because the uv at offset 24 then ends at byte 32 of a 28-byte
             // vertex. It does NOT catch the 36-byte one — every attribute fits
@@ -4109,8 +4148,82 @@ int run_gpu_probe(SDL_Window* window)
                 SDL_Log("  mesh pipeline %s: NOT created", pitch_names[i]);
             }
         }
+        // A FOURTH PIPELINE, identical but for the depth test, because [C] has to
+        // switch it and the test is PIPELINE STATE — there is no
+        // `SDL_SetGPUDepthTest`. Built at startup for the reason Lesson 4.4
+        // measured: a new state permutation costs about 2.4 ms, which is 15% of a
+        // 60 Hz frame and not something to pay on a keypress.
+        {
+            engine::pipeline_desc nd(gpu, shaders[4].handle(), shaders[5].handle());
+            engine::gpu_mesh::describe(nd, 0);
+            describe_instances(nd);
+            if (depth_format != SDL_GPU_TEXTUREFORMAT_INVALID)
+            {
+                // The FORMAT is still declared — the pass has a depth attachment
+                // either way, and a pipeline whose target info disagrees with the
+                // pass is a mismatch. What changes is only whether it TESTS.
+                nd.raw().target_info.has_depth_stencil_target = true;
+                nd.raw().target_info.depth_stencil_format = depth_format;
+            }
+            nd.raw().depth_stencil_state.enable_depth_test = false;
+            nd.raw().depth_stencil_state.enable_depth_write = false;
+            if (!mesh_pipeline_nodepth.create(gpu, nd.info()))
+            {
+                SDL_Log("  mesh pipeline (no depth): NOT created");
+            }
+        }
+
         mesh_pipeline_ok = mesh_pipelines[0].valid();
     }
+
+    // ---- Lesson 4.7: the image, the samplers, and the depth format ---------
+    //
+    // The texture is uploaded once, by the transfer path Lesson 4.2 built for the
+    // framebuffer. The two samplers exist because a sampler is an OBJECT and
+    // swapping filters at runtime means swapping objects rather than passing a
+    // different argument — which is the whole difference from Lesson 3.9.
+    engine::image_data uv_image;
+    engine::gpu_texture uv_texture;
+    engine::gpu_sampler sampler_linear;
+    engine::gpu_sampler sampler_nearest;
+    bool texture_ok = false;
+
+    const engine::image_status img_status =
+        engine::load_image(engine::asset_path("uv_grid.png").c_str(), uv_image);
+
+    if (img_status != engine::image_status::ok)
+    {
+        SDL_Log("  texture         : uv_grid.png did not load (%s) — [T] will do nothing",
+                engine::name_of(img_status));
+    }
+    else
+    {
+        SDL_GPUCommandBuffer* tex_cb = SDL_AcquireGPUCommandBuffer(gpu.handle());
+
+        // srgb = true. Lesson 3.9's whole argument in one flag: an albedo is a
+        // reflectance, a reflectance multiplies a quantity of light, so it must be
+        // LINEAR before the multiply. The sampler now does that decode per read,
+        // for free, and before the filter rather than after.
+        texture_ok = uv_texture.create_sampled(gpu, tex_cb, uv_image, true, "uv grid")
+                  && SDL_SubmitGPUCommandBuffer(tex_cb);
+
+        texture_ok = texture_ok
+                  && sampler_linear.create(gpu, engine::filter::linear,
+                                           engine::address_mode::repeat)
+                  && sampler_nearest.create(gpu, engine::filter::nearest,
+                                            engine::address_mode::repeat);
+
+        SDL_Log("  texture         : uv_grid.png %dx%d, %d channels in the file,"
+                " uploaded %u bytes as %s",
+                uv_image.width, uv_image.height, uv_image.source_channels,
+                uv_texture.uploaded_bytes(), engine::name_of(uv_texture.format()));
+    }
+
+    // The depth target itself is created lazily, because it must match the
+    // SWAPCHAIN's size and the window is resizable — see the frame loop.
+    engine::gpu_texture depth_target;
+    Uint32 depth_w = 0;
+    Uint32 depth_h = 0;
 
     // ---- The per-instance buffer -------------------------------------------
     engine::gpu_stream_buffer instance_buffer;
@@ -4122,8 +4235,8 @@ int run_gpu_probe(SDL_Window* window)
     SDL_Log("Keys: [1] filter  [2] present mode  [3] frames in flight"
             "  [4] wait on a fence every frame  [5] GPU triangle");
     SDL_Log("      [6] the mesh  [7] indexed/expanded  [8] the pitch  [9] instances");
-    SDL_Log("      arrows or WASD orbit  [Z]/[X] dolly  [0] reset  [L] orbit the lamp"
-            "  [Esc] quit");
+    SDL_Log("      arrows or WASD orbit  [Z]/[X] dolly  [0] reset  [L] orbit the lamp");
+    SDL_Log("      [T] texture/grid  [F] filter  [R] uv scale  [C] depth test  [Esc] quit");
     SDL_Log("Graph: green = software raster, cyan = recording, blue = waiting for a"
             " swapchain image, orange = waiting on a fence.");
 
@@ -4226,6 +4339,31 @@ int run_gpu_probe(SDL_Window* window)
         {
             view.light_orbits = !view.light_orbits;
             SDL_Log("[L] the lamp orbits: %s", view.light_orbits ? "ON" : "off");
+        }
+        if (in.key_pressed(SDL_SCANCODE_T))
+        {
+            view.show_texture = !view.show_texture;
+            SDL_Log("[T] surface: %s", view.show_texture ? "the texture"
+                                                         : "Lesson 4.5's diagnostic grid");
+        }
+        if (in.key_pressed(SDL_SCANCODE_F))
+        {
+            view.smooth_texture = !view.smooth_texture;
+            SDL_Log("[F] filter: %s  (a different sampler OBJECT, not a different argument)",
+                    view.smooth_texture ? "LINEAR" : "NEAREST");
+        }
+        if (in.key_pressed(SDL_SCANCODE_R))
+        {
+            view.uv_repeat = (view.uv_repeat >= 4.0f) ? 1.0f : view.uv_repeat * 2.0f;
+            SDL_Log("[R] uv scale: %.0fx  (address_mode::repeat is what makes >1 mean"
+                    " anything)", static_cast<double>(view.uv_repeat));
+        }
+        if (in.key_pressed(SDL_SCANCODE_C))
+        {
+            view.depth_test = !view.depth_test;
+            SDL_Log("[C] depth test: %s%s", view.depth_test ? "ON" : "off",
+                    view.depth_test ? ""
+                        : "  <- this is what every lesson before 4.7 looked like");
         }
         if (in.key_pressed(SDL_SCANCODE_6))
         {
@@ -4418,10 +4556,58 @@ int run_gpu_probe(SDL_Window* window)
                     light.ambient = 0.22f;
                     light.sky = engine::vec3{0.62f, 0.74f, 1.0f};   // a blue sky, not grey
                     light.diffuse = 0.90f;
+                    light.uv_scale = engine::vec2{view.uv_repeat, view.uv_repeat};
+                    light.grid_mix = (view.show_texture && texture_ok) ? 0.0f : 1.0f;
                     SDL_PushGPUFragmentUniformData(cb, 0, &light, sizeof(light));
                 }
 
-                SDL_GPURenderPass* draw_pass = SDL_BeginGPURenderPass(cb, &over, 1, nullptr);
+                // ---- Lesson 4.7: the depth attachment ------------------
+                //
+                // Created lazily and RE-created when the swapchain changes size,
+                // because a depth attachment must match its colour target exactly
+                // and this window is resizable. That is the one piece of
+                // bookkeeping a depth buffer costs, and forgetting it is a crash
+                // on the first resize rather than a wrong picture.
+                SDL_GPUDepthStencilTargetInfo depth_info{};
+                bool have_depth = false;
+
+                if (want_mesh && depth_format != SDL_GPU_TEXTUREFORMAT_INVALID)
+                {
+                    if (!depth_target.valid() || depth_w != swap_w || depth_h != swap_h)
+                    {
+                        if (depth_target.create_depth(gpu, depth_format, swap_w, swap_h,
+                                                      "scene depth"))
+                        {
+                            depth_w = swap_w;
+                            depth_h = swap_h;
+                            SDL_Log("  depth target    : %ux%u %s", swap_w, swap_h,
+                                    engine::name_of(depth_format));
+                        }
+                    }
+
+                    if (depth_target.valid())
+                    {
+                        depth_info.texture = depth_target.handle();
+
+                        // CLEARED TO 1, the far plane, because SDL_GPU's NDC runs
+                        // 0 at near to 1 at far (conventions §4) and the test is
+                        // LESS. Clear it to 0 instead and every fragment fails.
+                        depth_info.clear_depth = 1.0f;
+                        depth_info.load_op = SDL_GPU_LOADOP_CLEAR;
+
+                        // DONT_CARE, not STORE: nothing reads this buffer after
+                        // the pass ends. Module 6's shadow maps and depth-based
+                        // post-processing are where that changes, and on tiled
+                        // hardware the difference is real bandwidth.
+                        depth_info.store_op = SDL_GPU_STOREOP_DONT_CARE;
+                        depth_info.stencil_load_op = SDL_GPU_LOADOP_DONT_CARE;
+                        depth_info.stencil_store_op = SDL_GPU_STOREOP_DONT_CARE;
+                        have_depth = true;
+                    }
+                }
+
+                SDL_GPURenderPass* draw_pass =
+                    SDL_BeginGPURenderPass(cb, &over, 1, have_depth ? &depth_info : nullptr);
 
                 if (want_mesh)
                 {
@@ -4445,8 +4631,27 @@ int run_gpu_probe(SDL_Window* window)
                     vp.max_depth = 1.0f;   // SDL_GPU's depth range (conventions §4)
                     SDL_SetGPUViewport(draw_pass, &vp);
 
-                    SDL_BindGPUGraphicsPipeline(draw_pass,
-                                                mesh_pipelines[mesh_pitch_choice].handle());
+                    // [C] selects a different PIPELINE, not a different flag —
+                    // the depth test is baked in, which is Lesson 4.1's argument
+                    // arriving for the fourth time.
+                    const engine::gpu_pipeline& chosen =
+                        (view.depth_test && have_depth && mesh_pipeline_nodepth.valid())
+                            ? mesh_pipelines[mesh_pitch_choice]
+                            : (mesh_pipeline_nodepth.valid() ? mesh_pipeline_nodepth
+                                                             : mesh_pipelines[mesh_pitch_choice]);
+                    SDL_BindGPUGraphicsPipeline(draw_pass, chosen.handle());
+
+                    // Lesson 4.7: the texture and the sampler, bound as a PAIR.
+                    // Two objects, one binding — which is why one image can be
+                    // read three ways in a frame without being duplicated.
+                    if (texture_ok)
+                    {
+                        SDL_GPUTextureSamplerBinding tex_bind{};
+                        tex_bind.texture = uv_texture.handle();
+                        tex_bind.sampler = view.smooth_texture ? sampler_linear.handle()
+                                                               : sampler_nearest.handle();
+                        SDL_BindGPUFragmentSamplers(draw_pass, 0, &tex_bind, 1);
+                    }
 
                     const engine::gpu_mesh& m = mesh_use_indices ? mesh_indexed : mesh_expanded;
                     m.bind(draw_pass, 0);
@@ -4542,6 +4747,11 @@ int run_gpu_probe(SDL_Window* window)
     // would do this anyway (they are declared after `gpu`, so C++ destroys them
     // first), and saying it explicitly is the same choice 4.2 made: a dependency
     // that is visible is a dependency that survives the next edit.
+    depth_target.destroy();
+    uv_texture.destroy();
+    sampler_linear.destroy();
+    sampler_nearest.destroy();
+    mesh_pipeline_nodepth.destroy();
     instance_buffer.destroy();
     mesh_indexed.destroy();
     mesh_expanded.destroy();

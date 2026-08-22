@@ -7,9 +7,123 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-08-22 (after Lesson 4.6 — 42 of 94 lessons)
+updated: 2026-08-22 (after Lesson 4.7 — 43 of 94 lessons)
 
 conventions:
+  depth-attachment: DEPTH IS AN ATTACHMENT PLUS THREE PIPELINE FIELDS, and both are
+        required. The pass takes SDL_GPUDepthStencilTargetInfo* as a SEPARATE
+        parameter (may be NULL); the pipeline carries enable_depth_test,
+        enable_depth_write and compare_op, which we have been zero-filling since
+        4.4. 3.1's depth_buffer.hpp modelled exactly this split two modules early
+        and said the port would be a rename. IT WAS.
+        COMPAREOP_LESS, because SDL_GPU's NDC is 0 at near and 1 at far, so
+        smaller is nearer — the same reason 3.1's software test was `<`.
+        CLEAR TO 1.0, THE FAR VALUE. Clear to 0 and every fragment fails: a black
+        screen with no error. Under reversed-Z it is 0 and the op is GREATER; the
+        clear value and the compare op ALWAYS change together.
+        STOREOP_DONT_CARE unless a later pass reads it. On tile-based hardware
+        (every phone, Apple silicon) that skips writing the buffer back to memory.
+        THE ATTACHMENT MUST MATCH THE COLOUR TARGET'S SIZE, AND THE WINDOW IS
+        RESIZABLE. Recreate on change. Never reproduces on the machine where the
+        code was written, because nobody resizes the window there.
+  depth-precision: PRECISION FALLS OFF AS THE SQUARE OF DISTANCE, and this is the
+        one genuinely new piece of theory in Module 4.
+        z_ndc = (f/(f-n))(1 - n/d)   —   dz/dd = (f/(f-n)) * n/d^2
+        SO 70% OF OUR RANGE IS SPENT IN THE FIRST METRE (n=0.3, f=100: z_ndc(1) =
+        0.7021). The smallest separation N evenly spaced codes can resolve is
+        Δd = (f-n)d^2/(f n N).
+        MEASURED AND IT MATCHES TO A FEW PER CENT over two orders of magnitude.
+        D16 worst case: 0.050 mm at 1 m (predicted 0.051), 4.8 at 10 (5.07), 31.1
+        at 25 (31.69), 125.7 at 50 (126.8), 412.4 at 90 (410.8). D32_FLOAT
+        ordinary: 0.008 / 0.036 / 0.206 / 0.967 / 2.2 mm.
+        SO TWO WALLS 41 cm APART AT 90 m SHARE A D16 CODE. That is z-fighting with
+        a number on it.
+        FIXES IN ORDER OF VALUE: push the NEAR plane out (it is in the
+        denominator, so 0.3 -> 1.0 is 3x everywhere and most scenes have nothing
+        within a metre); reversed-Z with a float format; a wider format; moving
+        the far plane in helps least.
+  reversed-z: 180x ON A FLOAT FORMAT, NOTHING ON A UNORM ONE, and knowing which
+        follows from knowing where a float keeps its precision — near ZERO. The
+        ordinary mapping puts the FAR plane at z=1, the coarse end, which is
+        exactly where 1/d^2 has already thrown resolution away: the two effects
+        COMPOUND. Reversing puts far at 0 so they nearly cancel.
+        THREE CHANGES: one subtraction in the vertex stage, COMPAREOP_GREATER,
+        clear to 0. MEASURED: D32_FLOAT at 90 m goes 2.2 mm -> 0.012 mm (180x);
+        D16_UNORM 412.4 -> 412.4, unchanged, because evenly spaced codes do not
+        care which end is which. A large effect where theory predicts one and NO
+        effect where it predicts none is what makes the measurement believable.
+        NOT ADOPTED YET, deliberately: it touches the projection, the compare op,
+        the clear, and every later pass that reads depth. Module 6, with the
+        shadow maps in view. Exercise 4.7.4.
+  depth-formats: ASK, DO NOT ASSUME. SDL guarantees exactly ONE depth format,
+        D16_UNORM. MEASURED ON THIS MACHINE: D16 yes, D24_UNORM **NO**, D32_FLOAT
+        yes, D24_UNORM_S8_UINT no, D32_FLOAT_S8_UINT yes. D24 is the format a
+        desktop renderer would have hard-coded.
+        engine::supported_depth_format takes a preference list and falls back to
+        the guaranteed one. Same discipline 4.2 established for the swapchain
+        format and present modes.
+  samplers: A SAMPLER IS AN OBJECT, WHICH IS THE WHOLE DIFFERENCE FROM 3.9. There
+        the filter and address mode were ARGUMENTS to sample(); here they are
+        baked into SDL_GPUSampler. Fourth time this module has made the move —
+        pipeline (4.4), vertex layout (4.5), uniforms (4.6), sampler (4.7) — and
+        always for the same reason: a decision the hardware specialises for cannot
+        be a parameter of the inner loop.
+        TEXTURE AND SAMPLER ARE SEPARATE OBJECTS BOUND AS A PAIR
+        (SDL_GPUTextureSamplerBinding, t0 with s0, space2). Better than OpenGL's
+        fusion and better than ours: one image read three ways in a frame is three
+        samplers, and one sampler serves every texture in a material system.
+        THE PORT IS TWO CASTS, AND THERE IS A TEST BEHIND IT. 3.9 defined
+        engine::filter and engine::address_mode to match SDL enumerator for
+        enumerator; verify_42 §G has asserted it every run since; verify_47 §A
+        adds the address modes. So static_cast is a rename with a regression test,
+        not a coincidence being relied on.
+        WHAT THE OBJECT HAS THAT THE CALL HAD NO ROOM FOR: min_filter and
+        mag_filter SEPARATELY (the CPU path never minified), mipmap_mode + min/max
+        lod + lod bias, THREE address modes for three axes, anisotropy, and
+        enable_compare — which makes the sampler do the depth comparison itself
+        and return filtered occlusion. That last one is how PCF shadows are nearly
+        free (Module 6).
+  textures-gpu: _SRGB IS ONE ENUM AND IT DECIDES WHETHER THE LIGHTING IS CORRECT.
+        3.9's argument: an albedo is a reflectance, a reflectance multiplies a
+        quantity of light, both sides must be linear. 3.9 measured the cost of
+        skipping it (blending in encoded space gives 0.2139 where 0.5 is right —
+        43% of the light). On the GPU the sampler decodes per read, FREE, and
+        BEFORE the filter, which is the ordering software cannot easily achieve.
+        MEASURED: file byte 222 comes back 186 under _SRGB; sRGB-decoding 222/255
+        gives 0.7305 = 186.3. Exact.
+        _SRGB FOR COLOURS, _UNORM FOR NUMBERS. Normal maps, roughness, masks are
+        _UNORM — decoding them corrupts data that was never encoded. One of the
+        commonest material-system mistakes.
+        ORIENTATION IS NOW TESTED, NOT REASONED. assets/uv_grid.png carries a
+        different colour in each corner; sampled through a _UNORM texture the four
+        corners match the file BYTE FOR BYTE, so decoder + upload + sampler +
+        readback all agree about which way v runs. 3.9's import-time uv flip
+        stands.
+        pixels_per_row IS PIXELS, NOT BYTES — third appearance of this bug in the
+        course (1.5's framebuffer pitch, 4.5's vertex pitch, now the texture
+        upload). Treat any field named for a row with suspicion.
+        DEPTH TARGETS ASK FOR DEPTH_STENCIL_TARGET AND NOTHING ELSE. Adding
+        SAMPLER would let a later pass read it (Module 6's shadow maps) and can
+        force the driver into a layout that is slower for the usage you do have.
+  third-party: THE TEST IS WHETHER THE HARD PART IS THE SUBJECT. We wrote
+        parse_obj because OBJ's difficulty is exactly this course's subject — the
+        mismatch between how a file describes a vertex and how hardware fetches
+        one. We do NOT write a PNG decoder: baseline PNG is an afternoon, but PNG
+        in the wild is DEFLATE + five filter modes + Adam7 + 16-bit + palettes +
+        tRNS + colour profiles, and a decoder that handles only your test files
+        fails on a USER's asset. There is nothing about engines in the fifth
+        filter mode.
+        stb_image PINNED AT A COMMIT SHA — no tags exist, same situation 4.3 hit
+        with shadercross.
+        A DEPENDENCY REACHES AS FAR AS ITS TYPES APPEAR IN HEADERS. stb's reach is
+        src/gfx/image.cpp: STB_IMAGE_IMPLEMENTATION is defined there and nowhere
+        else, image.hpp mentions no third-party type, and replacing it is one file.
+        STBI_NO_STDIO so the decode takes bytes SDL_LoadFile already read — one
+        notion of where files live, one error style.
+        SUPPRESS WARNINGS AT THE BOUNDARY, NEVER BY EDITING THE DEPENDENCY. An
+        edited dependency is one you can no longer update.
+        ALWAYS ASK FOR 4 CHANNELS. Costs a byte per pixel on opaque images and
+        means nothing downstream branches on what shape a file was.
   uniform-data: THERE IS NO UNIFORM BUFFER OBJECT IN SDL_GPU. Look for
         SDL_GPU_BUFFERUSAGE_UNIFORM in SDL_gpu.h: it is not there. The six bits
         are VERTEX, INDEX, INDIRECT, GRAPHICS_STORAGE_READ, COMPUTE_STORAGE_READ,
@@ -1751,8 +1865,37 @@ completed:
   - 4.4  The First Triangle
   - 4.5  Vertex Buffers and Layouts
   - 4.6  Uniform Data and the Matrix Upload
+  - 4.7  Textures, Samplers, and Depth
 
 capabilities:
+  - gfx 4.7: THE ENGINE CAN HIDE SURFACES AND PAINT THEM. Four new files, one new
+    asset, three new probe shaders, four modified.
+    src/gfx/image.hpp/.cpp NEW — image_data (always RGBA8, whatever the file held)
+    and load_image, with stb_image confined to the .cpp. The first third-party
+    code here that is not SDL, with the "why we don't hand-roll this" paragraph
+    CLAUDE.md §4 requires.
+    src/gfx/gpu_texture.hpp/.cpp NEW — gpu_texture with two creation paths
+    (create_sampled, which is 4.2's transfer chain with a new destination, and
+    create_depth, which uploads nothing), gpu_sampler, supported_depth_format and
+    depth_bits.
+    shaders/depth_probe.{vert,frag}.hlsl and texture_probe.frag.hlsl NEW — the
+    instruments. The vertex stage is SHARED by both fragment stages because both
+    want the same full-target surface; it writes clip position directly from
+    2.10's terms so the experiment measures the depth BUFFER and nothing else.
+    assets/uv_grid.png NEW — 256x256, a distinct colour per corner so orientation
+    is readable by a program, gridlines, an arrow, and a checkerboard for the
+    filter comparison. Generated by scratch/make_uv_grid.py.
+    shaders/mesh.frag.hlsl — samples the albedo; 4.5's diagnostic grid survives as
+    a uniform-driven toggle rather than being deleted.
+    src/gfx/gpu_uniform.hpp — light_uniforms gains uv_scale and grid_mix, grouped
+    by RATE OF CHANGE (both per-frame) rather than by subject.
+    src/gfx/gpu_device.cpp — name_of gains the depth formats, growing the table
+    that 4.2 started rather than beginning a second one.
+  - demo 4.7: `engine --gpu` is textured and depth-tested. [C] the depth test
+    (off is what every lesson before this looked like), [T] texture or grid, [F]
+    linear/nearest — a different sampler OBJECT, not a different argument — and
+    [R] the uv scale, which is where address_mode::repeat starts to mean
+    something. The depth target is recreated when the swapchain resizes.
   - gfx 4.6: THE CAMERA CAN MOVE. One new header, two new shaders, two rewritten.
     src/gfx/gpu_uniform.hpp NEW — camera_uniforms (a bare mat4, 64 B) and
     light_uniforms (float3/float/float3/float, 32 B, two registers exactly), plus
@@ -2382,6 +2525,35 @@ capabilities:
   - skills: reading SDL headers as source of truth; debugging with lldb/gdb/VS
 
 decisions:
+  - CHANGING mesh.frag.hlsl BROKE verify_45 FOR THE SECOND TIME, and the standing
+    rule caught it. 4.6 gave that shader a uniform block; 4.7 gave it a SAMPLER,
+    and a draw with nothing bound to a sampler slot draws nothing. Fixed the same
+    way: give the older harness the identity of the new feature — a 1x1 WHITE
+    texture, which multiplies the tint by one — so every pixel count in Lesson 4.5
+    is still the number that program prints and all six of its figure SVGs
+    regenerate byte for byte. RUN EVERY PREVIOUS HARNESS AFTER TOUCHING A SHARED
+    SHADER; twice now it has been the shader, not the C++.
+  - THE DEPTH COMPARISON FIGURE IS DRAWN UNTEXTURED, and that is a figure decision
+    rather than an engine one. A high-frequency checkerboard on both panels makes
+    the eye hunt for the difference, and the difference is the whole point. One
+    variable at a time, in a figure as much as in a measurement.
+  - THE PROBE SHADERS SHARE ONE VERTEX STAGE. depth_probe.frag and
+    texture_probe.frag both take its uv output; the depth one declares and ignores
+    it, because a fragment stage must declare what the vertex stage sends. A
+    second copy of the vertex shader would be a second place to get the corners
+    wrong.
+  - REVERSED-Z IS MEASURED AND NOT ADOPTED. It touches the projection, the compare
+    op, the clear value and every pass that later reads depth — a change to make
+    once, deliberately, with Module 6's shadow maps in view. Measuring it now and
+    deferring it is better than either adopting it silently or not knowing.
+  - THE SCENE FIGURE USES A LOWER CAMERA THAN THE DEMO'S DEFAULT (elevation 0.10
+    against 0.42). 4.6's default looks down on the ring and the tori barely
+    overlap — which is how 4.5 arranged the scene so the missing depth test would
+    not show. A figure about the depth test needs overlap.
+  - name_of(SDL_GPUTextureFormat) WAS EXTENDED, NOT DUPLICATED. Writing a second
+    one in gpu_texture.cpp produced a duplicate-symbol link error, which was the
+    right answer arriving as a build failure: 4.2 already owns that table and a
+    lesson that starts printing something adds the row.
   - THE PROBE SHADERS SHIP; THE DELIBERATELY-BROKEN ONE DOES NOT. A space0 variant
     was written to measure "what does a wrong space do", and shadercross REFUSES
     to translate it, so it cannot live in the build. Deleted; the finding is
@@ -2871,7 +3043,9 @@ files:
   shaders/: triangle.vert.hlsl, triangle.frag.hlsl,
             textured.vert.hlsl, textured.frag.hlsl,
             mesh.vert.hlsl, mesh.frag.hlsl,
-            uniform_probe.vert.hlsl, uniform_probe.frag.hlsl
+            uniform_probe.vert.hlsl, uniform_probe.frag.hlsl,
+            depth_probe.vert.hlsl, depth_probe.frag.hlsl,
+            texture_probe.frag.hlsl
   src/: main.cpp
   src/core/: input.hpp, input.cpp, clock.hpp, clock.cpp,
             fixed_step.hpp, fixed_step.cpp, profile.hpp, profile.cpp
@@ -2882,14 +3056,15 @@ files:
             gpu_present.hpp, gpu_present.cpp,
             gpu_buffer.hpp, gpu_buffer.cpp,
             gpu_mesh.hpp, gpu_mesh.cpp,
-            gpu_uniform.hpp,
+            gpu_uniform.hpp, gpu_texture.hpp, gpu_texture.cpp,
+            image.hpp, image.cpp,
             gpu_pipeline.hpp, gpu_pipeline.cpp,
             gpu_shader.hpp, gpu_shader.cpp,
             mesh.hpp, mesh.cpp, obj.hpp, obj.cpp,
             raster.hpp, raster.cpp, texture.hpp, texture.cpp, viewport.hpp
   src/math/: vec2.hpp, vec3.hpp, vec4.hpp, mat2.hpp, mat3.hpp, mat4.hpp, transform.hpp
   src/game/: pong.hpp, pong.cpp
-  assets/: cube.obj, twisted.obj, quirks.obj, torus.obj
+  assets/: cube.obj, twisted.obj, quirks.obj, torus.obj, uv_grid.png
   docs/: index.html, conventions.html, math-toolbox.html, cpp-style.html
   docs/lessons/: 00-01-what-is-an-engine.html, 00-02-how-this-course-works.html,
                  00-03-toolchain.html, 00-04-cmake-from-zero.html,
@@ -2911,7 +3086,8 @@ files:
                  03-09-textures.html, 03-10-profiling-capstone.html,
                  04-01-how-gpus-work.html, 04-02-sdl-gpu-model.html,
                  04-03-shader-toolchain.html, 04-04-first-triangle.html,
-                 04-05-vertex-buffers.html, 04-06-uniforms.html
+                 04-05-vertex-buffers.html, 04-06-uniforms.html,
+                 04-07-textures-and-depth.html
   docs/shared/: course.css, course.js      (THE stylesheet + page script; one copy each)
   docs/_template/: lesson-template.html, README.md, apply-shared.py, check-page.js
   memory/: 2026-07-16.md, 2026-07-18.md, 2026-07-21.md, 2026-07-22.md,
@@ -2926,35 +3102,32 @@ files:
 
 
 
-next: 4.7 — Textures, Samplers, and Depth
-      (planned filename: docs/lessons/04-07-textures-and-depth.html — 4.6 links to
-      the index for now, so BOTH of 4.6's next links need repointing when it lands.)
-      TWO RE-ENCOUNTERS AND TWO GENUINELY NEW THINGS.
-        - THE DEPTH TEST IS OVERDUE AND 4.6 MADE IT VISIBLE. Orbiting the free
-          camera shows the later instance winning regardless of distance. It is
-          3.1's algorithm as three fields of SDL_GPUDepthStencilState we have been
-          zero-filling since 4.4 (enable_depth_test, enable_depth_write,
-          compare_op) plus a depth target on the render pass.
-        - THE DEPTH FORMAT IS A REAL CHOICE: D16_UNORM / D24_UNORM / D32_FLOAT.
-          Precision is NOT uniform across the range — 2.10's z_ndc = (Az+B)/(-z)
-          concentrates it near the near plane — so MEASURE it: render two surfaces
-          a known small distance apart at several depths and find where each
-          format stops separating them. That is z-fighting with a number on it.
-          SDL_GPUTextureSupportsFormat before assuming any of them exists.
-        - TEXTURES: the transfer path 4.2 built for the framebuffer, now for an
-          asset. stb_image is the sanctioned decoder (CLAUDE.md §4) and this is
-          where it enters — with the "why we don't hand-roll this" paragraph.
-        - SAMPLERS ARE OBJECTS, unlike anything in 3.9: filter, address mode,
-          mip settings, created once and BOUND with the texture as a pair
-          (SDL_GPUTextureSamplerBinding, t0 with s0). 3.9's engine::filter and
-          engine::address_mode already mirror SDL's enumerator values and
-          verify_42 §G asserts it, so this should be a rename — CHECK that it is.
-        - THE uv HAS BEEN TRAVELLING SINCE 4.5 AND ONLY DRAWN A GRID. This is
-          where it does its job, and where mesh.frag's grid can retire or become
-          a toggle.
-        - space2 FOR THE FRAGMENT TEXTURE+SAMPLER (4.3's table), and the counts in
-          SDL_GPUShaderCreateInfo stop being samplers=0 for a shader we draw with.
-        - CHECK whether the uv flip (3.9, applied at import) is still correct now
-          that a real texture is sampled — it has never been tested against an
-          actual image on the GPU path.
+next: 4.8 — Porting the Module-3 Scene
+      (planned filename: docs/lessons/04-08-porting-the-scene.html — 4.7 links to
+      the index for now, so BOTH of 4.7's next links need repointing.)
+      THE PAYOFF, AND IT SHOULD BE UNDRAMATIC.
+        - EVERY PIECE NOW EXISTS: geometry (4.5), camera (4.6), texture + depth
+          (4.7). What is missing is the SCENE — Module 3's floor, models, lighting
+          controls and HUD still run entirely on the CPU beside the GPU path.
+        - THE HONEST TEST OF MODULE 2 AND 3's CONVENTION WORK is how little has to
+          change. NDC parity, depth range, winding, column-major matrices, sampler
+          enums were all fixed deliberately so that this lesson is an API change
+          and not a maths change. COUNT what changes and report it — if a lot
+          changes, say so.
+        - THE HUD IS THE REAL OBSTACLE and it is not a rendering problem: the
+          software demo draws text with SDL_RenderDebugText, and 4.2 established
+          that a window is claimed by SDL_GPU or driven by SDL_Renderer, never
+          both. Options: give up text until stb_truetype (Module 6), or draw the
+          HUD into the software framebuffer and keep blitting it. The second is
+          what the probe already does.
+        - collect_triangles / draw_triangles ARE THE CPU PIPELINE and their
+          replacement is the vertex shader. The comparison to make is per-pixel,
+          as 4.4 did for the triangle: same scene, both rasterizers, count the
+          disagreements. That number is Module 2 and 3's report card.
+        - THE `--gpu` FLAG SHOULD PROBABLY INVERT HERE (4.2 said "from Lesson 4.8
+          the GPU path becomes the default and this branch inverts"). Decide
+          deliberately and keep the software path reachable — it is the reference.
+        - WATCH FOR: the floor is a large thin quad (z-fighting bait — 4.7 §3.2
+          now gives the number), and Module 3's scene has objects at ~1 m, where
+          70% of the depth range lives.
 ```

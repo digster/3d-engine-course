@@ -98,6 +98,10 @@ inventing one — but without paying framework ceremony before it buys anything.
 │   │   │                   #   the ONE place the vertex layout is named
 │   │   ├── gpu_uniform.hpp # per-frame data, and where each byte goes [EXISTS from 4.6]
 │   │   │                   #   header-only: there is no object to own
+│   │   ├── gpu_texture.hpp # an image on the device, and the sampler   [EXISTS from 4.7]
+│   │   ├── gpu_texture.cpp #   + the depth target: same SDL type, no upload
+│   │   ├── image.hpp       # decoded pixels, always RGBA8              [EXISTS from 4.7]
+│   │   ├── image.cpp       #   the ONE unit that contains stb_image
 │   │   ├── gpu_pipeline.hpp# ALL render state, in one object        [EXISTS from 4.4]
 │   │   ├── gpu_pipeline.cpp#   pipeline_desc owns the arrays the create-info points at
 │   │   │                   # + instance_buffer + check_layout (4.5)
@@ -127,12 +131,17 @@ inventing one — but without paying framework ceremony before it buys anything.
 │   ├── mesh.vert.hlsl      # 4.5: six inputs across two buffers; 4.6: a real camera
 │   ├── mesh.frag.hlsl      # 4.6: a lighting block in space3
 │   ├── uniform_probe.vert.hlsl  # 4.6's instrument: a triangle from SV_VertexID,
-│   └── uniform_probe.frag.hlsl  #   and one uniform field per pixel, read back
+│   ├── uniform_probe.frag.hlsl  #   and one uniform field per pixel, read back
+│   ├── depth_probe.vert.hlsl    # 4.7's: a full-target surface at an exact
+│   ├── depth_probe.frag.hlsl    #   distance, and a flat colour to count
+│   └── texture_probe.frag.hlsl  #   one texel per pixel, for the sRGB readback
 ├── assets/                 # meshes, textures, fonts                   [EXISTS from 3.5]
 │   ├── cube.obj            # 20 readable lines; the index problem, by hand
 │   ├── twisted.obj         # …with one face reversed: 3.4's precondition, violated
 │   ├── quirks.obj          # CRLF, negative indices, mixed corner formats, an n-gon
-│   └── torus.obj           # 2,304 triangles, written by save_obj from make_torus
+│   ├── torus.obj           # 2,304 triangles, written by save_obj from make_torus
+│   └── uv_grid.png         # 4.7: a colour per corner, so ORIENTATION is machine-
+│                           #   readable; gridlines, an arrow, a checkerboard
 ├── tests/                  # unit tests (math first — it is the most testable layer)
 └── third_party/            # stb, ImGui, cgltf. SDL3 arrives via FetchContent.
 ```
@@ -838,6 +847,26 @@ the one GPU header here with no move-only wrapper class in it — only the two b
 sends, and `packed_offset`, which is HLSL's constant-buffer packing rule written as a `constexpr`
 function so that each block can `static_assert` its field offsets against the rule rather than
 against remembered numbers.
+
+**Stage B is a renderer, as of Lesson 4.7.** The two remaining pieces both arrived as ports that
+Modules 3 had designed for: the depth test is an attachment on the render pass plus three fields
+of `SDL_GPUDepthStencilState`, and the sampler is two `static_cast`s from `engine::filter` and
+`engine::address_mode`, guarded by an assertion that has run on every build since Module 4 opened.
+`depth_buffer.hpp` and `texture.hpp` both said in Module 3 that this was the plan; the plan held.
+
+Two structural points from that lesson outlive it:
+
+- **`src/gfx/image.{hpp,cpp}` is the project's first non-SDL dependency and its containment.**
+  `STB_IMAGE_IMPLEMENTATION` is defined in exactly one translation unit, `image.hpp` mentions no
+  third-party type, and warnings are suppressed at the include rather than by editing the library.
+  A dependency reaches exactly as far into a codebase as its types appear in headers; stb's reach
+  is one file, so replacing it is one file. The test for hand-rolling that admitted it — *is the
+  hard part the subject?* — is the same test the remaining four approved libraries will face.
+- **Depth precision is now a number the engine can compute, not a folk belief.** The relation
+  Δd = (f−n)·d²/(f·n·N) is derived in 4.7 §3.2 and measured to within a few per cent, which makes
+  "how far can this renderer see before surfaces stop separating" a design input rather than a
+  surprise. It will be a design input: Module 6's shadow maps are a second depth buffer with a
+  second frustum, and cascades exist entirely because of this arithmetic.
 
 That header is where the engine's answer to a recurring shape lives. Three times now a layout has
 been declared twice in two languages with nothing checking the halves — vertex attributes (4.5),

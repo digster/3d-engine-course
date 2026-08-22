@@ -38,6 +38,33 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(SDL3)
 
+# stb_image — Lesson 4.7. A PNG/JPEG/BMP decoder in one header, and the first
+# third-party code in this project that is not SDL.
+#
+# WHY WE DO NOT HAND-ROLL THIS. Every other "we could write that" in this course
+# has been written: the maths, the rasterizer, the OBJ parser, the ECS to come.
+# An image decoder is different in kind, and the difference is not difficulty —
+# a baseline PNG decoder is an afternoon — it is that PNG is DEFLATE plus five
+# filter modes plus interlacing plus sixteen-bit channels plus palettes plus
+# transparency chunks, and a decoder that handles only the files you happened to
+# test is worse than no decoder at all. There is nothing about the ENGINE to be
+# learned from the fifth filter mode.
+#
+# stb has no releases and no tags, so we pin a COMMIT — the same rule Lesson 4.3
+# had to apply to SDL_shadercross for the same reason. A branch name would mean a
+# fresh clone could decode differently from yours.
+#
+# Header-only, so there is nothing to build: we fetch it and add the directory to
+# our include path. `src/gfx/image.cpp` is the single translation unit that
+# defines STB_IMAGE_IMPLEMENTATION.
+FetchContent_Declare(
+    stb
+    GIT_REPOSITORY https://github.com/nothings/stb.git
+    GIT_TAG        2c980bb59875b0d32144a71867fbdebb2f77cd20   # pinned — no tags exist
+    GIT_SHALLOW    FALSE   # a SHA cannot be shallow-fetched by name
+)
+FetchContent_MakeAvailable(stb)
+
 # ---- Our program -----------------------------------------------------------
 # Every source file is listed by hand. CMake can glob them for you, and you
 # should not let it: a glob is evaluated at configure time, so adding a file
@@ -57,6 +84,8 @@ add_executable(engine
     src/gfx/gpu_buffer.cpp
     src/gfx/gpu_device.cpp
     src/gfx/gpu_mesh.cpp
+    src/gfx/gpu_texture.cpp
+    src/gfx/image.cpp
     src/gfx/gpu_pipeline.cpp
     src/gfx/gpu_present.cpp
     src/gfx/gpu_shader.cpp
@@ -72,7 +101,7 @@ add_executable(engine
 # the including file lives in. Relative paths like "../core/input.hpp" break the
 # moment a file moves; a stable include root does not. PRIVATE because nothing
 # links against us: this is a leaf executable, and the setting stops here.
-target_include_directories(engine PRIVATE src)
+target_include_directories(engine PRIVATE src ${stb_SOURCE_DIR})
 
 # Link SDL. SDL3::SDL3 is the alias SDL exports for "the SDL library, however it
 # was built"; linking it also pulls in SDL's headers and platform frameworks
@@ -121,6 +150,9 @@ add_hlsl_shader(engine mesh.vert vertex)      # Lesson 4.5
 add_hlsl_shader(engine mesh.frag fragment)    # Lesson 4.5
 add_hlsl_shader(engine uniform_probe.vert vertex)    # Lesson 4.6 — the instrument
 add_hlsl_shader(engine uniform_probe.frag fragment)
+add_hlsl_shader(engine depth_probe.vert vertex)      # Lesson 4.7 — the instrument
+add_hlsl_shader(engine depth_probe.frag fragment)
+add_hlsl_shader(engine texture_probe.frag fragment)
 
 # Compiled shaders live beside the executable for the same reason assets do: the
 # program finds them with SDL_GetBasePath(), never relative to the working

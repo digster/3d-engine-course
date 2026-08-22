@@ -84,6 +84,7 @@
       <li><a href="#gpu-api">Talking to the GPU &mdash; the SDL_GPU contract</a></li>
       <li><a href="#vertex-layout">Vertex layouts &mdash; the contract nothing checks</a></li>
       <li><a href="#uniform-data">Uniform data &mdash; the push, and the packing rule</a></li>
+      <li><a href="#depth-and-textures">Depth and textures &mdash; formats, precision, samplers</a></li>
       <li><a href="#units">Units and angles</a></li>
       <li><a href="#simulation">The simulation contract</a></li>
       <li><a href="#colour">Colour and diagram conventions</a></li>
@@ -1945,6 +1946,112 @@
     </table>
   </div>
 
+  <h2 id="depth-and-textures"><span class="num">7j</span>Depth and textures &mdash; formats, precision, samplers</h2>
+
+  <p>
+    Established in Lesson 4.7. Two ports that were designed for in Modules 3, and one piece of
+    arithmetic that decides how far your renderer can see. Measurements from
+    <code>scratch/verify_47.cpp</code>.
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>Rule</th><th>Value</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td>Turning depth on</td>
+            <td><strong>an attachment AND three pipeline fields</strong></td>
+            <td>The pass takes <code>SDL_GPUDepthStencilTargetInfo*</code> as a separate
+                parameter; the pipeline carries <code>enable_depth_test</code>,
+                <code>enable_depth_write</code> and <code>compare_op</code>. Neither implies the
+                other, which is what lets a shadow pass write depth without colour and a
+                transparent pass test without writing.</td></tr>
+        <tr><td>The comparison</td>
+            <td><code>COMPAREOP_LESS</code>, clear to <strong>1.0</strong></td>
+            <td>SDL_GPU's NDC is 0 at near and 1 at far (&sect;4), so smaller is nearer. Clear to
+                0 and every fragment fails &mdash; a black screen with no error. Under reversed-Z
+                both invert; <strong>the clear value and the compare op always change
+                together.</strong></td></tr>
+        <tr><td>Storing depth</td>
+            <td><code>STOREOP_DONT_CARE</code> unless read later</td>
+            <td>On tile-based hardware &mdash; every phone, all Apple silicon &mdash; that skips
+                writing the buffer back to memory entirely.</td></tr>
+        <tr><td>Attachment size</td>
+            <td><strong>must match the colour target, every frame</strong></td>
+            <td>The window is resizable, so the depth texture is recreated when the swapchain
+                changes. Never reproduces on the machine where the code was written, because
+                nobody resizes the window there.</td></tr>
+        <tr><td>Depth precision</td>
+            <td><strong>falls off as <em>d</em>&#178;</strong></td>
+            <td><code>z = (f/(f&#8722;n))(1 &#8722; n/d)</code>, so
+                <code>dz/dd = (f/(f&#8722;n))&#183;n/d&#178;</code>. With near 0.3 and far 100,
+                <strong>70% of the range is spent in the first metre.</strong> The smallest
+                resolvable separation is
+                <code>&#916;d = (f&#8722;n)d&#178;/(f&#183;n&#183;N)</code>.</td></tr>
+        <tr><td>What that costs</td>
+            <td><strong>D16 cannot separate 41&nbsp;cm at 90&nbsp;m</strong></td>
+            <td>Measured, and matching the formula to a few per cent: D16 resolves 0.050&nbsp;mm
+                at 1&nbsp;m and 412&nbsp;mm at 90. D32_FLOAT resolves 0.008 and 2.2. That is
+                z-fighting with a number on it.</td></tr>
+        <tr><td>Fixing z-fighting</td>
+            <td><strong>move the NEAR plane first</strong></td>
+            <td>It is in the denominator, so 0.3&nbsp;&rarr;&nbsp;1.0 is 3&#215; everywhere and
+                most scenes have nothing within a metre. Then reversed-Z with a float format,
+                then a wider format. Moving the far plane in helps least.</td></tr>
+        <tr><td>Reversed-Z</td>
+            <td><strong>180&#215; on a float, nothing on a UNORM</strong></td>
+            <td>A float keeps its precision near zero and the ordinary mapping puts the far plane
+                there, so the two losses compound; reversing makes them nearly cancel. Measured:
+                D32_FLOAT 2.2&nbsp;&rarr;&nbsp;0.012&nbsp;mm at 90&nbsp;m; D16_UNORM unchanged,
+                because evenly spaced codes do not care which end is which. <strong>Not adopted
+                yet</strong> &mdash; it touches the projection, the compare op, the clear and
+                every pass that reads depth.</td></tr>
+        <tr><td>Depth format</td>
+            <td><strong>ask; only D16 is guaranteed</strong></td>
+            <td><code>SDL_GPUTextureSupportsFormat</code> in preference order.
+                <strong>D24_UNORM is not supported on this course's machine</strong> &mdash;
+                exactly the format a desktop renderer would have hard-coded.</td></tr>
+        <tr><td>Depth target usage</td>
+            <td><code>DEPTH_STENCIL_TARGET</code> only</td>
+            <td>Adding <code>SAMPLER</code> lets a later pass read it (Module 6's shadow maps) and
+                can force the driver into a layout slower for the usage you do have. Ask for what
+                you use.</td></tr>
+        <tr><td>A sampler</td>
+            <td><strong>an object, not an argument</strong></td>
+            <td>Lesson 3.9 passed the filter to <code>sample()</code>; SDL_GPU bakes it into
+                <code>SDL_GPUSampler</code>. Fourth time this module makes that move &mdash;
+                pipeline, vertex layout, uniforms, sampler.</td></tr>
+        <tr><td>Texture and sampler</td>
+            <td><strong>two objects, bound as a pair</strong></td>
+            <td><code>SDL_GPUTextureSamplerBinding</code>, <code>t0</code> with <code>s0</code>,
+                in <code>space2</code>. One image can be read three ways in a frame; one sampler
+                serves every texture.</td></tr>
+        <tr><td>The port from 3.9</td>
+            <td><strong>two <code>static_cast</code>s</strong></td>
+            <td><code>engine::filter</code> and <code>engine::address_mode</code> were defined to
+                match SDL enumerator for enumerator, and <code>verify_42</code>&nbsp;&sect;G has
+                asserted it every run since. A rename with a regression test, not a coincidence.</td></tr>
+        <tr><td>Colour space</td>
+            <td><strong><code>_SRGB</code> for colours, <code>_UNORM</code> for numbers</strong></td>
+            <td>An albedo is a reflectance and must be linear before it multiplies light
+                (&sect;3.9). The sampler decodes per read, free, <em>before</em> the filter.
+                Measured: file byte 222 arrives as 186, which is the exact sRGB decode. Normal
+                maps, roughness and masks are <code>_UNORM</code> &mdash; decoding them corrupts
+                data that was never encoded.</td></tr>
+        <tr><td>Texture upload</td>
+            <td><code>pixels_per_row</code> is <strong>pixels</strong></td>
+            <td>Third appearance of this bug in the course &mdash; Lesson 1.5's framebuffer pitch,
+                Lesson 4.5's vertex pitch, now here. Treat any field named for a row with
+                suspicion.</td></tr>
+        <tr><td>Image orientation</td>
+            <td><strong>verified, not reasoned</strong></td>
+            <td><code>assets/uv_grid.png</code> carries a distinct colour per corner; sampled
+                through a <code>_UNORM</code> texture all four match the file byte for byte, so
+                decoder, upload, sampler and readback agree about which way <em>v</em> runs.
+                Lesson 3.9's import-time uv flip stands.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
   <h2 id="units"><span class="num">8</span>Units and angles</h2>
 
   <div class="tbl-scroll">
@@ -2113,6 +2220,10 @@
         <tr><td>Uniform push</td><td><code>SDL_PushGPUVertexUniformData(cb, slot, data, length)</code> and the fragment twin — the first parameter is a <strong>command buffer</strong>, not a device or a pass</td><td><code>SDL3/SDL_gpu.h</code></td></tr>
         <tr><td>Buffer usage flags</td><td>VERTEX, INDEX, INDIRECT, GRAPHICS_STORAGE_READ, COMPUTE_STORAGE_READ, COMPUTE_STORAGE_WRITE — <strong>there is no UNIFORM bit</strong></td><td><code>SDL3/SDL_gpu.h</code></td></tr>
         <tr><td>Uniform layout, per SDL</td><td>"must respect std140 layout conventions… vec3 and vec4 fields are 16-byte aligned" — <strong>stricter than what the HLSL toolchain emits</strong>, and safe for that reason</td><td><code>SDL3/SDL_gpu.h</code></td></tr>
+        <tr><td>Depth-stencil target</td><td><code>SDL_GPUDepthStencilTargetInfo { texture, clear_depth, load_op, store_op, stencil_load_op, stencil_store_op, cycle, clear_stencil, mip_level, layer }</code> — a <em>separate</em> parameter to <code>SDL_BeginGPURenderPass</code>, and it may be NULL</td><td><code>SDL3/SDL_gpu.h</code></td></tr>
+        <tr><td>Guaranteed depth format</td><td><strong><code>D16_UNORM</code> only</strong>; everything else needs <code>SDL_GPUTextureSupportsFormat(device, format, type, usage)</code></td><td><code>SDL3/SDL_gpu.h</code></td></tr>
+        <tr><td>Sampler create-info</td><td><code>min_filter</code> and <code>mag_filter</code> <strong>separately</strong>, <code>address_mode_u/_v/_w</code>, mipmap mode and LOD clamps, anisotropy, and <code>enable_compare</code> + <code>compare_op</code> for shadow sampling</td><td><code>SDL3/SDL_gpu.h</code></td></tr>
+        <tr><td>Texture + sampler binding</td><td><code>SDL_BindGPUFragmentSamplers(pass, first_slot, bindings, count)</code> with <code>SDL_GPUTextureSamplerBinding { texture, sampler }</code></td><td><code>SDL3/SDL_gpu.h</code></td></tr>
         <tr><td>Register spaces, per stage</td><td>vertex: t/s <code>space0</code>, cbuffer <code>space1</code>. fragment: t/s <code>space2</code>, cbuffer <code>space3</code>. Storage buffers share space0/space2 <em>after</em> sampled and storage textures.</td><td><code>SDL3/SDL_gpu.h</code>, <code>SDL_CreateGPUShader</code></td></tr>
       </tbody>
     </table>

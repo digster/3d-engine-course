@@ -48,6 +48,7 @@
 #pragma once
 
 #include "math/mat4.hpp"
+#include "math/vec2.hpp"
 #include "math/vec3.hpp"
 
 #include <SDL3/SDL.h>
@@ -114,12 +115,31 @@ struct light_uniforms
 
     vec3  sky;        ///< the colour that ambient term is tinted with
     float diffuse;    ///< how much the cosine term contributes
+
+    // ---- Lesson 4.7 ------------------------------------------------------
+    //
+    // Two texture controls, added to the block that already existed rather than
+    // given a block of their own. A second uniform slot would be a second push
+    // and a second declaration for two floats and a float2; grouping by RATE OF
+    // CHANGE — both of these are per-frame, like everything above — beats
+    // grouping by subject.
+    vec2  uv_scale;   ///< how many times the image repeats across the surface
+    float grid_mix;   ///< 0 = the texture, 1 = Lesson 4.5's diagnostic grid
+    float pad0;       ///< keeps the block a whole number of registers
+
+    // Note that `uv_scale` at 32 and `grid_mix` at 40 need no thought: a vec2
+    // followed by two floats fills register 2 exactly. The pad is there so the
+    // struct's SIZE is a multiple of 16, which nothing here requires but every
+    // array of blocks will (Module 6), and which costs four bytes now against
+    // an awkward conversation later.
 };
 
-static_assert(sizeof(light_uniforms) == 32, "two registers, exactly filled");
+static_assert(sizeof(light_uniforms) == 48, "three registers, exactly filled");
 static_assert(offsetof(light_uniforms, to_light) == packed_offset(0, 3), "");
 static_assert(offsetof(light_uniforms, ambient) == packed_offset(12, 1), "");
 static_assert(offsetof(light_uniforms, sky) == packed_offset(16, 3), "");
 static_assert(offsetof(light_uniforms, diffuse) == packed_offset(28, 1), "");
+static_assert(offsetof(light_uniforms, uv_scale) == packed_offset(32, 2), "");
+static_assert(offsetof(light_uniforms, grid_mix) == packed_offset(40, 1), "");
 
 } // namespace engine

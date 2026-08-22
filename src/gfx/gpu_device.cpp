@@ -22,9 +22,11 @@ const char* name_of(gpu_status s)
 
 const char* name_of(SDL_GPUTextureFormat f)
 {
-    // Only the formats a swapchain realistically arrives as. The point of the
-    // function is a readable log line, not a complete table — and an unknown
-    // format printing its number is more useful than a wrong name.
+    // Not a complete table — there are dozens of formats and the point of this
+    // function is a readable log line. Started as "the formats a swapchain
+    // realistically arrives as" (Lesson 4.2) and gained the depth formats in
+    // Lesson 4.7, which is the natural way for a table like this to grow: when a
+    // lesson starts printing something, it adds the row.
     switch (f)
     {
     case SDL_GPU_TEXTUREFORMAT_B8G8R8A8_UNORM:      return "B8G8R8A8_UNORM";
@@ -33,6 +35,15 @@ const char* name_of(SDL_GPUTextureFormat f)
     case SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM_SRGB: return "R8G8B8A8_UNORM_SRGB";
     case SDL_GPU_TEXTUREFORMAT_R16G16B16A16_FLOAT:  return "R16G16B16A16_FLOAT";
     case SDL_GPU_TEXTUREFORMAT_R10G10B10A2_UNORM:   return "R10G10B10A2_UNORM";
+
+    // Lesson 4.7's depth formats. Only D16_UNORM is guaranteed by SDL; the rest
+    // are asked for with SDL_GPUTextureSupportsFormat.
+    case SDL_GPU_TEXTUREFORMAT_D16_UNORM:           return "D16_UNORM";
+    case SDL_GPU_TEXTUREFORMAT_D24_UNORM:           return "D24_UNORM";
+    case SDL_GPU_TEXTUREFORMAT_D32_FLOAT:           return "D32_FLOAT";
+    case SDL_GPU_TEXTUREFORMAT_D24_UNORM_S8_UINT:   return "D24_UNORM_S8_UINT";
+    case SDL_GPU_TEXTUREFORMAT_D32_FLOAT_S8_UINT:   return "D32_FLOAT_S8_UINT";
+
     case SDL_GPU_TEXTUREFORMAT_INVALID:             return "INVALID";
     default:                                        return "(other)";
     }

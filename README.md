@@ -7,7 +7,7 @@ There is no engine to download here and no framework doing the interesting parts
 write the math library, the rasterizer, the ECS, the renderer, the physics, and the editor. By
 the end you have a real engine and a game built on its public API.
 
-**Status:** curriculum and conventions published; lessons in progress — **Modules 0–3 are complete** and Module 4 is under way (42 of 94 lessons), so the CPU software rasterizer is finished end to end and the engine now draws real geometry on a real GPU, from a camera you can fly. Start at
+**Status:** curriculum and conventions published; lessons in progress — **Modules 0–3 are complete** and Module 4 is under way (43 of 94 lessons), so the CPU software rasterizer is finished end to end and the engine now draws textured, depth-tested geometry on a real GPU, from a camera you can fly. Start at
 [`docs/index.html`](docs/index.html).
 
 ---
@@ -319,6 +319,20 @@ transpose anywhere** — even though the compiled SPIR-V says `RowMajor`, which 
 toolchain describing your data in its own vocabulary rather than a contradiction. Orbit the new
 camera until two tori overlap and you will also see exactly why Lesson 4.7 is about the depth
 test.
+
+[Lesson 4.7](docs/lessons/04-07-textures-and-depth.html) fixes that, and it is mostly a
+*collection*: the depth test is three pipeline fields plus an attachment, and the sampler is two
+`static_cast`s — because Lessons 3.1 and 3.9 were written knowing this day was coming, and both
+said so in comments you can still read. So the lesson spends its length on what is *not* a port.
+Depth precision falls off as the **square** of distance, because the perspective divide puts
+1/*d* into the stored value — **70% of our depth range is spent in the first metre**, and a
+16-bit buffer cannot separate two walls **41 cm apart at ninety metres**. That is z-fighting with
+a number attached at last. The formula is derived and then measured, agreeing to a few per cent
+across two orders of magnitude, after two measurement bugs the lesson keeps rather than hides
+(one of them aliasing, in the probe itself). Reversed-Z turns out to be worth **180× on a float
+format and exactly nothing on a UNORM one** — which is the control that makes the number
+believable. Along the way it brings in the first third-party code in the project, with the test
+for when to hand-roll and when not to: *is the hard part the subject?*
 
 Then hold <kbd>=</kbd> on that floor and walk *into* it. <kbd>K</kbd> cycles what happens to a
 triangle with a corner behind your eye: **clip** it (correct), **drop** it (the ground vanishes —

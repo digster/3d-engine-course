@@ -1627,3 +1627,64 @@ since 2.9 but could not reach from the GPU path.
 Also: giving the camera freedom immediately exposed the missing depth test, which 4.5 had hidden
 by arranging the scene so nothing overlapped. That is in the expected-result section as something
 to go and look at, and it is what 4.7 opens on.
+
+---
+
+## 2026-08-22 — `next` (Lesson 4.7: Textures, Samplers, and Depth)
+
+The two ports Modules 3 were written for, plus the one piece of theory in Module 4 that is not a
+port of anything.
+
+### The ports landed as promised, which is the point
+
+`depth_buffer.hpp` said in Lesson 3.1 that SDL_GPU keeps colour and depth as separate attachments
+and that modelling the split then would make Module 4 a rename. `texture.hpp` said in Lesson 3.9
+that its sampler enums matched SDL's enumerator for enumerator for the same reason. Both held: the
+depth test is three pipeline fields plus an attachment, and the sampler port is two
+`static_cast`s with a regression test (`verify_42` §G) that has been guarding the claim since
+Module 4 opened. A lesson whose main content is "the plan worked" would be thin, so the length
+went elsewhere.
+
+### The depth-precision derivation, and two measurement bugs
+
+Derived `z = (f/(f−n))(1 − n/d)` and `dz/dd ∝ n/d²` from 2.10's matrix, which gives **70% of the
+depth range spent in the first metre** and `Δd = (f−n)d²/(f·n·N)` for the smallest resolvable gap.
+Then measured it with a probe shader that writes clip position directly, and the measurement
+matches to a few per cent from 0.05 mm at one metre to 412 mm at ninety.
+
+Getting there took two wrong tables, both kept in the lesson:
+
+1. The answer at a *single* distance is not a property of the format — it depends where that
+   distance falls between two codes. The first table went **down** between ten and twenty-five
+   metres, which is the tell that the experiment is being measured rather than the hardware.
+2. The fix (sample nearby distances, take the max) then aliased: evenly spaced offsets were almost
+   exactly one code wide at 25 m, so sixteen samples measured one situation sixteen times.
+   Golden-ratio offsets fixed it. Third aliasing bug in the course.
+
+### Reversed-Z, with its own control
+
+Measured at **180× on D32_FLOAT** (2.2 mm → 0.012 at ninety metres) and **exactly nothing on
+D16_UNORM** — which is what makes it believable, because the theory predicts no effect on evenly
+spaced codes. Measured and deliberately *not adopted*: it touches the projection, the compare op,
+the clear value and every later pass that reads depth, so it belongs with Module 6's shadow maps.
+Exercise 4.7.4.
+
+### stb_image, and the test for hand-rolling
+
+First non-SDL dependency, pinned at a commit SHA (no tags — same as shadercross in 4.3). The
+justification the master prompt requires is stated as a test: *is the hard part the subject?* For
+OBJ yes, so we wrote it; for PNG no, so we did not. Containment: implementation macro in one
+`.cpp`, no third-party type in any header, warnings suppressed at the boundary rather than by
+editing the library, `STBI_NO_STDIO` so there is one notion of where files live.
+
+### Also measured
+
+`D24_UNORM` **is not supported on this machine** — the format a desktop renderer would hard-code.
+An `_SRGB` texture returns byte 222 as 186, exactly the sRGB decode, free and before the filter.
+And `assets/uv_grid.png` (generated, with a distinct colour per corner) let the uv-flip question be
+answered byte for byte instead of by eye: 3.9's import-time flip stands.
+
+### One build failure that was the right answer
+
+A second `name_of(SDL_GPUTextureFormat)` in `gpu_texture.cpp` failed to link against Lesson 4.2's.
+Extended the existing table instead of starting a second one.

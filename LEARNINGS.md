@@ -3379,3 +3379,182 @@ Two details that make it trustworthy:
   instrument with a vertex layout might be measuring one by accident (4.5). One triangle rather
   than two also means no shared edge, so no pixel is rasterised twice and no value is written
   twice.
+
+---
+
+## Depth and texture facts, verified at SDL 3.4.12 (Lesson 4.7)
+
+Measured with `scratch/verify_47.cpp` on Metal, one machine.
+
+### Depth precision falls off as the square of distance
+
+From Lesson 2.10's projection, with *d* the positive distance in front of the eye:
+
+```
+z_ndc  = (f/(f-n)) * (1 - n/d)          dz/dd = (f/(f-n)) * n/d²
+```
+
+With near 0.3 and far 100, **z at one metre is 0.7021** — seventy per cent of the entire
+representable range is spent in the first metre, and the remaining ninety-nine metres share the
+rest. The smallest world-space separation *N* evenly spaced codes can resolve is:
+
+```
+Δd = (f - n) * d² / (f * n * N)
+```
+
+Measured against that formula, worst case over many probe distances:
+
+| d | D16 measured | D16 predicted | D32_FLOAT measured |
+|---|---|---|---|
+| 1 m | 0.050 mm | 0.051 mm | 0.000 mm |
+| 5 m | 1.3 mm | 1.27 mm | 0.008 mm |
+| 10 m | 4.8 mm | 5.07 mm | 0.036 mm |
+| 25 m | 31.1 mm | 31.69 mm | 0.206 mm |
+| 50 m | 125.7 mm | 126.8 mm | 0.967 mm |
+| 90 m | 412.4 mm | 410.8 mm | 2.2 mm |
+
+Agreement to a few per cent across two orders of magnitude, which means the model is not an
+approximation of what the hardware does — it *is* what it does. **Two walls 41 cm apart at ninety
+metres share a D16 depth code.**
+
+**Fixes, in order of value:** push the *near* plane out (it is in the denominator, so 0.3 → 1.0 is
+3× everywhere, and most scenes have nothing within a metre); reversed-Z with a float format; a
+wider format; moving the far plane in helps least.
+
+### Reversed-Z is 180× on a float and exactly nothing on a UNORM
+
+A float stores its precision near zero. The ordinary mapping puts the **far** plane at z = 1 — the
+coarse end — which is precisely where 1/d² has already thrown the resolution away, so the two
+losses compound. Reversing the mapping (near → 1, far → 0) makes them nearly cancel.
+
+Three changes: one subtraction in the vertex stage, `COMPAREOP_GREATER`, and clear to 0.
+
+| d | D32_FLOAT ordinary | D32_FLOAT reversed | D16_UNORM either way |
+|---|---|---|---|
+| 10 m | 0.036 mm | 0.001 mm | 5.1 mm |
+| 50 m | 0.967 mm | 0.007 mm | 125 mm |
+| 90 m | 2.2 mm | **0.012 mm** | 412 mm |
+
+**D16 is unchanged**, because evenly spaced codes do not care which end is which. A large effect
+where the theory predicts one and *no* effect where it predicts none is what makes a measurement
+believable.
+
+### Two measurement bugs worth keeping
+
+Both produced plausible-looking wrong tables.
+
+1. **The answer at a single distance is not a property of the format.** It depends on where that
+   distance falls between two representable codes — just below a boundary and a nanometre crosses
+   it, just above and you need nearly a whole code. Measured that way D16 reported 1.4 mm at ten
+   metres and 2.6 mm at twenty-five: *a curve going the wrong way*, which is the signal that the
+   experiment rather than the hardware is being measured. Fix: sample several nearby distances and
+   take the **maximum**, which is also the number a renderer has to survive.
+2. **Evenly spaced probe distances aliased against the code spacing.** At twenty-five metres the
+   step happened to be almost exactly one code wide, so sixteen samples measured one situation
+   sixteen times and reported a quarter of the true spacing. Fix: offsets at fractional multiples
+   of the golden ratio, which never lock to any period. Third appearance of aliasing in this
+   course — a texture (3.9), a vsync measurement (4.2), and now a probe.
+
+### Only D16_UNORM is guaranteed
+
+| format | supported here |
+|---|---|
+| `D16_UNORM` | yes — the only one SDL guarantees |
+| `D24_UNORM` | **NO** |
+| `D32_FLOAT` | yes |
+| `D24_UNORM_S8_UINT` | **NO** |
+| `D32_FLOAT_S8_UINT` | yes |
+
+`D24_UNORM` — the format a desktop renderer would have hard-coded — is unavailable on this
+machine. Use `SDL_GPUTextureSupportsFormat` with a preference list and a guaranteed fallback.
+
+### Depth attachment mechanics
+
+- The pass takes `SDL_GPUDepthStencilTargetInfo*` as a **separate** parameter that may be NULL;
+  the pipeline carries `enable_depth_test`, `enable_depth_write`, `compare_op`. Both required,
+  neither implies the other — which is what makes *test without write* (transparency) and *write
+  without colour* (shadow passes) expressible.
+- `COMPAREOP_LESS` with `clear_depth = 1.0f`, because SDL_GPU's NDC is 0 at near. **Clear to 0 and
+  every fragment fails** — a black screen with no error. The clear value and the compare op always
+  change together.
+- `STOREOP_DONT_CARE` unless a later pass reads it. On tile-based hardware that skips writing the
+  buffer back to memory.
+- **The attachment must match the colour target's size, and the window is resizable.** Recreate on
+  change. This never reproduces on the machine where the code was written, because nobody resizes
+  the window there.
+- Depth targets ask for `DEPTH_STENCIL_TARGET` and nothing else. Adding `SAMPLER` (which Module
+  6's shadow maps will need) can force the driver into a layout that is slower for the usage you
+  actually have.
+
+### The sampler port is two casts, with a test behind it
+
+Lesson 3.9 defined `engine::filter` and `engine::address_mode` to match `SDL_GPUFilter` and
+`SDL_GPUSamplerAddressMode` enumerator for enumerator, and `verify_42` §G has asserted the
+correspondence on every run since. So `static_cast` here is a rename with a regression test, not a
+coincidence being relied on — and if SDL ever inserts an enumerator the test fails there instead
+of the cast silently selecting the wrong mode.
+
+**A sampler is an object, which is the whole difference from 3.9** — the fourth time this module
+has moved a decision out of a call and into an object, after pipelines (4.4), vertex layouts (4.5)
+and uniform blocks (4.6). A texture and a sampler are **separate** objects bound as a pair
+(`SDL_GPUTextureSamplerBinding`, `t0` with `s0`, in `space2`), which is better than fusing them:
+one image can be read three ways in one frame, and one sampler serves every texture.
+
+Fields the object has that the CPU call had no room for: `min_filter` and `mag_filter`
+*separately*, mipmap mode with LOD clamps and bias, three address modes for three axes, anisotropy,
+and `enable_compare` — which makes the sampler perform the depth comparison itself and return
+filtered occlusion, which is why percentage-closer shadow filtering is nearly free.
+
+### `_SRGB` is one enum and it decides whether the lighting is correct
+
+Lesson 3.9's argument: an albedo is a reflectance, a reflectance multiplies a quantity of light, so
+both sides must be linear. That lesson measured the cost of skipping the decode — two texels
+blended in encoded space give 0.2139 where 0.5 is correct, 43% of the light.
+
+Measured here: file byte **222 comes back as 186** through an `_SRGB` texture. sRGB-decoding
+222/255 = 0.871 gives 0.7305, which is 186.3 out of 255. Exact — and performed by the sampler for
+free, *before* the filter rather than after, which is the ordering the software path had to
+construct by hand.
+
+**`_SRGB` for colours, `_UNORM` for numbers.** Normal maps, roughness maps and masks are `_UNORM`;
+decoding them corrupts data that was never encoded. This is one of the commonest material-system
+mistakes.
+
+### Image orientation, tested rather than reasoned
+
+`assets/uv_grid.png` carries a different flat colour in each corner so a program can read the four
+corners back. Sampled through a `_UNORM` texture they match the file **byte for byte** — a much
+stronger claim than "it looked right", since the decoder, the upload, the sampler and the readback
+would all have had to agree. Lesson 3.9's import-time uv flip stands.
+
+`pixels_per_row` in `SDL_GPUTextureTransferInfo` is **pixels, not bytes** — the third appearance of
+this bug in the course after Lesson 1.5's framebuffer pitch and Lesson 4.5's vertex pitch. Treat
+any field named for a row with suspicion.
+
+### When not to hand-roll: is the hard part the subject?
+
+We wrote `parse_obj` because OBJ's difficulty *is* this course's subject — the mismatch between how
+a file describes a vertex and how hardware fetches one. We do not write a PNG decoder: baseline PNG
+is an afternoon, but PNG in the wild is DEFLATE plus five filter modes plus Adam7 plus sixteen-bit
+channels plus palettes plus `tRNS` plus colour profiles, and a decoder that handles only your test
+files fails on a *user's* asset. There is nothing about game engines in the fifth filter mode.
+
+Containment rules that came with it:
+
+- **A dependency reaches exactly as far as its types appear in headers.** `STB_IMAGE_IMPLEMENTATION`
+  is defined in one `.cpp`; `image.hpp` mentions no third-party type; replacing stb is one file.
+- **Suppress warnings at the boundary, never by editing the dependency** — an edited dependency is
+  one you can no longer update.
+- **`STBI_NO_STDIO`**, so the decode consumes bytes `SDL_LoadFile` already read. Two file-opening
+  paths in one program is two answers to "why can it not find my asset".
+- **Always ask for four channels.** Costs a byte per pixel on opaque images, and means nothing
+  downstream ever branches on what shape a file happened to be.
+- stb has no tags, so pin a **commit SHA** — the same situation Lesson 4.3 hit with
+  SDL_shadercross.
+
+### A duplicate symbol was the right answer arriving as a build failure
+
+Writing a second `name_of(SDL_GPUTextureFormat)` in `gpu_texture.cpp` failed to link against the
+one Lesson 4.2 put in `gpu_device.cpp`. The fix was to *extend* the existing table with the depth
+formats rather than start a second one — which is how a table like that should grow: when a lesson
+starts printing something, it adds the row.
