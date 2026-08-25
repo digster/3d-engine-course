@@ -375,6 +375,30 @@ are two approximations of the same curve. The flat untextured floor reports 100%
 pixels differing, all by one code in one channel, which is the lesson's other moral: **never
 report a percentage without a magnitude**.
 
+Which leaves one thing, and it is the one nobody warns you about:
+[Lesson 4.9](docs/lessons/04-09-renderdoc.html) is what to do when the screen is black and every
+call returned success. **A breakpoint cannot catch a GPU bug** — recording and executing are
+separated by a submit, and the bug lives on the far side of it. So the lesson covers the class of
+tool that can see it, and the engine work that makes a frame worth capturing: every resource named
+*at creation* (SDL's own docs steer you away from the setter you find first — and a comment in this
+codebase spent four lessons confidently explaining an API asymmetry that turned out not to exist),
+debug groups as an immovable C++ scope (Metal scopes a group pushed inside a pass *to* that pass),
+and a frame log the engine prints itself. `engine --trace` dumps one frame headlessly — 33 events,
+3 draws, 560 uniform bytes — and cross-checks itself against the renderer's own counters.
+
+The awkward fact is stated in the first paragraph rather than buried: **RenderDoc does not support
+Metal**, so on a Mac the tool is Xcode's Metal Debugger. Every concept transfers; the screenshots
+do not.
+
+Two of the lesson's findings came out of getting it wrong first. The measurement of what
+instrumentation costs took three attempts, and the first reported a **negative cost for adding
+work** — which is not a puzzle, it is the tell that you have measured noise rather than an effect.
+Measure the floor, then scale the workload until the effect clears it: 183.6 ns and 182.0 ns from
+two independent estimates, and *the agreement between them* is the evidence. And a debt Lesson 4.5
+booked is declared **unpayable** on this hardware rather than fudged — modelling it instead turned
+up something better than the original number would have been, which is that vertex reuse is a
+property of the index *order*, and shuffling triangles costs 2.83× with the geometry untouched.
+
 Then hold <kbd>=</kbd> on that floor and walk *into* it. <kbd>K</kbd> cycles what happens to a
 triangle with a corner behind your eye: **clip** it (correct), **drop** it (the ground vanishes —
 31,747 pixels of 57,600), or divide anyway with **no guard** at all (the floor folds inside out and

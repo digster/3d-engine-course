@@ -337,13 +337,25 @@ bool gpu_shader::load(const gpu_device& dev, const char* name, shader_stage stag
     info.num_storage_buffers = resources_.storage_buffers;
     info.num_uniform_buffers = resources_.uniform_buffers;
 
-    // Name it for the debugger, and note the asymmetry: buffers and textures have
-    // SDL_SetGPUBufferName / SDL_SetGPUTextureName, and a SHADER DOES NOT. It is
-    // named through a creation property instead, because a shader is immutable
-    // the moment it exists — there is no later at which to set anything on it.
-    // (Checked in SDL_gpu.h at release-3.4.12 rather than assumed from the
-    // pattern; assuming the setter existed cost one compile error while this
-    // lesson was written.)
+    // Name it for the debugger, through a creation property.
+    //
+    // LESSON 4.9 CORRECTED THE EXPLANATION THAT USED TO BE HERE, and the wrong
+    // version is worth quoting because the mistake is a common shape: this
+    // comment said the creation property existed *because a shader is immutable
+    // the moment it exists*, inferring a reason from the asymmetry with
+    // SDL_SetGPUBufferName / SDL_SetGPUTextureName.
+    //
+    // Reading the docs of the *other* function settles it. SDL_gpu.h says of the
+    // buffer setter: "You should use SDL_PROP_GPU_BUFFER_CREATE_NAME_STRING with
+    // SDL_CreateGPUBuffer instead of this function to avoid thread safety
+    // issues." So the creation property is the RECOMMENDED path for all three,
+    // and the setters are the older API SDL now steers you away from. There was
+    // no asymmetry to explain; a shader simply never got the worse option.
+    //
+    // The engine now names buffers, textures and transfer buffers this way too —
+    // see gfx/gpu_debug.hpp. A confident explanation of an API's shape is a
+    // hypothesis, and the cheapest place to check it is the documentation of the
+    // function you are already calling.
     const SDL_PropertiesID props = SDL_CreateProperties();
     if (props != 0)
     {

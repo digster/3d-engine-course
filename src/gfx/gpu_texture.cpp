@@ -2,6 +2,8 @@
 
 #include "gfx/gpu_texture.hpp"
 
+#include "gfx/gpu_debug.hpp"   // Lesson 4.9: named at CREATION, as SDL asks
+
 #include <cstring>
 #include <utility>
 
@@ -107,7 +109,7 @@ bool gpu_texture::create_sampled(const gpu_device& dev, SDL_GPUCommandBuffer* cb
     ti.num_levels = 1;              // no mipmaps yet — Module 6
     ti.sample_count = SDL_GPU_SAMPLECOUNT_1;
 
-    texture_ = SDL_CreateGPUTexture(device_, &ti);
+    texture_ = create_named_texture(device_, ti, name);
     if (texture_ == nullptr)
     {
         SDL_Log("SDL_CreateGPUTexture(%ux%u %s) failed: %s",
@@ -115,7 +117,6 @@ bool gpu_texture::create_sampled(const gpu_device& dev, SDL_GPUCommandBuffer* cb
         destroy();
         return false;
     }
-    if (name != nullptr) { SDL_SetGPUTextureName(device_, texture_, name); }
 
     // ---- The transfer path, unchanged from Lesson 4.2 -----------------------
     const Uint32 bytes = width_ * height_ * 4u;
@@ -124,7 +125,8 @@ bool gpu_texture::create_sampled(const gpu_device& dev, SDL_GPUCommandBuffer* cb
     tb.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
     tb.size = bytes;
 
-    SDL_GPUTransferBuffer* staging = SDL_CreateGPUTransferBuffer(device_, &tb);
+    SDL_GPUTransferBuffer* staging =
+        create_named_transfer_buffer(device_, tb, "staging (texture upload)");
     if (staging == nullptr)
     {
         SDL_Log("SDL_CreateGPUTransferBuffer(%u) failed: %s", bytes, SDL_GetError());
@@ -201,7 +203,7 @@ bool gpu_texture::create_depth(const gpu_device& dev, SDL_GPUTextureFormat forma
     ti.num_levels = 1;
     ti.sample_count = SDL_GPU_SAMPLECOUNT_1;
 
-    texture_ = SDL_CreateGPUTexture(device_, &ti);
+    texture_ = create_named_texture(device_, ti, name);
     if (texture_ == nullptr)
     {
         SDL_Log("SDL_CreateGPUTexture(depth %ux%u %s) failed: %s",
@@ -209,7 +211,6 @@ bool gpu_texture::create_depth(const gpu_device& dev, SDL_GPUTextureFormat forma
         destroy();
         return false;
     }
-    if (name != nullptr) { SDL_SetGPUTextureName(device_, texture_, name); }
 
     // Nothing is uploaded. A depth buffer is written by the render pass that
     // clears it and by every fragment that passes the test — never by us.

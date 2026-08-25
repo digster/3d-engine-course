@@ -3713,3 +3713,164 @@ is wrong. Turn one thing off; if the difference goes with it, you have a cause.
    across the whole range, none near the boundary the disagreement lived at, and "refuted" a
    hypothesis that was merely unmeasured. **Measure the thing you are about to blame** — and
    measure it at the resolution the effect lives at.
+
+---
+
+## Frame-debugging facts, verified at SDL 3.4.12 (Lesson 4.9)
+
+### RenderDoc does not support Metal, and will not
+
+Quoted from its own front page: "a graphics debugger currently available for **Vulkan, D3D11,
+D3D12, OpenGL, and OpenGL ES** development on **Windows, Linux, Android, and Nintendo Switch**."
+
+SDL_GPU picks Metal on macOS, so a Mac reader cannot use it at all. `SDL_gpu.h` has a **"Debugging"
+section** — a page long, on your disk — that says the same thing and gives the Xcode procedure:
+*Debug → Debug Executable…*, set "GPU Frame Capture" to "Metal" in the scheme's Options, run, click
+the Metal icon. No Xcode *project* is needed; it attaches to a CMake-built binary.
+
+PIX is D3D12-only and is the better **GPU profiler**; RenderDoc is the better **state inspector**.
+
+### Name resources at creation; the setter is the API SDL steers you away from
+
+`SDL_gpu.h`, on `SDL_SetGPUBufferName`:
+
+> "You should use `SDL_PROP_GPU_BUFFER_CREATE_NAME_STRING` with `SDL_CreateGPUBuffer` instead of
+> this function to avoid thread safety issues."
+>
+> "This function is not thread safe, you must make sure the buffer is not simultaneously used by
+> any other thread."
+
+The same applies to textures and transfer buffers. **There is no getter** — no
+`SDL_GetGPUBufferName` — so a name is write-only from the program's side and cannot be asserted on
+in a test; only a capture shows it.
+
+Cost, measured: creating a 256-byte buffer is 0.0011 ms unnamed and 0.0018 ms named. Paid once, at
+load, never per frame.
+
+### A confident explanation of somebody else's API is a hypothesis
+
+This is the transferable finding, and it cost four lessons. `gpu_shader.cpp` carried a comment
+explaining that shaders are named through a creation property "because a shader is immutable the
+moment it exists — there is no later at which to set anything on it", inferring a reason from the
+asymmetry with the buffer and texture setters.
+
+There was no asymmetry to explain. The property is the recommended path for all three; the setters
+are simply the older API. The comment was written by somebody who had read `SDL_CreateGPUShader`'s
+docs carefully and `SDL_SetGPUBufferName`'s not at all — and it survived four lessons, a full
+published code listing and several readings, **because nothing depends on a comment being right**.
+No compiler, no test, no reviewer.
+
+Be most suspicious of comments that explain *why somebody else's API is shaped as it is*. Comments
+about your own code are checked constantly by people reading the code beside them; comments about a
+dependency's design are checked by nobody.
+
+### Debug groups: a C++ scope, because Metal makes it one
+
+```c
+void SDL_PushGPUDebugGroup(SDL_GPUCommandBuffer* cb, const char* name);
+void SDL_PopGPUDebugGroup(SDL_GPUCommandBuffer* cb);
+void SDL_InsertGPUDebugLabel(SDL_GPUCommandBuffer* cb, const char* text);
+```
+
+From the header: "On some backends (e.g. Metal), pushing a debug group during a
+render/blit/compute pass will create a group that is **scoped to the native pass** rather than the
+command buffer. For best results, if you push a debug group during a pass, always pop it in the
+same pass."
+
+So `engine::debug_group` is RAII **and deliberately not movable** — a movable one could be returned
+from a function or stored in a container and outlive its pass, and the failure is not a crash, it
+is a capture whose tree is quietly wrong.
+
+**On D3D12 all three calls require `WinPixEventRuntime.dll`** in PATH or beside the executable.
+Without it they are *inert, not an error*: no tree, no diagnostic. This is the only cross-platform
+difference in Module 4 that produces no message at all.
+
+Measured cost: ~183 ns per push+label+pop. Four a frame is 0.73 µs, 0.004% of a 16.7 ms budget.
+
+### Measure the noise floor before comparing anything against it
+
+This took three attempts and the failures are more instructive than the number.
+
+1. **No floor at all.** Compared one instrumented frame against one bare frame and got
+   `+ debug group and label  0.0238 ms  (-0.0003)` — **adding work made the frame faster**. That is
+   not a surprising result, it is the measurement announcing it has nothing to say.
+2. **A two-run floor.** Ran the identical workload twice and took the difference. Still let
+   `-541.7 ns` through the guard, because *one difference is itself a sample of a noisy quantity*.
+3. **A five-run spread, plus a 2× threshold.** Range of five medians = 2.46 µs, and nothing counts
+   as a result unless it beats twice that.
+
+Then, when an effect is below the floor, **scale the workload until it clears and divide**: 1 and 8
+debug groups are unmeasurable; 32 and 128 give 183.6 ns and 182.0 ns. **The agreement between two
+independent estimates is the evidence**, not either number — a real per-call cost is constant, so
+convergence is what separates a measurement from a coincidence. (Lesson 3.10 used the same trick on
+a profiler zone reading 0.00 µs.)
+
+### The validation layer costs 1.17× — and that ratio is misleading
+
+Recording one **three-draw** frame: 0.0267 ms with debug mode on, 0.0228 ms off. Measured on the
+*recording*, not the whole frame, because validation runs on the CPU as each call is recorded and a
+whole-frame number would dilute it with GPU time the layer cannot affect.
+
+The cost is **per API call**, so it scales with how chatty the frame is; a frame with two thousand
+draws pays roughly a thousand times this. The useful form of the finding is not a ratio: it is
+"validation costs about X per call, and I know how many calls I make". Keep it on while developing
+— the alternative to a validation message is a black window with no message at all.
+
+### Vertex reuse is a property of the index ORDER
+
+Lesson 4.5 promised that "4.9's RenderDoc capture is where the real number finally shows up". **It
+does not** — no Metal support, and Metal's pipeline-statistics counters are not reachable through
+SDL_GPU. Where to read it on hardware that answers: RenderDoc's Pipeline State statistics or
+`VK_QUERY_TYPE_PIPELINE_STATISTICS` / `VERTEX_SHADER_INVOCATIONS`; D3D12's
+`D3D12_QUERY_TYPE_PIPELINE_STATISTICS` → `VSInvocations`; Xcode's Metal Debugger per-pipeline
+counters.
+
+Simulating a FIFO post-transform cache over `torus.obj`'s own index order gives a **staircase**,
+not a slope:
+
+| cache size | invocations |
+|---|---|
+| 0 (none) | 6,912 |
+| 4 | 4,608 |
+| 6 – 32 | 2,400 (identical) |
+| 48 | 2,306 |
+| 50+ | 1,225 (the best case) |
+
+`make_torus(48, 24)` emits quads ring by ring, so reuse happens at *two* distances — a few index
+positions (the neighbouring quad) and about 2 × 24 (the quad one ring away) — with nothing in
+between. A cache of 8 and a cache of 32 therefore catch exactly the same reuse.
+
+**The control is the real finding.** Take the same 2,304 triangles, the same vertices, and shuffle
+the order the triangles are listed in: 2,400 invocations becomes **6,784 at cache 32, 2.83× worse**,
+with nothing about the geometry changed. This is why real pipelines run an index-buffer optimiser
+(Tom Forsyth's linear-speed reorder, `meshoptimizer`) as a build step, and why a mesh exported
+straight out of a modelling tool often leaves half its vertex throughput on the floor.
+
+Model assumptions, each a way it can be wrong: FIFO (may be LRU); whole vertices (may be
+fixed-size post-transform outputs); strictly in-order indices (hardware batches and may reorder);
+one cache (usually several).
+
+### Instrumentation must be recorded from the statement that issues the call
+
+`frame_log` is emitted from inside `gpu_scene_renderer::render`, beside each SDL call, rather than
+from a function that walks the draw list and describes what it believes the renderer does. The
+second design drifts the first time somebody edits the renderer, drifts *silently*, and produces a
+log that is **wrong and believed** — which is worse than having no log.
+
+`verify_49` §D asserts the log's draw count, uniform bytes and triangle count against
+`draw_stats`. Two counters incremented from the same statements. **This is a test a capture cannot
+give you**: a capture is a picture of what happened and has no independent account of what should
+have happened to compare against.
+
+### How a capture works, and every limit follows from it
+
+The tool records the full **contents** of every resource at frame start plus the ordered call
+list, then **replays**. That is why it can show any resource at any event, why captures are
+enormous (proportional to what you have allocated, not to what you drew), why capturing is slow,
+and why the tool must sit at the driver level — which is what makes Metal support a port rather
+than a feature.
+
+Four questions worth arriving with: is my draw there at all (missing → CPU-side; present but
+invisible → culled, clipped, depth-rejected, or offscreen); is the right thing bound; are the
+bytes what I think; where did the geometry go. **Predict before you look** — browsing a capture
+without a prediction produces the feeling of investigating and no information.

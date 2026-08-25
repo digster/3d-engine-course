@@ -52,10 +52,18 @@ public:
     ///              bitmask, and it is not advisory: a buffer bound as a vertex
     ///              buffer must have been created with the VERTEX bit, and SDL
     ///              says so field by field in `SDL_GPUBufferBinding`.
-    /// @param name  For debuggers and RenderDoc captures (Lesson 4.9). Buffers
-    ///              have a real setter, `SDL_SetGPUBufferName` — unlike shaders,
-    ///              which are named through a creation property because they are
-    ///              immutable the moment they exist.
+    /// @param name  For debuggers and frame captures (Lesson 4.9), attached at
+    ///              CREATION through `SDL_PROP_GPU_BUFFER_CREATE_NAME_STRING`.
+    ///
+    ///              This doc comment used to say buffers "have a real setter,
+    ///              `SDL_SetGPUBufferName` — unlike shaders, which are named
+    ///              through a creation property because they are immutable".
+    ///              **That was wrong**, and Lesson 4.9 fixed both the comment and
+    ///              the call: SDL's own documentation for the setter says to
+    ///              prefer the creation property "to avoid thread safety issues",
+    ///              so the property is the recommended path for every resource
+    ///              type and the setters are simply the older API. See
+    ///              `gfx/gpu_debug.hpp`.
     [[nodiscard]] bool create(const gpu_device& dev, SDL_GPUBufferUsageFlags usage,
                               Uint32 size, const char* name = nullptr);
 

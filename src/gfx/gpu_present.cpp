@@ -2,6 +2,8 @@
 
 #include "gfx/gpu_present.hpp"
 
+#include "gfx/gpu_debug.hpp"   // Lesson 4.9: named at CREATION, as SDL asks
+
 #include <cstring>
 #include <utility>
 
@@ -137,21 +139,20 @@ bool gpu_present_target::create(const gpu_device& dev, int width, int height)
     tex.num_levels = 1;
     tex.sample_count = SDL_GPU_SAMPLECOUNT_1;
 
-    image_ = SDL_CreateGPUTexture(device_, &tex);
+    image_ = create_named_texture(device_, tex, "framebuffer mirror");
     if (image_ == nullptr)
     {
         SDL_Log("SDL_CreateGPUTexture failed: %s", SDL_GetError());
         destroy();
         return false;
     }
-    SDL_SetGPUTextureName(device_, image_, "framebuffer mirror");
 
     // ---- The staging buffer -------------------------------------------------
     SDL_GPUTransferBufferCreateInfo tb{};
     tb.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
     tb.size = static_cast<Uint32>(width) * static_cast<Uint32>(height) * 4u;
 
-    staging_ = SDL_CreateGPUTransferBuffer(device_, &tb);
+    staging_ = create_named_transfer_buffer(device_, tb, "staging (framebuffer)");
     if (staging_ == nullptr)
     {
         SDL_Log("SDL_CreateGPUTransferBuffer failed: %s", SDL_GetError());

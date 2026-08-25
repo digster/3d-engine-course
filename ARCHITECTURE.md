@@ -103,6 +103,9 @@ inventing one — but without paying framework ceremony before it buys anything.
 │   │   ├── gpu_scene.hpp   # a SCENE, rather than a thing              [EXISTS from 4.8]
 │   │   ├── gpu_scene.cpp   #   surface_style -> 3 pipelines; a list of gpu_draw_item
 │   │   │                   #   -> N draws; draw_stats counts what the order cost
+│   │   ├── gpu_debug.hpp   # making a frame legible to a debugger     [EXISTS from 4.9]
+│   │   ├── gpu_debug.cpp   #   names at creation, debug_group (an RAII scope that
+│   │   │                   #   is deliberately NOT movable), and frame_log
 │   │   ├── image.hpp       # decoded pixels, always RGBA8              [EXISTS from 4.7]
 │   │   ├── image.cpp       #   the ONE unit that contains stb_image
 │   │   ├── gpu_pipeline.hpp# ALL render state, in one object        [EXISTS from 4.4]
@@ -783,6 +786,7 @@ inside one executable rather than replacing one another:
 ./engine --software  Stage A — the software demo of Modules 1–3, SDL_Renderer, HUD and all
 ./engine --probe     Stage B — the GPU probe Lessons 4.2–4.7 were built on
 ./engine --gpu       an alias for --probe, kept because six lessons say to type it
+./engine --trace     print one frame's command stream and exit          (from 4.9)
 ```
 
 The split is **forced, not stylistic**. A window can be claimed by an SDL_GPU device *or* driven
@@ -918,6 +922,42 @@ Two things that lesson changed elsewhere, both of which outlive it:
   keys geometry by the address of its first vertex and needs two extra fields to notice that a
   rebuilt `std::vector` keeps its address. Fifth lesson to name that pressure (3.2, 3.5, 3.9, 4.5,
   4.8) and the first where it costs something.
+
+**Stage B is debuggable, as of Lesson 4.9 — and Module 4 is complete.** The last piece is not a
+rendering feature at all: it is the ability to find out what the renderer actually did, which
+matters because a breakpoint cannot. Recording and executing are separated by a submit (Lesson
+4.2's sentence, collecting for the last time), so a GPU bug is a *state* question and a debugger is
+a *control-flow* instrument.
+
+`src/gfx/gpu_debug.{hpp,cpp}` holds three things, and the design of each is a decision worth
+keeping:
+
+- **Names at creation, not through the setters.** `SDL_SetGPUBufferName` exists and SDL's own
+  documentation tells you to prefer `SDL_PROP_GPU_BUFFER_CREATE_NAME_STRING` instead, "to avoid
+  thread safety issues". This codebase used the setter from 4.2 and, in 4.3, wrote a comment
+  *explaining* the asymmetry with shaders by inferring a reason (immutability) rather than reading
+  the docs of the function it was already calling. There was no asymmetry. Both the calls and the
+  comment are corrected, and the general rule is recorded in LEARNINGS.md: **a confident
+  explanation of why somebody else's API is shaped as it is, is a hypothesis.**
+- **`debug_group` is an RAII scope that is neither copyable nor movable.** That is SDL's Metal rule
+  in the type system — a group pushed inside a render pass is scoped to that pass, so push and pop
+  must be in the same one, and an immovable scope cannot escape its block. On D3D12 all three debug
+  calls need `WinPixEventRuntime.dll` and are *inert without it*, which is the only cross-platform
+  difference in Module 4 that produces no diagnostic at all.
+- **`frame_log` records from the statements that issue the calls**, never from a parallel
+  description of what `render()` is believed to do — instrumentation that can drift from the code
+  it describes is worse than none, because it is believed. `verify_49` §D asserts it against
+  `draw_stats`: two counters incremented from the same statements, which is a test *a capture
+  cannot give you*, having no independent account of what should have happened.
+
+`engine --trace` prints one frame and exits. It exists because a keypress-armed log cannot be
+tested headlessly, and the flag that made it testable turned out to be the useful artifact: a
+deterministic frame dump that runs in CI and can be diffed between commits.
+
+Two measurement disciplines came out of this lesson and belong to the whole project from here:
+**measure the noise floor before comparing anything against it** (the first attempt reported a
+negative cost for adding work), and **when an effect is below the floor, scale the workload until
+it clears and divide** — two independent estimates converging is the evidence, not either number.
 
 See [LEARNINGS.md](LEARNINGS.md) for the verified SDL_GPU convention table.
 

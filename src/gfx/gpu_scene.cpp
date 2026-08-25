@@ -194,7 +194,7 @@ draw_stats gpu_scene_renderer::render(SDL_GPUCommandBuffer* cb, SDL_GPURenderPas
                                       const gpu_draw_item* items, int count,
                                       const camera_uniforms& camera,
                                       const scene_light_uniforms& light,
-                                      SDL_GPUSampler* sampler) const
+                                      SDL_GPUSampler* sampler, frame_log* log) const
 {
     draw_stats stats;
     if (cb == nullptr || pass == nullptr || items == nullptr || count <= 0) { return stats; }
@@ -207,6 +207,14 @@ draw_stats gpu_scene_renderer::render(SDL_GPUCommandBuffer* cb, SDL_GPURenderPas
     SDL_PushGPUVertexUniformData(cb, 0, &camera, sizeof(camera));
     SDL_PushGPUFragmentUniformData(cb, 0, &light, sizeof(light));
     stats.uniform_bytes += static_cast<Uint32>(sizeof(camera) + sizeof(light));
+
+    if (log != nullptr)
+    {
+        log->record(gpu_event_kind::push_uniform, "camera (vertex)", 0,
+                    static_cast<Uint32>(sizeof(camera)));
+        log->record(gpu_event_kind::push_uniform, "lighting (fragment)", 0,
+                    static_cast<Uint32>(sizeof(light)));
+    }
 
     // Track what is currently bound so a redundant bind can be skipped AND
     // counted. The skipping is a small real saving; the counting is the lesson.
@@ -233,6 +241,10 @@ draw_stats gpu_scene_renderer::render(SDL_GPUCommandBuffer* cb, SDL_GPURenderPas
             SDL_BindGPUGraphicsPipeline(pass, want.handle());
             bound_pipeline = &want;
             ++stats.pipeline_binds;
+            if (log != nullptr)
+            {
+                log->record(gpu_event_kind::bind_pipeline, name_of(item.style));
+            }
         }
 
         SDL_GPUTexture* tex = (item.texture != nullptr) ? item.texture : white_.handle();
@@ -244,6 +256,11 @@ draw_stats gpu_scene_renderer::render(SDL_GPUCommandBuffer* cb, SDL_GPURenderPas
             SDL_BindGPUFragmentSamplers(pass, 0, &bind, 1);
             bound_texture = tex;
             ++stats.texture_binds;
+            if (log != nullptr)
+            {
+                log->record(gpu_event_kind::bind_sampler,
+                            (item.texture != nullptr) ? "albedo" : "white 1x1", 0);
+            }
         }
 
         // ---- Per DRAW ------------------------------------------------------
@@ -270,14 +287,36 @@ draw_stats gpu_scene_renderer::render(SDL_GPUCommandBuffer* cb, SDL_GPURenderPas
         stats.uniform_bytes += static_cast<Uint32>(sizeof(obj) + sizeof(item.material));
 
         item.mesh->bind(pass, 0);
+
+        const Uint32 tris = (item.mesh->index_count() > 0u)
+            ? item.mesh->index_count() / 3u
+            : item.mesh->vertex_count() / 3u;
+
+        if (log != nullptr)
+        {
+            log->record(gpu_event_kind::push_uniform, "object matrices", 1,
+                        static_cast<Uint32>(sizeof(obj)));
+            log->record(gpu_event_kind::push_uniform, "material", 1,
+                        static_cast<Uint32>(sizeof(item.material)));
+            log->record(gpu_event_kind::bind_vertex, "mesh vertices", 0);
+            if (item.mesh->index_count() > 0u)
+            {
+                log->record(gpu_event_kind::bind_index, "mesh indices", 0);
+            }
+        }
+
         item.mesh->draw(pass, 1);
         ++stats.draws;
 
+        if (log != nullptr)
+        {
+            log->record(gpu_event_kind::draw, "scene object",
+                        item.mesh->index_count(), 1u, tris);
+        }
+
         // An expanded mesh (Lesson 4.5's control) keeps no index buffer, so the
-        // triangle count comes from whichever of the two the draw actually used.
-        stats.triangles += (item.mesh->index_count() > 0u)
-            ? item.mesh->index_count() / 3u
-            : item.mesh->vertex_count() / 3u;
+        // triangle count came from whichever of the two the draw actually used.
+        stats.triangles += tris;
     }
 
     for (bool present : style_present)

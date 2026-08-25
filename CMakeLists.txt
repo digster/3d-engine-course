@@ -89,6 +89,7 @@ add_executable(engine
     src/gfx/gpu_pipeline.cpp
     src/gfx/gpu_present.cpp
     src/gfx/gpu_scene.cpp
+    src/gfx/gpu_debug.cpp
     src/gfx/gpu_shader.cpp
     src/gfx/mesh.cpp
     src/gfx/obj.cpp

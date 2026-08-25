@@ -3,6 +3,8 @@
 
 #include "gfx/gpu_buffer.hpp"
 
+#include "gfx/gpu_debug.hpp"   // Lesson 4.9: named at CREATION, as SDL asks
+
 #include <cstring>
 #include <utility>
 
@@ -49,15 +51,17 @@ bool gpu_buffer::create(const gpu_device& dev, SDL_GPUBufferUsageFlags usage,
     info.usage = usage;
     info.size = size;
 
-    buffer_ = SDL_CreateGPUBuffer(device_, &info);
+    // Lesson 4.9: the name goes on at CREATION rather than through
+    // SDL_SetGPUBufferName afterwards. SDL's own docs say to prefer this — the
+    // setter is documented as not thread safe — and gpu_debug.hpp explains why
+    // the comment this file used to carry about that asymmetry was wrong.
+    buffer_ = create_named_buffer(device_, info, name);
     if (buffer_ == nullptr)
     {
         SDL_Log("SDL_CreateGPUBuffer(%u bytes) failed: %s", size, SDL_GetError());
         destroy();
         return false;
     }
-
-    if (name != nullptr) { SDL_SetGPUBufferName(device_, buffer_, name); }
     size_ = size;
     return true;
 }
@@ -79,7 +83,11 @@ bool gpu_buffer::upload(SDL_GPUCommandBuffer* cb, const void* data, Uint32 bytes
     tb.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
     tb.size = bytes;
 
-    SDL_GPUTransferBuffer* staging = SDL_CreateGPUTransferBuffer(device_, &tb);
+    // Named, as of Lesson 4.9. A capture of a load-time frame is otherwise a
+    // column of identical anonymous transfer buffers, and working out which
+    // upload is which is exactly the time a debugger is supposed to save you.
+    SDL_GPUTransferBuffer* staging =
+        create_named_transfer_buffer(device_, tb, "staging (one-shot upload)");
     if (staging == nullptr)
     {
         SDL_Log("SDL_CreateGPUTransferBuffer failed: %s", SDL_GetError());
@@ -189,7 +197,7 @@ bool gpu_stream_buffer::create(const gpu_device& dev, SDL_GPUBufferUsageFlags us
     info.usage = usage;
     info.size = size;
 
-    buffer_ = SDL_CreateGPUBuffer(device_, &info);
+    buffer_ = create_named_buffer(device_, info, name);
     if (buffer_ == nullptr)
     {
         SDL_Log("SDL_CreateGPUBuffer(%u bytes, streaming) failed: %s", size, SDL_GetError());
@@ -204,7 +212,7 @@ bool gpu_stream_buffer::create(const gpu_device& dev, SDL_GPUBufferUsageFlags us
     tb.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
     tb.size = size;
 
-    staging_ = SDL_CreateGPUTransferBuffer(device_, &tb);
+    staging_ = create_named_transfer_buffer(device_, tb, "staging (per-frame stream)");
     if (staging_ == nullptr)
     {
         SDL_Log("SDL_CreateGPUTransferBuffer(%u bytes) failed: %s", size, SDL_GetError());
@@ -212,7 +220,6 @@ bool gpu_stream_buffer::create(const gpu_device& dev, SDL_GPUBufferUsageFlags us
         return false;
     }
 
-    if (name != nullptr) { SDL_SetGPUBufferName(device_, buffer_, name); }
     size_ = size;
     return true;
 }

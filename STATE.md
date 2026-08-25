@@ -7,9 +7,120 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-08-25 (after Lesson 4.8 — 44 of 94 lessons)
+updated: 2026-08-25 (after Lesson 4.9 — 45 of 94 lessons; MODULE 4 COMPLETE)
 
 conventions:
+  resource-names: NAME EVERY GPU RESOURCE AT CREATION, through
+        SDL_PROP_GPU_{BUFFER,TEXTURE,TRANSFERBUFFER}_CREATE_NAME_STRING — never
+        through SDL_SetGPU{Buffer,Texture}Name. SDL's own docs on the setter:
+        "You should use SDL_PROP_GPU_BUFFER_CREATE_NAME_STRING with
+        SDL_CreateGPUBuffer instead of this function to avoid thread safety
+        issues", and "This function is not thread safe".
+        LESSON 4.3's COMMENT ABOUT THIS WAS WRONG AND IS NOW CORRECTED IN PLACE.
+        It claimed the creation property existed for shaders "because a shader is
+        immutable the moment it exists", inferring a reason from the asymmetry
+        with the buffer/texture setters. There was no asymmetry to explain: the
+        property is the recommended path for all three and the setters are the
+        older API. A CONFIDENT EXPLANATION OF WHY SOMEBODY ELSE'S API IS SHAPED
+        THE WAY IT IS, IS A HYPOTHESIS — and the cheapest place to test it is the
+        documentation of the function you are already calling.
+        NEITHER API HAS A GETTER. A name is write-only from the program's side, so
+        it cannot be asserted on in a harness; only a capture shows it.
+        engine::create_named_{buffer,texture,transfer_buffer} in gfx/gpu_debug.hpp
+        are the wrappers. A failed property allocation costs the NAME and never
+        the RESOURCE — a debugging aid must not be able to break what it aids.
+        Cost: 0.0011 -> 0.0018 ms per buffer, paid once, at load.
+  debug-groups: A DEBUG GROUP IS A C++ SCOPE, engine::debug_group, and it is
+        NEITHER COPYABLE NOR MOVABLE. That is SDL's Metal rule expressed in the
+        type system: "On some backends (e.g. Metal), pushing a debug group during
+        a render/blit/compute pass will create a group that is scoped to the
+        native pass rather than the command buffer. For best results, if you push
+        a debug group during a pass, always pop it in the same pass."
+        The engine pushes FOUR a frame (upload / clear / blit / scene) and opens
+        the scene's group OUTSIDE its pass, closing after it — legal everywhere.
+        ON D3D12 ALL THREE CALLS NEED WinPixEventRuntime.dll in PATH or beside the
+        executable, and without it they are INERT, not an error: a capture with no
+        tree and no diagnostic.
+        Measured at ~183 ns per push+label+pop, so four a frame is 0.73 us =
+        0.004% of a 16.7 ms frame. THEY SHIP ON.
+  measure-the-noise-floor: BEFORE COMPARING TWO TIMINGS, MEASURE THE SPREAD OF THE
+        IDENTICAL WORKLOAD RUN SEVERAL TIMES, and require any claimed effect to
+        beat it by a factor of TWO. verify_49 §C runs the same frame five times
+        and takes the range of the medians (2.46 us here).
+        THE FIRST VERSION SKIPPED THIS AND REPORTED A NEGATIVE COST FOR ADDING
+        WORK (-0.0003 ms for adding a debug group), which is the tell that a
+        measurement has nothing to say. TWO runs was also not enough — a single
+        difference is itself a sample of a noisy quantity, and the two-run version
+        let -541.7 ns through the guard.
+        WHEN AN EFFECT IS BELOW THE FLOOR, SCALE THE WORKLOAD UNTIL IT CLEARS IT
+        AND DIVIDE: 1 and 8 groups are unmeasurable, 32 and 128 give 183.6 and
+        182.0 ns, and THE AGREEMENT BETWEEN TWO INDEPENDENT ESTIMATES IS THE
+        EVIDENCE. Same trick 3.10 used on a profiler zone reading 0.00 us.
+  frame-log: THE ENGINE CAN PRINT ITS OWN COMMAND STREAM — engine::frame_log,
+        armed by [P] for ONE frame, or by `engine --trace` which prints one frame
+        and exits (the headless/CI mode). 33 events, 4 groups, 3 draws, 560
+        uniform bytes for 4.8's scene.
+        RECORDED FROM THE STATEMENTS THAT ISSUE THE CALLS, never from a parallel
+        description of what render() is believed to do. Instrumentation that can
+        drift from the code it describes is worse than none, BECAUSE IT IS
+        BELIEVED. verify_49 §D asserts the log's draws / uniform bytes / triangles
+        against draw_stats — two counters incremented from the same statements,
+        which is a test A CAPTURE CANNOT GIVE YOU (a capture is a picture of what
+        happened and has no independent account of what should have).
+        Fixed-size name buffer (48 B) and fixed event capacity, because the log
+        runs inside the frame it measures and an allocation per event would make
+        the measured thing differ from the shipped thing. SDL_strlcpy, which
+        always null-terminates; strncpy does not.
+        WHAT IT CANNOT DO, and why the tools exist: resource CONTENTS at an event,
+        replay-to-a-draw, live pipeline state, shader disassembly, per-draw GPU
+        timing, per-fragment stepping. All of those need the frame REPLAYED, which
+        needs the driver.
+  frame-debuggers: RENDERDOC DOES NOT SUPPORT METAL. Its front page: "available
+        for Vulkan, D3D11, D3D12, OpenGL, and OpenGL ES development on Windows,
+        Linux, Android, and Nintendo Switch". SDL_GPU picks Metal on macOS, so a
+        Mac reader uses XCODE'S METAL DEBUGGER — Debug > Debug Executable…, set
+        "GPU Frame Capture" to "Metal" in the scheme's Options, run, click the
+        Metal icon. No Xcode PROJECT is needed. SDL_gpu.h has a "Debugging"
+        section that says all of this and is the first place to look.
+        PIX is D3D12-only and is the better GPU PROFILER; RenderDoc is the better
+        STATE INSPECTOR. Module 8 returns to that split.
+        HOW A CAPTURE WORKS, and it explains every limit: the tool records the
+        full CONTENTS of every resource at frame start plus the ordered call list,
+        then REPLAYS. That is why it can show any resource at any event, why
+        captures are huge, and why the tool must sit at the driver level.
+        FOUR QUESTIONS TO ASK ONE: is my draw there at all (missing = CPU-side;
+        present but invisible = culled/clipped/depth-rejected); is the right thing
+        bound; are the bytes what I think; where did the geometry go. PREDICT
+        BEFORE LOOKING — browsing without a prediction generates the feeling of
+        investigating and no information.
+  vertex-reuse: THE TRUE VERTEX-SHADER INVOCATION COUNT IS NOT MEASURABLE ON THIS
+        MACHINE and 4.5's promise that "4.9's RenderDoc capture is where the real
+        number finally shows up" IS NOT KEPT. Said plainly in the lesson rather
+        than fabricated. Read it from: RenderDoc's Pipeline State statistics or
+        VK_QUERY_TYPE_PIPELINE_STATISTICS / VERTEX_SHADER_INVOCATIONS; D3D12's
+        D3D12_QUERY_TYPE_PIPELINE_STATISTICS -> VSInvocations; Xcode's Metal
+        Debugger per-pipeline counters. Exercise 4.9.5.
+        A MODEL INSTEAD, with assumptions stated: a FIFO post-transform cache
+        simulated over torus.obj's own index order. best 1225, worst 6912, and the
+        curve is a STAIRCASE — 6 through 32 all give 2400, 48 gives 2306, 50+
+        gives 1225 — because make_torus emits ring by ring, so reuse happens at
+        two distances (a few positions, and ~2*24) and nothing in between.
+        THE FINDING IS BIGGER THAN THE QUESTION: REUSE IS A PROPERTY OF THE INDEX
+        ORDER. Control: the same 2,304 triangles shuffled go from 2,400 to 6,784
+        invocations at cache 32, 2.83x worse, with nothing about the geometry
+        changed. This is why real pipelines run an index optimiser (Forsyth,
+        meshoptimizer) as a build step.
+        The model assumes FIFO (may be LRU), whole vertices (may be fixed-size
+        outputs), strictly in-order indices (hardware batches and may reorder),
+        and one cache (usually several).
+  validation-cost: 1.17x TO RECORD a 3-draw frame (0.0267 vs 0.0228 ms), which
+        pays off the promise main.cpp has carried since 4.2. MEASURED ON THE
+        RECORDING, not the whole frame, because validation runs on the CPU as each
+        call is recorded and a whole-frame number would dilute it with GPU time.
+        DO NOT READ 1.17x AS "VALIDATION IS CHEAP": the cost is PER API CALL, so
+        it scales with how chatty the frame is. The useful form is "about X per
+        call, and I know how many calls I make" — and the frame log counts them.
+        Keep it ON while developing; 4.2's argument stands.
   draw-rates: FOUR RATES OF CHANGE, and data is grouped by RATE rather than by
         subject. per FRAME — camera_uniforms (64 B, vertex slot 0) and
         scene_light_uniforms (64 B, fragment slot 0), pushed once before the pass.
@@ -1993,8 +2104,24 @@ completed:
   - 4.6  Uniform Data and the Matrix Upload
   - 4.7  Textures, Samplers, and Depth
   - 4.8  Porting the Module-3 Scene
+  - 4.9  Debugging a Frame with RenderDoc
+  ===> MODULE 4 COMPLETE — Stage B (the SDL_GPU renderer) draws the scene <===
 
 capabilities:
+  - gfx 4.9: THE ENGINE IS DEBUGGABLE. One new file pair, six modified.
+    src/gfx/gpu_debug.hpp/.cpp NEW — scoped_properties (RAII for an
+    SDL_PropertiesID), create_named_{buffer,texture,transfer_buffer},
+    debug_group (an immovable RAII scope), and frame_log with gpu_event /
+    gpu_event_kind and an indented tree printer.
+    src/gfx/gpu_buffer, gpu_texture, gpu_present — every resource now named at
+    CREATION, and the four TRANSFER BUFFERS named for the first time ever.
+    src/gfx/gpu_shader.cpp — the wrong explanation quoted and corrected.
+    src/gfx/gpu_scene.{hpp,cpp} — render() takes an optional frame_log* and
+    records from the statements that issue the calls.
+    src/main.cpp — four debug groups per frame, [P] to dump one frame, and
+    `--trace` to dump one frame headlessly and exit.
+    THE FRAME, printed: 33 events, 4 groups, 1 pass, 3 draws, 560 uniform bytes,
+    cross-checked against draw_stats and AGREEING.
   - gfx 4.8: THE ENGINE DRAWS A SCENE, not a thing. Two new files, three new
     shaders, five modified.
     src/gfx/gpu_scene.hpp/.cpp NEW — surface_style (solid / two_sided /
@@ -2679,6 +2806,45 @@ capabilities:
   - skills: reading SDL headers as source of truth; debugging with lldb/gdb/VS
 
 decisions:
+  - A COMMENT THIS CODEBASE HAD CARRIED SINCE 4.3 WAS WRONG, and the correction is
+    written to quote the wrong version first. It explained the buffer/texture vs
+    shader naming asymmetry by inferring a reason (immutability) instead of
+    reading SDL_SetGPUBufferName's own docs, which say to prefer the property. It
+    survived four lessons, a full published listing and several readings BECAUSE
+    NOTHING DEPENDS ON A COMMENT BEING RIGHT — no compiler, no test, no reviewer.
+    Standing rule: be most suspicious of comments that explain WHY SOMEBODY ELSE'S
+    API IS SHAPED AS IT IS. Comments about your own code are checked constantly by
+    people reading the code beside them; comments about a dependency's design are
+    checked by nobody.
+  - THE LESSON IS NAMED FOR A TOOL THE AUTHORING MACHINE CANNOT RUN, and §5 says
+    so in a callout rather than pretending. The RenderDoc walkthrough is assembled
+    from RenderDoc's own Quick Start (panel names quoted); the Xcode walkthrough
+    from SDL_gpu.h. Marked ⚠ VERIFY on menu paths. Master prompt §10: an honest
+    flag beats a confident fabrication.
+  - THE FRAME LOG IS NOT A REPLACEMENT FOR A CAPTURE AND THE LESSON SAYS WHERE IT
+    STOPS. Six things it does that a capture cannot (every backend, CI, a
+    cross-check against a second counter) and six it cannot do that a capture can,
+    all six of which need REPLAY. Writing the small version is justified by the
+    macOS reader, not offered as an alternative to the tool.
+  - MEASURING INSTRUMENTATION TOOK THREE ATTEMPTS AND ALL THREE ARE IN THE LESSON.
+    (1) No noise floor: reported a NEGATIVE cost for adding work. (2) A two-run
+    floor: still let -541.7 ns through, because one difference is itself a noisy
+    sample. (3) A five-run spread plus a 2x threshold, and then scaling the group
+    count until the effect cleared: 183.6 and 182.0 ns from two independent
+    estimates. The convergence is the evidence, not either number.
+  - THE 4.5 DEBT IS DECLARED UNPAYABLE HERE rather than fudged, and the
+    replacement is better than the original would have been: modelling the vertex
+    cache turned up that REUSE IS A PROPERTY OF THE INDEX ORDER (2.83x from
+    shuffling alone), which is a transferable finding, where the true invocation
+    count would have been one number about one GPU.
+  - `--trace` EXISTS BECAUSE THE AUTHOR NEEDED IT. A keypress-armed log cannot be
+    tested headlessly, and the flag that made it testable turned out to be the
+    genuinely useful artifact: a deterministic frame dump that runs in CI and can
+    be diffed between commits.
+  - THE ENGINE'S FOUR DEBUG GROUPS SHIP ON IN EVERY BUILD, decided by measurement
+    (0.004% of a frame) rather than by argument. The frame log does NOT ship on;
+    it is armed for one frame, which is how a capture works and for the same
+    reason.
   - THE PORT IS AN API CHANGE AND NOT A MATHS CHANGE, and that is the whole
     report card for Modules 2 and 3. Of fifteen pipeline stages: TWO are literally
     the same C++ function called from both sides (parent_from_local,
@@ -3275,6 +3441,7 @@ files:
             gpu_device.hpp, gpu_device.cpp,
             gpu_present.hpp, gpu_present.cpp,
             gpu_scene.hpp, gpu_scene.cpp,
+            gpu_debug.hpp, gpu_debug.cpp,
             gpu_buffer.hpp, gpu_buffer.cpp,
             gpu_mesh.hpp, gpu_mesh.cpp,
             gpu_uniform.hpp, gpu_texture.hpp, gpu_texture.cpp,
@@ -3309,7 +3476,8 @@ files:
                  04-03-shader-toolchain.html, 04-04-first-triangle.html,
                  04-05-vertex-buffers.html, 04-06-uniforms.html,
                  04-07-textures-and-depth.html,
-                 04-08-porting-the-scene.html
+                 04-08-porting-the-scene.html,
+                 04-09-renderdoc.html
   docs/shared/: course.css, course.js      (THE stylesheet + page script; one copy each)
   docs/_template/: lesson-template.html, README.md, apply-shared.py, check-page.js
   memory/: 2026-07-16.md, 2026-07-18.md, 2026-07-21.md, 2026-07-22.md,
@@ -3320,38 +3488,44 @@ files:
            2026-08-08.md, 2026-08-10.md, 2026-08-12.md,
            2026-08-12-b.md, 2026-08-15.md, 2026-08-15-b.md,
            2026-08-17.md, 2026-08-18.md, 2026-08-22.md,
-           2026-08-22-b.md, 2026-08-25.md
+           2026-08-22-b.md, 2026-08-25.md, 2026-08-25-b.md
   (retired: hello.cpp)
 
 
 
-next: 4.9 — Debugging a Frame with RenderDoc
-      (planned filename: docs/lessons/04-09-renderdoc.html — 4.8 links to the
-      index for now, so BOTH of 4.8's next links need repointing.)
-      THE TOOL COMES AFTER THE KNOWLEDGE, ON PURPOSE.
-        - A FRAME DEBUGGER IS ONLY USEFUL TO SOMEBODY WHO KNOWS WHAT THEY EXPECT
-          TO SEE, which is why this lesson is here and not before 4.4. Every
-          object in the capture is one the student created and NAMED —
-          SDL_SetGPUTextureName and friends have been called since 4.2 for exactly
-          this moment, and that should be pointed out.
-        - THE CAPTURE TO WALK IS 4.8's FRAME: three draws, one pipeline bind, 560
-          bytes of uniform pushes, a depth attachment, a blit. Every one of those
-          numbers is already in the log, so the lesson is "here is where the tool
-          shows you the thing you already measured" — which is how you learn to
-          trust a tool.
-        - RENDERDOC AND METAL. RenderDoc does NOT support Metal. On macOS the
-          equivalent is Xcode's Metal Frame Capture / Metal Debugger, and the
-          lesson must say so up front rather than leaving mac students stuck ten
-          paragraphs in. SDL_GPU on Windows/Linux gives Vulkan or D3D12, both of
-          which RenderDoc handles. Consider covering BOTH tools with the same
-          frame, since the concepts transfer exactly and the screenshots do not.
-          VERIFY the current state of RenderDoc's Metal support before writing.
-        - THINGS TO SHOW: the uniform bytes actually received (4.6 §3.4 measured
-          them from inside a shader; here you can just read them), the vertex
-          buffer's contents against gpu_vertex_pnu, the depth attachment at the
-          end of the pass, and a deliberately broken frame — the 4.5 wrong-pitch
-          pipeline is still on [8] and is a perfect capture to dissect.
-        - WATCH FOR: a debug build is what you want to capture (4.2's validation
-          layer), and the shader names in the capture come from the reflection
-          JSON, so 4.3's toolchain is what makes the capture readable.
+next: 5.1 — The Refactor: Engine, Demos, and the Public API
+      (planned filename: docs/lessons/05-01-the-refactor.html — 4.9 links to the
+      index for now, so BOTH of 4.9's next links need repointing. MODULE 4 IS
+      COMPLETE; reissue index.html, conventions.html and math-toolbox.html at this
+      module boundary, per the master prompt §7.)
+      THE PRESSURE IS FULLY ACCUMULATED — DO NOT ADD MORE, SPEND IT.
+        - src/main.cpp IS ~7,800 LINES holding five software demos, the 4.2-4.7
+          GPU probe, 4.8's ported scene, a mesh cache, scene_object, build_scene,
+          collect_triangles and draw_triangles. Every one of those is a thing the
+          ENGINE should own or a thing a DEMO should own, and none of them can be
+          told apart today.
+        - FOUR HARNESSES IN A ROW HAVE HAD TO TRANSCRIBE THE SCENE BY HAND
+          (verify_46 through 49) because build_scene and friends live in an
+          anonymous namespace. verify_48's copy CAN DRIFT from the demo and
+          nothing would notice. That is the strongest single argument available
+          and it should open the lesson.
+        - THE ASSET-SYSTEM PRESSURE HAS BEEN NAMED FIVE TIMES (3.2, 3.5, 3.9, 4.5,
+          4.8) and 4.8's mesh cache — keyed by the address of a vector's first
+          element, needing two extra fields to notice a rebuild — is the version
+          that finally hurts. Handles are Module 5, and this lesson should set
+          them up rather than build them.
+        - THE SHAPE TO PRODUCE: engine/ (static library, public headers under
+          engine/include/engine/), demos/, and later tools/. From that point the
+          boundary is LAW — demos and the capstone may only include public
+          headers. CLAUDE.md §8.
+        - TEACH IT AS ARCHITECTURE, NOT AS A CHORE. What makes a good public API;
+          physical design (what goes in a header and why); dependency direction as
+          a design tool; and the honest cost — a build that is slower to configure,
+          a second place to put things, and a boundary somebody will want to break
+          within a week.
+        - A GOOD CONCRETE TEST FOR THE SPLIT: after it, verify_49 should be able
+          to LINK to the scene instead of copying it. If the refactor does not
+          make the harnesses simpler, it was decoration.
+        - WATCH FOR: the demos still need SDL_Renderer for their HUD (4.2's
+          claim), so the engine library must not assume it owns the window.
 ```

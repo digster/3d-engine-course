@@ -1751,3 +1751,71 @@ text needs a font atlas and a shader; `[V]` runs both renderers side by side ins
 better instrument than the HUD was. And `verify_48` had to transcribe the demo's scene by hand
 because `build_scene` lives in an anonymous namespace — the fourth harness in a row to want a
 piece of the demo it cannot have, and the strongest argument yet for Module 5's engine/demo split.
+
+---
+
+## 2026-08-25 — `next` (Lesson 4.9: Debugging a Frame with RenderDoc)
+
+The last lesson of Module 4, and the one where the tooling catches up with the renderer. Also the
+lesson with the most honest-failure content of any so far, because three separate things went
+wrong and all three are in the published text.
+
+### The awkward fact, in the first paragraph
+
+**RenderDoc does not support Metal** — quoted from its own front page — and this course is written
+on a Mac, so the lesson is named for a tool the authoring machine cannot run. Said in §3.1 and
+again in a callout at the top of §5 rather than buried ten paragraphs in. The RenderDoc walkthrough
+is assembled from its Quick Start (panel names quoted verbatim); the Xcode walkthrough from
+`SDL_gpu.h`'s own Debugging section, which turns out to be a page long, on disk, and exactly what a
+Mac reader needs.
+
+### A comment this codebase carried for four lessons was wrong
+
+`gpu_shader.cpp` explained why shaders are named through a creation property while buffers have a
+setter: "because a shader is immutable the moment it exists". Tidy, plausible, memorable, false.
+`SDL_SetGPUBufferName`'s own docs say to prefer the property *for buffers too*, "to avoid thread
+safety issues". There was no asymmetry to explain.
+
+Fixed in four files (all naming now goes through creation properties, and the four transfer buffers
+got names for the first time ever) and the comment is rewritten to **quote the wrong version
+first**, which is the only form of correction that inoculates a reader. The transferable rule went
+into LEARNINGS.md: *a confident explanation of why somebody else's API is shaped as it is, is a
+hypothesis* — and it survived four lessons and a published listing because **nothing depends on a
+comment being right**.
+
+### The measurement took three attempts
+
+1. No noise floor: reported a **negative cost for adding work**.
+2. A two-run floor: still let −541.7 ns through, because one difference is itself a noisy sample.
+3. A five-run spread and a 2× threshold — and then scaling the group count until the effect cleared
+   the floor: 183.6 ns and 182.0 ns from two independent estimates. **The convergence is the
+   evidence**, not either number.
+
+All three are in §3.5, including the printout of the wrong one. Also paid off a promise
+`src/main.cpp` has carried since Lesson 4.2: the validation layer costs 1.17× *on a three-draw
+frame*, which is a per-call figure wearing a misleading ratio and the lesson says so.
+
+### A debt declared unpayable
+
+`gpu_mesh.hpp` has promised since 4.5 that "4.9's RenderDoc capture is where the real number finally
+shows up" for vertex-shader invocations. It does not. Rather than inventing a number, §3.6 models a
+FIFO post-transform cache, states every assumption, and names the exact counter to read on each
+platform — and the model turned up something better than the original number would have been:
+**reuse is a property of the index ORDER**. Shuffling the triangle order costs 2.83× with the
+geometry untouched, which is why index optimisers exist.
+
+### What got built
+
+`gpu_debug.{hpp,cpp}`: `scoped_properties`, three named-create wrappers, `debug_group` (RAII and
+deliberately **not movable**, because Metal scopes a group pushed inside a pass to that pass), and
+`frame_log`. Four debug groups a frame, `[P]` to dump one, and `--trace` to dump one headlessly and
+exit — which exists because a keypress-armed log cannot be tested without a GUI, and turned out to
+be the genuinely useful artifact: a deterministic frame dump that runs in CI and diffs between
+commits.
+
+The log is recorded **from the statements that issue the calls**, and `verify_49` §D asserts it
+against `draw_stats` — two counters from the same statements, which is a test a capture cannot give
+you.
+
+**Module 4 is complete.** Next is 5.1, the refactor, and the pressure for it is fully accumulated:
+`main.cpp` is ~7,800 lines and four harnesses in a row have had to transcribe the scene by hand.

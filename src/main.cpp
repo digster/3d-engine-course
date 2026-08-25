@@ -37,6 +37,7 @@
 #include "gfx/gpu_mesh.hpp"      // Lesson 4.5: a real mesh, interleaved and indexed
 #include "gfx/gpu_uniform.hpp"   // Lesson 4.6: data that is the same for every vertex
 #include "gfx/gpu_scene.hpp"     // Lesson 4.8: a scene, rather than a thing
+#include "gfx/gpu_debug.hpp"     // Lesson 4.9: names, groups, and a frame log
 #include "gfx/gpu_texture.hpp"   // Lesson 4.7: an image on the device, and the depth target
 #include "gfx/image.hpp"         // Lesson 4.7: stb_image, behind our own interface
 #include "gfx/light.hpp"
@@ -5014,7 +5015,7 @@ constexpr int k_gpu_shininess_count = static_cast<int>(std::size(k_gpu_shininess
     return item;
 }
 
-int run_gpu_scene(SDL_Window* window)
+int run_gpu_scene(SDL_Window* window, bool trace_and_exit)
 {
     SDL_SetWindowTitle(window, "Module 3's Scene, on the GPU - Lesson 4.8");
 
@@ -5152,7 +5153,8 @@ int run_gpu_scene(SDL_Window* window)
     SDL_Log("Keys: arrows orbit  [-]/[=] dolly  [A]/[D] the lamp  [0] reset");
     SDL_Log("      [C] scene  [L] model  [V] view (gpu/split/software)  [W] wireframe");
     SDL_Log("      [U] cull  [Z] depth test  [J] normal matrix  [H] specular  [E] exponent");
-    SDL_Log("      [M] floor texture  [F] filter  [O] sort the draw list  [Esc] quit");
+    SDL_Log("      [M] floor texture  [F] filter  [O] sort the draw list");
+    SDL_Log("      [P] print the next frame's command stream  [Esc] quit");
 
     engine::clock clk;
     engine::input in;
@@ -5162,6 +5164,13 @@ int run_gpu_scene(SDL_Window* window)
     Uint64 last_log = SDL_GetTicks();
     engine::draw_stats stats;
     double cpu_ms = 0.0;
+
+    // Lesson 4.9. Recording is armed for ONE frame by [P] and disarmed as soon as
+    // that frame is printed, because a log that runs every frame is a log nobody
+    // reads and a per-frame cost nobody asked for. That is also how a real capture
+    // works: you press a key, you get one frame.
+    engine::frame_log flog;
+    bool want_frame_log = trace_and_exit;   // `--trace` arms the very first frame
 
     while (running)
     {
@@ -5282,6 +5291,11 @@ int run_gpu_scene(SDL_Window* window)
             ctl.sort_by_pipeline = !ctl.sort_by_pipeline;
             SDL_Log("[O] draw order: %s", ctl.sort_by_pipeline
                         ? "SORTED by pipeline" : "as the scene was built");
+        }
+        if (in.key_pressed(SDL_SCANCODE_P))
+        {
+            want_frame_log = true;
+            SDL_Log("[P] recording the next frame...");
         }
 
         // ---- The scene, built by Module 3's own code -----------------------
@@ -5406,7 +5420,21 @@ int run_gpu_scene(SDL_Window* window)
             break;
         }
 
-        if (want_cpu) { present.upload(cb, fb); }
+        if (want_frame_log) { flog.begin(); }
+
+        {
+            // A debug group per PHASE of the frame, so a capture reads as five
+            // headings rather than as two hundred calls. The scope is what pops
+            // it — see gpu_debug.hpp on why that matters more on Metal than it
+            // looks like it should.
+            const engine::debug_group g(cb, "upload", &flog);
+            if (want_cpu)
+            {
+                present.upload(cb, fb);
+                flog.record(engine::gpu_event_kind::copy, "framebuffer -> texture",
+                            0, present.last_upload_bytes());
+            }
+        }
 
         SDL_GPUTexture* swap = nullptr;
         Uint32 swap_w = 0;
@@ -5427,7 +5455,12 @@ int run_gpu_scene(SDL_Window* window)
             clear_target.clear_color = SDL_FColor{0.018f, 0.020f, 0.030f, 1.0f};
             clear_target.load_op = SDL_GPU_LOADOP_CLEAR;
             clear_target.store_op = SDL_GPU_STOREOP_STORE;
-            SDL_EndGPURenderPass(SDL_BeginGPURenderPass(cb, &clear_target, 1, nullptr));
+            {
+                const engine::debug_group g(cb, "clear", &flog);
+                flog.record(engine::gpu_event_kind::pass_begin, "clear (no draws)");
+                SDL_EndGPURenderPass(SDL_BeginGPURenderPass(cb, &clear_target, 1, nullptr));
+                flog.record(engine::gpu_event_kind::pass_end, nullptr);
+            }
 
             // Where each renderer's picture goes. In split mode the window is cut
             // down the middle and each half is letterboxed to 16:9 inside its own
@@ -5471,7 +5504,10 @@ int run_gpu_scene(SDL_Window* window)
             // Outside any pass, because a blit IS a pass.
             if (want_cpu && cpu_rect.w > 0)
             {
+                const engine::debug_group g(cb, "blit (software picture)", &flog);
                 present.blit_region(cb, swap, cpu_rect, false);
+                flog.record(engine::gpu_event_kind::blit, "framebuffer -> swapchain",
+                            0, static_cast<Uint32>(cpu_rect.w) * cpu_rect.h * 4u);
             }
 
             if (draw_gpu && item_count > 0)
@@ -5486,8 +5522,16 @@ int run_gpu_scene(SDL_Window* window)
                 SDL_GPUDepthStencilTargetInfo depth_info{};
                 if (have_depth) { depth_info = renderer.depth_target_info(); }
 
+                // NOTE the placement: the group opens BEFORE the pass and closes
+                // after it, which is legal everywhere and is the shape SDL's own
+                // Metal caveat is happiest with. Groups that begin inside a pass
+                // must also end inside it.
+                const engine::debug_group g(cb, "scene", &flog);
+
                 SDL_GPURenderPass* pass =
                     SDL_BeginGPURenderPass(cb, &over, 1, have_depth ? &depth_info : nullptr);
+                flog.record(engine::gpu_event_kind::pass_begin,
+                            have_depth ? "colour + depth" : "colour only");
 
                 SDL_SetGPUViewport(pass, &gpu_vp);
 
@@ -5514,8 +5558,10 @@ int run_gpu_scene(SDL_Window* window)
 
                 stats = renderer.render(cb, pass, items, item_count, camera, light,
                                         ctl.smooth_texture ? sampler_linear.handle()
-                                                           : sampler_nearest.handle());
+                                                           : sampler_nearest.handle(),
+                                        &flog);
 
+                flog.record(engine::gpu_event_kind::pass_end, nullptr);
                 SDL_EndGPURenderPass(pass);
             }
         }
@@ -5524,6 +5570,30 @@ int run_gpu_scene(SDL_Window* window)
         {
             SDL_Log("SDL_SubmitGPUCommandBuffer failed: %s", SDL_GetError());
             break;
+        }
+
+        // Printed AFTER submission, so the log describes a frame that was
+        // actually issued rather than one still being built — and so the printing
+        // itself is not inside the region being described.
+        if (want_frame_log)
+        {
+            flog.end();
+            flog.print();
+
+            // The cross-check that makes the log worth trusting: two independent
+            // readings of the same frame, from the same statements.
+            SDL_Log("  cross-check: log says %d draw(s) / %u uniform bytes;"
+                    " draw_stats says %d / %u  %s",
+                    flog.draws(), flog.uniform_bytes(), stats.draws,
+                    stats.uniform_bytes,
+                    (flog.draws() == stats.draws
+                     && flog.uniform_bytes() == stats.uniform_bytes) ? "AGREE" : "DISAGREE");
+            want_frame_log = false;
+
+            // `--trace` is the headless mode: dump one frame and stop. A frame
+            // debugger cannot run in CI and this can, which is the whole reason
+            // to have written the small version.
+            if (trace_and_exit) { running = false; }
         }
 
         const Uint64 now = SDL_GetTicks();
@@ -5571,6 +5641,8 @@ int main(int argc, char* argv[])
     //     engine --probe      the instrument Lessons 4.2-4.7 were built on
     //     engine --gpu        an alias for --probe, kept because every one of
     //                         those six lessons tells you to type it
+    //     engine --trace      print one frame's command stream and exit
+    //                         (Lesson 4.9; the mode that works without a GUI)
     //
     // The software path is not deprecated and is not going away. It is the
     // REFERENCE: every measured claim in Modules 2 and 3 was made against it, and
@@ -5582,12 +5654,14 @@ int main(int argc, char* argv[])
     // driven by an SDL_Renderer, never both (Lesson 4.2).
     enum class program { scene, software, probe };
     program which_program = program::scene;
+    bool trace_and_exit = false;
 
     for (int i = 1; i < argc; ++i)
     {
         if (SDL_strcmp(argv[i], "--software") == 0) { which_program = program::software; }
         else if (SDL_strcmp(argv[i], "--probe") == 0) { which_program = program::probe; }
         else if (SDL_strcmp(argv[i], "--gpu") == 0) { which_program = program::probe; }
+        else if (SDL_strcmp(argv[i], "--trace") == 0) { trace_and_exit = true; }
     }
     const bool want_gpu = (which_program == program::probe);
 
@@ -5617,8 +5691,9 @@ int main(int argc, char* argv[])
     // SDL_Renderer, and there is no order of operations in which it is both.
     if (want_gpu || which_program == program::scene)
     {
-        const int rc = (which_program == program::scene) ? run_gpu_scene(window)
-                                                         : run_gpu_probe(window);
+        const int rc = (which_program == program::scene)
+            ? run_gpu_scene(window, trace_and_exit)
+            : run_gpu_probe(window);
         SDL_DestroyWindow(window);
         SDL_Quit();
         return rc;

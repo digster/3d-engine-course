@@ -46,6 +46,7 @@
 
 #pragma once
 
+#include "gfx/gpu_debug.hpp"
 #include "gfx/gpu_device.hpp"
 #include "gfx/gpu_mesh.hpp"
 #include "gfx/gpu_pipeline.hpp"
@@ -222,11 +223,19 @@ public:
     ///
     /// A null or invalid mesh is skipped rather than being an error: a scene
     /// whose model failed to load should draw the rest of itself.
+    /// @param log  Lesson 4.9's frame log, or `nullptr`. When present, every
+    ///        bind, push and draw below is recorded as it is issued — from the
+    ///        SAME statement that issues it, never from a parallel description
+    ///        of what the function is believed to do. Instrumentation that can
+    ///        drift from the code it describes is worse than none, because it
+    ///        is believed. `verify_49` §D checks the log against `draw_stats`,
+    ///        which is a second reading of the same events.
     draw_stats render(SDL_GPUCommandBuffer* cb, SDL_GPURenderPass* pass,
                       const gpu_draw_item* items, int count,
                       const camera_uniforms& camera,
                       const scene_light_uniforms& light,
-                      SDL_GPUSampler* sampler) const;
+                      SDL_GPUSampler* sampler,
+                      frame_log* log = nullptr) const;
 
     /// The white 1x1 texture, for callers that want to bind it themselves.
     [[nodiscard]] SDL_GPUTexture* white() const { return white_.handle(); }
