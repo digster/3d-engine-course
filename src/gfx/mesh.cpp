@@ -318,4 +318,124 @@ mesh_data make_torus(int major_segments, int minor_segments,
     return out;
 }
 
+
+// ---------------------------------------------------------------------------
+// Lesson 4.8 — generating the normals a vertex shader cannot invent
+// ---------------------------------------------------------------------------
+
+mesh_data with_normals(const mesh& m, normal_style style)
+{
+    mesh_data out;
+
+    // Already authored? Then this function has nothing to say. Copying rather
+    // than generating is not laziness — it is the loader rule from Lesson 3.5
+    // holding one level up: data that came from somewhere keeps coming from
+    // there.
+    if (!m.normals.empty())
+    {
+        out.vertices.assign(m.vertices.begin(), m.vertices.end());
+        out.uvs.assign(m.uvs.begin(), m.uvs.end());
+        out.normals.assign(m.normals.begin(), m.normals.end());
+        out.indices.assign(m.indices.begin(), m.indices.end());
+        return out;
+    }
+
+    const std::size_t tri_count = m.indices.size() / 3;
+
+    if (style == normal_style::flat)
+    {
+        // ---- One vertex per face corner -----------------------------------
+        //
+        // The sharing has to go. Three faces meet at a cube's corner, each wants
+        // a different normal there, and a vertex holds one — so the position is
+        // written three times. Lesson 3.5 measured exactly this on a loaded cube
+        // (8 positions, 24 vertices) and this is the same fact from the
+        // generating side.
+        out.vertices.reserve(tri_count * 3);
+        out.normals.reserve(tri_count * 3);
+        out.indices.reserve(tri_count * 3);
+        if (!m.uvs.empty()) { out.uvs.reserve(tri_count * 3); }
+
+        for (std::size_t t = 0; t < tri_count; ++t)
+        {
+            const std::uint16_t ia = m.indices[t * 3 + 0];
+            const std::uint16_t ib = m.indices[t * 3 + 1];
+            const std::uint16_t ic = m.indices[t * 3 + 2];
+            if (ia >= m.vertices.size() || ib >= m.vertices.size()
+                || ic >= m.vertices.size())
+            {
+                continue;   // `validate()` reports these; drawing them would crash
+            }
+
+            const vec3 a = m.vertices[ia];
+            const vec3 b = m.vertices[ib];
+            const vec3 c = m.vertices[ic];
+
+            // Counter-clockwise winding seen from OUTSIDE gives an outward normal
+            // by the right-hand rule (conventions §7, Lesson 3.4 §2). Swap any
+            // two indices and every face of the mesh lights from the wrong side —
+            // which is why the winding convention had to be pinned down before
+            // anything was built on it.
+            const vec3 n = normalised_or(cross(b - a, c - a), vec3{0.0f, 1.0f, 0.0f});
+
+            const std::size_t base = out.vertices.size();
+            out.vertices.push_back(a);
+            out.vertices.push_back(b);
+            out.vertices.push_back(c);
+            out.normals.push_back(n);
+            out.normals.push_back(n);
+            out.normals.push_back(n);
+            if (!m.uvs.empty())
+            {
+                out.uvs.push_back(m.uv_at(ia));
+                out.uvs.push_back(m.uv_at(ib));
+                out.uvs.push_back(m.uv_at(ic));
+            }
+            out.indices.push_back(static_cast<std::uint16_t>(base + 0));
+            out.indices.push_back(static_cast<std::uint16_t>(base + 1));
+            out.indices.push_back(static_cast<std::uint16_t>(base + 2));
+        }
+        return out;
+    }
+
+    // ---- One normal per position, area-weighted ---------------------------
+    //
+    // The buffers keep their shape; only `normals` appears. Accumulate the raw
+    // cross products — whose lengths are twice each triangle's area — and
+    // normalise once at the end. The area weighting costs nothing and is the
+    // difference between a mesh that lights smoothly and one whose seams ripple.
+    out.vertices.assign(m.vertices.begin(), m.vertices.end());
+    out.uvs.assign(m.uvs.begin(), m.uvs.end());
+    out.indices.assign(m.indices.begin(), m.indices.end());
+    out.normals.assign(m.vertices.size(), vec3{0.0f, 0.0f, 0.0f});
+
+    for (std::size_t t = 0; t < tri_count; ++t)
+    {
+        const std::uint16_t ia = m.indices[t * 3 + 0];
+        const std::uint16_t ib = m.indices[t * 3 + 1];
+        const std::uint16_t ic = m.indices[t * 3 + 2];
+        if (ia >= m.vertices.size() || ib >= m.vertices.size()
+            || ic >= m.vertices.size())
+        {
+            continue;
+        }
+
+        const vec3 weighted = cross(m.vertices[ib] - m.vertices[ia],
+                                    m.vertices[ic] - m.vertices[ia]);
+        out.normals[ia] = out.normals[ia] + weighted;
+        out.normals[ib] = out.normals[ib] + weighted;
+        out.normals[ic] = out.normals[ic] + weighted;
+    }
+
+    // A vertex no triangle referenced accumulates nothing. `normalised_or`
+    // returns the fallback rather than a NaN, which is Lesson 1.7's rule and the
+    // reason an unused vertex cannot poison a frame.
+    for (vec3& n : out.normals)
+    {
+        n = normalised_or(n, vec3{0.0f, 1.0f, 0.0f});
+    }
+
+    return out;
+}
+
 } // namespace engine

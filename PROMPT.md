@@ -1688,3 +1688,66 @@ answered byte for byte instead of by eye: 3.9's import-time flip stands.
 
 A second `name_of(SDL_GPUTextureFormat)` in `gpu_texture.cpp` failed to link against Lesson 4.2's.
 Extended the existing table instead of starting a second one.
+
+---
+
+## 2026-08-25 — "Based on the STATE and the project's claude instructions, work on the next."
+
+Lesson 4.8: Porting the Module-3 Scene. The payoff of Module 4 — every piece existed, and what was
+missing was the scene — followed by an audit, because two modules of convention work were done on
+the promise that this would be an API change and not a maths change.
+
+### The port, counted
+
+Fifteen pipeline stages laid side by side. **Two are literally the same C++ function called from
+both sides** (`parent_from_local`, `normal_matrix` — neither knows a GPU exists), eight became
+fixed-function hardware, one was translated line for line, two were folded into a single per-frame
+matrix, and **two could not cross at all**: the cull mode and the material, both of which are
+pipeline state. That is Lesson 3.8's predicted bill arriving, and it is what turns one loop into N
+draw calls. Everything structural in `src/gfx/gpu_scene.{hpp,cpp}` follows from those two rows.
+
+### Two findings the port forced out, neither planned
+
+**A vertex shader sees one vertex.** Three of the four built-in meshes carry no normals, and
+`collect_triangles` had been quietly computing a face normal per triangle whenever it found none.
+A vertex shader cannot — so the fallback moved into the importer as `engine::with_normals`, and
+Lesson 3.8's flat/smooth *key* became a property of the vertex buffer (a cube's 8 positions become
+36). First time in this course that moving to the GPU has taken something away, and it is named
+rather than glossed.
+
+**The naive normal matrix is invisible on boxes by construction.** The `[J]` toggle ported and
+changed *zero* pixels, which looked like a broken experiment and is a theorem: a box's model-space
+normals are its own axes, and a diagonal scale sends an axis to a multiple of itself, so the two
+matrices differ only in a length that `normalize()` discards. Squash the icosahedron instead and
+2,160 pixels change by up to 143 codes. The general lesson is about testing: **choose geometry that
+is able to fail.**
+
+### The audit, and a wrong hypothesis kept in the lesson
+
+Both renderers, one scene description, compared per pixel. 86.99% byte-identical; the shading
+equation itself within **one float ULP** across 12,288 comparisons; the disagreements each with a
+cause (sub-pixel coverage on silhouettes, texture undersampling under minification).
+
+The one that took work: a flat untextured floor reported **100% of 39,202 pixels differing**. The
+obvious suspect was the sRGB encode, and a fourteen-point sweep *refuted* that — the two encoders
+agreed everywhere, including at the floor's own value. A float-target probe then showed the GPU
+fragment bit-identical to `shade()`. Only a fine sweep across 0.0044–0.0050 found the actual gap:
+the 14/15 boundary is at 0.004580 for our `powf` and between 0.0045148 and 0.0045186 for the
+hardware. One flat colour landing in that gap, 39,202 times. **A sweep is only evidence where it
+has samples**, and the ten minutes that refuted the first hypothesis are in the lesson.
+
+### Three harness bugs, all kept
+
+A software reference written without near clipping (the floor's near edge is behind the camera, so
+it skipped both triangles and the port looked catastrophic — *a reference that has been simplified
+is not a reference*); a render pass whose attachments disagreed with the bound pipeline, which
+produced an entirely plausible table; and the sweep resolution above.
+
+### Also
+
+The `--gpu` flag inverted as Lesson 4.2 said it would — `engine` is now the GPU scene,
+`--software` is the reference, `--probe` is the old instrument. The HUD was **given up**, because
+text needs a font atlas and a shader; `[V]` runs both renderers side by side instead, which is a
+better instrument than the HUD was. And `verify_48` had to transcribe the demo's scene by hand
+because `build_scene` lives in an anonymous namespace — the fourth harness in a row to want a
+piece of the demo it cannot have, and the strongest argument yet for Module 5's engine/demo split.

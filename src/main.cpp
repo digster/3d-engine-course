@@ -36,6 +36,7 @@
 #include "gfx/gpu_pipeline.hpp"  // Lesson 4.4: every piece of render state, in one object
 #include "gfx/gpu_mesh.hpp"      // Lesson 4.5: a real mesh, interleaved and indexed
 #include "gfx/gpu_uniform.hpp"   // Lesson 4.6: data that is the same for every vertex
+#include "gfx/gpu_scene.hpp"     // Lesson 4.8: a scene, rather than a thing
 #include "gfx/gpu_texture.hpp"   // Lesson 4.7: an image on the device, and the depth target
 #include "gfx/image.hpp"         // Lesson 4.7: stb_image, behind our own interface
 #include "gfx/light.hpp"
@@ -4764,19 +4765,831 @@ int run_gpu_probe(SDL_Window* window)
     return 0;
 }
 
+// ============================================================================
+// LESSON 4.8 — MODULE 3'S SCENE, ON THE GPU
+// ============================================================================
+//
+// This is the payoff of Module 4 and it should feel undramatic. Every piece has
+// already been built: geometry (4.5), a camera (4.6), textures and a depth buffer
+// (4.7). What has been missing is the SCENE — Module 3's floor, its models, its
+// lighting controls and its HUD have gone on running entirely on the CPU beside
+// the GPU path, and this function is where they stop.
+//
+// THE CLAIM UNDER TEST. Modules 2 and 3 pinned down their conventions
+// deliberately — NDC ranges, a depth range with 0 at the near plane,
+// counter-clockwise front faces, column-major matrices, sampler enums spelled the
+// way SDL spells them — on the stated promise that this lesson would then be an
+// API change rather than a maths change. `verify_48` counts what actually
+// changed, and the answer is in §2 of the lesson.
+//
+// WHAT IS NOT HERE, AND WHY. There is no text. The software demo's HUD is drawn
+// with SDL_RenderDebugText, which needs an SDL_Renderer, and Lesson 4.2
+// established that a window is claimed by SDL_GPU or driven by SDL_Renderer and
+// never both. Text on the GPU needs a font atlas and a shader — stb_truetype,
+// Module 6 — and inventing three lessons' worth of that here to print eleven
+// numbers would be the tail wagging the dog. So the numbers go to the log, once a
+// second and on every keypress, and the picture gets [V]: a split view with the
+// software rasterizer's frame on the left and the GPU's on the right, the same
+// scene, the same camera, the same light. That comparison is worth more than the
+// HUD was.
+
+/// The one texture the ported scene needs, and the meshes it needs on the device.
+///
+/// **This class is the asset system, and it is deliberately the worst possible
+/// version of one.** It keys a mesh by the address of its first vertex, holds
+/// eight of them, and never evicts. Every one of those is wrong for an engine and
+/// right for a lesson: the pressure that produces Module 5's handle-based asset
+/// system has been named in Lessons 3.2, 3.5, 3.9 and 4.5, and this is the fifth
+/// time and the first where it actually hurts. Watch what it cannot do — answer
+/// "is this the same mesh?" without comparing pointers, free anything, or survive
+/// the geometry it points at being rebuilt — and Module 5 arrives as an answer.
+class scene_mesh_cache
+{
+public:
+    /// One import, TWO consumers, and this is the part that matters.
+    ///
+    /// `cpu` is the geometry after normal generation, and both renderers draw
+    /// from it: the software rasterizer takes `cpu.view()`, the GPU takes the
+    /// interleaved upload made from the same arrays. If the two paths imported
+    /// separately, every pixel of disagreement would be suspect — is that the
+    /// rasterizer, or did they start from different triangles? Sharing the import
+    /// is what makes §4's per-pixel comparison mean anything at all.
+    struct entry
+    {
+        const void* key = nullptr;          ///< the source mesh's first vertex
+        engine::normal_style style = engine::normal_style::smooth;
+        engine::mesh_data cpu;              ///< with normals; what BOTH paths draw
+        engine::gpu_mesh gpu;               ///< …and its device-side interleaving
+    };
+
+    /// Find or upload the device-side copy of `m`.
+    ///
+    /// Returns `nullptr` when the cache is full or the upload failed — a caller
+    /// that skips such an object draws the rest of the scene, which is what a
+    /// renderer should do when one asset is missing.
+    const entry* get(const engine::gpu_device& dev, const engine::mesh& m,
+                     engine::normal_style style)
+    {
+        if (m.vertices.empty() || m.indices.empty()) { return nullptr; }
+        const void* key = m.vertices.data();
+
+        for (int i = 0; i < count_; ++i)
+        {
+            // The pointer AND the vertex count AND the style, because a
+            // `std::vector` that was rebuilt in place keeps its address and
+            // changes its contents. That is precisely the bug a handle exists to
+            // make impossible, and the check below is the shabby version of one.
+            if (slots_[i].key == key
+                && slots_[i].style == style
+                && slots_[i].cpu.vertices.size() >= m.vertices.size()
+                && slots_[i].source_vertices == m.vertices.size()
+                && slots_[i].source_indices == m.indices.size())
+            {
+                return &slots_[i];
+            }
+        }
+
+        if (count_ >= k_max) { return nullptr; }
+
+        slot& e = slots_[count_];
+        e.key = key;
+        e.style = style;
+        e.source_vertices = m.vertices.size();
+        e.source_indices = m.indices.size();
+
+        // Lesson 4.8's first real finding: three of the four built-in meshes carry
+        // no normals, the ground plane carries none either, and a VERTEX SHADER
+        // CANNOT INVENT THEM — it is handed one vertex and cannot see the other
+        // two corners of the triangle. `collect_triangles` could and did. So the
+        // fallback moves out of the renderer and into the geometry, which is where
+        // every real engine puts it.
+        e.cpu = engine::with_normals(m, style);
+
+        SDL_GPUCommandBuffer* cb = SDL_AcquireGPUCommandBuffer(dev.handle());
+        if (cb == nullptr) { return nullptr; }
+        const bool ok = e.gpu.create(dev, cb, e.cpu.view(), engine::index_mode::indexed,
+                                     "scene mesh")
+                     && SDL_SubmitGPUCommandBuffer(cb);
+        if (!ok) { return nullptr; }
+
+        SDL_Log("  mesh uploaded   : %5zu -> %5zu vertices, %5zu triangles, %s normals",
+                m.vertices.size(), e.cpu.vertices.size(), e.cpu.triangle_count(),
+                m.normals.empty()
+                    ? (style == engine::normal_style::flat ? "generated FLAT"
+                                                           : "generated SMOOTH")
+                    : "authored");
+
+        ++count_;
+        return &e;
+    }
+
+    void destroy()
+    {
+        for (int i = 0; i < count_; ++i) { slots_[i].gpu.destroy(); }
+        count_ = 0;
+    }
+
+    [[nodiscard]] int size() const { return count_; }
+
+private:
+    static constexpr int k_max = 8;
+
+    struct slot : entry
+    {
+        std::size_t source_vertices = 0;
+        std::size_t source_indices = 0;
+    };
+
+    slot slots_[k_max];
+    int count_ = 0;
+};
+
+/// Every knob the ported demo has, in one place.
+struct scene_controls
+{
+    orbit_camera camera;
+    float light_azimuth = 0.85f;
+    static constexpr float k_light_elevation = 0.70f;   ///< the software demo's value
+
+    scene_kind scene = scene_kind::solids;              ///< [C]
+    engine::specular_model spec = engine::specular_model::blinn;   ///< [H]
+    int shininess_step = 4;                             ///< [E]
+
+    bool correct_normals = true;    ///< [J] — inverse transpose, or the naive matrix
+    bool wireframe = false;         ///< [W]
+    bool depth_test = true;         ///< [Z]
+    bool smooth_texture = true;     ///< [F]
+    bool floor_textured = true;     ///< [M]
+    bool sort_by_pipeline = false;  ///< [O] — what a sorted draw list is worth
+    int cull_override = 0;          ///< [U] — 0 auto, 1 none, 2 back
+
+    /// 0 = GPU only, 1 = split (software left, GPU right), 2 = software only.
+    int view_mode = 1;              ///< [V]
+
+    /// The same numbers Module 3's scene camera uses, so the two pictures are
+    /// comparable without anybody having to argue about the frustum.
+    static constexpr float k_fovy = 55.0f * 3.14159265358979f / 180.0f;
+    static constexpr float k_near = 0.3f;
+    static constexpr float k_far = 100.0f;
+
+    [[nodiscard]] engine::vec3 to_light() const
+    {
+        const float ce = std::cos(k_light_elevation);
+        return engine::normalised(engine::vec3{ce * std::sin(light_azimuth),
+                                               std::sin(k_light_elevation),
+                                               ce * std::cos(light_azimuth)});
+    }
+};
+
+/// The nine shininess values [E] cycles — the software demo's array, unchanged, so
+/// a highlight can be compared between the two renderers at the same exponent.
+constexpr float k_gpu_shininess[] = {2.0f, 4.0f, 8.0f, 16.0f, 32.0f, 64.0f, 128.0f, 256.0f};
+constexpr int k_gpu_shininess_count = static_cast<int>(std::size(k_gpu_shininess));
+
+/// Turn one of Module 3's `scene_object`s into something the GPU renderer can draw.
+///
+/// **Read this function next to the top of `collect_triangles` and the port is
+/// visible in twenty lines.** Both compute the same two matrices from the same
+/// transform, by the same two functions, in the same order. What differs is what
+/// happens next: the CPU version goes on to multiply every vertex by them, and
+/// this one hands them to a shader that will.
+[[nodiscard]] engine::gpu_draw_item make_draw_item(const scene_object& obj,
+                                                   const scene_mesh_cache::entry& mesh,
+                                                   const scene_controls& ctl,
+                                                   SDL_GPUTexture* texture)
+{
+    engine::gpu_draw_item item;
+    item.mesh = &mesh.gpu;
+
+    // T*R*S — Lesson 2.8's composition, and the SAME function the software path
+    // calls. Not a re-derivation: `parent_from_local` is in math/transform.hpp and
+    // both renderers include it.
+    item.world_from_model = engine::parent_from_local(obj.xform);
+
+    // The inverse transpose (Lesson 3.6), or the naive linear part on [J]. Two
+    // thirds of this scene looks perfect either way, which is exactly why the bug
+    // survives in real codebases — and now it survives on a GPU too.
+    item.normal_from_model = ctl.correct_normals
+        ? engine::normal_matrix(item.world_from_model)
+        : engine::linear_of(item.world_from_model);
+
+    // ---- The material -------------------------------------------------------
+    //
+    // DECODED TO LINEAR HERE, once per object per frame, rather than per pixel in
+    // the shader. `obj.tint` is an sRGB-encoded `Uint32` because that is what a
+    // framebuffer holds and what a person types; it is about to multiply a
+    // quantity of light, and Lesson 1.6's rule has not softened.
+    const engine::linear_rgb albedo = engine::to_linear(obj.tint);
+    item.material.albedo = engine::vec3{albedo.r, albedo.g, albedo.b};
+    item.material.specular = engine::vec3{obj.surface.colour.r,
+                                          obj.surface.colour.g,
+                                          obj.surface.colour.b};
+    item.material.shininess = obj.surface.shininess;
+    item.material.textured = (texture != nullptr) ? 1.0f : 0.0f;
+    item.texture = texture;
+
+    // ---- The pipeline this object needs -------------------------------------
+    //
+    // `closed` has been on `scene_object` since Lesson 3.4, where it was described
+    // as belonging on a material in a real engine "because cull mode is pipeline
+    // state and pipeline state is what a material *is*". Here it selects a
+    // pipeline OBJECT, which is that sentence with the hedging removed.
+    if (ctl.wireframe)
+    {
+        item.style = engine::surface_style::wireframe;
+    }
+    else if (ctl.cull_override == 1)
+    {
+        item.style = engine::surface_style::two_sided;
+    }
+    else if (ctl.cull_override == 2 || obj.closed)
+    {
+        item.style = engine::surface_style::solid;
+    }
+    else
+    {
+        item.style = engine::surface_style::two_sided;
+    }
+
+    return item;
+}
+
+int run_gpu_scene(SDL_Window* window)
+{
+    SDL_SetWindowTitle(window, "Module 3's Scene, on the GPU - Lesson 4.8");
+
+    engine::gpu_device gpu;
+    const engine::gpu_report rep = gpu.create(window, true);
+    if (!rep.ok())
+    {
+        SDL_Log("The GPU scene cannot start: %s", engine::name_of(rep.status));
+        SDL_Log("Run with --software for the Module 1-3 demo.");
+        return 1;
+    }
+    gpu.log_report();
+
+    // ---- The software rasterizer, still here --------------------------------
+    //
+    // Not a fallback and not nostalgia: it is the REFERENCE. Every claim Modules 2
+    // and 3 made was measured against this code, and the only way to know the port
+    // preserved them is to run both and compare. [V] puts them side by side.
+    engine::framebuffer fb(k_fb_width, k_fb_height);
+    engine::depth_buffer cpu_depth(k_fb_width, k_fb_height);
+
+    engine::gpu_present_target present;
+    if (!present.create(gpu, fb.width(), fb.height()))
+    {
+        SDL_Log("The GPU scene cannot start: the present target could not be created.");
+        return 1;
+    }
+
+    // ---- Shaders ------------------------------------------------------------
+    engine::gpu_shader scene_vs;
+    engine::gpu_shader scene_fs;
+    if (!scene_vs.load(gpu, "scene.vert", engine::shader_stage::vertex)
+        || !scene_fs.load(gpu, "scene.frag", engine::shader_stage::fragment))
+    {
+        SDL_Log("The GPU scene cannot start: scene.vert/scene.frag did not load.");
+        SDL_Log("Build the shaders (see Lesson 4.3) or run with --software.");
+        present.destroy();
+        gpu.destroy();
+        return 1;
+    }
+
+    // ---- Depth, asked for rather than assumed (Lesson 4.7) ------------------
+    const SDL_GPUTextureFormat depth_wanted[] = {
+        SDL_GPU_TEXTUREFORMAT_D32_FLOAT,
+        SDL_GPU_TEXTUREFORMAT_D24_UNORM,
+        SDL_GPU_TEXTUREFORMAT_D16_UNORM,
+    };
+    const SDL_GPUTextureFormat depth_format =
+        engine::supported_depth_format(gpu, depth_wanted, SDL_arraysize(depth_wanted));
+
+    engine::gpu_scene_renderer renderer;
+    if (!renderer.create(gpu, scene_vs.handle(), scene_fs.handle(), depth_format))
+    {
+        SDL_Log("The GPU scene cannot start: the pipelines were not created.");
+        scene_vs.destroy();
+        scene_fs.destroy();
+        present.destroy();
+        gpu.destroy();
+        return 1;
+    }
+    SDL_Log("  depth format    : %s (%d bits)", engine::name_of(depth_format),
+            engine::depth_bits(depth_format));
+    SDL_Log("  pipelines       : 3 (solid, two-sided, wireframe) in %.3f ms total",
+            renderer.create_ms());
+
+    // ---- The floor's texture, on both sides ---------------------------------
+    //
+    // ONE image, built once by Lesson 3.9's `make_checker`, given to the software
+    // sampler as a `texture` and uploaded to the device as a `gpu_texture`. The
+    // two paths therefore read the same texels, which is the other half of what
+    // makes the comparison honest (the first half was sharing the geometry).
+    engine::texture cpu_checker = engine::make_checker(64, 8, 0xFFE8E2D6u, 0xFF3A4058u);
+
+    engine::image_data checker_image;
+    checker_image.width = 64;
+    checker_image.height = 64;
+    checker_image.source_channels = 4;
+    checker_image.pixels.resize(64u * 64u * 4u);
+    for (int y = 0; y < 64; ++y)
+    {
+        for (int x = 0; x < 64; ++x)
+        {
+            const Uint32 texel = cpu_checker.texel(x, y);
+            const std::size_t o = (static_cast<std::size_t>(y) * 64u
+                                 + static_cast<std::size_t>(x)) * 4u;
+            checker_image.pixels[o + 0] = static_cast<std::uint8_t>((texel >> 16) & 0xFFu);
+            checker_image.pixels[o + 1] = static_cast<std::uint8_t>((texel >> 8) & 0xFFu);
+            checker_image.pixels[o + 2] = static_cast<std::uint8_t>(texel & 0xFFu);
+            checker_image.pixels[o + 3] = 255;
+        }
+    }
+
+    engine::gpu_texture gpu_checker;
+    engine::gpu_sampler sampler_linear;
+    engine::gpu_sampler sampler_nearest;
+    bool texture_ok = false;
+    {
+        SDL_GPUCommandBuffer* cb = SDL_AcquireGPUCommandBuffer(gpu.handle());
+        texture_ok = cb != nullptr
+                  && gpu_checker.create_sampled(gpu, cb, checker_image, true, "floor checker")
+                  && SDL_SubmitGPUCommandBuffer(cb)
+                  && sampler_linear.create(gpu, engine::filter::linear,
+                                           engine::address_mode::repeat)
+                  && sampler_nearest.create(gpu, engine::filter::nearest,
+                                            engine::address_mode::repeat);
+        SDL_Log("  floor texture   : 64x64 checker, %s", texture_ok ? "uploaded" : "FAILED");
+    }
+
+    // ---- Module 3's scene, unchanged ----------------------------------------
+    //
+    // `build_scene`, `build_floor` and `load_model` are the SAME functions the
+    // software demo calls, taken verbatim. Not one of them knows a GPU exists,
+    // which is the strongest evidence available that a scene description and a
+    // renderer are different things — and the argument Module 5's engine/demo
+    // split is going to make at length.
+    floor_geometry floor;
+    build_floor(floor, 1);
+
+    model_state model;
+    model.generated = engine::make_torus(48, 24, 1.0f, 0.36f);
+    load_model(model, model_choice::torus, true);
+
+    scene_mesh_cache meshes;
+    scene_controls ctl;
+
+    engine::lighting lights;
+    lights.ambient = {0.06f, 0.07f, 0.10f};
+
+    // The software reference's working storage — reused, never reallocated per
+    // frame, exactly as the Module 3 demo does it.
+    std::vector<raster_triangle> cpu_tris;
+    projection_scratch scratch;
+    clip_stats clipped;
+
+    SDL_Log("Keys: arrows orbit  [-]/[=] dolly  [A]/[D] the lamp  [0] reset");
+    SDL_Log("      [C] scene  [L] model  [V] view (gpu/split/software)  [W] wireframe");
+    SDL_Log("      [U] cull  [Z] depth test  [J] normal matrix  [H] specular  [E] exponent");
+    SDL_Log("      [M] floor texture  [F] filter  [O] sort the draw list  [Esc] quit");
+
+    engine::clock clk;
+    engine::input in;
+
+    bool running = true;
+    float t = 0.0f;
+    Uint64 last_log = SDL_GetTicks();
+    engine::draw_stats stats;
+    double cpu_ms = 0.0;
+
+    while (running)
+    {
+        SDL_Event event;
+        while (SDL_PollEvent(&event))
+        {
+            in.feed_event(event);
+            if (event.type == SDL_EVENT_QUIT) { running = false; }
+        }
+
+        clk.tick();
+        in.update();
+        t += clk.dt();
+
+        if (in.key_pressed(SDL_SCANCODE_ESCAPE) || in.key_pressed(SDL_SCANCODE_Q))
+        {
+            running = false;
+        }
+
+        // ---- The camera and the lamp ---------------------------------------
+        {
+            constexpr float k_turn = 1.6f;
+            constexpr float k_zoom = 4.0f;
+            constexpr float k_light_speed = 1.4f;
+            const float dt = clk.dt();
+
+            if (in.key_down(SDL_SCANCODE_LEFT))  { ctl.camera.azimuth -= k_turn * dt; }
+            if (in.key_down(SDL_SCANCODE_RIGHT)) { ctl.camera.azimuth += k_turn * dt; }
+            if (in.key_down(SDL_SCANCODE_UP))    { ctl.camera.elevation += k_turn * dt; }
+            if (in.key_down(SDL_SCANCODE_DOWN))  { ctl.camera.elevation -= k_turn * dt; }
+            if (in.key_down(SDL_SCANCODE_MINUS)) { ctl.camera.radius += k_zoom * dt; }
+            if (in.key_down(SDL_SCANCODE_EQUALS)) { ctl.camera.radius -= k_zoom * dt; }
+            if (in.key_down(SDL_SCANCODE_A)) { ctl.light_azimuth -= k_light_speed * dt; }
+            if (in.key_down(SDL_SCANCODE_D)) { ctl.light_azimuth += k_light_speed * dt; }
+
+            // Lesson 2.9's degeneracy, clamped away: `look_at` builds its right
+            // vector from `cross(up, backward)`, which is zero when the camera
+            // looks straight down.
+            ctl.camera.elevation = std::clamp(ctl.camera.elevation, -1.5f, 1.5f);
+            ctl.camera.radius = std::clamp(ctl.camera.radius, 2.0f, 30.0f);
+        }
+
+        if (in.key_pressed(SDL_SCANCODE_0)) { ctl.camera = orbit_camera{}; }
+
+        if (in.key_pressed(SDL_SCANCODE_C))
+        {
+            ctl.scene = next_scene(ctl.scene);
+            SDL_Log("[C] scene: %s", name_of(ctl.scene));
+        }
+        if (in.key_pressed(SDL_SCANCODE_L))
+        {
+            load_model(model, next_model(model.choice), true);
+        }
+        if (in.key_pressed(SDL_SCANCODE_V))
+        {
+            ctl.view_mode = (ctl.view_mode + 1) % 3;
+            static const char* names[3] = {"GPU only", "SPLIT (software | GPU)",
+                                           "software only"};
+            SDL_Log("[V] view: %s", names[ctl.view_mode]);
+        }
+        if (in.key_pressed(SDL_SCANCODE_W))
+        {
+            ctl.wireframe = !ctl.wireframe;
+            SDL_Log("[W] wireframe: %s  <- Module 2 spent two lessons on this;"
+                    " here it is one enum value", ctl.wireframe ? "ON" : "off");
+        }
+        if (in.key_pressed(SDL_SCANCODE_U))
+        {
+            ctl.cull_override = (ctl.cull_override + 1) % 3;
+            static const char* names[3] = {"AUTO (per object's `closed` flag)",
+                                           "NONE (everything two-sided)",
+                                           "BACK (everything, including sheets)"};
+            SDL_Log("[U] cull: %s", names[ctl.cull_override]);
+        }
+        if (in.key_pressed(SDL_SCANCODE_Z))
+        {
+            ctl.depth_test = !ctl.depth_test;
+            SDL_Log("[Z] depth attachment: %s%s", ctl.depth_test ? "ON" : "off",
+                    ctl.depth_test ? "" : "  <- Lesson 3.1's problem, back");
+        }
+        if (in.key_pressed(SDL_SCANCODE_J))
+        {
+            ctl.correct_normals = !ctl.correct_normals;
+            SDL_Log("[J] normal matrix: %s%s",
+                    ctl.correct_normals ? "inverse transpose (correct)" : "the model matrix",
+                    ctl.correct_normals ? ""
+                        : "  <- watch the SLAB only; the icosahedron is uniform");
+        }
+        if (in.key_pressed(SDL_SCANCODE_H))
+        {
+            ctl.spec = (ctl.spec == engine::specular_model::blinn)
+                ? engine::specular_model::phong
+                : ((ctl.spec == engine::specular_model::phong)
+                       ? engine::specular_model::none
+                       : engine::specular_model::blinn);
+            SDL_Log("[H] specular: %s",
+                    ctl.spec == engine::specular_model::blinn ? "BLINN"
+                        : (ctl.spec == engine::specular_model::phong ? "PHONG" : "none"));
+        }
+        if (in.key_pressed(SDL_SCANCODE_E))
+        {
+            ctl.shininess_step = (ctl.shininess_step + 1) % k_gpu_shininess_count;
+            SDL_Log("[E] shininess: %.0f",
+                    static_cast<double>(k_gpu_shininess[ctl.shininess_step]));
+        }
+        if (in.key_pressed(SDL_SCANCODE_M))
+        {
+            ctl.floor_textured = !ctl.floor_textured;
+            SDL_Log("[M] floor texture: %s", ctl.floor_textured ? "ON" : "off");
+        }
+        if (in.key_pressed(SDL_SCANCODE_F))
+        {
+            ctl.smooth_texture = !ctl.smooth_texture;
+            SDL_Log("[F] filter: %s", ctl.smooth_texture ? "LINEAR" : "NEAREST");
+        }
+        if (in.key_pressed(SDL_SCANCODE_O))
+        {
+            ctl.sort_by_pipeline = !ctl.sort_by_pipeline;
+            SDL_Log("[O] draw order: %s", ctl.sort_by_pipeline
+                        ? "SORTED by pipeline" : "as the scene was built");
+        }
+
+        // ---- The scene, built by Module 3's own code -----------------------
+        scene_object objects[k_max_objects];
+        const int object_count = build_scene(objects, ctl.scene, spin::about_y, t,
+                                             floor, model,
+                                             k_gpu_shininess[ctl.shininess_step]);
+
+        const engine::vec3 eye = ctl.camera.eye();
+        const engine::mat4 view_from_world = ctl.camera.view();
+        const engine::vec3 to_light = ctl.to_light();
+
+        // The sign error light.hpp shouts about: `direction` is the direction the
+        // light TRAVELS, so it is the negation of the direction toward it.
+        lights.key.direction = -to_light;
+        lights.key.colour = {1.0f, 0.97f, 0.90f};
+        lights.key.intensity = 1.0f;
+
+        // ---- Turn the scene into draws -------------------------------------
+        engine::gpu_draw_item items[k_max_objects];
+        const scene_mesh_cache::entry* entries[k_max_objects] = {};
+        int item_count = 0;
+
+        for (int i = 0; i < object_count; ++i)
+        {
+            // FLAT for the box-like scenes and SMOOTH for anything meant to look
+            // curved — a decision that used to be a keypress ([Q] in Lesson 3.8)
+            // and is now a property of the vertex buffer. The icosahedron is the
+            // interesting case and it goes FLAT: it is a faceted solid, and
+            // averaging its corner normals rounds off twenty faces into a ball.
+            const engine::normal_style style =
+                (ctl.scene == scene_kind::model) ? engine::normal_style::smooth
+                                                 : engine::normal_style::flat;
+
+            const scene_mesh_cache::entry* mesh = meshes.get(gpu, objects[i].geometry, style);
+            if (mesh == nullptr) { continue; }
+
+            const bool is_floor = (ctl.scene == scene_kind::floor);
+            SDL_GPUTexture* tex = (is_floor && ctl.floor_textured && texture_ok)
+                ? gpu_checker.handle() : nullptr;
+
+            entries[item_count] = mesh;
+            items[item_count] = make_draw_item(objects[i], *mesh, ctl, tex);
+            ++item_count;
+        }
+
+        // [O]. A stable sort by pipeline, which is the cheapest useful draw-list
+        // policy there is and the one every engine starts with. The stats below
+        // report what it saved; on a four-object scene the answer is "one bind",
+        // and the reason to do it anyway is that the number scales with the scene
+        // and the sort does not.
+        if (ctl.sort_by_pipeline)
+        {
+            std::stable_sort(items, items + item_count,
+                             [](const engine::gpu_draw_item& a,
+                                const engine::gpu_draw_item& b) {
+                                 return static_cast<int>(a.style) < static_cast<int>(b.style);
+                             });
+        }
+
+        // ---- The software reference, when the view needs it -----------------
+        const bool want_cpu = (ctl.view_mode != 0);
+        if (want_cpu)
+        {
+            const Uint64 c0 = SDL_GetPerformanceCounter();
+
+            fb.clear(engine::pack_argb(18, 20, 28));
+            cpu_depth.clear();
+
+            const projector pr{
+                engine::perspective(scene_controls::k_fovy, 16.0f / 9.0f,
+                                    scene_controls::k_near, scene_controls::k_far),
+                k_full_viewport, near_mode::clip};
+
+            // ONE draw_triangles CALL PER OBJECT, and this is the port pushing
+            // back on the software path rather than the other way round. Module 3
+            // gathered every object's triangles into one array and filled them in
+            // one loop, because it could: a software rasterizer can change its
+            // material and its cull mode between two triangles. To be COMPARABLE
+            // with the GPU it has to stop doing that, because the GPU cannot.
+            for (int i = 0; i < item_count; ++i)
+            {
+                if (entries[i] == nullptr) { continue; }
+
+                scene_object one = objects[i];
+                one.geometry = entries[i]->cpu.view();   // the SAME geometry the GPU got
+
+                engine::fill_style style;
+                style.interp = engine::interpolation::perspective;
+                style.shade = engine::shading::lit;
+                style.lights = &lights;
+                style.model = ctl.spec;
+                style.eye = eye;
+                style.cull = (items[i].style == engine::surface_style::solid)
+                    ? engine::cull_mode::back : engine::cull_mode::none;
+                if (items[i].material.textured > 0.5f)
+                {
+                    style.albedo.image = &cpu_checker;
+                    style.albedo.samp.texel_filter = ctl.smooth_texture
+                        ? engine::filter::linear : engine::filter::nearest;
+                }
+
+                collect_triangles(cpu_tris, scratch, &one, 1, view_from_world, pr,
+                                  trs_order::trs, clipped,
+                                  cull_choice::none,
+                                  normal_source::vertex, shade_eval::per_pixel, lights,
+                                  ctl.correct_normals, nullptr, eye, ctl.spec);
+
+                draw_triangles(fb, ctl.depth_test ? &cpu_depth : nullptr,
+                               cpu_tris, false, style, nullptr, nullptr);
+            }
+
+            const Uint64 c1 = SDL_GetPerformanceCounter();
+            cpu_ms = static_cast<double>(ticks_to_ms(c0, c1));
+        }
+
+        // ---- The frame ------------------------------------------------------
+        SDL_GPUCommandBuffer* cb = SDL_AcquireGPUCommandBuffer(gpu.handle());
+        if (cb == nullptr)
+        {
+            SDL_Log("SDL_AcquireGPUCommandBuffer failed: %s", SDL_GetError());
+            break;
+        }
+
+        if (want_cpu) { present.upload(cb, fb); }
+
+        SDL_GPUTexture* swap = nullptr;
+        Uint32 swap_w = 0;
+        Uint32 swap_h = 0;
+        if (!SDL_WaitAndAcquireGPUSwapchainTexture(cb, window, &swap, &swap_w, &swap_h))
+        {
+            SDL_Log("SDL_WaitAndAcquireGPUSwapchainTexture failed: %s", SDL_GetError());
+            break;
+        }
+
+        if (swap != nullptr)
+        {
+            // Pass 1 exists to CLEAR, and only to clear — no pipeline, no draw.
+            // Lesson 4.2's point that a clear is a property of BEGINNING a pass
+            // rather than a thing you draw.
+            SDL_GPUColorTargetInfo clear_target{};
+            clear_target.texture = swap;
+            clear_target.clear_color = SDL_FColor{0.018f, 0.020f, 0.030f, 1.0f};
+            clear_target.load_op = SDL_GPU_LOADOP_CLEAR;
+            clear_target.store_op = SDL_GPU_STOREOP_STORE;
+            SDL_EndGPURenderPass(SDL_BeginGPURenderPass(cb, &clear_target, 1, nullptr));
+
+            // Where each renderer's picture goes. In split mode the window is cut
+            // down the middle and each half is letterboxed to 16:9 inside its own
+            // half — `fit_centred` called twice against a half-width rectangle,
+            // which is the whole implementation of a comparison view.
+            const Uint32 half = swap_w / 2u;
+            engine::blit_rect cpu_rect{};
+            SDL_GPUViewport gpu_vp{};
+            bool draw_gpu = true;
+
+            if (ctl.view_mode == 0)
+            {
+                const engine::blit_rect fit = engine::fit_centred(16, 9, swap_w, swap_h);
+                gpu_vp.x = static_cast<float>(fit.x);
+                gpu_vp.y = static_cast<float>(fit.y);
+                gpu_vp.w = static_cast<float>(fit.w);
+                gpu_vp.h = static_cast<float>(fit.h);
+            }
+            else if (ctl.view_mode == 1)
+            {
+                cpu_rect = engine::fit_centred(static_cast<Uint32>(fb.width()),
+                                               static_cast<Uint32>(fb.height()),
+                                               half, swap_h);
+                const engine::blit_rect fit =
+                    engine::fit_centred(16, 9, swap_w - half, swap_h);
+                gpu_vp.x = static_cast<float>(half + fit.x);
+                gpu_vp.y = static_cast<float>(fit.y);
+                gpu_vp.w = static_cast<float>(fit.w);
+                gpu_vp.h = static_cast<float>(fit.h);
+            }
+            else
+            {
+                cpu_rect = engine::fit_centred(static_cast<Uint32>(fb.width()),
+                                               static_cast<Uint32>(fb.height()),
+                                               swap_w, swap_h);
+                draw_gpu = false;
+            }
+            gpu_vp.min_depth = 0.0f;
+            gpu_vp.max_depth = 1.0f;   // SDL_GPU's depth range — conventions §4
+
+            // Outside any pass, because a blit IS a pass.
+            if (want_cpu && cpu_rect.w > 0)
+            {
+                present.blit_region(cb, swap, cpu_rect, false);
+            }
+
+            if (draw_gpu && item_count > 0)
+            {
+                SDL_GPUColorTargetInfo over{};
+                over.texture = swap;
+                over.load_op = SDL_GPU_LOADOP_LOAD;   // keep the clear and the blit
+                over.store_op = SDL_GPU_STOREOP_STORE;
+
+                const bool have_depth = ctl.depth_test
+                                     && renderer.ensure_depth(gpu, swap_w, swap_h);
+                SDL_GPUDepthStencilTargetInfo depth_info{};
+                if (have_depth) { depth_info = renderer.depth_target_info(); }
+
+                SDL_GPURenderPass* pass =
+                    SDL_BeginGPURenderPass(cb, &over, 1, have_depth ? &depth_info : nullptr);
+
+                SDL_SetGPUViewport(pass, &gpu_vp);
+
+                // The aspect ratio comes from the rectangle actually being drawn
+                // into, which is what Lesson 4.6's uniform block bought: a
+                // compile-time 16:9 could not have survived a split view.
+                const float aspect = (gpu_vp.h > 0.0f) ? gpu_vp.w / gpu_vp.h : 16.0f / 9.0f;
+
+                engine::camera_uniforms camera{
+                    engine::perspective(scene_controls::k_fovy, aspect,
+                                        scene_controls::k_near, scene_controls::k_far)
+                    * view_from_world};
+
+                engine::scene_light_uniforms light{};
+                light.to_light = to_light;
+                light.key = engine::vec3{lights.key.colour.r * lights.key.intensity,
+                                         lights.key.colour.g * lights.key.intensity,
+                                         lights.key.colour.b * lights.key.intensity};
+                light.ambient = engine::vec3{lights.ambient.r, lights.ambient.g,
+                                             lights.ambient.b};
+                light.eye_world = eye;
+                light.spec_model = (ctl.spec == engine::specular_model::none) ? 0.0f
+                    : ((ctl.spec == engine::specular_model::phong) ? 1.0f : 2.0f);
+
+                stats = renderer.render(cb, pass, items, item_count, camera, light,
+                                        ctl.smooth_texture ? sampler_linear.handle()
+                                                           : sampler_nearest.handle());
+
+                SDL_EndGPURenderPass(pass);
+            }
+        }
+
+        if (!SDL_SubmitGPUCommandBuffer(cb))
+        {
+            SDL_Log("SDL_SubmitGPUCommandBuffer failed: %s", SDL_GetError());
+            break;
+        }
+
+        const Uint64 now = SDL_GetTicks();
+        if (now - last_log >= 1000)
+        {
+            last_log = now;
+            SDL_Log("%5.1f fps | %s | %d items -> %d draws, %d pipeline binds"
+                    " (%d if sorted), %d texture binds, %u tris, %u uniform bytes"
+                    " | software reference %.2f ms",
+                    clk.fps(), name_of(ctl.scene), stats.items, stats.draws,
+                    stats.pipeline_binds, stats.ideal_pipeline_binds,
+                    stats.texture_binds, stats.triangles, stats.uniform_bytes,
+                    want_cpu ? cpu_ms : 0.0);
+        }
+    }
+
+    // Reverse of creation, and stated rather than left to the compiler for the
+    // reason Lesson 4.2 gave: a dependency that is visible is a dependency that
+    // survives the next edit.
+    meshes.destroy();
+    gpu_checker.destroy();
+    sampler_linear.destroy();
+    sampler_nearest.destroy();
+    renderer.destroy();
+    scene_vs.destroy();
+    scene_fs.destroy();
+    present.destroy();
+    gpu.destroy();
+    return 0;
+}
+
 } // namespace
 
 int main(int argc, char* argv[])
 {
-    // Lesson 4.2. One flag, and the only one this executable has: `--gpu` runs the
-    // GPU probe instead of the software demo. A flag rather than a key, because
-    // the choice has to be made before the window belongs to anybody — see the
-    // comment above `run_gpu_probe`.
-    bool want_gpu = false;
+    // ---- Which program is this? --------------------------------------------
+    //
+    // LESSON 4.8 INVERTS THE DEFAULT, and Lesson 4.2 said it would: "From Lesson
+    // 4.8 the GPU path becomes the default and this branch inverts; until then the
+    // software demo is what `engine` means." It is now the other way round.
+    //
+    //     engine              Module 3's scene, drawn by the GPU        (4.8)
+    //     engine --software   Module 3's scene, drawn by the CPU, with the
+    //                         HUD and all five demos on [Tab]           (1.8-3.10)
+    //     engine --probe      the instrument Lessons 4.2-4.7 were built on
+    //     engine --gpu        an alias for --probe, kept because every one of
+    //                         those six lessons tells you to type it
+    //
+    // The software path is not deprecated and is not going away. It is the
+    // REFERENCE: every measured claim in Modules 2 and 3 was made against it, and
+    // a port whose reference has been deleted is a port nobody can check. The
+    // split view inside the GPU scene runs both at once for exactly this reason.
+    //
+    // Still a flag rather than a key, because the choice has to be made before the
+    // window belongs to anybody — a window is claimed by an SDL_GPU device or
+    // driven by an SDL_Renderer, never both (Lesson 4.2).
+    enum class program { scene, software, probe };
+    program which_program = program::scene;
+
     for (int i = 1; i < argc; ++i)
     {
-        if (SDL_strcmp(argv[i], "--gpu") == 0) { want_gpu = true; }
+        if (SDL_strcmp(argv[i], "--software") == 0) { which_program = program::software; }
+        else if (SDL_strcmp(argv[i], "--probe") == 0) { which_program = program::probe; }
+        else if (SDL_strcmp(argv[i], "--gpu") == 0) { which_program = program::probe; }
     }
+    const bool want_gpu = (which_program == program::probe);
 
     if (!SDL_Init(SDL_INIT_VIDEO))
     {
@@ -4790,7 +5603,7 @@ int main(int argc, char* argv[])
             SDL_VERSIONNUM_MINOR(sdl_version),
             SDL_VERSIONNUM_MICRO(sdl_version));
 
-    SDL_Window* window = SDL_CreateWindow("The Z-Buffer — Module 3", 1280, 720,
+    SDL_Window* window = SDL_CreateWindow("Engine — Module 4", 1280, 720,
                                           SDL_WINDOW_RESIZABLE);
     if (window == nullptr)
     {
@@ -4802,15 +5615,17 @@ int main(int argc, char* argv[])
     // Lesson 4.2's fork in the road, and it has to be here — before any renderer
     // exists. A window can be claimed by an SDL_GPU device or driven by an
     // SDL_Renderer, and there is no order of operations in which it is both.
-    if (want_gpu)
+    if (want_gpu || which_program == program::scene)
     {
-        const int rc = run_gpu_probe(window);
+        const int rc = (which_program == program::scene) ? run_gpu_scene(window)
+                                                         : run_gpu_probe(window);
         SDL_DestroyWindow(window);
         SDL_Quit();
         return rc;
     }
 
-    SDL_Log("Software demo. Run with --gpu for Lesson 4.2's GPU probe.");
+    SDL_Log("Software demo (the reference). Run with no flag for Lesson 4.8's GPU"
+            " scene, or --probe for Lessons 4.2-4.7's instrument.");
 
     SDL_Renderer* renderer = SDL_CreateRenderer(window, nullptr);
     if (renderer == nullptr)

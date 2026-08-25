@@ -328,6 +328,74 @@ struct mesh_data
 /// A mesh with no uvs is left alone; there is nothing to flip.
 void flip_uv_v(mesh_data& m);
 
+// ---- Lesson 4.8: normals as DATA rather than as a fallback -----------------
+//
+// Three of the four meshes above carry no normals at all — the cube, the quad and
+// the icosahedron are positions and indices and nothing else — and so does Lesson
+// 3.2's ground plane. The software rasterizer never minded, because
+// `collect_triangles` computes a FACE NORMAL from the three corners inside the
+// per-triangle loop and uses it whenever `normal_at` comes back zero.
+//
+// **A vertex shader cannot do that.** It is handed one vertex. It does not know
+// which triangle that vertex is part of, cannot see the other two corners, and has
+// no way to compute a cross product of things it cannot see. (A geometry shader
+// could; SDL_GPU has no geometry stage, and geometry shaders are slow enough on
+// modern hardware that their absence is a feature.)
+//
+// So the fallback has to move: out of the renderer, and into the geometry. That is
+// not a workaround, it is what every real engine does — normals are authored in the
+// modelling package and written into the file, and an importer that finds none
+// generates them once at import. This function is that step, and the fact that a
+// port had to introduce it is one of the lesson's real findings.
+
+/// How to invent normals for geometry that has none — and note that this is a
+/// choice about the GEOMETRY, not about the shading.
+///
+/// Lesson 3.8 put flat and smooth shading on a key, and could, because the CPU
+/// rasterizer evaluated a normal per triangle or per vertex as it pleased. Here the
+/// difference is baked into the vertex buffer before anything is drawn, and it
+/// changes the VERTEX COUNT. That is the honest cost of the port: a runtime toggle
+/// became a build-time decision, and the two options no longer share a buffer.
+enum class normal_style
+{
+    /// One normal per FACE, which forces one vertex per face-corner.
+    ///
+    /// A cube's eight positions become twenty-four vertices, because a corner
+    /// where three faces meet needs three different normals and a vertex carries
+    /// exactly one. Lesson 3.5 measured this on a loaded cube and named it as the
+    /// reason an OBJ cube has 24 `v/vt/vn` triples; here we produce it ourselves.
+    /// The index buffer that comes out is 0,1,2,3,... — every vertex used once,
+    /// no sharing left to do, which is Lesson 4.5's `expanded` form arriving for
+    /// a reason other than a comparison.
+    flat,
+
+    /// One normal per POSITION, averaged over the faces that meet there.
+    ///
+    /// The vertex and index buffers keep their shape; only the normals array is
+    /// added. Right for anything meant to look curved, and wrong for a cube — an
+    /// averaged corner normal on a box rounds off every edge into a soft smear,
+    /// which is Lesson 3.8's picture from the other direction.
+    smooth
+};
+
+/// Return `m` with normals, generating them in `style` if it has none.
+///
+/// **Geometry that already has normals is returned unchanged**, whatever `style`
+/// says, because a file's normals are authorship and inventing over them is the
+/// loader lie Lesson 3.5 forbade. `torus.obj` keeps the normals it shipped with.
+///
+/// The averaging is **weighted by triangle area, for free**. `cross(b-a, c-a)` has
+/// magnitude twice the triangle's area, so accumulating the un-normalised cross
+/// products and normalising once at the end weights each face by its own area
+/// without a single extra multiply. That is the standard choice and the well-behaved
+/// one: it stops a mesh's dense, tiny triangles from outvoting its large ones, which
+/// un-weighted averaging does and which shows up as lighting that ripples along the
+/// seams of a badly tessellated model.
+///
+/// A degenerate triangle contributes a zero cross product and therefore nothing,
+/// which is the right answer arriving for free rather than a case to handle.
+[[nodiscard]] mesh_data with_normals(const mesh& m, normal_style style);
+
 /// **The index-space ceiling.** `mesh::indices` is `std::uint16_t`, so a mesh can
 /// name at most 65,536 distinct vertices. That is not a limitation we invented: GPU
 /// index buffers come in exactly these two widths, and SDL_GPU spells them

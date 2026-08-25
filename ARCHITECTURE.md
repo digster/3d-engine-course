@@ -100,6 +100,9 @@ inventing one — but without paying framework ceremony before it buys anything.
 │   │   │                   #   header-only: there is no object to own
 │   │   ├── gpu_texture.hpp # an image on the device, and the sampler   [EXISTS from 4.7]
 │   │   ├── gpu_texture.cpp #   + the depth target: same SDL type, no upload
+│   │   ├── gpu_scene.hpp   # a SCENE, rather than a thing              [EXISTS from 4.8]
+│   │   ├── gpu_scene.cpp   #   surface_style -> 3 pipelines; a list of gpu_draw_item
+│   │   │                   #   -> N draws; draw_stats counts what the order cost
 │   │   ├── image.hpp       # decoded pixels, always RGBA8              [EXISTS from 4.7]
 │   │   ├── image.cpp       #   the ONE unit that contains stb_image
 │   │   ├── gpu_pipeline.hpp# ALL render state, in one object        [EXISTS from 4.4]
@@ -776,15 +779,22 @@ online. Paid gladly.
 inside one executable rather than replacing one another:
 
 ```
-./engine          Stage A — the software demo of Modules 1–3, SDL_Renderer, HUD and all
-./engine --gpu    Stage B — the GPU probe: the same framebuffer, carried by SDL_GPU
+./engine             Stage B — Module 3's scene, drawn by the GPU        (from 4.8)
+./engine --software  Stage A — the software demo of Modules 1–3, SDL_Renderer, HUD and all
+./engine --probe     Stage B — the GPU probe Lessons 4.2–4.7 were built on
+./engine --gpu       an alias for --probe, kept because six lessons say to type it
 ```
 
 The split is **forced, not stylistic**. A window can be claimed by an SDL_GPU device *or* driven
 by an `SDL_Renderer`, never both, and every HUD in Modules 1–3 is drawn with
-`SDL_RenderDebugText`. So the flag is parsed at the top of `main` and the branch is taken before
-`SDL_CreateRenderer` is reached. **This inverts at Lesson 4.8**, when the ported scene makes the
-GPU path the default; the flag is scaffolding with a known removal date.
+`SDL_RenderDebugText`. So the mode is parsed at the top of `main` and the branch is taken before
+`SDL_CreateRenderer` is reached. **Lesson 4.8 inverted the default**, as 4.2 said it would.
+
+What 4.2 did *not* predict is that Stage A would stay. It is not scaffolding and it has no removal
+date: it is the **reference implementation**. Every measured claim in Modules 2 and 3 was made
+against it, so it is the only thing that can tell you whether the GPU path is right — and Lesson
+4.8's per-pixel audit exists only because both renderers can draw the same scene from one
+description. `[V]` runs them side by side in one window.
 
 Lesson 4.2's own contribution to the spine is that the *presentation* path is proven on the GPU
 before any shader exists: framebuffer → transfer buffer → texture → blit → swapchain, checked
@@ -875,6 +885,39 @@ different each time because the available evidence is different: `offsetof` and 
 JSON for vertex layouts, a `constexpr` rule and `static_assert` for uniforms. The reflection
 carries no cbuffer offsets, so 4.5's cross-check has no counterpart here; the compiled SPIR-V does
 carry them, which is what exercise 4.6.2 is for.
+
+**Stage B draws a SCENE, as of Lesson 4.8.** Everything above draws one piece of geometry. A
+scene is several, with different meshes, different transforms and different materials, and the
+structural consequence is the whole of `src/gfx/gpu_scene.{hpp,cpp}`:
+
+- **`surface_style` is the part of a material that cannot be a number.** Cull mode and fill mode
+  are baked into an immutable pipeline object, so `solid` / `two_sided` / `wireframe` are three
+  `SDL_GPUGraphicsPipeline`s created at startup. Three and not more, because every additional axis
+  of pipeline state *multiplies* the count — the combinatorial growth is why real engines either
+  enumerate a small fixed set or build them lazily and cache.
+- **A fourth rate of change: per DRAW.** 4.5 had per-vertex and per-instance; 4.6 added per-frame.
+  An object's model matrix is none of those, and SDL licenses the answer in one sentence
+  ("Subsequent draw calls in this command buffer will use this uniform data"). So the frame is
+  128 bytes pushed once plus 144 per object. **Per-draw overhead scales with object count, not
+  object size.**
+- **`render()` deliberately does not sort.** Sorting a draw list has several conflicting right
+  answers (by pipeline, front-to-back for early-z, back-to-front for transparency, by distance for
+  LOD) and the choice belongs to whoever knows what the frame is for. It *counts* instead:
+  `pipeline_binds` against `ideal_pipeline_binds`. A policy you can measure is a policy you can
+  argue about, and Module 6's frame organisation is where the buckets appear.
+
+Two things that lesson changed elsewhere, both of which outlive it:
+
+- **`engine::with_normals` moved a fallback out of the renderer and into the importer.** A vertex
+  shader is handed one vertex and cannot compute a face normal; `collect_triangles` could, and
+  did, whenever a mesh carried none — which is three of the four built-in meshes. Generating
+  normals at import is what every real engine does, and the consequence is that flat-vs-smooth
+  stopped being a runtime toggle (Lesson 3.8's `[Q]`) and became a property of the vertex buffer,
+  because flat forces unshared vertices.
+- **The mesh cache in `main.cpp` is the strongest argument yet for Module 5's asset system.** It
+  keys geometry by the address of its first vertex and needs two extra fields to notice that a
+  rebuilt `std::vector` keeps its address. Fifth lesson to name that pressure (3.2, 3.5, 3.9, 4.5,
+  4.8) and the first where it costs something.
 
 See [LEARNINGS.md](LEARNINGS.md) for the verified SDL_GPU convention table.
 

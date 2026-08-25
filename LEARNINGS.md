@@ -3558,3 +3558,158 @@ Writing a second `name_of(SDL_GPUTextureFormat)` in `gpu_texture.cpp` failed to 
 one Lesson 4.2 put in `gpu_device.cpp`. The fix was to *extend* the existing table with the depth
 formats rather than start a second one — which is how a table like that should grow: when a lesson
 starts printing something, it adds the row.
+
+---
+
+## Scene-porting facts, verified at SDL 3.4.12 (Lesson 4.8)
+
+### A material and a cull mode cannot ride on a triangle
+
+Lesson 3.8 wrote `raster_triangle::surface` and flagged it, in the field's own doc comment, as a
+cheat that would not survive Module 4. It did not. The *reason* is worth stating in terms of the
+machine rather than the API, because "the GPU is less flexible" is the wrong intuition and sends
+people looking for a way around it:
+
+A software rasterizer is one thread walking one loop, so "between two iterations" is a moment that
+exists and it can change its mind there. **A GPU draw is a launch, not a loop** — thousands of
+fragments enter at once, across dozens of cores, in an order nobody controls, with no
+synchronisation. There is no moment between triangle 7 and triangle 8, because triangle 8 may have
+finished first. Anything that must be the same for every fragment in flight is therefore fixed
+*before* the launch: as **pipeline state** (cull, fill, depth op, blend, the shaders) or as a
+**uniform push** (the numbers). Four objects with four materials is four draws.
+
+### The fourth rate of change, and SDL's one licensing sentence
+
+Per vertex and per instance are vertex buffers (4.5); per frame is a uniform push (4.6). An
+object's model matrix is none of those. `SDL_PushGPUVertexUniformData`'s documentation settles it
+in one line: *"Subsequent draw calls in this command buffer will use this uniform data."* A push
+is not bound to a pass and not bound to a pipeline, so pushing between draws is the supported
+per-draw mechanism and needs no object.
+
+Measured on a three-object scene: **128 bytes per frame + 144 per draw = 560 bytes**, and the same
+560 if each object had a million triangles. **Per-draw overhead scales with object count, not
+object size.** Group uniform data by *rate of change*, never by subject.
+
+### Push a 3×3 as three explicit columns, never as `float3x3`
+
+Both spellings occupy 48 bytes — a matrix in a constant buffer is one column (or row) per 16-byte
+register, so a 3×3 wastes 12 bytes either way. What the matrix *type* adds is a dependence on the
+compiler's matrix-packing default: `column_major` for DXC, `row_major` if any `#pragma pack_matrix`
+upstream says so, **with no diagnostic when it is not what you assumed**. A transposed normal
+matrix does not crash; it lights every non-symmetric object from a slightly wrong direction, which
+reads as a modelling problem.
+
+Measured (`verify_48` §C, `shaders/matrix_probe.frag.hlsl`, which declares the same 48 bytes twice
+at two slots): on this toolchain `float3x3` **would have worked** — DXC packs column-major and the
+matrix-typed reading matches exactly. It is still not what the engine ships. A default that happens
+to be right on the machine you tested is the most expensive kind of correctness there is.
+
+**Corollary for debugging:** never test a suspected transpose with a symmetric matrix. Use one
+whose transpose is unmistakably different — the probe uses columns (1,2,3), (40,50,60),
+(700,800,900), which give (12, 15, 18) one way and (1.23, 45.6, 789) the other.
+
+### A vertex shader sees one vertex, so normals become data
+
+`collect_triangles` computed a face normal from `cross(b-a, c-a)` inside its per-triangle loop
+whenever `normal_at()` returned zero — which is three of the four built-in meshes (cube, quad,
+icosahedron) plus the ground plane. A vertex shader cannot: it is handed one vertex and cannot see
+the other two corners. (A geometry shader could. SDL_GPU has no geometry stage, and geometry
+shaders are slow enough on modern hardware that their absence is closer to a feature.)
+
+So the fallback moves into the **importer**, which is where every real engine puts it
+(`aiProcess_GenNormals`). Consequences:
+
+- **Flat forces unshared vertices.** Three faces meet at a cube's corner and each wants a different
+  normal; a vertex holds one. A cube's 8 positions become **36**, an icosahedron's 12 become **60**,
+  and the index buffer is 0,1,2,3,… with no sharing left to express.
+- **A runtime toggle became a build-time decision.** Lesson 3.8's flat/smooth key is now a property
+  of the vertex buffer, and the two options no longer share one. First time in this course that
+  moving to the GPU took something away.
+- **Area weighting is free.** `|cross(b-a, c-a)|` *is* twice the triangle's area, so accumulating
+  the **un-normalised** cross products and normalising once at the end weights every face by its
+  area at no cost. Normalising each face normal first is more work *and* discards the weighting —
+  and unweighted averaging lets a corner's twenty tessellation slivers outvote its one large face,
+  which shows up as lighting that ripples along seams.
+- **Geometry that already has normals is returned unchanged**, whatever style was asked for. A
+  file's normals are authorship — Lesson 3.5's loader rule, one level up.
+
+### The naive normal matrix is invisible on boxes BY CONSTRUCTION
+
+Not "usually invisible". Provably zero. With linear part `R*S` and `S` diagonal, the naive matrix
+is `R*S` and the correct one is `(R*S)^-T = R*S^-1`. Feed either an axis-aligned normal `e_x`:
+
+```
+naive:    R*S*e_x   = s_x * (R*e_x)
+correct:  R*S⁻¹*e_x = (1/s_x) * (R*e_x)
+```
+
+**Parallel.** They differ only in length, and the fragment's `normalize()` throws length away. A
+box's model-space normals *are* its own axes, so the bug cannot show.
+
+Measured: **0 px** change on two non-uniformly scaled boxes; **2,160 px** by up to 143 codes once
+the icosahedron is squashed to (1.7, 0.5, 1.0), whose twenty face normals are not axes. Worked
+example — `n = (0.7071, 0.7071, 0)` under `S = diag(1.7, 0.5, 1.0)` gives `(0.9594, 0.2822, 0)`
+naive and `(0.2822, 0.9594, 0)` correct: **57.2° apart**.
+
+**The general rule is about testing, not about normals.** A test scene made of crates would have
+reported a clean pass while the renderer was broken. Choose test geometry that is *able to fail* —
+the same discipline as Lesson 3.1's cyclic planks and Lesson 4.5's deliberately wrong pitch.
+
+### How closely a software rasterizer and a GPU can agree
+
+Same scene, same camera, same light, and literally the same `mesh_data` handed to both, at
+320×180:
+
+| what | result |
+|---|---|
+| the shading equation (`shade()` vs `scene.frag.hlsl`, 4,096 fragments × 3 models) | worst 1.192e-07 — **one float ULP** |
+| pixels both renderers covered, byte-identical | **86.99%** |
+| …differing by one code | 7.88% |
+| …differing by more than 16 codes | 2.46%, **all on silhouettes** |
+| covered by only one renderer | 42 px (CPU) + 60 px (GPU) — a one-pixel sliver per object |
+
+The coverage sliver is not a bug in either: both use the same fill rule (centre-in, top-left
+tie-break) at different **sub-pixel resolutions** — our fill rounds projected corners to whole
+pixels, the hardware snaps them to a fixed sub-pixel grid. A >16-code disagreement at a boundary is
+one pixel of coverage difference wearing a large number.
+
+### The floor of a CPU/GPU pixel comparison is one code, and it is worst in the darks
+
+`engine::to_encoded`'s `powf` and the hardware's `_SRGB` render-target write are two approximations
+of a **curve**, not two readings of a table. They agree exactly above linear 0.006. Below that the
+sRGB slope (12.92 near zero) makes a linear value cross a code boundary more than twelve times
+faster, and the measured 14/15 boundary sits at **0.004580** for us and somewhere between
+**0.0045148 and 0.0045186** for this hardware — which then holds 15 through 0.0050, where the exact
+answer is 16.
+
+Neither is wrong; sRGB is specified as a function and a fixed-function converter in a ROP is
+entitled to a tolerance. **A claim of bit-identity across this boundary would be a claim about the
+hardware.**
+
+### Never report a percentage without a magnitude
+
+The untextured ground plane reports **100% of 39,202 pixels differing** — all by one code, in one
+channel, because it is one flat colour whose blue (0.0045186) lands inside that gap. That finding
+is worth nothing. Report a **histogram**: "100% differ, all by one code, in one channel" and "2%
+differ, by up to 134 codes" are opposite results and only the second is a bug.
+
+The same discipline saved the textured-floor result. Textured, that quad is 66.76% exact with
+14.38% differing by >16 codes — which looks alarming until the **untextured control** on identical
+geometry comes back at one code maximum. The difference is texture *undersampling*: where one
+screen pixel covers many texels the answer depends on which texel you land in, and neither renderer
+is wrong. Turn one thing off; if the difference goes with it, you have a cause.
+
+### Three harness bugs worth recognising by shape
+
+1. **A reference implementation that has been simplified is not a reference.** The software
+   comparison path was written without near clipping, so it skipped every triangle crossing the
+   near plane — and the ground quad's near edge is behind the camera. The GPU "covered" 35,532
+   pixels the CPU did not and the port looked catastrophic. The fix was to call
+   `engine::clip_polygon_near`: Lesson 3.3's code, doing Lesson 3.3's job.
+2. **A pass whose attachments disagree with the bound pipeline is undefined, and can look fine.**
+   The sRGB sweep ran without a depth attachment while its pipelines declared one, and produced an
+   entirely plausible table. Caught only by a second measurement disagreeing with it.
+3. **A sweep is only evidence where it has samples.** The first sRGB sweep took fourteen points
+   across the whole range, none near the boundary the disagreement lived at, and "refuted" a
+   hypothesis that was merely unmeasured. **Measure the thing you are about to blame** — and
+   measure it at the resolution the effect lives at.

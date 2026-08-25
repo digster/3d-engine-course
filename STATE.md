@@ -7,9 +7,135 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-08-22 (after Lesson 4.7 — 43 of 94 lessons)
+updated: 2026-08-25 (after Lesson 4.8 — 44 of 94 lessons)
 
 conventions:
+  draw-rates: FOUR RATES OF CHANGE, and data is grouped by RATE rather than by
+        subject. per FRAME — camera_uniforms (64 B, vertex slot 0) and
+        scene_light_uniforms (64 B, fragment slot 0), pushed once before the pass.
+        per DRAW — object_uniforms (112 B, vertex slot 1) and material_uniforms
+        (32 B, fragment slot 1), pushed BETWEEN draws; SDL licenses this in one
+        sentence ("Subsequent draw calls in this command buffer will use this
+        uniform data"). per INSTANCE — a vertex buffer at INSTANCE rate (4.5).
+        per VERTEX — a vertex buffer at VERTEX rate (4.5).
+        The camera and the lamp share a push because both change once a frame,
+        not because they are related. Grouping by subject is how you end up
+        re-pushing something 1,225 times.
+        Measured: a three-object scene moves 128 + 3*144 = 560 bytes of uniform
+        traffic a frame, and would move the same 560 if each object had a million
+        triangles. PER-DRAW OVERHEAD SCALES WITH OBJECT COUNT, NOT OBJECT SIZE.
+  one-draw-per-object: A MATERIAL AND A CULL MODE CANNOT RIDE ON A TRIANGLE. 3.8
+        flagged raster_triangle::surface in writing as a cheat that would not
+        survive Module 4; this is where the bill arrives. A GPU draw is a LAUNCH,
+        not a loop — thousands of fragments enter at once with no moment between
+        triangle 7 and triangle 8 — so anything constant across a draw is fixed
+        BEFORE it: as pipeline state (cull, fill, depth op, blend, the shaders) or
+        as a uniform push (the numbers). Four objects is four draws.
+        surface_style is the enum for the part that cannot be a number: solid
+        (cull back), two_sided (cull none), wireframe (fill LINE). Three values,
+        three pipeline objects at startup. THREE AND NOT MORE because every extra
+        axis MULTIPLIES: 2 cull x 2 fill x 2 depth is 8.
+        render() DOES NOT SORT. Sorting has several right answers that conflict
+        (by pipeline, front-to-back for early-z, back-to-front for transparency,
+        by distance for LOD) and the choice belongs to whoever knows what the
+        frame is for. It COUNTS instead: pipeline_binds against
+        ideal_pipeline_binds. Measured 3 vs 2 on a three-object, two-style scene.
+  normals-are-data: A VERTEX SHADER SEES ONE VERTEX, so it cannot compute a face
+        normal. collect_triangles could and did — cross(b-a, c-a) inside the
+        per-triangle loop, whenever normal_at() returned zero. Three of the four
+        built-in meshes carry no normals (cube, quad, icosahedron) and neither
+        does 3.2's ground plane, so the fallback had to move OUT of the renderer
+        and INTO the geometry. engine::with_normals(mesh, normal_style) is that
+        step, and it is where every real engine puts it (aiProcess_GenNormals).
+        FLAT FORCES UNSHARED VERTICES — one normal per face, and a vertex holds
+        one — so a cube's 8 positions become 36 and an icosahedron's 12 become 60,
+        with an index buffer of 0,1,2,3,... and no sharing left to express. That
+        is 4.5's `expanded` form arriving for a reason other than a comparison.
+        SMOOTH keeps the buffers' shape and averages, WEIGHTED BY AREA FOR FREE:
+        |cross(b-a, c-a)| IS twice the triangle's area, so accumulating the
+        UN-NORMALISED cross products and normalising once at the end weights each
+        face by its area at no cost. Normalising per face first is more work AND
+        throws the weighting away. Verified on a cube corner: the averaged normal
+        dotted with (-1,-1,-1)/sqrt3 is 1.000000.
+        GEOMETRY THAT ALREADY HAS NORMALS IS RETURNED UNCHANGED, whatever style is
+        asked for. A file's normals are authorship — 3.5's loader rule, one level
+        up. torus.obj's pass through bit for bit (verified).
+        AND A RUNTIME TOGGLE BECAME A BUILD-TIME DECISION: 3.8's [Q] flat/smooth
+        key is now a property of the vertex buffer, and the two options no longer
+        share one. First time in this course that moving to the GPU took something
+        away.
+  matrix-3x3-uniform: A 3x3 CROSSES A CONSTANT BUFFER AS THREE EXPLICIT COLUMNS,
+        never as float3x3. Both occupy 48 bytes (each column padded to a 16-byte
+        register), so nothing is saved either way — what the matrix type ADDS is a
+        dependence on the compiler's matrix-packing default (column_major for DXC;
+        row_major if any #pragma pack_matrix upstream says so), with no diagnostic
+        when it is not what you assumed. A transposed normal matrix does not crash:
+        it lights every non-symmetric object from a slightly wrong direction.
+        The shader rebuilds M*v by its definition — c0*v.x + c1*v.y + c2*v.z —
+        which is 2.5's "a matrix is where the basis vectors land" as three
+        multiply-adds, and cannot be transposed by a flag.
+        MEASURED ANYWAY (verify_48 §C, shaders/matrix_probe.frag.hlsl): on this
+        toolchain float3x3 WOULD have worked; DXC packs column-major and the
+        matrix-typed reading agrees exactly. Still not what we ship. A default
+        that happens to be right on the machine you tested is the most expensive
+        kind of correctness there is.
+  invisible-on-boxes: THE NAIVE NORMAL MATRIX IS INVISIBLE ON AXIS-ALIGNED
+        GEOMETRY BY CONSTRUCTION, not merely usually. With linear part R*S and S
+        diagonal, naive = R*S and correct = (R*S)^-T = R*S^-1. Feed an axis e_x:
+        naive gives s_x*(R e_x), correct gives (1/s_x)*(R e_x) — PARALLEL, and the
+        fragment's normalize() throws the length away. A box's model-space normals
+        ARE its own axes, so the difference is exactly zero.
+        Measured: 0 px change on two non-uniformly scaled boxes. Squash the
+        ICOSAHEDRON to (1.7, 0.5, 1.0), whose twenty face normals are not axes, and
+        2,160 px change by up to 143 codes. Worked example: n = (0.7071, 0.7071, 0)
+        under S = diag(1.7, 0.5, 1.0) gives (0.9594, 0.2822, 0) naive and
+        (0.2822, 0.9594, 0) correct — 57.2 degrees apart.
+        THE GENERAL RULE IS ABOUT TESTING, NOT NORMALS: a test scene made of crates
+        would have reported a clean pass while the renderer was broken. CHOOSE TEST
+        GEOMETRY THAT IS ABLE TO FAIL. Same discipline as 3.1's cyclic planks and
+        4.5's deliberately wrong vertex pitch.
+  cpu-gpu-agreement: WHAT TWO RASTERIZERS CAN AND CANNOT AGREE ON, measured on the
+        same scene, same camera, same light and literally the same mesh_data at
+        320x180 (verify_48 §D–F).
+        THE SHADING EQUATION: engine::shade() against scene.frag.hlsl over 4,096
+        fragments x 3 specular models — worst disagreement 1.192e-07, which is
+        ONE FLOAT ULP. Two implementations written three modules apart, in two
+        languages, on two processors, agreeing to the last bit a float has.
+        COVERAGE: 42 px only the CPU drew, 60 px only the GPU did — a one-pixel
+        sliver on every silhouette. Same fill rule (centre-in, top-left tie-break)
+        at different sub-pixel resolutions: we round corners to whole pixels, the
+        hardware snaps to a fixed sub-pixel grid.
+        COLOUR: of 2,729 shared pixels, 86.99% byte-identical, 7.88% one code,
+        2.35% two, and 2.46% badly wrong — all of the last on silhouettes, where a
+        large number is one pixel of coverage difference wearing a disguise.
+        THE FLOOR IS ONE CODE, AND IT IS WORST IN THE DARKS. Our to_encoded()'s
+        powf and the hardware's _SRGB write are two approximations of a CURVE, not
+        two readings of a table. They agree exactly above linear 0.006; below it
+        the curve's slope (12.92 near zero) makes a linear value cross a code
+        boundary twelve times faster, and the 14/15 boundary lands at 0.004580 for
+        us and between 0.0045148 and 0.0045186 for this hardware. A claim of
+        bit-identity across this boundary would be a claim about the hardware.
+        NEVER REPORT A PERCENTAGE WITHOUT A MAGNITUDE. The untextured floor reports
+        100% of 39,202 pixels differing — all by one code, in one channel, because
+        it is ONE flat colour that lands in the gap. That finding is worth nothing.
+        AND A TEXTURE MAKES IT MUCH WORSE, honestly: the same quad textured is
+        66.76% exact with 14.38% differing by >16 codes, because under minification
+        the sample position decides the answer and neither renderer is wrong. The
+        UNTEXTURED CONTROL (max one code) is what makes that a finding.
+  program-modes: THE DEFAULT INVERTED, as 4.2 said it would. `engine` = 4.8's GPU
+        scene; `engine --software` = the CPU renderer with its HUD and all five
+        demos on [Tab]; `engine --probe` = 4.2–4.7's instrument; `engine --gpu` is
+        an alias for --probe, kept because six lessons tell you to type it.
+        THE SOFTWARE PATH IS THE REFERENCE AND IS NOT GOING AWAY. Every measured
+        claim in Modules 2 and 3 was made against it; a port whose reference has
+        been deleted is a port nobody can check. [V] runs both at once, split down
+        the window.
+        NO ON-SCREEN TEXT IN THE GPU PATH, and it is a real loss rather than an
+        oversight. SDL_RenderDebugText needs an SDL_Renderer and 4.2 established a
+        window is claimed by one or the other, never both. Text needs a font atlas
+        and a shader (stb_truetype, Module 6). Numbers go to the log; Exercise
+        4.8.5 is the way back, via an alpha-blended overlay that is also this
+        engine's first post-processing pass.
   depth-attachment: DEPTH IS AN ATTACHMENT PLUS THREE PIPELINE FIELDS, and both are
         required. The pass takes SDL_GPUDepthStencilTargetInfo* as a SEPARATE
         parameter (may be NULL); the pipeline carries enable_depth_test,
@@ -1866,8 +1992,36 @@ completed:
   - 4.5  Vertex Buffers and Layouts
   - 4.6  Uniform Data and the Matrix Upload
   - 4.7  Textures, Samplers, and Depth
+  - 4.8  Porting the Module-3 Scene
 
 capabilities:
+  - gfx 4.8: THE ENGINE DRAWS A SCENE, not a thing. Two new files, three new
+    shaders, five modified.
+    src/gfx/gpu_scene.hpp/.cpp NEW — surface_style (solid / two_sided /
+    wireframe), gpu_draw_item (a borrowed gpu_mesh*, world_from_model,
+    normal_from_model, material_uniforms, a texture, a style), draw_stats, and
+    gpu_scene_renderer, which owns three pipelines, the depth target and a 1x1
+    white texture and turns a list of items into command-buffer calls.
+    shaders/scene.vert.hlsl NEW — collect_triangles' per-vertex loop, as a vertex
+    stage. Outputs world position (a highlight is view-dependent), the normal, and
+    the uv.
+    shaders/scene.frag.hlsl NEW — engine::shade(), in HLSL, line for line.
+    shaders/matrix_probe.frag.hlsl NEW — the instrument: one 48-byte block
+    declared twice, as float3x3 at b0 and as three float4 at b1.
+    src/gfx/mesh.hpp/.cpp — normal_style and with_normals(), the import step that
+    generates flat or area-weighted smooth normals for geometry carrying none.
+    src/gfx/gpu_uniform.hpp — object_uniforms (112 B), scene_light_uniforms
+    (64 B), material_uniforms (32 B), each with packed_offset asserts.
+    src/gfx/gpu_present.hpp/.cpp — blit_region(), a blit into a rectangle the
+    caller chooses, for the split view.
+    src/main.cpp — run_gpu_scene(), a mesh cache keyed by pointer (deliberately
+    the worst possible asset system), scene_controls, and the inverted flag.
+    THE DEMO now runs Module 3's own build_scene / build_floor / load_model
+    verbatim — not one of them knows a GPU exists — through both renderers at
+    once, on [V].
+    KEYS: [V] view, [C] scene, [L] model, [J] normal matrix, [W] wireframe,
+    [U] cull, [Z] depth, [O] sort, [H]/[E] specular, [M]/[F] texture, arrows /
+    [-][=] / [A][D] camera, lamp.
   - gfx 4.7: THE ENGINE CAN HIDE SURFACES AND PAINT THEM. Four new files, one new
     asset, three new probe shaders, four modified.
     src/gfx/image.hpp/.cpp NEW — image_data (always RGBA8, whatever the file held)
@@ -2525,6 +2679,70 @@ capabilities:
   - skills: reading SDL headers as source of truth; debugging with lldb/gdb/VS
 
 decisions:
+  - THE PORT IS AN API CHANGE AND NOT A MATHS CHANGE, and that is the whole
+    report card for Modules 2 and 3. Of fifteen pipeline stages: TWO are literally
+    the same C++ function called from both sides (parent_from_local,
+    normal_matrix — neither knows a GPU exists); EIGHT became fixed-function
+    hardware; ONE was translated line for line; TWO were folded into one CPU
+    multiply per frame; and TWO could not cross at all (the cull mode and the
+    material). Counted, not asserted.
+  - collect_triangles / draw_triangles ARE STILL HERE AND ARE NOT DEPRECATED.
+    They are the REFERENCE. This project temporarily has two complete renderers
+    for one scene, which almost no graphics course has, and the whole audit above
+    is only possible because of it. Module 5 keeps them.
+  - THE HUD WAS GIVEN UP, and it is named rather than glossed. For eight lessons
+    the HUD was how this course showed its working. SDL_RenderDebugText needs a
+    renderer; a GPU font needs stb_truetype and a shader; inventing three lessons
+    of Module 6 here to print eleven numbers would be the tail wagging the dog.
+    The split view [V] is a better instrument than the HUD was, and the log still
+    carries every number. Exercise 4.8.5 is the honest way back.
+  - THE ONE DRAW PER OBJECT IS NOT A REGRESSION AND MUST NOT BE APOLOGISED FOR.
+    3.8 predicted it in the field's own doc comment. §2.1 of the lesson explains
+    WHY in terms of the machine (a draw is a launch, not a loop) rather than in
+    terms of API limitations, because "the GPU is less flexible" is the wrong
+    intuition and leads people to look for a way around it.
+  - THE FLOOR'S GENERATED NORMAL POINTS DOWN, and Module 3 never noticed. The
+    ground plane's triangles are wound for a viewer underneath it, so
+    with_normals() — which takes winding at face value, correctly — produces
+    (0, -1, 0) and the floor receives only ambient. Nothing in Module 3 saw it
+    because the floor scene there was never LIT: it drew a procedural checker,
+    unshaded. A CONVENTION THAT NOTHING CONSUMED WAS NEVER ACTUALLY BEING CHECKED.
+    Kept as-is in the harness (the measurement is unaffected — both renderers use
+    the same geometry) and written up as a pitfall.
+  - THE MESH CACHE IS DELIBERATELY THE WORST POSSIBLE ASSET SYSTEM. Keyed by the
+    address of the first vertex, holds eight, never evicts, and needs two extra
+    fields to notice that a std::vector rebuilt in place keeps its address and
+    changes its contents. Fifth time the pressure has been named (3.2, 3.5, 3.9,
+    4.5, here) and the FIRST time it actually hurts. Module 5's handles are the
+    answer; letting the pain accumulate is what makes it land.
+  - verify_48 CANNOT LINK TO THE DEMO'S SCENE and has to transcribe it by hand —
+    build_scene, scene_object, collect_triangles and draw_triangles all live in
+    main.cpp's anonymous namespace. Fourth harness in a row to want a piece of the
+    demo it cannot have, and the first where the duplication can silently DRIFT.
+    Strongest argument the course has produced for Module 5's engine/demo split.
+  - THREE HARNESS BUGS, ALL KEPT IN THE LESSON. (1) The software reference had no
+    near clipping and skipped every triangle crossing the near plane — the floor's
+    near edge is behind the camera, so the GPU "covered" 35,532 pixels the CPU did
+    not and the port looked catastrophic. Fixed by calling clip_polygon_near, i.e.
+    3.3's code doing 3.3's job: A REFERENCE THAT HAS BEEN SIMPLIFIED IS NOT A
+    REFERENCE. (2) The sRGB sweep ran without a depth attachment while its
+    pipelines declared one — undefined, and it produced an entirely plausible
+    table. (3) The first sweep probed fourteen points across the whole range, none
+    near the boundary, and "refuted" a hypothesis that was merely unmeasured. A
+    SWEEP IS ONLY EVIDENCE WHERE IT HAS SAMPLES.
+  - THE FIRST HYPOTHESIS ABOUT THE ONE-CODE FLOOR WAS WRONG, and the ten minutes
+    that refuted it are in the lesson. "Every pixel differs" looked like a
+    systematic encode difference; the coarse sweep showed the encoders agreeing
+    everywhere; the float-target probe showed the GPU fragment bit-identical to
+    shade(); only a fine sweep across 0.0044–0.0050 found the actual gap. MEASURE
+    THE THING YOU ARE ABOUT TO BLAME.
+  - A NEW SHADER PAIR RATHER THAN EXTENDING mesh.{vert,frag}. The 4.6 and 4.7
+    sessions each broke verify_45 by editing a shared shader; scene.* is separate,
+    so mesh.* is untouched and verify_45/46/47 all still pass (checked, per the
+    standing rule).
+  - THE DIFFERENCE IMAGE'S RAMP STARTS VISIBLE (90 + 22*d rather than 24*d). A
+    one-code difference scaled linearly to 255 is a pixel nobody can see, and the
+    image exists to be looked at. A figure has a job.
   - CHANGING mesh.frag.hlsl BROKE verify_45 FOR THE SECOND TIME, and the standing
     rule caught it. 4.6 gave that shader a uniform block; 4.7 gave it a SAMPLER,
     and a draw with nothing bound to a sampler slot draws nothing. Fixed the same
@@ -3045,7 +3263,9 @@ files:
             mesh.vert.hlsl, mesh.frag.hlsl,
             uniform_probe.vert.hlsl, uniform_probe.frag.hlsl,
             depth_probe.vert.hlsl, depth_probe.frag.hlsl,
-            texture_probe.frag.hlsl
+            texture_probe.frag.hlsl,
+            scene.vert.hlsl, scene.frag.hlsl,
+            matrix_probe.frag.hlsl
   src/: main.cpp
   src/core/: input.hpp, input.cpp, clock.hpp, clock.cpp,
             fixed_step.hpp, fixed_step.cpp, profile.hpp, profile.cpp
@@ -3054,6 +3274,7 @@ files:
             framebuffer.hpp, framebuffer.cpp,
             gpu_device.hpp, gpu_device.cpp,
             gpu_present.hpp, gpu_present.cpp,
+            gpu_scene.hpp, gpu_scene.cpp,
             gpu_buffer.hpp, gpu_buffer.cpp,
             gpu_mesh.hpp, gpu_mesh.cpp,
             gpu_uniform.hpp, gpu_texture.hpp, gpu_texture.cpp,
@@ -3087,7 +3308,8 @@ files:
                  04-01-how-gpus-work.html, 04-02-sdl-gpu-model.html,
                  04-03-shader-toolchain.html, 04-04-first-triangle.html,
                  04-05-vertex-buffers.html, 04-06-uniforms.html,
-                 04-07-textures-and-depth.html
+                 04-07-textures-and-depth.html,
+                 04-08-porting-the-scene.html
   docs/shared/: course.css, course.js      (THE stylesheet + page script; one copy each)
   docs/_template/: lesson-template.html, README.md, apply-shared.py, check-page.js
   memory/: 2026-07-16.md, 2026-07-18.md, 2026-07-21.md, 2026-07-22.md,
@@ -3097,37 +3319,39 @@ files:
            2026-08-04.md, 2026-08-05.md, 2026-08-06.md, 2026-08-07.md,
            2026-08-08.md, 2026-08-10.md, 2026-08-12.md,
            2026-08-12-b.md, 2026-08-15.md, 2026-08-15-b.md,
-           2026-08-17.md, 2026-08-18.md, 2026-08-22.md
+           2026-08-17.md, 2026-08-18.md, 2026-08-22.md,
+           2026-08-22-b.md, 2026-08-25.md
   (retired: hello.cpp)
 
 
 
-next: 4.8 — Porting the Module-3 Scene
-      (planned filename: docs/lessons/04-08-porting-the-scene.html — 4.7 links to
-      the index for now, so BOTH of 4.7's next links need repointing.)
-      THE PAYOFF, AND IT SHOULD BE UNDRAMATIC.
-        - EVERY PIECE NOW EXISTS: geometry (4.5), camera (4.6), texture + depth
-          (4.7). What is missing is the SCENE — Module 3's floor, models, lighting
-          controls and HUD still run entirely on the CPU beside the GPU path.
-        - THE HONEST TEST OF MODULE 2 AND 3's CONVENTION WORK is how little has to
-          change. NDC parity, depth range, winding, column-major matrices, sampler
-          enums were all fixed deliberately so that this lesson is an API change
-          and not a maths change. COUNT what changes and report it — if a lot
-          changes, say so.
-        - THE HUD IS THE REAL OBSTACLE and it is not a rendering problem: the
-          software demo draws text with SDL_RenderDebugText, and 4.2 established
-          that a window is claimed by SDL_GPU or driven by SDL_Renderer, never
-          both. Options: give up text until stb_truetype (Module 6), or draw the
-          HUD into the software framebuffer and keep blitting it. The second is
-          what the probe already does.
-        - collect_triangles / draw_triangles ARE THE CPU PIPELINE and their
-          replacement is the vertex shader. The comparison to make is per-pixel,
-          as 4.4 did for the triangle: same scene, both rasterizers, count the
-          disagreements. That number is Module 2 and 3's report card.
-        - THE `--gpu` FLAG SHOULD PROBABLY INVERT HERE (4.2 said "from Lesson 4.8
-          the GPU path becomes the default and this branch inverts"). Decide
-          deliberately and keep the software path reachable — it is the reference.
-        - WATCH FOR: the floor is a large thin quad (z-fighting bait — 4.7 §3.2
-          now gives the number), and Module 3's scene has objects at ~1 m, where
-          70% of the depth range lives.
+next: 4.9 — Debugging a Frame with RenderDoc
+      (planned filename: docs/lessons/04-09-renderdoc.html — 4.8 links to the
+      index for now, so BOTH of 4.8's next links need repointing.)
+      THE TOOL COMES AFTER THE KNOWLEDGE, ON PURPOSE.
+        - A FRAME DEBUGGER IS ONLY USEFUL TO SOMEBODY WHO KNOWS WHAT THEY EXPECT
+          TO SEE, which is why this lesson is here and not before 4.4. Every
+          object in the capture is one the student created and NAMED —
+          SDL_SetGPUTextureName and friends have been called since 4.2 for exactly
+          this moment, and that should be pointed out.
+        - THE CAPTURE TO WALK IS 4.8's FRAME: three draws, one pipeline bind, 560
+          bytes of uniform pushes, a depth attachment, a blit. Every one of those
+          numbers is already in the log, so the lesson is "here is where the tool
+          shows you the thing you already measured" — which is how you learn to
+          trust a tool.
+        - RENDERDOC AND METAL. RenderDoc does NOT support Metal. On macOS the
+          equivalent is Xcode's Metal Frame Capture / Metal Debugger, and the
+          lesson must say so up front rather than leaving mac students stuck ten
+          paragraphs in. SDL_GPU on Windows/Linux gives Vulkan or D3D12, both of
+          which RenderDoc handles. Consider covering BOTH tools with the same
+          frame, since the concepts transfer exactly and the screenshots do not.
+          VERIFY the current state of RenderDoc's Metal support before writing.
+        - THINGS TO SHOW: the uniform bytes actually received (4.6 §3.4 measured
+          them from inside a shader; here you can just read them), the vertex
+          buffer's contents against gpu_vertex_pnu, the depth attachment at the
+          end of the pass, and a deliberately broken frame — the 4.5 wrong-pitch
+          pipeline is still on [8] and is a perfect capture to dissect.
+        - WATCH FOR: a debug build is what you want to capture (4.2's validation
+          layer), and the shader names in the capture come from the reflection
+          JSON, so 4.3's toolchain is what makes the capture readable.
 ```

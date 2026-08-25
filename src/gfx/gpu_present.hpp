@@ -114,6 +114,21 @@ public:
     void blit_onto(SDL_GPUCommandBuffer* cb, SDL_GPUTexture* swapchain,
                    Uint32 swap_w, Uint32 swap_h, bool smooth) const;
 
+    /// The same blit, into a rectangle **you** choose rather than the centred
+    /// one.
+    ///
+    /// Lesson 4.8, and it is here for exactly one job: the split view, where the
+    /// software rasterizer's picture goes in the left half of the window and the
+    /// GPU's scene is drawn into the right half. Comparing two renderers is worth
+    /// a method; `fit_centred` is still what computes the rectangle, it is simply
+    /// called by the caller against a half-window instead of a whole one.
+    ///
+    /// `dst` is in swapchain pixels and is not validated against the swapchain's
+    /// size, because SDL clips a blit that runs off the edge and a second opinion
+    /// about the same rule is a second place for it to be wrong.
+    void blit_region(SDL_GPUCommandBuffer* cb, SDL_GPUTexture* swapchain,
+                     blit_rect dst, bool smooth) const;
+
     [[nodiscard]] SDL_GPUTexture* image() const { return image_; }
     [[nodiscard]] int width() const { return width_; }
     [[nodiscard]] int height() const { return height_; }

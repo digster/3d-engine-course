@@ -88,6 +88,7 @@ add_executable(engine
     src/gfx/image.cpp
     src/gfx/gpu_pipeline.cpp
     src/gfx/gpu_present.cpp
+    src/gfx/gpu_scene.cpp
     src/gfx/gpu_shader.cpp
     src/gfx/mesh.cpp
     src/gfx/obj.cpp
@@ -153,6 +154,9 @@ add_hlsl_shader(engine uniform_probe.frag fragment)
 add_hlsl_shader(engine depth_probe.vert vertex)      # Lesson 4.7 — the instrument
 add_hlsl_shader(engine depth_probe.frag fragment)
 add_hlsl_shader(engine texture_probe.frag fragment)
+add_hlsl_shader(engine scene.vert vertex)          # Lesson 4.8 — the ported scene
+add_hlsl_shader(engine scene.frag fragment)
+add_hlsl_shader(engine matrix_probe.frag fragment)  # Lesson 4.8 — the instrument
 
 # Compiled shaders live beside the executable for the same reason assets do: the
 # program finds them with SDL_GetBasePath(), never relative to the working

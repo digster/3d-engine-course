@@ -263,4 +263,28 @@ void gpu_present_target::blit_onto(SDL_GPUCommandBuffer* cb, SDL_GPUTexture* swa
     SDL_BlitGPUTexture(cb, &blit);
 }
 
+
+void gpu_present_target::blit_region(SDL_GPUCommandBuffer* cb, SDL_GPUTexture* swapchain,
+                                     blit_rect dst, bool smooth) const
+{
+    if (!valid() || cb == nullptr || swapchain == nullptr) { return; }
+    if (dst.w == 0 || dst.h == 0) { return; }
+
+    SDL_GPUBlitInfo blit{};
+    blit.source.texture = image_;
+    blit.source.w = static_cast<Uint32>(width_);
+    blit.source.h = static_cast<Uint32>(height_);
+
+    blit.destination.texture = swapchain;
+    blit.destination.x = dst.x;
+    blit.destination.y = dst.y;
+    blit.destination.w = dst.w;
+    blit.destination.h = dst.h;
+
+    blit.load_op = SDL_GPU_LOADOP_LOAD;
+    blit.filter = smooth ? SDL_GPU_FILTER_LINEAR : SDL_GPU_FILTER_NEAREST;
+
+    SDL_BlitGPUTexture(cb, &blit);
+}
+
 } // namespace engine

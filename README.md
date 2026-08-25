@@ -88,16 +88,29 @@ cmake --build build
 ```
 
 The code in `src/` is the state of the engine as of the most recently published lesson (see
-[STATE.md](STATE.md)). Running it today gives you **Module 3's software rasterizer** — a solid,
-correctly occluded icosahedron spinning above a ground grid, and a checkerboard running to the
-horizon, every pixel of both rasterized by code in this repository:
+[STATE.md](STATE.md)). Running it today gives you **Module 3's scene, drawn by the GPU** — and,
+on <kbd>V</kbd>, the same frame drawn by the software rasterizer *beside it*, from one scene
+description:
 
 ```sh
 ./build/engine            # macOS / Linux
 .\build\Debug\engine.exe  # Windows
 ```
 
-Arrow keys orbit the camera, <kbd>-</kbd>/<kbd>=</kbd> dolly. The keys worth pressing first:
+**The executable has four modes**, and Lesson 4.8 inverted the default that Lesson 4.2 set up:
+
+| command | what runs |
+|---|---|
+| `engine` | Module 3's scene on the GPU (Lesson 4.8) |
+| `engine --software` | the CPU renderer, its HUD, and all five demos on <kbd>Tab</kbd> |
+| `engine --probe` | the instrument Lessons 4.2–4.7 were built on |
+| `engine --gpu` | an alias for `--probe`, kept because six lessons tell you to type it |
+
+The software path is **not** deprecated. It is the *reference*: every measured claim in Modules 2
+and 3 was made against it, and a port whose reference has been deleted is a port nobody can check.
+
+Everything below describes `engine --software`, where the HUD lives. Arrow keys orbit the camera,
+<kbd>-</kbd>/<kbd>=</kbd> dolly. The keys worth pressing first:
 
 - <kbd>F</kbd> cycles **wireframe → painter's algorithm → z-buffer → depth view**. The HUD counts,
   live, how many pixels the two hidden-surface strategies disagree about.
@@ -247,7 +260,7 @@ anyway, why a branch costs 1.93× when it is incoherent and nothing when it is n
 state lives in an immutable pipeline object — with the usual explanation for that measured and
 found **false** — is [Lesson 4.1](docs/lessons/04-01-how-gpus-work.html).
 
-Now run it a second way: `./engine --gpu`. Same window, same 320×180 framebuffer, same software
+Now run it a second way: `./engine --probe`. Same window, same 320×180 framebuffer, same software
 rasterizer — but nothing on screen came through `SDL_Renderer` any more. The picture is uploaded
 to a **GPU texture** through a transfer buffer and **blitted** onto the swapchain, with no shader
 anywhere in the program, and the bottom strip is a live graph of where the frame's time went:
@@ -265,7 +278,7 @@ benchmark that reported **763 GB/s on a 273 GB/s bus** (kept in the lesson, with
 was wrong), is [Lesson 4.2](docs/lessons/04-02-sdl-gpu-model.html).
 
 Then the part that turns SDL_GPU from a copier into a renderer: a program to run on the hardware.
-`./engine --gpu` now shows **four small green squares**, one per shader, and each one means a
+`./engine --probe` now shows **four small green squares**, one per shader, and each one means a
 lot — an HLSL file compiled to SPIR-V, translated to the binary format *this* device says it
 accepts, loaded with an entry point that Metal renamed behind your back, and given four resource
 counts read out of the compiler's own reflection rather than typed. That is Lesson 4.3, which
@@ -333,6 +346,34 @@ across two orders of magnitude, after two measurement bugs the lesson keeps rath
 format and exactly nothing on a UNORM one** — which is the control that makes the number
 believable. Along the way it brings in the first third-party code in the project, with the test
 for when to hand-roll and when not to: *is the hard part the subject?*
+
+Which leaves one thing missing, and [Lesson 4.8](docs/lessons/04-08-porting-the-scene.html) is it:
+the **scene**. Every piece existed — geometry, camera, texture, depth — but Module 3's floor and
+models were still running on the CPU beside the GPU path. Moving them is bookkeeping. The
+interesting part is the audit, because two modules of convention work were done on the stated
+promise that this would be an API change and not a maths change, and *a promise nobody checks is
+a wish*. Of fifteen pipeline stages, **two are literally the same C++ function called from both
+sides**, eight became fixed-function hardware, one was translated line for line — and **two could
+not cross at all**, because a cull mode and a material are pipeline state. That is Lesson 3.8's
+predicted bill arriving, and it is what turns one loop into N draw calls.
+
+Two findings the port forced out, neither of which was in the plan. A vertex shader sees **one
+vertex**, so it cannot compute a face normal the way the software rasterizer's per-triangle loop
+did — the fallback moves into the *importer*, and Lesson 3.8's flat/smooth key stops being a
+keypress and becomes a property of the vertex buffer (a cube's 8 positions become **36**). And the
+naive normal matrix turns out to be invisible on boxes **by construction**, not merely usually:
+zero pixels change on two non-uniformly scaled boxes, because a box's normals are its own axes and
+a diagonal scale only changes their length. Squash the icosahedron instead and **2,160 pixels**
+change by up to 143 codes. A test scene made of crates would have reported a clean pass while the
+renderer was broken.
+
+Then press <kbd>V</kbd> and compare the two renderers per pixel: **87% byte-identical**, the
+shading equation itself agreeing to **one float ULP** across 12,288 comparisons, and the
+disagreements each with a cause — sub-pixel coverage on silhouettes, texture undersampling under
+minification, and a one-code floor in the *darks*, where our `powf` and the hardware's sRGB write
+are two approximations of the same curve. The flat untextured floor reports 100% of its 39,202
+pixels differing, all by one code in one channel, which is the lesson's other moral: **never
+report a percentage without a magnitude**.
 
 Then hold <kbd>=</kbd> on that floor and walk *into* it. <kbd>K</kbd> cycles what happens to a
 triangle with a corner behind your eye: **clip** it (correct), **drop** it (the ground vanishes —
