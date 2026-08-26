@@ -22,6 +22,23 @@
 # installed — the machine this lesson was written on does. So we do not assume;
 # we run the tool once at configure time and find out.
 
+# LESSON 5.1 CHANGED THE SHAPE OF THIS FILE, not its contents. `add_hlsl_shader`
+# used to take the target the outputs belonged to, which was fine while there was
+# exactly one. There are now three executables and shaders are not the property of
+# any of them: they are compiled once, at the top level, and each program that
+# needs them says so with `engine_use_shaders()` (cmake/EngineHelpers.cmake).
+#
+# The mechanism is a GLOBAL PROPERTY, which is CMake's way of passing a list
+# between directories that cannot see each other's variables. Targets are global
+# too, so a demo can depend on a shader target declared in the root.
+
+# Where the sources are, and where the binaries land. Absolute, and set once,
+# because these functions are now called from more than one directory and
+# CMAKE_CURRENT_* would mean something different in each.
+set(ENGINE_SHADER_SOURCE_DIR "${CMAKE_SOURCE_DIR}/shaders")
+set(ENGINE_SHADER_OUTPUT_DIR "${CMAKE_BINARY_DIR}/shaders")
+file(MAKE_DIRECTORY "${ENGINE_SHADER_OUTPUT_DIR}")
+
 # ---- Finding the tools -------------------------------------------------------
 
 find_program(SHADERCROSS_EXE
@@ -61,7 +78,7 @@ set(SHADERCROSS_READS_HLSL OFF)
 if(SHADERCROSS_EXE)
     execute_process(
         COMMAND ${SHADERCROSS_RUN}
-                "${CMAKE_CURRENT_SOURCE_DIR}/shaders/triangle.vert.hlsl"
+                "${ENGINE_SHADER_SOURCE_DIR}/triangle.vert.hlsl"
                 -s HLSL -t vertex -d SPIRV
                 -o "${CMAKE_CURRENT_BINARY_DIR}/shadercross_probe.spv"
         RESULT_VARIABLE _probe_result
@@ -102,18 +119,16 @@ endif()
 # Compile one HLSL file into every format this machine can produce, plus its
 # reflection JSON, and hang the outputs off a target so the build orders itself.
 #
-#   add_hlsl_shader(<target> <name> <stage>)
-#     target : the target whose build these outputs are part of
+#   add_hlsl_shader(<name> <stage>)
 #     name   : "triangle.vert" — the file is shaders/<name>.hlsl
 #     stage  : vertex | fragment | compute
 #
 # The stage is passed explicitly rather than inferred from the filename. The CLI
 # can infer it, but an inference that silently picks `vertex` for a misnamed file
 # is a bug that shows up as a blank screen.
-function(add_hlsl_shader target name stage)
-    set(src "${CMAKE_CURRENT_SOURCE_DIR}/shaders/${name}.hlsl")
-    set(out_dir "${CMAKE_CURRENT_BINARY_DIR}/shaders")
-    file(MAKE_DIRECTORY "${out_dir}")
+function(add_hlsl_shader name stage)
+    set(src "${ENGINE_SHADER_SOURCE_DIR}/${name}.hlsl")
+    set(out_dir "${ENGINE_SHADER_OUTPUT_DIR}")
 
     if(NOT SHADERCROSS_EXE)
         return()
@@ -172,10 +187,11 @@ function(add_hlsl_shader target name stage)
         VERBATIM)
     list(APPEND outputs "${json}")
 
-    # One custom target per shader, which the executable depends on. Without this
-    # the custom commands have no consumer and are never run — a build that
-    # silently produces nothing, which is the classic CMake shader mistake.
+    # One custom target per shader. It is recorded in a global property rather
+    # than attached to an executable here, because at this point in the configure
+    # no executable exists yet — demos/ is added after this file runs, and that
+    # ordering is itself a consequence of the split.
     string(REPLACE "." "_" safe_name "${name}")
     add_custom_target(shader_${safe_name} DEPENDS ${outputs})
-    add_dependencies(${target} shader_${safe_name})
+    set_property(GLOBAL APPEND PROPERTY ENGINE_SHADER_TARGETS shader_${safe_name})
 endfunction()

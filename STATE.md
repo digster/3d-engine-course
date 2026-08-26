@@ -7,7 +7,7 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-08-25 (after Lesson 4.9 — 45 of 94 lessons; MODULE 4 COMPLETE)
+updated: 2026-08-25 (after Lesson 5.1 — 46 of 94 lessons; MODULE 5 OPENED)
 
 conventions:
   resource-names: NAME EVERY GPU RESOURCE AT CREATION, through
@@ -2055,6 +2055,72 @@ conventions:
 curriculum: 94 lessons, ~433 h, 9 modules
   M0:6  M1:8  M2:12  M3:10  M4:9  M5:10  M6:15  M7:13  M8:11
 
+  the-boundary: THE ENGINE IS A STATIC LIBRARY WITH AN OUTSIDE, and the outside is
+        enforced by the INCLUDE PATH, not by the style guide.
+          target_include_directories(engine PUBLIC include PRIVATE src)
+        engine/include/ contains exactly one directory, `engine`, so from outside
+        the only spellings that resolve are <engine/gfx/raster.hpp> and siblings.
+        `#include "gfx/raster.hpp"` — the spelling every file used through Module 4
+        — DOES NOT COMPILE from a demo. Verified: 'gfx/raster.hpp' file not found.
+        DEMOS AND THE CAPSTONE MAY USE ONLY PUBLIC HEADERS. This is law from here
+        to the end of the course (CLAUDE.md §8).
+        `engine::engine` is the ALIAS to link; a name with :: in it cannot be
+        mistaken for a file, so a typo fails at configure time instead of becoming
+        `-lengine` at link time.
+        stb_image is PRIVATE and STOPS AT THE BOUNDARY — one TU (image.cpp)
+        includes it, image.hpp exposes engine::image, and a demo reaching for
+        stb_image.h is refused. SDL3::SDL3 is PUBLIC and that is an ADMISSION, not
+        a choice: framebuffer.hpp says Uint32, gpu_device.hpp takes SDL_Window*.
+        An API that names another library's types has adopted its vocabulary.
+        add_subdirectory(engine) BEFORE add_subdirectory(demos): swap them and the
+        configure fails, which is a build system enforcing an architecture rule.
+  engine-vs-demo: THE RULE THAT DECIDES EVERY FILE. It belongs to the ENGINE if a
+        different game, one we have not written, would want it. It belongs to a
+        DEMO if it exists to show, teach or drive this particular program.
+        Applied: collect_triangles/draw_triangles/scene_object/debug draw ->
+        engine. build_scene, orbit_camera, the floor, the textures, pong ->
+        demos/common. next_cull()/next_eval()/is_degenerate/HUD labels -> the
+        sandbox, BECAUSE THEY ARE ABOUT A KEYBOARD.
+        demos/common/ is a static library so several programs can share content
+        instead of copying it. THE RULE THAT KEEPS IT HONEST: nothing in it may be
+        needed by a shipped game; the moment something is, it is an engine feature
+        nobody has named yet.
+  public-api-design: FOUR RULES, each with a receipt in 5.1.
+        (a) the CALLER's vocabulary, not the implementation's;
+        (b) state that always travels together travels as ONE THING — fill_style
+            (3.2), projector (3.3), render_options (5.1), three for three;
+        (c) EVERY DEFAULT IS THE CORRECT ANSWER — render_options{} cannot produce
+            a wrong picture; reaching a wrong answer costs a line that says its
+            name;
+        (d) INSTRUMENTATION IS OPTIONAL AND SAYS SO IN THE TYPE — clip_stats& was
+            required, so 7 throwaway `clip_stats ignored;` variables existed.
+        collect_triangles: 15 parameters -> 8, at 8 call sites. The old signature
+        was not merely ugly, IT WAS A TAX ON EVER IMPROVING THE THING IT BELONGED
+        TO: a ninth knob meant editing eight calls forty lines apart.
+  physical-design: A HEADER IS A PROMISE ABOUT REBUILD TIME as much as about
+        behaviour. Measured on this tree, best of three, incremental:
+          demos/sandbox/main.cpp      0.38 s
+          engine/src/gfx/raster.cpp   0.42 s   (one object file, then relink)
+          .../gfx/gpu_scene.hpp       0.81 s
+          .../gfx/raster.hpp          0.97 s   (everyone who includes it)
+        2.3x, on ~22k lines. THE RATIO IS WHAT TRAVELS, not the seconds.
+        A HEADER MUST COMPILE ALONE — checked, 37/37 public headers do. The check
+        is a four-line loop and belongs in CI.
+        A TYPE TWO COMPONENTS SHARE IS A HEADER, not a section of whichever one
+        defined it first — which is the entire reason projector.hpp exists
+        (soft_renderer and debug_draw both need it).
+  characterization-test: BEFORE A REFACTOR, BUILD THE THING THAT COULD PROVE IT
+        WRONG. `sandbox --shot PATH` renders SEVEN pinned frames (fixed t, camera,
+        light, every mode) to one binary PPM and exits: 1,209,600 bytes, hash
+        905BF27E. It lives in demos/common so a harness can call it too.
+        THE SEVENTH FRAME EXISTS BECAUSE THE FIRST SIX ALL REPORTED straddle = 0 —
+        the near-plane clipper was never called. A characterization test that does
+        not reach a branch cannot pin it; READ YOUR INSTRUMENT'S OWN COUNTERS AND
+        ASK WHAT THEY MISSED. Frame 6 stands the camera on the floor: 32 in, 8
+        straddling, 36 out.
+        MOVE WITHOUT CHANGING, THEN CHANGE WITHOUT MOVING, verifying separately.
+        Both passes byte-identical; verify_50 (which LINKS) also byte-identical.
+
 completed:
   - 0.1  What a Game Engine Actually Is
   - 0.2  How This Course Works
@@ -2106,8 +2172,47 @@ completed:
   - 4.8  Porting the Module-3 Scene
   - 4.9  Debugging a Frame with RenderDoc
   ===> MODULE 4 COMPLETE — Stage B (the SDL_GPU renderer) draws the scene <===
+  - 5.1  The Refactor: Engine, Demos, and the Public API
 
 capabilities:
+  - ARCH 5.1: THE ENGINE HAS AN OUTSIDE. engine/ is a STATIC LIBRARY
+    (engine::engine) with 37 public headers under engine/include/engine/ and 24
+    private sources under engine/src/. libengine.a is 1,201 KB. demos/ holds
+    three targets that link it: demo_common (shared content), sandbox (Lessons
+    1.8-4.9, renamed from `engine`), and hello_cube (160 lines, public headers
+    only, the acceptance test — it also takes --shot for CI).
+    FOUR NEW PUBLIC HEADERS, lifted out of main.cpp (1,325 lines):
+      gfx/projector.hpp      near_mode, projector, screen_point, to_clip,
+                             to_pixel, screen_from_clip. Its own header because
+                             soft_renderer AND debug_draw both need it.
+      gfx/scene.hpp          trs_order, model_matrix, scene_object — the type
+                             BOTH renderers consume (4.8's split view, made
+                             structural). verify_50 §D checks that the CPU
+                             pipeline and a gpu_draw_item build the SAME model
+                             matrix from one scene_object.
+      gfx/soft_renderer.hpp  raster_triangle, projection_scratch, the stats,
+                             camera_view, render_options, collect_stats,
+                             collect_triangles, sort_back_to_front,
+                             draw_triangles. + soft_renderer.cpp.
+      gfx/debug_draw.hpp     line3, line3_world, draw_mesh, draw_axes3,
+                             show_depth, count_differences, brightest_channel.
+                             Grouped by PURPOSE, not shape. 5.10 grows it into a
+                             real debug-draw system. + debug_draw.cpp.
+      engine.hpp             the umbrella. Shipped, documented, and used by
+                             nothing we ship: 262 ms / 82,507 preprocessed lines
+                             vs 215 ms / 72,942 for one header. Only 22% worse
+                             BECAUSE SDL ALREADY DOMINATES (73k lines arrive
+                             before we contribute anything).
+    demos/common/demo_scene.{hpp,cpp} — 1,100 lines of CONTENT: spin, scene_kind,
+    build_scene, the floor, model loading, texture_set, orbit_camera, the two
+    viewports, the projection constants, and write_reference_shot().
+    src/game/pong.* -> demos/common/. IT IS A GAME, AND IT WAS IN src/.
+    cmake/EngineHelpers.cmake NEW — engine_set_warnings / engine_use_assets /
+    engine_use_shaders, one rule one place. Shaders.cmake reshaped:
+    add_hlsl_shader(name stage) now records a GLOBAL PROPERTY instead of taking a
+    target, because shaders belong to the repository rather than to any one of
+    three executables.
+    main.cpp: 7,789 -> 5,721 lines (27%); its -O2 compile 1.30 -> 0.82 s (37%).
   - gfx 4.9: THE ENGINE IS DEBUGGABLE. One new file pair, six modified.
     src/gfx/gpu_debug.hpp/.cpp NEW — scoped_properties (RAII for an
     SDL_PropertiesID), create_named_{buffer,texture,transfer_buffer},
@@ -2806,6 +2911,47 @@ capabilities:
   - skills: reading SDL headers as source of truth; debugging with lldb/gdb/VS
 
 decisions:
+  - THE STRONGEST ARGUMENT WAS A RECEIPT, NOT AN OPINION: verify_46 through 49
+    each TRANSCRIBED build_scene by hand because it sat in an anonymous namespace.
+    Four copies, none compared to the original by anything. That opened the lesson
+    and verify_50 closes it — it LINKS demo_common and reproduces the sandbox's
+    picture to the byte (1,209,616 compared, 0 differ). IF A REFACTOR DOES NOT
+    MAKE THE HARNESSES SIMPLER IT WAS DECORATION; build_verify_*.sh went from
+    eighteen hand-listed sources to one archive, for all five older harnesses.
+  - THE EXECUTABLE IS NOW `sandbox`, NOT `engine`. The name belongs to the library
+    — to the thing it links — which is the confusion the old name was papering
+    over. build/demos/sandbox. Six lessons' run commands change, and the lesson
+    says so in a warn callout rather than letting readers discover it.
+  - A NAME COLLISION THE SPLIT CREATED: `enum class demo` in the sandbox's
+    anonymous namespace HIDES `namespace demo`, so demo::build_scene would not
+    compile. The enum was renamed to `screen`. NAMES ONLY COLLIDE ONCE THEY CAN
+    SEE EACH OTHER — four modules of private names had never had to be distinct
+    from anything.
+  - TWO OF verify_50's PROBES WERE WORTHLESS AND BOTH ARE IN THE LESSON.
+    correct_normal_matrix=false reported 0 px on the stock scene — 4.8's theorem
+    (a box's normals ARE its axes; a diagonal scale sends an axis to a multiple of
+    itself; normalize() discards the length), so it needed a SQUASHED ICOSAHEDRON:
+    then 454 px. normals=face reported 0 px because the stock meshes carry NO
+    VERTEX NORMALS, so both settings fall back to the face normal —
+    fell_back = 132 says so. A MEASUREMENT TAKEN ON CONTENT THAT CANNOT EXPRESS
+    THE EFFECT IS NOT A MEASUREMENT.
+  - A CHECK THAT ASSERTS A KNOWN DEFECT IS NOT A MISTAKE. cull_choice is applied
+    in TWO PLACES — collect_triangles reads only back_by_forward, draw_triangles
+    applies the rest via fill_style — and verify_50 pins that (`cull = back, in
+    collect only -> 0 px, expected 0`). It stops one known defect becoming two,
+    and tells whoever fixes it which line to change. Repair: 6.5's material
+    system, where cull mode is pipeline state because pipeline state IS what a
+    material is.
+  - §7 NAMES FOUR THINGS STILL ON THE WRONG SIDE OF THE LINE: cull_choice applied
+    twice (-> 6.5); SDL in the public API (-> 5.2); render_options shipping the
+    demos' teaching switches, trs_order::tsr and correct_normal_matrix=false,
+    which no shipping engine would export (-> exercise 5.1.4, honestly never);
+    and the sandbox still at 5,721 lines (-> 5.2, which supplies something to
+    split it INTO). A REFACTOR LESSON THAT ENDS "AND NOW IT IS CLEAN" IS LYING.
+  - ONE DEVIATION FROM THE ZERO-PLACEHOLDER RULE, STATED IN THE PAGE: the 57 moved
+    files are given as a MOVE TABLE plus the exact reproducible command, not as 57
+    full listings (>1 MB of near-identical text that would bury the 15 files that
+    actually changed). Every genuinely changed file appears whole.
   - A COMMENT THIS CODEBASE HAD CARRIED SINCE 4.3 WAS WRONG, and the correction is
     written to quote the wrong version first. It explained the buffer/texture vs
     shader naming asymmetry by inferring a reason (immutability) instead of
@@ -3423,7 +3569,7 @@ decisions:
 files:
   /: CLAUDE.md, README.md, ARCHITECTURE.md, LEARNINGS.md, PROMPT.md, LICENSE,
      .gitignore, CMakeLists.txt, STATE.md
-  cmake/: Shaders.cmake
+  cmake/: EngineHelpers.cmake, Shaders.cmake
   shaders/: triangle.vert.hlsl, triangle.frag.hlsl,
             textured.vert.hlsl, textured.frag.hlsl,
             mesh.vert.hlsl, mesh.frag.hlsl,
@@ -3432,26 +3578,27 @@ files:
             texture_probe.frag.hlsl,
             scene.vert.hlsl, scene.frag.hlsl,
             matrix_probe.frag.hlsl
-  src/: main.cpp
-  src/core/: input.hpp, input.cpp, clock.hpp, clock.cpp,
-            fixed_step.hpp, fixed_step.cpp, profile.hpp, profile.cpp
-  src/gfx/: clip.hpp, clip.cpp, colour.hpp, colour.cpp,
-            depth_buffer.hpp, depth_buffer.cpp,
-            framebuffer.hpp, framebuffer.cpp,
-            gpu_device.hpp, gpu_device.cpp,
-            gpu_present.hpp, gpu_present.cpp,
-            gpu_scene.hpp, gpu_scene.cpp,
-            gpu_debug.hpp, gpu_debug.cpp,
-            gpu_buffer.hpp, gpu_buffer.cpp,
-            gpu_mesh.hpp, gpu_mesh.cpp,
-            gpu_uniform.hpp, gpu_texture.hpp, gpu_texture.cpp,
-            image.hpp, image.cpp,
-            gpu_pipeline.hpp, gpu_pipeline.cpp,
-            gpu_shader.hpp, gpu_shader.cpp,
-            mesh.hpp, mesh.cpp, obj.hpp, obj.cpp,
-            raster.hpp, raster.cpp, texture.hpp, texture.cpp, viewport.hpp
-  src/math/: vec2.hpp, vec3.hpp, vec4.hpp, mat2.hpp, mat3.hpp, mat4.hpp, transform.hpp
-  src/game/: pong.hpp, pong.cpp
+  engine/: CMakeLists.txt
+  engine/include/engine/: engine.hpp                      (the umbrella)
+  engine/include/engine/core/: clock.hpp, fixed_step.hpp, input.hpp, profile.hpp
+  engine/include/engine/gfx/: clip.hpp, colour.hpp, debug_draw.hpp,
+            depth_buffer.hpp, framebuffer.hpp, gpu_buffer.hpp, gpu_debug.hpp,
+            gpu_device.hpp, gpu_mesh.hpp, gpu_pipeline.hpp, gpu_present.hpp,
+            gpu_scene.hpp, gpu_shader.hpp, gpu_texture.hpp, gpu_uniform.hpp,
+            image.hpp, light.hpp, mesh.hpp, obj.hpp, projector.hpp, raster.hpp,
+            scene.hpp, soft_renderer.hpp, texture.hpp, viewport.hpp
+  engine/include/engine/math/: mat2.hpp, mat3.hpp, mat4.hpp, transform.hpp,
+            vec2.hpp, vec3.hpp, vec4.hpp
+  engine/src/core/: clock.cpp, fixed_step.cpp, input.cpp, profile.cpp
+  engine/src/gfx/: clip.cpp, colour.cpp, debug_draw.cpp, depth_buffer.cpp,
+            framebuffer.cpp, gpu_buffer.cpp, gpu_debug.cpp, gpu_device.cpp,
+            gpu_mesh.cpp, gpu_pipeline.cpp, gpu_present.cpp, gpu_scene.cpp,
+            gpu_shader.cpp, gpu_texture.cpp, image.cpp, mesh.cpp, obj.cpp,
+            raster.cpp, soft_renderer.cpp, texture.cpp
+  demos/: CMakeLists.txt
+  demos/common/: demo_scene.hpp, demo_scene.cpp, pong.hpp, pong.cpp
+  demos/sandbox/: main.cpp
+  demos/hello_cube/: main.cpp
   assets/: cube.obj, twisted.obj, quirks.obj, torus.obj, uv_grid.png
   docs/: index.html, conventions.html, math-toolbox.html, cpp-style.html
   docs/lessons/: 00-01-what-is-an-engine.html, 00-02-how-this-course-works.html,
@@ -3477,55 +3624,46 @@ files:
                  04-05-vertex-buffers.html, 04-06-uniforms.html,
                  04-07-textures-and-depth.html,
                  04-08-porting-the-scene.html,
-                 04-09-renderdoc.html
+                 04-09-renderdoc.html,
+                 05-01-the-refactor.html
   docs/shared/: course.css, course.js      (THE stylesheet + page script; one copy each)
   docs/_template/: lesson-template.html, README.md, apply-shared.py, check-page.js
-  memory/: 2026-07-16.md, 2026-07-18.md, 2026-07-21.md, 2026-07-22.md,
-           2026-07-23.md, 2026-07-24.md, 2026-07-25.md, 2026-07-26.md,
-           2026-07-27.md, 2026-07-28.md, 2026-07-29.md, 2026-07-30.md,
-           2026-07-31.md, 2026-08-01.md, 2026-08-02.md, 2026-08-03.md,
-           2026-08-04.md, 2026-08-05.md, 2026-08-06.md, 2026-08-07.md,
-           2026-08-08.md, 2026-08-10.md, 2026-08-12.md,
-           2026-08-12-b.md, 2026-08-15.md, 2026-08-15-b.md,
-           2026-08-17.md, 2026-08-18.md, 2026-08-22.md,
-           2026-08-22-b.md, 2026-08-25.md, 2026-08-25-b.md
-  (retired: hello.cpp)
+  memory/: 2026-07-16.md … 2026-08-25.md, 2026-08-25-b.md, 2026-08-25-c.md
+  (retired: src/ — the whole directory. hello.cpp.)
 
 
-
-next: 5.1 — The Refactor: Engine, Demos, and the Public API
-      (planned filename: docs/lessons/05-01-the-refactor.html — 4.9 links to the
-      index for now, so BOTH of 4.9's next links need repointing. MODULE 4 IS
-      COMPLETE; reissue index.html, conventions.html and math-toolbox.html at this
-      module boundary, per the master prompt §7.)
-      THE PRESSURE IS FULLY ACCUMULATED — DO NOT ADD MORE, SPEND IT.
-        - src/main.cpp IS ~7,800 LINES holding five software demos, the 4.2-4.7
-          GPU probe, 4.8's ported scene, a mesh cache, scene_object, build_scene,
-          collect_triangles and draw_triangles. Every one of those is a thing the
-          ENGINE should own or a thing a DEMO should own, and none of them can be
-          told apart today.
-        - FOUR HARNESSES IN A ROW HAVE HAD TO TRANSCRIBE THE SCENE BY HAND
-          (verify_46 through 49) because build_scene and friends live in an
-          anonymous namespace. verify_48's copy CAN DRIFT from the demo and
-          nothing would notice. That is the strongest single argument available
-          and it should open the lesson.
-        - THE ASSET-SYSTEM PRESSURE HAS BEEN NAMED FIVE TIMES (3.2, 3.5, 3.9, 4.5,
-          4.8) and 4.8's mesh cache — keyed by the address of a vector's first
-          element, needing two extra fields to notice a rebuild — is the version
-          that finally hurts. Handles are Module 5, and this lesson should set
-          them up rather than build them.
-        - THE SHAPE TO PRODUCE: engine/ (static library, public headers under
-          engine/include/engine/), demos/, and later tools/. From that point the
-          boundary is LAW — demos and the capstone may only include public
-          headers. CLAUDE.md §8.
-        - TEACH IT AS ARCHITECTURE, NOT AS A CHORE. What makes a good public API;
-          physical design (what goes in a header and why); dependency direction as
-          a design tool; and the honest cost — a build that is slower to configure,
-          a second place to put things, and a boundary somebody will want to break
-          within a week.
-        - A GOOD CONCRETE TEST FOR THE SPLIT: after it, verify_49 should be able
-          to LINK to the scene instead of copying it. If the refactor does not
-          make the harnesses simpler, it was decoration.
+next: 5.2 — The Platform and Application Layer
+      (planned filename: docs/lessons/05-02-platform-layer.html — 5.1's TWO next
+      links point at the index and BOTH need repointing.)
+      THE QUESTION IS "WHO OWNS THE LOOP", and 5.1 ends by asking it out loud.
+        - THE PRESSURE IS demos/sandbox/main.cpp AT 5,721 LINES. 5.1 deliberately
+          did not split it, and said why in §12: each of those demos would be its
+          own small executable if there were an application layer to hang a loop
+          on. That promise is now due.
+        - THE FORK: does your program call the engine (a library: you write
+          main(), you own the loop — what we have) or does the engine call your
+          program (a framework: you implement callbacks, it owns the loop)?
+          SDL3 HAS AN OPINION AND IT IS ON DISK: SDL_main callbacks —
+          SDL_AppInit / SDL_AppIterate / SDL_AppEvent / SDL_AppQuit, enabled with
+          SDL_MAIN_USE_CALLBACKS. ⚠ VERIFY the exact signatures against
+          SDL3/SDL_main.h before writing a line; do NOT guess them. This is the
+          honest, platform-correct answer for web and mobile, where the OS owns
+          the loop and a while(true) cannot exist.
+        - WHAT MOVES OUT OF main.cpp: SDL_Init, window creation, the renderer /
+          GPU device fork (4.2's rule that a window is claimed by one or the
+          other), the streaming texture, the present step, and the loop itself.
+          Everything that is "how a program starts" rather than "what it draws".
+        - 5.1 LEFT SDL IN THE PUBLIC API on purpose and named it as residue. 5.2
+          is where that seam is examined: framebuffer.hpp says Uint32,
+          gpu_device.hpp takes SDL_Window*. Decide deliberately whether the
+          platform layer hides SDL or admits it, and SAY WHY — a wrapper that
+          hides a library you have no intention of replacing is cost with no
+          benefit, and that argument should be made rather than assumed.
         - WATCH FOR: the demos still need SDL_Renderer for their HUD (4.2's
-          claim), so the engine library must not assume it owns the window.
+          claim) while the GPU path claims the window for a device. The app layer
+          must let a program choose, not choose for it.
+        - THE TEST TO BEAT: after 5.2, `--shot` and `--trace` should still work,
+          the golden must still be byte-identical, and at least one demo should
+          be under 200 lines. If the app layer does not make a demo smaller, it
+          is ceremony.
 ```

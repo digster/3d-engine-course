@@ -1998,7 +1998,8 @@
   </p>
 
   <div class="pending">
-    <b>Module 2 — Matrices and projection.</b> Matrices as basis transforms · matrix
+    <b>Module 2 — Matrices and projection.</b> <span class="badge done">complete</span>
+    Matrices as basis transforms · matrix
     multiplication · the inverse and why the view matrix rarely needs a general one ·
     homogeneous coordinates and <em>w</em> · barycentric coordinates from signed areas ·
     the look-at derivation · <strong>perspective projection from similar triangles</strong> ·
@@ -2018,6 +2019,17 @@
     <strong>minimax curve fitting</strong> (§8). (The reflection vector arrived early, in
     1.8, because a bouncing ball needed it before a specular highlight did — and 3.7 turned out
     to need it with the arrow pointing the other way.)
+  </div>
+
+  <div class="pending">
+    <b>Module 5 — Becoming an engine.</b> Nothing new arrived with
+    <a href="lessons/05-01-the-refactor.html">5.1</a>, and that is worth saying rather than
+    leaving as a silence: the refactor moved a great deal of code and derived no mathematics at
+    all. What <em>is</em> coming in this module is arithmetic rather than geometry &mdash;
+    <strong>generational-index packing</strong> (5.4), <strong>cache lines and stride</strong>
+    (5.6), the storage arithmetic that decides archetype against sparse set (5.7), and
+    <strong>transform composition down a hierarchy</strong> (5.9), which is the first time
+    <code>parent_from_local</code> has had a parent worth the name.
   </div>
 
   <div class="pending">

@@ -117,7 +117,7 @@ table.lessons .d { color: var(--text-muted); font-size: 0.95em; line-height: 1.4
     <div class="stat"><span class="n">94</span><span class="l">lessons</span></div>
     <div class="stat"><span class="n">9</span><span class="l">modules</span></div>
     <div class="stat"><span class="n">~436</span><span class="l">hours</span></div>
-    <div class="stat"><span class="n">43</span><span class="l">published</span></div>
+    <div class="stat"><span class="n">46</span><span class="l">published</span></div>
   </div>
 
   <p>
@@ -453,7 +453,7 @@ table.lessons .d { color: var(--text-muted); font-size: 0.95em; line-height: 1.4
   <details class="module">
     <summary>
       <span class="m-num">Module 4</span>
-      <span class="m-name">To the GPU: SDL_GPU <span class="stage-tag b">GPU</span> <span class="badge new">in progress</span></span>
+      <span class="m-name">To the GPU: SDL_GPU <span class="stage-tag b">GPU</span> <span class="badge done">complete</span></span>
       <span class="m-meta">9 lessons · ~40 h</span>
     </summary>
     <div class="m-body">
@@ -485,7 +485,7 @@ table.lessons .d { color: var(--text-muted); font-size: 0.95em; line-height: 1.4
   <details class="module">
     <summary>
       <span class="m-num">Module 5</span>
-      <span class="m-name">Becoming an Engine <span class="stage-tag b">GPU</span></span>
+      <span class="m-name">Becoming an Engine <span class="stage-tag b">GPU</span> <span class="badge new">in progress</span></span>
       <span class="m-meta">10 lessons · ~49 h</span>
     </summary>
     <div class="m-body">
@@ -497,7 +497,7 @@ table.lessons .d { color: var(--text-muted); font-size: 0.95em; line-height: 1.4
       <div class="tbl-scroll">
         <table class="lessons">
           <tbody>
-            <tr><td class="id">5.1</td><td><span class="t">The Refactor: Engine, Demos, and the Public API</span><span class="d">A static library with public headers, and executables that may only include them. What makes a good public API; physical design; dependency direction as a design tool.</span></td><td class="hrs">6 h</td></tr>
+            <tr><td class="id">5.1</td><td><span class="t"><a href="lessons/05-01-the-refactor.html">The Refactor: Engine, Demos, and the Public API</a> <span class="badge done">published</span></span><span class="d">Four harnesses in a row had to <strong>transcribe the scene by hand</strong>, because <code>build_scene</code> was trapped in an anonymous namespace inside a 7,789-line <code>main.cpp</code>. So we draw the line: a static library whose public headers live under <code>engine/include/engine/</code>, and demos that may include nothing else &mdash; enforced by <strong>the include path, not the style guide</strong>, so the old spelling is now a compile error rather than a review comment. Publishing the pipeline is what finally forces it to be <em>designed</em>: <code>collect_triangles</code> goes from <strong>15 parameters to 8</strong>, seven throwaway out-parameter variables vanish, and every default becomes the correct answer. Physical design gets measured rather than asserted &mdash; touching a private source costs 0.42&nbsp;s, a public header <strong>0.97&nbsp;s</strong>, and 37/37 headers compile alone. And the whole thing is done <em>with a net</em>: a characterization test written <strong>before a single file moved</strong> (seven pinned frames, hash <code>905BF27E</code>), then move-without-changing and change-without-moving, each verified separately &mdash; <strong>0 bytes differ</strong>, twice. Ends by naming the four things still on the wrong side of the line.</span></td><td class="hrs">6 h</td></tr>
             <tr><td class="id">5.2</td><td><span class="t">The Platform and Application Layer</span><span class="d">Where the OS stops and the engine starts. Who owns the loop — and why that question decides your API's shape.</span></td><td class="hrs">4 h</td></tr>
             <tr><td class="id">5.3</td><td><span class="t">Logging, Assertions, and Errors Without Exceptions</span><span class="d">Explicit error handling, and an honest account of the tradeoff. Why engine cores routinely disable exceptions and RTTI — and what it genuinely costs you.</span></td><td class="hrs">5 h</td></tr>
             <tr><td class="id">5.4</td><td><span class="t">Handles: Generational Indices</span><span class="d">Why engines don't hand out pointers. Stale references become detectable instead of undefined; storage becomes relocatable; serialization becomes trivial.</span></td><td class="hrs">5 h</td></tr>

@@ -88,6 +88,7 @@
       <li><a href="#units">Units and angles</a></li>
       <li><a href="#simulation">The simulation contract</a></li>
       <li><a href="#colour">Colour and diagram conventions</a></li>
+      <li><a href="#code">Code organization &mdash; the boundary</a></li>
       <li><a href="#verified">The verified-facts table</a></li>
     </ol>
   </details>
@@ -2184,6 +2185,86 @@
   </p>
 
   <!-- ===================================================================== -->
+  <!-- ===================================================================== -->
+  <h2 id="code"><span class="num">10b</span>Code organization &mdash; the boundary</h2>
+
+  <p>
+    Binding from <a href="lessons/05-01-the-refactor.html">Lesson 5.1</a> to the end of the
+    course. This is the only convention on this page that a compiler enforces, and that is the
+    point of it.
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <caption class="visually-hidden">The engine/demo boundary</caption>
+      <thead><tr><th>Rule</th><th>Why, and how it is enforced</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>engine/include/engine/&hellip;</code> is the <strong>whole</strong> public API</td>
+          <td>Declared <code>PUBLIC</code>; <code>engine/src</code> is <code>PRIVATE</code>. A demo
+              writing <code>#include "gfx/raster.hpp"</code> gets
+              <em>file not found</em> &mdash; not a review comment.</td>
+        </tr>
+        <tr>
+          <td>Public headers are included with <strong>angle brackets</strong>:
+              <code>&lt;engine/gfx/raster.hpp&gt;</code></td>
+          <td>That is what an installed library looks like from outside it, and after 5.1 there is
+              no other spelling that resolves.</td>
+        </tr>
+        <tr>
+          <td>Demos and the capstone may use <strong>only</strong> the public API</td>
+          <td>Master prompt &sect;8. <code>demos/hello_cube</code> is the standing acceptance
+              test: 160 lines, public headers only.</td>
+        </tr>
+        <tr>
+          <td>Link <code>engine::engine</code>, never plain <code>engine</code></td>
+          <td>A name with <code>::</code> cannot be mistaken for a file, so a typo fails at
+              configure time instead of becoming <code>-lengine</code> at link time.</td>
+        </tr>
+        <tr>
+          <td>A header must compile <strong>alone</strong></td>
+          <td>Otherwise reordering two includes breaks a file nobody touched. Checked
+              mechanically: 37/37 pass.</td>
+        </tr>
+        <tr>
+          <td>A type two components share is <strong>its own header</strong></td>
+          <td>Not a section of whichever one defined it first. This is why
+              <code>gfx/projector.hpp</code> exists.</td>
+        </tr>
+        <tr>
+          <td>Third-party dependencies are <code>PRIVATE</code> unless they appear in a public
+              signature</td>
+          <td><code>stb_image</code> stops at the boundary and no demo can see it.
+              <code>SDL3::SDL3</code> is <code>PUBLIC</code>, which is an admission: our headers
+              name SDL's types, so we have adopted its vocabulary.</td>
+        </tr>
+        <tr>
+          <td><strong>Engine or demo?</strong> Would a different game, one we have not written,
+              want it?</td>
+          <td>Yes &rarr; engine. No, it exists to show/teach/drive <em>this</em> program &rarr;
+              demo. Applied to <code>next_cull()</code>: it is about a keyboard, so it is the
+              demo's.</td>
+        </tr>
+        <tr>
+          <td>Every default in a public options struct is the <strong>correct</strong> answer</td>
+          <td><code>render_options{}</code> cannot produce a wrong picture; reaching a wrong one
+              costs a line of code that says its name out loud.</td>
+        </tr>
+        <tr>
+          <td>Instrumentation is <strong>optional</strong> and says so in the type</td>
+          <td>A required out-parameter produced seven throwaway
+              <code>clip_stats ignored;</code> variables before 5.1 deleted them.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    One consequence worth stating separately, because it changes commands printed in earlier
+    lessons: the executable is <code>build/demos/sandbox</code>, not <code>build/engine</code>.
+    That name belongs to the library now.
+  </p>
+
   <h2 id="verified"><span class="num">11</span>The verified-facts table</h2>
 
   <p>

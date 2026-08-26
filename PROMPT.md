@@ -1819,3 +1819,44 @@ you.
 
 **Module 4 is complete.** Next is 5.1, the refactor, and the pressure for it is fully accumulated:
 `main.cpp` is ~7,800 lines and four harnesses in a row have had to transcribe the scene by hand.
+
+---
+
+## 2026-08-25 — "Based on the STATE and the project's claude instructions, work on the next."
+
+Lesson 5.1 — **The Refactor: Engine, Demos, and the Public API**. Module 5 opens.
+
+The first act was not moving code. `main.cpp` gained `--shot PATH`: seven pinned frames (fixed
+time, camera, light, every mode) rendered to one binary PPM and exit — 1,209,600 bytes, hash
+`905BF27E`, captured from the **pre-refactor** binary. A refactor's whole claim is that nothing
+observable changed, and a claim nothing can falsify is not a claim. The seventh frame was added
+after the log admitted that the first six all reported `straddle = 0`: the near-plane clipper,
+several hundred lines about to move, was never being called.
+
+Then two passes, verified separately. **Move without changing:** 57 files renamed into
+`engine/include/engine/…` and `engine/src/…`, 2,425 lines lifted out of `main.cpp` into four new
+public headers (`projector.hpp`, `scene.hpp`, `soft_renderer.hpp`, `debug_draw.hpp`) and a demo
+content library (`demos/common/demo_scene.{hpp,cpp}`), `src/game/pong.*` finally landing in a
+directory for games. `cmp` → byte-identical. **Change without moving:** `collect_triangles` from
+fifteen parameters to eight — `render_options`, `camera_view`, `collect_stats`, `std::span` — with
+seven throwaway `clip_stats ignored;` variables deleted along the way. `cmp` → byte-identical
+again.
+
+The boundary is the include path, not the style guide:
+`target_include_directories(engine PUBLIC include PRIVATE src)`, so a demo writing
+`#include "gfx/raster.hpp"` now gets *file not found*. `stb_image` is PRIVATE and stops at the
+boundary; `SDL3::SDL3` is PUBLIC, which is an admission rather than a choice and is named as
+residue. `demos/hello_cube` is the standing acceptance test: 160 lines, public headers only, a lit
+cube, and `--shot` so a build server can check it.
+
+`verify_50` is the receipt the lesson opened by demanding — it **links** `demo_common` instead of
+transcribing it, and reproduces the sandbox's picture to the byte (1,209,616 compared, 0 differ).
+Two of its own probes turned out to be worthless (a normal-matrix bug is invisible on boxes by
+construction; `normal_source` cannot matter on meshes carrying no vertex normals — `fell_back =
+132` said so), and both failures are in the lesson.
+
+Measured rather than asserted: private-source rebuild 0.42 s against a public header's 0.97 s;
+37/37 headers compile alone; the umbrella costs only 22% because SDL already dominates the
+preprocessed volume. §7 names the four things still on the wrong side of the line and which lesson
+pays each. Module 4 closed; `index.html`, `conventions.html` (new §10b) and `math-toolbox.html`
+reissued at the boundary.

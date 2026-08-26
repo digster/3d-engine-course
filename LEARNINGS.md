@@ -3874,3 +3874,125 @@ Four questions worth arriving with: is my draw there at all (missing → CPU-sid
 invisible → culled, clipped, depth-rejected, or offscreen); is the right thing bound; are the
 bytes what I think; where did the geometry go. **Predict before you look** — browsing a capture
 without a prediction produces the feeling of investigating and no information.
+
+---
+
+## Refactoring facts, learned the hard way (Lesson 5.1)
+
+### A refactor's claim is falsifiable, so build the falsifier first
+
+The claim is "nothing observable changed". If nothing can prove it wrong, it is not a claim — it
+is a hope with a commit message. Before a single file moved, `sandbox --shot PATH` was written:
+seven pinned frames to one binary PPM, everything that could vary (time, camera, light, every
+mode) a `constexpr` inside the function. 1,209,600 bytes, hash `905BF27E`.
+
+Then the work was done in **two passes, verified separately**:
+
+1. move 2,425 lines and 57 files without changing them → `cmp` → identical
+2. redesign `collect_triangles` without moving anything → `cmp` → identical
+
+Relocation breaks on a missing include or a namespace slip; redesign breaks on a mis-ordered
+argument. One edit containing both leaves two suspects and no way to separate them.
+
+### A characterization test that does not reach a branch has not pinned it
+
+The first version had six frames, and the log said `straddle = 0` on every one of them — no
+triangle crossed the near plane, so Lesson 3.3's clipper, several hundred lines about to be moved,
+was **never called**. Frame 6 stands the camera on the floor: 32 triangles in, 8 straddling, 36
+out.
+
+The general form: **read your instrument's own counters and ask them what you missed.** The
+counter that revealed this (`clip_stats::straddling`) existed for the HUD and was doing a second
+job nobody had asked it to do.
+
+### The include path is a better boundary than the style guide
+
+```cmake
+target_include_directories(engine PUBLIC include PRIVATE src)
+```
+
+`include/` holds exactly one directory, `engine`, so from outside the only spellings that resolve
+are `<engine/…>`. `#include "gfx/raster.hpp"` fails with *file not found*. A boundary maintained
+by discipline lasts until the first time somebody is in a hurry; this one is maintained by a
+compiler, which is never in a hurry. Prefer rules a machine enforces over rules people remember.
+
+`add_library(engine::engine ALIAS engine)` for the same reason: a name with `::` cannot be
+mistaken for a file, so a typo fails at *configure* time rather than becoming `-lengine` at link
+time.
+
+### A fifteen-parameter function is a design nobody was asked to defend
+
+`collect_triangles` had fifteen parameters at eight call sites. Every one was added by a lesson
+that needed it; every addition was locally reasonable; nobody ever read the total. Read by *kind*
+rather than in order, seven of the sixteen rows were one thing (policy) and three more were the
+camera spelled as separate values a caller had to remember to derive together.
+
+15 → 8, and the cost of the old shape was not ugliness: **a ninth knob meant editing eight calls
+forty lines apart, so nobody would ever add one.** A bad signature is a tax on improving the thing
+it belongs to.
+
+Four rules that fell out, each with a receipt:
+
+- the **caller's** vocabulary, not the implementation's (`camera_view`, not two loose values)
+- state that always travels together travels as one thing — `fill_style` (3.2), `projector` (3.3),
+  `render_options` (5.1): three for three
+- **every default is the correct answer**; reaching a wrong one costs a line that says its name
+- instrumentation is optional and says so in the type — a required `clip_stats&` had produced
+  **seven** throwaway `clip_stats ignored;` variables
+
+### A header is a promise about rebuild time
+
+Measured on this tree, best of three, incremental:
+
+| touched | seconds |
+|---|---|
+| `demos/sandbox/main.cpp` | 0.38 |
+| `engine/src/gfx/raster.cpp` (private) | 0.42 |
+| `engine/include/engine/gfx/gpu_scene.hpp` (public) | 0.81 |
+| `engine/include/engine/gfx/raster.hpp` (public) | 0.97 |
+
+2.3× on ~22k lines. The seconds are trivial and saying otherwise would be dishonest; **the ratio
+is what carries** to a codebase fifty times the size, where the same two edits are a coffee break
+apart. Related, and checked: 37/37 public headers compile **alone**. A header that only works
+because of what came before it in your TU breaks for the next person who reorders two lines.
+
+### The umbrella header is cheaper than folklore says, for an unflattering reason
+
+`<engine/engine.hpp>` versus one header, same program: 262 ms / 82,507 preprocessed lines against
+215 ms / 72,942. Only 22% worse — because **SDL already dominates**. Nearly 73,000 lines arrive
+before we contribute anything, since `framebuffer.hpp` includes `<SDL3/SDL_stdinc.h>` for one
+typedef. If we cared about compile time we would go after that first, not the umbrella.
+
+### Names only collide once they can see each other
+
+`enum class demo` in the sandbox's anonymous namespace **hides** `namespace demo`, so
+`demo::build_scene` would not compile — lookup finds the enum and stops. Four modules of private
+names had never had to be distinct from anything. The enum was the vaguer name and became
+`screen`.
+
+### A measurement taken on content that cannot express the effect is not a measurement
+
+Two of `verify_50`'s probes reported 0 px and both were the probe's fault:
+
+- `correct_normal_matrix = false` on the stock scene — Lesson 4.8's theorem again: a box's
+  model-space normals **are** its axes, a diagonal scale sends an axis to a multiple of itself,
+  and `normalize()` discards the length. Invisible on crates *by construction*. A squashed
+  icosahedron reports 454 px.
+- `normals = face` — the stock meshes carry **no vertex normals at all**, so both settings fall
+  back to the face normal. `normal_stats::fell_back = 132` said so, which is why that counter
+  exists.
+
+### A test that asserts a known defect is not a mistake
+
+`cull_choice` is applied in two places: `collect_triangles` reads exactly one of its four values
+(`back_by_forward`, which must happen before the divide) and `draw_triangles` applies the rest via
+`fill_style`. `verify_50` pins that — `cull = back, in collect only → 0 px, expected 0`. It stops
+one known defect from quietly becoming two, and tells whoever repairs it which line the repair
+must change.
+
+### If a refactor does not make the harnesses simpler, it was decoration
+
+`build_verify_49.sh` listed eighteen engine translation units by hand and grew by a line every
+time the engine gained a file. It now names one include directory and one archive. All five
+earlier harnesses were rebuilt against the new layout and re-run (`ALL PASS`), at a cost of 68
+respelled include directives — real work, and worth counting rather than hiding.

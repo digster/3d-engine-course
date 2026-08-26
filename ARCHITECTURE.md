@@ -38,11 +38,20 @@ correctness bugs — there is no snapshot to fall back on.
 
 ## 2. Repository layout
 
-### 2.1 Now (Modules 0–4): one library-shaped executable
+> **The current layout is [§2.2](#22-now-lesson-51-onward-engine--demos--tools).** §2.1 records
+> what the tree looked like through Module 4 and why, because the shape of the refactor is only
+> legible next to the shape it replaced.
 
-Deliberately **not** a framework yet. The internal structure is already drawn along the seams
-the Module 5 refactor will cut, so that refactor feels like *revealing* a boundary rather than
-inventing one — but without paying framework ceremony before it buys anything.
+### 2.1 Then (Modules 0–4): one library-shaped executable — *retired by Lesson 5.1*
+
+Deliberately **not** a framework yet. The internal structure was already drawn along the seams
+the Module 5 refactor would cut, so that refactor felt like *revealing* a boundary rather than
+inventing one — but without paying framework ceremony before it bought anything.
+
+It worked: 57 files moved without a single one of them changing, because none of them had ever
+been allowed to depend the wrong way. **The refactor's difficulty is decided entirely by how many
+wrong-way dependencies accumulated before it started, and there were none.** What did have to be
+untangled was the one file that had never been given a home: `src/main.cpp`, at 7,789 lines.
 
 ```
 3d-engine-course/
@@ -607,6 +616,8 @@ decisions are bit-identical across compilers and architectures, which floating-p
 in LEARNINGS.md so the decision can be revisited with evidence rather than deference.
 
 #### 2.1.1 `src/game/` — the boundary, three modules early
+> Lesson 5.1 resolved this directory: `pong.{hpp,cpp}` now lives in `demos/common/`, which is
+> where a game belongs. The reasoning below is kept because it is what made the move a rename.
 
 Introduced in **Lesson 1.8**, and the first directory in the tree that is emphatically *not*
 engine. The test that decides where a file goes is one question:
@@ -634,33 +645,92 @@ Two habits established here that carry into the refactor:
   what will let Module 8 serialise it in one call. A single global read would silently destroy
   replayability; see [conventions.html §9](docs/conventions.html).
 
-### 2.2 After the Module 5 refactor: engine / demos / tools
+### 2.2 Now (Lesson 5.1 onward): engine / demos / tools
 
-Module 5 opens with a dedicated refactor arc, taught as a **first-class architecture lesson**
+Module 5 opened with a dedicated refactor arc, taught as a **first-class architecture lesson**
 (what makes a good public API, physical design, dependency direction) — not rushed through as a
-chore.
+chore. What follows is on disk.
 
 ```
-├── engine/
-│   ├── include/engine/     # THE PUBLIC API. Everything else is private.
-│   │   ├── core/
-│   │   ├── math/
-│   │   ├── gfx/
-│   │   ├── scene/
-│   │   └── engine.hpp      # umbrella header
-│   ├── src/                # private implementation + private headers
-│   └── CMakeLists.txt      # produces the `engine` static library
+├── CMakeLists.txt          # acquires SDL3 + stb, declares the shaders, adds the two subdirs
+├── cmake/
+│   ├── EngineHelpers.cmake # engine_set_warnings / _use_assets / _use_shaders   [5.1]
+│   └── Shaders.cmake       # add_hlsl_shader(name stage) -> a GLOBAL PROPERTY   [4.3, reshaped 5.1]
+├── engine/                 # THE LIBRARY                                        [5.1]
+│   ├── CMakeLists.txt      # produces engine::engine (STATIC)
+│   ├── include/engine/     # ---- THE PUBLIC API. 37 headers. Nothing else. ----
+│   │   ├── engine.hpp      # the umbrella: shipped, documented, used by nothing we ship
+│   │   ├── core/           # clock, fixed_step, input, profile
+│   │   ├── math/           # vec2/3/4, mat2/3/4, transform  (header-only)
+│   │   └── gfx/            # everything from §2.1's gfx/, plus four new headers:
+│   │       ├── projector.hpp     # near_mode, projector, screen_point, to_clip,
+│   │       │                     #   to_pixel, screen_from_clip. Its own header
+│   │       │                     #   because soft_renderer AND debug_draw need it
+│   │       ├── scene.hpp         # trs_order, model_matrix, scene_object —
+│   │       │                     #   the type BOTH renderers consume
+│   │       ├── soft_renderer.hpp # the CPU pipeline: raster_triangle,
+│   │       │                     #   projection_scratch, camera_view,
+│   │       │                     #   render_options, collect_stats,
+│   │       │                     #   collect_triangles / sort / draw_triangles
+│   │       └── debug_draw.hpp    # line3, draw_mesh, draw_axes3, show_depth,
+│   │                             #   count_differences — grouped by PURPOSE
+│   └── src/                # ---- PRIVATE. 24 sources; no demo can name this path ----
+│       ├── core/           # clock, fixed_step, input, profile
+│       └── gfx/            # …+ soft_renderer.cpp, debug_draw.cpp; image.cpp is the
+│                           #   ONE unit that contains stb_image
 ├── demos/                  # executables; link engine, include ONLY public headers
-│   ├── 01-triangle/
-│   ├── 02-scene/
-│   └── capstone/           # the proof: a full game on the public API alone
-└── tools/                  # editor, asset cooker
+│   ├── CMakeLists.txt
+│   ├── common/             # demo_common: CONTENT, shared so nothing is transcribed
+│   │   ├── demo_scene.hpp  # spin, scene_kind, floor_geometry, model_state,
+│   │   ├── demo_scene.cpp  #   texture_set, orbit_camera, build_scene, draw_world,
+│   │   │                   #   and write_reference_shot() — the characterization test
+│   │   ├── pong.hpp        # the Module 1 game, finally in a directory for games
+│   │   └── pong.cpp
+│   ├── sandbox/main.cpp    # Lessons 1.8–4.9 on [Tab] and four flags. 5,721 lines,
+│   │                       #   and 5.2 is what finally splits it
+│   └── hello_cube/main.cpp # 160 lines, public headers only. THE ACCEPTANCE TEST
+└── tools/                  # editor, asset cooker (Module 8). Not yet.
 ```
 
-**From that point the boundary is law.** Demo and capstone code may only `#include <engine/...>`.
-The capstone being buildable against nothing but the public API is what makes the claim
-"professional grade" falsifiable rather than decorative — if the public API is missing something
-the game needs, that is a bug in the engine, and we fix it in the engine.
+**The boundary is the include path, not the style guide.** One property does it:
+
+```cmake
+target_include_directories(engine PUBLIC include PRIVATE src)
+```
+
+`include/` holds exactly one directory, `engine`, so from outside the only spellings that resolve
+are `<engine/gfx/raster.hpp>` and its siblings — and `#include "gfx/raster.hpp"`, which every file
+in this repository used until Lesson 5.1, resolves to nothing at all. A boundary maintained by
+discipline lasts until the first time somebody is in a hurry; this one is maintained by a compiler.
+
+Three more properties finish the job:
+
+| line | what it buys |
+|---|---|
+| `add_library(engine::engine ALIAS engine)` | a name with `::` cannot be mistaken for a file, so a typo fails at *configure* time rather than becoming `-lengine` at link time |
+| `target_link_libraries(engine PUBLIC SDL3::SDL3)` | contagious, and it has to be: our public headers name `Uint32`, `SDL_Window*`, `SDL_Event`. **An admission, not a choice** |
+| `target_include_directories(engine PRIVATE ${stb_SOURCE_DIR})` | stb stops at the boundary. One TU includes it; no demo can see it |
+
+**Which side does a file go on?** One question, and it settled every case but four:
+
+> Would a different game, one we have not written, want it?
+
+Yes → engine. No, it exists to show/teach/drive *this* program → demo. Applied to `next_cull()`,
+which advances a cull mode so the `[U]` key can cycle it: an engine shipping that function is
+shipping this demo's key bindings to everybody who links it. Demo.
+
+`demos/common/` looks like a second engine and is kept honest by one rule: **nothing in it may be
+needed by a shipped game.** The moment something is, it is not demo content — it is an engine
+feature nobody has named yet.
+
+**What is still on the wrong side**, recorded rather than quietly left (lesson §7):
+
+| leftover | why it is wrong | paid in |
+|---|---|---|
+| `cull_choice` is applied twice | `collect_triangles` reads one of its four values; `draw_triangles` applies the rest via `fill_style` | 6.5, the material system |
+| SDL is in the public API | the vocabulary is adopted permanently | 5.2, the platform layer |
+| `render_options` ships teaching switches | `trs_order::tsr` exists so a lesson can show a bug | exercise 5.1.4, honestly never |
+| `demos/sandbox/main.cpp` is 5,721 lines | splitting it needs an application layer to split it *into* | 5.2 |
 
 ### 2.3 Dependency direction
 
@@ -675,9 +745,11 @@ tools/ ──►
 under test. `core` may not include `gfx`. Nothing in `engine/` may include from `demos/`. A
 cycle here is a design error, not an inconvenience to work around.
 
-The same rule already applies in today's single-executable layout, with `src/game/` standing in
-for `demos/` (§2.1.1): `src/game/` may include from `core`, `gfx` and `math`; none of those three
-may ever include from `src/game/`.
+Since Lesson 5.1 this is no longer a rule people follow — it is a rule the build enforces, in two
+independent ways. Horizontally, `engine/src` is `PRIVATE`, so a demo cannot name it. Vertically,
+`add_subdirectory(engine)` comes before `add_subdirectory(demos)` in the root `CMakeLists.txt`:
+swap the two lines and the configure fails, because `engine::engine` would not exist yet when
+`demos/` asked to link it.
 
 ---
 
@@ -1245,7 +1317,19 @@ Commands that are not obvious from reading files.
 ```sh
 cmake -S . -B build              # first run compiles SDL3 via FetchContent — minutes
 cmake --build build
+
+./build/demos/sandbox                        # the GPU scene (4.8)
+./build/demos/sandbox --software             # the five CPU demos, on [Tab]
+./build/demos/sandbox --probe                # the 4.2–4.7 instrument
+./build/demos/sandbox --trace                # one frame's command stream, then exit  (4.9)
+./build/demos/sandbox --shot scratch/x.ppm   # seven pinned frames, no window          (5.1)
+./build/demos/hello_cube                     # the acceptance test: public API only    (5.1)
+./build/demos/hello_cube --shot cube.ppm     # …one frame, no window
 ```
+
+> **The executable moved and was renamed in Lesson 5.1.** It was `build/engine` through Module 4;
+> that name now belongs to the library. Anything in Modules 0–4 that says `./build/engine` means
+> `./build/demos/sandbox`.
 
 `FetchContent` pins SDL3 to a tag. A fresh clone needs no SDL install and no submodule ritual.
 The tradeoff (a one-time source build) was accepted over vendored submodules specifically to
@@ -1281,13 +1365,24 @@ commit bytecode — stale bytecode that silently disagrees with its source is a 
 ### Measuring
 
 ```sh
-# The harness for a lesson, built against the configured SDL3 tree.
-c++ -std=c++20 -O2 -Wall -Wextra -I src -I build/_deps/sdl3-src/include \
-    scratch/verify_310.cpp src/core/profile.cpp \
-    src/gfx/{mesh,obj,clip,raster,texture,framebuffer,depth_buffer,colour}.cpp \
-    -L build/_deps/sdl3-build -lSDL3 -Wl,-rpath,build/_deps/sdl3-build \
-    -o scratch/verify_310 && ./scratch/verify_310
+# The harness for a lesson, built against the configured SDL3 tree. Since Lesson
+# 5.1 there is a library to link, so this names ONE include directory and ONE
+# archive instead of listing every engine translation unit by hand — which is
+# what 4.9's script had to do, with eighteen of them.
+c++ -std=c++20 -O2 -Wall -Wextra \
+    -I engine/include -I build/_deps/sdl3-src/include \
+    scratch/verify_50.cpp \
+    build/demos/libdemo_common.a build/engine/libengine.a \
+    -L build/_deps/sdl3-build -lSDL3 -Wl,-rpath,"$PWD/build/_deps/sdl3-build" \
+    -o build/demos/verify_50 && ./build/demos/verify_50
 ```
+
+Link `libdemo_common.a` only when the harness needs the demo's *content* — the scene, the floor,
+the reference shot. A harness that checks the engine should link the engine alone, and that
+distinction is now expressible.
+
+**Output goes in `build/demos/`** so that `SDL_GetBasePath()` finds `assets/` and `shaders/`,
+which the build copies next to each executable. Run the script from the repository root.
 
 Three rules, all of which have caught something (Lesson 3.10, conventions §7e):
 
@@ -1309,6 +1404,20 @@ interval and an fps counter cannot tell you that you made anything faster.
 - **GPU:** RenderDoc, with a dedicated lesson in Module 4. Frame captures are gitignored.
 - **Profiling:** measure before optimizing. Module 3 profiles the software rasterizer; Module 8
   does CPU/GPU profiling case studies *on our own engine*.
+
+### Refactoring
+
+Since Lesson 5.1 there is a documented procedure, and it is not optional for anything structural:
+
+1. **Write the characterization test first**, before a single file moves. `sandbox --shot PATH`
+   renders seven pinned frames to one binary PPM — 1,209,600 bytes, hash `905BF27E`. Everything
+   that could vary is a constant inside `write_reference_shot()`.
+2. **Check the test's own coverage.** The first version had six frames and every one reported
+   `straddle = 0`, meaning the near-plane clipper was never called. Read the instrument's counters
+   and ask what they missed.
+3. **Move without changing. Verify.** Then **change without moving. Verify.** Relocation and
+   redesign break in completely different ways; one edit containing both leaves two suspects.
+4. `cmp` the golden. Zero bytes differ, or you have work to do.
 
 ### Tests
 

@@ -87,29 +87,48 @@ cmake -S . -B build
 cmake --build build
 ```
 
-The code in `src/` is the state of the engine as of the most recently published lesson (see
-[STATE.md](STATE.md)). Running it today gives you **Module 3's scene, drawn by the GPU** — and,
-on <kbd>V</kbd>, the same frame drawn by the software rasterizer *beside it*, from one scene
+The code is the state of the engine as of the most recently published lesson (see
+[STATE.md](STATE.md)). Since **Lesson 5.1** it is split in two: `engine/` is a static library
+whose public headers live under `engine/include/engine/`, and `demos/` holds the programs built
+on it. Running the sandbox demo gives you **Module 3's scene, drawn by the GPU** — and, on
+<kbd>V</kbd>, the same frame drawn by the software rasterizer *beside it*, from one scene
 description:
 
 ```sh
-./build/engine            # macOS / Linux
-.\build\Debug\engine.exe  # Windows
+./build/demos/sandbox                  # macOS / Linux
+.\build\demos\Debug\sandbox.exe        # Windows
 ```
 
-**The executable has four modes**, and Lesson 4.8 inverted the default that Lesson 4.2 set up:
+> **Renamed in Lesson 5.1.** This was `build/engine` through Module 4. That name now belongs to
+> the library — to the thing the demo links — which was exactly the confusion the old name was
+> papering over. Anything in Modules 0–4 that says `./build/engine` means
+> `./build/demos/sandbox`.
+
+**The sandbox has five modes**, and Lesson 4.8 inverted the default that Lesson 4.2 set up:
 
 | command | what runs |
 |---|---|
-| `engine` | Module 3's scene on the GPU (Lesson 4.8) |
-| `engine --software` | the CPU renderer, its HUD, and all five demos on <kbd>Tab</kbd> |
-| `engine --probe` | the instrument Lessons 4.2–4.7 were built on |
-| `engine --gpu` | an alias for `--probe`, kept because six lessons tell you to type it |
+| `sandbox` | Module 3's scene on the GPU (Lesson 4.8) |
+| `sandbox --software` | the CPU renderer, its HUD, and all five demos on <kbd>Tab</kbd> |
+| `sandbox --probe` | the instrument Lessons 4.2–4.7 were built on |
+| `sandbox --gpu` | an alias for `--probe`, kept because six lessons tell you to type it |
+| `sandbox --shot FILE` | seven pinned frames to a PPM, no window — Lesson 5.1's characterization test |
+
+There is a second executable, and it is the point of the refactor rather than a demo of anything:
+
+```sh
+./build/demos/hello_cube                  # a lit cube, spinning
+./build/demos/hello_cube --shot cube.ppm  # one frame, no window
+```
+
+`hello_cube` is 160 lines and every symbol in it comes from a header under `<engine/…>`. It is the
+standing acceptance test for the public API: **if a picture cannot be made from outside the
+library, the library does not have an API.**
 
 The software path is **not** deprecated. It is the *reference*: every measured claim in Modules 2
 and 3 was made against it, and a port whose reference has been deleted is a port nobody can check.
 
-Everything below describes `engine --software`, where the HUD lives. Arrow keys orbit the camera,
+Everything below describes `sandbox --software`, where the HUD lives. Arrow keys orbit the camera,
 <kbd>-</kbd>/<kbd>=</kbd> dolly. The keys worth pressing first:
 
 - <kbd>F</kbd> cycles **wireframe → painter's algorithm → z-buffer → depth view**. The HUD counts,
@@ -452,10 +471,22 @@ Third-party, each with an explicit "why we don't hand-roll this" justification: 
 ## Repository layout
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the full tree and the reasoning behind it. The short
-version: Modules 0–4 build a single, library-shaped executable; **Module 5 opens with a refactor
-arc** that splits the tree into `engine/` (static library, public headers under
-`engine/include/engine/`), `demos/`, and later `tools/`. From that point the boundary is law —
-demos and the capstone may only use the public API.
+version, as of **Lesson 5.1**:
+
+```
+engine/include/engine/   the public API — 37 headers, and the only path a demo can name
+engine/src/              private implementation; stb_image stops here
+demos/common/            content shared by demos and verification harnesses
+demos/sandbox/           Lessons 1.8–4.9, on [Tab] and four flags
+demos/hello_cube/        160 lines against the public API — the acceptance test
+tools/                   the editor and asset cooker (Module 8)
+```
+
+**The boundary is law, and it is enforced by the include path rather than by discipline.**
+`target_include_directories(engine PUBLIC include PRIVATE src)` means a demo writing
+`#include "gfx/raster.hpp"` — the spelling every file in this repository used through Module 4 —
+does not compile. Modules 0–4 built a single, library-shaped executable; the shape was already
+right, which is why 57 files moved without one of them changing.
 
 ---
 

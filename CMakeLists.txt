@@ -1,9 +1,18 @@
-# CMakeLists.txt — the engine's build description.
+# CMakeLists.txt — the top of the build.
 #
-# This one file tells CMake how to build the project on Windows, Linux, and
-# macOS, with MSVC, GCC, or Clang, and how to acquire SDL3. You describe the
-# build once here; CMake generates the right native build for whatever machine
-# runs it. This is what Lesson 0.4 builds up, line by line.
+# Lesson 5.1 turned this file inside out. Through Module 4 it described one
+# executable and everything that went into it, which is exactly right for a
+# program. This project is no longer a program: it is a LIBRARY and the programs
+# built on it, and this file's job is now to acquire the dependencies, declare the
+# rules everybody shares, and then get out of the way.
+#
+#     engine/   the library. Public headers under engine/include/engine/.
+#     demos/    executables that link it and may include only those headers.
+#     tools/    (Module 8) the editor and the asset pipeline.
+#
+# Read this file, then engine/CMakeLists.txt, then demos/CMakeLists.txt. Together
+# they are about a hundred lines of actual instruction, and the boundary the whole
+# lesson is about is drawn by three of them.
 
 # 3.24 is our floor: new enough for modern FetchContent behaviour and the
 # target/property model we rely on. Older CMake will refuse to configure, which
@@ -54,9 +63,9 @@ FetchContent_MakeAvailable(SDL3)
 # had to apply to SDL_shadercross for the same reason. A branch name would mean a
 # fresh clone could decode differently from yours.
 #
-# Header-only, so there is nothing to build: we fetch it and add the directory to
-# our include path. `src/gfx/image.cpp` is the single translation unit that
-# defines STB_IMAGE_IMPLEMENTATION.
+# Header-only, so there is nothing to build. Note where it is USED: only
+# engine/src/gfx/image.cpp, and only PRIVATELY (engine/CMakeLists.txt), so the
+# dependency stops at the library boundary and no demo can see it.
 FetchContent_Declare(
     stb
     GIT_REPOSITORY https://github.com/nothings/stb.git
@@ -65,123 +74,43 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(stb)
 
-# ---- Our program -----------------------------------------------------------
-# Every source file is listed by hand. CMake can glob them for you, and you
-# should not let it: a glob is evaluated at configure time, so adding a file
-# leaves the build silently ignoring it until someone reconfigures. An explicit
-# list is one extra line per file and never lies.
-add_executable(engine
-    src/main.cpp
-    src/core/clock.cpp
-    src/core/fixed_step.cpp
-    src/core/input.cpp
-    src/core/profile.cpp
-    src/game/pong.cpp
-    src/gfx/clip.cpp
-    src/gfx/colour.cpp
-    src/gfx/depth_buffer.cpp
-    src/gfx/framebuffer.cpp
-    src/gfx/gpu_buffer.cpp
-    src/gfx/gpu_device.cpp
-    src/gfx/gpu_mesh.cpp
-    src/gfx/gpu_texture.cpp
-    src/gfx/image.cpp
-    src/gfx/gpu_pipeline.cpp
-    src/gfx/gpu_present.cpp
-    src/gfx/gpu_scene.cpp
-    src/gfx/gpu_debug.cpp
-    src/gfx/gpu_shader.cpp
-    src/gfx/mesh.cpp
-    src/gfx/obj.cpp
-    src/gfx/raster.cpp
-    src/gfx/texture.cpp
-)
-
-# Make `src/` a root for our own includes, so a file says
-#     #include "core/input.hpp"
-# from anywhere in the tree — the same spelling regardless of which directory
-# the including file lives in. Relative paths like "../core/input.hpp" break the
-# moment a file moves; a stable include root does not. PRIVATE because nothing
-# links against us: this is a leaf executable, and the setting stops here.
-target_include_directories(engine PRIVATE src ${stb_SOURCE_DIR})
-
-# Link SDL. SDL3::SDL3 is the alias SDL exports for "the SDL library, however it
-# was built"; linking it also pulls in SDL's headers and platform frameworks
-# transitively, so we never name Cocoa or user32 ourselves.
-target_link_libraries(engine PRIVATE SDL3::SDL3)
-
-# ---- Assets ----------------------------------------------------------------
-# Lesson 3.5. The program loads models at runtime, and it finds them with
-# SDL_GetBasePath() — the directory the executable lives in — never with a path
-# relative to the current working directory, which is wherever the user happened
-# to be standing when they launched it. So the assets have to BE there, and
-# putting them there is the build's job.
-#
-# POST_BUILD runs after every successful link, so editing a model and rebuilding
-# is enough; there is no separate "install assets" step to forget.
-#
-# $<TARGET_FILE_DIR:engine> is a GENERATOR EXPRESSION — a value CMake cannot know
-# at configure time and resolves when it writes the build rules. It matters here
-# because multi-config generators (Visual Studio, Xcode) put the binary in
-# Debug/ or Release/ and a hard-coded path would be right in at most one of them.
-add_custom_command(TARGET engine POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-            "${CMAKE_CURRENT_SOURCE_DIR}/assets"
-            "$<TARGET_FILE_DIR:engine>/assets"
-    COMMENT "Copying assets/ next to the executable"
-    VERBATIM)
+# ---- Shared build rules ----------------------------------------------------
+# Two modules, both of ours. EngineHelpers defines the three functions every
+# target calls; Shaders defines the HLSL toolchain and probes it once, here, at
+# configure time.
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+include(EngineHelpers)
+include(Shaders)
 
 # ---- Shaders ---------------------------------------------------------------
 # Lesson 4.3. One HLSL source per stage, compiled to every format this machine's
-# toolchain can produce — plus a JSON reflection file per shader, because
-# SDL_GPUShaderCreateInfo wants four resource counts and guessing them is the
-# first thing SDL_gpu.h's FAQ tells you not to do.
+# toolchain can produce, plus a JSON reflection file per shader.
 #
-# cmake/Shaders.cmake probes the toolchain at configure time rather than assuming
-# it: SDL_shadercross can be built WITHOUT DirectXShaderCompiler, and such a build
-# cannot read HLSL at all. Read its configure-time message; it says which path
-# you got.
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
-include(Shaders)
+# Declared HERE rather than in engine/ or demos/, and the reason is worth a
+# sentence. A compiled shader is not the property of a library (the engine never
+# loads one by name) nor of any single program (three of them want the same
+# scene.frag). It is a build artifact of the repository. Each executable then
+# asks for a copy beside itself with engine_use_shaders().
+add_hlsl_shader(triangle.vert vertex)
+add_hlsl_shader(triangle.frag fragment)
+add_hlsl_shader(textured.vert vertex)
+add_hlsl_shader(textured.frag fragment)
+add_hlsl_shader(mesh.vert vertex)             # Lesson 4.5
+add_hlsl_shader(mesh.frag fragment)           # Lesson 4.5
+add_hlsl_shader(uniform_probe.vert vertex)    # Lesson 4.6 — the instrument
+add_hlsl_shader(uniform_probe.frag fragment)
+add_hlsl_shader(depth_probe.vert vertex)      # Lesson 4.7 — the instrument
+add_hlsl_shader(depth_probe.frag fragment)
+add_hlsl_shader(texture_probe.frag fragment)
+add_hlsl_shader(scene.vert vertex)            # Lesson 4.8 — the ported scene
+add_hlsl_shader(scene.frag fragment)
+add_hlsl_shader(matrix_probe.frag fragment)   # Lesson 4.8 — the instrument
 
-add_hlsl_shader(engine triangle.vert vertex)
-add_hlsl_shader(engine triangle.frag fragment)
-add_hlsl_shader(engine textured.vert vertex)
-add_hlsl_shader(engine textured.frag fragment)
-add_hlsl_shader(engine mesh.vert vertex)      # Lesson 4.5
-add_hlsl_shader(engine mesh.frag fragment)    # Lesson 4.5
-add_hlsl_shader(engine uniform_probe.vert vertex)    # Lesson 4.6 — the instrument
-add_hlsl_shader(engine uniform_probe.frag fragment)
-add_hlsl_shader(engine depth_probe.vert vertex)      # Lesson 4.7 — the instrument
-add_hlsl_shader(engine depth_probe.frag fragment)
-add_hlsl_shader(engine texture_probe.frag fragment)
-add_hlsl_shader(engine scene.vert vertex)          # Lesson 4.8 — the ported scene
-add_hlsl_shader(engine scene.frag fragment)
-add_hlsl_shader(engine matrix_probe.frag fragment)  # Lesson 4.8 — the instrument
-
-# Compiled shaders live beside the executable for the same reason assets do: the
-# program finds them with SDL_GetBasePath(), never relative to the working
-# directory.
-#
-# This copy must not fail when the toolchain was missing and no shader was built.
-# It does not, and the reason is one line in cmake/Shaders.cmake: the output
-# directory is created at configure time, BEFORE the function decides whether it
-# can compile anything, so the worst case here is copying an empty directory. The
-# program then reports the absence at startup — a better error, in a lesson about
-# acquiring a tool, than a build that stops.
-add_custom_command(TARGET engine POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:engine>/shaders"
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-            "${CMAKE_CURRENT_BINARY_DIR}/shaders"
-            "$<TARGET_FILE_DIR:engine>/shaders"
-    COMMENT "Copying compiled shaders next to the executable"
-    VERBATIM)
-
-# Our warning discipline (see cpp-style §9) — applied to OUR target only, never
-# to SDL. Third-party code is compiled with its own flags; holding someone
-# else's library to /W4 just produces noise we cannot act on.
-if(MSVC)
-    target_compile_options(engine PRIVATE /W4 /Zc:__cplusplus)
-else()
-    target_compile_options(engine PRIVATE -Wall -Wextra)
-endif()
+# ---- The project -----------------------------------------------------------
+# ORDER MATTERS, and it is the dependency direction made visible: engine/ knows
+# nothing of demos/ and is added first; demos/ links the engine and is added
+# second. Swap these two lines and the configure fails, because `engine::engine`
+# would not exist yet — which is a build system enforcing an architecture rule,
+# and is the cheapest such enforcement you will ever get.
+add_subdirectory(engine)
+add_subdirectory(demos)
