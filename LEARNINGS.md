@@ -3996,3 +3996,68 @@ must change.
 time the engine gained a file. It now names one include directory and one archive. All five
 earlier harnesses were rebuilt against the new layout and re-run (`ALL PASS`), at a cost of 68
 respelled include directives — real work, and worth counting rather than hiding.
+
+## Course-infrastructure facts (docs/, 2026-08-26)
+
+### `max-height` is a no-op on anything already shorter than it
+
+The whole listing-fold feature is one rule on `.listing pre`, applied unconditionally to all 798
+listings across 50 pages, and it changed only the ~230 that are whole files. The ~560 short
+excerpts clear the bar and render pixel-identically. No markup migration, no builder change, no
+re-stamping. When a retrofit looks like it needs an attribute on every element, check first whether
+the property you want is already inert on the elements you meant to skip.
+
+### The corpus was safe to automate because its shape is bimodal, and that was measured first
+
+Listing lengths: median 9 lines, p75 74, p90 290. The count exceeding a threshold barely moves
+between 24 and 60 lines (233 → 209) — the pages are made of short excerpts *and* whole files, with
+almost nothing between. That measurement is what justified an automatic threshold instead of a
+per-listing opt-in flag. A threshold over a distribution you have not plotted is a guess.
+
+### A clamp that must survive first paint belongs in CSS, not in the page script
+
+`course.js` is a classic `<script>` at end of body, so it runs *after* the browser has painted and
+after it has jumped to any `#anchor`. Collapsing the document there would yank a reader who was
+already positioned. Clamping in CSS happens at parse time and cannot. The script's whole job is to
+*add controls*, and the bottom bar is `position: absolute` while collapsed so even that is free:
+removing every injected bar changes document height by exactly 0 px. Measured end to end, the
+script now moves Lesson 5.1's height by 33 px — one 13-line listing being released.
+
+### `<details>` hides content with `display: none`, which blinds computed-style probes
+
+It was the semantically obvious choice for a collapsible listing and the wrong engineering one:
+`check-page.js` decides `sharedCssApplied` and `wrappedListings` from
+`getComputedStyle('.listing pre')`, and a closed `<details>` returns `rgba(0,0,0,0)` and `normal`
+for a subtree that is perfectly styled. Clipping with `overflow: hidden` keeps every probe honest —
+and keeps the text in the accessibility tree, which is the right trade for a screen reader anyway.
+
+### Decide by line count, not by measuring the box
+
+`textContent.split("\n").length` needs no layout, so it is correct before webfonts settle and
+correct for the one listing in the course nested inside a closed `<details>`
+(`01-07-vectors-2d.html`), where `scrollHeight` and `clientHeight` both read 0 and every
+measurement-based test calls a 400-line file "short".
+
+### A verifier must expand what it is about to measure
+
+`check-page.js` now opens every listing before running the geometry and layout checks. Otherwise a
+clamp hides the very lines that cause a horizontal-overflow or wrapped-listing regression, and the
+suite passes on a broken page. The fold-specific checks run *first*, against the collapsed state a
+reader actually loads — including `clippedWithoutToggle`, which fires en masse if `course.js` fails
+to load at all, exactly when every other signal still looks fine.
+
+### Two vocabularies for one concept will get crossed, so make the checker enumerate them
+
+`.badge` takes `mod`; `.tag` takes `modified`. The builders emitted `class="tag mod"` — right word,
+right-looking source, no matching rule — so 82 badges across 14 pages rendered neutral grey next to
+144 amber ones, for six lessons, without anyone noticing. It was fixed at the emitter rather than
+by aliasing `.tag.mod`, because the alias would have blessed both spellings permanently. The guard
+is three lines: list the modifiers a class actually defines and report anything else.
+
+### `scroll-behavior: smooth` makes fixed-delay anchor tests lie
+
+`course.css` sets it, and lesson pages are tens of thousands of pixels tall. A Playwright check
+that navigates to `#id`, waits 300 ms and measures the heading reads it mid-animation: headings
+measured at y=2091 and y=5014 looked exactly like "content grows after the anchor scroll", which is
+a real failure mode and cost a diagnosis detour. Use `reducedMotion: 'reduce'`, or poll until
+`scrollY` stops moving.

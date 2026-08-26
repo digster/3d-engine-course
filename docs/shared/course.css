@@ -44,6 +44,19 @@
   --code-bar:      #262932;
   --code-text:     #dfe3ec;
   --code-rule:     #363a45;
+  --code-bg-0:     rgba(27, 29, 35, 0);   /* --code-bg at zero alpha, for the fold fade */
+
+  /* Folded listings. The course prints whole files — CLAUDE.md §8 forbids
+     placeholders — so a lesson can carry several thousand lines of code, and
+     Lesson 5.1's demos/sandbox/main.cpp alone is 5,727 of them. Long listings
+     are therefore clamped to a peek and expanded on demand.
+
+     --listing-line MUST track the two values set on `.listing pre code` below.
+     They are repeated here rather than shared because custom properties cannot
+     read another rule's computed font-size; if you retune the listing type,
+     retune this with it or every peek silently gains or loses lines. */
+  --listing-peek-lines: 12;
+  --listing-line:  calc(0.79rem * 1.62);  /* one code line box: font-size x line-height */
 
   /* Syntax tokens */
   --tok-comment:   #6d7789;
@@ -499,6 +512,24 @@ blockquote {
   padding: 0.9rem 1rem;
   overflow-x: auto;
   background: var(--code-bg);
+
+  /* The fold, and the reason it needs no markup change anywhere: max-height is
+     a no-op on anything already shorter than it. Roughly 560 of the course's
+     798 listings are short excerpts that clear this bar and render exactly as
+     they always have; only the ~230 whole-file listings are clipped.
+
+     It has to be CSS rather than JS because this script is a classic <script>
+     at end of body — by the time it runs the browser has already painted a
+     5,727-line listing, and collapsing the document height at that point
+     breaks anchor jumps and scroll restoration. Clamping at parse time cannot.
+
+     0.9rem x 2 is this rule's own vertical padding; the 0.7rem on top of that
+     clears the 9px horizontal scrollbar, so a listing exactly at the peek that
+     also scrolls sideways is not clipped by a hairline.
+
+     No JS? overflow-x:auto already computes overflow-y to auto, so a long
+     listing degrades to an internal scrollbox. Clipped, never unreachable. */
+  max-height: calc(var(--listing-peek-lines) * var(--listing-line) + 1.8rem + 0.7rem);
 }
 .listing pre code {
   font-family: var(--font-mono);
@@ -529,6 +560,89 @@ blockquote {
 
 /* Shell transcripts get a lighter treatment than source files */
 .listing.shell figcaption .path::before { content: "$ "; opacity: 0.6; }
+
+/* ---- Folding long listings ----------------------------------------------
+   Three states, set by the shared script:
+     .is-short       code fits the peek — release the clamp, no controls
+     .is-collapsed   clipped to the peek, both controls read "expand"
+     .is-open        released, both controls read "collapse"
+   A listing with none of these has not been reached by JS, and the CSS clamp
+   above is holding it as a plain scrollbox. That is the intended fallback. */
+.listing.is-short pre,
+.listing.is-open pre  { max-height: none; }
+
+/* Once a real control exists, the inner scrollbar is a liability: the wheel
+   stops scrolling the page the moment the pointer crosses a listing. */
+.listing.is-collapsed pre { overflow-y: hidden; }
+
+/* Anchors the absolutely-positioned bar below. */
+.listing.is-collapsible { position: relative; }
+
+/* The caption-bar chevron. figcaption is display:flex with .lang carrying
+   margin-left:auto, so appending this after .lang parks it at the far right. */
+.listing-fold {
+  font: inherit;
+  line-height: 1;
+  background: none;
+  border: 0;
+  color: #aeb6c4;
+  padding: 0.1rem 0.2rem;
+  margin-left: 0.1rem;
+  cursor: pointer;
+  opacity: 0.75;
+}
+.listing-fold:hover { opacity: 1; color: #dfe3ec; }
+.listing-fold:focus-visible,
+.listing-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* The bottom bar. Absolute while collapsed so that adding it costs ZERO
+   layout shift — the document height after the script runs is the one the
+   CSS clamp already painted. Static once open, so it cannot sit on top of
+   the last lines of the file. */
+.listing-toggle {
+  display: block;
+  width: 100%;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  text-align: left;
+  padding: 0.45rem 0.85rem;
+  background: var(--code-bar);
+  color: #aeb6c4;
+  border: 0;
+  border-top: 1px solid var(--code-rule);
+  cursor: pointer;
+}
+.listing-toggle:hover { color: #dfe3ec; }
+.listing-toggle .chev { display: inline-block; width: 1em; opacity: 0.8; }
+.listing.is-collapsed .listing-toggle {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+}
+
+/* The fade, hung above the bar so the clip reads as "continues" rather than
+   as "ends here". pointer-events:none keeps the code under it selectable. */
+.listing.is-collapsed .listing-toggle::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  height: 3.2rem;
+  background: linear-gradient(to bottom, var(--code-bg-0), var(--code-bg));
+  pointer-events: none;
+}
+
+/* The page-level control, injected into the masthead by the shared script.
+   Carries .theme-toggle too, so it inherits that button's look exactly. */
+.listings-toggle[aria-pressed="true"] {
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
 
 /* ---- Figures & diagrams -------------------------------------------------- */
 figure.dia {
@@ -894,6 +1008,10 @@ td code { font-size: 0.82em; }
   .masthead, .lesson-nav, .theme-toggle { display: none; }
   body { background: #fff; color: #000; font-size: 11pt; }
   .listing { break-inside: avoid; }
+  /* A printed lesson that lost its code would be a far worse regression than a
+     long one. Release every clamp and drop every control. */
+  .listing pre { max-height: none !important; overflow: visible !important; }
+  .listing-toggle, .listing-fold, .listings-toggle { display: none; }
   figure.dia { break-inside: avoid; }
   a::after { content: " (" attr(href) ")"; font-size: 0.7em; color: #666; }
 }

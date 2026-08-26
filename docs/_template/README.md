@@ -135,6 +135,30 @@ execute page content.
 It lives in `docs/shared/course.js`, so **add a keyword by editing that file**. There is one copy
 and every page links it; the change is live everywhere the moment you save.
 
+### Folding
+
+Listings longer than **14 lines fold automatically**, showing a 12-line peek above a
+"Show all N lines" bar plus a chevron in the caption. **Author nothing — the markup above is
+unchanged.** The clamp is a single `max-height` on `.listing pre`, and because `max-height` is a
+no-op on anything already shorter than it, roughly 560 of the course's 798 listings are untouched
+and only the ~230 whole-file ones fold. That is also why the threshold is safe to automate: listing
+lengths are sharply bimodal (median 9 lines, p75 74), so almost nothing sits near the boundary.
+
+- **Opt a listing out** with `class="listing nofold"` when the prose walks it line by line.
+- **Retune the peek** with `--listing-peek-lines` in `course.css`. If you also change the listing
+  font-size or line-height, update `--listing-line` beside it — a custom property cannot read
+  another rule's computed type, so the two are coupled by hand and commented as such.
+- The clamp is **CSS, not JS, and that is load-bearing**: `course.js` is a classic script at end of
+  body, so it runs after the browser has painted. Clamping there would shrink the document under a
+  reader who had already been scrolled to an anchor. The script only *adds controls*, and the
+  bottom bar is `position: absolute` while collapsed so even that costs zero layout shift.
+- **Nothing is ever unreachable.** With JS disabled no controls appear, but the clamped listing is
+  an internal scrollbox. In print the clamp is released and the controls are hidden.
+- Find-in-page can match text inside a clipped listing but cannot scroll to it, so the masthead
+  carries an **Expand all** button (injected by the script, not authored) that opens every listing
+  and remembers the choice in `localStorage` under `engine-course-listings`. A page can also be
+  linked pre-opened with `#expand-all`.
+
 Two things to know if you touch its word lists:
 
 - `CPP_KEYWORDS` is consulted **before** `CPP_TYPES`, so a word in both renders as a keyword.
@@ -313,6 +337,14 @@ there:
 | SVG **text-vs-shape** | A label sitting on a line or curve | 1.3, 2.1 |
 | **Shared-asset positive signal** (`course.css` in effect, highlighter ran) | A wrong `../shared/…` prefix — an unstyled, inert page that throws nothing | CSS extraction |
 | Horizontal page scroll, wrapped listings | Layout regressions | — |
+| **Clipped without a toggle** | A folded listing the script never reached — code silently unreachable on a page that looks fine. Fires en masse if `course.js` fails to load at all | fold |
+| Listing control ARIA | A toggle with no `aria-expanded`, or an `aria-controls` pointing at nothing | fold |
+| **Badge vocabulary** (`.tag` takes `new`/`modified` only) | `class="tag mod"` — reads right, renders the right word, matches no rule, goes silently grey. 82 of them shipped | 3.7–5.1 |
+
+Note the checker **expands every listing before it measures anything**. Otherwise a clamp could
+hide the very lines causing a horizontal-overflow or wrapped-listing regression, and the layout
+checks would pass on a page that is actually broken. The fold checks above run first, against the
+collapsed state a reader really loads.
 
 Three traps are baked into that script, all of which cost real time before they were understood:
 

@@ -1,8 +1,8 @@
 /* ==========================================================================
    Build a Professional 3D Game Engine — shared page script
    ==========================================================================
-   Theme toggle, table-of-contents scrollspy, and the syntax highlighter, for
-   every page in docs/. Linked (not inlined) between each page's SHARED-SCRIPT
+   Theme toggle, syntax highlighter, and the listing fold, for every page in
+   docs/. Linked (not inlined) between each page's SHARED-SCRIPT
    markers, immediately before the two KaTeX CDN tags — which stay inline in the
    pages because they carry SRI hashes and an inline onload handler.
 
@@ -153,4 +153,146 @@
       }
     }
   });
+
+  /* ---- Folding long listings -----------------------------------------------
+     The course prints whole files, so a lesson can carry thousands of lines of
+     code between two paragraphs of prose — Lesson 5.1 has 9,444 across 34
+     listings, one of which is 5,727 on its own. Long listings are clamped to a
+     peek and expanded on demand.
+
+     The clamp itself is CSS (`max-height` on `.listing pre`) and is already in
+     force before this file runs. That is deliberate and load-bearing: this is a
+     classic script at end of body, so by the time it executes the browser has
+     painted the full-height page, and shrinking the document here would break
+     anchor jumps and scroll restoration. Everything below is enhancement on top
+     of a page that is already correctly clipped.
+
+     Runs AFTER the highlighter, which rewrites each <code>'s innerHTML.
+     -------------------------------------------------------------------------- */
+  var LISTINGS_KEY = "engine-course-listings";
+
+  // Two lines of slack over --listing-peek-lines (12). A 13-line listing loses a
+  // hairline at most, and a "Show all 13 lines" bar on it would cost more space
+  // than it could ever save.
+  var FOLD_THRESHOLD = 14;
+
+  var folds = [];
+
+  // Sole mutator of a listing's state, so the two controls can never disagree.
+  function setOpen(entry, open, keepInView) {
+    entry.fig.classList.toggle("is-collapsed", !open);
+    entry.fig.classList.toggle("is-open", open);
+
+    entry.buttons.forEach(function (b) { b.setAttribute("aria-expanded", String(open)); });
+    entry.chev.setAttribute("aria-label",
+      (open ? "Collapse " : "Expand ") + entry.path);
+
+    // Rebuilt from nodes rather than innerHTML — same rule the highlighter
+    // follows, so page content can never be interpreted as markup.
+    entry.bar.textContent = "";
+    var glyph = document.createElement("span");
+    glyph.className = "chev";
+    glyph.textContent = open ? "\u25b4" : "\u25be";
+    entry.bar.appendChild(glyph);
+    entry.bar.appendChild(document.createTextNode(
+      open ? "Collapse" : "Show all " + entry.lines + " lines"));
+    entry.chev.textContent = open ? "\u25b4" : "\u25be";
+
+    // Collapsing a listing the reader has already scrolled past removes
+    // thousands of pixels from ABOVE the viewport, which throws them down the
+    // page. Pull the listing back into view instead.
+    if (keepInView && !open && entry.fig.getBoundingClientRect().top < 0) {
+      entry.fig.scrollIntoView({ block: "nearest" });
+    }
+  }
+
+  document.querySelectorAll(".listing").forEach(function (fig, i) {
+    if (fig.classList.contains("nofold")) { return; }   // author opt-out
+    var pre = fig.querySelector("pre");
+    var code = pre && pre.querySelector("code");
+    if (!pre || !code) { return; }
+
+    // Decide by LINE COUNT, never by measuring. textContent needs no layout, so
+    // this is correct before webfonts settle — and correct for a listing inside
+    // a closed <details>, where scrollHeight and clientHeight both read 0 and
+    // any measurement would call a 400-line file "short".
+    var lines = code.textContent.replace(/\n$/, "").split("\n").length;
+    if (lines <= FOLD_THRESHOLD) { fig.classList.add("is-short"); return; }
+
+    if (!pre.id) { pre.id = "listing-body-" + i; }
+    var pathEl = fig.querySelector(".path");
+
+    var chev = document.createElement("button");
+    chev.type = "button";
+    chev.className = "listing-fold";
+    chev.setAttribute("aria-controls", pre.id);
+
+    var bar = document.createElement("button");
+    bar.type = "button";
+    bar.className = "listing-toggle";
+    bar.setAttribute("aria-controls", pre.id);
+
+    var cap = fig.querySelector("figcaption");
+    if (cap) { cap.appendChild(chev); }
+    fig.appendChild(bar);
+    fig.classList.add("is-collapsible");
+
+    var entry = {
+      fig: fig, chev: chev, bar: bar, buttons: [chev, bar],
+      lines: lines.toLocaleString(),
+      path: pathEl ? pathEl.textContent.trim() : "listing"
+    };
+    folds.push(entry);
+
+    entry.buttons.forEach(function (b) {
+      b.addEventListener("click", function () {
+        setOpen(entry, entry.fig.classList.contains("is-collapsed"), true);
+      });
+    });
+
+    setOpen(entry, false, false);
+  });
+
+  /* Page-level escape hatch. Find-in-page can match text inside a clipped
+     listing but cannot scroll to it, so a reader searching a whole lesson needs
+     one click that opens everything. Injected next to the theme toggle rather
+     than authored into markup — the masthead is hand-copied into all 50 pages
+     and the template, and injection retrofits every one of them. */
+  if (folds.length) {
+    var themeBtn = document.getElementById("theme-toggle");
+    var allBtn = document.createElement("button");
+    allBtn.type = "button";
+    allBtn.className = "theme-toggle listings-toggle";
+    allBtn.setAttribute("aria-label", "Expand all code listings on this page");
+
+    function setAll(open, persist) {
+      folds.forEach(function (e) { setOpen(e, open, false); });
+      allBtn.setAttribute("aria-pressed", String(open));
+      allBtn.textContent = open ? "Collapse all" : "Expand all";
+      if (persist) {
+        try {
+          if (open) { localStorage.setItem(LISTINGS_KEY, "expanded"); }
+          else { localStorage.removeItem(LISTINGS_KEY); }
+        } catch (e) { /* private mode — the choice just does not outlive the page */ }
+      }
+    }
+
+    allBtn.addEventListener("click", function () {
+      setAll(allBtn.getAttribute("aria-pressed") !== "true", true);
+    });
+
+    if (themeBtn && themeBtn.parentNode) {
+      themeBtn.parentNode.insertBefore(allBtn, themeBtn);
+    }
+
+    // Honour a persisted preference, and #expand-all for linking someone
+    // straight to a fully-open page. Only the masthead button writes the key —
+    // per-listing toggles stay ephemeral, or reading one long file would
+    // silently reconfigure the whole course.
+    var wantOpen = location.hash === "#expand-all";
+    if (!wantOpen) {
+      try { wantOpen = localStorage.getItem(LISTINGS_KEY) === "expanded"; } catch (e) {}
+    }
+    setAll(wantOpen, false);
+  }
 })();

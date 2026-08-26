@@ -1860,3 +1860,24 @@ Measured rather than asserted: private-source rebuild 0.42 s against a public he
 preprocessed volume. §7 names the four things still on the wrong side of the line and which lesson
 pays each. Module 4 closed; `index.html`, `conventions.html` (new §10b) and `math-toolbox.html`
 reissued at the boundary.
+
+---
+
+## 2026-08-26 — Collapsible code listings
+
+> some of the inline code files can be long, so they should have the ability to be collapsible and
+> collapsed by default.
+
+Answered two design questions before building: a **12-line peek** rather than a fully-hidden
+listing (the file-header comments in this codebase are real teaching content), and an
+**Expand all** control persisted in `localStorage`, because find-in-page can match text inside a
+clipped listing but cannot scroll to it.
+
+Then, on seeing the out-of-scope badge bug reported at the end of the plan:
+
+> add the out of scope change as well in a separate commit.
+
+Shipped as two commits: the `.tag mod` → `.tag modified` badge fix plus its regression guard, then
+the fold itself. No lesson prose was touched and no lesson was regenerated — the fold is one
+`max-height` rule in the shared sheet, which is a no-op on the ~560 listings short enough to
+ignore it.

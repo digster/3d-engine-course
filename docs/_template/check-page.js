@@ -7,7 +7,7 @@
 // Returns an object with one key per check. Every array should be empty and
 // every count should match. See docs/_template/README.md §13.
 //
-// Why each check exists — all three earned their place by catching something:
+// Why each check exists — every one earned its place by catching something:
 //
 //   1. HIGHLIGHTER ROUND-TRIP. The syntax highlighter rewrites innerHTML of
 //      every listing. If it ever mangles one, the page still renders and the
@@ -47,11 +47,65 @@
 //      sheet that loaded and applied correctly — the naive probe reports a
 //      perfectly good page as broken. Computed style is the honest signal.
 //
+//   5. BADGE VOCABULARY. Listing captions use .tag with the modifier
+//      `modified`; manifest tables use .badge with `mod`. Crossing the two
+//      produces `class="tag mod"`, which reads correctly, renders the correct
+//      word, and matches no rule — the badge goes silently grey instead of
+//      amber. 82 of them shipped across 14 pages that way.
+//
+//   6. LISTING FOLD. Long listings are clamped by CSS and expanded by a
+//      control the shared script adds. If the script ever fails to reach a
+//      listing, the clamp still applies and the code becomes unreachable on a
+//      page that looks perfectly normal. Check that nothing is clipped without
+//      a way to open it, and that both controls carry working ARIA.
+//
 // What none of these catch: a label on a filled <rect>, and a line drawn
 // through the wrong row of a stacked diagram. Look at the rendered figure.
 
 (function checkPage() {
   const out = {};
+
+  // ---- 6. LISTING FOLD ----------------------------------------------------
+  // Measured FIRST, while the page is still in the state a reader actually
+  // loads it in — everything below this block runs against a fully expanded
+  // page instead (see the expand-all at the end of this section).
+  out.collapsibleListings = document.querySelectorAll('.listing.is-collapsible').length;
+  out.clippedWithoutToggle = [];
+  out.listingA11y = [];
+
+  document.querySelectorAll('.listing').forEach(fig => {
+    const pre = fig.querySelector('pre');
+    if (!pre) { return; }
+    const path = fig.querySelector('.path')?.textContent || '(unknown)';
+
+    // THE failure mode this feature can introduce: content taller than its box
+    // with no control to reveal it. Silently unreachable code, on a page that
+    // looks completely fine. Note this also fires en masse if course.js failed
+    // to load at all — the CSS clamp is in force but nothing ever added a
+    // toggle — which is exactly the right alarm for that too.
+    if (pre.scrollHeight > pre.clientHeight + 2 &&
+        fig.querySelectorAll('.listing-toggle, .listing-fold').length === 0) {
+      out.clippedWithoutToggle.push(path);
+    }
+
+    fig.querySelectorAll('.listing-toggle, .listing-fold').forEach(b => {
+      const controls = b.getAttribute('aria-controls');
+      if (b.getAttribute('aria-expanded') === null) {
+        out.listingA11y.push({ path, why: 'no aria-expanded' });
+      } else if (!controls || !document.getElementById(controls)) {
+        out.listingA11y.push({ path, why: 'aria-controls unresolved: ' + controls });
+      }
+    });
+  });
+
+  // Expand everything before measuring anything else. Every check below then
+  // sees the page exactly as it did before folding existed — and, crucially,
+  // a clamp can never mask a horizontal-overflow or wrapped-listing regression
+  // by hiding the offending lines.
+  document.querySelectorAll('.listing.is-collapsed').forEach(fig => {
+    fig.classList.remove('is-collapsed');
+    fig.classList.add('is-open');
+  });
 
   // ---- 3. SVG geometry ----------------------------------------------------
   const spill = [], overlap = [], onShape = [];
@@ -189,6 +243,29 @@
   out.katexScriptTags = document.querySelectorAll('script[src*="katex"]').length;
   out.katexOk = out.katexRendered === out.eqBlocks && out.katexScriptTags === 2;
 
+  // ---- 5. BADGE VOCABULARY ------------------------------------------------
+  // The sheet carries two parallel badge systems and they are easy to cross:
+  // manifest tables use .badge with `mod`, listing captions use .tag with
+  // `modified`. Writing `class="tag mod"` reads perfectly in the source, renders
+  // the right word, and matches no rule at all — so the badge silently falls
+  // back to the neutral grey of a bare .tag instead of amber. That shipped in 82
+  // badges across 14 pages before anyone noticed, because nothing about it looks
+  // wrong until you see a grey and an amber "modified" in the same page.
+  //
+  // Cheapest possible guard: enumerate the modifiers .tag actually defines.
+  const TAG_MODIFIERS = ['new', 'modified'];
+  out.unknownTagClasses = [];
+  document.querySelectorAll('.listing figcaption .tag').forEach(el => {
+    [...el.classList].forEach(cls => {
+      if (cls !== 'tag' && !TAG_MODIFIERS.includes(cls)) {
+        out.unknownTagClasses.push({
+          cls,
+          path: el.closest('figure')?.querySelector('.path')?.textContent || '(unknown)'
+        });
+      }
+    });
+  });
+
   // ---- layout -------------------------------------------------------------
   out.pageScrollsX =
     document.documentElement.scrollWidth > document.documentElement.clientWidth + 1;
@@ -210,7 +287,9 @@
     }
     out.pass = spill.length === 0 && overlap.length === 0 && onShape.length === 0
             && out.corruptedListings.length === 0 && out.katexOk && out.sharedOk
-            && !out.pageScrollsX && out.wrappedListings === 0;
+            && !out.pageScrollsX && out.wrappedListings === 0
+            && out.unknownTagClasses.length === 0
+            && out.clippedWithoutToggle.length === 0 && out.listingA11y.length === 0;
     return out;
   });
 })();
