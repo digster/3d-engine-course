@@ -890,7 +890,7 @@ figure.dia svg .lobe-p  { stroke-linejoin: round; }
   <figure class="listing">
     <figcaption>
       <span class="path">src/gfx/raster.hpp — added to <code>vertex</code></span>
-      <span class="tag mod">modified</span>
+      <span class="tag modified">modified</span>
       <span class="lang" data-lang="cpp">C++</span>
     </figcaption>
     <pre><code class="lang-cpp">    vec3 normal{};   ///&lt; world-space surface normal at this corner
@@ -950,7 +950,7 @@ figure.dia svg .lobe-p  { stroke-linejoin: round; }
   <figure class="listing">
     <figcaption>
       <span class="path">src/gfx/clip.cpp — added to <code>lerp</code></span>
-      <span class="tag mod">modified</span>
+      <span class="tag modified">modified</span>
       <span class="lang" data-lang="cpp">C++</span>
     </figcaption>
     <pre><code class="lang-cpp">    out.normal = a.normal + (b.normal - a.normal) * t;
@@ -975,7 +975,7 @@ figure.dia svg .lobe-p  { stroke-linejoin: round; }
   <figure class="listing">
     <figcaption>
       <span class="path">src/gfx/raster.cpp — the new branch</span>
-      <span class="tag mod">modified</span>
+      <span class="tag modified">modified</span>
       <span class="lang" data-lang="cpp">C++</span>
     </figcaption>
     <pre><code class="lang-cpp">const vec3 n{(f0 * pn0.x + f1 * pn1.x + f2 * pn2.x) * w_recip,
@@ -1025,7 +1025,7 @@ row[x] = to_encoded(shade(albedo, n, style.eye - p,
   <figure class="listing">
     <figcaption>
       <span class="path">src/gfx/raster.cpp — the effective blend space</span>
-      <span class="tag mod">modified</span>
+      <span class="tag modified">modified</span>
       <span class="lang" data-lang="cpp">C++</span>
     </figcaption>
     <pre><code class="lang-cpp">const bool lit = (style.shade == shading::lit) &amp;&amp; (style.lights != nullptr);
@@ -1095,7 +1095,7 @@ const blend_space space = lit ? blend_space::linear : style.space;</code></pre>
   <figure class="listing">
     <figcaption>
       <span class="path">src/main.cpp — <code>draw_triangles</code></span>
-      <span class="tag mod">modified</span>
+      <span class="tag modified">modified</span>
       <span class="lang" data-lang="cpp">C++</span>
     </figcaption>
     <pre><code class="lang-cpp">style.surface = t.surface;
@@ -1138,7 +1138,7 @@ engine::fill_triangle(fb, depth, t.v[0], t.v[1], t.v[2], style);</code></pre>
   <figure class="listing">
     <figcaption>
       <span class="path">src/main.cpp — the corrected rule</span>
-      <span class="tag mod">modified</span>
+      <span class="tag modified">modified</span>
       <span class="lang" data-lang="cpp">C++</span>
     </figcaption>
     <pre><code class="lang-cpp">[[nodiscard]] bool is_degenerate(normal_source n, shade_eval e, engine::specular_model m)
@@ -1165,7 +1165,7 @@ engine::fill_triangle(fb, depth, t.v[0], t.v[1], t.v[2], style);</code></pre>
   <figure class="listing">
     <figcaption>
       <span class="path">src/main.cpp — timing the fill</span>
-      <span class="tag mod">modified</span>
+      <span class="tag modified">modified</span>
       <span class="lang" data-lang="cpp">C++</span>
     </figcaption>
     <pre><code class="lang-cpp">const Uint64 fill_t0 = SDL_GetTicksNS();
@@ -1344,7 +1344,7 @@ shade_ns = (shade_ns == 0.0) ? fill_ns : shade_ns * 0.9 + fill_ns * 0.1;</code><
   <figure class="listing">
     <figcaption>
       <span class="path">src/gfx/clip.hpp</span>
-      <span class="tag mod">modified</span>
+      <span class="tag modified">modified</span>
       <span class="lang" data-lang="cpp">C++</span>
     </figcaption>
     <pre><code class="lang-cpp">// src/gfx/clip.hpp — cutting geometry against the near plane, before the divide.
@@ -1594,7 +1594,7 @@ inline constexpr std::size_t k_clip_max_vertices = 4;
   <figure class="listing">
     <figcaption>
       <span class="path">src/gfx/clip.cpp</span>
-      <span class="tag mod">modified</span>
+      <span class="tag modified">modified</span>
       <span class="lang" data-lang="cpp">C++</span>
     </figcaption>
     <pre><code class="lang-cpp">// src/gfx/clip.cpp — Sutherland–Hodgman against one plane, and what it costs.
@@ -1735,7 +1735,7 @@ std::size_t clip_polygon_near(std::span&lt;const clip_vertex&gt; in, std::span&l
   <figure class="listing">
     <figcaption>
       <span class="path">src/gfx/raster.hpp</span>
-      <span class="tag mod">modified</span>
+      <span class="tag modified">modified</span>
       <span class="lang" data-lang="cpp">C++</span>
     </figcaption>
     <pre><code class="lang-cpp">// src/gfx/raster.hpp — turning shapes into pixels.
@@ -2301,7 +2301,7 @@ void draw_triangle(framebuffer&amp; fb,
   <figure class="listing">
     <figcaption>
       <span class="path">src/gfx/raster.cpp</span>
-      <span class="tag mod">modified</span>
+      <span class="tag modified">modified</span>
       <span class="lang" data-lang="cpp">C++</span>
     </figcaption>
     <pre><code class="lang-cpp">// src/gfx/raster.cpp — the software rasterizer&#x27;s implementation.
@@ -3041,7 +3041,7 @@ void draw_triangle(framebuffer&amp; fb,
   <figure class="listing">
     <figcaption>
       <span class="path">src/main.cpp</span>
-      <span class="tag mod">modified</span>
+      <span class="tag modified">modified</span>
       <span class="lang" data-lang="cpp">C++</span>
     </figcaption>
     <pre><code class="lang-cpp">// src/main.cpp — the engine&#x27;s entry point.

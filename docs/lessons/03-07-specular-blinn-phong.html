@@ -1322,7 +1322,7 @@ dot(n,h) &lt;= 0 — Blinn cut off — for 0 of them (0.0%)
   <figure class="listing">
     <figcaption>
       <span class="path">src/math/vec3.hpp — added</span>
-      <span class="tag mod">modified</span>
+      <span class="tag modified">modified</span>
       <span class="lang" data-lang="cpp">C++</span>
     </figcaption>
     <pre><code class="lang-cpp">[[nodiscard]] constexpr vec3 reflect(vec3 v, vec3 n)
@@ -1338,7 +1338,7 @@ dot(n,h) &lt;= 0 — Blinn cut off — for 0 of them (0.0%)
   <figure class="listing">
     <figcaption>
       <span class="path">src/gfx/light.hpp — added</span>
-      <span class="tag mod">modified</span>
+      <span class="tag modified">modified</span>
       <span class="lang" data-lang="cpp">C++</span>
     </figcaption>
     <pre><code class="lang-cpp">[[nodiscard]] constexpr vec3 mirror_direction(vec3 normal_unit, vec3 to_light_unit)
@@ -1365,7 +1365,7 @@ dot(n,h) &lt;= 0 — Blinn cut off — for 0 of them (0.0%)
   <figure class="listing">
     <figcaption>
       <span class="path">src/gfx/light.hpp — added</span>
-      <span class="tag mod">modified</span>
+      <span class="tag modified">modified</span>
       <span class="lang" data-lang="cpp">C++</span>
     </figcaption>
     <pre><code class="lang-cpp">[[nodiscard]] inline float phong_term(vec3 normal_unit, vec3 to_light_unit,
@@ -1406,7 +1406,7 @@ dot(n,h) &lt;= 0 — Blinn cut off — for 0 of them (0.0%)
   <figure class="listing">
     <figcaption>
       <span class="path">src/gfx/light.hpp — added</span>
-      <span class="tag mod">modified</span>
+      <span class="tag modified">modified</span>
       <span class="lang" data-lang="cpp">C++</span>
     </figcaption>
     <pre><code class="lang-cpp">[[nodiscard]] inline float blinn_term(vec3 normal_unit, vec3 to_light_unit,
@@ -1440,7 +1440,7 @@ dot(n,h) &lt;= 0 — Blinn cut off — for 0 of them (0.0%)
   <figure class="listing">
     <figcaption>
       <span class="path">src/gfx/light.hpp — added</span>
-      <span class="tag mod">modified</span>
+      <span class="tag modified">modified</span>
       <span class="lang" data-lang="cpp">C++</span>
     </figcaption>
     <pre><code class="lang-cpp">struct specular
@@ -1498,7 +1498,7 @@ dot(n,h) &lt;= 0 — Blinn cut off — for 0 of them (0.0%)
   <figure class="listing">
     <figcaption>
       <span class="path">src/gfx/light.hpp — changed signature</span>
-      <span class="tag mod">modified</span>
+      <span class="tag modified">modified</span>
       <span class="lang" data-lang="cpp">C++</span>
     </figcaption>
     <pre><code class="lang-cpp">[[nodiscard]] inline linear_rgb shade(linear_rgb albedo, vec3 normal, vec3 to_eye,
@@ -1527,7 +1527,7 @@ dot(n,h) &lt;= 0 — Blinn cut off — for 0 of them (0.0%)
   <figure class="listing">
     <figcaption>
       <span class="path">src/gfx/light.hpp — the body</span>
-      <span class="tag mod">modified</span>
+      <span class="tag modified">modified</span>
       <span class="lang" data-lang="cpp">C++</span>
     </figcaption>
     <pre><code class="lang-cpp">    const vec3 n = normalised_or(normal, vec3{0.0f, 0.0f, 0.0f});
@@ -1613,7 +1613,7 @@ view_pos.push_back(engine::xyz(view_from_model
   <figure class="listing">
     <figcaption>
       <span class="path">src/main.cpp — as of Lesson 3.7</span>
-      <span class="tag mod">modified</span>
+      <span class="tag modified">modified</span>
       <span class="lang" data-lang="cpp">C++</span>
     </figcaption>
     <pre><code class="lang-cpp">world_pos.push_back(engine::xyz(world_from_model
@@ -1673,7 +1673,7 @@ clip_pos.push_back(to_clip(view_pos.back(), pr.proj));</code></pre>
   <figure class="listing">
     <figcaption>
       <span class="path">src/main.cpp — added</span>
-      <span class="tag mod">modified</span>
+      <span class="tag modified">modified</span>
       <span class="lang" data-lang="cpp">C++</span>
     </figcaption>
     <pre><code class="lang-cpp">[[nodiscard]] float matched_shininess(engine::specular_model from, float shininess)
@@ -2028,7 +2028,7 @@ clip_pos.push_back(to_clip(view_pos.back(), pr.proj));</code></pre>
   <figure class="listing">
     <figcaption>
       <span class="path">src/math/vec3.hpp</span>
-      <span class="tag mod">modified</span>
+      <span class="tag modified">modified</span>
       <span class="lang" data-lang="cpp">C++</span>
     </figcaption>
     <pre><code class="lang-cpp">// src/math/vec3.hpp — the same arrow, one dimension wider.
@@ -2196,7 +2196,7 @@ constexpr vec3&amp; operator/=(vec3&amp; v, float s) { v.x /= s; v.y /= s; v.z /
   <figure class="listing">
     <figcaption>
       <span class="path">src/gfx/light.hpp</span>
-      <span class="tag mod">modified</span>
+      <span class="tag modified">modified</span>
       <span class="lang" data-lang="cpp">C++</span>
     </figcaption>
     <pre><code class="lang-cpp">// src/gfx/light.hpp — the first light in the engine.
@@ -2550,7 +2550,7 @@ struct specular
   <figure class="listing">
     <figcaption>
       <span class="path">src/main.cpp</span>
-      <span class="tag mod">modified</span>
+      <span class="tag modified">modified</span>
       <span class="lang" data-lang="cpp">C++</span>
     </figcaption>
     <pre><code class="lang-cpp">// src/main.cpp — the engine&#x27;s entry point.
