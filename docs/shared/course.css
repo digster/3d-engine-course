@@ -506,6 +506,14 @@ blockquote {
 .listing figcaption .tag.modified { background: #453a1c; color: #e0be74; }
 .listing figcaption .lang { margin-left: auto; opacity: 0.65; }
 
+/* Every <pre> scrolls, not just the ones inside a listing. Transcripts inside
+   callouts and .worked boxes are bare <pre> blocks with no .listing wrapper, and
+   without this they had `overflow-x: visible` — a 677px compiler error spilling
+   out of a 302px column and dragging the whole page into horizontal scroll at
+   390px. Both `.listing pre` and `.state pre` restate this; harmless, and it
+   keeps each rule readable on its own. */
+pre { overflow-x: auto; }
+
 /* Horizontal scroll — NEVER wrap. Wrapped code lies about its structure. */
 .listing pre {
   margin: 0;
@@ -642,6 +650,25 @@ blockquote {
 .listings-toggle[aria-pressed="true"] {
   border-color: var(--accent);
   color: var(--accent-text);
+}
+
+/* Hand-aligned numeric walkthroughs in prose — the columns lining up IS the
+   teaching content. Authored since Lesson 3.3 but never given a rule, so all 16
+   of them rendered in the body serif at 18px: no alignment, and wide enough to
+   push the page sideways. Note `figure.dia svg .mono` above is a DIFFERENT
+   class in a different context; it only sets the family.
+
+   nowrap, not `pre`: these blocks break their lines with <br> and pad columns
+   with &nbsp;, so whitespace must still collapse — `white-space: pre` would
+   render the source's own indentation. nowrap keeps the collapse, refuses to
+   re-wrap a numeric column, and lets overflow-x scroll it on a narrow screen,
+   which is the same bargain every listing in the course makes. */
+p.mono {
+  font-family: var(--font-mono);
+  font-size: 0.79rem;
+  line-height: 1.75;
+  white-space: nowrap;
+  overflow-x: auto;
 }
 
 /* ---- Figures & diagrams -------------------------------------------------- */
@@ -1010,7 +1037,8 @@ td code { font-size: 0.82em; }
   .listing { break-inside: avoid; }
   /* A printed lesson that lost its code would be a far worse regression than a
      long one. Release every clamp and drop every control. */
-  .listing pre { max-height: none !important; overflow: visible !important; }
+  pre, p.mono { overflow: visible !important; }
+  .listing pre { max-height: none !important; }
   .listing-toggle, .listing-fold, .listings-toggle { display: none; }
   figure.dia { break-inside: avoid; }
   a::after { content: " (" attr(href) ")"; font-size: 0.7em; color: #666; }

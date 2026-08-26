@@ -167,6 +167,27 @@ Two things to know if you touch its word lists:
   `::` is also a CMake target separator — an unanchored rule turns
   `cmake --build . --target SDL3::SDL3 --config Release` into a comment from `::` onward.
 
+### Code outside a listing
+
+Not every bit of code needs the full `<figure class="listing">` chrome. A compiler error inside a
+pitfall callout, or a harness transcript inside a `.worked` box, is a bare `<pre><code>`. **Every
+`<pre>` scrolls horizontally**, listing or not — bare ones had no overflow rule at all until
+2026-08-26 and six of them across three lessons were spilling out of their column and dragging the
+whole page sideways at 390px.
+
+### Numeric walkthroughs in prose
+
+Use `<p class="mono">` for a hand-aligned block of numbers in the reading flow — the pushed-through
+matrix, the two distances, the crossing parameter. Break lines with `<br>` and pad columns with
+`&nbsp;`. It is monospace, it never re-wraps, and it scrolls on a narrow screen, so the columns
+line up on every viewport.
+
+That rule was **missing for thirteen lessons**: the markup was authored from Lesson 3.3 onward but
+`p.mono` was never given a declaration, so all 16 blocks rendered in the body serif at 18px, with
+no alignment at all and wide enough to push the page sideways. Beware the neighbour —
+`figure.dia svg .mono` is a *different* class in a different context and only sets the family; it
+does not style prose.
+
 ## 7. Diagrams
 
 Inline SVG, authored by hand. Nothing else.

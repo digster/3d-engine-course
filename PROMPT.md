@@ -1881,3 +1881,12 @@ Shipped as two commits: the `.tag mod` → `.tag modified` badge fix plus its re
 the fold itself. No lesson prose was touched and no lesson was regenerated — the fold is one
 `max-height` rule in the shared sheet, which is a no-op on the ~560 listings short enough to
 ignore it.
+
+> ok, work on the four failures.
+
+Cleared all four, and the corpus reached **100/100 page-checks** (50 pages × 1280px and 390px) for
+the first time. Two were SVG label collisions fixed in place. The other two turned out not to be
+page bugs at all: bare `<pre>` outside a listing had **no** `overflow-x` rule, and `p.mono` had
+never been given a declaration in the repo's entire history — 16 hand-aligned numeric walkthroughs
+had been rendering in the body serif since Lesson 3.3. Both fixed in the shared sheet, which also
+cleared latent breakage on three lessons that were not among the four.

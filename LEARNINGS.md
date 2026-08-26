@@ -4061,3 +4061,38 @@ that navigates to `#id`, waits 300 ms and measures the heading reads it mid-anim
 measured at y=2091 and y=5014 looked exactly like "content grows after the anchor scroll", which is
 a real failure mode and cost a diagnosis detour. Use `reducedMotion: 'reduce'`, or poll until
 `scrollY` stops moving.
+
+### A class with no rule fails silently, and looks like a styling opinion
+
+`<p class="mono">` was authored from Lesson 3.3 onward for hand-aligned numeric walkthroughs —
+columns padded with `&nbsp;`, continuation lines indented under an `=`. No `p.mono` declaration was
+ever written. All 16 blocks across two lessons rendered in the body serif at 18px: no alignment, no
+monospace, and wide enough to push the page into horizontal scroll at 390px. It survived thirteen
+lessons because unstyled prose still *reads* fine — the failure only shows if you know the columns
+were meant to line up. The nearest neighbour in the sheet, `figure.dia svg .mono`, is a different
+class in a different context and only sets the family, which is exactly the kind of near-miss that
+makes a missing rule look deliberate.
+
+### `overflow-x` was a listing rule when it should always have been a `pre` rule
+
+Six bare `<pre>` blocks across three lessons — compiler errors in pitfall callouts, harness
+transcripts in `.worked` boxes — sat outside `<figure class="listing">` and so matched no overflow
+declaration at all. A 677px error message inside a 302px column spilled visibly and dragged the
+document into horizontal scroll. The rule now hangs on `pre`, not on `.listing pre`, because the
+"code scrolls, never wraps" bargain is a property of preformatted text and not of the chrome that
+happens to be wrapped around it.
+
+### A dedup key that ignores position hides duplicates of the same defect
+
+`check-page.js` dedupes text-on-shape hits by `figure|text|tagName|class`. Lesson 0.6 figure 2 has
+*two* labels reading "observe", and had they both collided the checker would have reported one.
+When a finding says "a label named X collides", verify how many X there are before assuming the fix
+is done — measuring both is what proved only the second one needed moving.
+
+### A gutter is a width budget, and long identifiers overrun it
+
+Lesson 1.2's timeline reserves x=10..100 for row labels. `SDL_EVENT_KEY_DOWN` at 11px is 131 user
+units and ran past the axis into the t=0 event spike. Shrinking to `xs` still needs 113; anchoring
+right pushes the text to negative x and trips the viewBox-spill check instead. Wrapping onto two
+`<text>` elements is the fix that keeps the exact SDL3 constant, which is the whole reason the
+label is there.
