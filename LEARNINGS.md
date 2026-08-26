@@ -4096,3 +4096,166 @@ units and ran past the axis into the t=0 event spike. Shrinking to `xs` still ne
 right pushes the text to negative x and trips the viewBox-spill check instead. Wrapping onto two
 `<text>` elements is the fix that keeps the exact SDL3 constant, which is the whole reason the
 label is there.
+
+---
+
+## SDL3 main-callback facts, verified at SDL 3.4.12 (Lesson 5.2)
+
+All of the below was read out of `build/_deps/sdl3-src/` rather than remembered. Master prompt
+§10 forbids guessing entry-point signatures, and this is the one place where a wrong guess does
+not produce a compiler error — it produces a program with no entry point.
+
+| Fact | Value | Source |
+|---|---|---|
+| Enable the callbacks | `#define SDL_MAIN_USE_CALLBACKS 1` **before** `#include <SDL3/SDL_main.h>` | `SDL_main.h:99` |
+| Init | `SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[])` | `SDL_main.h:345` |
+| Iterate | `SDL_AppResult SDL_AppIterate(void *appstate)` | `SDL_main.h:396` |
+| Event | `SDL_AppResult SDL_AppEvent(void *appstate, SDL_Event *event)` | `SDL_main.h:~446` |
+| Quit | `void SDL_AppQuit(void *appstate, SDL_AppResult result)` | `SDL_main.h:~485` |
+| Results | `SDL_APP_CONTINUE` / `SDL_APP_SUCCESS` / `SDL_APP_FAILURE` | `SDL_init.h:109` |
+| Linkage | declared inside `SDL_main.h`'s `extern "C" {` block | so C++ definitions get C linkage automatically |
+| Quit always runs | *"called in all cases, even if SDL_AppInit requests termination at startup"* | `SDL_main.h` doc comment |
+| SDL inits events itself | `SDL_InitSubSystem(SDL_INIT_EVENTS)` **after** `SDL_AppInit` returns `CONTINUE` | `src/main/SDL_main_callbacks.c` |
+
+### `SDL_main.h` emits a non-inline function definition, and that is the whole rule
+
+Under `SDL_MAIN_USE_CALLBACKS`, `SDL_main.h` ends by including `SDL_main_impl.h`, which emits:
+
+```c
+#define SDL_MAIN_CALLBACK_STANDARD 1
+int SDL_main(int argc, char **argv)
+{
+    return SDL_EnterAppMainCallbacks(argc, argv, SDL_AppInit, SDL_AppIterate, SDL_AppEvent, SDL_AppQuit);
+}
+```
+
+…plus the platform's real `main`/`WinMain`. Neither is `inline`. So:
+
+- **One translation unit per program may include it.** Two is `duplicate symbol _main`. This is
+  the One Definition Rule, not an SDL quirk.
+- **That file must not define `main()`.** The header ends with `#define main SDL_main`, so a
+  `main` written below the include is renamed and collides with SDL's. The header says the app
+  *"SHOULD NOT ALSO SUPPLY"* one.
+- **The entry point therefore cannot live in a static library.** Not a linker subtlety — it is
+  that `libengine.a` defining `main` would impose it on every program that links the engine, with
+  no way to opt out, and `demos/sandbox` deliberately wants its own.
+
+Corollary for the umbrella header: `engine/platform/main.hpp` is the one public header **not**
+included by `engine.hpp`. An umbrella whose promise is "include everything, it is harmless" must
+not be a way to acquire a `main()` by accident.
+
+### The event/iterate ordering guarantee is three lines, and they are readable
+
+The worry when inverting control is that Lesson 1.2's "drain, then `update()`" contract dies,
+because events now arrive one at a time from a function SDL calls whenever it likes. It does not,
+and the proof is in the tree we already fetch:
+
+```c
+/* src/main/SDL_main_callbacks.c */
+SDL_AppResult SDL_IterateMainCallbacks(bool pump_events)
+{
+    if (pump_events) { SDL_PumpEvents(); }
+    SDL_DispatchMainCallbackEvents();
+    /* …then, only if the result is still CONTINUE, the iterate callback. */
+}
+```
+
+**When a guarantee moves out of your code, go and read the code that now provides it.** The
+contract survived the inversion; its enforcer changed.
+
+Also from the same file: SDL reads its result atom *before* calling iterate, so a callback that
+returned `SDL_APP_SUCCESS` is never iterated again. That is worth knowing precisely because it
+means a missing guard in your own `iterate` cannot show up in a running program — only in a test
+that drives the callbacks directly.
+
+### `SDL_Init(SDL_INIT_VIDEO)` fails where there is no display
+
+Obvious in hindsight, and it invalidated a test we had already written. Lesson 5.1 built
+`sandbox --shot` specifically so a refactor could be checked automatically — and the code called
+`SDL_Init(SDL_INIT_VIDEO)` first, then never used video. On the machine it was written on that is
+free. On a build server it is a hard failure, so the automation-shaped test could not run anywhere
+automatic.
+
+The fix is that the surface implies the subsystems rather than the caller requesting them, which
+is also why `app_config`'s field is named `extra_subsystems`. The first draft was
+`SDL_InitFlags subsystems = SDL_INIT_VIDEO`, which would have forced the class to *subtract* a
+flag the caller had explicitly set whenever the surface was headless — **a class quietly
+overruling its own configuration is worse than a field with a clumsier name.**
+
+### `event.key.repeat` is information `input::key_pressed()` cannot give you
+
+`SDL_KeyboardEvent` carries `scancode`, `key`, `mod`, `down` and `repeat` (verified at
+`SDL_events.h:360`). Holding a key produces a stream of key-down events with `repeat = true`.
+`engine::input`'s edge queries collapse that to one edge per physical press, which is usually what
+you want — but when you need to distinguish "pressed" from "held down and auto-repeating", the
+event hook is the only place the answer exists. That is the clearest single reason `on_event`
+earns its place beside `on_fixed_step`.
+
+### Ownership through a `void*`: publish before you can fail
+
+`SDL_AppInit` hands you a `void** appstate` and SDL carries that pointer for the life of the
+program. The instinct is to publish it only once construction has succeeded. Do the opposite.
+
+`SDL_AppQuit` runs *in all cases*, including a failed init. If a failure path destroys the
+instance and leaves `*appstate` null, then null means both "never built" and "already cleaned up",
+and you now have two teardown paths. Publishing first — `release()`, store, *then* do everything
+that can fail — gives one owner, one teardown path, and an unowned interval containing no
+branches at all.
+
+### 0, 1, 2, 1, 2 — the fixed step is not once per frame, and callbacks make that easier to forget
+
+Five frames from a machine at very close to 60 fps, run through `engine::fixed_step` (h =
+0.01666667 s) — measured, not hand-computed:
+
+| frame | dt (s) | steps | alpha |
+|---|---|---|---|
+| 1 | 0.0161 | **0** | 0.9660 |
+| 2 | 0.0172 | 1 | 0.9980 |
+| 3 | 0.0170 | **2** | 0.0180 |
+| 4 | 0.0165 | 1 | 0.0080 |
+| 5 | 0.0333 | 2 | 0.0060 |
+
+Under a hand-written loop the `while` is visible; under `on_fixed_step` it is a function somebody
+else calls, and assuming it runs once per frame is much easier. **Edges belong to the frame,
+levels belong to the step**: `key_down()` inside a step is safe (input is frame-coherent since
+Lesson 1.2), `key_pressed()` is not — on a two-step frame it fires twice from one press.
+
+### Measure with comments stripped
+
+`measure_52.py`'s first run reported that `sandbox` still made four lifecycle SDL calls. One of
+them was the sentence *explaining that `SDL_Init(SDL_INIT_VIDEO)` is no longer called there*.
+**A measurement that counts its own footnotes is not a measurement.** Strip `//` and `/* */`
+before any grep-based count of API usage; string literals are safe as long as the pattern requires
+a following `(`.
+
+---
+
+## Course-infrastructure facts (docs/, Lesson 5.2)
+
+### `nofold` was half a feature until something used it
+
+`course.js` has honoured `class="listing nofold"` since the fold shipped, by declining to add an
+expand control. `course.css` never did — the `max-height` clamp on `.listing pre` applied
+regardless. So a `nofold` listing longer than the 12-line peek was **clamped by CSS and given no
+control by JS**: silently unreachable code on a page that looks fine.
+
+Nothing had used the class until Lesson 5.2, and `check-page.js`'s `clippedWithoutToggle` caught it
+on the first run. The fix is one rule, `.listing.nofold pre { max-height: none; }`, and the lesson
+is general: **a half-implemented opt-out is worse than no opt-out**, because the documentation
+promises the behaviour and only one of the two files delivers it.
+
+### Long URLs need `class="reading"` on the Further Reading list
+
+`course.css` has `.reading a { overflow-wrap: anywhere; }` — and *only* there. A Further Reading
+`<ul>` written without the class renders link text as one unbreakable token;
+`martinfowler.com/bliki/InversionOfControl.html` is 394px wide and pushed a 302px column into
+horizontal page scroll at 390px. `pageScrollsX` catches it, but the report is a single boolean, so
+finding the culprit needs a walk over every element whose `right` exceeds the viewport **and**
+which has no scrollable ancestor — the ancestor test is what filters out the hundreds of tokens
+legitimately scrolled off inside a `<pre>`.
+
+### `overPx` in `svgSpill` is not always horizontal
+
+A label sitting below the viewBox floor reports exactly like one running off the right edge. When a
+spill makes no sense horizontally, check the figure's height against the y of its last row — in
+Lesson 5.2's Figure 6 a caption line added late sat 12 units under a 348-unit viewBox.

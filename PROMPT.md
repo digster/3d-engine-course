@@ -1890,3 +1890,29 @@ page bugs at all: bare `<pre>` outside a listing had **no** `overflow-x` rule, a
 never been given a declaration in the repo's entire history — 16 hand-aligned numeric walkthroughs
 had been rendering in the body serif since Lesson 3.3. Both fixed in the shared sheet, which also
 cleared latent breakage on three lessons that were not among the four.
+
+> Based on the STATE and the project's claude instructions, work on the next.
+
+**Lesson 5.2 — The Platform and Application Layer.** Built both arrangements of the fork STATE
+named: `engine::platform` (a lifecycle layer — you keep the loop) and `engine::app` +
+`ENGINE_MAIN` on SDL3's main callbacks (the engine keeps it), with `app` implemented *on*
+`platform` so the library path stays first-class. Every SDL3 signature was read out of the
+vendored `SDL_main.h` / `SDL_init.h` / `SDL_main_callbacks.c` rather than remembered, including
+the three lines that prove Lesson 1.2's ordering contract survives the inversion.
+
+The layer decided the seam 5.1 left open: **admit SDL, own its lifetime** — a wrapper that hides a
+library you will never replace is cost with no benefit, and the argument is written into the
+header. Three surfaces turn 4.2's window-claim rule into an enum and add `headless`, which
+finally makes `--shot` runnable without a display (the pre-5.2 shot called `SDL_Init(SDL_INIT_VIDEO)`
+and never used it, so the test built for CI could not run in CI).
+
+Payoff, measured: **48 lifecycle SDL calls across the demos became 3**; `hello_cube` 160 → 96 code
+lines; and **Pong left `sandbox` to become its own executable** — 87 lines, no `main`. `sandbox`
+adopted `platform` and kept its own loop deliberately, with the reasons written down. Golden image
+byte-identical, `hello_cube --shot` byte-identical, `--trace` unchanged, verify_45–50 all still
+pass, and a new `verify_52` at 66 checks / 0 failures — one of which found a missing guard in
+`iterate` that SDL's own loop would have hidden forever.
+
+Page infrastructure found two latent bugs on the way: `nofold` was honoured by `course.js` and
+ignored by `course.css`, and a Further Reading list without `class="reading"` pushed the page
+sideways at 390px. Both fixed at the source; corpus back to **102/102**.

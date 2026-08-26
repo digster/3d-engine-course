@@ -658,10 +658,17 @@ chore. What follows is on disk.
 │   └── Shaders.cmake       # add_hlsl_shader(name stage) -> a GLOBAL PROPERTY   [4.3, reshaped 5.1]
 ├── engine/                 # THE LIBRARY                                        [5.1]
 │   ├── CMakeLists.txt      # produces engine::engine (STATIC)
-│   ├── include/engine/     # ---- THE PUBLIC API. 37 headers. Nothing else. ----
+│   ├── include/engine/     # ---- THE PUBLIC API. 40 headers. Nothing else. ----
 │   │   ├── engine.hpp      # the umbrella: shipped, documented, used by nothing we ship
 │   │   ├── core/           # clock, fixed_step, input, profile
 │   │   ├── math/           # vec2/3/4, mat2/3/4, transform  (header-only)
+│   │   ├── platform/       # HOW A PROGRAM STARTS                          [5.2]
+│   │   │   ├── platform.hpp  # surface, app_config, platform — SDL's lifecycle,
+│   │   │   │                 #   owned once. YOU keep the loop
+│   │   │   ├── app.hpp       # app (7 hooks), app_runner (the 4 SDL callbacks) —
+│   │   │   │                 #   the engine keeps the loop
+│   │   │   └── main.hpp      # ENGINE_MAIN. ONE .cpp per program; no main() in it.
+│   │   │                     #   NOT in engine.hpp, deliberately
 │   │   └── gfx/            # everything from §2.1's gfx/, plus four new headers:
 │   │       ├── projector.hpp     # near_mode, projector, screen_point, to_clip,
 │   │       │                     #   to_pixel, screen_from_clip. Its own header
@@ -674,10 +681,11 @@ chore. What follows is on disk.
 │   │       │                     #   collect_triangles / sort / draw_triangles
 │   │       └── debug_draw.hpp    # line3, draw_mesh, draw_axes3, show_depth,
 │   │                             #   count_differences — grouped by PURPOSE
-│   └── src/                # ---- PRIVATE. 24 sources; no demo can name this path ----
+│   └── src/                # ---- PRIVATE. 26 sources; no demo can name this path ----
 │       ├── core/           # clock, fixed_step, input, profile
+│       ├── platform/       # platform.cpp, app.cpp                            [5.2]
 │       └── gfx/            # …+ soft_renderer.cpp, debug_draw.cpp; image.cpp is the
-│                           #   ONE unit that contains stb_image
+│                           #   ONE unit that contains stb_image + save_ppm
 ├── demos/                  # executables; link engine, include ONLY public headers
 │   ├── CMakeLists.txt
 │   ├── common/             # demo_common: CONTENT, shared so nothing is transcribed
@@ -686,9 +694,11 @@ chore. What follows is on disk.
 │   │   │                   #   and write_reference_shot() — the characterization test
 │   │   ├── pong.hpp        # the Module 1 game, finally in a directory for games
 │   │   └── pong.cpp
-│   ├── sandbox/main.cpp    # Lessons 1.8–4.9 on [Tab] and four flags. 5,721 lines,
-│   │                       #   and 5.2 is what finally splits it
-│   └── hello_cube/main.cpp # 160 lines, public headers only. THE ACCEPTANCE TEST
+│   ├── sandbox/main.cpp    # Lessons 2.1–4.9 on [Tab] and four flags. 5,625 lines.
+│   │                       #   Uses engine::platform; keeps its own main() ON PURPOSE
+│   ├── pong/main.cpp       # Lesson 1.8's game, on engine::app. 87 code lines,
+│   │                       #   no main, no SDL_Init, no loop                  [5.2]
+│   └── hello_cube/main.cpp # public headers only. THE ACCEPTANCE TEST for the API
 └── tools/                  # editor, asset cooker (Module 8). Not yet.
 ```
 
@@ -728,9 +738,48 @@ feature nobody has named yet.
 | leftover | why it is wrong | paid in |
 |---|---|---|
 | `cull_choice` is applied twice | `collect_triangles` reads one of its four values; `draw_triangles` applies the rest via `fill_style` | 6.5, the material system |
-| SDL is in the public API | the vocabulary is adopted permanently | 5.2, the platform layer |
+| ~~SDL is in the public API~~ | **Settled in 5.2, and the answer is "keep it".** A wrapper that hides a library you have no intention of replacing is cost with no benefit. The platform layer owns *lifetime*, not *vocabulary* | 5.2 — closed |
 | `render_options` ships teaching switches | `trs_order::tsr` exists so a lesson can show a bug | exercise 5.1.4, honestly never |
-| `demos/sandbox/main.cpp` is 5,721 lines | splitting it needs an application layer to split it *into* | 5.2 |
+| `demos/sandbox/main.cpp` is 5,625 lines | the application layer now exists and Pong has left; four screens remain welded together | one at a time, as later lessons need them |
+| no window-resize handling | `platform` makes a resizable window and ignores `SDL_EVENT_WINDOW_RESIZED` | 6.x, when render targets care |
+| `surface::gpu` hands you a window and stops | device, swapchain and present target are still the program's job | a future `gpu_app` |
+
+### 2.2b The platform and application layers (Lesson 5.2)
+
+Two arrangements, and the engine supports both because they are not interchangeable:
+
+| | you write | the loop lives in | used by |
+|---|---|---|---|
+| **library** | `main()`, `while (plat.running())` | your code | `sandbox` |
+| **framework** | 7 overrides + `ENGINE_MAIN(T)` | SDL, via the main callbacks | `pong`, `hello_cube` |
+
+**The rule that keeps them one engine: `engine::app` is implemented *on* `engine::platform`,
+never beside it.** Everything the framework offers is reachable from the library path, and
+`app.cpp` does nothing a hand-written `main()` could not. `verify_52` §E renders six frames down
+each path and compares the framebuffers byte for byte. If that ever diverges, the framework has
+started growing a private engine inside itself.
+
+`platform` owns **lifecycle and order**, not vocabulary. `window()` returns `SDL_Window*`;
+`handle()` takes an `SDL_Event`. The ladder — `SDL_Init` → window → renderer → texture, and the
+exact mirror on the way down — is what it exists for, together with the fact that every failure
+path and the destructor all funnel through one `stop()`.
+
+The surface is chosen in `app_config`, before anything exists, because by then it is too late:
+
+| `surface` | window | renderer | `SDL_INIT_VIDEO` | for |
+|---|---|---|---|---|
+| `renderer` | yes | yes + streaming texture | yes | Module 1's presentation path |
+| `gpu` | yes | **no** | yes | `gpu_device::create` — Lesson 4.2's claim rule |
+| `headless` | no | no | **no** | `--shot`, CI, any machine with no display |
+
+`headless` not initialising video is the point, not an optimisation: `SDL_Init(SDL_INIT_VIDEO)`
+*fails* on a build server, and the pre-5.2 `sandbox --shot` called it and never used it.
+
+**Entry point.** `<engine/platform/main.hpp>` defines `SDL_MAIN_USE_CALLBACKS` and includes
+`<SDL3/SDL_main.h>`, which emits a *non-inline* `SDL_main()` plus the platform entry point. So:
+one translation unit per program, and that file must not define `main()`. It is why the entry
+point cannot live in `libengine.a` — an entry point is not a library's to own — and why it is the
+one public header deliberately absent from `engine.hpp`.
 
 ### 2.3 Dependency direction
 
@@ -739,6 +788,10 @@ Strictly one-way. Arrows point at what a layer is allowed to know about:
 ```
 demos/ ──► engine public API ──► engine private impl ──► platform (SDL3) ──► OS
 tools/ ──►
+
+within the public API, since 5.2:
+   demos ──► engine::app ──► engine::platform ──► SDL3
+   demos ─────────────────►  engine::platform          (sandbox takes this one)
 ```
 
 `math` depends on nothing but the standard library — which is exactly why it is the first thing

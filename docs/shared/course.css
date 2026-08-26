@@ -539,6 +539,19 @@ pre { overflow-x: auto; }
      listing degrades to an internal scrollbox. Clipped, never unreachable. */
   max-height: calc(var(--listing-peek-lines) * var(--listing-line) + 1.8rem + 0.7rem);
 }
+
+/* The author opt-out, and it MUST live here as well as in course.js.
+   `nofold` means "do not fold this listing" — the prose walks it line by line,
+   so a peek would hide the thing being discussed. course.js has honoured it
+   since the fold shipped by declining to add a toggle. The clamp above did not,
+   which made the two halves of one feature disagree: a `nofold` listing longer
+   than the peek was clamped by CSS and given no control by JS, i.e. silently
+   unreachable code on a page that looks fine.
+   That is precisely the failure `check-page.js`'s clippedWithoutToggle exists to
+   catch, and it caught it — on Lesson 5.2, the first page ever to use the class.
+   A half-implemented opt-out is worse than none. */
+.listing.nofold pre { max-height: none; }
+
 .listing pre code {
   font-family: var(--font-mono);
   font-size: 0.79rem;

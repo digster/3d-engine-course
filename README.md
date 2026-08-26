@@ -109,21 +109,35 @@ description:
 | command | what runs |
 |---|---|
 | `sandbox` | Module 3's scene on the GPU (Lesson 4.8) |
-| `sandbox --software` | the CPU renderer, its HUD, and all five demos on <kbd>Tab</kbd> |
+| `sandbox --software` | the CPU renderer, its HUD, and four demos on <kbd>Tab</kbd> |
 | `sandbox --probe` | the instrument Lessons 4.2–4.7 were built on |
 | `sandbox --gpu` | an alias for `--probe`, kept because six lessons tell you to type it |
-| `sandbox --shot FILE` | seven pinned frames to a PPM, no window — Lesson 5.1's characterization test |
+| `sandbox --shot FILE` | seven pinned frames to a PPM, **no window and no display** — Lesson 5.1's characterization test, made genuinely headless in 5.2 |
 
-There is a second executable, and it is the point of the refactor rather than a demo of anything:
+There are two more executables, and they are the point of Module 5 rather than demos of anything:
 
 ```sh
 ./build/demos/hello_cube                  # a lit cube, spinning
-./build/demos/hello_cube --shot cube.ppm  # one frame, no window
+./build/demos/hello_cube --shot cube.ppm  # one frame, no window, no display
+
+./build/demos/pong                        # Lesson 1.8's game, at last a program
 ```
 
-`hello_cube` is 160 lines and every symbol in it comes from a header under `<engine/…>`. It is the
-standing acceptance test for the public API: **if a picture cannot be made from outside the
-library, the library does not have an API.**
+`hello_cube` is the standing acceptance test for the public API: every symbol in it comes from a
+header under `<engine/…>`, so **if a picture cannot be made from outside the library, the library
+does not have an API.**
+
+`pong` is **Lesson 5.2's** acceptance test for the *application* layer. Until that lesson it was a
+branch of `sandbox`'s five-way <kbd>Tab</kbd> switch, for one reason: a demo needs a loop to exist
+in, and there was exactly one loop in the repository. It is now 87 lines of code with no `main`,
+no `SDL_Init`, no window handling and no loop — five overrides on `engine::app`, which is built on
+SDL3's main callbacks.
+
+> **Two arrangements, both supported.** `engine::platform` owns SDL's lifecycle and leaves the
+> loop to you (`sandbox` uses it, deliberately). `engine::app` owns the loop and calls you
+> (`hello_cube` and `pong`). `app` is implemented **on** `platform`, never beside it — a harness
+> renders six frames down each path and compares the framebuffers byte for byte. Across the three
+> demos, **48 SDL lifecycle calls became 3**.
 
 The software path is **not** deprecated. It is the *reference*: every measured claim in Modules 2
 and 3 was made against it, and a port whose reference has been deleted is a port nobody can check.
@@ -471,16 +485,23 @@ Third-party, each with an explicit "why we don't hand-roll this" justification: 
 ## Repository layout
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the full tree and the reasoning behind it. The short
-version, as of **Lesson 5.1**:
+version, as of **Lesson 5.2**:
 
 ```
-engine/include/engine/   the public API — 37 headers, and the only path a demo can name
+engine/include/engine/   the public API — 40 headers, and the only path a demo can name
+engine/include/engine/platform/   how a program starts: platform.hpp, app.hpp, main.hpp
 engine/src/              private implementation; stb_image stops here
 demos/common/            content shared by demos and verification harnesses
-demos/sandbox/           Lessons 1.8–4.9, on [Tab] and four flags
-demos/hello_cube/        160 lines against the public API — the acceptance test
+demos/sandbox/           Lessons 2.1–4.9, on [Tab] and four flags; keeps its own main()
+demos/hello_cube/        the public-API acceptance test
+demos/pong/              Lesson 1.8's game, on engine::app — 87 lines, no main()
 tools/                   the editor and asset cooker (Module 8)
 ```
+
+`engine/include/engine/platform/main.hpp` is the one public header **not** reachable through the
+`engine.hpp` umbrella, and the omission is deliberate: including it defines a program's entry
+point, so it belongs in exactly one `.cpp` per program. An umbrella whose promise is "include
+everything, it is harmless" must not be a way to acquire a `main()` by accident.
 
 **The boundary is law, and it is enforced by the include path rather than by discipline.**
 `target_include_directories(engine PUBLIC include PRIVATE src)` means a demo writing

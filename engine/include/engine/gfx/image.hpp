@@ -38,6 +38,12 @@
 #include <string>
 #include <vector>
 
+// A forward declaration, not an include: save_ppm() only needs to NAME this
+// type in its signature. Pulling framebuffer.hpp in here would paste it, and
+// colour.hpp behind it, into every file that wanted to decode a PNG — the
+// physical-design habit from Lesson 5.1 §3.3, applied to a two-line addition.
+namespace engine { class framebuffer; }
+
 namespace engine {
 
 /// How a decode ended. `ok` is the only success.
@@ -95,5 +101,26 @@ inline constexpr std::size_t k_max_image_texels = 8192u * 8192u;
 ///             `asset_path()` (Lesson 3.5) to get a file that sits beside the
 ///             executable, which is where the build puts them.
 [[nodiscard]] image_status load_image(const char* path, image_data& out);
+
+/// Write a framebuffer to `path` as a binary PPM (P6). Returns false and logs on
+/// failure.
+///
+/// Lesson 5.2 promoted this out of two demos that had each hand-rolled it. PPM
+/// deserves a word of justification, because writing a PNG here would be one
+/// call to `stb_image_write` and we are choosing not to:
+///
+/// **A test artifact should be trivially comparable, and PPM is.** The format is
+/// a short ASCII header followed by raw RGB bytes — no compression, no filter
+/// modes, no metadata, no timestamp. Two runs that drew the same picture produce
+/// byte-identical files, so `cmp` is a valid renderer test. A PNG of the same
+/// picture may differ in bytes for reasons that have nothing to do with pixels
+/// (encoder version, filter heuristics), which makes the cheapest possible check
+/// unavailable exactly when you need it. Every `--shot` in this repository, and
+/// the golden image Lesson 5.1's refactor was verified against, is a PPM for this
+/// reason.
+///
+/// The alpha channel is dropped: PPM has no place to put it, and a screenshot's
+/// alpha is not information anybody wants.
+[[nodiscard]] bool save_ppm(const framebuffer& fb, const char* path);
 
 } // namespace engine

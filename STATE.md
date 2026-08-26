@@ -7,9 +7,50 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-08-25 (after Lesson 5.1 — 46 of 94 lessons; MODULE 5 OPENED)
+updated: 2026-08-26 (after Lesson 5.2 — 47 of 94 lessons)
 
 conventions:
+  program-entry: A PROGRAM PICKS ONE OF TWO ARRANGEMENTS AND THE ENGINE SUPPORTS
+        BOTH. Library: construct engine::platform, write your own main() and your
+        own while(plat.running()). Framework: derive from engine::app, override
+        the hooks, and write ENGINE_MAIN(YourApp) — no main(), no loop.
+        engine::app IS IMPLEMENTED ON engine::platform, NEVER BESIDE IT. Anything
+        app can do must be reachable from the library path, or the library path
+        has quietly become second-class. verify_52 §E renders six frames down each
+        path and compares the framebuffers byte for byte.
+        <engine/platform/main.hpp> GOES IN EXACTLY ONE .cpp PER PROGRAM, AND THAT
+        FILE MUST NOT DEFINE main(). It defines SDL_MAIN_USE_CALLBACKS and
+        includes <SDL3/SDL_main.h>, which emits a NON-INLINE definition of
+        SDL_main() plus the platform entry point. Two inclusions = duplicate
+        symbol _main. That is the ODR, not an SDL quirk — and it is why the entry
+        point cannot live in libengine.a: an entry point is not a library's to own.
+        It is DELIBERATELY ABSENT from engine.hpp, the umbrella: "include
+        everything, it is harmless" must not be a way to acquire a main().
+        THE FOUR SDL3 SIGNATURES, verified against SDL 3.4.12:
+          SDL_AppResult SDL_AppInit   (void **appstate, int argc, char *argv[]);
+          SDL_AppResult SDL_AppIterate(void *appstate);
+          SDL_AppResult SDL_AppEvent  (void *appstate, SDL_Event *event);
+          void          SDL_AppQuit   (void *appstate, SDL_AppResult result);
+        Returns: SDL_APP_CONTINUE / SDL_APP_SUCCESS / SDL_APP_FAILURE.
+  surfaces: THE SURFACE IS CHOSEN BEFORE ANYTHING EXISTS, in app_config, because
+        by the time you could regret it the window already belongs to somebody.
+          surface::renderer  SDL_Renderer + streaming texture (Module 1's path)
+          surface::gpu       a window claimed by NOBODY, for gpu_device::create
+          surface::headless  no window, and NO SDL_INIT_VIDEO — runs with no display
+        This is Lesson 4.2's "a window is claimed by an SDL_GPU device or driven by
+        an SDL_Renderer, never both" turned from a comment into an enum.
+        HEADLESS DOES NOT INITIALISE VIDEO, and that is the point rather than an
+        optimisation: SDL_Init(SDL_INIT_VIDEO) FAILS on a build server. The
+        pre-5.2 `sandbox --shot` called it and never used it, so the
+        characterization test built specifically for automation could not run
+        anywhere automatic. verify_52 §B pins it (SDL_WasInit == 0).
+  edges-and-levels: EDGES BELONG TO THE FRAME, LEVELS BELONG TO THE STEP.
+        on_fixed_step runs 0..N times per frame (measured: 0,1,2,1,2 across five
+        frames within 1.6 ms of each other at 60 Hz), so an edge query inside it
+        fires TWICE on a two-step frame. key_down() in a step is safe — input is
+        frame-coherent since Lesson 1.2, so every step in one frame sees the same
+        snapshot. key_pressed() is not. Discrete presses go in on_event, where
+        event.key.repeat is also available.
   resource-names: NAME EVERY GPU RESOURCE AT CREATION, through
         SDL_PROP_GPU_{BUFFER,TEXTURE,TRANSFERBUFFER}_CREATE_NAME_STRING — never
         through SDL_SetGPU{Buffer,Texture}Name. SDL's own docs on the setter:
@@ -2173,8 +2214,27 @@ completed:
   - 4.9  Debugging a Frame with RenderDoc
   ===> MODULE 4 COMPLETE — Stage B (the SDL_GPU renderer) draws the scene <===
   - 5.1  The Refactor: Engine, Demos, and the Public API
+  - 5.2  The Platform and Application Layer
 
 capabilities:
+  - ARCH 5.2: A PROGRAM NO LONGER HAS TO SAY HOW TO START. engine::platform owns
+    SDL_Init, the window, the renderer, the streaming texture and the mirror
+    teardown; engine::app adds the four SDL3 callbacks on top of it. 40 public
+    headers now (37 + platform/{platform,app,main}.hpp), 26 private sources.
+    THE MEASUREMENT: 48 lifecycle SDL calls across the three demos became 3 — and
+    all three survivors are SDL_PollEvent, in sandbox, on purpose. hello_cube went
+    160 -> 96 code lines and 17 -> 0 lifecycle calls. The layer that did it is 428
+    lines of code across five files; a poor trade on line count alone, and stated
+    as such in the lesson.
+  - DEMO 5.2: PONG IS A PROGRAM. ./build/demos/pong, 87 lines of code, five
+    overrides, zero SDL lifecycle calls. It was a branch of sandbox's five-way
+    [Tab] switch for four modules for exactly one reason — a demo needs a loop and
+    there was one loop in the repository. sandbox is down to four screens
+    (scene / basis / triangles / lines).
+  - HEADLESS 5.2: `--shot` RUNS WITHOUT A DISPLAY. Both sandbox and hello_cube
+    choose surface::headless from the same flag that turns the shot on, in
+    configure(), before SDL exists. engine::save_ppm (gfx/image.hpp) is the shared
+    writer, promoted out of two demos that had each hand-rolled it.
   - ARCH 5.1: THE ENGINE HAS AN OUTSIDE. engine/ is a STATIC LIBRARY
     (engine::engine) with 37 public headers under engine/include/engine/ and 24
     private sources under engine/src/. libengine.a is 1,201 KB. demos/ holds
@@ -2911,6 +2971,76 @@ capabilities:
   - skills: reading SDL headers as source of truth; debugging with lldb/gdb/VS
 
 decisions:
+  - THE PLATFORM LAYER ADMITS SDL RATHER THAN HIDING IT, and the argument is
+    written into platform.hpp's header comment so nobody re-opens it by accident.
+    window() returns SDL_Window*; handle() takes SDL_Event. A WRAPPER THAT HIDES A
+    LIBRARY YOU HAVE NO INTENTION OF REPLACING IS COST WITH NO BENEFIT — the
+    swap-ability is a benefit we would never collect, paid for with a parallel
+    vocabulary (engine::key, engine::event, a window-flags bitfield) that must be
+    invented, documented, kept in sync and taxed on every new SDL feature.
+    WHAT IT OWNS INSTEAD IS LIFECYCLE AND ORDER. 5.1 flagged SDL-in-public-headers
+    as residue; 5.2's conclusion is that it is not residue, it is the decision.
+    (The counter-case is named too: a console SDK under NDA, a second backend that
+    already exists, or a public API shipped to customers. None apply.)
+  - SANDBOX KEEPS ITS OWN main() AND ITS OWN LOOP, DELIBERATELY. It adopts
+    engine::platform (31 lifecycle calls -> 3) and refuses engine::app. Three
+    reasons, all still true: it runs THREE incompatible loops chosen at runtime
+    (run_gpu_scene / run_gpu_probe / software), so one app subclass would mean
+    every hook opening with a three-way branch; it is THE INSTRUMENT every measured
+    claim in Modules 2-4 was taken with, and an instrument wants its control flow
+    visible; and SOMEBODY HAS TO PROVE THE LIBRARY PATH STILL WORKS, or platform
+    has no independent users and drifts into being an implementation detail of app.
+    THE RULE: use the framework when your program wants A loop; write your own when
+    it wants THIS loop. A framework you built is still a framework.
+  - OWNERSHIP IS PUBLISHED TO SDL *BEFORE* ANYTHING CAN FAIL. app_runner::init does
+    release() -> *appstate = self -> then configure/start/on_start, any of which may
+    return SDL_APP_FAILURE. Publishing only on success looks safer and is worse:
+    SDL calls SDL_AppQuit "in all cases, even if SDL_AppInit requests termination
+    at startup", so a null appstate would have to mean both "never built" and
+    "already cleaned up". ONE OWNER, ONE TEARDOWN PATH, and the window in which the
+    raw pointer is unowned contains NO BRANCHES.
+    on_stop() runs whenever on_start() RAN, whatever it returned.
+  - iterate() CHECKS running() TWICE AND THAT IS NOT REDUNDANT. Top: decline to
+    START a frame after a quit. Bottom: refuse to ABANDON one — every --shot
+    depends on draw-then-write-then-exit. THE TOP CHECK WAS FOUND BY verify_52 §D,
+    NOT BY DESIGN: SDL's own loop reads its result atom before calling iterate, so
+    the gap could never appear in a running program. A CALLBACK SHOULD BE TOTAL —
+    safe to call at any moment, including one SDL would not have chosen — and that
+    is exactly what lets a test drive the four functions with no entry point.
+  - THE MACRO CONTAINS NO LOGIC. ENGINE_MAIN is four one-line forwards into
+    app_runner's four static functions. A macro is code the debugger struggles to
+    step through and the compiler reports odd line numbers for, so the only thing
+    worth putting in one is the part that cannot be a function: the four fixed C
+    symbol names SDL looks up. Consequence: verify_52 calls app_runner::init /
+    iterate / event / quit DIRECTLY, no SDL_MAIN_USE_CALLBACKS, no window.
+  - app_config's `extra_subsystems` IS "EXTRA", NOT "SUBSYSTEMS". The first draft
+    was `SDL_InitFlags subsystems = SDL_INIT_VIDEO`, which would have forced the
+    class to SUBTRACT a flag the caller had explicitly set whenever the surface was
+    headless — a class quietly overruling its own configuration. Video belongs to
+    the surface; the field is for what else (Module 7's audio).
+  - PRESENTATION IS TWO CALLS: blit_framebuffer() then present(). Lesson 3.10
+    needed the split so the frame budget excludes the vsync block; it turns out to
+    be exactly the gap a HUD wants (on_overlay). One seam, two independent reasons.
+  - PPM, NOT PNG, FOR EVERY SHOT — now engine::save_ppm in gfx/image.hpp. A test
+    artifact should be trivially comparable: ASCII header + raw RGB, no
+    compression, no filters, no timestamp, so `cmp` is a valid renderer test. A PNG
+    of the same picture can differ in bytes for encoder reasons, which removes the
+    cheapest check exactly when it is needed. Writes one buffered ROW per
+    SDL_WriteIO (180 crossings at 320x180, not 57,600).
+  - MEASUREMENT: measure_52.py STRIPS COMMENTS BEFORE COUNTING API CALLS. Its first
+    run reported four remaining lifecycle calls in sandbox and one of them was the
+    sentence explaining that SDL_Init is no longer called there. A MEASUREMENT THAT
+    COUNTS ITS OWN FOOTNOTES IS NOT A MEASUREMENT.
+  - THE ORDERING CONTRACT SURVIVED THE INVERSION; ITS ENFORCER CHANGED. Lesson
+    1.2's "drain, then update()" still holds under the callbacks because
+    SDL_IterateMainCallbacks() calls SDL_PumpEvents(), then
+    SDL_DispatchMainCallbackEvents(), then the iterate callback — three lines of
+    src/main/SDL_main_callbacks.c, READ rather than assumed. WHEN A GUARANTEE MOVES
+    OUT OF YOUR CODE, GO AND READ THE CODE THAT NOW PROVIDES IT.
+  - platform IS NON-COPYABLE **AND** NON-MOVABLE, which is stronger than the rest
+    of the engine (gpu_device and framebuffer are movable). It owns PROCESS-WIDE
+    state — there is one SDL library — so a second one is a bug and a moved-from
+    one is a bug found later. Deleting the move makes both compile-time.
   - THE STRONGEST ARGUMENT WAS A RECEIPT, NOT AN OPINION: verify_46 through 49
     each TRANSCRIBED build_scene by hand because it sat in an anonymous namespace.
     Four copies, none compared to the original by anything. That opened the lesson
@@ -3589,16 +3719,20 @@ files:
             scene.hpp, soft_renderer.hpp, texture.hpp, viewport.hpp
   engine/include/engine/math/: mat2.hpp, mat3.hpp, mat4.hpp, transform.hpp,
             vec2.hpp, vec3.hpp, vec4.hpp
+  engine/include/engine/platform/: platform.hpp, app.hpp,
+            main.hpp   (NOT in engine.hpp — it defines the entry point)
   engine/src/core/: clock.cpp, fixed_step.cpp, input.cpp, profile.cpp
   engine/src/gfx/: clip.cpp, colour.cpp, debug_draw.cpp, depth_buffer.cpp,
             framebuffer.cpp, gpu_buffer.cpp, gpu_debug.cpp, gpu_device.cpp,
             gpu_mesh.cpp, gpu_pipeline.cpp, gpu_present.cpp, gpu_scene.cpp,
             gpu_shader.cpp, gpu_texture.cpp, image.cpp, mesh.cpp, obj.cpp,
             raster.cpp, soft_renderer.cpp, texture.cpp
+  engine/src/platform/: platform.cpp, app.cpp
   demos/: CMakeLists.txt
   demos/common/: demo_scene.hpp, demo_scene.cpp, pong.hpp, pong.cpp
   demos/sandbox/: main.cpp
   demos/hello_cube/: main.cpp
+  demos/pong/: main.cpp
   assets/: cube.obj, twisted.obj, quirks.obj, torus.obj, uv_grid.png
   docs/: index.html, conventions.html, math-toolbox.html, cpp-style.html
   docs/lessons/: 00-01-what-is-an-engine.html, 00-02-how-this-course-works.html,
@@ -3625,45 +3759,50 @@ files:
                  04-07-textures-and-depth.html,
                  04-08-porting-the-scene.html,
                  04-09-renderdoc.html,
-                 05-01-the-refactor.html
+                 05-01-the-refactor.html,
+                 05-02-platform-layer.html
   docs/shared/: course.css, course.js      (THE stylesheet + page script; one copy each)
   docs/_template/: lesson-template.html, README.md, apply-shared.py, check-page.js
-  memory/: 2026-07-16.md … 2026-08-25.md, 2026-08-25-b.md, 2026-08-25-c.md
+  memory/: 2026-07-16.md … 2026-08-25.md, 2026-08-25-b.md, 2026-08-25-c.md,
+           2026-08-26.md
   (retired: src/ — the whole directory. hello.cpp.)
 
 
-next: 5.2 — The Platform and Application Layer
-      (planned filename: docs/lessons/05-02-platform-layer.html — 5.1's TWO next
-      links point at the index and BOTH need repointing.)
-      THE QUESTION IS "WHO OWNS THE LOOP", and 5.1 ends by asking it out loud.
-        - THE PRESSURE IS demos/sandbox/main.cpp AT 5,721 LINES. 5.1 deliberately
-          did not split it, and said why in §12: each of those demos would be its
-          own small executable if there were an application layer to hang a loop
-          on. That promise is now due.
-        - THE FORK: does your program call the engine (a library: you write
-          main(), you own the loop — what we have) or does the engine call your
-          program (a framework: you implement callbacks, it owns the loop)?
-          SDL3 HAS AN OPINION AND IT IS ON DISK: SDL_main callbacks —
-          SDL_AppInit / SDL_AppIterate / SDL_AppEvent / SDL_AppQuit, enabled with
-          SDL_MAIN_USE_CALLBACKS. ⚠ VERIFY the exact signatures against
-          SDL3/SDL_main.h before writing a line; do NOT guess them. This is the
-          honest, platform-correct answer for web and mobile, where the OS owns
-          the loop and a while(true) cannot exist.
-        - WHAT MOVES OUT OF main.cpp: SDL_Init, window creation, the renderer /
-          GPU device fork (4.2's rule that a window is claimed by one or the
-          other), the streaming texture, the present step, and the loop itself.
-          Everything that is "how a program starts" rather than "what it draws".
-        - 5.1 LEFT SDL IN THE PUBLIC API on purpose and named it as residue. 5.2
-          is where that seam is examined: framebuffer.hpp says Uint32,
-          gpu_device.hpp takes SDL_Window*. Decide deliberately whether the
-          platform layer hides SDL or admits it, and SAY WHY — a wrapper that
-          hides a library you have no intention of replacing is cost with no
-          benefit, and that argument should be made rather than assumed.
-        - WATCH FOR: the demos still need SDL_Renderer for their HUD (4.2's
-          claim) while the GPU path claims the window for a device. The app layer
-          must let a program choose, not choose for it.
-        - THE TEST TO BEAT: after 5.2, `--shot` and `--trace` should still work,
-          the golden must still be byte-identical, and at least one demo should
-          be under 200 lines. If the app layer does not make a demo smaller, it
-          is ceremony.
+next: 5.3 — Logging, Assertions, and the Error-Handling Strategy
+      (planned filename: docs/lessons/05-03-logging-and-errors.html — 5.2's TWO
+      next links point at the index and BOTH need repointing.)
+      THE DEBT IS FOUR ANSWERS TO ONE QUESTION, and 5.2 ends by naming them:
+        - image_status (3.5/4.7)   — an enum of named failures
+        - gpu_status (4.2)         — an enum PLUS a gpu_report struct of detail
+        - bool + a log line        — obj.cpp, texture.cpp, gpu_* create/upload
+        - "returns false and has ALREADY logged" — platform::start, app::on_start
+          (5.2), which is the newest and the least examined of the four
+        All four are defensible in isolation; none of them is the same. CLAUDE.md
+        §4 forbids exceptions and RTTI in the engine core, so this is not a choice
+        between exceptions and codes — it is a choice among the codes.
+      LOGGING IS THE CONCRETE HALF AND IT IS ALREADY EMBARRASSING. platform::start
+      alone has SIX SDL_Log calls, and they are not the same KIND of message:
+      "SDL_Init failed" is fatal, "vsync refused — continuing" is a warning,
+      "platform: SDL 3.4.12, surface=headless" is information, and
+      "SDL_SetAppMetadata failed — continuing" is a curiosity. All four go to the
+      same place at the same volume. ⚠ VERIFY SDL3's own logging API before
+      designing over it: SDL_LogPriority, SDL_SetLogPriorities,
+      SDL_SetLogPriority, the SDL_LOG_CATEGORY_* enum, and SDL_SetLogOutputFunction
+      (for routing to a file or an ImGui console) — against SDL3/SDL_log.h. We
+      have been using SDL_Log (which is CATEGORY_APPLICATION at INFO) for
+      everything since 0.5.
+      ASSERTIONS ARE THE THIRD PIECE. ⚠ VERIFY SDL_assert / SDL_assert_release /
+      SDL_assert_paranoid and SDL_AssertState against SDL3/SDL_assert.h — SDL's
+      assertions are unusual and worth teaching honestly (they offer a "break /
+      retry / ignore / always ignore" prompt rather than aborting), and the
+      question of what survives a release build is the actual lesson.
+      THE TEST TO BEAT: after 5.3 the golden must STILL be byte-identical; a
+      release build must contain no debug-only assertion; and it must be possible
+      to run any demo with engine chatter OFF and application output ON, from the
+      command line, without editing code. If the logging layer cannot be turned
+      down, it is a print statement with extra ceremony.
+      WATCH FOR: 5.2 added `bool` returns that log internally, which is precisely
+      the pattern 5.3 must judge rather than inherit. Do not quietly convert the
+      whole engine — pick the strategy, convert ONE subsystem end to end as the
+      worked example, and write down which lesson converts the rest.
 ```

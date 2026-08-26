@@ -73,3 +73,13 @@
 #include <engine/gfx/gpu_shader.hpp>
 #include <engine/gfx/gpu_texture.hpp>
 #include <engine/gfx/gpu_uniform.hpp>
+
+// ---- Platform: how a program starts ---------------------------------------
+//
+// Lesson 5.2. `platform.hpp` and `app.hpp` are here; `platform/main.hpp` is
+// NOT, and that omission is deliberate rather than an oversight. Including it
+// defines a program's entry point, so it belongs in exactly one .cpp per
+// program — and an umbrella whose job is "include everything, it is harmless"
+// must not be a way to get a `main` by accident.
+#include <engine/platform/app.hpp>
+#include <engine/platform/platform.hpp>

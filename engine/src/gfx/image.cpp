@@ -13,7 +13,11 @@
 
 #include <engine/gfx/image.hpp>
 
+#include <engine/gfx/framebuffer.hpp>
+
 #include <SDL3/SDL.h>
+
+#include <vector>
 
 // Turn off the parts we do not want, before the implementation is generated.
 //
@@ -128,6 +132,51 @@ image_status load_image(const char* path, image_data& out)
     stbi_image_free(decoded);
 
     return image_status::ok;
+}
+
+bool save_ppm(const framebuffer& fb, const char* path)
+{
+    if (path == nullptr) { return false; }
+
+    SDL_IOStream* const io = SDL_IOFromFile(path, "wb");
+    if (io == nullptr)
+    {
+        SDL_Log("save_ppm: cannot write %s: %s", path, SDL_GetError());
+        return false;
+    }
+
+    // P6 is the binary flavour: "P6", width, height, and the maximum channel
+    // value, whitespace-separated, then the pixel bytes with no separator at all.
+    char header[32];
+    const int header_len = SDL_snprintf(header, sizeof(header), "P6\n%d %d\n255\n",
+                                        fb.width(), fb.height());
+
+    bool ok = SDL_WriteIO(io, header, static_cast<std::size_t>(header_len))
+              == static_cast<std::size_t>(header_len);
+
+    // One buffered row at a time rather than one SDL_WriteIO per pixel. At
+    // 320x180 the difference is 57,600 write calls against 180 of them, and the
+    // rule generalises: crossing an I/O boundary is expensive per CROSSING, not
+    // per byte.
+    std::vector<Uint8> row(static_cast<std::size_t>(fb.width()) * 3u);
+
+    for (int y = 0; ok && y < fb.height(); ++y)
+    {
+        for (int x = 0; x < fb.width(); ++x)
+        {
+            const Uint32 px = fb.pixel_at(x, y);
+            const std::size_t o = static_cast<std::size_t>(x) * 3u;
+            row[o + 0] = red_of(px);
+            row[o + 1] = green_of(px);
+            row[o + 2] = blue_of(px);
+        }
+        ok = SDL_WriteIO(io, row.data(), row.size()) == row.size();
+    }
+
+    if (!SDL_CloseIO(io)) { ok = false; }
+
+    if (!ok) { SDL_Log("save_ppm: short write to %s: %s", path, SDL_GetError()); }
+    return ok;
 }
 
 } // namespace engine

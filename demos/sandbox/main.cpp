@@ -30,7 +30,6 @@
 // A relative path would work too and would be a lie about where the header comes
 // from — it comes from a LIBRARY this target links, not from a sibling folder.
 #include "demo_scene.hpp"
-#include "pong.hpp"
 
 // The engine's public API. Angle brackets, because that is what an installed
 // library's headers look like from outside it — and after Lesson 5.1 there is no
@@ -71,6 +70,7 @@
 #include <engine/math/mat4.hpp>
 #include <engine/math/transform.hpp>
 #include <engine/math/vec2.hpp>
+#include <engine/platform/platform.hpp>   // Lesson 5.2: SDL's lifecycle, once
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>   // Provides the cross-platform entry point. NOTE:
@@ -229,8 +229,10 @@ enum class screen
     scene,       ///< Lessons 2.6 – 2.8 — this lesson
     basis,       ///< Lesson 2.5
     triangles,   ///< Lessons 2.2 – 2.4
-    lines,       ///< Lesson 2.1
-    pong         ///< Lesson 1.8
+    lines        ///< Lesson 2.1
+    // Lesson 1.8's Pong used to be a fifth value here. Lesson 5.2 gave it its
+    // own executable — `./build/demos/pong` — because `engine::app` means a
+    // demo no longer has to borrow somebody else's loop to exist.
 };
 
 [[nodiscard]] screen next_demo(screen d)
@@ -240,8 +242,7 @@ enum class screen
     case screen::scene:     return screen::basis;
     case screen::basis:     return screen::triangles;
     case screen::triangles: return screen::lines;
-    case screen::lines:     return screen::pong;
-    case screen::pong:      return screen::scene;
+    case screen::lines:     return screen::scene;
     }
     return screen::scene;
 }
@@ -1165,36 +1166,15 @@ void draw_fan(engine::framebuffer& fb, line_fn draw, float phase)
 // ===========================================================================
 // Presentation
 // ===========================================================================
-
-/// Copy the framebuffer into a streaming texture, row by row.
-///
-/// Row by row rather than one big memcpy because the pitch SDL hands back may
-/// exceed width*4 — some drivers pad each row — and copying as one block would
-/// shear the image diagonally on exactly the machines you do not own. Lesson 1.5
-/// §4.3.
-[[nodiscard]] bool upload(SDL_Texture* texture, const engine::framebuffer& fb)
-{
-    void* dst_pixels = nullptr;
-    int dst_pitch = 0;
-
-    if (!SDL_LockTexture(texture, nullptr, &dst_pixels, &dst_pitch))
-    {
-        return false;
-    }
-
-    Uint8* const dst = static_cast<Uint8*>(dst_pixels);
-    const int row_bytes = fb.pitch();
-
-    for (int y = 0; y < fb.height(); ++y)
-    {
-        std::memcpy(dst + static_cast<std::size_t>(y) * static_cast<std::size_t>(dst_pitch),
-                    fb.row(y),
-                    static_cast<std::size_t>(row_bytes));
-    }
-
-    SDL_UnlockTexture(texture);
-    return true;
-}
+//
+// LESSON 5.2 EMPTIED THIS SECTION. `upload()` lived here — thirty lines that
+// locked the streaming texture and copied the framebuffer into it row by row,
+// because the pitch SDL hands back may exceed width*4 and one big memcpy would
+// shear the image on machines you do not own (Lesson 1.5 §4.3). It was correct,
+// it was subtle, and it was duplicated verbatim in hello_cube.
+//
+// It is `engine::platform::blit_framebuffer()` now. The heading stays as a
+// marker: this is where presentation used to be a demo's problem.
 
 // ===========================================================================
 // Lesson 3.10 — the frame budget, on screen
@@ -1344,21 +1324,6 @@ void draw_budget(SDL_Renderer* r, const engine::profiler& prof, float wall_ns,
         SDL_RenderDebugText(r, x, y + 98.0f,
                             "ZONES OVERLAPPED - two timers alive at once");
     }
-}
-
-/// Turn the keyboard into the two numbers Pong's simulation wants.
-[[nodiscard]] game::intent read_intent(const engine::input& in, bool right_is_ai)
-{
-    game::intent wanted;
-    wanted.right_is_ai = right_is_ai;
-
-    if (in.key_down(SDL_SCANCODE_W)) { wanted.left -= 1.0f; }
-    if (in.key_down(SDL_SCANCODE_S)) { wanted.left += 1.0f; }
-
-    if (in.key_down(SDL_SCANCODE_UP))   { wanted.right -= 1.0f; }
-    if (in.key_down(SDL_SCANCODE_DOWN)) { wanted.right += 1.0f; }
-
-    return wanted;
 }
 
 // ============================================================================
@@ -3587,71 +3552,74 @@ int main(int argc, char* argv[])
     }
     const bool want_gpu = (which_program == program::probe);
 
-    if (!SDL_Init(SDL_INIT_VIDEO))
-    {
-        SDL_Log("SDL_Init failed: %s", SDL_GetError());
-        return 1;
-    }
+    // ---- Lesson 5.2: the platform ------------------------------------------
+    //
+    // Everything that used to be here — SDL_Init, the window, the renderer, the
+    // vsync call, the streaming texture, and four teardown paths that each had
+    // to unwind a different amount — is `engine::platform` now. What is left is
+    // the part that was ever this program's own business: WHICH surface, and
+    // therefore what kind of program this run is.
+    //
+    // NOTE WHAT SANDBOX DID NOT ADOPT: `engine::app`. This file keeps its own
+    // main() and its own `while` loop, deliberately, and Lesson 5.2 §6 argues
+    // it. In one sentence: this program chooses between three incompatible loops
+    // at runtime and is the instrument every measurement in Modules 2 to 4 was
+    // taken with, so it wants the arrangement where the loop is visible in front
+    // of you. The framework path is for programs that want a loop; sandbox is a
+    // program that wants THIS loop.
+    engine::platform plat;
 
-    // Lesson 5.1. Before any window, because nothing here needs one: the software
-    // renderer draws into memory we own, and a characterization test that needed a
-    // GUI session could not run in CI.
+    // Lesson 5.1's characterization shot, now honestly headless: no window, no
+    // renderer, and — the part that used to be a lie — no video subsystem. The
+    // old code called SDL_Init(SDL_INIT_VIDEO) first and then never used it, so
+    // the shot could not run on a machine without a display, which is most of
+    // what a shot is for.
     if (shot_path != nullptr)
     {
-        const int rc = demo::write_reference_shot(shot_path);
-        SDL_Quit();
-        return rc;
+        if (!plat.start({.title = "sandbox — reference shot",
+                         .draw_to = engine::surface::headless}))
+        {
+            return 1;
+        }
+        return demo::write_reference_shot(shot_path);
     }
 
-    const int sdl_version = SDL_GetVersion();
-    SDL_Log("Engine starting — SDL %d.%d.%d",
-            SDL_VERSIONNUM_MAJOR(sdl_version),
-            SDL_VERSIONNUM_MINOR(sdl_version),
-            SDL_VERSIONNUM_MICRO(sdl_version));
+    // Lesson 4.2's fork in the road, and it still has to be made before anybody
+    // owns the window. `surface::gpu` is exactly "make a window and claim it for
+    // nobody" — the platform deliberately does not create a renderer, because
+    // creating one would poison the window for SDL_CreateGPUDevice.
+    const bool gpu_program = want_gpu || (which_program == program::scene);
 
-    SDL_Window* window = SDL_CreateWindow("Engine — Module 4", 1280, 720,
-                                          SDL_WINDOW_RESIZABLE);
-    if (window == nullptr)
+    if (!plat.start({.title = gpu_program ? "Engine — Module 4"
+                                          : "Engine — the software reference",
+                     .draw_to = gpu_program ? engine::surface::gpu
+                                            : engine::surface::renderer,
+                     .fb_width = gpu_program ? 0 : k_fb_width,
+                     .fb_height = gpu_program ? 0 : k_fb_height}))
     {
-        SDL_Log("SDL_CreateWindow failed: %s", SDL_GetError());
-        SDL_Quit();
         return 1;
     }
 
-    // Lesson 4.2's fork in the road, and it has to be here — before any renderer
-    // exists. A window can be claimed by an SDL_GPU device or driven by an
-    // SDL_Renderer, and there is no order of operations in which it is both.
-    if (want_gpu || which_program == program::scene)
+    SDL_Window* const window = plat.window();
+
+    if (gpu_program)
     {
-        const int rc = (which_program == program::scene)
+        return (which_program == program::scene)
             ? run_gpu_scene(window, trace_and_exit)
             : run_gpu_probe(window);
-        SDL_DestroyWindow(window);
-        SDL_Quit();
-        return rc;
     }
 
     SDL_Log("Software screen (the reference). Run with no flag for Lesson 4.8's GPU"
             " scene, or --probe for Lessons 4.2-4.7's instrument.");
 
-    SDL_Renderer* renderer = SDL_CreateRenderer(window, nullptr);
-    if (renderer == nullptr)
-    {
-        SDL_Log("SDL_CreateRenderer failed: %s", SDL_GetError());
-        SDL_DestroyWindow(window);
-        SDL_Quit();
-        return 1;
-    }
+    SDL_Renderer* const renderer = plat.renderer();
 
-    int vsync = 1;
-    if (!SDL_SetRenderVSync(renderer, vsync))
-    {
-        SDL_Log("SDL_SetRenderVSync(%d) failed: %s — continuing unsynchronised",
-                vsync, SDL_GetError());
-        vsync = SDL_RENDERER_VSYNC_DISABLED;
-    }
-
-    engine::framebuffer fb(k_fb_width, k_fb_height);
+    // Borrowed references, so the four thousand lines below read exactly as they
+    // did. The platform owns these; this is a name, not a copy.
+    engine::framebuffer& fb = plat.fb();
+    engine::clock& clk = plat.time();
+    engine::input& in = plat.in();
+    engine::fixed_step& stepper = plat.steps();
 
     // Lesson 3.1's depth attachment. Same dimensions as the colour buffer,
     // allocated once and cleared every frame — never reallocated, because a
@@ -3665,24 +3633,6 @@ int main(int argc, char* argv[])
     engine::framebuffer scratch_fb(k_fb_width, k_fb_height);
     engine::depth_buffer scratch_depth(k_fb_width, k_fb_height);
 
-    SDL_Texture* screen_texture = SDL_CreateTexture(renderer,
-                                                    SDL_PIXELFORMAT_ARGB8888,
-                                                    SDL_TEXTUREACCESS_STREAMING,
-                                                    k_fb_width, k_fb_height);
-    if (screen_texture == nullptr)
-    {
-        SDL_Log("SDL_CreateTexture failed: %s", SDL_GetError());
-        SDL_DestroyRenderer(renderer);
-        SDL_DestroyWindow(window);
-        SDL_Quit();
-        return 1;
-    }
-
-    SDL_SetTextureScaleMode(screen_texture, SDL_SCALEMODE_NEAREST);
-
-    engine::clock clk;
-    engine::input in;
-    engine::fixed_step stepper(60.0f);
 
     // ---- Demo state --------------------------------------------------------
     screen which = screen::scene;
@@ -3844,11 +3794,6 @@ int main(int argc, char* argv[])
     line_fn line_algo = engine::draw_line;
     const char* line_algo_name = "Bresenham (int)";
 
-    const Uint32 seed = static_cast<Uint32>(SDL_GetTicksNS() & 0xFFFFFFFFu);
-    game::state pong_current = game::make_state(seed);
-    game::state pong_previous = pong_current;
-    bool pong_right_is_ai = true;
-
     const Uint32 k_bg = engine::pack_argb(12, 14, 20);
 
     SDL_Log("Triangles: [1] filled [2] wireframe [3] half-planes [4] weights [5] iso-lines");
@@ -3875,11 +3820,11 @@ int main(int argc, char* argv[])
     SDL_Log("  [5] traversal: scanline / 2x2 quads / quads with the helper lanes shown");
     SDL_Log("  [arrows] orbit  [-]/[=] dolly  [P] persp/ortho  [O] model order  [X] object");
     SDL_Log("  [Z] rotation axis  [,] [.] t  [Space] demo::spin  [W]/[N] the 2.7 w bugs");
-    SDL_Log("[Tab] cycles demos: scene (2.6-3.3) -> basis (2.5) -> triangles -> lines -> Pong");
+    SDL_Log("[Tab] cycles demos: scene (2.6-3.3) -> basis (2.5) -> triangles -> lines");
+    SDL_Log("Pong (1.8) is its own program now: ./build/demos/pong");
     SDL_Log("[V] vsync · [Y] throttle · [Esc] quit");
 
-    bool running = true;
-    while (running)
+    while (plat.running())
     {
         // Lesson 3.10. The frame starts HERE — before the event drain, because
         // draining events is work the frame does and a budget that starts after it
@@ -3889,32 +3834,27 @@ int main(int argc, char* argv[])
         // visible rather than hidden.
         prof.begin_frame();
 
+        // The drain is still written out here rather than replaced by
+        // `plat.pump()`, and the difference is the whole reason `handle()` and
+        // `pump()` are two functions. `pump()` drains the queue and tells you
+        // nothing; this loop hands each event to the platform AND keeps it, which
+        // a program with per-event business of its own needs. Sandbox has none
+        // left today — the quit cases moved into `handle` — but it is the file
+        // that grows a drag-and-drop handler first, and the shape should be here
+        // when it does.
         SDL_Event event;
         while (SDL_PollEvent(&event))
         {
-            in.feed_event(event);
-
-            switch (event.type)
-            {
-            case SDL_EVENT_QUIT:
-                SDL_Log("Quit requested");
-                running = false;
-                break;
-
-            case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
-                SDL_Log("Window %u close requested", static_cast<unsigned>(event.window.windowID));
-                running = false;
-                break;
-
-            default:
-                break;
-            }
+            plat.handle(event);
         }
 
-        clk.tick();
-        in.update();
+        // Lesson 1.2's contract and 1.3's, in one call: tick the clock, publish
+        // the input snapshot, and hand the elapsed time to the accumulator — in
+        // that order, which is now impossible to get wrong here because it is not
+        // written here.
+        plat.begin_frame();
 
-        if (in.key_pressed(SDL_SCANCODE_ESCAPE)) { running = false; }
+        if (in.key_pressed(SDL_SCANCODE_ESCAPE)) { plat.request_quit(); }
 
         if (in.key_pressed(SDL_SCANCODE_TAB))
         {
@@ -3923,20 +3863,13 @@ int main(int argc, char* argv[])
                 which == screen::scene     ? "The Z-Buffer — Module 3"
               : which == screen::basis     ? "Basis Transforms — Module 2"
               : which == screen::triangles ? "Triangles — Module 2"
-              : which == screen::lines     ? "Lines — Module 2"
-                                         : "Pong — Module 1 Checkpoint");
+                                           : "Lines — Module 2");
         }
 
-        if (in.key_pressed(SDL_SCANCODE_V))
+        if (in.key_pressed(SDL_SCANCODE_V) && !plat.set_vsync(!plat.vsync()))
         {
-            vsync = (vsync == SDL_RENDERER_VSYNC_DISABLED) ? 1 : SDL_RENDERER_VSYNC_DISABLED;
-            if (!SDL_SetRenderVSync(renderer, vsync))
-            {
-                SDL_Log("SDL_SetRenderVSync(%d) failed: %s", vsync, SDL_GetError());
-            }
+            SDL_Log("vsync toggle refused: %s", SDL_GetError());
         }
-
-        stepper.begin_frame(clk.dt());
 
         if (which == screen::scene)
         {
@@ -4768,25 +4701,6 @@ int main(int argc, char* argv[])
 
             basis_area_px = measure_area_px(basis_m);
         }
-        else if (which == screen::pong)
-        {
-            // ---- Lesson 1.8's game, unchanged --------------------------------
-            if (in.key_pressed(SDL_SCANCODE_C)) { pong_right_is_ai = !pong_right_is_ai; }
-            if (in.key_pressed(SDL_SCANCODE_K))
-            {
-                pong_current.swept_collision = !pong_current.swept_collision;
-                pong_previous.swept_collision = pong_current.swept_collision;
-            }
-
-            const game::intent wanted = read_intent(in, pong_right_is_ai);
-            while (stepper.next_step())
-            {
-                pong_previous = pong_current;
-                game::step(pong_current, wanted, stepper.h());
-                if (pong_current.teleported) { pong_previous = pong_current; }
-            }
-            game::draw(fb, pong_previous, pong_current, stepper.alpha());
-        }
         else if (which == screen::lines)
         {
             // ---- Lesson 2.1's fan ---------------------------------------------
@@ -4930,14 +4844,7 @@ int main(int argc, char* argv[])
         // 90% "waiting for the monitor" tells you nothing about your renderer.
         {
             const engine::scope_timer z{prof, engine::zone::present};
-            if (!upload(screen_texture, fb))
-            {
-                SDL_Log("SDL_LockTexture failed: %s", SDL_GetError());
-            }
-
-            SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-            SDL_RenderClear(renderer);
-            SDL_RenderTexture(renderer, screen_texture, nullptr, nullptr);
+            plat.blit_framebuffer();
         }
 
         // The HUD is a phase, but it is not a lexical scope: it runs to the bottom
@@ -5578,16 +5485,6 @@ int main(int argc, char* argv[])
             SDL_RenderDebugText(renderer, 6.0f, 328.0f,
                                 "[Z] transform  [,] [.] adjust t  [0] reset  [Space] animate  [Tab] screen");
         }
-        else if (which == screen::pong)
-        {
-            SDL_SetRenderDrawColor(renderer, 210, 212, 220, 255);
-            SDL_RenderDebugTextFormat(renderer, 6.0f, 6.0f,
-                                      "PONG (Lesson 1.8)   collision: %-6s   rally %d",
-                                      pong_current.swept_collision ? "swept" : "naive",
-                                      pong_current.rally_hits);
-            SDL_RenderDebugText(renderer, 6.0f, 328.0f,
-                                "[Tab] next screen   [W]/[S]   [C] 2P   [K] collision   [Esc] quit");
-        }
         else if (which == screen::lines)
         {
             SDL_SetRenderDrawColor(renderer, 210, 212, 220, 255);
@@ -5707,7 +5604,7 @@ int main(int argc, char* argv[])
         // The frame ends here, before the blocking call. See `begin_frame` above.
         prof.end_frame();
 
-        SDL_RenderPresent(renderer);
+        plat.present();
 
         // The frame throttle moved from [T] to [Y] in Lesson 3.2, because [T]
         // now cycles the floor tessellation and a key that means two things in
@@ -5718,9 +5615,10 @@ int main(int argc, char* argv[])
         }
     }
 
-    SDL_DestroyTexture(screen_texture);
-    SDL_DestroyRenderer(renderer);
-    SDL_DestroyWindow(window);
-    SDL_Quit();
+    // No teardown. `plat`'s destructor destroys the texture, the renderer and the
+    // window — in that order — and calls SDL_Quit, which is the same four lines
+    // that used to be here except that they now also run on every early return
+    // above. That is not tidiness: this function has five exits, and four of them
+    // used to unwind a different amount.
     return 0;
 }

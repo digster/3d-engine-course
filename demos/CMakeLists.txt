@@ -28,12 +28,34 @@ target_include_directories(demo_common PUBLIC common)
 target_link_libraries(demo_common PUBLIC engine::engine)
 engine_set_warnings(demo_common)
 
+# ---- pong: Lesson 1.8's game, as its own program --------------------------
+#
+# Lesson 5.2. Until this lesson Pong was a branch inside sandbox's five-way
+# switch, reachable only by pressing [Tab] four times, and it was there for one
+# reason: a demo needs a loop and there was exactly one loop in the repository.
+# `engine::app` is a loop you do not have to write, so the branch came out.
+#
+# It links demo_common for the simulation (which was always shared) and gets the
+# engine transitively — demo_common links it PUBLIC. No assets and no shaders:
+# Pong draws with nothing but a framebuffer, which is the whole of what Module 1
+# had and is still enough for a complete game.
+add_executable(pong pong/main.cpp)
+target_link_libraries(pong PRIVATE demo_common)
+engine_set_warnings(pong)
+
 # ---- sandbox: every demo the course has built so far ----------------------
 #
-# Lessons 1.8 through 4.9, on [Tab] and a handful of flags. It is still far too
-# big, and Lesson 5.1 did not fix that on purpose: splitting it needs an
-# application layer to split it INTO, and that is Lesson 5.2. What this lesson
-# took out of it was everything that was never the demo's to begin with.
+# Lessons 2.1 through 4.9, on [Tab] and a handful of flags. Lesson 5.1 said the
+# splitting needed an application layer to split it INTO; Lesson 5.2 built one
+# and took the first demo out (see `pong` above).
+#
+# What sandbox KEPT is a hand-written main() and its own `while` loop, and that
+# is a decision rather than a leftover. It chooses between three incompatible
+# loops at runtime — software, GPU probe, GPU scene — and it is the instrument
+# every measurement in Modules 2 to 4 was taken with. A program with that job
+# wants the library arrangement, and Lesson 5.2 §6 argues it out. It still uses
+# `engine::platform`, so the SDL lifecycle is no longer its problem; what it
+# owns is the loop.
 # NOTE THE NAME. Through Lesson 4.9 this executable was called `engine`, and
 # that name is now taken by the library — by the thing it links, which is
 # precisely the confusion the old name was papering over. It is `sandbox` from

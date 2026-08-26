@@ -45,6 +45,12 @@ add_library(engine STATIC
     src/gfx/raster.cpp
     src/gfx/soft_renderer.cpp
     src/gfx/texture.cpp
+    # Lesson 5.2. Note what is NOT here: platform/main.hpp, which carries
+    # ENGINE_MAIN. It is header-only and deliberately so — including it emits a
+    # real `main`, and an entry point is not a library's to own. See the comment
+    # block at the top of that file.
+    src/platform/app.cpp
+    src/platform/platform.cpp
 )
 
 # `engine::engine` is an ALIAS, and aliases exist for one reason: a name with a
