@@ -658,9 +658,10 @@ chore. What follows is on disk.
 │   └── Shaders.cmake       # add_hlsl_shader(name stage) -> a GLOBAL PROPERTY   [4.3, reshaped 5.1]
 ├── engine/                 # THE LIBRARY                                        [5.1]
 │   ├── CMakeLists.txt      # produces engine::engine (STATIC)
-│   ├── include/engine/     # ---- THE PUBLIC API. 40 headers. Nothing else. ----
+│   ├── include/engine/     # ---- THE PUBLIC API. 43 headers. Nothing else. ----
 │   │   ├── engine.hpp      # the umbrella: shipped, documented, used by nothing we ship
-│   │   ├── core/           # clock, fixed_step, input, profile
+│   │   ├── core/           # clock, fixed_step, input, profile,
+│   │   │                   #   log.hpp + assert.hpp                          [5.3]
 │   │   ├── math/           # vec2/3/4, mat2/3/4, transform  (header-only)
 │   │   ├── platform/       # HOW A PROGRAM STARTS                          [5.2]
 │   │   │   ├── platform.hpp  # surface, app_config, platform — SDL's lifecycle,
@@ -682,7 +683,7 @@ chore. What follows is on disk.
 │   │       └── debug_draw.hpp    # line3, draw_mesh, draw_axes3, show_depth,
 │   │                             #   count_differences — grouped by PURPOSE
 │   └── src/                # ---- PRIVATE. 26 sources; no demo can name this path ----
-│       ├── core/           # clock, fixed_step, input, profile
+│       ├── core/           # clock, fixed_step, input, log, profile
 │       ├── platform/       # platform.cpp, app.cpp                            [5.2]
 │       └── gfx/            # …+ soft_renderer.cpp, debug_draw.cpp; image.cpp is the
 │                           #   ONE unit that contains stb_image + save_ppm
@@ -780,6 +781,76 @@ The surface is chosen in `app_config`, before anything exists, because by then i
 one translation unit per program, and that file must not define `main()`. It is why the entry
 point cannot live in `libengine.a` — an entry point is not a library's to own — and why it is the
 one public header deliberately absent from `engine.hpp`.
+
+### 2.2c Diagnostics: logging, assertions, errors (Lesson 5.3)
+
+**Two axes, never one.** A *category* says who is speaking; a *priority* says how much it
+matters. Collapsing them — a `LOG_ERROR` **category** — means you can never ask for "errors from
+the GPU but not from assets".
+
+Five categories, based at `SDL_LOG_CATEGORY_CUSTOM` (never at a literal; SDL reserves everything
+above that enumerator for applications). A `static_assert` ties the name table to the enum.
+
+| Category | Who |
+|---|---|
+| `log_core` | clock, input, fixed_step, profiler |
+| `log_platform` | window, renderer, the app lifecycle |
+| `log_gfx` | the CPU rasterizer — **no users yet**; it never logs |
+| `log_gpu` | SDL_GPU: devices, pipelines, uploads |
+| `log_asset` | files: images, OBJ, the asset system |
+
+Six levels, and the meanings are promises the engine's 92 call sites obey. The mechanical test
+between the two that get confused: **did the operation happen?** If yes and we carried on, it is
+`warn`; if no and the caller is being told so, it is `error`.
+
+**Who logs a failure: the deepest point that knows why.** Callers propagate silently and add only
+the *consequence*. Chosen over "the caller decides the level" because this rule's cost is visible
+(a recovering caller gets an error line it did not deserve) and the other's is not (detail lost at
+every layer boundary).
+
+**The default costs nothing, and that is the argument against a wrapper.** SDL's documented
+default table is `app=info, assert=warn, test=verbose, *=error`, so every category SDL does not
+know about — every one of ours — is silent unless something failed. Moving the engine off
+`SDL_LOG_CATEGORY_APPLICATION` was the whole change. Demos keep `SDL_Log` deliberately: a demo
+*is* the application.
+
+`--log SPEC` works on every program (`platform::start` reads it first; `app_runner::init` fills in
+`argv` when the app left it null). The grammar is SDL's own `SDL_LOGGING` grammar, so two things a
+person might type do not need two mental models. **The parser validates everything before applying
+anything** — a rejected spec is a no-op.
+
+#### Assertions
+
+One question separates an assertion from an error: *could a correct program, on a working machine,
+encounter this?* Yes → an error, returned, shipping. No → an assertion, which may be compiled out.
+
+| Macro | Survives | For |
+|---|---|---|
+| `ENGINE_ASSERT` | debug only | the default; condition must have no side effects |
+| `ENGINE_CHECK` | every build | only where continuing is worse than stopping |
+| `ENGINE_VERIFY` | expression always runs | an operation whose result is an invariant |
+
+**SDL decides its assertion level from `__OPTIMIZE__`, not `NDEBUG`.** So `-O2` alone disables
+`SDL_assert`, with no `-DNDEBUG` in sight, while our log floor (which keys off `NDEBUG`) is still
+fully compiled in. `-O0 -DNDEBUG` is the exact inverse. Measured in `scratch/measure_53.py`; this
+mismatch produced a real bug in `ENGINE_VERIFY`'s first version.
+
+#### Error reporting
+
+The engine converged on one shape twice, independently, before anybody named it: a **status enum**
+that names the failure, the **facts you ask for next**, and a **`bool ok()`**. `obj_report` (3.5),
+`gpu_report` (4.2), `image_report` (5.3).
+
+| Rule | |
+|---|---|
+| status + report + `ok()` | when a caller might branch on the failure, or there are diagnostics worth having on success |
+| a bare `bool` | when there is genuinely nothing more to say (`platform::set_vsync`) |
+| per-subsystem status enums | never one engine-wide enum — that becomes a junk drawer |
+| no "already logged" contracts | superseded by the who-logs rule above |
+
+`std::expected` is C++23 and deliberately not adopted: the loaders return *facts*, not just
+values, and return them whether or not they worked — `expected` has nowhere to put `obj_report`'s
+twelve statistics.
 
 ### 2.3 Dependency direction
 

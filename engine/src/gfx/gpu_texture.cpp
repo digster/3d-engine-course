@@ -2,6 +2,7 @@
 
 #include <engine/gfx/gpu_texture.hpp>
 
+#include <engine/core/log.hpp>
 #include <engine/gfx/gpu_debug.hpp>   // Lesson 4.9: named at CREATION, as SDL asks
 
 #include <cstring>
@@ -112,7 +113,7 @@ bool gpu_texture::create_sampled(const gpu_device& dev, SDL_GPUCommandBuffer* cb
     texture_ = create_named_texture(device_, ti, name);
     if (texture_ == nullptr)
     {
-        SDL_Log("SDL_CreateGPUTexture(%ux%u %s) failed: %s",
+        ENGINE_LOG_ERROR(engine::log_gpu, "SDL_CreateGPUTexture(%ux%u %s) failed: %s",
                 width_, height_, name_of(format_), SDL_GetError());
         destroy();
         return false;
@@ -129,7 +130,7 @@ bool gpu_texture::create_sampled(const gpu_device& dev, SDL_GPUCommandBuffer* cb
         create_named_transfer_buffer(device_, tb, "staging (texture upload)");
     if (staging == nullptr)
     {
-        SDL_Log("SDL_CreateGPUTransferBuffer(%u) failed: %s", bytes, SDL_GetError());
+        ENGINE_LOG_ERROR(engine::log_gpu, "SDL_CreateGPUTransferBuffer(%u) failed: %s", bytes, SDL_GetError());
         destroy();
         return false;
     }
@@ -137,7 +138,7 @@ bool gpu_texture::create_sampled(const gpu_device& dev, SDL_GPUCommandBuffer* cb
     void* mapped = SDL_MapGPUTransferBuffer(device_, staging, false);
     if (mapped == nullptr)
     {
-        SDL_Log("SDL_MapGPUTransferBuffer failed: %s", SDL_GetError());
+        ENGINE_LOG_ERROR(engine::log_gpu, "SDL_MapGPUTransferBuffer failed: %s", SDL_GetError());
         SDL_ReleaseGPUTransferBuffer(device_, staging);
         destroy();
         return false;
@@ -206,7 +207,7 @@ bool gpu_texture::create_depth(const gpu_device& dev, SDL_GPUTextureFormat forma
     texture_ = create_named_texture(device_, ti, name);
     if (texture_ == nullptr)
     {
-        SDL_Log("SDL_CreateGPUTexture(depth %ux%u %s) failed: %s",
+        ENGINE_LOG_ERROR(engine::log_gpu, "SDL_CreateGPUTexture(depth %ux%u %s) failed: %s",
                 width_, height_, name_of(format_), SDL_GetError());
         destroy();
         return false;
@@ -312,7 +313,7 @@ bool gpu_sampler::create(const gpu_device& dev, filter min_mag, address_mode wra
     sampler_ = SDL_CreateGPUSampler(device_, &si);
     if (sampler_ == nullptr)
     {
-        SDL_Log("SDL_CreateGPUSampler failed: %s", SDL_GetError());
+        ENGINE_LOG_ERROR(engine::log_gpu, "SDL_CreateGPUSampler failed: %s", SDL_GetError());
         destroy();
         return false;
     }

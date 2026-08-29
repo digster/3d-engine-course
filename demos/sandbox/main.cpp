@@ -70,6 +70,7 @@
 #include <engine/math/mat4.hpp>
 #include <engine/math/transform.hpp>
 #include <engine/math/vec2.hpp>
+#include <engine/core/log.hpp>            // Lesson 5.3: categories and levels
 #include <engine/platform/platform.hpp>   // Lesson 5.2: SDL's lifecycle, once
 
 #include <SDL3/SDL.h>
@@ -2069,16 +2070,28 @@ int run_gpu_probe(SDL_Window* window)
     engine::gpu_sampler sampler_nearest;
     bool texture_ok = false;
 
-    const engine::image_status img_status =
-        engine::load_image(engine::asset_path("uv_grid.png").c_str(), uv_image);
+    // Lesson 5.3: a report, not a bare status. Note what the demo does NOT do —
+    // it does not log the failure at ERROR. `load_image` already did that, with
+    // the path and the reason, at the point that knew them. Adding a second
+    // error line here would produce two entries for one problem, the second of
+    // them less informative than the first. What the demo adds is the
+    // CONSEQUENCE, which is the only thing it knows and the loader does not.
+    const engine::image_report img = engine::load_image(
+        engine::asset_path("uv_grid.png").c_str(), uv_image);
 
-    if (img_status != engine::image_status::ok)
+    if (!img.ok())
     {
         SDL_Log("  texture         : uv_grid.png did not load (%s) — [T] will do nothing",
-                engine::name_of(img_status));
+                engine::name_of(img.status));
     }
     else
     {
+        SDL_Log("  texture         : uv_grid.png %dx%d, %d channels on disk,"
+                " %zu bytes decoded from %zu (%.1fx)",
+                img.width, img.height, img.source_channels,
+                img.bytes, img.file_bytes,
+                static_cast<double>(img.bytes) / static_cast<double>(img.file_bytes));
+
         SDL_GPUCommandBuffer* tex_cb = SDL_AcquireGPUCommandBuffer(gpu.handle());
 
         // srgb = true. Lesson 3.9's whole argument in one flag: an albedo is a
@@ -3577,7 +3590,8 @@ int main(int argc, char* argv[])
     if (shot_path != nullptr)
     {
         if (!plat.start({.title = "sandbox — reference shot",
-                         .draw_to = engine::surface::headless}))
+                         .draw_to = engine::surface::headless,
+                         .argc = argc, .argv = argv}))
         {
             return 1;
         }
@@ -3588,6 +3602,16 @@ int main(int argc, char* argv[])
     // owns the window. `surface::gpu` is exactly "make a window and claim it for
     // nobody" — the platform deliberately does not create a renderer, because
     // creating one would poison the window for SDL_CreateGPUDevice.
+    // Lesson 5.3. `--trace` asks for the GPU command log, and that log is emitted
+    // on the `gpu` category at INFO — which 5.3 made silent by default along with
+    // every other engine category. So the flag that requests the report also
+    // raises the level that lets it out. A diagnostic switch that silently does
+    // nothing is worse than no switch, and this is the one line that prevents it.
+    if (trace_and_exit && !engine::set_log_levels("gpu=info"))
+    {
+        return 1;
+    }
+
     const bool gpu_program = want_gpu || (which_program == program::scene);
 
     if (!plat.start({.title = gpu_program ? "Engine — Module 4"
@@ -3595,7 +3619,8 @@ int main(int argc, char* argv[])
                      .draw_to = gpu_program ? engine::surface::gpu
                                             : engine::surface::renderer,
                      .fb_width = gpu_program ? 0 : k_fb_width,
-                     .fb_height = gpu_program ? 0 : k_fb_height}))
+                     .fb_height = gpu_program ? 0 : k_fb_height,
+                     .argc = argc, .argv = argv}))
     {
         return 1;
     }

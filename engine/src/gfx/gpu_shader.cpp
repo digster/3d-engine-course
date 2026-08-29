@@ -3,6 +3,8 @@
 
 #include <engine/gfx/gpu_shader.hpp>
 
+#include <engine/core/log.hpp>
+
 #include <cctype>
 #include <utility>
 
@@ -264,7 +266,7 @@ bool gpu_shader::load(const gpu_device& dev, const char* name, shader_stage stag
     target_ = choose_shader_target(dev.report().granted);
     if (!target_.ok())
     {
-        SDL_Log("shader '%s': this device accepts no format we emit", name);
+        ENGINE_LOG_ERROR(engine::log_gpu, "shader '%s': this device accepts no format we emit", name);
         destroy();
         return false;
     }
@@ -276,8 +278,8 @@ bool gpu_shader::load(const gpu_device& dev, const char* name, shader_stage stag
     void* code = SDL_LoadFile(code_file.c_str(), &code_size);
     if (code == nullptr)
     {
-        SDL_Log("shader '%s': cannot read %s (%s)", name, code_file.c_str(), SDL_GetError());
-        SDL_Log("  Did the build compile shaders? cmake/Shaders.cmake prints what it found.");
+        ENGINE_LOG_ERROR(engine::log_gpu, "shader '%s': cannot read %s (%s)", name, code_file.c_str(), SDL_GetError());
+        ENGINE_LOG_ERROR(engine::log_gpu, "  Did the build compile shaders? cmake/Shaders.cmake prints what it found.");
         destroy();
         return false;
     }
@@ -289,7 +291,7 @@ bool gpu_shader::load(const gpu_device& dev, const char* name, shader_stage stag
     void* json = SDL_LoadFile(json_file.c_str(), &json_size);
     if (json == nullptr)
     {
-        SDL_Log("shader '%s': cannot read %s (%s)", name, json_file.c_str(), SDL_GetError());
+        ENGINE_LOG_ERROR(engine::log_gpu, "shader '%s': cannot read %s (%s)", name, json_file.c_str(), SDL_GetError());
         SDL_free(code);
         destroy();
         return false;
@@ -305,7 +307,7 @@ bool gpu_shader::load(const gpu_device& dev, const char* name, shader_stage stag
     // and losing a check silently is the thing worth refusing to do.
     if (!parse_shader_inputs(json_text, inputs_))
     {
-        SDL_Log("shader '%s': the reflection's \"inputs\" array is malformed —"
+        ENGINE_LOG_ERROR(engine::log_gpu, "shader '%s': the reflection's \"inputs\" array is malformed —"
                 " the layout cannot be checked against it", name);
         inputs_.clear();
     }
@@ -317,7 +319,7 @@ bool gpu_shader::load(const gpu_device& dev, const char* name, shader_stage stag
         // Refusing here rather than defaulting to zero is the whole argument. A
         // shader created with counts that are too low binds nothing at the slots
         // it reads, and reads garbage — silently, at full frame rate.
-        SDL_Log("shader '%s': %s is not the reflection we expect — refusing to guess counts",
+        ENGINE_LOG_ERROR(engine::log_gpu, "shader '%s': %s is not the reflection we expect — refusing to guess counts",
                 name, json_file.c_str());
         SDL_free(code);
         destroy();
@@ -374,7 +376,7 @@ bool gpu_shader::load(const gpu_device& dev, const char* name, shader_stage stag
 
     if (shader_ == nullptr)
     {
-        SDL_Log("shader '%s': SDL_CreateGPUShader failed: %s", name, SDL_GetError());
+        ENGINE_LOG_ERROR(engine::log_gpu, "shader '%s': SDL_CreateGPUShader failed: %s", name, SDL_GetError());
         destroy();
         return false;
     }

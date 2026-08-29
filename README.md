@@ -139,6 +139,24 @@ SDL3's main callbacks.
 > renders six frames down each path and compares the framebuffers byte for byte. Across the three
 > demos, **48 SDL lifecycle calls became 3**.
 
+### The engine is quiet; your program is not
+
+Since **Lesson 5.3** the engine logs on its own categories (`core`, `platform`, `gfx`, `gpu`,
+`asset`) at six levels, and SDL's own default table (`app=info, …, *=error`) means all five are
+silent unless something actually failed. A demo's `SDL_Log` is `APPLICATION` at `info`, so it
+still prints. `--log` works on **every** program built on the engine, because `platform::start`
+reads it before doing anything else:
+
+```sh
+./build/demos/pong                     # one line: the demo's own
+./build/demos/pong --log platform=info # …plus the engine's start-up facts
+./build/demos/sandbox --log gpu=debug  # everything the GPU layer says, nothing else
+./build/demos/sandbox --log '*=quiet'  # silence the engine; the demo still talks
+```
+
+A bad spec is rejected with a message and **nothing is applied** — the parser validates the whole
+string before touching a single level.
+
 The software path is **not** deprecated. It is the *reference*: every measured claim in Modules 2
 and 3 was made against it, and a port whose reference has been deleted is a port nobody can check.
 
@@ -488,7 +506,8 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the full tree and the reasoning behin
 version, as of **Lesson 5.2**:
 
 ```
-engine/include/engine/   the public API — 40 headers, and the only path a demo can name
+engine/include/engine/   the public API — 43 headers, and the only path a demo can name
+engine/include/engine/core/       clock, input, fixed_step, profile, log, assert
 engine/include/engine/platform/   how a program starts: platform.hpp, app.hpp, main.hpp
 engine/src/              private implementation; stb_image stops here
 demos/common/            content shared by demos and verification harnesses

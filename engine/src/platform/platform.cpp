@@ -8,6 +8,9 @@
 
 #include <engine/platform/platform.hpp>
 
+#include <engine/core/assert.hpp>
+#include <engine/core/log.hpp>
+
 #include <cstddef>
 #include <cstring>
 
@@ -36,18 +39,26 @@ bool platform::start(const app_config& cfg)
     // with a live one already up. Refuse loudly rather than half-doing it.
     if (started_)
     {
-        SDL_Log("platform::start called twice — ignoring the second");
+        ENGINE_LOG_WARN(engine::log_platform, "platform::start called twice — ignoring the second");
         return false;
     }
 
     cfg_ = cfg;
+
+    // FIRST, before anything that could want to say something. A `--log` flag
+    // that only took effect after start-up would be unable to explain a
+    // start-up failure, which is the failure people most want explained.
+    if (cfg.argv != nullptr && !configure_logging(cfg.argc, cfg.argv))
+    {
+        return false;
+    }
 
     // Metadata before SDL_Init, because that is when SDL reads it. It is what the
     // window manager, the taskbar, and (on some platforms) the audio mixer call
     // us. Costs one line and removes "SDL Application" from the alt-tab list.
     if (!SDL_SetAppMetadata(cfg.title, "0.5.2", "org.engine-course.engine"))
     {
-        SDL_Log("SDL_SetAppMetadata failed: %s — continuing", SDL_GetError());
+        ENGINE_LOG_WARN(engine::log_platform, "SDL_SetAppMetadata failed: %s — continuing", SDL_GetError());
     }
 
     // Video is implied by the surface rather than requested by the caller, and a
@@ -60,17 +71,22 @@ bool platform::start(const app_config& cfg)
 
     if (!SDL_Init(flags))
     {
-        SDL_Log("SDL_Init(0x%08x) failed: %s", static_cast<unsigned>(flags), SDL_GetError());
+        ENGINE_LOG_ERROR(engine::log_platform, "SDL_Init(0x%08x) failed: %s", static_cast<unsigned>(flags), SDL_GetError());
         return false;
     }
     started_ = true;
 
     const int version = SDL_GetVersion();
-    SDL_Log("platform: SDL %d.%d.%d, surface=%s",
-            SDL_VERSIONNUM_MAJOR(version),
-            SDL_VERSIONNUM_MINOR(version),
-            SDL_VERSIONNUM_MICRO(version),
-            name_of(cfg.draw_to));
+    // INFO, not the old SDL_Log: a fact worth having on a bug report, and
+    // therefore off by default. `--log platform=info` brings it back.
+    ENGINE_LOG_INFO(log_platform, "platform: SDL %d.%d.%d, surface=%s,"
+                    " assertions level %d, log floor %s",
+                    SDL_VERSIONNUM_MAJOR(version),
+                    SDL_VERSIONNUM_MINOR(version),
+                    SDL_VERSIONNUM_MICRO(version),
+                    name_of(cfg.draw_to),
+                    engine::assert_level(),
+                    name_of(compiled_log_floor()));
 
     // ---- The window --------------------------------------------------------
     if (cfg.draw_to != surface::headless)
@@ -79,7 +95,7 @@ bool platform::start(const app_config& cfg)
         window_ = SDL_CreateWindow(cfg.title, cfg.window_width, cfg.window_height, window_flags);
         if (window_ == nullptr)
         {
-            SDL_Log("SDL_CreateWindow failed: %s", SDL_GetError());
+            ENGINE_LOG_ERROR(engine::log_platform, "SDL_CreateWindow failed: %s", SDL_GetError());
             stop();
             return false;
         }
@@ -97,14 +113,14 @@ bool platform::start(const app_config& cfg)
         renderer_ = SDL_CreateRenderer(window_, nullptr);
         if (renderer_ == nullptr)
         {
-            SDL_Log("SDL_CreateRenderer failed: %s", SDL_GetError());
+            ENGINE_LOG_ERROR(engine::log_platform, "SDL_CreateRenderer failed: %s", SDL_GetError());
             stop();
             return false;
         }
 
         if (!set_vsync(cfg.vsync))
         {
-            SDL_Log("vsync %s refused: %s — continuing unsynchronised",
+            ENGINE_LOG_WARN(engine::log_platform, "vsync %s refused: %s — continuing unsynchronised",
                     cfg.vsync ? "on" : "off", SDL_GetError());
         }
     }
@@ -125,7 +141,7 @@ bool platform::start(const app_config& cfg)
                                         cfg.fb_width, cfg.fb_height);
             if (screen_ == nullptr)
             {
-                SDL_Log("SDL_CreateTexture failed: %s", SDL_GetError());
+                ENGINE_LOG_ERROR(engine::log_platform, "SDL_CreateTexture failed: %s", SDL_GetError());
                 stop();
                 return false;
             }
@@ -134,7 +150,7 @@ bool platform::start(const app_config& cfg)
                                          cfg.fb_nearest ? SDL_SCALEMODE_NEAREST
                                                         : SDL_SCALEMODE_LINEAR))
             {
-                SDL_Log("SDL_SetTextureScaleMode failed: %s — continuing", SDL_GetError());
+                ENGINE_LOG_WARN(engine::log_platform, "SDL_SetTextureScaleMode failed: %s — continuing", SDL_GetError());
             }
         }
     }
@@ -195,7 +211,7 @@ void platform::handle(const SDL_Event& event)
     switch (event.type)
     {
     case SDL_EVENT_QUIT:
-        SDL_Log("quit requested");
+        ENGINE_LOG_DEBUG(engine::log_platform, "quit requested");
         running_ = false;
         break;
 
@@ -206,7 +222,7 @@ void platform::handle(const SDL_Event& event)
     case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
         if (window_ != nullptr && event.window.windowID == SDL_GetWindowID(window_))
         {
-            SDL_Log("window %u close requested", static_cast<unsigned>(event.window.windowID));
+            ENGINE_LOG_DEBUG(engine::log_platform, "window %u close requested", static_cast<unsigned>(event.window.windowID));
             running_ = false;
         }
         break;
@@ -256,7 +272,7 @@ void platform::blit_framebuffer()
     int dst_pitch = 0;
     if (!SDL_LockTexture(screen_, nullptr, &dst_pixels, &dst_pitch))
     {
-        SDL_Log("SDL_LockTexture failed: %s", SDL_GetError());
+        ENGINE_LOG_ERROR(engine::log_platform, "SDL_LockTexture failed: %s", SDL_GetError());
         return;
     }
 

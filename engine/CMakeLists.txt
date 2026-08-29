@@ -24,6 +24,7 @@ add_library(engine STATIC
     src/core/clock.cpp
     src/core/fixed_step.cpp
     src/core/input.cpp
+    src/core/log.cpp          # Lesson 5.3
     src/core/profile.cpp
     src/gfx/clip.cpp
     src/gfx/colour.cpp

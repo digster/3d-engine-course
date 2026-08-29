@@ -13,6 +13,7 @@
 
 #include <engine/gfx/image.hpp>
 
+#include <engine/core/log.hpp>
 #include <engine/gfx/framebuffer.hpp>
 
 #include <SDL3/SDL.h>
@@ -67,11 +68,16 @@ const char* name_of(image_status s)
     return "unknown";
 }
 
-image_status load_image(const char* path, image_data& out)
+image_report load_image(const char* path, image_data& out)
 {
     out = image_data{};
+    image_report report;
 
-    if (path == nullptr) { return image_status::cannot_open; }
+    if (path == nullptr)
+    {
+        ENGINE_LOG_ERROR(log_asset, "load_image: null path");
+        return report;   // status is cannot_open, the struct's default
+    }
 
     // Read the bytes with SDL, not with stb. One notion of "where files are"
     // (Lesson 3.5's `asset_path`), one error style, one place that knows the
@@ -80,9 +86,10 @@ image_status load_image(const char* path, image_data& out)
     void* file = SDL_LoadFile(path, &file_bytes);
     if (file == nullptr)
     {
-        SDL_Log("load_image: cannot read %s (%s)", path, SDL_GetError());
-        return image_status::cannot_open;
+        ENGINE_LOG_ERROR(log_asset, "load_image: cannot read %s (%s)", path, SDL_GetError());
+        return report;
     }
+    report.file_bytes = file_bytes;
 
     int w = 0;
     int h = 0;
@@ -93,18 +100,29 @@ image_status load_image(const char* path, image_data& out)
     if (stbi_info_from_memory(static_cast<const stbi_uc*>(file),
                               static_cast<int>(file_bytes), &w, &h, &channels_in_file) == 0)
     {
-        SDL_Log("load_image: %s is not a format we decode (%s)", path, stbi_failure_reason());
+        ENGINE_LOG_ERROR(log_asset, "load_image: %s is not a format we decode (%s)",
+                         path, stbi_failure_reason());
         SDL_free(file);
-        return image_status::bad_format;
+        report.status = image_status::bad_format;
+        return report;
     }
+
+    // Recorded before the size check, so a REJECTED image still reports what it
+    // was. "too_large" with no dimensions makes you open the file yourself to
+    // find out how large; a report that describes the thing it refused is the
+    // difference between a diagnosis and a complaint.
+    report.width = w;
+    report.height = h;
+    report.source_channels = channels_in_file;
 
     if (w <= 0 || h <= 0
         || static_cast<std::size_t>(w) * static_cast<std::size_t>(h) > k_max_image_texels)
     {
-        SDL_Log("load_image: %s is %dx%d, beyond the %zu-texel ceiling",
-                path, w, h, k_max_image_texels);
+        ENGINE_LOG_ERROR(log_asset, "load_image: %s is %dx%d, beyond the %zu-texel ceiling",
+                         path, w, h, k_max_image_texels);
         SDL_free(file);
-        return image_status::too_large;
+        report.status = image_status::too_large;
+        return report;
     }
 
     // The 4 is not a preference, it is the whole point: whatever the file held,
@@ -116,8 +134,10 @@ image_status load_image(const char* path, image_data& out)
 
     if (decoded == nullptr)
     {
-        SDL_Log("load_image: %s failed to decode (%s)", path, stbi_failure_reason());
-        return image_status::bad_format;
+        ENGINE_LOG_ERROR(log_asset, "load_image: %s failed to decode (%s)",
+                         path, stbi_failure_reason());
+        report.status = image_status::bad_format;
+        return report;
     }
 
     const std::size_t bytes = static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4u;
@@ -131,7 +151,18 @@ image_status load_image(const char* path, image_data& out)
     // does not outlive this function.
     stbi_image_free(decoded);
 
-    return image_status::ok;
+    report.bytes = bytes;
+    report.status = image_status::ok;
+
+    // DEBUG, not INFO: this is "what the subsystem did", one line per asset, and
+    // a level with four hundred textures in it should not print four hundred
+    // lines unless somebody asked. `--log asset=debug` asks.
+    ENGINE_LOG_DEBUG(log_asset, "load_image: %s  %dx%d  %d->4 channels  "
+                     "%zu bytes from %zu on disk (%.1fx)",
+                     path, w, h, channels_in_file, report.bytes, report.file_bytes,
+                     report.file_bytes ? static_cast<double>(report.bytes)
+                                       / static_cast<double>(report.file_bytes) : 0.0);
+    return report;
 }
 
 bool save_ppm(const framebuffer& fb, const char* path)
@@ -141,7 +172,7 @@ bool save_ppm(const framebuffer& fb, const char* path)
     SDL_IOStream* const io = SDL_IOFromFile(path, "wb");
     if (io == nullptr)
     {
-        SDL_Log("save_ppm: cannot write %s: %s", path, SDL_GetError());
+        ENGINE_LOG_ERROR(engine::log_asset, "save_ppm: cannot write %s: %s", path, SDL_GetError());
         return false;
     }
 
@@ -175,7 +206,7 @@ bool save_ppm(const framebuffer& fb, const char* path)
 
     if (!SDL_CloseIO(io)) { ok = false; }
 
-    if (!ok) { SDL_Log("save_ppm: short write to %s: %s", path, SDL_GetError()); }
+    if (!ok) { ENGINE_LOG_ERROR(engine::log_asset, "save_ppm: short write to %s: %s", path, SDL_GetError()); }
     return ok;
 }
 

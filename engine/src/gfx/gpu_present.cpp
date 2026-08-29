@@ -2,6 +2,7 @@
 
 #include <engine/gfx/gpu_present.hpp>
 
+#include <engine/core/log.hpp>
 #include <engine/gfx/gpu_debug.hpp>   // Lesson 4.9: named at CREATION, as SDL asks
 
 #include <cstring>
@@ -142,7 +143,7 @@ bool gpu_present_target::create(const gpu_device& dev, int width, int height)
     image_ = create_named_texture(device_, tex, "framebuffer mirror");
     if (image_ == nullptr)
     {
-        SDL_Log("SDL_CreateGPUTexture failed: %s", SDL_GetError());
+        ENGINE_LOG_ERROR(engine::log_gpu, "SDL_CreateGPUTexture failed: %s", SDL_GetError());
         destroy();
         return false;
     }
@@ -155,7 +156,7 @@ bool gpu_present_target::create(const gpu_device& dev, int width, int height)
     staging_ = create_named_transfer_buffer(device_, tb, "staging (framebuffer)");
     if (staging_ == nullptr)
     {
-        SDL_Log("SDL_CreateGPUTransferBuffer failed: %s", SDL_GetError());
+        ENGINE_LOG_ERROR(engine::log_gpu, "SDL_CreateGPUTransferBuffer failed: %s", SDL_GetError());
         destroy();
         return false;
     }
@@ -202,7 +203,7 @@ void gpu_present_target::upload(SDL_GPUCommandBuffer* cb, const framebuffer& fb)
     void* mapped = SDL_MapGPUTransferBuffer(device_, staging_, true);
     if (mapped == nullptr)
     {
-        SDL_Log("SDL_MapGPUTransferBuffer failed: %s", SDL_GetError());
+        ENGINE_LOG_ERROR(engine::log_gpu, "SDL_MapGPUTransferBuffer failed: %s", SDL_GetError());
         return;
     }
     std::memcpy(mapped, fb.data(), bytes);

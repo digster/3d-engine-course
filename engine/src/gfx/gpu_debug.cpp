@@ -2,6 +2,8 @@
 
 #include <engine/gfx/gpu_debug.hpp>
 
+#include <engine/core/log.hpp>
+
 #include <cstring>
 
 namespace engine {
@@ -158,7 +160,7 @@ Uint32 frame_log::uniform_bytes() const
 
 void frame_log::print() const
 {
-    SDL_Log("---- frame: %d events%s ----", count_,
+    ENGINE_LOG_INFO(engine::log_gpu, "---- frame: %d events%s ----", count_,
             overflowed_ ? "  (TRUNCATED — raise frame_log::k_max_events)" : "");
 
     for (int i = 0; i < count_; ++i)
@@ -177,29 +179,29 @@ void frame_log::print() const
         switch (e.kind)
         {
         case gpu_event_kind::draw:
-            SDL_Log("  %s%-10s %-24s %u indices, %u instance(s), %u triangles",
+            ENGINE_LOG_INFO(engine::log_gpu, "  %s%-10s %-24s %u indices, %u instance(s), %u triangles",
                     indent, name_of(e.kind), e.name, e.a, e.b, e.c);
             break;
         case gpu_event_kind::push_uniform:
-            SDL_Log("  %s%-10s %-24s slot %u, %u bytes",
+            ENGINE_LOG_INFO(engine::log_gpu, "  %s%-10s %-24s slot %u, %u bytes",
                     indent, name_of(e.kind), e.name, e.a, e.b);
             break;
         case gpu_event_kind::bind_vertex:
         case gpu_event_kind::bind_index:
         case gpu_event_kind::bind_sampler:
-            SDL_Log("  %s%-10s %-24s slot %u", indent, name_of(e.kind), e.name, e.a);
+            ENGINE_LOG_INFO(engine::log_gpu, "  %s%-10s %-24s slot %u", indent, name_of(e.kind), e.name, e.a);
             break;
         case gpu_event_kind::copy:
         case gpu_event_kind::blit:
-            SDL_Log("  %s%-10s %-24s %u bytes", indent, name_of(e.kind), e.name, e.b);
+            ENGINE_LOG_INFO(engine::log_gpu, "  %s%-10s %-24s %u bytes", indent, name_of(e.kind), e.name, e.b);
             break;
         default:
-            SDL_Log("  %s%-10s %s", indent, name_of(e.kind), e.name);
+            ENGINE_LOG_INFO(engine::log_gpu, "  %s%-10s %s", indent, name_of(e.kind), e.name);
             break;
         }
     }
 
-    SDL_Log("---- %d draw(s), %u uniform bytes ----", draws(), uniform_bytes());
+    ENGINE_LOG_INFO(engine::log_gpu, "---- %d draw(s), %u uniform bytes ----", draws(), uniform_bytes());
 }
 
 } // namespace engine

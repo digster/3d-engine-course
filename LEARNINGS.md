@@ -4259,3 +4259,176 @@ legitimately scrolled off inside a `<pre>`.
 A label sitting below the viewBox floor reports exactly like one running off the right edge. When a
 spill makes no sense horizontally, check the figure's height against the y of its last row — in
 Lesson 5.2's Figure 6 a caption line added late sat 12 units under a 348-unit viewBox.
+
+---
+
+## SDL3 logging and assertion facts, verified at SDL 3.4.12 (Lesson 5.3)
+
+### `SDL_Log()` is not neutral — it is a specific choice made for you
+
+```c
+/* src/SDL_log.c */
+void SDL_Log(const char *fmt, ...)
+{
+    SDL_LogMessageV(SDL_LOG_CATEGORY_APPLICATION, SDL_LOG_PRIORITY_INFO, fmt, ap);
+}
+```
+
+So every `SDL_Log` claims to be *the application speaking, at information level*. For a demo that
+is exactly right. For an engine it is a lie that cannot be filtered, and it is how this codebase
+ended up with 197 calls at one category and one level.
+
+### The default priority table, and why custom categories are free
+
+From `SDL_HINT_LOGGING`'s documentation in `SDL_hints.h`, implemented in `src/SDL_log.c`:
+
+```
+app=info, assert=warn, test=verbose, *=error
+```
+
+**Every category SDL does not know about defaults to ERROR.** `SDL_LOG_CATEGORY_CUSTOM` is where
+SDL stops and applications begin, so any category an app invents lands in the `*` arm. Moving an
+engine's messages off `SDL_LOG_CATEGORY_APPLICATION` therefore makes it silent-by-default with no
+configuration and no filtering code — which is the single strongest argument for using SDL's
+logger instead of wrapping it. A wrapper would have had to reimplement this and would have got a
+different answer.
+
+(`DEBUG_INVOCATION=1` in the environment changes the defaults to `assert=warn,test=verbose,*=debug`.
+Worth knowing before concluding that your levels are broken.)
+
+### `SDL_SetLogOutputFunction` replaces; chain it if you mean "also"
+
+Call `SDL_GetLogOutputFunction(&prev, &prev_userdata)` *before* installing yours, and call `prev`
+from your hook. Otherwise "log to a file" silently costs the user their console, which is not what
+anybody means by that phrase. SDL holds a mutex across the callback, so a file sink is thread-safe
+for free.
+
+**SDL filters before the hook.** A message below its category's threshold never reaches your
+output function at all, so the file and the level are independent controls — and an empty log file
+is almost always the level, not the file.
+
+### SDL's assertion level keys off `__OPTIMIZE__`, not `NDEBUG`
+
+```c
+#elif defined(_DEBUG) || defined(DEBUG) || \
+      (defined(__GNUC__) && !defined(__OPTIMIZE__))
+#define SDL_ASSERT_LEVEL 2
+#else
+#define SDL_ASSERT_LEVEL 1
+#endif
+```
+
+`-O2` **alone** takes you to level 1 — `SDL_assert` disabled, `SDL_assert_release` live — with no
+`-DNDEBUG` anywhere. Measured, per-function code size from the object file:
+
+| | `-O0` | `-O0 -DNDEBUG` | `-O2` | `-O2 -DNDEBUG` |
+|---|---|---|---|---|
+| empty function | 20 B | 20 B | 4 B | 4 B |
+| `ENGINE_LOG_TRACE` | 80 | 28 | 44 | **4** |
+| `ENGINE_ASSERT` | 148 | 148 | **4** | **4** |
+| `ENGINE_CHECK` | 148 | 148 | 100 | 100 |
+
+Columns 2 and 3 are exact inverses: `-O0 -DNDEBUG` gives live assertions and dead trace logging;
+`-O2` gives the opposite. **When you gate your own machinery on a build flag, find out what your
+dependencies gate theirs on.**
+
+### `SDL_disabled_assert` wraps the condition in `sizeof`
+
+```c
+#define SDL_disabled_assert(condition) \
+    do { (void) sizeof ((condition)); } while (SDL_NULL_WHILE_LOOP_CONDITION)
+```
+
+Compiled, never evaluated. That is good — the condition cannot rot, and
+`assert(fp = fopen(path, "r"))` still compiles and still does not open the file — and it is the
+trap that made this lesson's first `ENGINE_VERIFY` wrong:
+
+```cpp
+#ifdef NDEBUG
+#  define ENGINE_VERIFY(e) ((void)(e))     // fine
+#else
+#  define ENGINE_VERIFY(e) SDL_assert(e)   // NOT fine at -O2 with no -DNDEBUG
+#endif
+```
+
+At `-O2` without `NDEBUG` we take the `#else`, SDL is at level 1, and the expression is never
+evaluated — the macro whose entire purpose is guaranteed evaluation silently stopped evaluating.
+**Measured at 4 bytes: a bare `ret`.** Fix: evaluate into a named `bool` unconditionally and gate
+only the check, on `SDL_ASSERT_LEVEL` rather than on `NDEBUG`.
+
+### `SDL_enabled_assert` is a `while` loop, so RETRY genuinely re-tests
+
+```c
+while ( !(condition) ) {
+    static struct SDL_AssertData sdl_assert_data = { … };
+    const SDL_AssertState st = SDL_ReportAssertion(&sdl_assert_data, …);
+    if (st == SDL_ASSERTION_RETRY) { continue; }
+    else if (st == SDL_ASSERTION_BREAK) { SDL_AssertBreakpoint(); }
+    break;
+}
+```
+
+Fix the state in a debugger, answer RETRY, and the program proceeds as though the bug had not
+happened. `SDL_ASSERTION_ALWAYS_IGNORE` latches in that `static`, which is *per expansion site* —
+so an assertion fires once and then goes quiet, which is a feature when grinding past a known
+glitch and a trap when counting.
+
+### Assertions are testable, and almost nobody tests them
+
+`SDL_SetAssertionHandler` + a handler returning `SDL_ASSERTION_IGNORE`, then walk
+`SDL_GetAssertionReport()`'s linked list: condition text, filename, line, `trigger_count`. That is
+enough to prove an assertion fires on the input that should fire it, and to prove it does *not*
+fire in a build where it was compiled out. Use `IGNORE`, not `ALWAYS_IGNORE` — the latter latches
+and your second count comes back short.
+
+### `if constexpr`, not `#if`, for a compile-time log floor
+
+`#define X(...) ((void)0)` in release means the **arguments are never compiled**, so a trace call
+naming a since-renamed variable keeps building in release and breaks in debug — discovered by the
+person least able to explain it. `if constexpr` with a literal condition discards the statement
+(nothing in the object file, and the symbol is not even referenced) while still parsing and
+type-checking it. Deletion *plus* type-checking.
+
+### Validate a whole spec before applying any of it
+
+`--log gfx=debug,gpu=nonsens` must be a no-op, not "the first entry took effect". Parsing straight
+into `SDL_SetLogPriority` leaves the user with a configuration they did not ask for and cannot
+see. Two passes: parse everything into a small stack array, then apply. The array is sized from
+the category count, so it needs no allocation.
+
+---
+
+## Course-infrastructure facts (docs/, Lesson 5.3)
+
+### `svgSpill`'s `overPx` is *usually* vertical, in practice
+
+Second lesson running where every `svgSpill` finding turned out to be a note line below the
+viewBox floor rather than text off the right edge. The generator computes note positions as
+`y0 + i * 14` and the height is a literal — add a line and the last one falls off. Worth checking
+the figure's height against its last row *before* hunting for a long string.
+
+### A figure can pass every automated check and still be wrong
+
+`check-page.js` verified geometry, overlap, spill and theming on all six of this lesson's figures,
+and two of them had **each other's captions** — the builder's `FIGURES` dict mapped
+`FIG_REPORT → l53_fig5.svg` while the generator wrote `l53_fig5.svg = fig_build_matrix`. The page
+rendered a table of byte counts under the caption "three subsystems, arrived at independently".
+
+Only a screenshot catches this. The fix that prevents it recurring is to **number the SVG
+filenames by page order and keep the generator's map in that order too**, so a filename that
+disagrees with its figure number is visible in one file rather than across two.
+
+### Recreate throwaway tooling inside the repo, not `/tmp`
+
+`/tmp` is cleared between sessions, so `check-pages.mjs` and the screenshot driver had to be
+rewritten from memory. They now live in `scratch/` (gitignored) where they survive:
+
+```sh
+(cd docs && python3 -m http.server 8765 &)
+node scratch/check-pages.mjs $(cd docs && ls *.html lessons/*.html)
+node scratch/shot-figs.mjs lessons/05-03-logging-and-errors.html scratch/figs53
+```
+
+Note also that `pageScrollsX` is a bare boolean in the checker's result, so a reporting loop that
+only prints non-empty **arrays** shows a failing page with no reason at all. `check-pages.mjs`
+special-cases it.

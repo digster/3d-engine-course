@@ -138,6 +138,17 @@ struct app_config
     /// automatically for `renderer` and `gpu` and deliberately NOT for
     /// `headless`; audio arrives in Module 7 and goes here.
     SDL_InitFlags extra_subsystems = 0;
+
+    /// Lesson 5.3. Scan `argv` for `--log SPEC` and apply it before anything
+    /// else happens, so that start-up itself can be traced. Set to 0 / nullptr
+    /// if your program parses its own arguments and calls
+    /// `engine::configure_logging` when it chooses.
+    ///
+    /// Passing argv through the config rather than making every program
+    /// remember a call is the same reasoning as every other default here: the
+    /// flag exists whether or not the program thought about it.
+    int argc = 0;
+    char** argv = nullptr;
 };
 
 /// The program's window, renderer, framebuffer, clock, input and step

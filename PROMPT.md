@@ -1916,3 +1916,34 @@ pass, and a new `verify_52` at 66 checks / 0 failures — one of which found a m
 Page infrastructure found two latent bugs on the way: `nofold` was honoured by `course.js` and
 ignored by `course.css`, and a Further Reading list without `class="reading"` pushed the page
 sideways at 390px. Both fixed at the source; corpus back to **102/102**.
+
+> next
+
+**Lesson 5.3 — Logging, Assertions, and Errors Without Exceptions.** Opened by counting: 197
+logging calls, every one of them `SDL_Log` — which `src/SDL_log.c` shows is
+`SDL_LOG_CATEGORY_APPLICATION` at `SDL_LOG_PRIORITY_INFO` — so a fatal error and a curiosity
+printed identically. And *five* different conventions for reporting failure, not the four the
+resume note claimed.
+
+The decisive fact came from reading SDL rather than designing: its default priority table is
+`app=info, assert=warn, test=verbose, *=error`, and `SDL_LOG_CATEGORY_CUSTOM` is where
+applications begin — so **moving the engine onto its own categories makes it silent by default,
+free**. That made 5.2's "don't wrap a library you won't replace" policy pay out a second time:
+`log.hpp` + `log.cpp` are 200 lines of names, a compile-time floor, a two-pass `--log` parser and
+a chaining file sink, and nothing else.
+
+76 call sites converted by a written rule rather than by hand (`convert_logs_53.py`, which prints
+its classification for review; four were corrected). Demos deliberately keep `SDL_Log` — a demo
+*is* the application. Assertions got three macros and an honest account of SDL's unusual ones
+(the `while` loop that makes RETRY real, the `sizeof` that makes disabled conditions unevaluated,
+and `SDL_GetAssertionReport` making assertions **testable**).
+
+Two things worth keeping. **Measuring in four build configurations found a real bug in my own
+`ENGINE_VERIFY`**: SDL gates on `__OPTIMIZE__`, I gated on `NDEBUG`, so at `-O2` it compiled to
+4 bytes and stopped evaluating its expression — the exact bug the macro exists to prevent. And
+the lesson **declined to invent an error type**, because the engine had already converged on one
+twice a module apart; `image_status` became `image_report` and that was the whole conversion.
+
+Golden byte-identical, verify_45–53 all pass (53 runs in three build configurations), corpus at
+**104/104**. The visual pass caught two figures wearing each other's captions — invisible to
+every automated check.

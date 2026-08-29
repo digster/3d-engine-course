@@ -2,6 +2,7 @@
 
 #include <engine/gfx/gpu_scene.hpp>
 
+#include <engine/core/log.hpp>
 #include <engine/gfx/image.hpp>
 
 #include <cstring>
@@ -105,7 +106,7 @@ bool gpu_scene_renderer::create(const gpu_device& dev,
 
         if (!pipelines_[i].create(dev, desc.info()))
         {
-            SDL_Log("gpu_scene: pipeline '%s' was not created", name_of(k_order[i]));
+            ENGINE_LOG_ERROR(engine::log_gpu, "gpu_scene: pipeline '%s' was not created", name_of(k_order[i]));
             destroy();
             return false;
         }
@@ -131,14 +132,14 @@ bool gpu_scene_renderer::create(const gpu_device& dev,
     SDL_GPUCommandBuffer* cb = SDL_AcquireGPUCommandBuffer(dev.handle());
     if (cb == nullptr)
     {
-        SDL_Log("gpu_scene: could not acquire a command buffer: %s", SDL_GetError());
+        ENGINE_LOG_ERROR(engine::log_gpu, "gpu_scene: could not acquire a command buffer: %s", SDL_GetError());
         destroy();
         return false;
     }
     if (!white_.create_sampled(dev, cb, one_texel, true, "white 1x1")
         || !SDL_SubmitGPUCommandBuffer(cb))
     {
-        SDL_Log("gpu_scene: the fallback white texture was not created");
+        ENGINE_LOG_ERROR(engine::log_gpu, "gpu_scene: the fallback white texture was not created");
         destroy();
         return false;
     }
@@ -165,7 +166,7 @@ bool gpu_scene_renderer::ensure_depth(const gpu_device& dev, Uint32 w, Uint32 h)
     if (!depth_.create_depth(dev, depth_format_, w, h, "scene depth")) { return false; }
     depth_w_ = w;
     depth_h_ = h;
-    SDL_Log("gpu_scene: depth target %ux%u %s", w, h, name_of(depth_format_));
+    ENGINE_LOG_INFO(engine::log_gpu, "gpu_scene: depth target %ux%u %s", w, h, name_of(depth_format_));
     return true;
 }
 

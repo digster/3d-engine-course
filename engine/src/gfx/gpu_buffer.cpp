@@ -3,6 +3,7 @@
 
 #include <engine/gfx/gpu_buffer.hpp>
 
+#include <engine/core/log.hpp>
 #include <engine/gfx/gpu_debug.hpp>   // Lesson 4.9: named at CREATION, as SDL asks
 
 #include <cstring>
@@ -58,7 +59,7 @@ bool gpu_buffer::create(const gpu_device& dev, SDL_GPUBufferUsageFlags usage,
     buffer_ = create_named_buffer(device_, info, name);
     if (buffer_ == nullptr)
     {
-        SDL_Log("SDL_CreateGPUBuffer(%u bytes) failed: %s", size, SDL_GetError());
+        ENGINE_LOG_ERROR(engine::log_gpu, "SDL_CreateGPUBuffer(%u bytes) failed: %s", size, SDL_GetError());
         destroy();
         return false;
     }
@@ -74,7 +75,7 @@ bool gpu_buffer::upload(SDL_GPUCommandBuffer* cb, const void* data, Uint32 bytes
         // Refuse rather than truncate. A short upload leaves the tail of the
         // buffer undefined, and undefined geometry draws triangles reaching off
         // to infinity — a spectacular symptom for a mundane arithmetic slip.
-        SDL_Log("gpu_buffer::upload: %u bytes into a %u-byte buffer", bytes, size_);
+        ENGINE_LOG_ERROR(engine::log_gpu, "gpu_buffer::upload: %u bytes into a %u-byte buffer", bytes, size_);
         return false;
     }
 
@@ -90,7 +91,7 @@ bool gpu_buffer::upload(SDL_GPUCommandBuffer* cb, const void* data, Uint32 bytes
         create_named_transfer_buffer(device_, tb, "staging (one-shot upload)");
     if (staging == nullptr)
     {
-        SDL_Log("SDL_CreateGPUTransferBuffer failed: %s", SDL_GetError());
+        ENGINE_LOG_ERROR(engine::log_gpu, "SDL_CreateGPUTransferBuffer failed: %s", SDL_GetError());
         return false;
     }
 
@@ -98,7 +99,7 @@ bool gpu_buffer::upload(SDL_GPUCommandBuffer* cb, const void* data, Uint32 bytes
     void* mapped = SDL_MapGPUTransferBuffer(device_, staging, false);
     if (mapped == nullptr)
     {
-        SDL_Log("SDL_MapGPUTransferBuffer failed: %s", SDL_GetError());
+        ENGINE_LOG_ERROR(engine::log_gpu, "SDL_MapGPUTransferBuffer failed: %s", SDL_GetError());
         SDL_ReleaseGPUTransferBuffer(device_, staging);
         return false;
     }
@@ -200,7 +201,7 @@ bool gpu_stream_buffer::create(const gpu_device& dev, SDL_GPUBufferUsageFlags us
     buffer_ = create_named_buffer(device_, info, name);
     if (buffer_ == nullptr)
     {
-        SDL_Log("SDL_CreateGPUBuffer(%u bytes, streaming) failed: %s", size, SDL_GetError());
+        ENGINE_LOG_ERROR(engine::log_gpu, "SDL_CreateGPUBuffer(%u bytes, streaming) failed: %s", size, SDL_GetError());
         destroy();
         return false;
     }
@@ -215,7 +216,7 @@ bool gpu_stream_buffer::create(const gpu_device& dev, SDL_GPUBufferUsageFlags us
     staging_ = create_named_transfer_buffer(device_, tb, "staging (per-frame stream)");
     if (staging_ == nullptr)
     {
-        SDL_Log("SDL_CreateGPUTransferBuffer(%u bytes) failed: %s", size, SDL_GetError());
+        ENGINE_LOG_ERROR(engine::log_gpu, "SDL_CreateGPUTransferBuffer(%u bytes) failed: %s", size, SDL_GetError());
         destroy();
         return false;
     }
@@ -230,7 +231,7 @@ bool gpu_stream_buffer::write(SDL_GPUCommandBuffer* cb, const void* data, Uint32
     if (bytes == 0) { last_write_bytes_ = 0; return true; }
     if (bytes > size_)
     {
-        SDL_Log("gpu_stream_buffer::write: %u bytes into a %u-byte buffer", bytes, size_);
+        ENGINE_LOG_ERROR(engine::log_gpu, "gpu_stream_buffer::write: %u bytes into a %u-byte buffer", bytes, size_);
         return false;
     }
 
@@ -242,7 +243,7 @@ bool gpu_stream_buffer::write(SDL_GPUCommandBuffer* cb, const void* data, Uint32
     void* mapped = SDL_MapGPUTransferBuffer(device_, staging_, true);
     if (mapped == nullptr)
     {
-        SDL_Log("SDL_MapGPUTransferBuffer failed: %s", SDL_GetError());
+        ENGINE_LOG_ERROR(engine::log_gpu, "SDL_MapGPUTransferBuffer failed: %s", SDL_GetError());
         return false;
     }
     std::memcpy(mapped, data, bytes);

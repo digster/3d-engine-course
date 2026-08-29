@@ -3,6 +3,8 @@
 
 #include <engine/gfx/gpu_device.hpp>
 
+#include <engine/core/log.hpp>
+
 #include <cstdio>
 #include <cstring>
 #include <utility>
@@ -125,7 +127,7 @@ gpu_report gpu_device::create(SDL_Window* window, bool debug)
     if (device_ == nullptr)
     {
         r.status = gpu_status::no_device;
-        SDL_Log("SDL_CreateGPUDevice failed: %s", SDL_GetError());
+        ENGINE_LOG_ERROR(engine::log_gpu, "SDL_CreateGPUDevice failed: %s", SDL_GetError());
         report_ = r;
         return r;
     }
@@ -140,7 +142,7 @@ gpu_report gpu_device::create(SDL_Window* window, bool debug)
             // Leave nothing half-built. A device with no window is a perfectly
             // legal object, but it is not what THIS caller asked for, and
             // returning it would make `ok()` a lie.
-            SDL_Log("SDL_ClaimWindowForGPUDevice failed: %s", SDL_GetError());
+            ENGINE_LOG_ERROR(engine::log_gpu, "SDL_ClaimWindowForGPUDevice failed: %s", SDL_GetError());
             SDL_DestroyGPUDevice(device_);
             device_ = nullptr;
             r.status = gpu_status::window_not_claimed;
@@ -208,7 +210,7 @@ bool gpu_device::set_present_mode(SDL_GPUPresentMode mode)
     if (!SDL_SetGPUSwapchainParameters(device_, window_,
                                        SDL_GPU_SWAPCHAINCOMPOSITION_SDR, mode))
     {
-        SDL_Log("SDL_SetGPUSwapchainParameters failed: %s", SDL_GetError());
+        ENGINE_LOG_ERROR(engine::log_gpu, "SDL_SetGPUSwapchainParameters failed: %s", SDL_GetError());
         return false;
     }
 
@@ -224,7 +226,7 @@ bool gpu_device::set_frames_in_flight(Uint32 frames)
 
     if (!SDL_SetGPUAllowedFramesInFlight(device_, frames))
     {
-        SDL_Log("SDL_SetGPUAllowedFramesInFlight(%u) failed: %s", frames, SDL_GetError());
+        ENGINE_LOG_ERROR(engine::log_gpu, "SDL_SetGPUAllowedFramesInFlight(%u) failed: %s", frames, SDL_GetError());
         return false;
     }
     report_.frames_in_flight = frames;
@@ -235,16 +237,16 @@ void gpu_device::log_report() const
 {
     const gpu_report& r = report_;
 
-    SDL_Log("GPU device: %s", name_of(r.status));
+    ENGINE_LOG_INFO(engine::log_gpu, "GPU device: %s", name_of(r.status));
     if (!r.ok()) { return; }
 
-    SDL_Log("  driver          : %s", r.driver);
+    ENGINE_LOG_INFO(engine::log_gpu, "  driver          : %s", r.driver);
 
     const int drivers = SDL_GetNumGPUDrivers();
     for (int i = 0; i < drivers; ++i)
     {
         const char* name = SDL_GetGPUDriver(i);
-        SDL_Log("  driver [%d]      : %s%s", i, name,
+        ENGINE_LOG_INFO(engine::log_gpu, "  driver [%d]      : %s%s", i, name,
                 (name != nullptr && r.driver != nullptr
                  && SDL_strcmp(name, r.driver) == 0) ? "   <- chosen" : "");
     }
@@ -253,14 +255,14 @@ void gpu_device::log_report() const
     char granted[64];
     format_shader_formats(r.asked, asked, sizeof(asked));
     format_shader_formats(r.granted, granted, sizeof(granted));
-    SDL_Log("  shaders asked   : %s", asked);
-    SDL_Log("  shaders granted : %s", granted);
+    ENGINE_LOG_INFO(engine::log_gpu, "  shaders asked   : %s", asked);
+    ENGINE_LOG_INFO(engine::log_gpu, "  shaders granted : %s", granted);
 
-    SDL_Log("  swapchain format: %s", name_of(r.swapchain_format));
-    SDL_Log("  present modes   : VSYNC%s%s",
+    ENGINE_LOG_INFO(engine::log_gpu, "  swapchain format: %s", name_of(r.swapchain_format));
+    ENGINE_LOG_INFO(engine::log_gpu, "  present modes   : VSYNC%s%s",
             r.supports_immediate ? " IMMEDIATE" : "",
             r.supports_mailbox ? " MAILBOX" : "");
-    SDL_Log("  frames in flight: %u", r.frames_in_flight);
+    ENGINE_LOG_INFO(engine::log_gpu, "  frames in flight: %u", r.frames_in_flight);
 }
 
 } // namespace engine

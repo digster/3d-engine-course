@@ -7,9 +7,107 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-08-26 (after Lesson 5.2 — 47 of 94 lessons)
+updated: 2026-08-29 (after Lesson 5.3 — 48 of 94 lessons)
 
 conventions:
+  logging: TWO AXES, NEVER ONE. A CATEGORY says WHO is speaking (a noun, a part of
+        the program); a PRIORITY says HOW MUCH IT MATTERS. Collapsing them — a
+        `LOG_ERROR` *category* — destroys the mechanism, because you can then never
+        say "errors from the GPU but not from assets".
+        FIVE CATEGORIES, based at SDL_LOG_CATEGORY_CUSTOM (never at a literal —
+        SDL reserves everything above that enumerator for applications, and a
+        number would collide the week SDL adds one):
+          log_core  log_platform  log_gfx  log_gpu  log_asset
+        A static_assert ties the name table to the enum, so adding one without a
+        name does not compile. log_gfx currently has ZERO users: the CPU
+        rasterizer never logs. Recorded rather than hidden; Module 6 fills it.
+        SIX LEVELS, and the meanings are PROMISES that 92 call sites obey:
+          error     the operation did not happen, and the caller is being told so
+          warn      something went wrong and WE RECOVERED  <- the whole distinction
+          info      a fact worth having on a bug report
+          debug     what a subsystem did, once per operation
+          trace     per-frame or per-item detail
+          critical  the program cannot continue
+        THE MECHANICAL TEST between error and warn: DID THE OPERATION HAPPEN?
+        WHO LOGS A FAILURE: the DEEPEST point that knows WHY. Callers propagate
+        SILENTLY and add only the CONSEQUENCE — the thing they know that the
+        callee does not. Chosen over "the caller decides the level" because the
+        cost of THIS rule is visible (a recovering caller gets an error line it
+        did not deserve, fixable by demoting that call to debug) and the cost of
+        the other is invisible (detail lost at every layer boundary).
+        THE PAYOFF IS FREE AND THAT IS THE ARGUMENT AGAINST A WRAPPER. SDL's
+        documented default table is `app=info,assert=warn,test=verbose,*=error`,
+        so every category SDL does not know about — i.e. every one of ours —
+        defaults to ERROR. Moving the engine off SDL_LOG_CATEGORY_APPLICATION
+        makes it quiet with no configuration and no filtering code. A hand-rolled
+        logger would have had to reimplement that and would have got a different
+        default.
+        DEMOS KEEP SDL_Log ON PURPOSE (122 of them). A demo IS the application;
+        APPLICATION/info is exactly what its output is, and it is on by default
+        because the person who ran the program asked for it.
+        `--log SPEC` works on EVERY program: platform::start reads it first thing,
+        and app_runner::init fills in argv when the app left it null. Grammar
+        borrowed from SDL's own SDL_LOGGING hint so two things a person might type
+        do not need two mental models. `*` means OUR categories only — silencing
+        SDL's diagnostics is not ours to do on the user's behalf.
+        THE PARSER VALIDATES EVERYTHING BEFORE APPLYING ANYTHING. A rejected spec
+        is a NO-OP. Parsing straight into SDL_SetLogPriority would leave the good
+        first entry applied after a bad third one, and the user would have a
+        configuration they did not ask for and cannot see.
+        THE FILE SINK CHAINS rather than replaces: SDL_GetLogOutputFunction before
+        SDL_SetLogOutputFunction, and call the previous one. "Also log to a file"
+        must not silently cost you your console. SDL holds a mutex across the
+        hook, so it is thread-safe for free. SDL FILTERS BEFORE THE HOOK, so a
+        message below its level never reaches the sink — the file and the level
+        are independent controls.
+  assertions: AN ASSERTION IS NOT AN ERROR, and one question separates them:
+        COULD A CORRECT PROGRAM, ON A WORKING MACHINE, ENCOUNTER THIS?
+          yes -> an ERROR. The world did it to you. Return it; it ships.
+          no  -> an ASSERTION. Your own code is wrong. Stop; it may be compiled out.
+        THREE MACROS:
+          ENGINE_ASSERT(c)  debug only. The default. NO SIDE EFFECTS in c.
+          ENGINE_CHECK(c)   every build. Only where continuing is worse than stopping.
+          ENGINE_VERIFY(e)  the expression ALWAYS runs; the check is debug only.
+        SDL DECIDES ITS LEVEL FROM __OPTIMIZE__, NOT NDEBUG (SDL_assert.h). So -O2
+        ALONE takes you to SDL_ASSERT_LEVEL 1 — SDL_assert disabled,
+        SDL_assert_release live — with no -DNDEBUG anywhere. OUR log floor keys off
+        NDEBUG. TWO GATES, TWO SWITCHES: `-O2` gives dead assertions + live trace
+        logging; `-O0 -DNDEBUG` gives the exact inverse. Neither is what you guess.
+        SDL_disabled_assert WRAPS THE CONDITION IN sizeof — compiled, never
+        evaluated. Good (the condition cannot rot, and `assert(fp = fopen(...))`
+        still does not open the file) and a trap (this is why ENGINE_VERIFY exists).
+        SDL_enabled_assert IS A `while (!(condition))` LOOP, so SDL_ASSERTION_RETRY
+        genuinely RE-TESTS: fix state in a debugger, continue, proceed as though the
+        bug had not happened. ALWAYS_IGNORE LATCHES in a static per expansion site.
+        ASSERTIONS ARE TESTABLE: SDL_SetAssertionHandler returning IGNORE, plus
+        SDL_GetAssertionReport()'s linked list (condition text, file, line,
+        trigger_count). verify_53 §F proves an assertion fires on the input that
+        should fire it — the thing everyone assumes is impossible.
+  errors: THE ENGINE HAD ALREADY CONVERGED ON THE ANSWER TWICE. obj_report (3.5)
+        and gpu_report (4.2) are both: a STATUS enum naming the failure precisely,
+        the FACTS you ask for next, and a `bool ok()`. Written a module apart by
+        nobody trying to match the other. 5.3 NAMES that shape rather than
+        inventing a fourth, and converts the odd one out (image_status ->
+        image_report).
+        THE FOUR RULES:
+          1. status + report + ok() when a caller might BRANCH on the failure, or
+             when there are diagnostics worth having on SUCCESS too.
+          2. A BARE `bool` IS HONEST WHEN THERE IS NOTHING MORE TO SAY
+             (platform::set_vsync: one failure mode, one sane response).
+          3. PER-SUBSYSTEM status enums, NOT one engine-wide one. A global enum
+             becomes a junk drawer where bad_format means six things. The SHAPE is
+             unified; the vocabularies are not, and should not be.
+          4. "returns false and has ALREADY logged" is retired as an unwritten
+             contract — it is now the documented who-logs rule above.
+        A REPORT DESCRIBES WHAT IT REFUSED: image_report fills in width/height
+        BEFORE the size check, so `too_large` says how large. A report that
+        describes the thing it rejected is a diagnosis; one that does not is a
+        complaint.
+        std::expected IS C++23 AND WE ARE NOT ADOPTING IT YET. Reason recorded:
+        the engine's loaders return FACTS, not just values, and they return them
+        whether or not they worked — expected has nowhere to put obj_report's
+        twelve statistics. Exercise 9.5 builds one anyway. ADOPT A NEW ABSTRACTION
+        WHEN THE OLD ONE HAS FAILED YOU, NOT WHEN THE NEW ONE IS ELEGANT.
   program-entry: A PROGRAM PICKS ONE OF TWO ARRANGEMENTS AND THE ENGINE SUPPORTS
         BOTH. Library: construct engine::platform, write your own main() and your
         own while(plat.running()). Framework: derive from engine::app, override
@@ -2215,8 +2313,25 @@ completed:
   ===> MODULE 4 COMPLETE — Stage B (the SDL_GPU renderer) draws the scene <===
   - 5.1  The Refactor: Engine, Demos, and the Public API
   - 5.2  The Platform and Application Layer
+  - 5.3  Logging, Assertions, and Errors Without Exceptions
 
 capabilities:
+  - DIAG 5.3: THE ENGINE CAN BE TURNED DOWN. 197 SDL_Log calls were one category
+    at one level; the engine's 76 are now 92 ENGINE_LOG_* calls across five
+    categories and six levels (error 54, info 25, warn 6, debug 4, critical 2,
+    trace 1). `./build/demos/pong` prints ONE line — its own — and
+    `--log platform=info` brings the engine back. Zero configuration was needed
+    for the default, because SDL's own table already says `*=error`.
+    engine/core/log.hpp + log.cpp (categories, six macros with a COMPILE-TIME
+    floor, a two-pass `--log` parser, a chaining file sink) and
+    engine/core/assert.hpp (three macros). 43 public headers now.
+    MEASURED, in bytes of emitted code: at -O2 -DNDEBUG a disabled
+    ENGINE_LOG_TRACE is 4 B — identical to an empty function — and the object file
+    does not reference SDL_LogTrace at all.
+  - ERR 5.3: load_image RETURNS A REPORT. image_report (status, width, height,
+    source_channels, bytes, file_bytes, ok()) is the third instance of the shape
+    obj_report and gpu_report had already converged on. Exactly ONE call site
+    needed changing, which is Lesson 5.1's boundary paying out again.
   - ARCH 5.2: A PROGRAM NO LONGER HAS TO SAY HOW TO START. engine::platform owns
     SDL_Init, the window, the renderer, the streaming texture and the mirror
     teardown; engine::app adds the four SDL3 callbacks on top of it. 40 public
@@ -2971,6 +3086,52 @@ capabilities:
   - skills: reading SDL headers as source of truth; debugging with lldb/gdb/VS
 
 decisions:
+  - THE LOGGING LAYER IS 200 LINES BECAUSE SDL'S IS GOOD. Same policy as 5.2's
+    platform decision, applied a second time and paying out harder: SDL already
+    has priorities, categories, a per-category table, an env override and an
+    output hook. What it CANNOT supply is names for our subsystems and a
+    compile-time floor, and that is the entire content of log.hpp/log.cpp.
+    THE DECIDING EVIDENCE WAS READING src/SDL_log.c: the default table is
+    `app=info,assert=warn,test=verbose,*=error`, so custom categories are silent
+    by default for free. A wrapper would have had to reimplement that and would
+    have got a different answer.
+  - `if constexpr`, NOT `#if`, FOR THE COMPILE-TIME FLOOR. `#define X(...) ((void)0)`
+    in release means the ARGUMENTS ARE NEVER COMPILED, so a trace call naming a
+    renamed variable keeps building in release and breaks in debug — found by the
+    person least able to explain it. `if constexpr` with a literal condition
+    DISCARDS the statement (nothing in the object file) while still parsing and
+    type-checking it. Deletion plus type-checking; measured both ways in §5.
+  - ENGINE_VERIFY WAS WRONG THE FIRST TIME, AND MEASUREMENT FOUND IT. v1 was
+    `#ifdef NDEBUG ((void)(expr)) #else SDL_assert(expr)`. Reads correctly; both
+    branches evaluate. But SDL gates on __OPTIMIZE__, so at `-O2` with no
+    -DNDEBUG we take the #else and SDL_assert is at level 1 =
+    `(void)sizeof(condition)` — an UNEVALUATED CONTEXT. The macro whose entire
+    purpose is guaranteed evaluation silently stopped evaluating, in exactly one
+    configuration. MEASURED AT 4 BYTES — a bare `ret`. Fix: evaluate into a named
+    bool ALWAYS, assert on the value under `if constexpr (SDL_ASSERT_LEVEL >= 2)`.
+    16 bytes now. GENERAL LESSON: WHEN YOU GATE YOUR MACHINERY ON A BUILD FLAG,
+    FIND OUT WHAT YOUR DEPENDENCIES GATE THEIRS ON.
+  - THE 76-SITE CONVERSION WAS DONE BY A WRITTEN RULE, NOT BY HAND.
+    scratch/convert_logs_53.py: category from the file's directory (that is what a
+    category IS), level from an ORDERED pattern list where "— continuing" beats
+    "failed" — which is the error/warn rule in code. It PRINTS its classification
+    for every site so review is possible; four were wrong and were corrected by
+    hand. 76 judgement calls made at 76 different moments is how a level system
+    loses its meaning before it has one.
+  - `--trace` RAISES gpu=info, IN ONE LINE, and without it the flag would have
+    silently done nothing — worse than no flag, because it looks like the feature
+    is broken rather than the logging. Any diagnostic switch whose output lives on
+    a category must raise that category.
+  - MEASURE IN FOUR CONFIGURATIONS, NOT TWO. -O0 / -O0 -DNDEBUG / -O2 /
+    -O2 -DNDEBUG, per-function code size read out of the object file plus the
+    undefined-symbol list. Columns 2 and 3 are exact inverses and neither is
+    guessable. The undefined-symbol list is the stronger claim: at -O2 -DNDEBUG
+    the object does not reference SDL_LogTrace, so the calls did not become cheap,
+    they stopped existing.
+  - THE HARNESS REPORTS WITH std::printf, NOT WITH ENGINE_LOG_*. A harness that
+    reports through the machinery it is testing cannot report that the machinery
+    is broken. verify_53 also RUNS IN THREE CONFIGURATIONS and adapts its
+    assertions (60 checks at -O0, 59 at -O2) rather than assuming one.
   - THE PLATFORM LAYER ADMITS SDL RATHER THAN HIDING IT, and the argument is
     written into platform.hpp's header comment so nobody re-opens it by accident.
     window() returns SDL_Window*; handle() takes SDL_Event. A WRAPPER THAT HIDES A
@@ -3710,7 +3871,8 @@ files:
             matrix_probe.frag.hlsl
   engine/: CMakeLists.txt
   engine/include/engine/: engine.hpp                      (the umbrella)
-  engine/include/engine/core/: clock.hpp, fixed_step.hpp, input.hpp, profile.hpp
+  engine/include/engine/core/: assert.hpp, clock.hpp, fixed_step.hpp, input.hpp,
+            log.hpp, profile.hpp
   engine/include/engine/gfx/: clip.hpp, colour.hpp, debug_draw.hpp,
             depth_buffer.hpp, framebuffer.hpp, gpu_buffer.hpp, gpu_debug.hpp,
             gpu_device.hpp, gpu_mesh.hpp, gpu_pipeline.hpp, gpu_present.hpp,
@@ -3721,7 +3883,7 @@ files:
             vec2.hpp, vec3.hpp, vec4.hpp
   engine/include/engine/platform/: platform.hpp, app.hpp,
             main.hpp   (NOT in engine.hpp — it defines the entry point)
-  engine/src/core/: clock.cpp, fixed_step.cpp, input.cpp, profile.cpp
+  engine/src/core/: clock.cpp, fixed_step.cpp, input.cpp, log.cpp, profile.cpp
   engine/src/gfx/: clip.cpp, colour.cpp, debug_draw.cpp, depth_buffer.cpp,
             framebuffer.cpp, gpu_buffer.cpp, gpu_debug.cpp, gpu_device.cpp,
             gpu_mesh.cpp, gpu_pipeline.cpp, gpu_present.cpp, gpu_scene.cpp,
@@ -3760,49 +3922,63 @@ files:
                  04-08-porting-the-scene.html,
                  04-09-renderdoc.html,
                  05-01-the-refactor.html,
-                 05-02-platform-layer.html
+                 05-02-platform-layer.html,
+                 05-03-logging-and-errors.html
   docs/shared/: course.css, course.js      (THE stylesheet + page script; one copy each)
   docs/_template/: lesson-template.html, README.md, apply-shared.py, check-page.js
   memory/: 2026-07-16.md … 2026-08-25.md, 2026-08-25-b.md, 2026-08-25-c.md,
-           2026-08-26.md
+           2026-08-26.md, 2026-08-26-b.md, 2026-08-29.md
   (retired: src/ — the whole directory. hello.cpp.)
 
 
-next: 5.3 — Logging, Assertions, and the Error-Handling Strategy
-      (planned filename: docs/lessons/05-03-logging-and-errors.html — 5.2's TWO
-      next links point at the index and BOTH need repointing.)
-      THE DEBT IS FOUR ANSWERS TO ONE QUESTION, and 5.2 ends by naming them:
-        - image_status (3.5/4.7)   — an enum of named failures
-        - gpu_status (4.2)         — an enum PLUS a gpu_report struct of detail
-        - bool + a log line        — obj.cpp, texture.cpp, gpu_* create/upload
-        - "returns false and has ALREADY logged" — platform::start, app::on_start
-          (5.2), which is the newest and the least examined of the four
-        All four are defensible in isolation; none of them is the same. CLAUDE.md
-        §4 forbids exceptions and RTTI in the engine core, so this is not a choice
-        between exceptions and codes — it is a choice among the codes.
-      LOGGING IS THE CONCRETE HALF AND IT IS ALREADY EMBARRASSING. platform::start
-      alone has SIX SDL_Log calls, and they are not the same KIND of message:
-      "SDL_Init failed" is fatal, "vsync refused — continuing" is a warning,
-      "platform: SDL 3.4.12, surface=headless" is information, and
-      "SDL_SetAppMetadata failed — continuing" is a curiosity. All four go to the
-      same place at the same volume. ⚠ VERIFY SDL3's own logging API before
-      designing over it: SDL_LogPriority, SDL_SetLogPriorities,
-      SDL_SetLogPriority, the SDL_LOG_CATEGORY_* enum, and SDL_SetLogOutputFunction
-      (for routing to a file or an ImGui console) — against SDL3/SDL_log.h. We
-      have been using SDL_Log (which is CATEGORY_APPLICATION at INFO) for
-      everything since 0.5.
-      ASSERTIONS ARE THE THIRD PIECE. ⚠ VERIFY SDL_assert / SDL_assert_release /
-      SDL_assert_paranoid and SDL_AssertState against SDL3/SDL_assert.h — SDL's
-      assertions are unusual and worth teaching honestly (they offer a "break /
-      retry / ignore / always ignore" prompt rather than aborting), and the
-      question of what survives a release build is the actual lesson.
-      THE TEST TO BEAT: after 5.3 the golden must STILL be byte-identical; a
-      release build must contain no debug-only assertion; and it must be possible
-      to run any demo with engine chatter OFF and application output ON, from the
-      command line, without editing code. If the logging layer cannot be turned
-      down, it is a print statement with extra ceremony.
-      WATCH FOR: 5.2 added `bool` returns that log internally, which is precisely
-      the pattern 5.3 must judge rather than inherit. Do not quietly convert the
-      whole engine — pick the strategy, convert ONE subsystem end to end as the
-      worked example, and write down which lesson converts the rest.
+next: 5.4 — Handles: Generational Indices
+      (planned filename: docs/lessons/05-04-handles.html — 5.3's TWO next links
+      point at the index and BOTH need repointing.)
+      THE PRESSURE HAS BEEN ACCUMULATING SINCE MODULE 3. Every resource in this
+      engine is passed as a reference or a raw pointer — mesh_data, texture,
+      gpu_texture, scene_object::geometry (a NON-OWNING `mesh` view over arrays
+      somebody else owns). That works today for exactly one reason: everything is
+      a local of main() and NOTHING IS EVER DESTROYED. hello_cube's own comment
+      says it out loud — "the data must outlive every frame that uses it, which it
+      does, being a local of main()".
+      THE MOMENT AN ASSET SYSTEM CAN UNLOAD, every one of those pointers becomes a
+      question nobody can answer: IS THIS STILL VALID? A raw pointer to freed
+      memory is not detectably wrong — it is the same bits it always was.
+      THE ANSWER: a handle = INDEX + GENERATION. The index says where; the
+      generation says which occupant. Freeing a slot bumps its generation, so an
+      old handle's generation no longer matches and the lookup FAILS LOUDLY
+      instead of returning somebody else's mesh.
+        - DERIVE IT, do not decree it. Start from the raw pointer and show the
+          three failures in order: dangling (freed), aliasing (slot reused), and
+          relocation (the pool grew and moved everything). Each one motivates one
+          more piece of the design, and the ABA problem is the interesting middle
+          step — an index alone fixes relocation and makes aliasing WORSE.
+        - THE BIT BUDGET IS A REAL DESIGN DECISION with a worked example: 32 bits
+          split 20/12 gives 1,048,576 slots and 4,096 reuses before a generation
+          wraps; 64 bits split 32/32 makes wrap-around a non-issue and doubles
+          every handle in every struct. Compute the wrap time at a plausible
+          churn rate rather than asserting one is enough.
+        - WHAT IT BUYS BEYOND SAFETY, and this is the part that makes it worth a
+          lesson rather than a paragraph: storage becomes RELOCATABLE (a pool can
+          compact, which a raw pointer forbids), serialization becomes trivial
+          (two integers, no pointer fixups — Module 8 needs this), and a handle is
+          CHEAP TO COPY and safe to store in a component, which is exactly what
+          the ECS needs.
+        - TYPED HANDLES, not a bare integer: handle<mesh> and handle<texture> must
+          not be interchangeable. A phantom template parameter costs nothing at
+          runtime and turns a whole class of mix-up into a compile error — the
+          same argument engine::engine's `::` made in 5.1.
+        - CONVERT ONE SUBSYSTEM, as 5.3 did, and say which lesson converts the
+          rest. Meshes are the obvious first: scene_object::geometry is a
+          non-owning view TODAY and is the thing that breaks first.
+      THE TEST TO BEAT: the golden must STILL be byte-identical; a stale handle
+      must be DETECTED rather than dereferenced (and verify_54 must prove it by
+      freeing a slot, reallocating it, and showing the old handle fails); and the
+      pool must survive a reallocation that moves every element, with old handles
+      still resolving correctly. If a handle cannot survive its pool growing, it
+      is a pointer with extra steps.
+      WATCH FOR: 5.3's own residue lists 61 bool-returning functions and three
+      status enums that were deliberately left alone. Do not fold that work into
+      5.4 — handles are a big enough idea on their own, and the ECS (5.6-5.9)
+      depends on getting them right rather than on getting them soon.
 ```

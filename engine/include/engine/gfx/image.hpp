@@ -95,12 +95,59 @@ struct image_data
 /// beats allocating a quarter of a gigabyte and finding out later.
 inline constexpr std::size_t k_max_image_texels = 8192u * 8192u;
 
+/// Everything the decode learned, whether or not it succeeded.
+///
+/// **Lesson 5.3 added this, and it is a convergence rather than an invention.**
+/// The engine had already grown this exact shape twice, independently:
+/// `obj_report` (3.5) and `gpu_report` (4.2) are both a status enum, plus the
+/// facts you actually want when something looks wrong, plus an `ok()`. Naming
+/// the pattern and applying it to the third case is cheaper than arguing about
+/// a fourth.
+///
+/// A bare `image_status` answered "did it work". These fields answer the
+/// questions you ask next: how big is it, what did the FILE contain as against
+/// what we handed back, and how much memory did that cost.
+struct image_report
+{
+    image_status status = image_status::cannot_open;
+
+    int width = 0;
+    int height = 0;
+
+    /// Channels the file contained, before stb converted to four. Diagnostic
+    /// only — `image_data::pixels` is always RGBA — but it is the answer to
+    /// "why is my alpha 255 everywhere".
+    int source_channels = 0;
+
+    /// Bytes of decoded pixel data: `width * height * 4`. Worth having on a
+    /// report because it is the number that turns "the level takes a while to
+    /// load" into "the level decodes 380 MB of textures".
+    std::size_t bytes = 0;
+
+    /// Bytes read from disk before decoding — so `bytes / file_bytes` is this
+    /// asset's compression ratio, measured rather than assumed.
+    std::size_t file_bytes = 0;
+
+    [[nodiscard]] bool ok() const { return status == image_status::ok; }
+};
+
 /// Decode `path` into `out`.
 ///
 /// @param path an absolute path, or one relative to the working directory. Use
 ///             `asset_path()` (Lesson 3.5) to get a file that sits beside the
 ///             executable, which is where the build puts them.
-[[nodiscard]] image_status load_image(const char* path, image_data& out);
+///
+/// Returns a report rather than a bare status (Lesson 5.3). `report.ok()` is the
+/// success test; `report.status` is what went wrong; the rest is what the file
+/// turned out to be.
+///
+/// **On failure this function logs at ERROR on `log_asset` and returns.** That
+/// is the engine's rule, stated once here because this is the first function to
+/// follow it deliberately: *the failure is logged once, at the deepest point
+/// that knows why, and callers propagate silently.* A caller that adds its own
+/// error line produces two entries for one problem, and the second one has less
+/// information than the first.
+[[nodiscard]] image_report load_image(const char* path, image_data& out);
 
 /// Write a framebuffer to `path` as a binary PPM (P6). Returns false and logs on
 /// failure.

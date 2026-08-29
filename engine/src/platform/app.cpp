@@ -14,6 +14,8 @@
 
 #include <engine/platform/app.hpp>
 
+#include <engine/core/log.hpp>
+
 namespace engine {
 
 // ---- The defaults ---------------------------------------------------------
@@ -66,7 +68,17 @@ SDL_AppResult app_runner::init(void** appstate, std::unique_ptr<app> instance,
 
     // configure() runs before SDL exists, which is precisely why it takes argv:
     // a flag that chooses the surface must be read before the surface is made.
-    const app_config cfg = self->configure(argc, argv);
+    app_config cfg = self->configure(argc, argv);
+
+    // Lesson 5.3. Filled in for the app rather than by it: `--log` should work
+    // on every program built on the engine, including the ones whose author
+    // never heard of it. An app that genuinely wants to own the flag sets
+    // `argv` itself and gets whatever it set.
+    if (cfg.argv == nullptr)
+    {
+        cfg.argc = argc;
+        cfg.argv = argv;
+    }
 
     if (!self->sys().start(cfg))
     {
@@ -78,7 +90,7 @@ SDL_AppResult app_runner::init(void** appstate, std::unique_ptr<app> instance,
 
     if (!self->on_start())
     {
-        SDL_Log("app: on_start() failed");
+        ENGINE_LOG_ERROR(engine::log_platform, "app: on_start() failed");
         return SDL_APP_FAILURE;
     }
 
@@ -173,7 +185,7 @@ void app_runner::quit(void* appstate, SDL_AppResult result)
 
     if (result == SDL_APP_FAILURE)
     {
-        SDL_Log("app: shutting down after a failure");
+        ENGINE_LOG_ERROR(engine::log_platform, "app: shutting down after a failure");
     }
 
     // on_stop() only if the platform actually came up. If start() failed there is

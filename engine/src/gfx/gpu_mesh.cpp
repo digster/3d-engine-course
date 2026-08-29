@@ -2,6 +2,8 @@
 
 #include <engine/gfx/gpu_mesh.hpp>
 
+#include <engine/core/log.hpp>
+
 #include <cmath>
 #include <cstddef>
 #include <utility>
@@ -119,7 +121,7 @@ bool gpu_mesh::create(const gpu_device& dev, SDL_GPUCommandBuffer* cb,
         // cashes that constant in.
         if (m.vertices.size() > k_max_mesh_vertices)
         {
-            SDL_Log("gpu_mesh '%s': %zu vertices exceeds the 16-bit index ceiling of %zu",
+            ENGINE_LOG_ERROR(engine::log_gpu, "gpu_mesh '%s': %zu vertices exceeds the 16-bit index ceiling of %zu",
                     (name != nullptr) ? name : "?", m.vertices.size(), k_max_mesh_vertices);
             return false;
         }

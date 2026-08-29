@@ -3,6 +3,8 @@
 
 #include <engine/gfx/gpu_pipeline.hpp>
 
+#include <engine/core/log.hpp>
+
 #include <cstddef>
 #include <string>
 #include <string_view>
@@ -275,7 +277,7 @@ layout_report pipeline_desc::check_layout(const shader_inputs& inputs, const cha
             if (attributes_[j].location == a.location)
             {
                 ++r.duplicate;
-                SDL_Log("  layout %s: TWO attributes at location %u — SDL requires them unique",
+                ENGINE_LOG_ERROR(engine::log_gpu, "  layout %s: TWO attributes at location %u — SDL requires them unique",
                         who, a.location);
                 break;
             }
@@ -292,7 +294,7 @@ layout_report pipeline_desc::check_layout(const shader_inputs& inputs, const cha
             if (end > buffers_[b].pitch)
             {
                 ++r.overrun;
-                SDL_Log("  layout %s: location %u ends at byte %u of a %u-byte vertex"
+                ENGINE_LOG_INFO(engine::log_gpu, "  layout %s: location %u ends at byte %u of a %u-byte vertex"
                         " — it reads into the NEXT one",
                         who, a.location, end, buffers_[b].pitch);
             }
@@ -313,7 +315,7 @@ layout_report pipeline_desc::check_layout(const shader_inputs& inputs, const cha
             // without a word. It is harmless to the picture and it is almost
             // always a typo, so it is worth a line.
             ++r.extra;
-            SDL_Log("  layout %s: location %u is supplied but the shader never declares it",
+            ENGINE_LOG_INFO(engine::log_gpu, "  layout %s: location %u is supplied but the shader never declares it",
                     who, a.location);
             continue;
         }
@@ -332,7 +334,7 @@ layout_report pipeline_desc::check_layout(const shader_inputs& inputs, const cha
             // The bad kind. Float bits read as an integer are not a small error;
             // 1.0f read as an int is 1065353216.
             ++r.type_mismatch;
-            SDL_Log("  layout %s: location %u (%s) supplies %s, the shader reads %s"
+            ENGINE_LOG_INFO(engine::log_gpu, "  layout %s: location %u (%s) supplies %s, the shader reads %s"
                     " — the BITS are reinterpreted, not converted",
                     who, a.location, match->name.c_str(),
                     shader_type_of(a.format), match->type.c_str());
@@ -341,7 +343,7 @@ layout_report pipeline_desc::check_layout(const shader_inputs& inputs, const cha
         {
             // The legal kind — see `layout_report::widening`.
             ++r.widening;
-            SDL_Log("  layout %s: location %u (%s) supplies %s into a %s"
+            ENGINE_LOG_INFO(engine::log_gpu, "  layout %s: location %u (%s) supplies %s into a %s"
                     " — hardware fills the rest; verify_45 §F says with what",
                     who, a.location, match->name.c_str(),
                     shader_type_of(a.format), match->type.c_str());
@@ -351,7 +353,7 @@ layout_report pipeline_desc::check_layout(const shader_inputs& inputs, const cha
             // Also legal, also worth saying: the extra components are read out of
             // the buffer and then discarded, which is bandwidth spent on nothing.
             ++r.widening;
-            SDL_Log("  layout %s: location %u (%s) supplies %s into a %s"
+            ENGINE_LOG_INFO(engine::log_gpu, "  layout %s: location %u (%s) supplies %s into a %s"
                     " — the extra components are fetched and thrown away",
                     who, a.location, match->name.c_str(),
                     shader_type_of(a.format), match->type.c_str());
@@ -373,7 +375,7 @@ layout_report pipeline_desc::check_layout(const shader_inputs& inputs, const cha
         if (!supplied)
         {
             ++r.missing;
-            SDL_Log("  layout %s: the shader declares %s (%s) at location %u"
+            ENGINE_LOG_INFO(engine::log_gpu, "  layout %s: the shader declares %s (%s) at location %u"
                     " and NOTHING supplies it",
                     who, in.name.c_str(), in.type.c_str(), in.location);
         }
@@ -381,7 +383,7 @@ layout_report pipeline_desc::check_layout(const shader_inputs& inputs, const cha
 
     if (r.ok())
     {
-        SDL_Log("  layout %s: %d attribute%s checked against the reflection, no problems%s",
+        ENGINE_LOG_INFO(engine::log_gpu, "  layout %s: %d attribute%s checked against the reflection, no problems%s",
                 who, r.checked, r.checked == 1 ? "" : "s",
                 r.widening > 0 ? " (see the note above)" : "");
     }
@@ -445,7 +447,7 @@ bool gpu_pipeline::create(const gpu_device& dev, const SDL_GPUGraphicsPipelineCr
 
     if (pipeline_ == nullptr)
     {
-        SDL_Log("SDL_CreateGPUGraphicsPipeline failed: %s", SDL_GetError());
+        ENGINE_LOG_ERROR(engine::log_gpu, "SDL_CreateGPUGraphicsPipeline failed: %s", SDL_GetError());
         destroy();
         return false;
     }
