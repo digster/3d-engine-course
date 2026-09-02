@@ -4432,3 +4432,93 @@ node scratch/shot-figs.mjs lessons/05-03-logging-and-errors.html scratch/figs53
 Note also that `pageScrollsX` is a bare boolean in the checker's result, so a reporting loop that
 only prints non-empty **arrays** shows a failing page with no reason at all. `check-pages.mjs`
 special-cases it.
+
+---
+
+## C++ and container facts (Lesson 5.4)
+
+### A member function named `handle()` blocks the type `handle<T>`
+
+`engine::handle<T>` is a good name and it collides with an idiom this codebase uses everywhere —
+`gpu_device::handle()`, `gpu_texture::handle()`, `gpu_mesh::handle()` all return the underlying
+SDL object. Inside such a class, unqualified `handle<mesh_data> h;` does not compile:
+
+```
+error: explicit qualification required to use member 'handle' from dependent base class
+```
+
+Reproduced in four lines. Name lookup finds the member first. The fix is to use an alias
+(`mesh_handle`) or qualify (`engine::handle<mesh_data>`), which is why every line of engine and
+demo code uses the alias. Worth knowing before naming any short, generic type that shares a word
+with a common accessor.
+
+### `pop_back()` does not free what a moved-from element owned
+
+Removing from a dense container by "move the last element into the hole, then `pop_back`" leaves
+the moved-from `T` sitting in the vector's *capacity*, and a moved-from `std::vector` is only
+required to be "valid but unspecified" — keeping its buffer is a perfectly valid unspecified
+state. So a pool of `mesh_data` can hold a freed mesh's megabytes indefinitely while every size
+and count reads correctly. Assign `T{}` over the vacated slot before popping.
+
+### Guard the self-move in swap-and-patch
+
+`items_[dead] = std::move(items_[last])` when `dead == last` is self-move-assignment, which is not
+required to leave the object in any particular state — a `std::vector` member is entitled to end
+up empty. Removing the *last* element is the common case, so an unguarded version is wrong in the
+case it will hit most often, and intermittently. `if (dead != last)` is correctness, not an
+optimisation.
+
+### A dense index doubling as the occupancy flag costs nothing and cannot desync
+
+`slot::dense == 0xFFFFFFFF` means "this slot holds nothing". A separate `bool occupied` would be
+a byte per slot, a second thing to update on every insert and remove, and a second thing to forget
+to check. One sentinel answers both questions and cannot disagree with itself.
+
+### Bump the generation on *removal*, never on insertion
+
+Bumping on free means a vacated slot immediately carries a value no outstanding handle holds, so
+the window between free and re-allocation needs no separate flag. Bumping on allocate leaves that
+window open, and closing it needs exactly the extra flag the sentinel above avoided.
+
+### Resolving a handle costs about 0.13 ns more than a dereference
+
+Measured over 4,096 objects × 20,000 reps, alternating the two loops so thermal drift hits both:
+`pool.get(h)` 0.98 ns against a raw `const T*` at 0.85 ns, stable across five runs. That is well
+under a cycle — the two extra loads are adjacent in one cache line and sit in the shadow of a
+dependent load that misses anyway. It is negligible **once per object** and would not be once per
+vertex, which is the entire argument for resolving at the top of the object loop rather than at
+each use.
+
+### LIFO free lists concentrate generation churn; FIFO spreads it
+
+Reusing the most recently freed slot is the cheapest insert (that slot is still in L1) and it
+means a hot allocate/free pair hammers *one* slot's generation — which is the only thing that
+makes a 12-bit generation wrap reachable at all. FIFO reuse multiplies time-to-wrap by the number
+of slots and costs a `deque` and some cache locality. Know which one you picked and why.
+
+### The "handle from the wrong pool" hazard turned up the same afternoon
+
+Lesson 5.4's Pitfall 5 warns that the type system cannot catch a handle minted by a *different*
+pool of the same type. `scratch/verify_50.cpp` hit it immediately: it built a `scene_object` by
+hand with `geometry = icosahedron_mesh()`, which is now a type error, and the obvious fix — mint a
+handle in the harness and assign it — would have produced a handle the render's own pool could not
+resolve. The honest fix is that **a struct that describes an object for somebody else to render
+cannot carry a handle at all**; it carries a `mesh` view and the renderer's pool owner stores it.
+
+General rule: a handle is only meaningful alongside the pool that issued it, so any type that
+crosses a boundary where the pool changes should carry the *data* or take the pool with it.
+
+### Adding a header can give a previously SDL-free header an SDL dependency
+
+`gfx/mesh.hpp` included no SDL until it included `core/pool.hpp`, which includes `core/log.hpp`
+for its one warning, which includes `SDL_log.h`. Harmless here — `SDL3::SDL3` is `PUBLIC` on the
+engine target, and all 44 public headers still compile standalone — but worth noticing, because a
+container template pulling in a logging dependency is the kind of thing that is free until the day
+somebody wants the container somewhere SDL is not.
+
+### Count, do not increment
+
+Lesson 5.3's STATE recorded "43 public headers"; `find engine/include -name '*.hpp' | wc -l` said
+42 before 5.4 and 44 after. The 43 was arrived at by adding to a previous number rather than by
+counting, and it had been wrong for a lesson. Any number in a document that can be produced by a
+one-line command should be produced by that command every time it is written down.

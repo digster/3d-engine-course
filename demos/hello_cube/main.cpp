@@ -75,12 +75,21 @@ public:
         // `with_normals` is the import step: a cube's eight positions become
         // twenty-four vertices, because a corner where three faces meet needs
         // three different normals and a vertex carries exactly one (Lesson 3.5).
-        // `cube_` owns those arrays and `view()` hands out a non-owning `mesh`
-        // that borrows them — so the data must outlive every frame that uses it,
-        // which is why it is a member and not a local.
-        cube_ = engine::with_normals(engine::cube_mesh(), engine::normal_style::flat);
-
-        object_.geometry = cube_.view();
+        //
+        // LESSON 5.4 CHANGED WHERE THAT GEOMETRY LIVES, and this program is the
+        // smallest place to read the change. There used to be a `mesh_data cube_`
+        // member here whose comment admitted the whole problem: "the data must
+        // outlive every frame that uses it, which is why it is a member and not a
+        // local". That is not a design, it is a promise — enforced by nothing,
+        // checked by nobody, and true only for as long as this file stays small.
+        //
+        // Now the pool owns the arrays and the object holds a handle. The
+        // lifetime promise is gone, because there is nothing left to promise:
+        // `meshes_` may move its storage, may free this mesh, may be handed a
+        // hundred more, and `object_.geometry` either resolves or reports that it
+        // cannot.
+        object_.geometry = meshes_.insert(
+            engine::with_normals(engine::cube_mesh(), engine::normal_style::flat));
         object_.name = "cube";
         object_.tint = 0xFFE0A83Cu;             // amber; not an axis colour
         object_.surface = {.colour = {0.6f, 0.6f, 0.6f}, .shininess = 48.0f};
@@ -122,7 +131,7 @@ public:
         // are the correct answers — so this call says only the one thing this
         // program has an opinion about.
         const engine::render_options opts{.cull = engine::cull_choice::back};
-        engine::collect_triangles(triangles_, scratch_, {&object_, 1},
+        engine::collect_triangles(triangles_, scratch_, {&object_, 1}, meshes_,
                                   {view_, k_eye}, projector_, lights_, opts);
 
         const engine::fill_style style{.shade = engine::shading::vertex_colour,
@@ -143,7 +152,12 @@ private:
     const char* shot_path_ = nullptr;
     float t_ = 0.0f;
 
-    engine::mesh_data cube_;
+    /// Where the cube's arrays actually live — Lesson 5.4.
+    ///
+    /// One mesh in a container built for a million is not overkill, it is the
+    /// point: the program no longer says anything about geometry lifetime, so
+    /// there is no rule here for a later change to break.
+    engine::mesh_pool meshes_;
     engine::scene_object object_;
     engine::lighting lights_;
 

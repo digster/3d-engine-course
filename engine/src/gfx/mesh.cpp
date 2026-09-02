@@ -438,4 +438,22 @@ mesh_data with_normals(const mesh& m, normal_style style)
     return out;
 }
 
+// ---- Lesson 5.4 -------------------------------------------------------------
+
+mesh_data to_mesh_data(const mesh& m)
+{
+    // Four range constructions and nothing clever. `uvs` and `normals` may be
+    // empty in the source, in which case they are empty here too — `mesh`'s
+    // "empty means absent" convention (see the header) is preserved rather than
+    // padded out with zeroes, because a mesh that carries no normals and a mesh
+    // whose normals are all zero are different meshes and only one of them is
+    // valid input to `with_normals`.
+    mesh_data out;
+    out.vertices.assign(m.vertices.begin(), m.vertices.end());
+    out.uvs.assign(m.uvs.begin(), m.uvs.end());
+    out.normals.assign(m.normals.begin(), m.normals.end());
+    out.indices.assign(m.indices.begin(), m.indices.end());
+    return out;
+}
+
 } // namespace engine

@@ -7,9 +7,50 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-08-29 (after Lesson 5.3 — 48 of 94 lessons)
+updated: 2026-09-02 (after Lesson 5.4 — 49 of 94 lessons)
 
 conventions:
+  handles: A REFERENCE INTO THE ENGINE IS AN INDEX PLUS A GENERATION, NEVER A
+        POINTER. engine::handle<T> is ONE 32-BIT WORD split 20 index / 12
+        generation (the same split EnTT uses for entt::entity), packed
+        generation-high. T is a PHANTOM parameter — nothing of it is stored,
+        sizeof is 4 for every T, T may be incomplete — so handle<mesh_data> and
+        handle<texture> are DIFFERENT TYPES and a mix-up is a compile error.
+        GENERATION 0 IS RESERVED, which makes the null handle all-bits-zero for
+        free: a value-initialised member, a default-constructed vector element and
+        a memset struct are all null with no code.
+        THE THREE FAILURES, and this is the derivation, not a list:
+          dangling    the object was freed
+          aliasing    …and something took its place (ABA). A BARE INDEX MAKES
+                      THIS WORSE — it converts a probable crash into a guaranteed
+                      silent wrong answer, which is why the generation exists.
+          relocation  nothing was freed; the container moved. An index survives
+                      this and a pointer cannot.
+        THE GENERATION IS BUMPED ON REMOVAL, never on insertion. A freed slot then
+        already carries a value no outstanding handle has, so "is this slot
+        occupied" needs no separate flag and no window exists in which a stale
+        handle matches.
+        THE BUDGET IS MONITORED, NOT ASSUMED. 4,095 usable generations means a
+        slot's generation REPEATS after 4,095 frees of that slot — 68 s at 60 Hz,
+        4.7 days at one level load per 100 s. Unreachable for assets, worth
+        thinking about for entities. pool::generation_wraps() counts it and the
+        pool logs a warning; if it ever leaves zero the two fixes are a FIFO free
+        list (spreads reuse across all slots, multiplying time-to-wrap by the slot
+        count) or 64 bits split 32/32.
+        THE ONE RULE FOR USERS: RESOLVE LATE, USE IMMEDIATELY, NEVER STORE. get()
+        returns a T* valid until the next insert or remove and not one instruction
+        longer. Storing one re-creates the bug the design abolished, wearing
+        modern clothes.
+        RESOLVE AT THE BOUNDARY, ONCE PER OBJECT — not once per use and never once
+        per vertex. Measured: 0.98 ns vs 0.85 ns for a raw dereference, so +0.13 ns
+        per resolution; per object per frame that is 0.003% of a 60 Hz budget on a
+        4,096-object scene, and per vertex it would be a different conversation.
+        A HANDLE IS HALF A REFERENCE; THE POOL IS THE OTHER HALF. Every function
+        that resolves one takes the pool as a parameter (collect_triangles went
+        8 -> 9 params, and Lesson 5.1's reduction is not being walked back — this
+        is the cost of the design, made visible rather than hidden in a global).
+        A GLOBAL WAS REFUSED and there is a concrete reason: sandbox has TWO
+        mesh_pools in one frame by the end of 5.4.
   logging: TWO AXES, NEVER ONE. A CATEGORY says WHO is speaking (a noun, a part of
         the program); a PRIORITY says HOW MUCH IT MATTERS. Collapsing them — a
         `LOG_ERROR` *category* — destroys the mechanism, because you can then never
@@ -2314,8 +2355,46 @@ completed:
   - 5.1  The Refactor: Engine, Demos, and the Public API
   - 5.2  The Platform and Application Layer
   - 5.3  Logging, Assertions, and Errors Without Exceptions
+  - 5.4  Handles: Generational Indices
 
 capabilities:
+  - ARCH 5.4: NOTHING IN THE ENGINE HOLDS A BORROWED POINTER TO GEOMETRY ANY MORE.
+    engine/core/handle.hpp (handle<T>, the 20/12 constants, make_handle) and
+    engine/core/pool.hpp (pool<T>) are HEADER-ONLY — no new .cpp, no CMake change,
+    44 public headers now — COUNTED, not incremented: 5.3's STATE said 43 and
+    `find engine/include -name '*.hpp' | wc -l` says 42 before this lesson, so
+    that number was off by one and is corrected here.
+    pool<T> is three vectors: slots_ SPARSE and STABLE
+    (generation + dense index, indexed by the handle), items_ DENSE and MOBILE
+    (live objects only, packed, reallocates freely), owners_ mapping dense back to
+    slot. slot::dense == 0xFFFFFFFF IS the occupancy flag — no bool, nothing to
+    keep in sync. insert/remove/get/contains are all O(1); removal is SWAP AND
+    PATCH (move the last item into the hole, then patch ITS slot), which means a
+    live object's address changes while its handle keeps working — the only real
+    proof that a handle is not a pointer with extra steps.
+  - GFX 5.4: scene_object::geometry IS A mesh_handle. 160 -> 96 BYTES (40%
+    smaller, 2.50 -> 1.50 cache lines per object), because a `mesh` view is four
+    spans = 64 bytes and a handle is 4. mesh.hpp adds mesh_handle, mesh_pool and
+    to_mesh_data(); collect_triangles takes a const mesh_pool& and RESOLVES ONCE
+    PER OBJECT at the top of the loop, skipping and COUNTING what does not resolve
+    (collect_stats::unresolved — a field that could not previously exist, because
+    a dangling span is not detectable).
+  - DEMO 5.4: SIX OWNING GEOMETRY MEMBERS IN demos/ BECAME ZERO. demo::mesh_library
+    (a pool + three built-in handles + build()) replaces floor_geometry's three
+    vectors, model_state::data, model_state::generated and hello_cube's cube_ —
+    including its comment "the data must outlive every frame that uses it", which
+    was a promise enforced by nothing. build_floor and load_model now REMOVE then
+    INSERT, so the handle changes and a stale one fails loudly; load_model builds
+    into a local and only hands the pool the result at the END, so a failed load
+    leaves the previous model on screen.
+  - DEMO 5.4: THE 4.8 MESH CACHE KEY WENT FROM FIVE TESTS TO TWO. It was
+    `key == m.vertices.data() && style && cpu.vertices.size() >= … &&
+    source_vertices == … && source_indices == …`; it is now
+    `source == handle && style == style`. Four of the five existed only because a
+    std::vector rebuilt in place keeps its address — an address is a location, not
+    an identity. The upload log now prints [handle N:G]. The cache also holds a
+    SECOND mesh_pool for the geometry it derives via with_normals, which is why a
+    global pool was never on the table.
   - DIAG 5.3: THE ENGINE CAN BE TURNED DOWN. 197 SDL_Log calls were one category
     at one level; the engine's 76 are now 92 ENGINE_LOG_* calls across five
     categories and six levels (error 54, info 25, warn 6, debug 4, critical 2,
@@ -3086,6 +3165,40 @@ capabilities:
   - skills: reading SDL headers as source of truth; debugging with lldb/gdb/VS
 
 decisions:
+  - 5.4 CONVERTED ONE SUBSYSTEM, MESHES, and deliberately left the rest. 5.3's
+    residue (61 bool-returning functions, three status enums) is STILL open and
+    was not folded in: handles are a big enough idea on their own and the ECS
+    (5.7-5.8) depends on getting them right rather than soon. Textures, shaders
+    and GPU resources convert in 5.5 with the asset system.
+  - 5.4 CHOSE DENSE STORAGE OVER A SLOT-INDEXED ARRAY, at a cost of ~30 lines. A
+    slot-indexed array is sparse: iterating walks holes and touches cache lines
+    holding nothing, and the waste grows with everything ever destroyed. items()
+    returns a contiguous span of exactly the live objects, which is what 5.6
+    measures and what 5.8's ECS needs. Order of items() is DELIBERATELY
+    UNSPECIFIED — it is a function of your removal history.
+  - 5.4 CHOSE LIFO FOR THE FREE LIST, knowing the cost. The warmest slot is reused
+    first (cheapest insert), and the price is that hot allocate/free pairs hammer
+    one slot's generation, which is the only thing that makes wrap reachable.
+    FIFO is the documented fix and is Exercise 9.3.
+  - 5.4 REBUILDS REPLACE RATHER THAN OVERWRITE. build_floor/load_model could have
+    resolved the handle and assigned over the mesh_data in place, keeping the
+    handle valid and the change invisible. Invisible is exactly wrong when
+    something downstream caches per mesh: a new mesh gets a new handle, and the
+    sandbox cache is the code that benefits.
+  - 5.4's HONEST LIMIT, exhibited rather than hidden: verify_54 §D recycles ONE
+    slot 4,095 times and shows the ORIGINAL handle resolving to the new occupant.
+    12 bits buys the failure down; it does not eliminate it. Stated in the lesson,
+    in the header, and counted at runtime.
+  - 5.4 LEFT A LIFETIME HOLE FOR 5.5 ON PURPOSE. scene_mesh_cache now holds two
+    pools — loaded geometry and geometry DERIVED from it by with_normals — with no
+    rule connecting their lifetimes. Free the source and the derived mesh lives on
+    keyed by a handle that no longer resolves. Not a bug today because nothing
+    frees; exactly the bug 5.5 must be designed against.
+  - 5.4 NAMED THE TYPE `handle`, KNOWING IT SHADOWS. A class with a member
+    function handle() — gpu_device, gpu_texture, gpu_mesh all have one — cannot
+    write handle<T> unqualified: "explicit qualification required to use member
+    'handle' from dependent base class". Verified in four lines. The aliases
+    (mesh_handle) exist partly for this, and it is Pitfall 2.
   - THE LOGGING LAYER IS 200 LINES BECAUSE SDL'S IS GOOD. Same policy as 5.2's
     platform decision, applied a second time and paying out harder: SDL already
     has priorities, categories, a per-category table, an env override and an
@@ -3871,8 +3984,8 @@ files:
             matrix_probe.frag.hlsl
   engine/: CMakeLists.txt
   engine/include/engine/: engine.hpp                      (the umbrella)
-  engine/include/engine/core/: assert.hpp, clock.hpp, fixed_step.hpp, input.hpp,
-            log.hpp, profile.hpp
+  engine/include/engine/core/: assert.hpp, clock.hpp, fixed_step.hpp, handle.hpp,
+            input.hpp, log.hpp, pool.hpp, profile.hpp
   engine/include/engine/gfx/: clip.hpp, colour.hpp, debug_draw.hpp,
             depth_buffer.hpp, framebuffer.hpp, gpu_buffer.hpp, gpu_debug.hpp,
             gpu_device.hpp, gpu_mesh.hpp, gpu_pipeline.hpp, gpu_present.hpp,
@@ -3923,62 +4036,65 @@ files:
                  04-09-renderdoc.html,
                  05-01-the-refactor.html,
                  05-02-platform-layer.html,
-                 05-03-logging-and-errors.html
+                 05-03-logging-and-errors.html,
+                 05-04-handles.html
   docs/shared/: course.css, course.js      (THE stylesheet + page script; one copy each)
   docs/_template/: lesson-template.html, README.md, apply-shared.py, check-page.js
   memory/: 2026-07-16.md … 2026-08-25.md, 2026-08-25-b.md, 2026-08-25-c.md,
-           2026-08-26.md, 2026-08-26-b.md, 2026-08-29.md
+           2026-08-26.md, 2026-08-26-b.md, 2026-08-29.md, 2026-09-02.md
   (retired: src/ — the whole directory. hello.cpp.)
 
 
-next: 5.4 — Handles: Generational Indices
-      (planned filename: docs/lessons/05-04-handles.html — 5.3's TWO next links
-      point at the index and BOTH need repointing.)
-      THE PRESSURE HAS BEEN ACCUMULATING SINCE MODULE 3. Every resource in this
-      engine is passed as a reference or a raw pointer — mesh_data, texture,
-      gpu_texture, scene_object::geometry (a NON-OWNING `mesh` view over arrays
-      somebody else owns). That works today for exactly one reason: everything is
-      a local of main() and NOTHING IS EVER DESTROYED. hello_cube's own comment
-      says it out loud — "the data must outlive every frame that uses it, which it
-      does, being a local of main()".
-      THE MOMENT AN ASSET SYSTEM CAN UNLOAD, every one of those pointers becomes a
-      question nobody can answer: IS THIS STILL VALID? A raw pointer to freed
-      memory is not detectably wrong — it is the same bits it always was.
-      THE ANSWER: a handle = INDEX + GENERATION. The index says where; the
-      generation says which occupant. Freeing a slot bumps its generation, so an
-      old handle's generation no longer matches and the lookup FAILS LOUDLY
-      instead of returning somebody else's mesh.
-        - DERIVE IT, do not decree it. Start from the raw pointer and show the
-          three failures in order: dangling (freed), aliasing (slot reused), and
-          relocation (the pool grew and moved everything). Each one motivates one
-          more piece of the design, and the ABA problem is the interesting middle
-          step — an index alone fixes relocation and makes aliasing WORSE.
-        - THE BIT BUDGET IS A REAL DESIGN DECISION with a worked example: 32 bits
-          split 20/12 gives 1,048,576 slots and 4,096 reuses before a generation
-          wraps; 64 bits split 32/32 makes wrap-around a non-issue and doubles
-          every handle in every struct. Compute the wrap time at a plausible
-          churn rate rather than asserting one is enough.
-        - WHAT IT BUYS BEYOND SAFETY, and this is the part that makes it worth a
-          lesson rather than a paragraph: storage becomes RELOCATABLE (a pool can
-          compact, which a raw pointer forbids), serialization becomes trivial
-          (two integers, no pointer fixups — Module 8 needs this), and a handle is
-          CHEAP TO COPY and safe to store in a component, which is exactly what
-          the ECS needs.
-        - TYPED HANDLES, not a bare integer: handle<mesh> and handle<texture> must
-          not be interchangeable. A phantom template parameter costs nothing at
-          runtime and turns a whole class of mix-up into a compile error — the
-          same argument engine::engine's `::` made in 5.1.
-        - CONVERT ONE SUBSYSTEM, as 5.3 did, and say which lesson converts the
-          rest. Meshes are the obvious first: scene_object::geometry is a
-          non-owning view TODAY and is the thing that breaks first.
-      THE TEST TO BEAT: the golden must STILL be byte-identical; a stale handle
-      must be DETECTED rather than dereferenced (and verify_54 must prove it by
-      freeing a slot, reallocating it, and showing the old handle fails); and the
-      pool must survive a reallocation that moves every element, with old handles
-      still resolving correctly. If a handle cannot survive its pool growing, it
-      is a pointer with extra steps.
-      WATCH FOR: 5.3's own residue lists 61 bool-returning functions and three
-      status enums that were deliberately left alone. Do not fold that work into
-      5.4 — handles are a big enough idea on their own, and the ECS (5.6-5.9)
-      depends on getting them right rather than on getting them soon.
+next: 5.5 — The Asset System v1
+      (planned filename: docs/lessons/05-05-asset-system.html — 5.4's TWO next
+      links point at the index and BOTH need repointing.)
+      5.4 BUILT THE MECHANISM; 5.5 IS THE POLICY. A pool answers "is this handle
+      still good". It does not answer any of the three questions an asset system
+      exists for, and all three were unanswerable before today for the same
+      reason — you cannot free a thing safely until you can say what happens to
+      the references to it:
+        - LOADING. Where does a mesh come from, and who decides? demo::load_model
+          is 40 lines of demo code that opens a file, times it, validates it,
+          flips its uvs and logs about it. Four of those five steps are an ENGINE's
+          job and one is a program's.
+        - FINDING. Ask for "torus.obj" and get the SAME handle you got last time,
+          rather than loading it twice. That is a name -> handle map, and it is the
+          first thing in this engine that needs one.
+        - UNLOADING. The word this whole module has been building towards. Nothing
+          in the engine has ever freed anything.
+      THE HOLE 5.4 LEFT ON PURPOSE, and it is the design constraint rather than a
+      chore: scene_mesh_cache holds TWO pools — geometry that was loaded, and
+      geometry DERIVED from it by with_normals — with no rule connecting their
+      lifetimes. Free the source and the derived mesh lives on, keyed by a handle
+      that no longer resolves. That is a DERIVED ASSET, it is the general case
+      (a texture and its mipmaps, a shader and its variants, a mesh and its
+      GPU upload), and an asset system that has no answer for it is a lookup
+      table.
+        - REFERENCE COUNTING IS THE OBVIOUS ANSWER AND IT SHOULD BE ARGUED, NOT
+          ASSUMED. Ask what a count is actually for before adding one: who is
+          allowed to hold a reference, what happens at a level boundary, and why
+          most engines end up with explicit unload plus a leak check rather than
+          a refcount on everything. Show the failure of each.
+        - THE ASSET PATH IS ALREADY THREE DIFFERENT THINGS. engine::asset_path
+          (obj.hpp) puts you next to the executable; the demo assembles
+          std::strings; the shader build copies to a third place. Name the
+          concept — a mount point / search path — and pick one.
+        - CONVERT TEXTURES AS THE SECOND SUBSYSTEM, as 5.3 and 5.4 each converted
+          exactly one. engine::texture and gpu_texture are the natural pair and
+          they exercise the derived-asset problem for real.
+        - LOAD FAILURE IS NOT AN ERROR CASE, IT IS THE COMMON CASE, and 5.3's
+          report shape (obj_report, gpu_report, image_report) plus 5.4's null
+          handle already give the vocabulary. A missing asset must cost one
+          object, never the frame — collect_stats::unresolved is the receipt and
+          it should stay at 0 in every shipping run.
+      THE TEST TO BEAT: the golden must STILL be byte-identical (that is four
+      lessons running); asking for the same name twice must return the SAME
+      handle and load the file ONCE, proved by a counter; unloading a mesh that
+      a scene is still using must show up as collect_stats::unresolved rather
+      than as anything else at all; and a derived asset must not outlive its
+      source. If 5.5 cannot unload, it is 5.4 with a std::map.
+      WATCH FOR: do not let the asset system become a singleton because the
+      handle needs its pool. 5.4 refused a global for a concrete reason — sandbox
+      already has two mesh_pools in one frame — and 5.5 is where that pressure
+      will be strongest.
 ```

@@ -20,7 +20,7 @@ namespace engine {
 }
 
 void collect_triangles(std::vector<raster_triangle>& out, projection_scratch& scratch,
-                       std::span<const scene_object> objects,
+                       std::span<const scene_object> objects, const mesh_pool& meshes,
                        const camera_view& camera, const projector& pr,
                        const lighting& lights, const render_options& opts,
                        collect_stats* stats_out)
@@ -40,9 +40,38 @@ void collect_triangles(std::vector<raster_triangle>& out, projection_scratch& sc
     clip_stats stats;
     normal_stats nstats;
 
+    int unresolved = 0;
+
     const int count = static_cast<int>(objects.size());
     for (int i = 0; i < count; ++i)
     {
+        // ---- Lesson 5.4: resolve the handle, ONCE, at the top --------------
+        //
+        // `objects[i].geometry` is a `mesh_handle` — four bytes that mean nothing
+        // without this pool. Turning it into geometry is the one operation that
+        // can fail, and the shape of the failure is the whole point: a handle
+        // whose slot has been freed or refilled returns `nullptr` HERE, at a
+        // named line, instead of quietly reading whatever moved into the memory
+        // a `std::span` used to point at.
+        //
+        // Resolved once per object rather than once per use, and that is not
+        // merely tidier. Before this lesson the loop below said
+        // `geometry.vertices[v]` INSIDE the per-vertex loop; a lookup
+        // per vertex would have made handles cost something real. Resolve at the
+        // boundary and use the view inside is the rule, and it is the same rule
+        // every engine follows with every resource.
+        const mesh_data* geometry_data = meshes.get(objects[i].geometry);
+        if (geometry_data == nullptr)
+        {
+            // Skip the object and draw the rest of the scene. A missing asset
+            // should cost you one object, never the frame — and the count goes
+            // into the stats so "why is that gone?" has an answer other than
+            // silence.
+            ++unresolved;
+            continue;
+        }
+        const mesh geometry = geometry_data->view();
+
         // Only the model matrix now. `view_from_model = view_from_world *
         // world_from_model` used to be composed right here, and Lesson 3.7 deleted
         // it: the shading needs each vertex's WORLD position, so the two hops have
@@ -68,7 +97,7 @@ void collect_triangles(std::vector<raster_triangle>& out, projection_scratch& sc
         // Transform each vertex ONCE. The icosahedron's twelve vertices are
         // shared by twenty triangles, so this is 12 matrix multiplies instead of
         // 60 — the practical argument for indexed geometry, from Lesson 2.12.
-        const std::size_t vertex_count = objects[i].geometry.vertices.size();
+        const std::size_t vertex_count = geometry.vertices.size();
         std::vector<vec3>& view_pos = scratch.view_pos;
         std::vector<vec4>& clip_pos = scratch.clip_pos;
         std::vector<vec3>& world_normal = scratch.world_normal;
@@ -99,7 +128,7 @@ void collect_triangles(std::vector<raster_triangle>& out, projection_scratch& sc
             // matrix multiply per vertex, and the extra multiply is what view
             // dependence costs.
             world_pos.push_back(xyz(world_from_model
-                                          * engine::point(objects[i].geometry.vertices[v])));
+                                    * engine::point(geometry.vertices[v])));
             view_pos.push_back(xyz(view_from_world * point(world_pos.back())));
             clip_pos.push_back(to_clip(view_pos.back(), pr.proj));
 
@@ -107,7 +136,7 @@ void collect_triangles(std::vector<raster_triangle>& out, projection_scratch& sc
             // the zero vector when the mesh has none, and zero survives the matrix
             // as zero — so the per-triangle loop can detect it and fall back to the
             // face normal without a second flag travelling alongside.
-            const vec3 n_model = objects[i].geometry.normal_at(v);
+            const vec3 n_model = geometry.normal_at(v);
             world_normal.push_back(to_world_normal * n_model);
 
             if (per_vertex_light && nsrc == normal_source::vertex)
@@ -149,7 +178,7 @@ void collect_triangles(std::vector<raster_triangle>& out, projection_scratch& sc
                                   cv.normal, cv.world};
         };
 
-        const std::span<const std::uint16_t> idx = objects[i].geometry.indices;
+        const std::span<const std::uint16_t> idx = geometry.indices;
         for (std::size_t f = 0; f * 3 + 2 < idx.size(); ++f)
         {
             const std::size_t a = idx[f * 3 + 0];
@@ -171,7 +200,7 @@ void collect_triangles(std::vector<raster_triangle>& out, projection_scratch& sc
             // need it: `flat` always, and `smooth` for any corner whose mesh gave
             // it no normal — the fallback that lets an unauthored mesh light
             // correctly instead of turning black.
-            const std::span<const vec3> mv = objects[i].geometry.vertices;
+            const std::span<const vec3> mv = geometry.vertices;
             const vec3 face_model = cross(mv[b] - mv[a], mv[c] - mv[a]);
             const vec3 face_world = to_world_normal * face_model;
 
@@ -262,9 +291,9 @@ void collect_triangles(std::vector<raster_triangle>& out, projection_scratch& sc
             // interpolated normal and position at its new corners — the clipper
             // lerps every field with the one crossing parameter (3.3 §3.4).
             const clip_vertex src[3] = {
-                {clip_pos[a], objects[i].geometry.uv_at(a), colour_a, na, world_pos[a]},
-                {clip_pos[b], objects[i].geometry.uv_at(b), colour_b, nb, world_pos[b]},
-                {clip_pos[c], objects[i].geometry.uv_at(c), colour_c, nc, world_pos[c]}};
+                {clip_pos[a], geometry.uv_at(a), colour_a, na, world_pos[a]},
+                {clip_pos[b], geometry.uv_at(b), colour_b, nb, world_pos[b]},
+                {clip_pos[c], geometry.uv_at(c), colour_c, nc, world_pos[c]}};
 
             // How the triangle sits relative to the near plane — measured from the
             // geometry, not inferred from what the current mode does about it, so
@@ -356,7 +385,7 @@ void collect_triangles(std::vector<raster_triangle>& out, projection_scratch& sc
         }
     }
 
-    if (stats_out != nullptr) { *stats_out = {stats, nstats}; }
+    if (stats_out != nullptr) { *stats_out = {stats, nstats, unresolved}; }
 }
 
 void sort_back_to_front(std::vector<raster_triangle>& tris)

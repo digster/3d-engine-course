@@ -658,10 +658,12 @@ chore. What follows is on disk.
 │   └── Shaders.cmake       # add_hlsl_shader(name stage) -> a GLOBAL PROPERTY   [4.3, reshaped 5.1]
 ├── engine/                 # THE LIBRARY                                        [5.1]
 │   ├── CMakeLists.txt      # produces engine::engine (STATIC)
-│   ├── include/engine/     # ---- THE PUBLIC API. 43 headers. Nothing else. ----
+│   ├── include/engine/     # ---- THE PUBLIC API. 44 headers. Nothing else. ----
 │   │   ├── engine.hpp      # the umbrella: shipped, documented, used by nothing we ship
 │   │   ├── core/           # clock, fixed_step, input, profile,
-│   │   │                   #   log.hpp + assert.hpp                          [5.3]
+│   │   │   │               #   log.hpp + assert.hpp                          [5.3]
+│   │   │   ├── handle.hpp  # handle<T>: 20 index / 12 generation, in 32 bits  [5.4]
+│   │   │   └── pool.hpp    # pool<T>: sparse slots + dense items + free list  [5.4]
 │   │   ├── math/           # vec2/3/4, mat2/3/4, transform  (header-only)
 │   │   ├── platform/       # HOW A PROGRAM STARTS                          [5.2]
 │   │   │   ├── platform.hpp  # surface, app_config, platform — SDL's lifecycle,
@@ -1194,11 +1196,33 @@ Built roughly in dependency order — each module's milestone is the next module
 
 **Load-bearing structural decisions:**
 
-- **Handles, not pointers** (Module 5). Resources are addressed by *generational indices* — an
-  index plus a generation counter — rather than raw pointers. Stale references are detectable
-  (generation mismatch) instead of undefined behaviour, storage can be relocated and compacted,
-  and serialization becomes trivial because a handle is just a number. This is why engines look
-  the way they do, and it is taught as such.
+- **Handles, not pointers** (Module 5, Lesson 5.4 — *implemented*). Resources are addressed by
+  *generational indices* — an index plus a generation counter — rather than raw pointers. Stale
+  references are detectable (generation mismatch) instead of undefined behaviour, storage can be
+  relocated and compacted, and serialization becomes trivial because a handle is just a number.
+  This is why engines look the way they do, and it is taught as such.
+
+  `engine/core/handle.hpp` is one 32-bit word split **20 index / 12 generation**, packed
+  generation-high, with `T` as a *phantom* parameter so `handle<mesh_data>` and
+  `handle<texture>` are different types at zero runtime cost. Generation 0 is reserved, which
+  makes an all-bits-zero handle the null handle for free. `engine/core/pool.hpp` is the
+  container that issues them: **`slots_` sparse and stable** (generation + dense index, indexed
+  by the handle), **`items_` dense and mobile** (live objects only, packed, free to reallocate),
+  and `owners_` mapping dense back to slot. `slot::dense == 0xFFFFFFFF` *is* the occupancy flag,
+  so occupancy costs no extra byte and cannot fall out of sync. Removal is **swap-and-patch**:
+  the last item moves into the hole and its owning slot is patched, which means a live object's
+  address changes while its handle keeps working — the property that distinguishes a handle from
+  a pointer with extra steps.
+
+  The **dependency direction** is the thing to note: `pool<T>` knows nothing about geometry, and
+  meshes were converted (`mesh_handle`, `mesh_pool`, `to_mesh_data`) without the pool gaining a
+  line. Textures, materials and sounds follow in 5.5 the same way.
+
+  **The cost is a parameter, and it is paid in the open.** A handle is half a reference; the pool
+  is the other half, so `collect_triangles` takes a `const mesh_pool&` and resolves **once per
+  object** at the top of its loop (never per vertex — measured at +0.13 ns per resolution).
+  A global pool was refused for a concrete reason: `demos/sandbox` holds two `mesh_pool`s in one
+  frame, one of loaded geometry and one of geometry derived from it by `with_normals`.
 - **ECS, not a scene tree** (Module 5). Data-oriented storage chosen after demonstrating —
   with cache-line reasoning and measurements — why OOP scene graphs creak at scale. Archetype
   vs sparse-set is a justified choice made in the lesson, not a coin flip.

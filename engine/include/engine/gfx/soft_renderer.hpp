@@ -387,6 +387,15 @@ struct collect_stats
 {
     clip_stats clip;        ///< what the near plane did (3.3)
     normal_stats normals;   ///< what the normals did (3.6)
+
+    /// Objects skipped because their `mesh_handle` did not resolve — Lesson 5.4.
+    ///
+    /// **A number that could not previously exist.** A dangling `std::span` is
+    /// not detectable, so before handles there was no version of this field: an
+    /// object whose geometry had been freed either drew garbage or crashed, and
+    /// either way nothing counted it. Now the failure has a name, a count, and a
+    /// place on the HUD, which is the difference between a bug and a symptom.
+    int unresolved = 0;
 };
 
 /// Project every triangle of every object into screen space.
@@ -406,8 +415,11 @@ struct collect_stats
 /// nothing. It is the smallest taste of Module 8's allocators — the fix for
 /// allocation in a hot loop is almost never a faster allocator, it is not
 /// allocating.
+/// `meshes` resolves every object's `geometry` handle, and an object whose handle
+/// does not resolve is SKIPPED and counted in `collect_stats::unresolved` — one
+/// missing asset costs one object, never the frame (Lesson 5.4).
 void collect_triangles(std::vector<raster_triangle>& out, projection_scratch& scratch,
-                       std::span<const scene_object> objects,
+                       std::span<const scene_object> objects, const mesh_pool& meshes,
                        const camera_view& camera, const projector& pr,
                        const lighting& lights, const render_options& opts,
                        collect_stats* stats = nullptr);

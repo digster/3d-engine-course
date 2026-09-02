@@ -28,6 +28,7 @@
 
 #pragma once
 
+#include <engine/core/pool.hpp>
 #include <engine/math/vec2.hpp>
 #include <engine/math/vec3.hpp>
 
@@ -289,6 +290,44 @@ struct mesh_data
 
     [[nodiscard]] std::size_t triangle_count() const { return indices.size() / 3; }
 };
+
+// ---- Lesson 5.4: geometry, referred to by handle -----------------------------
+//
+// `mesh_data` owns and `mesh` views, and until this lesson the only way to name
+// somebody else's geometry was to hold one of those views — which is a pointer,
+// with all of a pointer's inability to notice that the thing it points at has
+// gone. `model_state` in the demo said so explicitly: reloading on [L] clears the
+// vectors, so any `mesh` taken before the reload points at freed memory, and the
+// demo was safe only because of the order two things happened in.
+//
+// So the third form: a handle. It owns nothing, views nothing, and is four bytes
+// that a pool can check.
+
+/// A reference to geometry stored in a `mesh_pool`.
+///
+/// The type a `scene_object` holds as of Lesson 5.4, replacing a `mesh` — which
+/// is to say, replacing three pointers and three lengths with one integer that
+/// can be told it is out of date.
+using mesh_handle = handle<mesh_data>;
+
+/// Storage for geometry the engine owns: hand it `mesh_data`, get a `mesh_handle`.
+///
+/// No new container was needed for this, and that is worth noticing. `pool<T>` is
+/// entirely ignorant of geometry; meshes are simply the first resource converted
+/// to it (Lesson 5.4), and textures, materials and sounds follow in 5.5 with no
+/// change to the pool at all.
+using mesh_pool = pool<mesh_data>;
+
+/// Copy a view's arrays into geometry that owns them.
+///
+/// The bridge between the built-in shapes — `cube_mesh()` and friends, which view
+/// `inline constexpr` arrays with program lifetime — and a pool, which owns
+/// everything it stores. It is a genuine copy and it costs what it costs: 8
+/// positions and 36 indices for the cube, done once at startup. A pool that could
+/// hold views instead would be a pool that hands out handles to memory it does
+/// not control, which is the problem this lesson is solving rather than a clever
+/// way around it.
+[[nodiscard]] mesh_data to_mesh_data(const mesh& m);
 
 /// Convert texture coordinates from **OBJ's** convention to **the texture's**:
 /// `v -> 1 - v`. Lesson 3.9.

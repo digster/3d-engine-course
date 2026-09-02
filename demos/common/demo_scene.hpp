@@ -227,41 +227,71 @@ inline constexpr float k_floor_far = -30.0f;  ///< -z edge, 37 units away
 /// which is what makes the two comparable.
 inline constexpr float k_floor_cell = 3.0f;
 
-/// Storage for the floor. A `mesh` is a pair of non-owning spans (Lesson 2.12),
-/// so unlike every mesh so far — which view `inline constexpr` arrays with
-/// program lifetime — this one needs somebody to own its arrays. That somebody is
-/// the demo, and the awkwardness is the point: it is exactly the pressure that
-/// produces Module 5's asset system.
-struct floor_geometry
-{
-    std::vector<engine::vec3> vertices;
-    std::vector<engine::vec2> uvs;
-    std::vector<std::uint16_t> indices;
-    int cells = 0;                       ///< quads per side; 0 = not built yet
+// ---------------------------------------------------------------------------
+// Lesson 5.4 — one owner for every mesh in the demo
+// ---------------------------------------------------------------------------
 
-    /// Designated initialisers, as of Lesson 3.5: `mesh` grew a fourth member and
-    /// this floor carries no normals, so naming the three it does carry is both
-    /// clearer and what stops `-Wmissing-field-initializers` complaining.
-    ///
-    /// This struct is what `engine::mesh_data` generalises — Lesson 3.2 said at the
-    /// time that the awkwardness of owning geometry by hand was the pressure that
-    /// would eventually produce a real type. It is kept as it is because the floor
-    /// is *generated*, not loaded, and rewriting it to use `mesh_data` would gain
-    /// nothing but churn in a demo that already works.
-    [[nodiscard]] engine::mesh view() const
-    {
-        return engine::mesh{.vertices = vertices, .indices = indices, .uvs = uvs};
-    }
+/// Every mesh this demo can draw, owned in one place, referred to by handle.
+///
+/// **This is the demo's asset system, and it is deliberately three fields and a
+/// function.** Lesson 5.5 promotes it into the engine, where it grows loading,
+/// lookup by name, reference counting and the rest; today its whole job is to be
+/// the one thing that *owns* geometry, so that nothing else has to.
+///
+/// Read what disappeared to make room for it. `floor_geometry` used to carry
+/// three `std::vector`s; `model_state` carried two `mesh_data`s; `hello_cube`
+/// carried one, with a comment explaining why it had to be a member. All four
+/// were the same workaround — somebody has to own this, so it may as well be
+/// whoever is nearest — and all four are gone.
+struct mesh_library
+{
+    /// The owner. Everything else in this struct, and every `scene_object` the
+    /// demo builds, is a four-byte reference INTO here.
+    engine::mesh_pool meshes;
+
+    // The three built-in shapes, copied into the pool once at startup. They are
+    // `inline constexpr` arrays with program lifetime, so they are the one case
+    // that would have been safe to keep viewing — and they go in the pool anyway,
+    // because "this particular mesh is safe to borrow and that one is not" is
+    // exactly the distinction a caller should never have to keep track of.
+    engine::mesh_handle cube;
+    engine::mesh_handle quad;
+    engine::mesh_handle icosahedron;
+
+    /// Copy the built-in shapes into the pool. Call once, before any scene.
+    void build();
 };
 
-/// Tessellate the ground plane into `cells` x `cells` quads.
+/// The floor, as a handle and a tessellation level.
+///
+/// Compare against what this struct held before Lesson 5.4: three vectors of
+/// geometry plus a `view()` that handed out spans into them. Rebuilding the floor
+/// on [T] cleared those vectors, which quietly invalidated every `mesh` anybody
+/// had taken — a hazard the demo dodged only by rebuilding the scene immediately
+/// afterwards, every frame, forever.
+///
+/// Now the rebuild REPLACES the pool's mesh and the handle changes with it. A
+/// scene still holding the old handle does not read freed vectors; it fails to
+/// resolve, and `collect_stats::unresolved` counts it.
+struct floor_geometry
+{
+    engine::mesh_handle geometry;        ///< the tessellated grid, in `mesh_library`
+    int cells = 0;                       ///< quads per side; 0 = not built yet
+};
+
+/// Tessellate the ground plane into `cells` x `cells` quads and store it.
 ///
 /// The uvs are computed from the **world position**, not from the grid index, so
 /// the checker pattern is bit-identical at every tessellation level. Only the
 /// number of triangles the interpolation has to span changes — which is what lets
 /// the demo answer "how much subdivision would affine interpolation need?" with a
 /// number instead of a shrug.
-void build_floor(floor_geometry& g, int cells);
+///
+/// The previous floor is REMOVED from the pool rather than overwritten in place,
+/// and that is the honest choice: overwriting would keep the handle valid and
+/// hide the change, which is convenient right up until something is caching per
+/// mesh and never learns that its cache is stale. A new mesh gets a new handle.
+void build_floor(mesh_library& lib, floor_geometry& g, int cells);
 
 // ---------------------------------------------------------------------------
 // Lesson 3.5 — geometry from disk
@@ -344,16 +374,23 @@ enum class model_choice
 
 /// The loaded model, plus everything measured about it.
 ///
-/// **`data` owns the arrays and `view()` borrows them**, which is the hazard this
-/// type exists to make obvious. Reloading on [L] clears the vectors, so any `mesh`
+/// **This struct is Lesson 5.4's exhibit A, and its old comment is the exhibit.**
+/// It used to hold `engine::mesh_data data` and hand out `data.view()`, and the
+/// comment above it read: *"Reloading on [L] clears the vectors, so any `mesh`
 /// taken before the reload now points at freed memory. The demo is safe because
 /// `build_scene` runs after key handling and re-takes the view every frame — but
-/// "safe because of the order two things happen in" is exactly the kind of safety
-/// Module 5's handles replace with something a compiler can check.
+/// safe because of the order two things happen in is exactly the kind of safety
+/// Module 5's handles replace."*
+///
+/// So here it is replaced. `geometry` is a handle; reloading frees the old mesh
+/// and inserts a new one, which means the old handle stops resolving instead of
+/// pointing at freed vectors. The demo no longer has to run its steps in a
+/// particular order to be correct — and, more to the point, a demo that DID get
+/// the order wrong would now say so rather than reading somebody else's memory.
 struct model_state
 {
     model_choice choice = model_choice::torus;
-    engine::mesh_data data;        ///< whatever [L] currently names
+    engine::mesh_handle geometry;  ///< whatever [L] currently names
     engine::obj_report load;       ///< what the file contained, and what we built
     engine::mesh_report check;     ///< …and whether it is safe to draw
     double load_ms = 0.0;          ///< wall-clock cost of the last load
@@ -366,7 +403,11 @@ struct model_state
 
     /// `make_torus()`, built once. The control for the round-trip comparison, and
     /// the source `assets/torus.obj` was written from.
-    engine::mesh_data generated;
+    ///
+    /// A handle too, which makes the round-trip comparison in `sandbox` read the
+    /// way it always should have: `control.geometry = model.generated;` — an
+    /// assignment of one integer, with no question about who owns what.
+    engine::mesh_handle generated;
 };
 
 /// Load (or regenerate) the current model and measure it.
@@ -384,7 +425,12 @@ struct model_state
 /// parameter rather than a constant so the disagreement can be switched back on
 /// with [2] and looked at — it is not subtle when you can see it, and it is nearly
 /// invisible when you cannot.
-void load_model(model_state& m, model_choice c, bool apply_uv_flip);
+///
+/// **Lesson 5.4**: the freshly imported geometry goes into `lib.meshes` and the
+/// old one comes out. The handle changes on every load, which is the mechanism
+/// working rather than an inconvenience — a stale handle to the previous model
+/// now fails a lookup instead of reading vectors that have been cleared.
+void load_model(mesh_library& lib, model_state& m, model_choice c, bool apply_uv_flip);
 
 /// Rebuild the scene for the current time, rotation mode and scene kind.
 /// Returns how many objects were written.
@@ -394,8 +440,15 @@ void load_model(model_state& m, model_choice c, bool apply_uv_flip);
 /// being a rotation, and the object slowly shears. Deriving the whole transform
 /// from one authoritative `t` cannot drift, and it is the pattern the engine keeps
 /// (Module 5's transform component stores the *inputs*, never a running matrix).
+///
+/// **It resolves nothing**, which is worth noticing now that geometry is
+/// handle-shaped: this function copies four-byte references into `out` and never
+/// asks the pool a single question. Only the renderer resolves, once per object,
+/// at the point of use — so `lib` is here for the three built-in handles and for
+/// no other reason. A `const&` to a pool it never reads would be worse.
 int build_scene(engine::scene_object (&out)[k_max_objects], scene_kind kind, spin mode, float t,
-                const floor_geometry& floor, const model_state& model, float shininess);
+                const mesh_library& lib, const floor_geometry& floor,
+                const model_state& model, float shininess);
 
 /// Draw the world through the camera: a ground grid on y = 0 and a marked origin.
 ///

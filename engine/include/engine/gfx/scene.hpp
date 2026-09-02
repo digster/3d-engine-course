@@ -81,15 +81,27 @@ enum class trs_order
 /// to a transform as a separate component for exactly this reason. Here it is a
 /// two-field demo struct, which is the honest amount of machinery for three objects.
 ///
-/// The `mesh` is stored BY VALUE and that is cheap: it is two spans, four words,
-/// pointing at static geometry that outlives everything.
+/// **Lesson 5.4 changed one word here and it is the most consequential word in
+/// the struct.** `geometry` used to be a `mesh` — three pointers and three
+/// lengths, borrowed from whoever happened to own the arrays, valid for exactly
+/// as long as that owner said nothing and moved nothing. It is now a
+/// `mesh_handle`: four bytes, owning nothing, borrowing nothing, and answerable.
+/// A `scene_object` can now be copied, stored, serialized and outlive its
+/// geometry, and every one of those is a thing it could not do yesterday.
+///
+/// The cost is real and is named rather than hidden: a handle is meaningless
+/// without its pool, so everything that draws a `scene_object` now needs the
+/// `mesh_pool` too. `collect_triangles` grew a parameter for it. Module 5's ECS
+/// eventually folds the pools into a `world` that carries them together — but a
+/// context object invented before three callers have asked for one is a guess,
+/// so for now the dependency is spelled out at every call site where it exists.
 ///
 /// Lesson 3.1 adds a `tint`. Triangles are filled now, and a fill needs a colour;
 /// there is no lighting until 3.6, so each object simply carries one.
 struct scene_object
 {
     transform xform;
-    mesh geometry;
+    mesh_handle geometry;
     const char* name;
     Uint32 tint = 0xFFFFFFFFu;
 

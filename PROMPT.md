@@ -1947,3 +1947,47 @@ twice a module apart; `image_status` became `image_report` and that was the whol
 Golden byte-identical, verify_45–53 all pass (53 runs in three build configurations), corpus at
 **104/104**. The visual pass caught two figures wearing each other's captions — invisible to
 every automated check.
+
+## 2026-09-02 — "Based on the STATE and the project's claude instructions, work on the next."
+
+> Based on the STATE and the project's claude instructions, work on the next.
+
+Lesson 5.4 — **Handles: Generational Indices**. The pressure was already written down in the
+codebase, in three separate files, by me, at three different times: `hello_cube`'s "the data must
+outlive every frame that uses it", `model_state`'s admission that it was "safe because of the
+order two things happen in", and 4.8's mesh cache comparing **five things** to answer "is this the
+same mesh?" while its own comment called four of them "the shabby version of" a handle. All three
+survive for one reason — nothing in this engine is ever destroyed — and 5.5's asset system ends
+that.
+
+Derived rather than decreed, from the three ways a reference goes wrong: dangling, aliasing,
+relocation. The turn is the middle one — a **bare index makes aliasing worse**, converting a
+probable crash into a guaranteed silent wrong answer, which is what motivates the generation
+instead of asserting it. 32-bit handle split 20/12 with the wrap arithmetic actually done
+(68 s at one recycle per frame, 4.7 days at one per level load), generation 0 reserved so the null
+handle is all-bits-zero for free, and a phantom template parameter making mesh and texture handles
+uninterchangeable at zero runtime cost.
+
+Chose **dense storage over a slot-indexed array**, at ~30 extra lines, because sparse iteration is
+exactly what 5.6 is about to measure — and because swap-and-patch removal moves a *surviving*
+object to a new address while its handle keeps working, which is the only real proof that a handle
+is not a pointer with extra steps. `slot::dense == 0xFFFFFFFF` doubles as the occupancy flag.
+
+Converted one subsystem end to end (meshes), as 5.3 did, and deliberately did **not** fold in
+5.3's residue. Six owning geometry members in `demos/` became zero. `scene_object` 160 → 96 bytes.
+The 4.8 cache key went five tests → two. A resolution costs **+0.13 ns** over a dereference,
+measured five times, which is why the renderer resolves once per object and not once per vertex.
+`collect_stats` gained an `unresolved` counter — a field that could not previously exist, because
+a dangling span is not detectable.
+
+Two things kept honest rather than hidden: §D of the harness **exhibits the wrap failure**
+(4,095 recycles of one slot, then the original handle resolving to the new occupant), and the
+lesson names the API cost — `collect_triangles` went 8 → 9 parameters, and a global pool was
+refused because `sandbox` ends the lesson with two `mesh_pool`s in one frame.
+
+Golden byte-identical for the fourth lesson running (`905BF27E`, 0 bytes differ), `hello_cube`
+likewise, `verify_54` at 68 checks / 0 failures in two build configurations, page checks green at
+both widths. The visual pass caught two figure collisions the automated checker passes over —
+row labels running into the first column, and a divider rule striking through a line of prose.
+
+> next

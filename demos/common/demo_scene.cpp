@@ -12,6 +12,7 @@
 #include <SDL3/SDL.h>
 
 #include <string>
+#include <utility>
 
 namespace demo {
 
@@ -50,13 +51,23 @@ namespace demo {
     return t;
 }
 
-void build_floor(floor_geometry& g, int cells)
+void mesh_library::build()
 {
-    if (g.cells == cells) { return; }   // nothing to do; rebuilt only on [T]
+    // Three copies, once, at startup: 8 + 4 + 12 positions and 36 + 6 + 60
+    // indices, which is 636 bytes of copying in exchange for never again having
+    // to know which meshes are safe to borrow. `to_mesh_data` is the bridge from
+    // Lesson 2.12's `inline constexpr` arrays to storage the pool controls.
+    cube = meshes.insert(engine::to_mesh_data(engine::cube_mesh()));
+    quad = meshes.insert(engine::to_mesh_data(engine::quad_mesh()));
+    icosahedron = meshes.insert(engine::to_mesh_data(engine::icosahedron_mesh()));
+}
+
+void build_floor(mesh_library& lib, floor_geometry& g, int cells)
+{
+    if (g.cells == cells && g.geometry) { return; }   // rebuilt only on [T]
     g.cells = cells;
-    g.vertices.clear();
-    g.uvs.clear();
-    g.indices.clear();
+
+    engine::mesh_data floor;
 
     const int n = cells + 1;   // vertices per side
     for (int j = 0; j < n; ++j)
@@ -67,8 +78,8 @@ void build_floor(floor_geometry& g, int cells)
         {
             const float tx = static_cast<float>(i) / static_cast<float>(cells);
             const float x = -k_floor_x + tx * (2.0f * k_floor_x);
-            g.vertices.push_back({x, 0.0f, z});
-            g.uvs.push_back({x / k_floor_cell, z / k_floor_cell});
+            floor.vertices.push_back({x, 0.0f, z});
+            floor.uvs.push_back({x / k_floor_cell, z / k_floor_cell});
         }
     }
 
@@ -81,27 +92,45 @@ void build_floor(floor_geometry& g, int cells)
             const auto v = [&](int ii, int jj) {
                 return static_cast<std::uint16_t>(jj * n + ii);
             };
-            g.indices.push_back(v(i, j));     g.indices.push_back(v(i, j + 1));
-            g.indices.push_back(v(i + 1, j + 1));
-            g.indices.push_back(v(i, j));     g.indices.push_back(v(i + 1, j + 1));
-            g.indices.push_back(v(i + 1, j));
+            floor.indices.push_back(v(i, j));     floor.indices.push_back(v(i, j + 1));
+            floor.indices.push_back(v(i + 1, j + 1));
+            floor.indices.push_back(v(i, j));     floor.indices.push_back(v(i + 1, j + 1));
+            floor.indices.push_back(v(i + 1, j));
         }
     }
+
+    // Out with the old, in with the new — in that order, so the pool reuses the
+    // slot the old floor was in and the new handle differs from the old one only
+    // in its generation. Watch that in a debugger once and the design stops being
+    // abstract: same index, next generation, and the previous handle is now a
+    // number the pool refuses.
+    lib.meshes.remove(g.geometry);
+    g.geometry = lib.meshes.insert(std::move(floor));
 }
 
-void load_model(model_state& m, model_choice c, bool apply_uv_flip)
+void load_model(mesh_library& lib, model_state& m, model_choice c, bool apply_uv_flip)
 {
     m.choice = c;
     m.uv_flipped = apply_uv_flip;
 
+    // The freshly imported geometry is built HERE, as a local, and only handed to
+    // the pool at the end. That ordering is deliberate: the old mesh stays
+    // resolvable for the whole of the load, so a load that FAILS leaves the demo
+    // showing what it was showing rather than showing nothing. Free first and you
+    // have committed to the new asset before you know whether it exists.
+    engine::mesh_data data;
+
     const Uint64 t0 = SDL_GetTicksNS();
     if (c == model_choice::generated)
     {
-        m.data = m.generated;   // a copy: four vectors, and it happens on a keypress
+        // A copy out of the pool: four vectors, on a keypress. `get` returns a
+        // pointer that is valid exactly until the insert at the bottom of this
+        // function, which is why the copy happens now and not later.
+        if (const engine::mesh_data* src = lib.meshes.get(m.generated)) { data = *src; }
         m.load = {};
         m.load.status = engine::obj_status::ok;
-        m.load.vertices = static_cast<int>(m.data.vertices.size());
-        m.load.triangles = static_cast<int>(m.data.triangle_count());
+        m.load.vertices = static_cast<int>(data.vertices.size());
+        m.load.triangles = static_cast<int>(data.triangle_count());
     }
     else
     {
@@ -110,7 +139,7 @@ void load_model(model_state& m, model_choice c, bool apply_uv_flip)
         // has to own the characters — the same ownership question as the mesh, one
         // level down.
         const std::string path = engine::asset_path(file_of(c));
-        m.load = engine::load_obj(path.c_str(), m.data);
+        m.load = engine::load_obj(path.c_str(), data);
     }
     // OBJ space -> texture space, before anything measures or draws the mesh.
     //
@@ -127,14 +156,20 @@ void load_model(model_state& m, model_choice c, bool apply_uv_flip)
     // happen after the parse. (It is 24 subtractions on the cube and 2,352 on the
     // torus, so the answer is "nothing measurable" — which is worth knowing rather
     // than assuming.)
-    if (apply_uv_flip) { engine::flip_uv_v(m.data); }
+    if (apply_uv_flip) { engine::flip_uv_v(data); }
 
     const Uint64 t1 = SDL_GetTicksNS();
     m.load_ms = static_cast<double>(t1 - t0) / 1.0e6;
 
     // Validate whatever we got, INCLUDING a failed load — on failure the arrays are
     // empty, and an empty mesh reports zeroes rather than crashing the report.
-    m.check = engine::validate(m.data.view());
+    m.check = engine::validate(data.view());
+
+    // Only now does the pool change hands. The old model's slot is freed, its
+    // generation bumped, and any handle still naming it stops resolving — which
+    // is precisely what used to be undefined behaviour and is now a `nullptr`.
+    lib.meshes.remove(m.geometry);
+    m.geometry = lib.meshes.insert(std::move(data));
 
     if (m.load.ok())
     {
@@ -154,7 +189,8 @@ void load_model(model_state& m, model_choice c, bool apply_uv_flip)
 }
 
 int build_scene(engine::scene_object (&out)[k_max_objects], scene_kind kind, spin mode, float t,
-                const floor_geometry& floor, const model_state& model, float shininess)
+                const mesh_library& lib, const floor_geometry& floor,
+                const model_state& model, float shininess)
 {
     const engine::mat3 spinning = build_spin(mode, t);
 
@@ -173,7 +209,7 @@ int build_scene(engine::scene_object (&out)[k_max_objects], scene_kind kind, spi
         // placed by a transform, and a ground plane is the one thing it is more
         // honest to build where it lives.
         out[0].xform = engine::transform{};
-        out[0].geometry = floor.view();
+        out[0].geometry = floor.geometry;
         out[0].name = "ground plane (checkered)";
         out[0].tint = k_amber;   // unused: the floor is shaded from its uvs
         out[0].closed = false;   // a sheet, not a solid — 3.4 must not cull it
@@ -190,7 +226,7 @@ int build_scene(engine::scene_object (&out)[k_max_objects], scene_kind kind, spi
         out[0].xform.scale = {s, s, s};
         out[0].xform.position = {0.0f, 1.0f, 0.0f};
         out[0].xform.rotation = spinning * engine::rotation_x(0.35f);
-        out[0].geometry = model.data.view();
+        out[0].geometry = model.geometry;
         out[0].name = name_of(model.choice);
         out[0].tint = k_amber;
         // The torus is the one mesh in the demo dense enough for a per-vertex
@@ -214,7 +250,7 @@ int build_scene(engine::scene_object (&out)[k_max_objects], scene_kind kind, spi
         out[0].xform.scale    = {0.9f, 0.9f, 0.9f};
         out[0].xform.position = {0.0f, 1.0f, 0.0f};
         out[0].xform.rotation = spinning * engine::rotation_x(0.5f);
-        out[0].geometry       = engine::icosahedron_mesh();
+        out[0].geometry       = lib.icosahedron;
         out[0].name           = "icosahedron (uniform, spinning)";
         out[0].tint           = k_amber;
         out[0].closed         = true;
@@ -229,7 +265,7 @@ int build_scene(engine::scene_object (&out)[k_max_objects], scene_kind kind, spi
         out[1].xform.scale    = {1.8f, 0.35f, 0.9f};
         out[1].xform.position = {-1.6f, 0.5f, 0.4f};
         out[1].xform.rotation = spinning;
-        out[1].geometry       = engine::cube_mesh();
+        out[1].geometry       = lib.cube;
         out[1].name           = "slab   (non-uniform, spinning)";
         out[1].tint           = k_teal;
         out[1].closed         = true;
@@ -243,7 +279,7 @@ int build_scene(engine::scene_object (&out)[k_max_objects], scene_kind kind, spi
         out[2].xform.scale    = {1.2f, 0.25f, 1.2f};
         out[2].xform.position = {1.4f, 0.125f, 0.9f};
         out[2].xform.rotation = engine::mat3::identity();
-        out[2].geometry       = engine::cube_mesh();
+        out[2].geometry       = lib.cube;
         out[2].name           = "plinth (non-uniform, still)";
         out[2].tint           = k_violet;
         out[2].closed         = true;
@@ -283,19 +319,19 @@ int build_scene(engine::scene_object (&out)[k_max_objects], scene_kind kind, spi
         constexpr float k_overhang = 0.5f;
 
         out[0].xform = make_plank(c1, c2, k_width, k_tilt, k_overhang);
-        out[0].geometry = engine::quad_mesh();
+        out[0].geometry = lib.quad;
         out[0].name = "plank A (C1->C2)";
         out[0].tint = k_amber;
         out[0].closed = false;
 
         out[1].xform = make_plank(c2, c3, k_width, k_tilt, k_overhang);
-        out[1].geometry = engine::quad_mesh();
+        out[1].geometry = lib.quad;
         out[1].name = "plank B (C2->C3)";
         out[1].tint = k_teal;
         out[1].closed = false;
 
         out[2].xform = make_plank(c3, c1, k_width, k_tilt, k_overhang);
-        out[2].geometry = engine::quad_mesh();
+        out[2].geometry = lib.quad;
         out[2].name = "plank C (C3->C1)";
         out[2].tint = k_violet;
         out[2].closed = false;
@@ -321,7 +357,7 @@ int build_scene(engine::scene_object (&out)[k_max_objects], scene_kind kind, spi
         out[0].xform.scale    = {2.6f, 2.0f, 1.0f};
         out[0].xform.position = {0.0f, 1.1f, +0.1f};
         out[0].xform.rotation = engine::rotation_y(+0.7f);
-        out[0].geometry       = engine::quad_mesh();
+        out[0].geometry       = lib.quad;
         out[0].name           = "quad A (nearer centre)";
         out[0].tint           = k_amber;
         out[0].closed         = false;
@@ -329,7 +365,7 @@ int build_scene(engine::scene_object (&out)[k_max_objects], scene_kind kind, spi
         out[1].xform.scale    = {2.6f, 2.0f, 1.0f};
         out[1].xform.position = {0.0f, 1.1f, -0.1f};
         out[1].xform.rotation = engine::rotation_y(-0.7f);
-        out[1].geometry       = engine::quad_mesh();
+        out[1].geometry       = lib.quad;
         out[1].name           = "quad B (further centre)";
         out[1].tint           = k_teal;
         out[1].closed         = false;
@@ -347,7 +383,7 @@ int build_scene(engine::scene_object (&out)[k_max_objects], scene_kind kind, spi
     out[0].xform.scale    = {3.0f, 2.4f, 1.0f};
     out[0].xform.position = {0.0f, 1.1f, 0.0f};
     out[0].xform.rotation = engine::rotation_y(0.9f);
-    out[0].geometry       = engine::quad_mesh();
+    out[0].geometry       = lib.quad;
     out[0].name           = "panel A (behind)";
     out[0].tint           = k_amber;
     out[0].closed         = false;
@@ -355,7 +391,7 @@ int build_scene(engine::scene_object (&out)[k_max_objects], scene_kind kind, spi
     out[1].xform.scale    = {3.0f, 2.4f, 1.0f};
     out[1].xform.position = {0.0f, 1.1f, 0.001f};   // one millimetre nearer. That is all.
     out[1].xform.rotation = engine::rotation_y(0.9f);
-    out[1].geometry       = engine::quad_mesh();
+    out[1].geometry       = lib.quad;
     out[1].name           = "panel B (1 mm in front)";
     out[1].tint           = k_teal;
     out[1].closed         = false;
@@ -426,12 +462,19 @@ int write_reference_shot(const char* path)
     engine::framebuffer fb(k_fb_width, k_fb_height);
     engine::depth_buffer depth(k_fb_width, k_fb_height);
 
+    // Lesson 5.4: one owner for every mesh the shot draws. Built here rather
+    // than passed in, because the whole value of this function is that its inputs
+    // are constants — an asset library handed in from outside would be one more
+    // thing that could differ between two runs.
+    mesh_library assets;
+    assets.build();
+
     floor_geometry floor;
-    build_floor(floor, k_shot_floor_cells);
+    build_floor(assets, floor, k_shot_floor_cells);
 
     model_state model;
-    model.generated = engine::make_torus(48, 24, 1.0f, 0.4f);
-    load_model(model, model_choice::torus, true);
+    model.generated = assets.meshes.insert(engine::make_torus(48, 24, 1.0f, 0.4f));
+    load_model(assets, model, model_choice::torus, true);
 
     texture_set textures;
     textures.build();
@@ -484,7 +527,7 @@ int write_reference_shot(const char* path)
 
         engine::scene_object scene[k_max_objects];
         const int count = build_scene(scene, kind, spin::about_z, k_shot_t,
-                                      floor, model, k_shot_shininess);
+                                      assets, floor, model, k_shot_shininess);
 
         const bool close_up = (f == k_shot_frames - 1);
         const engine::mat4 view = close_up ? close_cam.view() : view_from_world;
@@ -501,7 +544,8 @@ int write_reference_shot(const char* path)
         // answer — which is what makes this the reference render.
         engine::collect_stats measured;
         engine::collect_triangles(tris, scratch, {scene, static_cast<std::size_t>(count)},
-                                  {view, eye}, pr, lights, engine::render_options{}, &measured);
+                                  assets.meshes, {view, eye}, pr, lights,
+                                  engine::render_options{}, &measured);
 
         // The two uv surfaces read the orientation chart; everything else reads
         // its vertex colours. One texture rather than none, so the sampler is on

@@ -7,7 +7,7 @@ There is no engine to download here and no framework doing the interesting parts
 write the math library, the rasterizer, the ECS, the renderer, the physics, and the editor. By
 the end you have a real engine and a game built on its public API.
 
-**Status:** curriculum and conventions published; lessons in progress — **Modules 0–3 are complete** and Module 4 is under way (43 of 94 lessons), so the CPU software rasterizer is finished end to end and the engine now draws textured, depth-tested geometry on a real GPU, from a camera you can fly. Start at
+**Status:** curriculum and conventions published; lessons in progress — **Modules 0–4 are complete** and Module 5 is under way (49 of 94 lessons). The CPU software rasterizer is finished end to end, the same scene is drawn on a real GPU through SDL_GPU, and the tree is now a static library with a public API, a platform/application layer, its own logging, and handle-based resource storage. Start at
 [`docs/index.html`](docs/index.html).
 
 ---
@@ -156,6 +156,27 @@ reads it before doing anything else:
 
 A bad spec is rejected with a message and **nothing is applied** — the parser validates the whole
 string before touching a single level.
+
+### Nothing holds a borrowed pointer to a resource
+
+Since **Lesson 5.4** geometry is owned by an `engine::mesh_pool` and referred to by an
+`engine::mesh_handle` — one 32-bit word, 20 bits of index and 12 of generation. Freeing a slot
+bumps its generation, so a reference to something that has been unloaded *fails a lookup*
+instead of reading whatever moved into the memory:
+
+```cpp
+engine::mesh_pool meshes;
+const engine::mesh_handle h = meshes.insert(engine::to_mesh_data(engine::cube_mesh()));
+
+if (const engine::mesh_data* m = meshes.get(h)) { draw(m->view()); }   // resolves
+meshes.remove(h);
+assert(meshes.get(h) == nullptr);                                     // and now it does not
+```
+
+The storage underneath is dense and packed, so the pool relocates freely — inserting may
+reallocate everything and removing moves a *surviving* item into the hole — and handles survive
+all of it. The rule for users is one line: **resolve late, use immediately, never store**; the
+`T*` that `get()` returns is valid until the next `insert` or `remove` and no longer.
 
 The software path is **not** deprecated. It is the *reference*: every measured claim in Modules 2
 and 3 was made against it, and a port whose reference has been deleted is a port nobody can check.
@@ -503,11 +524,12 @@ Third-party, each with an explicit "why we don't hand-roll this" justification: 
 ## Repository layout
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the full tree and the reasoning behind it. The short
-version, as of **Lesson 5.2**:
+version, as of **Lesson 5.4**:
 
 ```
-engine/include/engine/   the public API — 43 headers, and the only path a demo can name
-engine/include/engine/core/       clock, input, fixed_step, profile, log, assert
+engine/include/engine/   the public API — 44 headers, and the only path a demo can name
+engine/include/engine/core/       clock, input, fixed_step, profile, log, assert,
+                                  handle, pool
 engine/include/engine/platform/   how a program starts: platform.hpp, app.hpp, main.hpp
 engine/src/              private implementation; stb_image stops here
 demos/common/            content shared by demos and verification harnesses
