@@ -33,6 +33,8 @@
 
 #pragma once
 
+#include <engine/core/pool.hpp>
+
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -86,6 +88,25 @@ struct image_data
             && pixels.size() == static_cast<std::size_t>(width) * height * 4u;
     }
 };
+
+// ---- Lesson 5.5: an image is an asset -------------------------------------
+//
+// The same two aliases meshes got in Lesson 5.4, and it is worth noticing that
+// adding them needed no change to `pool<T>` whatsoever — the container was written
+// once, knowing nothing about geometry, and images join it by naming it.
+//
+// NOTE WHICH TYPE IS THE ASSET. `image_data` is what the FILE contained: RGBA8
+// rows, top row first, exactly as decoded, which is what `gpu_texture::create_
+// sampled` uploads. `engine::texture` (gfx/texture.hpp) is a different thing — a
+// sampler-ready form you MAKE from an image — and keeping the two apart is the same
+// distinction 5.5 draws everywhere: what was loaded, versus what was derived from
+// what was loaded.
+
+/// A reference to an image held in an `image_pool`.
+using image_handle = handle<image_data>;
+
+/// Storage for images the engine owns. `asset_store` has one.
+using image_pool = pool<image_data>;
 
 /// The most texels we will decode in one image, and a deliberate policy rather
 /// than a technical limit.

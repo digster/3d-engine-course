@@ -7,9 +7,56 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-09-02 (after Lesson 5.4 — 49 of 94 lessons)
+updated: 2026-09-02 (after Lesson 5.5 — 50 of 94 lessons)
 
 conventions:
+  assets: AN ASSET IS FOUND BY NAME, LOADED ONCE, AND EXPLICITLY UNLOADED.
+        A NAME IS NOT A PATH. "torus.obj" is stable, recorded in a scene file, and
+        the key the store caches on; /Users/…/assets/torus.obj is where that name
+        resolved TODAY. Store the first, compute the second.
+        engine::search_path is an ORDERED LIST OF ROOTS, and order IS the feature:
+        prepend_root shadows a shipped asset without moving or deleting anything —
+        mods, localisation packs, live editing out of the source tree, and a test
+        fixture standing in for a real asset are all the same mechanism.
+        search_path::beside_executable(subdir) is THE ONLY CALLER OF
+        SDL_GetBasePath() IN THE ENGINE (was 2 before 5.5, was 3 counting the
+        demo's own path assembly). Assets, shaders and Module 7's sounds each get
+        their own root from one rule.
+        resolve() REFUSES a name that is absolute, empty, or contains "..", before
+        any root is tried — SYNTACTICALLY, not by canonicalising, because
+        canonicalisation needs the filesystem and grows bypasses. It also requires
+        SDL_PATHTYPE_FILE: a directory of the right name is not a hit.
+        NO REFERENCE COUNTING ON HANDLES, and the argument is from 5.4's
+        properties rather than from taste: a refcount needs a copy constructor, a
+        destructor and a pointer to the store, which costs 4 bytes/trivially
+        copyable/memcpy-able-into-a-component/serializable-without-fixups — every
+        property that made a handle worth having. A refcounted handle is a
+        shared_ptr with extra steps.
+        SO: EXPLICIT UNLOAD, safe to get wrong because 5.4 made staleness
+        detectable. Forget to unload -> a LEAK, which live_count() finds. Unload
+        too early -> a NULL and collect_stats::unresolved. Neither is a crash.
+        DERIVED ASSETS ARE THE ONE PLACE A LIFETIME RULE IS UNAVOIDABLE: a derived
+        asset is OWNED BY ITS SOURCE and unloading a source cascades TRANSITIVELY.
+        It has no name, because nobody asked for it by one. Deriving from a stale
+        source is REFUSED (an orphan has no name to find it by and no source to
+        free it with). A cascade that stops after one hop is a leak.
+        IMPORT SETTINGS ARE PART OF AN ASSET'S IDENTITY. The same file imported two
+        ways is two meshes with two vertex arrays, so the key is name + settings
+        (engine::mesh_import). THE DEFAULT CONFIGURATION MUST SERIALISE TO NOTHING:
+        asset_key("torus.obj", {}) == "torus.obj", and only a non-default import
+        earns a "|flip=0" suffix — otherwise generated content (bare name) and
+        loaded content (decorated name) live in two key spaces wearing one name.
+        THE NAME MAP IS A HINT; THE POOL IS THE TRUTH. Every cache probe nests a
+        pool::contains() inside the map lookup, so an asset freed by handle leaves
+        no live-looking entry. A pointer-keyed cache could never ask.
+        LOAD FAILURE IS THE ORDINARY CASE: null handle + a report, logged ONCE at
+        the point that knows why (resolved_path::refused exists so the caller can
+        tell "already reported" from "mine to report"). No exception, no assertion,
+        and NO FALLBACK ASSET — substituting a default cube removes the game's
+        ability to notice.
+        NOT A SINGLETON, and the reason is concrete rather than stylistic: sandbox
+        holds THREE asset_stores in one program. platform and app deliberately do
+        not own one either — that would be a singleton with better manners.
   handles: A REFERENCE INTO THE ENGINE IS AN INDEX PLUS A GENERATION, NEVER A
         POINTER. engine::handle<T> is ONE 32-BIT WORD split 20 index / 12
         generation (the same split EnTT uses for entt::entity), packed
@@ -2356,8 +2403,51 @@ completed:
   - 5.2  The Platform and Application Layer
   - 5.3  Logging, Assertions, and Errors Without Exceptions
   - 5.4  Handles: Generational Indices
+  - 5.5  The Asset System v1
 
 capabilities:
+  - ASSET 5.5: THE ENGINE CAN FIND, SHARE AND FREE THE THINGS IT DRAWS.
+    engine/asset/ is a NEW DIRECTORY (not under gfx/ — an asset system loads
+    meshes, images and Module 7's sounds, and gfx/ would make the audio loader's
+    home a joke). Two headers, two sources; 44 -> 46 public headers.
+    search_path: ordered roots, resolve() -> resolved_path {path, root_index,
+    bytes, refused}, prepend_root/add_root, beside_executable().
+    asset_store: load_mesh/load_image (cache probe -> resolve -> load -> import ->
+    insert), find_mesh/find_image, insert_mesh/insert_image (generated content,
+    REPLACES a name it already holds), derive_mesh (lifetime bound to the source),
+    unload_mesh/unload_image/unload_all, meshes()/images()/mesh_at()/image_at(),
+    name_of() (O(n), diagnostic — ONE map, not two, echoing 5.4's dense sentinel),
+    and asset_counters {files_read, cache_hits, loads_failed, inserted, derived,
+    unloaded, bytes_read}.
+    image_handle / image_pool are TWO LINES in gfx/image.hpp, and pool<T> needed
+    no change at all — the second use is where an abstraction is decided.
+  - ASSET 5.5: THE CACHE IS WORTH 15,000x, MEASURED. torus.obj cold 3.749 ms, hit
+    0.00025 ms. The stage breakdown is the finding and it is the opposite of the
+    intuition: resolve 0.0022, read 200 KB 0.0186, PARSE 3.6903, import 0.0034,
+    VALIDATE 2.4873. The disk is a rounding error; the cost is the two steps that
+    look at every vertex. That is why Module 8's cooked assets are a real
+    optimisation and a faster file format is not.
+    A SESSION (five models cycled twice, as [L] does): 8 acquires, 4 file reads,
+    4 hits, 205.7 KB. "Loaded once" is now a number.
+  - DEMO 5.5: [Bksp] UNLOADS THE MODEL OUT FROM UNDER A LIVE SCENE. The object
+    vanishes, everything else keeps drawing, and the HUD reads
+    "handle 4:1 is stale, unresolved = 1". The handle is DELIBERATELY LEFT IN
+    PLACE rather than nulled — build_scene keeps writing it in every frame, which
+    is the whole demonstration. unload_model REFUSES the generated torus: it is
+    the round-trip control, and naming an asset is how you protect it.
+    load_model no longer frees (a load is not a free), so [L] round the five
+    models reads five files ONCE. That broke a verify_54 check written one lesson
+    earlier — correctly — and the check now asserts the new contract with the
+    reason next to it.
+  - DEMO 5.5: THE 4.8 MESH CACHE'S LIFETIME HOLE IS CLOSED. Its private second
+    pool became store.derive_mesh(source, with_normals(...)), and its eviction is
+    now one line — `if (store.meshes().contains(slots_[i].cpu))` — because an
+    entry whose derived asset is gone is a miss. A cache keyed on a pointer could
+    never have been told; a cache keyed on a handle finds out by asking the
+    question it was already asking.
+    demo::mesh_library -> demo::scene_assets: the store is the engine's, and what
+    is left is the only part that was ever a program's business — WHICH HANDLES IT
+    REMEMBERS. Ask by name once, at load; refer by handle for ever after.
   - ARCH 5.4: NOTHING IN THE ENGINE HOLDS A BORROWED POINTER TO GEOMETRY ANY MORE.
     engine/core/handle.hpp (handle<T>, the 20/12 constants, make_handle) and
     engine/core/pool.hpp (pool<T>) are HEADER-ONLY — no new .cpp, no CMake change,
@@ -3165,6 +3255,42 @@ capabilities:
   - skills: reading SDL headers as source of truth; debugging with lldb/gdb/VS
 
 decisions:
+  - 5.5 REFUSED REFERENCE COUNTING, from 5.4's properties rather than from taste.
+    See conventions:assets. The general form of the question is never "should this
+    be refcounted?" but "what does this reference have to be able to do, and does
+    a count take that away?" — gpu_texture's RAII wrapper is a count of one and is
+    exactly right, because it is already an object with a lifetime.
+  - 5.5 KEPT engine::asset_path RATHER THAN DELETING IT, and reimplemented it over
+    search_path. Five verification harnesses from Modules 3-4 call it and they are
+    correct; breaking five working tests to remove two lines is a bad trade. What
+    matters is ONE IMPLEMENTATION, not one spelling. New code takes an asset_store.
+    Its behaviour improved on the way: it now returns where the file ACTUALLY IS,
+    searching every root, rather than where it would be under the first.
+  - 5.5's KEY-SPACE BUG, found by verify_55 §D one line after the check that
+    stored the asset: insert_mesh("cube") stored "cube" while find_mesh("cube")
+    looked up "cube|flip=1". Two key spaces wearing one name, silent, no crash and
+    no log. FIX AND GENERAL RULE: THE DEFAULT CONFIGURATION MUST SERIALISE TO
+    NOTHING — same shape as 5.4 reserving generation 0 so a zeroed handle is null
+    for free.
+  - 5.5's DOUBLE-LOG BUG, found on the first smoke run: a refused name produced
+    TWO error lines, search_path's (which says why) and asset_store's (which says
+    less) — the exact double-reporting 5.3 forbade, reintroduced by the lesson
+    after it. resolved_path::refused is the fix. A rule you wrote down is not a
+    rule you will follow; it is a rule you will NOTICE BREAKING.
+  - 5.5 COLLECTS THEN RECURSES in release_mesh. Walking mesh_derivations_ while
+    the recursion erases from it is correct for every mesh with ONE dependent,
+    which is every mesh the demo has. The worst kind of bug: correct in every test
+    you would think to write.
+  - 5.5's HONEST LIMITS, both recorded in the header: derivations are MESH -> MESH
+    only (a texture and its mipmaps need the edge to carry kinds — Exercise 9.5),
+    and unloading is IMMEDIATE rather than deferred to a frame boundary, so it is
+    safe between frames and Exercise 9.4 shows exactly what happens during one
+    (collect_triangles resolves once per object and holds the pointer for the
+    object's duration — the handle was fine, the resolved pointer was not).
+  - 5.5's COUNTERS GO TO THE LOG, NOT THE HUD, and it is a layout fact rather than
+    a design one: the software HUD's rows are full at 14 px spacing and a number
+    squeezed into a row another lesson owns is a number nobody reads. Printed on
+    every acquire and every unload, which is when they change.
   - 5.4 CONVERTED ONE SUBSYSTEM, MESHES, and deliberately left the rest. 5.3's
     residue (61 bool-returning functions, three status enums) is STILL open and
     was not folded in: handles are a big enough idea on their own and the ECS
@@ -3984,6 +4110,7 @@ files:
             matrix_probe.frag.hlsl
   engine/: CMakeLists.txt
   engine/include/engine/: engine.hpp                      (the umbrella)
+  engine/include/engine/asset/: search_path.hpp, asset_store.hpp        [5.5]
   engine/include/engine/core/: assert.hpp, clock.hpp, fixed_step.hpp, handle.hpp,
             input.hpp, log.hpp, pool.hpp, profile.hpp
   engine/include/engine/gfx/: clip.hpp, colour.hpp, debug_draw.hpp,
@@ -3996,6 +4123,7 @@ files:
             vec2.hpp, vec3.hpp, vec4.hpp
   engine/include/engine/platform/: platform.hpp, app.hpp,
             main.hpp   (NOT in engine.hpp — it defines the entry point)
+  engine/src/asset/: search_path.cpp, asset_store.cpp                   [5.5]
   engine/src/core/: clock.cpp, fixed_step.cpp, input.cpp, log.cpp, profile.cpp
   engine/src/gfx/: clip.cpp, colour.cpp, debug_draw.cpp, depth_buffer.cpp,
             framebuffer.cpp, gpu_buffer.cpp, gpu_debug.cpp, gpu_device.cpp,
@@ -4037,7 +4165,7 @@ files:
                  05-01-the-refactor.html,
                  05-02-platform-layer.html,
                  05-03-logging-and-errors.html,
-                 05-04-handles.html
+                 05-04-handles.html, 05-05-asset-system.html
   docs/shared/: course.css, course.js      (THE stylesheet + page script; one copy each)
   docs/_template/: lesson-template.html, README.md, apply-shared.py, check-page.js
   memory/: 2026-07-16.md … 2026-08-25.md, 2026-08-25-b.md, 2026-08-25-c.md,
@@ -4045,56 +4173,48 @@ files:
   (retired: src/ — the whole directory. hello.cpp.)
 
 
-next: 5.5 — The Asset System v1
-      (planned filename: docs/lessons/05-05-asset-system.html — 5.4's TWO next
-      links point at the index and BOTH need repointing.)
-      5.4 BUILT THE MECHANISM; 5.5 IS THE POLICY. A pool answers "is this handle
-      still good". It does not answer any of the three questions an asset system
-      exists for, and all three were unanswerable before today for the same
-      reason — you cannot free a thing safely until you can say what happens to
-      the references to it:
-        - LOADING. Where does a mesh come from, and who decides? demo::load_model
-          is 40 lines of demo code that opens a file, times it, validates it,
-          flips its uvs and logs about it. Four of those five steps are an ENGINE's
-          job and one is a program's.
-        - FINDING. Ask for "torus.obj" and get the SAME handle you got last time,
-          rather than loading it twice. That is a name -> handle map, and it is the
-          first thing in this engine that needs one.
-        - UNLOADING. The word this whole module has been building towards. Nothing
-          in the engine has ever freed anything.
-      THE HOLE 5.4 LEFT ON PURPOSE, and it is the design constraint rather than a
-      chore: scene_mesh_cache holds TWO pools — geometry that was loaded, and
-      geometry DERIVED from it by with_normals — with no rule connecting their
-      lifetimes. Free the source and the derived mesh lives on, keyed by a handle
-      that no longer resolves. That is a DERIVED ASSET, it is the general case
-      (a texture and its mipmaps, a shader and its variants, a mesh and its
-      GPU upload), and an asset system that has no answer for it is a lookup
-      table.
-        - REFERENCE COUNTING IS THE OBVIOUS ANSWER AND IT SHOULD BE ARGUED, NOT
-          ASSUMED. Ask what a count is actually for before adding one: who is
-          allowed to hold a reference, what happens at a level boundary, and why
-          most engines end up with explicit unload plus a leak check rather than
-          a refcount on everything. Show the failure of each.
-        - THE ASSET PATH IS ALREADY THREE DIFFERENT THINGS. engine::asset_path
-          (obj.hpp) puts you next to the executable; the demo assembles
-          std::strings; the shader build copies to a third place. Name the
-          concept — a mount point / search path — and pick one.
-        - CONVERT TEXTURES AS THE SECOND SUBSYSTEM, as 5.3 and 5.4 each converted
-          exactly one. engine::texture and gpu_texture are the natural pair and
-          they exercise the derived-asset problem for real.
-        - LOAD FAILURE IS NOT AN ERROR CASE, IT IS THE COMMON CASE, and 5.3's
-          report shape (obj_report, gpu_report, image_report) plus 5.4's null
-          handle already give the vocabulary. A missing asset must cost one
-          object, never the frame — collect_stats::unresolved is the receipt and
-          it should stay at 0 in every shipping run.
-      THE TEST TO BEAT: the golden must STILL be byte-identical (that is four
-      lessons running); asking for the same name twice must return the SAME
-      handle and load the file ONCE, proved by a counter; unloading a mesh that
-      a scene is still using must show up as collect_stats::unresolved rather
-      than as anything else at all; and a derived asset must not outlive its
-      source. If 5.5 cannot unload, it is 5.4 with a std::map.
-      WATCH FOR: do not let the asset system become a singleton because the
-      handle needs its pool. 5.4 refused a global for a concrete reason — sandbox
-      already has two mesh_pools in one frame — and 5.5 is where that pressure
-      will be strongest.
+next: 5.6 — Data-Oriented Design: Why Scene Trees Creak
+      (planned filename: docs/lessons/05-06-data-oriented-design.html — 5.5's TWO
+      next links point at the index and BOTH need repointing.)
+      EVERYTHING SINCE 5.1 HAS BEEN ABOUT STRUCTURE. 5.6 is the first lesson in the
+      module about SPEED, and it is the one that has to earn the ECS rather than
+      assume it. NOT DOGMA — NUMBERS, taken on our own engine, on code the reader
+      has already read.
+      TWO NUMBERS ARE ALREADY ON THE TABLE from 5.4, and the lesson should start
+      from them rather than from a parable about cache lines:
+        - scene_object is 96 BYTES (was 160), i.e. 1.5 cache lines, and 4 of them
+          is 384 bytes. What does that buy, in ns, over an array of pointers to
+          heap-allocated objects? BUILD BOTH and measure.
+        - pool::items() is a CONTIGUOUS SPAN OF EXACTLY THE LIVE OBJECTS, and 5.4
+          spent ~30 extra lines on swap-and-patch to get it. 5.6 is where that
+          spend is justified or admitted as premature: measure dense iteration
+          against a slot-indexed array with holes, at several occupancy ratios.
+          If the dense version does not win at 90% occupancy, SAY SO.
+      THE MEASUREMENT MUST BE HONEST, and 3.10's pitfall is the standing warning:
+      never compare two numbers taken hours apart; alternate the two loops in one
+      process; report medians and the spread; and state the machine. 5.4's
+      microbenchmark (alternating loops, 5 runs, range printed) is the template.
+      WHAT TO ACTUALLY MEASURE, in rough order of how convincing it is:
+        - AoS vs SoA over collect_triangles' own inputs. We have a real loop, real
+          data, and a golden that proves a rewrite changed nothing.
+        - Pointer-chasing a linked scene tree vs walking a flat array, at 100 /
+          1,000 / 10,000 objects, so the reader sees WHERE it starts to matter and
+          that it does NOT matter at 4.
+        - The cost of a virtual call in the object loop, since the OOP scene graph
+          being argued against is usually virtual too. Be fair to it.
+        - False sharing / prefetch: optional, and only if the numbers are stable.
+      BE FAIR TO THE THING BEING REPLACED. A scene tree is not stupid; it is the
+      right answer for a hierarchy you edit by hand and traverse rarely, and the
+      course has been using one (scene_object[4]) happily for three modules. The
+      lesson's honest claim is about SCALE and ACCESS PATTERN, not about OOP being
+      bad — and the strongest version says at what N the answer flips.
+      THE TEST TO BEAT: golden STILL byte-identical (that would be six lessons); a
+      measurement harness that runs in one process, alternates its arms, and
+      reports medians + range; and at least one result the author did not expect,
+      stated as such. If every number confirms the thesis, the experiment was
+      probably designed to.
+      WATCH FOR: do not implement any part of the ECS here. 5.7 chooses the
+      storage design and 5.8 builds it; 5.6's whole job is to make that choice
+      arguable with evidence. A lesson that arrives at "so we need an ECS" without
+      a number the reader can reproduce has taught nothing.
 ```

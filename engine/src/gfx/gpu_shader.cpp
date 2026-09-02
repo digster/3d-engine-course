@@ -3,6 +3,8 @@
 
 #include <engine/gfx/gpu_shader.hpp>
 
+#include <engine/asset/search_path.hpp>
+
 #include <engine/core/log.hpp>
 
 #include <cctype>
@@ -65,13 +67,23 @@ shader_target choose_shader_target(SDL_GPUShaderFormat granted)
 
 std::string shader_path(const char* relative)
 {
-    // Same contract as asset_path (gfx/obj.cpp): SDL3 returns a CACHED pointer
-    // the caller must not free, and it can be null on platforms that cannot
-    // answer, in which case a bare relative path is the honest fallback.
-    const char* base = SDL_GetBasePath();
+    // Lesson 5.5: the third copy of "where do files live", now the third caller of
+    // ONE implementation. Shaders get their own root — they are a different kind
+    // of content with a different build step and a different extension per backend
+    // — and that is precisely what a search path is for: same mechanism, different
+    // configuration, rather than a second mechanism.
+    //
+    // Built per call rather than cached in a static, deliberately. A function-local
+    // static would be one `SDL_GetBasePath` instead of N, and it would also be
+    // mutable global state that no test could point somewhere else — which is the
+    // shape of every hot-reload problem in Module 8. Shader loading happens a
+    // handful of times at start-up; the syscall is not the cost.
+    const search_path paths = search_path::beside_executable("shaders");
 
-    std::string path = (base != nullptr) ? std::string(base) : std::string();
-    path += "shaders/";
+    const resolved_path found = paths.resolve(relative);
+    if (found.ok()) { return found.path; }
+
+    std::string path = paths.roots()[0] + "/";
     path += relative;
     return path;
 }

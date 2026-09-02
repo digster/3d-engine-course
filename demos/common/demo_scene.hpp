@@ -21,6 +21,7 @@
 
 #pragma once
 
+#include <engine/asset/asset_store.hpp>
 #include <engine/gfx/framebuffer.hpp>
 #include <engine/gfx/mesh.hpp>
 #include <engine/gfx/obj.hpp>
@@ -228,38 +229,52 @@ inline constexpr float k_floor_far = -30.0f;  ///< -z edge, 37 units away
 inline constexpr float k_floor_cell = 3.0f;
 
 // ---------------------------------------------------------------------------
-// Lesson 5.4 — one owner for every mesh in the demo
+// Lesson 5.5 — the store owns; the program remembers
 // ---------------------------------------------------------------------------
 
-/// Every mesh this demo can draw, owned in one place, referred to by handle.
+/// The store this demo loads from, and the handles it cares about.
 ///
-/// **This is the demo's asset system, and it is deliberately three fields and a
-/// function.** Lesson 5.5 promotes it into the engine, where it grows loading,
-/// lookup by name, reference counting and the rest; today its whole job is to be
-/// the one thing that *owns* geometry, so that nothing else has to.
+/// **Lesson 5.5 replaced this struct's contents and the replacement is the whole
+/// point.** In 5.4 it was called `mesh_library` and it held a bare
+/// `engine::mesh_pool`, three handles and a `build()` — the demo's own asset
+/// system, admitted at the time to be "deliberately three fields and a function".
+/// The pool is now an `engine::asset_store`, which is the engine's, and what is
+/// left here is the only part that was ever a program's business: **which handles
+/// this program happens to care about.**
 ///
-/// Read what disappeared to make room for it. `floor_geometry` used to carry
-/// three `std::vector`s; `model_state` carried two `mesh_data`s; `hello_cube`
-/// carried one, with a comment explaining why it had to be a member. All four
-/// were the same workaround — somebody has to own this, so it may as well be
-/// whoever is nearest — and all four are gone.
-struct mesh_library
+/// That division is worth stating as a rule, because it is the one people get
+/// wrong in both directions:
+///
+///   THE STORE OWNS the assets, the names, the search path and the lifetimes.
+///   THE PROGRAM REMEMBERS the handles it will use again, so that drawing a cube
+///   is not a hash lookup on the string "cube" once per object per frame.
+///
+/// A handle is four bytes and resolving one costs 0.13 ns (Lesson 5.4 §5); a name
+/// is a string and looking one up costs a hash and a compare. Ask by name **once**,
+/// at load; refer by handle for ever after. Code that calls `find_mesh("cube")` in
+/// a draw loop has understood the store and misunderstood the handle.
+struct scene_assets
 {
-    /// The owner. Everything else in this struct, and every `scene_object` the
-    /// demo builds, is a four-byte reference INTO here.
-    engine::mesh_pool meshes;
+    /// Everything loaded, generated or derived. The engine's, since 5.5.
+    engine::asset_store store;
 
-    // The three built-in shapes, copied into the pool once at startup. They are
+    // The three built-in shapes, stored under names at start-up. They are
     // `inline constexpr` arrays with program lifetime, so they are the one case
-    // that would have been safe to keep viewing — and they go in the pool anyway,
+    // that would have been safe to keep viewing — and they go in the store anyway,
     // because "this particular mesh is safe to borrow and that one is not" is
     // exactly the distinction a caller should never have to keep track of.
     engine::mesh_handle cube;
     engine::mesh_handle quad;
     engine::mesh_handle icosahedron;
 
-    /// Copy the built-in shapes into the pool. Call once, before any scene.
+    /// Put the built-in shapes in the store. Call once, before any scene.
     void build();
+
+    /// The pool the renderer resolves against. A shorthand for `store.meshes()`,
+    /// because `collect_triangles` wants the pool and not the policy around it —
+    /// which is itself the reason `asset_store` exposes the pool rather than
+    /// wrapping every one of its accessors.
+    [[nodiscard]] const engine::mesh_pool& meshes() const { return store.meshes(); }
 };
 
 /// The floor, as a handle and a tessellation level.
@@ -275,7 +290,7 @@ struct mesh_library
 /// resolve, and `collect_stats::unresolved` counts it.
 struct floor_geometry
 {
-    engine::mesh_handle geometry;        ///< the tessellated grid, in `mesh_library`
+    engine::mesh_handle geometry;        ///< the tessellated grid, in the store
     int cells = 0;                       ///< quads per side; 0 = not built yet
 };
 
@@ -287,11 +302,18 @@ struct floor_geometry
 /// the demo answer "how much subdivision would affine interpolation need?" with a
 /// number instead of a shrug.
 ///
-/// The previous floor is REMOVED from the pool rather than overwritten in place,
+/// The previous floor is REMOVED from the store rather than overwritten in place,
 /// and that is the honest choice: overwriting would keep the handle valid and
 /// hide the change, which is convenient right up until something is caching per
 /// mesh and never learns that its cache is stale. A new mesh gets a new handle.
-void build_floor(mesh_library& lib, floor_geometry& g, int cells);
+///
+/// **Lesson 5.5 makes that one call instead of two.** The floor is generated
+/// content stored under the name `"floor"`, and `asset_store::insert_mesh`
+/// replaces a name it already holds — unloading the old asset, and cascading to
+/// anything derived from it, before storing the new one. Which is exactly what
+/// regenerating content should mean, and exactly what the demo had to do by hand
+/// last lesson.
+void build_floor(scene_assets& assets, floor_geometry& g, int cells);
 
 // ---------------------------------------------------------------------------
 // Lesson 3.5 — geometry from disk
@@ -407,7 +429,28 @@ struct model_state
     /// A handle too, which makes the round-trip comparison in `sandbox` read the
     /// way it always should have: `control.geometry = model.generated;` — an
     /// assignment of one integer, with no question about who owns what.
+    ///
+    /// Stored under the name `"generated:torus"` since Lesson 5.5, because
+    /// generated content is content: an asset system that can only load is missing
+    /// half its job, and giving `make_torus()`'s output a name is what lets it be
+    /// found, replaced and unloaded like anything else.
     engine::mesh_handle generated;
+
+    /// Did the last acquire come out of the store, or off the disk? Lesson 5.5.
+    ///
+    /// The visible half of "loaded once". Cycle [L] all the way round and the
+    /// second lap is entirely cache hits — no file opened, no parse, no
+    /// validation — and this flag plus `asset_store::counters().files_read` is how
+    /// the demo says so rather than claiming it.
+    bool cached = false;
+
+    /// True after [Bksp] unloaded it and before [L] loaded something again.
+    ///
+    /// Kept as demo state rather than inferred from the handle, because the two
+    /// mean different things: the handle going stale is the *engine's* fact, and
+    /// this is the *program's* record of having asked for it. The HUD shows both,
+    /// and watching them agree is the point of the key.
+    bool unloaded = false;
 };
 
 /// Load (or regenerate) the current model and measure it.
@@ -426,11 +469,42 @@ struct model_state
 /// with [2] and looked at — it is not subtle when you can see it, and it is nearly
 /// invisible when you cannot.
 ///
-/// **Lesson 5.4**: the freshly imported geometry goes into `lib.meshes` and the
-/// old one comes out. The handle changes on every load, which is the mechanism
-/// working rather than an inconvenience — a stale handle to the previous model
-/// now fails a lookup instead of reading vectors that have been cleared.
-void load_model(mesh_library& lib, model_state& m, model_choice c, bool apply_uv_flip);
+/// **Lesson 5.5 turned this function inside out**, and the diff is the argument
+/// for the asset system. It used to open a file, time it, parse it, flip its uvs,
+/// validate it and log about it — and four of those six steps were an engine's
+/// job. What is left is one call to `asset_store::load_mesh`, plus the two things
+/// that really are a program's business: which file, and what to do about a
+/// failure.
+///
+/// It also stopped unloading. The store keeps every model resident, so cycling
+/// [L] round the five choices reads five files ONCE and is a cache hit for ever
+/// after — `m.cached` and `counters().files_read` report it. Unloading is now its
+/// own key ([Bksp] -> `unload_model`), because burying a free inside a load is how
+/// you get an engine where nobody can say what is resident.
+///
+/// `apply_uv_flip` is passed as an **import setting**, not applied afterwards: the
+/// same file imported both ways is two different meshes, so it is part of the
+/// asset's identity and the store keys on it (`engine::mesh_import`). Toggling [2]
+/// therefore loads a second asset rather than silently corrupting the first.
+void load_model(scene_assets& assets, model_state& m, model_choice c, bool apply_uv_flip);
+
+/// Print what the store currently holds: live, read, hit, generated, derived,
+/// unloaded, failed, and bytes. Called on every acquire and every unload.
+void log_asset_counters(const scene_assets& assets);
+
+/// Unload the model currently on screen, and report how many assets went.
+///
+/// **This is the key worth pressing.** The scene is rebuilt every frame from
+/// handles, and one of them now names nothing — so the model vanishes, the rest of
+/// the scene keeps drawing, and `collect_stats::unresolved` counts exactly one
+/// object skipped. Before Lesson 5.4 that same sequence was a dangling `std::span`
+/// and a picture nobody could trust; before 5.5 there was no way to free anything
+/// at all.
+///
+/// The count is more than one whenever the GPU path has been up, because
+/// `with_normals` output is a DERIVED asset and unloading a source takes its
+/// dependents with it.
+int unload_model(scene_assets& assets, model_state& m);
 
 /// Rebuild the scene for the current time, rotation mode and scene kind.
 /// Returns how many objects were written.
@@ -447,7 +521,7 @@ void load_model(mesh_library& lib, model_state& m, model_choice c, bool apply_uv
 /// at the point of use — so `lib` is here for the three built-in handles and for
 /// no other reason. A `const&` to a pool it never reads would be worse.
 int build_scene(engine::scene_object (&out)[k_max_objects], scene_kind kind, spin mode, float t,
-                const mesh_library& lib, const floor_geometry& floor,
+                const scene_assets& assets, const floor_geometry& floor,
                 const model_state& model, float shininess);
 
 /// Draw the world through the camera: a ground grid on y = 0 and a marked origin.

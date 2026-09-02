@@ -10,6 +10,8 @@
 
 #include <engine/gfx/obj.hpp>
 
+#include <engine/asset/search_path.hpp>
+
 #include <SDL3/SDL.h>
 
 #include <cmath>
@@ -659,14 +661,29 @@ bool save_obj(const char* path, const mesh& m)
 
 std::string asset_path(const char* relative)
 {
-    // SDL3 returns a CACHED const char* here and the caller must not free it —
-    // unlike SDL2, where SDL_GetBasePath returned memory you owned. It can be null
-    // on platforms that cannot answer, in which case we fall back to a plain
-    // relative path and accept that it depends on the working directory.
-    const char* base = SDL_GetBasePath();
+    // LESSON 5.5 EMPTIED THIS FUNCTION OUT. It used to call `SDL_GetBasePath()`
+    // and glue "assets/" onto the front — one of three places in the engine that
+    // did the same thing in the same way and did not know about each other. The
+    // logic now lives in exactly one place, `engine::search_path`, and this is a
+    // shim over it.
+    //
+    // Kept rather than deleted, and the reason is a fair one to state out loud:
+    // five verification harnesses from Modules 3 and 4 call it, they are correct,
+    // and breaking five working tests to remove two lines is a bad trade. What
+    // matters is that there is one IMPLEMENTATION, not one spelling. New code
+    // takes an `asset_store`.
+    //
+    // Behaviour differs from the pre-5.5 version in one way, and it is an
+    // improvement: this returns the path where the file ACTUALLY IS, searching
+    // every root, rather than the path where it would be under the first one. If
+    // nothing answers, it falls back to the first root's spelling so the caller's
+    // error message still names somewhere plausible.
+    const search_path paths = search_path::standard();
+    const resolved_path found = paths.resolve(relative);
+    if (found.ok()) { return found.path; }
 
-    std::string path = (base != nullptr) ? std::string(base) : std::string();
-    path += "assets/";
+    std::string path = paths.roots().empty() ? std::string("assets/")
+                                             : paths.roots()[0] + "/";
     path += relative;
     return path;
 }

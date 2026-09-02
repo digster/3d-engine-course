@@ -4522,3 +4522,78 @@ Lesson 5.3's STATE recorded "43 public headers"; `find engine/include -name '*.h
 42 before 5.4 and 44 after. The 43 was arrived at by adding to a previous number rather than by
 counting, and it had been wrong for a lesson. Any number in a document that can be produced by a
 one-line command should be produced by that command every time it is written down.
+
+---
+
+## Asset-system facts (Lesson 5.5)
+
+### `SDL_GetPathInfo(path, NULL)` is the documented existence check — and it hands you the size
+
+SDL3's `SDL_GetPathInfo` "returns true on success or false if the file doesn't exist", and fills
+an `SDL_PathInfo` with `type`, `size` and three timestamps. So a search path can report which root
+answered *and* how many bytes the file is without a second syscall. Test
+`info.type == SDL_PATHTYPE_FILE`: a **directory** of the right name is otherwise a hit, and the
+caller then fails much later, inside a loader, with a far worse message. Both are SDL 3.2.0.
+
+### A cache's map must nest a `contains()` on the pool
+
+`std::unordered_map<key, handle>` is a **hint**, not the truth. If an asset is freed by handle,
+the map entry survives and looks live. Every probe therefore reads
+
+```cpp
+if (auto it = by_key_.find(key); it != by_key_.end()) {
+    if (pool_.contains(it->second)) { /* hit */ }
+    by_key_.erase(it);            // the pool freed it; the map catches up
+}
+```
+
+This is only possible because a generational handle cannot lie about whether its asset exists. A
+pointer-keyed cache has no way to ask, which is precisely the 4.8 mesh cache's problem.
+
+### The default configuration must serialise to nothing
+
+`asset_key(name, settings)` originally always appended `"|flip=1"` or `"|flip=0"`. Generated
+content (`insert_mesh("cube", …)`) has no settings and was stored under the bare name, so
+`find_mesh("cube")` — which encodes default settings — looked up `"cube|flip=1"` and missed.
+**Two key spaces wearing one name**, silent, no crash, no log. Making the *default* encode to
+nothing puts generated and loaded content in one key space by construction. Same shape as
+reserving generation 0 so an all-bits-zero handle is null for free.
+
+### Collect, then recurse, when a cascade erases from the container it walks
+
+`release_mesh` walks `mesh_derivations_` looking for children and recurses; the recursion erases
+from that vector. With **one** dependent per source — which is every mesh the demo has — the
+unguarded version is correct. Copy the children into a local first. The worst class of bug:
+correct in every test you would think to write.
+
+### Timing stages separately double-counts unless you know what nests inside what
+
+The first version of `measure_55.py` stacked `read` beside `parse` and summed them. `load_obj`
+**opens the file itself**, so the separately-timed read is a *subset* of the parse. It also
+stacked `validate`, which the asset store does not perform at all. The bar totalled 6.20 ms for
+an operation that takes 3.69. Before stacking timings, write down which call contains which.
+
+### On this machine, an OBJ acquire is 99.9% parse
+
+torus.obj, 200 KB, 1,225 vertices: resolve 0.0022 ms, read 0.0148, parse 3.6922, uv flip 0.0034,
+store into the pool ~0. "Asset loading is slow because disks are slow" is a sentence from a
+different decade. It is also why a *cooked* format is a real optimisation and a faster text format
+is not — the win is not reading fewer bytes, it is not parsing them.
+
+And a finding that fell out of separating the stages: the demo's `validate()` pass costs **2.45 ms,
+another 66% of the acquire**, and has been quietly doubling load times since Module 3. Cost you
+can see is cost you can choose.
+
+### A member function hides a namespace-scope function of the same name
+
+`asset_store::load_image` hides `engine::load_image`, so an unqualified call inside the class
+fails with "too few arguments" — a confusing way to be told about name lookup. Qualify it. This is
+the second lesson running to hit the shape (5.4: a member `handle()` blocking the type
+`handle<T>`); short, generic names collide with accessor idioms.
+
+### Test edits are honest only when they record what changed
+
+Lesson 5.5's `load_model` stopped freeing the previous mesh (a load is not a free), which broke a
+`verify_54` check written one lesson earlier asserting the opposite. The harness was right to
+fail. The fix is to assert the *new* contract with the reason written next to it — a test edited
+to match the code teaches nothing unless the edit says what moved.

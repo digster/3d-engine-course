@@ -1991,3 +1991,48 @@ both widths. The visual pass caught two figure collisions the automated checker 
 row labels running into the first column, and a divider rule striking through a line of prose.
 
 > next
+
+## 2026-09-02 — `next` (Lesson 5.5: The Asset System v1)
+
+> next
+
+The policy on top of 5.4's mechanism, and it answers the three questions a pool does not: where a
+mesh comes from, how asking twice gives you the same one, and — **the word this module has been
+building towards** — how to unload it. Worth stating plainly: *nothing in this engine had ever
+freed anything*, in fifty-four lessons, which is why 5.4's whole argument had to be made in the
+abstract.
+
+`engine/asset/` is a new directory (not under `gfx/` — an asset system loads meshes, images and
+Module 7's sounds). `search_path` makes **a name not a path**, with ordered roots where order
+*is* the feature: mods, localisation packs, live editing and test fixtures are one mechanism seen
+from four directions. It is also now the only caller of `SDL_GetBasePath()` in the engine; there
+were two, the second written by copying the first, plus the demo assembling strings around them.
+
+The design decision is a **refusal**. No reference counting, argued from what a handle *is* rather
+than from taste: a count needs a copy constructor, a destructor and a pointer to the store, which
+costs four bytes, trivial copyability, `memcpy` into a component, and fixup-free serialization —
+every property 5.4 existed to obtain. So explicit unload, safe to get wrong *because* staleness is
+detectable. The one unavoidable rule is **derived assets**: owned by their source, cascading
+transitively, refused when the source is already gone. That closes the hole 5.4 left open on
+purpose, and the sandbox mesh cache's eviction became one line — `contains(cpu)` — because a cache
+keyed on a handle finds out by asking the question it was already asking.
+
+Two bugs found and kept. **The first smoke run** double-logged a refused name — 5.3's rule broken
+by the lesson after it; `resolved_path::refused` is the fix. **The first harness run** found a
+real one: `insert_mesh("cube")` stored `"cube"` while `find_mesh("cube")` looked up
+`"cube|flip=1"`. Two key spaces wearing one name, silent. General rule, and it is the same shape
+as reserving generation 0: **the default configuration must serialise to nothing.**
+
+And the measurement had to be corrected before it was true. The first version stacked `read`
+beside `parse` (but `load_obj` opens the file itself) and stacked `validate` (which the store does
+not do), totalling 6.20 ms for a 3.69 ms operation. Corrected: **the acquire is the parse**, 99.9%
+of it; resolve + read 200 KB + uv flip + store are together 0.55%; the cache is 14,771×. A
+finding fell out of the fix — the demo's `validate()` costs another 66% of the acquire and has
+been quietly doubling load times since Module 3.
+
+`[Bksp]` frees the model out from under a scene still drawing it: one object vanishes,
+`unresolved = 1`, nothing else changes. Golden byte-identical for the **fifth** lesson running;
+verify_45–55 all pass (three ported, one check updated to assert the new contract with the reason
+written beside it); 85 checks in two build configurations; page checks green at both widths.
+
+> next

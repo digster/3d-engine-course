@@ -51,18 +51,25 @@ namespace demo {
     return t;
 }
 
-void mesh_library::build()
+void scene_assets::build()
 {
     // Three copies, once, at startup: 8 + 4 + 12 positions and 36 + 6 + 60
     // indices, which is 636 bytes of copying in exchange for never again having
     // to know which meshes are safe to borrow. `to_mesh_data` is the bridge from
-    // Lesson 2.12's `inline constexpr` arrays to storage the pool controls.
-    cube = meshes.insert(engine::to_mesh_data(engine::cube_mesh()));
-    quad = meshes.insert(engine::to_mesh_data(engine::quad_mesh()));
-    icosahedron = meshes.insert(engine::to_mesh_data(engine::icosahedron_mesh()));
+    // Lesson 2.12's `inline constexpr` arrays to storage the store controls.
+    //
+    // NAMED, as of Lesson 5.5, and the names are not decoration. They make the
+    // built-ins findable (`store.find_mesh("cube")`), replaceable, unloadable and
+    // countable by exactly the same machinery as `torus.obj` — which is the test
+    // of whether generated content is really a first-class asset or a special
+    // case wearing the same type.
+    cube = store.insert_mesh("cube", engine::to_mesh_data(engine::cube_mesh()));
+    quad = store.insert_mesh("quad", engine::to_mesh_data(engine::quad_mesh()));
+    icosahedron = store.insert_mesh("icosahedron",
+                                    engine::to_mesh_data(engine::icosahedron_mesh()));
 }
 
-void build_floor(mesh_library& lib, floor_geometry& g, int cells)
+void build_floor(scene_assets& assets, floor_geometry& g, int cells)
 {
     if (g.cells == cells && g.geometry) { return; }   // rebuilt only on [T]
     g.cells = cells;
@@ -99,82 +106,99 @@ void build_floor(mesh_library& lib, floor_geometry& g, int cells)
         }
     }
 
-    // Out with the old, in with the new — in that order, so the pool reuses the
-    // slot the old floor was in and the new handle differs from the old one only
-    // in its generation. Watch that in a debugger once and the design stops being
-    // abstract: same index, next generation, and the previous handle is now a
-    // number the pool refuses.
-    lib.meshes.remove(g.geometry);
-    g.geometry = lib.meshes.insert(std::move(floor));
+    // ONE call, as of Lesson 5.5. `insert_mesh` replaces a name it already holds:
+    // it unloads the previous floor — cascading to anything derived from it — and
+    // stores the new one. The pool reuses the slot, so the new handle differs from
+    // the old one only in its generation. Watch that in a debugger once and the
+    // design stops being abstract: same index, next generation, and the previous
+    // handle is now a number the store refuses.
+    g.geometry = assets.store.insert_mesh("floor", std::move(floor));
 }
 
-void load_model(mesh_library& lib, model_state& m, model_choice c, bool apply_uv_flip)
+/// Print what the store currently holds.
+///
+/// **It goes to the log rather than to the HUD, and that is a layout fact rather
+/// than a design one** — the software demo's HUD is full, and a number squeezed
+/// into a row that another lesson already owns is a number nobody reads. Printed
+/// on every acquire and every unload, which is exactly when it changes, so the
+/// terminal beside the window is a running account of what is resident.
+void log_asset_counters(const scene_assets& assets)
+{
+    const engine::asset_counters& c = assets.store.counters();
+    SDL_Log("  assets: %d live | %d file(s) read, %d cache hit(s), %d generated, "
+            "%d derived, %d unloaded, %d failed | %.1f KB read",
+            assets.store.live_count(), c.files_read, c.cache_hits, c.inserted,
+            c.derived, c.unloaded, c.loads_failed,
+            static_cast<double>(c.bytes_read) / 1024.0);
+}
+
+void load_model(scene_assets& assets, model_state& m, model_choice c, bool apply_uv_flip)
 {
     m.choice = c;
     m.uv_flipped = apply_uv_flip;
-
-    // The freshly imported geometry is built HERE, as a local, and only handed to
-    // the pool at the end. That ordering is deliberate: the old mesh stays
-    // resolvable for the whole of the load, so a load that FAILS leaves the demo
-    // showing what it was showing rather than showing nothing. Free first and you
-    // have committed to the new asset before you know whether it exists.
-    engine::mesh_data data;
+    m.unloaded = false;
 
     const Uint64 t0 = SDL_GetTicksNS();
+
     if (c == model_choice::generated)
     {
-        // A copy out of the pool: four vectors, on a keypress. `get` returns a
-        // pointer that is valid exactly until the insert at the bottom of this
-        // function, which is why the copy happens now and not later.
-        if (const engine::mesh_data* src = lib.meshes.get(m.generated)) { data = *src; }
+        // NOT A COPY ANY MORE, and the deleted copy is worth a sentence. This
+        // branch used to duplicate four vectors on every keypress, because the
+        // demo had two owners of the same geometry and no way to say "the same
+        // one". Now `generated` is an asset in the store like any other and this
+        // is an assignment of one integer: two handles naming one mesh, which is
+        // exactly what a handle is for.
+        m.geometry = m.generated;
+        m.cached = true;
         m.load = {};
         m.load.status = engine::obj_status::ok;
-        m.load.vertices = static_cast<int>(data.vertices.size());
-        m.load.triangles = static_cast<int>(data.triangle_count());
+        if (const engine::mesh_data* g = assets.store.mesh_at(m.geometry))
+        {
+            m.load.vertices = static_cast<int>(g->vertices.size());
+            m.load.triangles = static_cast<int>(g->triangle_count());
+        }
     }
     else
     {
-        // asset_path() puts us next to the executable, wherever it was launched
-        // from. std::string, because the path is assembled at runtime and something
-        // has to own the characters — the same ownership question as the mesh, one
-        // level down.
-        const std::string path = engine::asset_path(file_of(c));
-        m.load = engine::load_obj(path.c_str(), data);
+        // ONE CALL, and everything that used to be here went with it: the path
+        // assembly, the `std::string` that owned it, the parse, and the uv flip.
+        //
+        // The flip goes in as an IMPORT SETTING rather than being applied
+        // afterwards, which is the change with a consequence: the same file
+        // imported both ways is two different meshes, so the store keys on the
+        // settings as well as the name and toggling [2] loads a SECOND asset
+        // instead of quietly rewriting the first. That is what every real
+        // pipeline does, and it is the reason `mesh_import` is a struct rather
+        // than a bool parameter — the day it grows a second field, nothing here
+        // changes.
+        const engine::mesh_import settings{.flip_uv_v = apply_uv_flip};
+        const engine::mesh_load got = assets.store.load_mesh(file_of(c), settings);
+        m.geometry = got.handle;
+        m.load = got.report;
+        m.cached = got.cached;
     }
-    // OBJ space -> texture space, before anything measures or draws the mesh.
-    //
-    // Applied to EVERY branch, including `generated`, and that uniformity is what
-    // keeps the round-trip comparison honest: `assets/torus.obj` was written from
-    // `make_torus()`, so if the file's copy were flipped and the in-memory copy were
-    // not, `roundtrip_wrong` would start counting the import step instead of the
-    // loader. An import applied to everything cannot break a round trip; an import
-    // applied to some things silently can. `m.data` is re-copied from `m.generated`
-    // on every load, so nothing accumulates.
-    //
-    // Inside the timed region on purpose: it is part of what importing an asset
-    // costs, and the HUD's load time should not quietly exclude the steps that
-    // happen after the parse. (It is 24 subtractions on the cube and 2,352 on the
-    // torus, so the answer is "nothing measurable" — which is worth knowing rather
-    // than assuming.)
-    if (apply_uv_flip) { engine::flip_uv_v(data); }
 
     const Uint64 t1 = SDL_GetTicksNS();
     m.load_ms = static_cast<double>(t1 - t0) / 1.0e6;
 
-    // Validate whatever we got, INCLUDING a failed load — on failure the arrays are
-    // empty, and an empty mesh reports zeroes rather than crashing the report.
-    m.check = engine::validate(data.view());
+    // Validate whatever we got, INCLUDING a failed load — on failure the handle is
+    // null, `mesh_at` returns nullptr, and an empty mesh reports zeroes rather
+    // than crashing the report.
+    //
+    // Run on a CACHE HIT too, deliberately, even though the answer cannot have
+    // changed. Validation is a pure function of the mesh and it is the demo's
+    // HUD data, not the store's: an asset system that cached the *validator's*
+    // opinion would have to decide when that opinion expires, and this demo has
+    // no need to buy that problem. Module 8's cooked assets do, and that is where
+    // it belongs.
+    const engine::mesh_data* loaded = assets.store.mesh_at(m.geometry);
+    m.check = loaded != nullptr ? engine::validate(loaded->view()) : engine::mesh_report{};
 
-    // Only now does the pool change hands. The old model's slot is freed, its
-    // generation bumped, and any handle still naming it stops resolving — which
-    // is precisely what used to be undefined behaviour and is now a `nullptr`.
-    lib.meshes.remove(m.geometry);
-    m.geometry = lib.meshes.insert(std::move(data));
-
-    if (m.load.ok())
+    if (m.load.ok() && loaded != nullptr)
     {
-        SDL_Log("Loaded %-24s %5d verts (%+d split), %5d tris, euler %+d, "
+        SDL_Log("%s %-24s %5d verts (%+d split), %5d tris, euler %+d, "
                 "volume %+.4f, %s%s  [%.2f ms]",
+                m.cached ? "Cached" : "Loaded",
                 name_of(c), m.load.vertices, m.load.split_vertices, m.load.triangles,
                 m.check.euler, static_cast<double>(m.check.signed_volume),
                 m.check.closed() ? "closed" : "OPEN",
@@ -183,13 +207,50 @@ void load_model(mesh_library& lib, model_state& m, model_choice c, bool apply_uv
     }
     else
     {
-        SDL_Log("FAILED to load %s: %s (line %d)", name_of(c),
+        // The store has already logged WHY, at the point that knew (Lesson 5.3).
+        // What the demo adds is the CONSEQUENCE, which is the only thing it knows.
+        SDL_Log("%s will not draw: %s (line %d)", name_of(c),
                 engine::name_of(m.load.status), m.load.line);
     }
+    log_asset_counters(assets);
+}
+
+int unload_model(scene_assets& assets, model_state& m)
+{
+    // The generated torus is not unloadable from here, and the refusal is a real
+    // rule rather than a special case: it is the CONTROL for the round-trip
+    // comparison, `torus.obj` was written from it, and a demo that could delete
+    // its own reference would be a demo whose measurement means nothing. Naming
+    // an asset is also how you protect it.
+    if (m.choice == model_choice::generated)
+    {
+        SDL_Log("[Bksp] make_torus() is the round-trip control and stays resident");
+        return 0;
+    }
+
+    const int went = assets.store.unload_mesh(m.geometry);
+    if (went == 0)
+    {
+        SDL_Log("[Bksp] nothing to unload — %s is already gone", name_of(m.choice));
+        return 0;
+    }
+
+    m.unloaded = true;
+    // The handle is DELIBERATELY LEFT IN PLACE rather than nulled, and this is the
+    // whole demonstration. `build_scene` keeps writing it into the scene every
+    // frame, `collect_triangles` keeps failing to resolve it, and the object
+    // disappears with a number next to it instead of a crash. Nulling it here
+    // would tidy away the exact thing worth looking at.
+    SDL_Log("[Bksp] unloaded %s: %d asset(s) released, %d still resident. "
+            "The scene still holds handle %u:%u — watch `unresolved` on the HUD.",
+            name_of(m.choice), went, assets.store.live_count(),
+            m.geometry.index(), m.geometry.generation());
+    log_asset_counters(assets);
+    return went;
 }
 
 int build_scene(engine::scene_object (&out)[k_max_objects], scene_kind kind, spin mode, float t,
-                const mesh_library& lib, const floor_geometry& floor,
+                const scene_assets& assets, const floor_geometry& floor,
                 const model_state& model, float shininess)
 {
     const engine::mat3 spinning = build_spin(mode, t);
@@ -250,7 +311,7 @@ int build_scene(engine::scene_object (&out)[k_max_objects], scene_kind kind, spi
         out[0].xform.scale    = {0.9f, 0.9f, 0.9f};
         out[0].xform.position = {0.0f, 1.0f, 0.0f};
         out[0].xform.rotation = spinning * engine::rotation_x(0.5f);
-        out[0].geometry       = lib.icosahedron;
+        out[0].geometry       = assets.icosahedron;
         out[0].name           = "icosahedron (uniform, spinning)";
         out[0].tint           = k_amber;
         out[0].closed         = true;
@@ -265,7 +326,7 @@ int build_scene(engine::scene_object (&out)[k_max_objects], scene_kind kind, spi
         out[1].xform.scale    = {1.8f, 0.35f, 0.9f};
         out[1].xform.position = {-1.6f, 0.5f, 0.4f};
         out[1].xform.rotation = spinning;
-        out[1].geometry       = lib.cube;
+        out[1].geometry       = assets.cube;
         out[1].name           = "slab   (non-uniform, spinning)";
         out[1].tint           = k_teal;
         out[1].closed         = true;
@@ -279,7 +340,7 @@ int build_scene(engine::scene_object (&out)[k_max_objects], scene_kind kind, spi
         out[2].xform.scale    = {1.2f, 0.25f, 1.2f};
         out[2].xform.position = {1.4f, 0.125f, 0.9f};
         out[2].xform.rotation = engine::mat3::identity();
-        out[2].geometry       = lib.cube;
+        out[2].geometry       = assets.cube;
         out[2].name           = "plinth (non-uniform, still)";
         out[2].tint           = k_violet;
         out[2].closed         = true;
@@ -319,19 +380,19 @@ int build_scene(engine::scene_object (&out)[k_max_objects], scene_kind kind, spi
         constexpr float k_overhang = 0.5f;
 
         out[0].xform = make_plank(c1, c2, k_width, k_tilt, k_overhang);
-        out[0].geometry = lib.quad;
+        out[0].geometry = assets.quad;
         out[0].name = "plank A (C1->C2)";
         out[0].tint = k_amber;
         out[0].closed = false;
 
         out[1].xform = make_plank(c2, c3, k_width, k_tilt, k_overhang);
-        out[1].geometry = lib.quad;
+        out[1].geometry = assets.quad;
         out[1].name = "plank B (C2->C3)";
         out[1].tint = k_teal;
         out[1].closed = false;
 
         out[2].xform = make_plank(c3, c1, k_width, k_tilt, k_overhang);
-        out[2].geometry = lib.quad;
+        out[2].geometry = assets.quad;
         out[2].name = "plank C (C3->C1)";
         out[2].tint = k_violet;
         out[2].closed = false;
@@ -357,7 +418,7 @@ int build_scene(engine::scene_object (&out)[k_max_objects], scene_kind kind, spi
         out[0].xform.scale    = {2.6f, 2.0f, 1.0f};
         out[0].xform.position = {0.0f, 1.1f, +0.1f};
         out[0].xform.rotation = engine::rotation_y(+0.7f);
-        out[0].geometry       = lib.quad;
+        out[0].geometry       = assets.quad;
         out[0].name           = "quad A (nearer centre)";
         out[0].tint           = k_amber;
         out[0].closed         = false;
@@ -365,7 +426,7 @@ int build_scene(engine::scene_object (&out)[k_max_objects], scene_kind kind, spi
         out[1].xform.scale    = {2.6f, 2.0f, 1.0f};
         out[1].xform.position = {0.0f, 1.1f, -0.1f};
         out[1].xform.rotation = engine::rotation_y(-0.7f);
-        out[1].geometry       = lib.quad;
+        out[1].geometry       = assets.quad;
         out[1].name           = "quad B (further centre)";
         out[1].tint           = k_teal;
         out[1].closed         = false;
@@ -383,7 +444,7 @@ int build_scene(engine::scene_object (&out)[k_max_objects], scene_kind kind, spi
     out[0].xform.scale    = {3.0f, 2.4f, 1.0f};
     out[0].xform.position = {0.0f, 1.1f, 0.0f};
     out[0].xform.rotation = engine::rotation_y(0.9f);
-    out[0].geometry       = lib.quad;
+    out[0].geometry       = assets.quad;
     out[0].name           = "panel A (behind)";
     out[0].tint           = k_amber;
     out[0].closed         = false;
@@ -391,7 +452,7 @@ int build_scene(engine::scene_object (&out)[k_max_objects], scene_kind kind, spi
     out[1].xform.scale    = {3.0f, 2.4f, 1.0f};
     out[1].xform.position = {0.0f, 1.1f, 0.001f};   // one millimetre nearer. That is all.
     out[1].xform.rotation = engine::rotation_y(0.9f);
-    out[1].geometry       = lib.quad;
+    out[1].geometry       = assets.quad;
     out[1].name           = "panel B (1 mm in front)";
     out[1].tint           = k_teal;
     out[1].closed         = false;
@@ -464,16 +525,18 @@ int write_reference_shot(const char* path)
 
     // Lesson 5.4: one owner for every mesh the shot draws. Built here rather
     // than passed in, because the whole value of this function is that its inputs
-    // are constants — an asset library handed in from outside would be one more
-    // thing that could differ between two runs.
-    mesh_library assets;
+    // are constants — an asset store handed in from outside would be one more
+    // thing that could differ between two runs, and (5.5) would bring its own
+    // search path with it, which is the most important input of all.
+    scene_assets assets;
     assets.build();
 
     floor_geometry floor;
     build_floor(assets, floor, k_shot_floor_cells);
 
     model_state model;
-    model.generated = assets.meshes.insert(engine::make_torus(48, 24, 1.0f, 0.4f));
+    model.generated = assets.store.insert_mesh("generated:torus",
+                                               engine::make_torus(48, 24, 1.0f, 0.4f));
     load_model(assets, model, model_choice::torus, true);
 
     texture_set textures;
@@ -544,7 +607,7 @@ int write_reference_shot(const char* path)
         // answer — which is what makes this the reference render.
         engine::collect_stats measured;
         engine::collect_triangles(tris, scratch, {scene, static_cast<std::size_t>(count)},
-                                  assets.meshes, {view, eye}, pr, lights,
+                                  assets.meshes(), {view, eye}, pr, lights,
                                   engine::render_options{}, &measured);
 
         // The two uv surfaces read the orientation chart; everything else reads

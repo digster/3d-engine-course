@@ -21,6 +21,12 @@
 # reloads shaders and assets, not code. If that ever changes, this word is the
 # only thing that has to.
 add_library(engine STATIC
+    # Lesson 5.5. A new directory rather than another file in gfx/: an asset
+    # system is not a graphics subsystem — it loads meshes, images, and in
+    # Module 7 sounds — and putting it under gfx/ would make the audio loader's
+    # home a joke six lessons before it is written.
+    src/asset/asset_store.cpp
+    src/asset/search_path.cpp
     src/core/clock.cpp
     src/core/fixed_step.cpp
     src/core/input.cpp

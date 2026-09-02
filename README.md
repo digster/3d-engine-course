@@ -7,7 +7,7 @@ There is no engine to download here and no framework doing the interesting parts
 write the math library, the rasterizer, the ECS, the renderer, the physics, and the editor. By
 the end you have a real engine and a game built on its public API.
 
-**Status:** curriculum and conventions published; lessons in progress — **Modules 0–4 are complete** and Module 5 is under way (49 of 94 lessons). The CPU software rasterizer is finished end to end, the same scene is drawn on a real GPU through SDL_GPU, and the tree is now a static library with a public API, a platform/application layer, its own logging, and handle-based resource storage. Start at
+**Status:** curriculum and conventions published; lessons in progress — **Modules 0–4 are complete** and Module 5 is under way (50 of 94 lessons). The CPU software rasterizer is finished end to end, the same scene is drawn on a real GPU through SDL_GPU, and the tree is now a static library with a public API, a platform/application layer, its own logging, handle-based resource storage, and an asset system that can load, share and free. Start at
 [`docs/index.html`](docs/index.html).
 
 ---
@@ -177,6 +177,37 @@ The storage underneath is dense and packed, so the pool relocates freely — ins
 reallocate everything and removing moves a *surviving* item into the hole — and handles survive
 all of it. The rule for users is one line: **resolve late, use immediately, never store**; the
 `T*` that `get()` returns is valid until the next `insert` or `remove` and no longer.
+
+### Assets are named, loaded once, and explicitly unloaded
+
+Since **Lesson 5.5** an `engine::asset_store` owns everything loaded, generated or derived, and
+finds it by name through an ordered `engine::search_path`:
+
+```cpp
+engine::asset_store assets;                       // roots: <exe>/assets by default
+assets.paths().prepend_root("mods/dragon_pack");  // …and this one wins
+
+const engine::mesh_load a = assets.load_mesh("torus.obj");   // reads the file
+const engine::mesh_load b = assets.load_mesh("torus.obj");   // b.cached == true
+assert(a.handle == b.handle);                                // …and the same handle
+
+assets.unload_mesh(a.handle);                     // and now neither resolves
+```
+
+**A name is not a path.** `"torus.obj"` is stable and is what a scene file records; the absolute
+path is where that name resolved today, under these roots. Order is the feature — put a
+directory in front and everything in it shadows the shipped asset of the same name, which is
+how mods, localisation packs, live editing and test fixtures all work.
+
+**There is no reference counting**, deliberately: a count would cost a handle every property that
+made it worth having. Unloading is explicit, and it is safe to get wrong because staleness is
+detectable — forgetting leaks (find it with `live_count()`), unloading early gives a null handle
+and a bump in `collect_stats::unresolved`. The one exception is **derived assets** —
+`with_normals` output, a mipmap chain, a GPU upload — which are owned by their source and
+released with it, transitively.
+
+Press <kbd>Bksp</kbd> in `sandbox --software` to free the current model out from under the scene
+that is still drawing it. Exactly one object disappears, and the HUD says so.
 
 The software path is **not** deprecated. It is the *reference*: every measured claim in Modules 2
 and 3 was made against it, and a port whose reference has been deleted is a port nobody can check.
@@ -524,10 +555,11 @@ Third-party, each with an explicit "why we don't hand-roll this" justification: 
 ## Repository layout
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the full tree and the reasoning behind it. The short
-version, as of **Lesson 5.4**:
+version, as of **Lesson 5.5**:
 
 ```
-engine/include/engine/   the public API — 44 headers, and the only path a demo can name
+engine/include/engine/   the public API — 46 headers, and the only path a demo can name
+engine/include/engine/asset/      search_path, asset_store — names, roots, lifetimes
 engine/include/engine/core/       clock, input, fixed_step, profile, log, assert,
                                   handle, pool
 engine/include/engine/platform/   how a program starts: platform.hpp, app.hpp, main.hpp

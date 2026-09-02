@@ -1898,28 +1898,33 @@ int run_gpu_probe(SDL_Window* window)
     // Lesson 3.5's parallel arrays into interleaved vertices, and pushed to the
     // device; from then on the only thing that moves per frame is 28 bytes per
     // instance. That sentence is the lesson.
-    engine::mesh_data torus;
-    const engine::obj_report torus_report =
-        engine::load_obj(engine::asset_path("torus.obj").c_str(), torus);
+    // LESSON 5.5 REPLACED SIX LINES WITH ONE, and the six are worth reading before
+    // they go: `load_obj(asset_path("torus.obj").c_str(), torus)` assembled a path,
+    // opened a file, parsed it, and then — twenty lines further down, in a
+    // different branch — applied `flip_uv_v` by hand. Four steps, three of them
+    // the engine's job, and the fourth (the import convention) sitting far enough
+    // from the load that the two could drift.
+    //
+    // It is now an acquire against a store, with the flip as an import setting.
+    // The store is a local because this probe outlives nothing and shares nothing;
+    // that it is cheap to have one per program is the argument against a global.
+    engine::asset_store assets;
+    const engine::mesh_load torus_asset = assets.load_mesh("torus.obj");
+    const engine::obj_report torus_report = torus_asset.report;
 
     engine::gpu_mesh mesh_indexed;
     engine::gpu_mesh mesh_expanded;
     bool mesh_ok = false;
 
-    if (!torus_report.ok())
+    if (!torus_asset.ok())
     {
         SDL_Log("  mesh            : torus.obj did not load (%s) - [6] will do nothing",
                 engine::name_of(torus_report.status));
     }
     else
     {
-        // Lesson 3.9's flip, applied at the import boundary as always: OBJ counts v
-        // upwards from the bottom, every GPU texture counts it downwards from the
-        // top, and the grid in `mesh.frag.hlsl` would be a mirror image without it.
-        engine::flip_uv_v(torus);
-
         SDL_GPUCommandBuffer* mesh_cb = SDL_AcquireGPUCommandBuffer(gpu.handle());
-        const engine::mesh view = torus.view();
+        const engine::mesh view = assets.mesh_at(torus_asset.handle)->view();
 
         // BOTH FORMS OF THE SAME MESH, so that [7] is a comparison rather than a
         // claim. `expanded` writes three vertices per triangle and keeps no index
@@ -1931,7 +1936,7 @@ int run_gpu_probe(SDL_Window* window)
         mesh_ok = a_ok && b_ok && SDL_SubmitGPUCommandBuffer(mesh_cb);
 
         SDL_Log("  mesh            : torus.obj  %zu vertices, %zu triangles",
-                torus.vertices.size(), torus.triangle_count());
+                view.vertices.size(), view.triangle_count());
         SDL_Log("    indexed       : %6u vertices + %6u indices = %6u bytes"
                 "  (%u-%u shader invocations)",
                 mesh_indexed.vertex_count(), mesh_indexed.index_count(),
@@ -2064,7 +2069,6 @@ int run_gpu_probe(SDL_Window* window)
     // framebuffer. The two samplers exist because a sampler is an OBJECT and
     // swapping filters at runtime means swapping objects rather than passing a
     // different argument — which is the whole difference from Lesson 3.9.
-    engine::image_data uv_image;
     engine::gpu_texture uv_texture;
     engine::gpu_sampler sampler_linear;
     engine::gpu_sampler sampler_nearest;
@@ -2076,8 +2080,8 @@ int run_gpu_probe(SDL_Window* window)
     // error line here would produce two entries for one problem, the second of
     // them less informative than the first. What the demo adds is the
     // CONSEQUENCE, which is the only thing it knows and the loader does not.
-    const engine::image_report img = engine::load_image(
-        engine::asset_path("uv_grid.png").c_str(), uv_image);
+    const engine::image_load uv_asset = assets.load_image("uv_grid.png");
+    const engine::image_report img = uv_asset.report;
 
     if (!img.ok())
     {
@@ -2098,7 +2102,8 @@ int run_gpu_probe(SDL_Window* window)
         // reflectance, a reflectance multiplies a quantity of light, so it must be
         // LINEAR before the multiply. The sampler now does that decode per read,
         // for free, and before the filter rather than after.
-        texture_ok = uv_texture.create_sampled(gpu, tex_cb, uv_image, true, "uv grid")
+        texture_ok = uv_texture.create_sampled(gpu, tex_cb, *assets.image_at(uv_asset.handle),
+                                              true, "uv grid")
                   && SDL_SubmitGPUCommandBuffer(tex_cb);
 
         texture_ok = texture_ok
@@ -2109,7 +2114,7 @@ int run_gpu_probe(SDL_Window* window)
 
         SDL_Log("  texture         : uv_grid.png %dx%d, %d channels in the file,"
                 " uploaded %u bytes as %s",
-                uv_image.width, uv_image.height, uv_image.source_channels,
+                img.width, img.height, img.source_channels,
                 uv_texture.uploaded_bytes(), engine::name_of(uv_texture.format()));
     }
 
@@ -2710,8 +2715,19 @@ int run_gpu_probe(SDL_Window* window)
 /// compare two handles and you have compared two occupants of two slots, not two
 /// addresses that happen to agree today.
 ///
-/// It still holds eight and still never evicts, because eviction is Lesson 5.5's
-/// subject and inventing it here would be inventing an asset system in a demo.
+/// **LESSON 5.5 CLOSED THE LIFETIME HOLE 5.4 LEFT HERE.** The imported geometry —
+/// `with_normals` output, a different vertex count and a different index buffer
+/// from the mesh it came from — used to live in a second `mesh_pool` this class
+/// owned, with no rule connecting it to the mesh it was made from. Unload the
+/// source and the derived copy lived on, keyed by a handle that no longer
+/// resolved: a leak with a clean bill of health.
+///
+/// It is now an `asset_store::derive_mesh`, which binds the two lifetimes: the
+/// source's unload cascades. What this class has to do about it is the part worth
+/// reading — **nothing, except notice.** An entry whose derived handle stops
+/// resolving is an entry whose GPU buffers should go, and `get()` checks that on
+/// the way past. A cache keyed on a pointer could never have been told; a cache
+/// keyed on a handle finds out by asking the question it was already asking.
 class scene_mesh_cache
 {
 public:
@@ -2727,7 +2743,7 @@ public:
     {
         engine::mesh_handle source;         ///< WHICH mesh this was imported from
         engine::normal_style style = engine::normal_style::smooth;
-        engine::mesh_handle cpu;            ///< with normals, in `derived_`; what BOTH paths draw
+        engine::mesh_handle cpu;            ///< with normals, in the store; what BOTH paths draw
         engine::gpu_mesh gpu;               ///< …and its device-side interleaving
     };
 
@@ -2736,10 +2752,10 @@ public:
     /// Returns `nullptr` when the cache is full or the upload failed — a caller
     /// that skips such an object draws the rest of the scene, which is what a
     /// renderer should do when one asset is missing.
-    const entry* get(const engine::gpu_device& dev, const engine::mesh_pool& meshes,
+    const entry* get(const engine::gpu_device& dev, engine::asset_store& store,
                      engine::mesh_handle source, engine::normal_style style)
     {
-        const engine::mesh_data* src = meshes.get(source);
+        const engine::mesh_data* src = store.mesh_at(source);
         if (src == nullptr || src->vertices.empty() || src->indices.empty()) { return nullptr; }
         const engine::mesh m = src->view();
 
@@ -2751,7 +2767,20 @@ public:
             // of the four tests this line replaced.
             if (slots_[i].source == source && slots_[i].style == style)
             {
-                return &slots_[i];
+                // …and one more, added in 5.5: is the DERIVED asset still there?
+                // The store may have unloaded it from under us, because unloading
+                // the source cascades. A hit whose geometry is gone is a miss, and
+                // its GPU buffers are ours to destroy — nobody else knows they
+                // exist. This is the only eviction this cache has, and it arrives
+                // for free: it is the same `contains` question a handle answers
+                // everywhere else.
+                if (store.meshes().contains(slots_[i].cpu)) { return &slots_[i]; }
+
+                slots_[i].gpu.destroy();
+                slots_[i] = slot{};
+                if (i != count_ - 1) { slots_[i] = std::move(slots_[count_ - 1]); }
+                --count_;
+                break;
             }
         }
 
@@ -2768,14 +2797,13 @@ public:
         // fallback moves out of the renderer and into the geometry, which is where
         // every real engine puts it.
         // The IMPORTED geometry is a mesh in its own right — a different vertex
-        // count, different normals, a different index buffer — so it goes into a
-        // pool of its own rather than being smuggled around as a member. Two
-        // pools, two kinds of asset: `meshes` holds what was authored or loaded,
-        // `derived_` holds what an import step produced from it. Lesson 5.5 gives
-        // that relationship a name; today it is enough that both are addressed
-        // the same way.
-        e.cpu = derived_.insert(engine::with_normals(m, style));
-        const engine::mesh_data* cpu = derived_.get(e.cpu);
+        // count, different normals, a different index buffer — and as of Lesson
+        // 5.5 it is stored as a DERIVED asset, with its lifetime bound to the mesh
+        // it was made from. It gets no name, because nobody asked for it by one:
+        // it exists only as a consequence of its source existing, and it should
+        // stop existing for the same reason.
+        e.cpu = store.derive_mesh(source, engine::with_normals(m, style));
+        const engine::mesh_data* cpu = store.mesh_at(e.cpu);
         if (cpu == nullptr) { return nullptr; }
 
         SDL_GPUCommandBuffer* cb = SDL_AcquireGPUCommandBuffer(dev.handle());
@@ -2798,17 +2826,17 @@ public:
         return &e;
     }
 
+    /// Destroy the device-side buffers. The derived MESHES are the store's and
+    /// are released with it — which is the division this class exists to
+    /// demonstrate: an asset store owns data, and a cache owns the device objects
+    /// it built from that data.
     void destroy()
     {
         for (int i = 0; i < count_; ++i) { slots_[i].gpu.destroy(); }
-        derived_.clear();
         count_ = 0;
     }
 
     [[nodiscard]] int size() const { return count_; }
-
-    /// Where the imported meshes live, so the software path can draw them.
-    [[nodiscard]] const engine::mesh_pool& derived() const { return derived_; }
 
 private:
     static constexpr int k_max = 8;
@@ -2817,9 +2845,6 @@ private:
 
     slot slots_[k_max];
     int count_ = 0;
-
-    /// Geometry produced BY this cache: `with_normals` output, one per entry.
-    engine::mesh_pool derived_;
 };
 
 /// Every knob the ported demo has, in one place.
@@ -3048,14 +3073,15 @@ int run_gpu_scene(SDL_Window* window, bool trace_and_exit)
     // which is the strongest evidence available that a scene description and a
     // renderer are different things — and the argument Module 5's engine/demo
     // split is going to make at length.
-    demo::mesh_library assets;
+    demo::scene_assets assets;
     assets.build();
 
     demo::floor_geometry floor;
     demo::build_floor(assets, floor, 1);
 
     demo::model_state model;
-    model.generated = assets.meshes.insert(engine::make_torus(48, 24, 1.0f, 0.36f));
+    model.generated = assets.store.insert_mesh("generated:torus",
+                                               engine::make_torus(48, 24, 1.0f, 0.36f));
     demo::load_model(assets, model, demo::model_choice::torus, true);
 
     scene_mesh_cache meshes;
@@ -3250,7 +3276,7 @@ int run_gpu_scene(SDL_Window* window, bool trace_and_exit)
                                                  : engine::normal_style::flat;
 
             const scene_mesh_cache::entry* mesh =
-                meshes.get(gpu, assets.meshes, objects[i].geometry, style);
+                meshes.get(gpu, assets.store, objects[i].geometry, style);
             if (mesh == nullptr) { continue; }
 
             const bool is_floor = (ctl.scene == demo::scene_kind::floor);
@@ -3322,7 +3348,7 @@ int run_gpu_scene(SDL_Window* window, bool trace_and_exit)
                     .shading = engine::shade_eval::per_pixel,
                     .specular = ctl.spec,
                     .correct_normal_matrix = ctl.correct_normals};
-                engine::collect_triangles(cpu_tris, scratch, {&one, 1}, meshes.derived(),
+                engine::collect_triangles(cpu_tris, scratch, {&one, 1}, assets.meshes(),
                                           {view_from_world, eye}, pr, lights, cpu_opts);
 
                 engine::draw_triangles(fb, ctl.depth_test ? &cpu_depth : nullptr,
@@ -3743,13 +3769,17 @@ int main(int argc, char* argv[])
     int painter_wrong = 0;                         ///< px where the two algorithms disagree
     engine::depth_range shown_depth;                       ///< what the depth view actually contained
 
-    // ---- Lesson 5.4 --------------------------------------------------------
+    // ---- Lessons 5.4 and 5.5 -----------------------------------------------
     //
     // One owner for every mesh in this demo, declared before anything that names
     // one. Everything below that used to hold geometry now holds a handle into
     // here — the floor, the model, the round-trip control, and every
     // `scene_object` `build_scene` writes.
-    demo::mesh_library assets;
+    //
+    // As of 5.5 the owner is `engine::asset_store`: it brings the search path,
+    // the name -> handle map, and the only `unload` in the program. [Bksp]
+    // exercises it.
+    demo::scene_assets assets;
 
     // ---- Lesson 3.2 --------------------------------------------------------
     engine::interpolation interp = engine::interpolation::perspective;   ///< [I]
@@ -3837,7 +3867,8 @@ int main(int argc, char* argv[])
     // The control mesh, built once. `assets/torus.obj` was written from exactly this
     // call, so "loaded == generated" is a real end-to-end check of writer and reader
     // together — and it is a claim the demo re-tests on every frame it is shown.
-    model.generated = assets.meshes.insert(engine::make_torus(48, 24, 1.0f, 0.4f));
+    model.generated = assets.store.insert_mesh("generated:torus",
+                                               engine::make_torus(48, 24, 1.0f, 0.4f));
     demo::load_model(assets, model, demo::model_choice::torus, uv_flip_on_load);
 
     xform basis_mode = xform::rotate;   ///< Lesson 2.5
@@ -3875,6 +3906,8 @@ int main(int argc, char* argv[])
     SDL_Log("  [K] near plane: clip / drop / none - on the floor scene, hold [=] to walk into it");
     SDL_Log("  [U] cull: none / back / front / back-by-dot(n,fwd) (the classic bug)");
     SDL_Log("  [L] load a model: torus.obj / cube.obj / twisted.obj / quirks.obj / generated");
+    SDL_Log("      …the first lap reads files; every lap after it is a cache hit (5.5)");
+    SDL_Log("  [Bksp] UNLOAD the current model out from under the scene — watch it vanish");
     SDL_Log("  [G] evaluate: debug palette / flat / Gouraud (per-vertex) / PER-PIXEL");
     SDL_Log("  [Q] normal source: face (cross product) / vertex (as authored)");
     SDL_Log("  [J] normal matrix: inverse-transpose (correct) vs the naive model matrix");
@@ -3977,13 +4010,23 @@ int main(int argc, char* argv[])
             }
             if (in.key_pressed(SDL_SCANCODE_L))
             {
-                // A real load, on a keypress, every time — not a cache lookup. It
-                // costs about half a millisecond for the torus and the HUD says so,
-                // which is the honest way to introduce the fact that asset loading
-                // is work. Module 5 caches; today we measure.
+                // Lesson 3.5 wrote: "a real load, on a keypress, every time — not
+                // a cache lookup … Module 5 caches; today we measure." Module 5
+                // caches. The FIRST lap round the five choices reads five files;
+                // every lap after that is a hit, and the HUD prints which.
                 demo::load_model(assets, model, next_model(model.choice), uv_flip_on_load);
                 scene_mode = demo::scene_kind::model;
                 selected = 0;
+            }
+            if (in.key_pressed(SDL_SCANCODE_BACKSPACE))
+            {
+                // Lesson 5.5's key, and the one worth pressing. Free the model
+                // out from under a scene that is still drawing it: the object
+                // vanishes, everything else keeps drawing, and the HUD's
+                // `unresolved` count goes to 1. Before 5.4 that was a dangling
+                // span; before 5.5 there was no way to free anything at all.
+                demo::unload_model(assets, model);
+                scene_mode = demo::scene_kind::model;
             }
 
             // ---- Lesson 3.9 ---------------------------------------------
@@ -4200,7 +4243,7 @@ int main(int argc, char* argv[])
                     // Resolved at the point of use, and skipped if it does not
                     // resolve — the same two lines the renderer runs, because a
                     // handle has exactly one way to be turned into geometry.
-                    const engine::mesh_data* geom = assets.meshes.get(scene[i].geometry);
+                    const engine::mesh_data* geom = assets.meshes().get(scene[i].geometry);
                     if (geom == nullptr) { continue; }
                     engine::draw_mesh(fb, geom->view(), view_from_model, pr, cube_point_w);
                     engine::draw_axes3(fb, view_from_model, pr, cube_point_w, cube_dir_w);
@@ -4253,7 +4296,7 @@ int main(int argc, char* argv[])
                     // in triangle count, which is the whole of why it is a separate
                     // zone from the one below it.
                     const engine::scope_timer z{prof, engine::zone::collect};
-                    engine::collect_triangles(scene_tris, scratch, objects, assets.meshes, camera, pr,
+                    engine::collect_triangles(scene_tris, scratch, objects, assets.meshes(), camera, pr,
                                               lights, opts, &scene_stats);
                 }
 
@@ -4389,7 +4432,7 @@ int main(int argc, char* argv[])
                         // rasterizer, so the reference needs its own geometry.
                         engine::render_options unculled_opts = opts;
                         unculled_opts.cull = engine::cull_choice::none;
-                        engine::collect_triangles(compare_tris, scratch, objects, assets.meshes, camera, pr,
+                        engine::collect_triangles(compare_tris, scratch, objects, assets.meshes(), camera, pr,
                                                   lights, unculled_opts);
                         engine::draw_triangles(scratch_fb, want_painter ? nullptr : &scratch_depth,
                                        compare_tris, want_painter, unculled);
@@ -4420,7 +4463,7 @@ int main(int argc, char* argv[])
                     engine::scene_object control = scene[0];
                     control.geometry = model.generated;
 
-                    engine::collect_triangles(compare_tris, scratch, {&control, 1}, assets.meshes, camera,
+                    engine::collect_triangles(compare_tris, scratch, {&control, 1}, assets.meshes(), camera,
                                               pr, lights, opts);
 
                     scratch_fb.clear(k_bg);
@@ -4449,7 +4492,7 @@ int main(int argc, char* argv[])
                 {
                     engine::render_options other_normals = opts;
                     other_normals.correct_normal_matrix = !correct_normals;
-                    engine::collect_triangles(compare_tris, scratch, objects, assets.meshes, camera, pr,
+                    engine::collect_triangles(compare_tris, scratch, objects, assets.meshes(), camera, pr,
                                               lights, other_normals);
 
                     scratch_fb.clear(k_bg);
@@ -4493,7 +4536,7 @@ int main(int argc, char* argv[])
                                          : engine::specular_model::blinn;
                     engine::collect_triangles(compare_tris, scratch,
                                               {other_scene, static_cast<std::size_t>(scene_count)},
-                                              assets.meshes, camera, pr, lights, other_model);
+                                              assets.meshes(), camera, pr, lights, other_model);
 
                     scratch_fb.clear(k_bg);
                     demo::draw_world(scratch_fb, view_from_world, pr);
@@ -4526,7 +4569,7 @@ int main(int argc, char* argv[])
 
                     engine::render_options per_pixel_opts = opts;
                     per_pixel_opts.shading = engine::shade_eval::per_pixel;
-                    engine::collect_triangles(compare_tris, scratch, objects, assets.meshes, camera, pr,
+                    engine::collect_triangles(compare_tris, scratch, objects, assets.meshes(), camera, pr,
                                               lights, per_pixel_opts);
 
                     scratch_fb.clear(k_bg);
@@ -4676,7 +4719,7 @@ int main(int argc, char* argv[])
                     // DIFFERENT SET OF TRIANGLES — this is the one comparison in
                     // the demo where the two renders cannot share geometry.
                     engine::collect_stats reference_stats;
-                    engine::collect_triangles(compare_tris, scratch, objects, assets.meshes, camera,
+                    engine::collect_triangles(compare_tris, scratch, objects, assets.meshes(), camera,
                                               reference, lights, opts, &reference_stats);
                     engine::draw_triangles(scratch_fb, want_painter ? nullptr : &scratch_depth,
                                    compare_tris, want_painter, style);
@@ -4720,7 +4763,7 @@ int main(int argc, char* argv[])
             selected_verts = 0;
             selected_tris = 0;
             selected_idx = 0;
-            if (const engine::mesh_data* sel = assets.meshes.get(scene[selected].geometry))
+            if (const engine::mesh_data* sel = assets.meshes().get(scene[selected].geometry))
             {
                 if (!sel->vertices.empty()) { selected_probe = sel->vertices[0]; }
                 selected_verts = sel->vertices.size();
@@ -4996,11 +5039,24 @@ int main(int argc, char* argv[])
                 // Lesson 3.5's readout. The three numbers that ARE the index
                 // problem: how many positions the file holds, how many extra
                 // vertices reconciling the attribute streams cost, and the total.
-                const bool good = model.load.ok() && model.check.consistently_wound();
+                const bool good = model.load.ok() && model.check.consistently_wound()
+                               && !model.unloaded;
                 SDL_SetRenderDrawColor(renderer, good ? 122 : 236,
                                                  good ? 196 : 92,
                                                  good ? 152 : 92, 255);
-                if (!model.load.ok())
+                if (model.unloaded)
+                {
+                    // Lesson 5.5. The scene still holds the handle; the store no
+                    // longer holds the asset. Both numbers are on screen so the
+                    // two facts can be read against each other, which is the whole
+                    // demonstration: nothing crashed, one object is missing, and
+                    // the renderer says exactly how many.
+                    SDL_RenderDebugTextFormat(renderer, 6.0f, 48.0f,
+                        "[Bksp] %-14s UNLOADED  handle %u:%u is stale, unresolved = %d",
+                        name_of(model.choice), model.geometry.index(),
+                        model.geometry.generation(), scene_stats.unresolved);
+                }
+                else if (!model.load.ok())
                 {
                     SDL_RenderDebugTextFormat(renderer, 6.0f, 48.0f,
                         "[L] %-16s  FAILED: %s (line %d)",
@@ -5010,11 +5066,13 @@ int main(int argc, char* argv[])
                 else
                 {
                     SDL_RenderDebugTextFormat(renderer, 6.0f, 48.0f,
-                        "[L] %-16s  %d+%d -> %d verts, %d tris  [%.2f ms]",
+                        "[L] %-16s  %d+%d -> %d verts, %d tris  [%s %.2f ms]",
                         name_of(model.choice), model.load.positions,
                         model.load.split_vertices, model.load.vertices,
-                        model.load.triangles, model.load_ms);
+                        model.load.triangles,
+                        model.cached ? "cached" : "read", model.load_ms);
                 }
+
             }
             else
             {

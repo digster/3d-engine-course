@@ -658,8 +658,12 @@ chore. What follows is on disk.
 │   └── Shaders.cmake       # add_hlsl_shader(name stage) -> a GLOBAL PROPERTY   [4.3, reshaped 5.1]
 ├── engine/                 # THE LIBRARY                                        [5.1]
 │   ├── CMakeLists.txt      # produces engine::engine (STATIC)
-│   ├── include/engine/     # ---- THE PUBLIC API. 44 headers. Nothing else. ----
+│   ├── include/engine/     # ---- THE PUBLIC API. 46 headers. Nothing else. ----
 │   │   ├── engine.hpp      # the umbrella: shipped, documented, used by nothing we ship
+│   │   ├── asset/          # NAMES, ROOTS AND LIFETIMES                       [5.5]
+│   │   │   ├── search_path.hpp # ordered roots; the ONLY caller of
+│   │   │   │                   #   SDL_GetBasePath() in the engine
+│   │   │   └── asset_store.hpp # load / find / insert / derive / unload
 │   │   ├── core/           # clock, fixed_step, input, profile,
 │   │   │   │               #   log.hpp + assert.hpp                          [5.3]
 │   │   │   ├── handle.hpp  # handle<T>: 20 index / 12 generation, in 32 bits  [5.4]
@@ -1216,13 +1220,42 @@ Built roughly in dependency order — each module's milestone is the next module
 
   The **dependency direction** is the thing to note: `pool<T>` knows nothing about geometry, and
   meshes were converted (`mesh_handle`, `mesh_pool`, `to_mesh_data`) without the pool gaining a
-  line. Textures, materials and sounds follow in 5.5 the same way.
+  line. Lesson 5.5 added `image_handle` / `image_pool` in *two lines* of `gfx/image.hpp` and the
+  pool still did not change — which is where an abstraction is decided.
 
   **The cost is a parameter, and it is paid in the open.** A handle is half a reference; the pool
   is the other half, so `collect_triangles` takes a `const mesh_pool&` and resolves **once per
   object** at the top of its loop (never per vertex — measured at +0.13 ns per resolution).
   A global pool was refused for a concrete reason: `demos/sandbox` holds two `mesh_pool`s in one
   frame, one of loaded geometry and one of geometry derived from it by `with_normals`.
+- **Assets are named, loaded once, and explicitly unloaded** (Module 5, Lesson 5.5). The policy
+  layer on top of handles. `engine/asset/search_path.hpp` turns a **name** (`"torus.obj"` —
+  stable, recorded in scene data, the cache key) into a **path** (where it resolved today) by
+  trying an *ordered* list of roots; order is the whole feature, because prepending a root
+  shadows a shipped asset without moving anything, which is simultaneously how mods,
+  localisation packs, live editing and test fixtures work. It is also the only caller of
+  `SDL_GetBasePath()` in the engine — there were two before, written by copying.
+
+  `engine/asset/asset_store.hpp` owns the pools, the name → handle maps and the lifetimes.
+  **There is no reference counting**, and the argument is from the properties handles have
+  rather than from taste: a count needs a copy constructor, a destructor and a pointer to the
+  store, which costs a handle its four bytes, its trivial copyability, its `memcpy`-ability into
+  a component and its fixup-free serialization — every property Lesson 5.4 existed to obtain.
+  So the policy is *explicit unload*, which is safe to get wrong precisely because staleness is
+  detectable: forgetting leaks (found by `live_count()`), unloading early yields a null handle
+  and a bump in `collect_stats::unresolved`, and neither is a crash.
+
+  **The one unavoidable lifetime rule is derived assets.** `with_normals` output, a mipmap chain,
+  a shader variant and a GPU upload are all the same shape: a real asset nobody asked for, with
+  no name, existing only because its source does. `derive_mesh` records a dependency edge and
+  unloading a source cascades **transitively**; deriving from a dead source is refused, because
+  the result would have no name to find it by and no source to free it with.
+
+  **Import settings are part of an asset's identity** — the same OBJ imported with and without
+  the uv flip is two meshes with two vertex arrays — so the key is name + settings, with the rule
+  that *the default configuration serialises to nothing* so that generated and loaded content
+  share one key space. **The store is not a singleton**: `demos/sandbox` holds three.
+
 - **ECS, not a scene tree** (Module 5). Data-oriented storage chosen after demonstrating —
   with cache-line reasoning and measurements — why OOP scene graphs creak at scale. Archetype
   vs sparse-set is a justified choice made in the lesson, not a coin flip.
