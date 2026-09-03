@@ -7,7 +7,7 @@ There is no engine to download here and no framework doing the interesting parts
 write the math library, the rasterizer, the ECS, the renderer, the physics, and the editor. By
 the end you have a real engine and a game built on its public API.
 
-**Status:** curriculum and conventions published; lessons in progress — **Modules 0–4 are complete** and Module 5 is under way (50 of 94 lessons). The CPU software rasterizer is finished end to end, the same scene is drawn on a real GPU through SDL_GPU, and the tree is now a static library with a public API, a platform/application layer, its own logging, handle-based resource storage, and an asset system that can load, share and free. Start at
+**Status:** curriculum and conventions published; lessons in progress — **Modules 0–4 are complete** and Module 5 is under way (51 of 94 lessons). The CPU software rasterizer is finished end to end, the same scene is drawn on a real GPU through SDL_GPU, and the tree is now a static library with a public API, a platform/application layer, its own logging, handle-based resource storage, and an asset system that can load, share and free. Start at
 [`docs/index.html`](docs/index.html).
 
 ---
@@ -555,13 +555,13 @@ Third-party, each with an explicit "why we don't hand-roll this" justification: 
 ## Repository layout
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the full tree and the reasoning behind it. The short
-version, as of **Lesson 5.5**:
+version, as of **Lesson 5.6**:
 
 ```
-engine/include/engine/   the public API — 46 headers, and the only path a demo can name
+engine/include/engine/   the public API — 47 headers, and the only path a demo can name
 engine/include/engine/asset/      search_path, asset_store — names, roots, lifetimes
 engine/include/engine/core/       clock, input, fixed_step, profile, log, assert,
-                                  handle, pool
+                                  handle, pool, bench
 engine/include/engine/platform/   how a program starts: platform.hpp, app.hpp, main.hpp
 engine/src/              private implementation; stb_image stops here
 demos/common/            content shared by demos and verification harnesses

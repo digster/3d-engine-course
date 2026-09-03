@@ -658,7 +658,7 @@ chore. What follows is on disk.
 │   └── Shaders.cmake       # add_hlsl_shader(name stage) -> a GLOBAL PROPERTY   [4.3, reshaped 5.1]
 ├── engine/                 # THE LIBRARY                                        [5.1]
 │   ├── CMakeLists.txt      # produces engine::engine (STATIC)
-│   ├── include/engine/     # ---- THE PUBLIC API. 46 headers. Nothing else. ----
+│   ├── include/engine/     # ---- THE PUBLIC API. 47 headers. Nothing else. ----
 │   │   ├── engine.hpp      # the umbrella: shipped, documented, used by nothing we ship
 │   │   ├── asset/          # NAMES, ROOTS AND LIFETIMES                       [5.5]
 │   │   │   ├── search_path.hpp # ordered roots; the ONLY caller of
@@ -666,6 +666,7 @@ chore. What follows is on disk.
 │   │   │   └── asset_store.hpp # load / find / insert / derive / unload
 │   │   ├── core/           # clock, fixed_step, input, profile,
 │   │   │   │               #   log.hpp + assert.hpp                          [5.3]
+│   │   │   ├── bench.hpp   # A/B timing: alternate, median, keep, agree      [5.6]
 │   │   │   ├── handle.hpp  # handle<T>: 20 index / 12 generation, in 32 bits  [5.4]
 │   │   │   └── pool.hpp    # pool<T>: sparse slots + dense items + free list  [5.4]
 │   │   ├── math/           # vec2/3/4, mat2/3/4, transform  (header-only)
@@ -1259,6 +1260,34 @@ Built roughly in dependency order — each module's milestone is the next module
 - **ECS, not a scene tree** (Module 5). Data-oriented storage chosen after demonstrating —
   with cache-line reasoning and measurements — why OOP scene graphs creak at scale. Archetype
   vs sparse-set is a justified choice made in the lesson, not a coin flip.
+
+  **Lesson 5.6 is the evidence, and it is deliberately unflattering to the usual story.** Six
+  layouts, two workloads, five scene sizes, timed on the engine's own `transform` with
+  `engine/core/bench.hpp`. Below a thousand objects every layout is within 13% of a flat array
+  — scattering objects across the heap costs *nothing*, and walking a linked tree costs
+  *nothing*. The knee sits between 1,000 and 10,000 objects, which is where 96 bytes an object
+  stops fitting in L2, so it is a property of the cache and not of the design.
+
+  Three of its findings shape what the ECS must be, each with a number:
+
+  - **Storage must be dense and compactable.** Not because contiguity is virtuous — an array of
+    pointers in allocation order is 1.00× up to ten thousand objects — but because a long-lived
+    scene *decays* into disorder, and a shuffled linked tree is **6.47×** while a shuffled array
+    of pointers is only **2.38×**. The gap is memory-level parallelism: an array's addresses are
+    known in advance so its misses overlap, a list's are not so they cannot. A tree also offers
+    no way to fix it, because node addresses are the identity — which is exactly what Lesson
+    5.4's handles removed.
+  - **A system must declare which components it touches.** Splitting a struct buys nothing when
+    a loop reads 60 of 96 bytes and buys **5×** when it reads 12. That, not "SoA is faster", is
+    the mechanism an ECS query exists to exploit.
+  - **Iteration must not be virtual.** A flat **1.5–1.7×** at every scene size — and monomorphic
+    and polymorphic agree within 4%, so it is not branch misprediction, and being flat across N
+    it is not the vtable load. It is the inlining the call prevents.
+
+  What 5.6 explicitly does **not** settle is archetype versus sparse set: both are dense, both
+  are contiguous, both permit a subset. That is Lesson 5.7's argument and must not inherit these
+  numbers.
+
 - **Fixed timestep + render interpolation** (Module 1). The accumulator loop, derived rather
   than pasted as folklore. Simulation determinism is a property you design in early or retrofit
   painfully; physics in Module 7 depends on it already being right.

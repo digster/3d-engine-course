@@ -2036,3 +2036,50 @@ verify_45–55 all pass (three ported, one check updated to assert the new contr
 written beside it); 85 checks in two build configurations; page checks green at both widths.
 
 > next
+
+## 2026-09-02 (c) — `next` (Lesson 5.6: Data-Oriented Design: Why Scene Trees Creak)
+
+> next
+
+The lesson that has to **earn** the ECS rather than assume it, so it is mostly an experiment.
+Six scene layouts, two workloads, five sizes, on the engine's own `transform`. It changes no
+rendering code at all — and the golden staying byte-identical is not an achievement this time, it
+is the consequence of correctly deciding to change nothing.
+
+Ships one header. `engine/core/bench.hpp` exists because 5.3, 5.4 and 5.5 each hand-rolled the
+same A/B timing loop slightly differently — 5.5's own "three copies means the idea has no name",
+turned on the course's own tooling. Four rules: alternate the arms, report median **and** spread,
+store through a `volatile`, and **check both arms computed the same answer**. That last one is the
+rule people skip and it caught two real problems here.
+
+**Read the left half of the table first, because it is the half nobody publishes.** Below a
+thousand objects every layout is within 13% of a flat array: scattering objects across the heap
+costs nothing, walking a linked tree costs nothing. The knee is between 1,000 and 10,000, which is
+where 96 B/object leaves L2 — a property of the cache, not of the design. Our scene is four
+objects, so §5.5 says plainly that nothing here justifies changing the renderer.
+
+Three results contradicted what I expected, and all three survived a correction to the experiment.
+**SoA's win on the full-transform workload is vectorisation, not cache** — identical at 384 bytes
+and 9.6 MB, and 1.00× at every size under `-fno-vectorize`. The cull workload's win *is* the cache,
+in isolation. So the rule is not "use SoA": split the data a loop does not read away from the data
+it does, and **the prize is the fraction you leave behind** — 60 of 96 buys nothing, 12 of 96 buys
+5×. **A polymorphic virtual call costs the same as a monomorphic one** (within 4% at every N), so
+it is not misprediction; flat across N, so it is not the vtable load; what is left is the inlining
+it prevents. And **the heap fragmentation the benchmark carefully arranged is not controllable at
+all** — matching the spacer size to the object size moved a headline from 1.09× to 1.98× and
+looked like a fix, but the same code gives 0 adjacent objects in one process and 99,411 of 99,999
+in another. Adjacency is a property of the process. The resolution is a protocol: the benchmark
+reports its own allocation layout before it reports a timing.
+
+Three ways a microbenchmark lies, all three hit here in order: a timer coarser than the work
+(0.0000 ns/item), a loop the compiler deleted (0.166 ns for four matrix builds — 2.3 cycles for
+nine multiplies and sixteen stores, which is not physically possible), and an accumulator that
+*was* the bottleneck. Every one was found by arithmetic, not suspicion. A fourth confound halved a
+headline: the accumulator read 5 of a matrix's 16 entries, which let every **inlined** arm skip
+work the virtual one had to do — `virtual` read 3.4× and actually reads 1.7×.
+
+verify_56 at 36 checks / 0 failures, page checks green at both widths, all eleven harnesses pass.
+The figure pass caught the 5.3 trap again — figures numbered by authoring order rather than page
+order — plus a label sitting on two shapes that no automated check looks at.
+
+> next

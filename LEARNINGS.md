@@ -4597,3 +4597,104 @@ Lesson 5.5's `load_model` stopped freeing the previous mesh (a load is not a fre
 `verify_54` check written one lesson earlier asserting the opposite. The harness was right to
 fail. The fix is to assert the *new* contract with the reason written next to it — a test edited
 to match the code teaches nothing unless the edit says what moved.
+
+---
+
+## Measurement facts (Lesson 5.6)
+
+### Three ways a microbenchmark lies, all three hit in one afternoon
+
+1. **The timer is coarser than the work.** `SDL_GetPerformanceFrequency()` is 24 MHz on this
+   machine, so one tick is 41.67 ns and a pass over four objects finishes inside one. Every sample
+   read 0 or 1 ticks and the table said `0.0000 ns/item`. *Tell:* a suspiciously round number,
+   especially zero. *Fix:* repeat the pass inside the timed region until a sample is ~100 µs.
+2. **The compiler deleted the loop.** Repeating a pure function of nothing lets it be computed
+   once. The tree arm read 0.166 ns/item — 2.3 cycles for four matrix builds of nine multiplies
+   and sixteen stores each. *Tell:* a number that is not physically possible. *Fix:* make each
+   pass genuinely different work — a per-pass bias added **per element**, so the running sum's
+   rounding depends on it and FP non-associativity forbids hoisting.
+3. **The accumulator is the bottleneck.** `hits += 1.0` is a serial chain of ~4-cycle double
+   additions against a body of three multiplies. Both arms were latency-bound and the layout
+   difference was completely masked. *Tell:* two arms that should differ, agreeing exactly.
+   *Fix:* an `int` counter.
+
+### Sanity-check every published number against the hardware
+
+ns → cycles → instructions, and instructions are countable. All three lies above were found by
+asking "could the machine physically do that", not by suspecting the code. No tool finds this one.
+
+### An effect that survives the removal of its explanation had a different explanation
+
+SoA beat a flat array by 0.66× on a full-transform loop, identically at 384 bytes and at 9.6 MB.
+The cache story fits perfectly and is wrong: rebuild with `-fno-vectorize -fno-slp-vectorize` and
+the win is **1.00× at every size**. It was auto-vectorisation — a contiguous `mat3` array
+vectorises, a 96-byte stride does not. The *same* header's cull workload (12 of 96 bytes) keeps a
+0.36× win with the vectoriser off, and only above the knee: that one really is the cache.
+
+The general move: find the knob that disables your hypothesised mechanism and see whether the
+effect goes with it.
+
+### The real rule is not "use SoA"
+
+Split the data a loop does not read away from the data it does, and **the size of the prize is the
+fraction you leave behind**. 60 of 96 bytes buys nothing from the memory system; 12 of 96 buys 5×.
+
+### An array of pointers is not a linked list
+
+Both are "pointer chasing" and they differ by 3×. An array's addresses are known in advance, so a
+core issues a dozen dependent loads before any returns and the misses **overlap** — 2.38× at
+100,000 objects. A linked list stores each address inside the previous node, so the misses are a
+serial dependency chain and **add** — 6.47×. That, not the hierarchy and not the OOP, is what
+makes a decayed scene tree slow.
+
+### A virtual call costs inlining, not prediction
+
+1.5–1.7× on this workload, and *monomorphic and polymorphic agree within 4% at every size* — so it
+is not branch misprediction. It is also flat across N, including four objects inside L1 — so it is
+not the vtable load. What is left is that the compiler cannot see through the call.
+
+### Dead-code elimination is not symmetric across arms of different inlinability
+
+The accumulator read 5 of a matrix's 16 entries. `parent_from_local` is inlined into the flat,
+pointer, SoA and tree arms — so the compiler could skip computing the other 11 — and it **cannot**
+see through the virtual call. The virtual arm built whole matrices while its rivals built a third
+of one. "The cost of `virtual`" read **3.4×**; reading all 16 entries it reads **1.7×**.
+
+### You cannot make the allocator fragment, so measure what it did
+
+A benchmark placed spacers between its heap objects so that "pointer chasing" would not quietly
+measure a contiguous walk. 24-byte spacers between 96-byte objects went into a different size class
+and separated nothing — **497 of 499 consecutive objects exactly `sizeof(T)` apart**. Matching the
+sizes moved a headline from 1.09× to 1.98×, which looked like the fix.
+
+It is not a fix. The *same layout code* gives different answers in different processes:
+
+| process | n | consecutive objects `sizeof(T)` apart |
+|---|---|---|
+| the benchmark, `-O2` | 4 … 100,000 | **0** at every size |
+| the benchmark, `-fno-vectorize` | 100,000 | 99,411 of 99,999 |
+| a standalone probe | 100,000 | 0 of 99,999 |
+| a standalone probe | 500 | 485 of 499 |
+
+macOS's allocator interleaves same-size blocks, or does not, depending on that size class's
+magazine state — which depends on everything the process allocated earlier. **Adjacency is a
+property of the process, not of the layout**, no separate harness can assert another program's heap
+state, and matching the spacer size only changes the odds.
+
+So the resolution is a protocol, not a fix: the benchmark **reports its own allocation layout at
+every size**, the driver flags any build whose objects came out contiguous, and the test asserts
+only what the code controls (that the spacers were allocated) and prints the rest.
+**A number whose provenance you cannot state is a number you should not publish.**
+
+### Alternating two arms introduces cache interference
+
+Alternation is the fix for thermal drift (3.10's pitfall) and it has its own cost: at large N the
+arms evict each other, and the *same* flat arm read 0.98 ns/item in one pairing and 1.83 in
+another. Quote **ratios within a pairing**, never an absolute from one pairing against an absolute
+from another.
+
+### Do not assert a property of the data and call it a property of the design
+
+A check asserted "at least one reordering arm is not bit-identical". It failed: at n = 2,000 all
+three reorderings happened to land on the same bits. Whether a reordering differs is a property of
+the numbers. Replaced with `(a+b)-a != (a-a)+b` at 1e16, which is true regardless of the data.
