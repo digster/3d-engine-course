@@ -2213,3 +2213,36 @@ repoint one navigation link would have re-added 331 KB. Amended and proved by re
 temp file and diffing it against the shipped page.
 
 `next:` is now 5.9 — Transform Hierarchy and the Camera System.
+
+> next
+
+**Lesson 5.9 — Transform Hierarchy and the Camera System.** Two header-only files under
+`engine/include/engine/ecs/` (public headers 51 → 53, no CMake change anywhere):
+`hierarchy.hpp` (`parent` and `world_transform` components, `set_parent` refusing cycles,
+`destroy_subtree`, and a level-order resolver) and `camera.hpp` (`camera`, the `active_camera`
+tag, `look_along`, and the three functions that read a camera entity). Plus `rigid_inverse` and
+`is_rigid` in `math/mat4.hpp` — Lesson 2.9's derivation extracted now that a camera has a
+placement to invert.
+
+The maths cost nothing: `parent_from_local` has been called that since Lesson 2.8 *precisely so
+this day would change nothing*, and it did not change by a character. **The order was the
+lesson.** A parent must be resolved before its children and a pool hands entities back in
+insertion order — churn a 48-entity tree the way a running game churns it and twelve sit ahead of
+their own parent. Three visit orders were measured on a probe of plain arrays (5.7's method) before
+one was shipped: recursion runs 3.34 → 13.55 ns/entity from depth 1 to 32 while level order runs
+3.39 → 4.94, with a control row at depth 1 where the ratio must be and is 1.01×.
+
+Two optimisations measured and **refused**, each with its number: packed rows (~1.6 resolves per
+topology change to buy ~30% at a scale this engine has not got) and dirty flags (crossover at ~25%
+moved, **1.29× slower** at 100%, which is what an animated scene does). The amplification is the
+part nobody quotes — moving 10% of a depth-8 tree dirties 36% of it.
+
+`ecs_swarm` is now three levels deep — sun → planet → moon — with a camera entity that can be
+parented onto a moving planet. **73 checks / 0 failures**; `verify_45`…`58` still green; golden
+byte-identical for the **ninth** lesson.
+
+Also caught and fixed a pipeline bug of my own making: re-running `build_58.py` to repoint one
+navigation link spliced 5.9's demo into 5.8's listings, because listings are read from the live
+repo. Fixed with a pinned snapshot, verified byte-identical to the file at commit `dfbdb0f`.
+
+`next:` is now 5.10 — Input Mapping, ImGui, and Debug Draw.

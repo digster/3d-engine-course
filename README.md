@@ -7,7 +7,7 @@ There is no engine to download here and no framework doing the interesting parts
 write the math library, the rasterizer, the ECS, the renderer, the physics, and the editor. By
 the end you have a real engine and a game built on its public API.
 
-**Status:** curriculum and conventions published; lessons in progress — **Modules 0–4 are complete** and Module 5 is under way (53 of 94 lessons). The CPU software rasterizer is finished end to end, the same scene is drawn on a real GPU through SDL_GPU, and the tree is now a static library with a public API, a platform/application layer, its own logging, handle-based resource storage, an asset system that can load, share and free, a reusable A/B timing harness that has decided two architecture questions with numbers instead of folklore, and — as of Lesson 5.8 — **a working from-scratch ECS**: a generational entity id minted once and honoured by every pool, sparse-set component storage, and queries that lead with the smallest pool. Start at
+**Status:** curriculum and conventions published; lessons in progress — **Modules 0–4 are complete** and Module 5 is under way (54 of 94 lessons). The CPU software rasterizer is finished end to end, the same scene is drawn on a real GPU through SDL_GPU, and the tree is now a static library with a public API, a platform/application layer, its own logging, handle-based resource storage, an asset system that can load, share and free, a reusable A/B timing harness that has decided three architecture questions with numbers instead of folklore, and **a working from-scratch ECS** — a generational entity id honoured by every pool, sparse-set component storage, queries that lead with the smallest pool, and (5.9) a **transform hierarchy** whose resolve cost is flat in depth, with a camera that is an ordinary entity. Start at
 [`docs/index.html`](docs/index.html).
 
 ---
@@ -247,10 +247,73 @@ imposes is the familiar one — *do not add or erase a component the view names 
 exactly as you would not erase from a `std::vector` inside a range-`for`. Collect, then act.
 
 Run `ecs_swarm` to see what this buys at a scale where the performance argument does not apply:
-121 entities, six component types, and twenty-four of them invisible **because they have no
+154 entities, ten component types, and twenty-four of them invisible **because they have no
 geometry component**, not because anything hid them. Press <kbd>M</kbd> to strip the material
 from a third of the swarm and watch the HUD's lead pool change as the material pool becomes the
 smallest one.
+
+### A child's placement is relative to its parent, and the order is the hard part
+
+Since **Lesson 5.9** an entity may carry a `parent`, and `engine::ecs::hierarchy` composes every
+`world_transform` from it:
+
+```cpp
+engine::ecs::registry world;
+engine::ecs::hierarchy tree;
+
+const auto sun    = world.create();
+const auto planet = world.create();
+const auto moon   = world.create();
+engine::ecs::add_hierarchy_components(world, sun,    {.position = {0, 0, 0}});
+engine::ecs::add_hierarchy_components(world, planet, {.position = {10, 0, 0}});
+engine::ecs::add_hierarchy_components(world, moon,   {.position = {0, 2, 0}});
+
+engine::ecs::set_parent(world, planet, sun);     // refuses to create a cycle
+engine::ecs::set_parent(world, moon,   planet);
+
+tree.mark_topology_changed();
+tree.rebuild_and_resolve(world);                 // the moon is now at (10, 2, 0)
+```
+
+**Nobody computed `(10, 2, 0)`.** It is not stored anywhere and no system produced it — it is
+what two matrix multiplications happen to say. Move the sun and every world position under it
+changes, with no code that says so.
+
+**The maths was free; the order was the lesson.** A parent must be resolved before its children,
+and a component pool hands entities back in *insertion* order — churn a 48-entity tree the way a
+running game churns it and twelve of them sit ahead of their own parent. So `rebuild()` buckets
+entities by **depth**, which is a topological sort (a parent's depth is always one less than its
+child's), and `resolve()` walks the buckets. That was chosen by measurement over depth-first
+recursion, which ran 3.34 → 13.55 ns/entity from depth 1 to 32 while level order ran 3.39 → 4.94.
+It also means **a level is independent work**, which is Module 8's unit of parallelism arriving
+for free.
+
+`rebuild()` costs about one resolve, so it runs only when the *shape* changes; `resolve()` runs
+every frame. An orphan becomes a root and is counted; a cycle is broken, counted and logged,
+because a hang is not a recoverable failure. `destroy_subtree()` is there for callers who want
+the other behaviour.
+
+### The camera is an entity
+
+```cpp
+const auto cam = world.create();
+engine::ecs::add_hierarchy_components(world, cam,
+                                      engine::ecs::look_along(eye, target, {0, 1, 0}));
+world.add<engine::ecs::camera>(cam, {});
+engine::ecs::set_active_camera(world, cam);          // moves a tag; no pointer anywhere
+
+engine::ecs::set_parent(world, cam, car);            // …and now it rides in the car
+```
+
+Three things fall out that nobody had to design: a camera can be **parented**, “which camera is
+active” is a **component rather than a pointer** (so destroying it dangles nothing), and a camera
+is **findable by a query**. Its view matrix is `rigid_inverse` of its resolved placement, which is
+bit-for-bit Lesson 2.9's `look_at` — the same maths, finally spelled out in two steps because the
+camera now *has* a placement to invert.
+
+Run `ecs_swarm` and press <kbd>F</kbd>: the sun drifts and the entire system — ninety-six
+planets, thirty-two moons, twenty-four invisible waypoints — follows it. Press <kbd>C</kbd> and
+the camera parks on a planet and rides.
 
 The software path is **not** deprecated. It is the *reference*: every measured claim in Modules 2
 and 3 was made against it, and a port whose reference has been deleted is a port nobody can check.
@@ -598,20 +661,21 @@ Third-party, each with an explicit "why we don't hand-roll this" justification: 
 ## Repository layout
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the full tree and the reasoning behind it. The short
-version, as of **Lesson 5.8**:
+version, as of **Lesson 5.9**:
 
 ```
-engine/include/engine/   the public API — 51 headers, and the only path a demo can name
+engine/include/engine/   the public API — 53 headers, and the only path a demo can name
 engine/include/engine/asset/      search_path, asset_store — names, roots, lifetimes
 engine/include/engine/core/       clock, input, fixed_step, profile, log, assert,
                                   handle, pool, bench
 engine/include/engine/ecs/        entity, pool, registry, view — the world (5.8)
+                                  hierarchy, camera — structure and viewpoint (5.9)
 engine/include/engine/platform/   how a program starts: platform.hpp, app.hpp, main.hpp
 engine/src/              private implementation; stb_image stops here
 demos/common/            content shared by demos and verification harnesses
 demos/sandbox/           Lessons 2.1–4.9, on [Tab] and four flags; keeps its own main()
 demos/hello_cube/        the public-API acceptance test
-demos/ecs_swarm/         Lesson 5.8's world: 121 entities out of six components
+demos/ecs_swarm/         Lessons 5.8-5.9: 154 entities, ten components, three levels
 demos/pong/              Lesson 1.8's game, on engine::app — 87 lines, no main()
 tools/                   the editor and asset cooker (Module 8)
 ```

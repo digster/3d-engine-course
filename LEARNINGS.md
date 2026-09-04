@@ -5089,3 +5089,182 @@ Re-running it to repoint one navigation link would have re-added a 331 KB block.
 the builder *and* proving it: rebuilding 5.7 to a temp file and `diff`-ing it against the shipped
 page, which also caught a one-line whitespace drift left by the original strip. **When a builder is
 the source of a page, "the page is correct" is not the same claim as "the builder is correct".**
+
+---
+
+## Transform hierarchy facts (Lesson 5.9)
+
+### Name the function for the day it will be needed, and that day costs nothing
+
+`math/transform.hpp` has called its composition function `parent_from_local` since Lesson 2.8,
+with a comment explaining that in Module 2 an object's parent *is* the world and that Module 5
+would widen the meaning. Adding a hierarchy seven lessons later changed **not one character** of
+that file, or of `transform`. The general form: when you know a concept will generalise, name it
+for the general case and document why it currently looks like the special one. The alternative —
+`world_from_local` — would have been a lie that had to be gone back and corrected in every
+caller.
+
+### The maths of a scene graph is one line; the ordering constraint is the whole problem
+
+`world(child) = world(parent) × parent_from_local(child)` reads the parent's *world* matrix, so
+the parent must be finished first. That is a constraint on the **graph**, and a component pool's
+dense order is insertion order — the two are in direct tension, and reconciling them is what the
+lesson costs. Anyone who says a hierarchy is "just a matrix multiply" has not said where the
+multiply happens in the loop.
+
+### Depth is a topological sort, and that is the cheapest one available
+
+A parent's depth is always exactly one less than its child's, so **sorting by depth puts every
+parent before every child** — and a counting sort by a small integer key is O(*n*). Two things
+follow, and the second is the one worth having: the resolve loop needs no visited set and no "has
+my parent been done yet" test, because the order guarantees what those would check; and **within
+a level nothing depends on anything else in it**, so a level is a `parallel_for`. That parallelism
+was not designed. It arrived with the choice of order.
+
+### Recursion's locality advantage loses to level order's write pattern
+
+A depth-first walk has the best temporal locality available — the parent's matrix was written one
+call ago and is certainly in L1 — and it still loses, because its *writes* jump. Measured at
+100,000 entities with only the shape varying: recursion runs 3.34 → 13.55 ns/entity from depth 1
+to 32, level order 3.39 → 4.94. **Recursion is depth-dependent; level order is very nearly not**,
+and it saturates around depth 8. The lesson generalises: when two orders trade read locality
+against write locality, measure, because the intuition points the wrong way as often as not.
+
+### A control row that costs nothing is worth more than an extra data point
+
+The depth-1 row — no hierarchy at all, both arms doing identical work, ratio 1.01× — is what says
+the harness measures the tree rather than itself. Had it come out at 0.6× or 1.4×, nothing else in
+the table would have meant anything. **Every ratio table wants a row where the ratio must be 1.**
+
+### Split the operation that runs on change from the one that runs every frame
+
+`rebuild()` (produce the level order) costs about **one resolve**, measured at 0.93–1.39. A game
+re-parents rarely and moves things constantly, so rebuilding only when the shape changes is worth
+more than any choice of visit order. This is the same shape as a dirty flag, applied at the level
+where the ratio of "changes" to "frames" is genuinely enormous rather than merely favourable.
+
+### The amplification is what makes dirty flags stop paying
+
+Moving 10% of a depth-8 tree dirties **36%** of it, because every descendant of a moved entity has
+to move too; 25% moved reaches two thirds of the world. So the crossover sits at about a quarter
+moved, and past it the "optimisation" is *slower* — 1.29× when everything moves, which is exactly
+what an animated scene does. **Quote the reach, not the fraction you marked.** A partial-update
+scheme's cost is set by its closure, not by its input.
+
+### Publish what the container costs on top of the algorithm
+
+The probe measured a visit order over three plain arrays; the shipped resolver walks the same
+order through `registry` and `pool<T>` and costs **1.22–1.40×** more — three sparse lookups per
+entity instead of three array reads. Quoting the probe's number for shipped code would be quoting
+a measurement of something else. Measure both, publish both, and the gap tells you whether a
+caching exercise is worth attempting.
+
+### A hang is a different class of failure from a wrong picture
+
+A parent cycle does not produce a bad frame; it produces no frame. So it gets two independent
+defences, and the second exists because the first is not enough: `set_parent()` refuses to create
+one (walking the *whole* chain — a one-link check misses a grandchild), and `rebuild()` survives
+one written directly into the component, because `parent` is public data and a scene file can
+carry anything. Break it, count it, log it, and keep resolving everything else — **one bad link
+must not cost the frame.**
+
+### Choose an orphan policy, state it, and give the caller the other one
+
+A child whose parent died becomes a root and is *counted*. Destroying the subtree is a policy a
+game may want and a transform system must not impose — silently deleting entities during a resolve
+pass is a surprise nobody asked for. So the engine ships `destroy_subtree()` as an explicit,
+named alternative. The general rule: when two behaviours are both defensible, the *less
+destructive* one is the silent default and the other one gets a function whose name says it.
+
+### Scale composes down the chain, and it is the one that surprises people
+
+A child under a parent of scale 0.16 is 0.16 of its authored size; under two such parents, 0.0256.
+The demo's moons are deliberately built this way, with the arithmetic in a comment, because the
+first time a "1-metre" prop turns out to be 20 cm everybody assumes a bug. It is not a bug in the
+composition — it is what "relative to my parent" means, applied to size.
+
+### `transform` can carry any affine matrix exactly, and that is a bridge rather than a design
+
+`parent_from_local` builds `affine(columns scaled by scale, position)` and `transform::rotation`
+is a general `mat3` with no orthonormality requirement, so
+`{position = translation_of(m), rotation = linear_of(m), scale = 1}` reproduces **any** affine
+matrix bit for bit. That let the demo feed composed world matrices into a renderer that wants a
+`transform`, with no engine change and therefore no risk to the golden. It works because a field
+named `rotation` is typed as something more general than a rotation — which is exactly why it is
+a temporary bridge and is labelled as one.
+
+---
+
+## Measurement and tooling facts (Lesson 5.9)
+
+### A `double` accumulator over `float` data makes order-dependence disappear
+
+Lesson 5.6 established that two arms visiting the same elements in different orders sum them
+differently, so `bench_ab::agree` should be false. In 5.9 every arm reported `agree`, exactly, and
+the reason is the widening: each addend is a `float` (24-bit mantissa) going into a `double` (53),
+and a running sum of 10⁵ values of magnitude ~1 never exceeds 2¹⁷ — so every partial sum needs at
+most 17 + 24 = **41 significant bits and nothing is ever rounded**. An exact sum is
+order-independent. The knob that proves it: change the accumulator to `float` and the agreement
+vanishes (49928.1484 forwards, 49928.2734 backwards). **When a rule you trust does not fire, find
+out why before assuming the test is broken.**
+
+### `DIFFER` can be the correct outcome, and the harness has to say which kind it is
+
+The dirty arm legitimately disagrees with the full pass's checksum, because it touched fewer rows
+and therefore summed fewer of them. Its claim is not "same checksum" but "same *matrices*", and
+that is checked element-by-element in the verification harness with no clock running. **Put the
+exactness claim where exactness is affordable**, and make the benchmark say which of its rows are
+expected to differ.
+
+### Swap-and-pop makes some scrambles impossible, and a test can pass because its situation never arose
+
+Producing a pool whose dense order puts children before parents took three attempts. Destroying
+leaves scrambled nothing — swap-and-pop fills a hole with the **last** element, and in a tree built
+level by level the last elements are leaves, so a leaf replaced a leaf. Destroying fillers created
+at the *end* failed identically. What works is destroying something **early** while deep entities
+sit at the end. Twice in a row the test passed for a reason that had nothing to do with the code
+under test, which is the failure mode a test of an *ordering* property is most prone to. The
+assertion is now on a count greater than zero, not on the answer being right.
+
+### A rule nothing observes is a rule that quietly stops being true — again
+
+Every correctness test of the resolver passes just as well if it walks in the wrong order and
+happens to get lucky, because the *answer* is the same whatever order you compute it in. So
+`hierarchy` exposes `level(i)` and `depth_of()` purely so the harness can assert that every
+entity's parent appeared in a strictly earlier level. Same lesson as 5.8's `view::lead()`, arriving
+one lesson later on a different property.
+
+### A builder is not frozen just because its page is shipped
+
+Re-running `build_58.py` to repoint one navigation link spliced Lesson **5.9's** demo into Lesson
+5.8's listings, because listings are read from the live repository. The page then carried code
+referencing `engine::ecs::hierarchy`, which does not exist at 5.8's point in the course. This is
+the second time an old builder has misbehaved when re-run (5.7's was still stamping a retired
+STATE block).
+
+**The fix is a pinned snapshot**: any file a later lesson modifies is frozen into
+`scratch/lNN_<name>.cpp` and the builder reads that instead. And the snapshot is *verified* rather
+than trusted — `git show <commit>:<path> | diff - <snapshot>` proves it byte-identical to what the
+lesson shipped. The reconstruction attempted before the commit existed was one comment off, which
+is exactly the error rate you should expect from reconstructing 600 lines from memory.
+
+### A label can overflow its own box, and none of the geometry checks can see it
+
+`check-page.js` catches labels outside the viewBox, labels overlapping each other, and labels
+sitting on strokes. A 34-character run in a 132-unit box is inside the viewBox, on top of nothing,
+and overlapping no other label — it just renders straight through both edges. The throwaway check
+(find the `<rect>` whose vertical span contains the text's centre, compare horizontal extents)
+found it, plus a full-width prose line running through a dashed box beneath it. Worth keeping in
+the authoring pass permanently.
+
+### SVG `<text>` collapses leading whitespace, so indented code in a diagram is not indented
+
+Three lines of pseudo-code written with leading spaces rendered flush left, destroying the nesting
+that was the reason to show a loop at all. Indent with explicit `x` offsets. (`xml:space="preserve"`
+also works and brings its own surprises with trailing whitespace.)
+
+### Put a chart's annotation where the data is not
+
+The "break even" label on the dirty-flag chart was right-anchored at the plot's right edge —
+directly on top of the 1.29× bar it was there to explain. The right-hand bars are the tall ones in
+any chart whose series rises. Anchor annotations on the side the data has left empty.

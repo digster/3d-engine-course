@@ -196,6 +196,74 @@ struct mat4
             {-dot(right, eye), -dot(up, eye), -dot(backward, eye), 1.0f}};
 }
 
+/// Undo a RIGID placement — a rotation and a translation, with no scale.
+///
+/// **This is `look_at`'s derivation, extracted so a camera can be an object
+/// rather than a special case** (Lesson 5.9). `look_at` takes an eye and a
+/// target because in Module 2 that was the only way to place a camera; once a
+/// camera is an entity with a `transform`, its placement already exists as a
+/// matrix and the view matrix is simply that matrix inverted.
+///
+/// The same argument as in `look_at` applies, and it is why there is still no
+/// general 4×4 inverse in this file: for `M = affine(R, t)` with `R`
+/// orthonormal, the inverse is written down directly —
+///
+///     M⁻¹ = affine(Rᵀ, −Rᵀ·t)
+///
+/// — which is nine multiplies for the transpose (free, it is a relabelling) and
+/// nine more for the offset. A general inverse would be forty-odd and would
+/// answer a question we never ask.
+///
+/// **The precondition is real and is not checked here**: `linear_of(m)` must be
+/// orthonormal. A camera with a scale is not a thing (it would change the field
+/// of view by changing the units), and a camera with a *non-uniform* scale would
+/// make this function silently return something that is not an inverse. Lesson
+/// 5.9's camera code asserts orthonormality at the one place it matters, in a
+/// debug build, rather than paying for the check on every frame of every build.
+///
+/// Round-trip identity, which is what verify_59 §D checks:
+/// `rigid_inverse(affine(R, eye))` equals `look_at(eye, eye − R·ẑ, R·ŷ)`.
+/// Is `m` a rigid placement — a rotation and a translation, with no scale, shear
+/// or reflection?
+///
+/// The precondition `rigid_inverse` cannot afford to check on every call, offered
+/// so that the one place it matters (a camera, Lesson 5.9) can assert it in a
+/// debug build. Three columns of unit length, mutually perpendicular; the
+/// tolerance is generous because these matrices are composed from other matrices
+/// and a chain sixteen deep accumulates real error.
+///
+/// A reflection passes this test and is not a rotation — its determinant is −1.
+/// Left out on purpose: a reflected camera is a legitimate thing (a mirror), the
+/// inverse is still correct for it, and the check exists to catch SCALE.
+[[nodiscard]] inline bool is_rigid(const mat4& m, float tolerance = 1e-3f)
+{
+    const vec3 c0{m.c0.x, m.c0.y, m.c0.z};
+    const vec3 c1{m.c1.x, m.c1.y, m.c1.z};
+    const vec3 c2{m.c2.x, m.c2.y, m.c2.z};
+
+    const float lengths = std::fabs(dot(c0, c0) - 1.0f) + std::fabs(dot(c1, c1) - 1.0f)
+                        + std::fabs(dot(c2, c2) - 1.0f);
+    const float angles = std::fabs(dot(c0, c1)) + std::fabs(dot(c0, c2))
+                       + std::fabs(dot(c1, c2));
+    return lengths + angles < tolerance;
+}
+
+[[nodiscard]] constexpr mat4 rigid_inverse(const mat4& m)
+{
+    // Rows of the result's linear part are the columns of the original's — that
+    // is what a transpose is, and writing it out beats calling one so the
+    // fourth component of each column stays visibly 0.
+    const vec3 c0{m.c0.x, m.c0.y, m.c0.z};
+    const vec3 c1{m.c1.x, m.c1.y, m.c1.z};
+    const vec3 c2{m.c2.x, m.c2.y, m.c2.z};
+    const vec3 t{m.c3.x, m.c3.y, m.c3.z};
+
+    return {{c0.x, c1.x, c2.x, 0.0f},
+            {c0.y, c1.y, c2.y, 0.0f},
+            {c0.z, c1.z, c2.z, 0.0f},
+            {-dot(c0, t), -dot(c1, t), -dot(c2, t), 1.0f}};
+}
+
 // ---- The projection matrix -------------------------------------------------
 
 /// A perspective projection. Takes view-space coordinates to CLIP space, where a

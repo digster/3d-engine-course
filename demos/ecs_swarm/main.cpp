@@ -1,49 +1,42 @@
-// demos/ecs_swarm/main.cpp — the ECS, doing the one thing a struct cannot.
+// demos/ecs_swarm/main.cpp — composition, and now structure.
 //
-// Lesson 5.8. This program holds 121 entities and draws 97 of them, which is a
-// number Lesson 5.6 already told us is far too small for storage layout to
-// matter: at this size a `std::vector<scene_object>` and a fully data-oriented
-// ECS run within one percent of each other, and 5.6 published the table that says
-// so. **So speed is not why this program exists, and pretending otherwise would
-// be the exact folklore this course is written against.**
+// Lesson 5.8 built this program to make one argument: an entity is which
+// components it has, and twenty-four of the things on screen are invisible
+// because they lack a `geometry` rather than because anything hid them. That
+// argument still stands and the entities that made it are still here.
 //
-// It exists because of what it can express. Look at the components below and then
-// at `engine::scene_object` in <engine/gfx/scene.hpp>, which has been accreting
-// fields since Lesson 3.1 — a tint, then `closed`, then a whole `specular`
-// struct — each one added because *some* object needed it and every object
-// therefore got it. Six fields, of which any given object means four. Here the
-// same information is six independent components, and the interesting sentences
-// are the ones about entities that do NOT have all of them:
+// LESSON 5.9 ADDS THE ONE THING A FLAT WORLD CANNOT DO. Every placement used to
+// be in world space, which is fine for a swarm orbiting an origin and useless the
+// moment one thing has to move with another. Now:
 //
-//   - the WAYPOINTS have a transform and an orbit and no geometry. They move
-//     through the scene and are invisible, and no `if (visible)` was written
-//     anywhere to arrange that: the render query asks for geometry, and they do
-//     not have it. In a `scene_object` world an invisible mover is a null mesh
-//     pointer and a branch in the renderer.
-//   - the SUN has geometry and spin and no orbit. Same code path, different set.
-//   - pressing [M] REMOVES the material component from a third of the swarm and
-//     they vanish; pressing it again puts it back. Not a flag flip — the rows are
-//     gone from the pool, `component_count()` on the HUD drops, and the render
-//     query genuinely has fewer entities to walk.
-//   - the SPARKS on [Space] carry a `lifetime` nothing else has, and the system
-//     that ages them has never heard of the rest of the world.
+//     sun ── ring member ── moon          three levels, and the middle one is
+//      │         │                        where the interesting sentence lives
+//      │         └── (every sixth)
+//      ├── waypoint (invisible mover)
+//      └── camera   (when you press [C])
 //
-// That is composition, and it is the argument at a hundred objects. The
-// performance argument is Lesson 5.7's and it applies at ten thousand.
+// A moon's world position is computed by NOBODY. It falls out of
 //
-// WHAT THIS PROGRAM DOES NOT DO is render through the ECS. `collect_triangles`
-// still takes a span of `scene_object`, so the render system below walks a view
-// and FILLS one — a bridge, written in six lines and marked as temporary, because
-// converting the renderer is Module 6's job and doing it here would mean changing
-// the picture on the same day as changing the architecture. The reference shot
-// this course has been comparing against since Lesson 5.1 is still byte-identical
-// after this lesson, and that is only checkable because nothing on its path moved.
+//     world(moon) = world(planet) * local(moon)
+//
+// which is the composition rule and the whole of a scene graph. Press [F] and
+// the sun drifts; every ring member, every moon and every waypoint follows,
+// because following is not a feature anyone implemented — it is what "my
+// placement is relative to my parent" MEANS.
+//
+// THE CAMERA IS AN ENTITY NOW, and that is the other half of the lesson. It has
+// a `transform`, a `world_transform`, a `camera` and — while it is the one being
+// rendered from — an `active_camera` tag. Press [C] and it is PARENTED to a ring
+// member: it rides along, resolved by the same pass as everything else, and the
+// renderer never learns that anything changed.
 //
 //     cmake --build build --target ecs_swarm
 //     ./build/demos/ecs_swarm                        a window
 //     ./build/demos/ecs_swarm --shot swarm.ppm       one frame, no window
 
 #include <engine/asset/asset_store.hpp>
+#include <engine/ecs/camera.hpp>
+#include <engine/ecs/hierarchy.hpp>
 #include <engine/ecs/registry.hpp>
 #include <engine/gfx/colour.hpp>
 #include <engine/gfx/depth_buffer.hpp>
@@ -72,24 +65,23 @@ using engine::ecs::entity;
 //  THE COMPONENTS
 // ===========================================================================
 //
-// Every one of them is a plain struct with no base class, no virtual anything,
-// no registration macro and no header of its own. That is not minimalism for its
-// own sake — it is Lesson 5.7's rule 1 (components stay small and single-purpose)
-// meeting the fact that `registry` needs nothing from a type but that it be
-// movable. `engine::transform` is used as a component below without being
-// modified, or even recompiled, which is the cleanest possible demonstration of
-// the point: an ECS does not ask your data to join anything.
+// Six demo components, plus four the engine now supplies: `parent` and
+// `world_transform` from ecs/hierarchy.hpp, `camera` and `active_camera` from
+// ecs/camera.hpp. Every one of them is a plain struct with no base class, no
+// virtual anything and no registration macro — `registry` asks a component type
+// for nothing but that it be movable.
 
-/// Where an entity is. The engine's own `transform` (position, rotation, scale),
-/// used unchanged — a component is a struct, and this one was written in Lesson
-/// 2.8 by somebody who had never heard of an ECS.
+/// Where an entity is, **relative to its parent**.
+///
+/// The same `engine::transform` as in Lesson 5.8, and the same alias — but the
+/// meaning widened, and it widened without the type changing by one character.
+/// That was designed for in Lesson 2.8, which is why the function that turns one
+/// into a matrix is called `parent_from_local` and not `world_from_local`. An
+/// entity with no `parent` component has the world as its parent, so 5.8's flat
+/// interpretation is the special case rather than the rule.
 using placement = engine::transform;
 
-/// What shape an entity is, and whether that shape is closed enough to cull.
-///
-/// `closed` lives here rather than beside the tint because it is a fact about the
-/// GEOMETRY — a quad is two-sided whatever colour you paint it — and in
-/// `scene_object` it sits three fields away from the mesh it describes.
+/// What shape an entity is, and whether it is closed enough to cull.
 struct geometry
 {
     engine::mesh_handle mesh;
@@ -104,9 +96,12 @@ struct material
     engine::specular surface{};
 };
 
-/// A circular path around the origin. Position is DERIVED from it every step, so
-/// an entity with an orbit does not need its position stored anywhere else —
-/// though it happens to have one, because it also has a placement.
+/// A circular path — now around the entity's PARENT rather than around the world.
+///
+/// Nothing in this struct changed in Lesson 5.9, and nothing in `orbit_system`
+/// changed either. What changed is where the number it writes ends up meaning
+/// something, which is the cheapest possible demonstration that a hierarchy is a
+/// property of the composition and not of the data.
 struct orbit
 {
     float radius = 1.0f;
@@ -117,12 +112,11 @@ struct orbit
 
 /// A tumble, integrated over the fixed step.
 ///
-/// Two Euler angles rather than an axis and an angle, because axis-angle
-/// rotation does not exist in this engine yet — Module 7 derives it, by way of
-/// quaternions, and until then `rotation_y * rotation_x` is what `mat3.hpp`
-/// offers. Worth noticing that the component does not care: when Module 7 lands,
-/// this struct becomes `{ quat orientation; vec3 angular_velocity; }` and not one
-/// line of `registry`, `pool` or `view` changes.
+/// Two Euler angles rather than an axis and an angle, because axis-angle rotation
+/// does not exist in this engine yet — Module 7 derives it by way of quaternions.
+/// The component does not care: when that lands, this becomes
+/// `{ quat orientation; vec3 angular_velocity; }` and not one line of `registry`,
+/// `pool`, `view` or `hierarchy` changes.
 struct spin
 {
     float rate = 1.0f;
@@ -130,40 +124,40 @@ struct spin
     float angle = 0.0f;
 };
 
-/// Seconds until this entity destroys itself. Only the sparks have one, and the
-/// system that ages them is four lines that mention no other component type.
+/// Seconds until this entity destroys itself. Only the sparks have one.
 struct lifetime
 {
     float remaining = 1.0f;
 };
 
+/// The orbit angles a free camera flies on. One entity has this; it is a
+/// component like any other, and the camera is an entity like any other.
+struct camera_orbit
+{
+    float radius = 9.0f;
+    float azimuth = 0.0f;
+    float elevation = 0.32f;
+    engine::vec3 target{0.0f, 0.0f, 0.0f};
+};
+
 // ===========================================================================
 //  THE SYSTEMS
 // ===========================================================================
-//
-// Free functions taking a `registry&`. Not classes, not virtuals, not a base
-// `System` with an `update()` — there is nothing for such a base to hold, because
-// a system's entire state is the query it runs. Lesson 5.6 measured what a
-// virtual call costs on an iteration (1.5–1.7× at every world size, including
-// four objects in L1) and that number is the reason this file has no interfaces
-// in it.
-//
-// Read the queries and you can see the data flow without reading the bodies:
-// `orbit_system` writes placements and reads orbits; `render_system` reads
-// placement, geometry and material and writes none of them. That is the property
-// Module 8's job system will need in order to run two of these at once, and it
-// is legible here for free.
 
-/// Put every orbiting entity where its orbit says it should be, at time `t`.
+/// Put every orbiting entity where its orbit says — **in its parent's space**.
+///
+/// Byte for byte the function Lesson 5.8 shipped. It writes a `placement`, which
+/// used to be a world position and is now a local one, and it has no idea which.
+/// That is the point: a system that reads and writes local data does not need to
+/// know whether anything is parented to anything.
 void orbit_system(engine::ecs::registry& world, float t)
 {
     world.view<placement, orbit>().each([t](placement& p, const orbit& o) {
         const float a = o.phase + o.speed * t;
-        // A circle of radius r in the x–z plane, tilted by `tilt` about the x
-        // axis: x is untouched by the tilt (it is the axis), and the y–z pair is
+        // A circle of radius r in the x-z plane, tilted by `tilt` about the x
+        // axis: x is untouched by the tilt (it is the axis), and the y-z pair is
         // the rotation. Multiplying x by cos(tilt) as well would give an ellipse
-        // that looks similar and is not a circle, which is the sort of thing this
-        // course would rather not have in a listing.
+        // that looks similar and is not a circle.
         const float ct = std::cos(o.tilt);
         const float st = std::sin(o.tilt);
         p.position = {o.radius * std::cos(a),
@@ -173,6 +167,11 @@ void orbit_system(engine::ecs::registry& world, float t)
 }
 
 /// Advance every spinning entity by one simulation step.
+///
+/// Also unchanged — and worth pausing on, because the sun has one of these. A
+/// rotation applied to a parent rotates *its children's whole coordinate frame*,
+/// so spinning the sun sweeps the entire ring around with it. Nothing in this
+/// function knows that.
 void spin_system(engine::ecs::registry& world, float h)
 {
     world.view<placement, spin>().each([h](placement& p, spin& s) {
@@ -183,44 +182,70 @@ void spin_system(engine::ecs::registry& world, float h)
 
 /// Age the sparks, and destroy the ones that have run out.
 ///
-/// **The two-phase shape here is the one rule a view imposes**, and it is worth
-/// having met once. Destroying an entity erases its rows from every pool, which
-/// swap-and-pops the very array the walk is stepping through — so the loop
-/// collects first and acts afterwards. In a debug build, destroying inside the
-/// callback trips the assertion in `view::fetch`; in a release build it silently
-/// skips whichever entity was swapped into the hole, which is exactly how erasing
-/// from a `std::vector` inside a range-for behaves and is no more forgivable here.
-void lifetime_system(engine::ecs::registry& world, float h, std::vector<entity>& scratch)
+/// **The two-phase shape is the one rule a view imposes**, and Lesson 5.9 gives
+/// it a second reason to exist: destroying an entity changes the SHAPE of the
+/// hierarchy, so the resolver's level order goes stale and has to be told. Both
+/// facts are handled in the same three lines.
+void lifetime_system(engine::ecs::registry& world, engine::ecs::hierarchy& tree, float h,
+                     std::vector<entity>& scratch)
 {
     scratch.clear();
     world.view<lifetime>().each([h, &scratch](entity e, lifetime& l) {
         l.remaining -= h;
         if (l.remaining <= 0.0f) { scratch.push_back(e); }
     });
+    if (scratch.empty()) { return; }
+
     for (entity e : scratch) { world.destroy(e); }
+    tree.mark_topology_changed();
 }
 
-/// Turn everything visible into the `scene_object` array the renderer still wants.
+/// Aim the free camera from its orbit angles.
 ///
-/// **This function is the seam**, and it is deliberately ugly enough to notice.
-/// `collect_triangles` takes `std::span<const scene_object>`, so an ECS world has
-/// to be flattened into one every frame — a copy of six fields per visible entity,
-/// which at 140 objects is about 8 KB and roughly nothing. It stops being nothing
-/// at 10,000, and Module 6 removes it by teaching the renderer to read pools
-/// directly. Writing that today would mean changing the picture in the same
-/// lesson as changing the architecture, and then having no way to tell which
-/// change broke it.
+/// `look_along` builds the transform that PUTS a camera somewhere looking at
+/// something — the inverse of Lesson 2.9's question, which asked for the matrix
+/// that takes the world into the camera's view. Writing the placement and letting
+/// `view_from_camera` invert it is what makes a camera an ordinary object.
+void camera_orbit_system(engine::ecs::registry& world)
+{
+    world.view<placement, camera_orbit>().each([](placement& p, const camera_orbit& c) {
+        const engine::vec3 eye =
+            c.target + engine::vec3{c.radius * std::cos(c.elevation) * std::sin(c.azimuth),
+                                    c.radius * std::sin(c.elevation),
+                                    c.radius * std::cos(c.elevation) * std::cos(c.azimuth)};
+        p = engine::ecs::look_along(eye, c.target, {0.0f, 1.0f, 0.0f});
+    });
+}
+
+/// Turn everything visible into the `scene_object` array the renderer wants.
+///
+/// **The seam moved one level deeper and is still a seam.** In Lesson 5.8 this
+/// read a `placement` and copied it; now it reads a `world_transform` — a
+/// composed 4x4 — and has to get that matrix into a `scene_object`, which holds a
+/// `transform`.
+///
+/// The conversion below is EXACT and is a trick worth understanding rather than
+/// copying. `parent_from_local` builds `affine(columns scaled by `scale`,
+/// position)`, and `transform::rotation` is a general `mat3` with no orthonormality
+/// requirement — so setting the rotation to the matrix's whole linear part and the
+/// scale to 1 reproduces any affine matrix bit for bit. It abuses the fact that
+/// the field is named `rotation` and typed `mat3`, which is precisely why it is a
+/// bridge and not a design. Module 6 gives the renderer a matrix directly and
+/// this function loses its last four lines.
 void render_system(engine::ecs::registry& world, std::vector<engine::scene_object>& out)
 {
     out.clear();
-    world.view<placement, geometry, material>().each(
-        [&out](const placement& p, const geometry& g, const material& m) {
-            out.push_back(engine::scene_object{.xform = p,
-                                               .geometry = g.mesh,
-                                               .name = "entity",
-                                               .tint = m.tint,
-                                               .closed = g.closed,
-                                               .surface = m.surface});
+    world.view<engine::ecs::world_transform, geometry, material>().each(
+        [&out](const engine::ecs::world_transform& w, const geometry& g, const material& m) {
+            out.push_back(engine::scene_object{
+                .xform = {.position = engine::translation_of(w.matrix),
+                          .rotation = engine::linear_of(w.matrix),
+                          .scale = {1.0f, 1.0f, 1.0f}},
+                .geometry = g.mesh,
+                .name = "entity",
+                .tint = m.tint,
+                .closed = g.closed,
+                .surface = m.surface});
         });
 }
 
@@ -235,6 +260,8 @@ constexpr Uint32 k_background = 0xFF0C0E14u;   // pack_argb(12, 14, 20)
 constexpr int k_ring_count = 96;
 constexpr int k_waypoint_count = 24;
 constexpr int k_spark_burst = 32;
+constexpr int k_moons_every = 6;     ///< every sixth ring member gets moons
+constexpr int k_moons_each = 2;
 
 /// A tiny linear congruential generator, seeded by hand.
 ///
@@ -275,7 +302,7 @@ public:
             if (SDL_strcmp(argv[i], "--shot") == 0 && i + 1 < argc) { shot_path_ = argv[++i]; }
         }
 
-        return {.title = "ecs_swarm — one world, five components",
+        return {.title = "ecs_swarm — one world, ten components, three levels",
                 .draw_to = (shot_path_ != nullptr) ? engine::surface::headless
                                                    : engine::surface::renderer,
                 .fb_width = k_width,
@@ -284,10 +311,6 @@ public:
 
     [[nodiscard]] bool on_start() override
     {
-        // Three meshes, shared by every entity that references them. A component
-        // holds a `mesh_handle` — four bytes, Lesson 5.4 — so a hundred and forty
-        // entities pointing at one cube cost 140 handles and one cube, and the
-        // handle stays answerable if the mesh is ever unloaded.
         cube_ = assets_.insert_mesh("cube",
                                     engine::with_normals(engine::cube_mesh(),
                                                          engine::normal_style::flat));
@@ -309,12 +332,9 @@ public:
 
     /// Discrete presses, handled here rather than in `on_fixed_step`.
     ///
-    /// Lesson 1.4's rule, which the course states as EDGES BELONG TO THE FRAME
-    /// AND LEVELS BELONG TO THE STEP: `on_fixed_step` runs zero or more times per
-    /// frame, so `key_pressed()` inside it would fire twice on a two-step frame
-    /// and spawn sixty-four sparks instead of thirty-two. `key_down()` in a step
-    /// is fine, because input is frame-coherent and every step of one frame sees
-    /// the same snapshot.
+    /// Lesson 1.4's rule: EDGES BELONG TO THE FRAME AND LEVELS BELONG TO THE STEP.
+    /// `on_fixed_step` runs zero or more times per frame, so `key_pressed()` in it
+    /// would fire twice on a two-step frame and spawn sixty-four sparks.
     void on_event(const SDL_Event& event) override
     {
         if (event.type != SDL_EVENT_KEY_DOWN || event.key.repeat) { return; }
@@ -327,6 +347,9 @@ public:
         case SDL_SCANCODE_O:      toggle_orbits(); break;
         case SDL_SCANCODE_X:      cull_swarm(); break;
         case SDL_SCANCODE_R:      build_world(); break;
+        case SDL_SCANCODE_C:      toggle_camera_ride(); break;
+        case SDL_SCANCODE_H:      toggle_detach(); break;
+        case SDL_SCANCODE_F:      drifting_ = !drifting_; break;
         default: break;
         }
     }
@@ -335,6 +358,7 @@ public:
     {
         if (shot_path_ != nullptr) { return; }
         t_ += h;
+        if (!riding_) { camera_.azimuth += 0.15f * h; }
         step_world(h);
     }
 
@@ -347,27 +371,47 @@ public:
         fb().clear(k_background);
         depth_.clear();
 
-        const engine::render_options opts{.cull = engine::cull_choice::back};
-        engine::collect_triangles(triangles_, scratch_, objects_, assets_.meshes(),
-                                  {view_, k_eye}, projector_, lights_, opts, &stats_);
+        // The camera is looked up rather than held. If the entity tagged
+        // `active_camera` were destroyed, this would return null and the frame
+        // would draw nothing — which is a case a scene can legitimately be in,
+        // and is why it is a branch rather than an assertion.
+        const entity cam = engine::ecs::find_active_camera(world_);
+        const engine::ecs::world_transform* cam_world =
+            cam.valid() ? world_.get<engine::ecs::world_transform>(cam) : nullptr;
+        const engine::ecs::camera* lens =
+            cam.valid() ? world_.get<engine::ecs::camera>(cam) : nullptr;
 
-        const engine::fill_style style{.shade = engine::shading::vertex_colour,
-                                       .cull = engine::cull_mode::back,
-                                       .eye = k_eye};
-        engine::draw_triangles(fb(), &depth_, triangles_, false, style);
+        if (cam_world != nullptr && lens != nullptr)
+        {
+            const engine::mat4 view = engine::ecs::view_from_camera(*cam_world);
+            const engine::vec3 eye = engine::ecs::eye_of(*cam_world);
+            const engine::projector proj{
+                engine::ecs::projection_of(*lens, static_cast<float>(k_width)
+                                                      / static_cast<float>(k_height)),
+                engine::viewport{0.0f, 0.0f, static_cast<float>(k_width),
+                                 static_cast<float>(k_height), 0.0f, 1.0f},
+                engine::near_mode::clip};
+
+            const engine::render_options opts{.cull = engine::cull_choice::back};
+            engine::collect_triangles(triangles_, scratch_, objects_, assets_.meshes(),
+                                      {view, eye}, proj, lights_, opts, &stats_);
+
+            const engine::fill_style style{.shade = engine::shading::vertex_colour,
+                                           .cull = engine::cull_mode::back,
+                                           .eye = eye};
+            engine::draw_triangles(fb(), &depth_, triangles_, false, style);
+        }
 
         if (shot_path_ != nullptr)
         {
-            // The same four numbers the HUD shows, plus the two that make the
-            // view's choice checkable from a headless run: which pool it decided
-            // to lead with, and how many candidates that implies.
-            const auto v = world_.view<placement, geometry, material>();
+            const engine::ecs::hierarchy_report& r = tree_.last_report();
             SDL_Log("ecs_swarm: %zu entities, %zu components, %zu pools, %zu drawn, "
                     "%d triangles",
                     world_.size(), world_.component_count(), world_.pool_count(),
                     objects_.size(), static_cast<int>(triangles_.size()));
-            SDL_Log("ecs_swarm: render view leads with pool %zu, %zu candidates",
-                    v.lead(), v.size_hint());
+            SDL_Log("ecs_swarm: hierarchy %zu rows, %zu roots, %zu levels, %zu orphans, "
+                    "%zu cycles",
+                    r.entities, r.roots, r.levels, r.orphans, r.cycles);
             request_quit(engine::save_ppm(fb(), shot_path_));
         }
     }
@@ -377,13 +421,8 @@ public:
         SDL_Renderer* const r = renderer();
         if (r == nullptr) { return; }
 
-        // Which pool the render query decided to lead with, by position in
-        // `view<placement, geometry, material>` — 0, 1 or 2. Watch it move when
-        // [M] takes the materials away: the material pool becomes the smallest,
-        // so it becomes the lead, and the walk gets shorter rather than staying
-        // the same length and skipping. That is Lesson 5.7's rule 3 visible on a
-        // HUD, which is the only way a design decision ever becomes real.
-        const auto v = world_.view<placement, geometry, material>();
+        const engine::ecs::hierarchy_report& h = tree_.last_report();
+        const auto v = world_.view<engine::ecs::world_transform, geometry, material>();
 
         SDL_SetRenderScale(r, 2.0f, 2.0f);
         SDL_SetRenderDrawColor(r, 210, 212, 220, 255);
@@ -392,57 +431,71 @@ public:
                                   world_.size(), world_.component_count(),
                                   world_.pool_count());
         SDL_RenderDebugTextFormat(r, 6.0f, 20.0f,
-                                  "render view  lead pool %zu   candidates %3zu   drawn %3zu"
+                                  "hierarchy  rows %3zu  roots %3zu  levels %zu  "
+                                  "orphans %zu  cycles %zu",
+                                  h.entities, h.roots, h.levels, h.orphans, h.cycles);
+        SDL_RenderDebugTextFormat(r, 6.0f, 34.0f,
+                                  "render view  lead %zu   candidates %3zu   drawn %3zu"
                                   "   tris %4d",
                                   v.lead(), v.size_hint(), objects_.size(),
                                   static_cast<int>(triangles_.size()));
-        SDL_RenderDebugTextFormat(r, 6.0f, 34.0f,
-                                  "slots %zu   free %zu   unresolved %d   fps %5.1f",
-                                  world_.entities().slot_count(),
-                                  world_.entities().free_count(), stats_.unresolved,
+        SDL_RenderDebugTextFormat(r, 6.0f, 48.0f,
+                                  "camera %s   sun %s   fps %5.1f",
+                                  riding_ ? "PARENTED to a ring member" : "free orbit",
+                                  drifting_ ? "drifting" : "still",
                                   static_cast<double>(time().fps()));
-        SDL_RenderDebugText(r, 6.0f, 118.0f,
-                            "[Space] sparks  [M] materials  [O] orbits  [X] cull  "
-                            "[R] rebuild  [Esc] quit");
+        SDL_RenderDebugText(r, 6.0f, 112.0f,
+                            "[F] drift the sun  [C] ride a planet  [H] detach half  "
+                            "[Space] sparks");
+        SDL_RenderDebugText(r, 6.0f, 124.0f,
+                            "[M] materials  [O] orbits  [X] cull  [R] rebuild  [Esc] quit");
         SDL_SetRenderScale(r, 1.0f, 1.0f);
     }
 
 private:
     // ---- Building the world ------------------------------------------------
 
-    /// Wipe the world and repopulate it. Three kinds of entity, and the whole
-    /// point is that "kind" is not a thing the registry knows about — it is which
-    /// components got attached, and nothing records it anywhere.
+    /// Wipe the world and repopulate it — now with a shape as well as a set of
+    /// components. Four kinds of entity became five, and the new one (a moon) is
+    /// distinguished from a ring member by nothing except who its parent is.
     void build_world()
     {
         world_.clear();
         swarm_.clear();
+        moons_.clear();
         materials_hidden_ = false;
         orbits_frozen_ = false;
+        detached_ = false;
+        riding_ = false;
 
         lcg rng{0x5EEDu};
 
-        // The sun: geometry, material, spin. NO orbit — it does not move, and
-        // that is expressed by the absence of a component rather than by a
-        // `speed = 0` that every orbit system would still have to process.
-        const entity sun = world_.create();
-        world_.add<placement>(sun, placement{.position = {0.0f, 0.0f, 0.0f},
-                                             .rotation = engine::mat3::identity(),
-                                             .scale = {0.9f, 0.9f, 0.9f}});
-        world_.add<geometry>(sun, geometry{.mesh = torus_, .closed = true});
-        world_.add<material>(sun, material{.tint = 0xFFE8B84Cu,
-                                           .surface = {.colour = {0.7f, 0.65f, 0.5f},
-                                                       .shininess = 64.0f}});
-        world_.add<spin>(sun, spin{.rate = 0.6f, .wobble = 0.35f});
+        // ---- the sun: the root of everything -----------------------------
+        sun_ = world_.create();
+        engine::ecs::add_hierarchy_components(
+            world_, sun_,
+            placement{.position = {0.0f, 0.0f, 0.0f},
+                      .rotation = engine::mat3::identity(),
+                      .scale = {0.9f, 0.9f, 0.9f}});
+        world_.add<geometry>(sun_, geometry{.mesh = torus_, .closed = true});
+        world_.add<material>(sun_, material{.tint = 0xFFE8B84Cu,
+                                            .surface = {.colour = {0.7f, 0.65f, 0.5f},
+                                                        .shininess = 64.0f}});
+        world_.add<spin>(sun_, spin{.rate = 0.6f, .wobble = 0.35f});
 
-        // The ring: everything, and every third one also spins.
+        // ---- the ring: children of the sun -------------------------------
+        //
+        // Their orbits are now LOCAL. Spin the sun and the whole ring sweeps with
+        // it; drift the sun and the ring goes too. Neither behaviour is
+        // implemented anywhere — both are what the composition rule says.
         for (int i = 0; i < k_ring_count; ++i)
         {
             const entity e = world_.create();
             const float band = static_cast<float>(i % 3);
 
-            world_.add<placement>(e, placement{.scale = engine::vec3{0.16f, 0.16f, 0.16f}});
-            world_.add<orbit>(e, orbit{.radius = 2.1f + 0.75f * band,
+            engine::ecs::add_hierarchy_components(
+                world_, e, placement{.scale = engine::vec3{0.16f, 0.16f, 0.16f}});
+            world_.add<orbit>(e, orbit{.radius = 2.4f + 0.85f * band,
                                        .speed = 0.75f - 0.16f * band,
                                        .phase = rng.range(0.0f, 6.2831853f),
                                        .tilt = rng.range(-0.55f, 0.55f)});
@@ -456,42 +509,107 @@ private:
                 world_.add<spin>(e, spin{.rate = rng.range(1.2f, 3.0f),
                                          .wobble = rng.range(-0.9f, 0.9f)});
             }
+            engine::ecs::set_parent(world_, e, sun_);
             swarm_.push_back(e);
+
+            // ---- moons: children of a ring member, so DEPTH 3 -------------
+            //
+            // A moon's world position is computed by nobody. Two composes deep,
+            // and the only thing that makes it a moon rather than a planet is
+            // which entity its `parent` names.
+            if (i % k_moons_every == 0)
+            {
+                for (int m = 0; m < k_moons_each; ++m)
+                {
+                    const entity moon = world_.create();
+                    // NOTE THE NUMBERS, because they are the hierarchy being
+                    // honest. This scale is 0.8 in the PLANET's space, and the
+                    // planet is itself 0.16 of the sun's — so a moon comes out
+                    // 0.128 in world units, and its local orbit radius of 3.6
+                    // becomes 0.58. Scale composes down the chain exactly as
+                    // rotation and translation do, which surprises people the
+                    // first time a "1-metre" prop under a scaled parent turns out
+                    // to be 20 cm. It is not a bug in the composition; it is what
+                    // "relative to my parent" means, applied to size.
+                    engine::ecs::add_hierarchy_components(
+                        world_, moon, placement{.scale = engine::vec3{0.8f, 0.8f, 0.8f}});
+                    world_.add<orbit>(moon, orbit{.radius = 3.6f,
+                                                  .speed = rng.range(2.5f, 4.5f),
+                                                  .phase = rng.range(0.0f, 6.2831853f),
+                                                  .tilt = rng.range(-1.3f, 1.3f)});
+                    world_.add<geometry>(moon, geometry{.mesh = ico_, .closed = true});
+                    world_.add<material>(moon,
+                                         material{.tint = 0xFFF2F4F8u,
+                                                  .surface = {.colour = {0.85f, 0.85f, 0.9f},
+                                                              .shininess = 80.0f}});
+                    engine::ecs::set_parent(world_, moon, e);
+                    moons_.push_back(moon);
+                }
+            }
         }
 
-        // The waypoints: placement and orbit, and nothing else. They are real
-        // entities, they move every step, and they are invisible — not because
-        // anything hid them, but because the render query asks for a geometry
-        // they do not have.
+        // ---- waypoints: placement + orbit, and nothing else ---------------
+        //
+        // Lesson 5.8's argument, still standing: they move every step and are
+        // invisible, because the render query asks for a `geometry` they do not
+        // have. Nobody wrote an `if`.
         for (int i = 0; i < k_waypoint_count; ++i)
         {
             const entity e = world_.create();
-            world_.add<placement>(e, placement{});
-            world_.add<orbit>(e, orbit{.radius = 1.35f,
+            engine::ecs::add_hierarchy_components(world_, e, placement{});
+            world_.add<orbit>(e, orbit{.radius = 1.6f,
                                        .speed = 1.4f,
                                        .phase = rng.range(0.0f, 6.2831853f),
                                        .tilt = rng.range(-1.2f, 1.2f)});
+            engine::ecs::set_parent(world_, e, sun_);
         }
 
+        // ---- the camera: an entity, like everything else ------------------
+        camera_entity_ = world_.create();
+        engine::ecs::add_hierarchy_components(world_, camera_entity_, placement{});
+        world_.add<engine::ecs::camera>(camera_entity_, engine::ecs::camera{
+                                                            .fovy = 52.0f * 3.14159265f / 180.0f,
+                                                            .near_plane = 0.1f,
+                                                            .far_plane = 100.0f});
+        world_.add<camera_orbit>(camera_entity_, camera_);
+        engine::ecs::set_active_camera(world_, camera_entity_);
+
         rng_ = rng;
+        tree_.mark_topology_changed();
+        step_world(0.0f);
     }
 
+    /// One simulation step: local transforms first, then one resolve.
+    ///
+    /// **The order of these five lines is the lesson.** Everything above the
+    /// resolve writes LOCAL data and knows nothing about parents; the resolve
+    /// turns local into world, once, in an order that guarantees a parent is
+    /// finished before its children are started. Nothing below it has to think
+    /// about hierarchy at all.
     void step_world(float h)
     {
+        if (drifting_)
+        {
+            // Move the ROOT. Everything under it follows, and no code says so.
+            if (placement* p = world_.get<placement>(sun_))
+            {
+                p->position = {1.6f * std::sin(t_ * 0.35f), 0.5f * std::sin(t_ * 0.5f), 0.0f};
+            }
+        }
+
         orbit_system(world_, t_);
         spin_system(world_, h);
-        lifetime_system(world_, h, dead_);
+        lifetime_system(world_, tree_, h, dead_);
+        if (camera_orbit* c = world_.get<camera_orbit>(camera_entity_)) { *c = camera_; }
+        camera_orbit_system(world_);
+
+        if (tree_.topology_changed()) { tree_.rebuild(world_); }
+        tree_.resolve(world_);
     }
 
-    // ---- The four demonstrations -------------------------------------------
+    // ---- The demonstrations -------------------------------------------------
 
-    /// Spawn a burst of short-lived sparks near the ring.
-    ///
-    /// Creating an entity is a free-list pop and one push per component — Lesson
-    /// 5.7's measurement was 4.2 ns for the whole structural change, and *the same
-    /// 4.2 ns whether the world has four component types or twelve*, which is the
-    /// property that decided the storage design. Nothing here reserves capacity,
-    /// nothing rebuilds a chunk, and nothing else in the world is touched.
+    /// Spawn a burst of short-lived sparks, parented to the sun.
     void spawn_sparks()
     {
         for (int i = 0; i < k_spark_burst; ++i)
@@ -499,8 +617,9 @@ private:
             const entity e = world_.create();
             if (!e) { break; }   // id space exhausted; the world's failure, not ours
 
-            world_.add<placement>(e, placement{.scale = engine::vec3{0.07f, 0.07f, 0.07f}});
-            world_.add<orbit>(e, orbit{.radius = rng_.range(1.6f, 4.3f),
+            engine::ecs::add_hierarchy_components(
+                world_, e, placement{.scale = engine::vec3{0.07f, 0.07f, 0.07f}});
+            world_.add<orbit>(e, orbit{.radius = rng_.range(1.8f, 4.8f),
                                        .speed = rng_.range(-2.6f, 2.6f),
                                        .phase = rng_.range(0.0f, 6.2831853f),
                                        .tilt = rng_.range(-1.4f, 1.4f)});
@@ -509,10 +628,61 @@ private:
                                              .surface = {.colour = {0.9f, 0.9f, 0.9f},
                                                          .shininess = 96.0f}});
             world_.add<lifetime>(e, lifetime{.remaining = rng_.range(0.8f, 2.4f)});
+            engine::ecs::set_parent(world_, e, sun_);
         }
+        tree_.mark_topology_changed();
     }
 
-    /// Take the material component away from every third swarm member, or give it
+    /// Park the camera on a ring member, or take it off again.
+    ///
+    /// **Two lines of consequence for the whole feature.** `set_parent` links the
+    /// camera into the tree; the resolver composes it with everything else; and
+    /// `view_from_camera` inverts whatever came out. The renderer is not told, the
+    /// camera type does not change, and nothing anywhere holds a pointer to a
+    /// "current camera object".
+    void toggle_camera_ride()
+    {
+        riding_ = !riding_;
+        if (riding_)
+        {
+            // A vantage point beside the planet, expressed in the PLANET's space.
+            const entity host = swarm_.empty() ? sun_ : swarm_[k_moons_every];
+            if (!world_.alive(host)) { riding_ = false; return; }
+
+            world_.remove<camera_orbit>(camera_entity_);
+            if (placement* p = world_.get<placement>(camera_entity_))
+            {
+                *p = engine::ecs::look_along({0.0f, 3.5f, 9.0f}, {0.0f, 0.0f, 0.0f},
+                                             {0.0f, 1.0f, 0.0f});
+            }
+            engine::ecs::set_parent(world_, camera_entity_, host);
+        }
+        else
+        {
+            engine::ecs::set_parent(world_, camera_entity_, engine::ecs::null_entity);
+            world_.add<camera_orbit>(camera_entity_, camera_);
+        }
+        tree_.mark_topology_changed();
+    }
+
+    /// Detach the outer half of the ring from the sun, or re-attach it.
+    ///
+    /// Detached entities keep their `orbit`, so they keep circling — but they
+    /// circle the WORLD origin instead of the sun, because their placement is now
+    /// relative to nothing. Drift the sun with [F] and the split is unmistakable.
+    void toggle_detach()
+    {
+        detached_ = !detached_;
+        for (std::size_t i = swarm_.size() / 2; i < swarm_.size(); ++i)
+        {
+            if (!world_.alive(swarm_[i])) { continue; }
+            engine::ecs::set_parent(world_, swarm_[i],
+                                    detached_ ? engine::ecs::null_entity : sun_);
+        }
+        tree_.mark_topology_changed();
+    }
+
+    /// Take the material component away from every third ring member, or give it
     /// back. They disappear and reappear, and no renderer branch was involved.
     void toggle_materials()
     {
@@ -522,8 +692,7 @@ private:
 
             // `swarm_` may hold ids that [X] destroyed. Nothing needs to prune it:
             // a stale entity fails `alive()` and every pool lookup, which is
-            // Lesson 5.4's whole argument arriving in ordinary code. A vector of
-            // pointers here would be a vector of landmines.
+            // Lesson 5.4's argument arriving in ordinary code.
             if (!world_.alive(e)) { continue; }
 
             if (materials_hidden_)
@@ -540,8 +709,8 @@ private:
         materials_hidden_ = !materials_hidden_;
     }
 
-    /// Freeze half the swarm by removing its orbits. They keep spinning, because
-    /// spinning is a different component and a different system.
+    /// Freeze half the ring by removing its orbits. They keep spinning, because
+    /// spinning is a different component read by a different system.
     void toggle_orbits()
     {
         for (std::size_t i = swarm_.size() / 2; i < swarm_.size(); ++i)
@@ -551,8 +720,9 @@ private:
 
             if (orbits_frozen_)
             {
-                world_.add<orbit>(e, orbit{.radius = 2.1f + 0.75f * static_cast<float>(i % 3),
-                                           .speed = 0.75f - 0.16f * static_cast<float>(i % 3),
+                const float band = static_cast<float>(i % 3);
+                world_.add<orbit>(e, orbit{.radius = 2.4f + 0.85f * band,
+                                           .speed = 0.75f - 0.16f * band,
                                            .phase = static_cast<float>(i) * 0.37f,
                                            .tilt = 0.2f});
             }
@@ -564,15 +734,21 @@ private:
         orbits_frozen_ = !orbits_frozen_;
     }
 
-    /// Destroy every fourth swarm member. Watch `slots` hold steady on the HUD
-    /// while `free` climbs — and then watch [Space] reuse those slots rather than
-    /// minting new ones, which is why the sparse arrays never grow past peak live.
+    /// Destroy every fourth ring member — **and its moons with it**.
+    ///
+    /// `destroy_subtree` is the explicit alternative to the orphan policy. Use
+    /// plain `destroy()` here instead and the moons survive as orphans: the
+    /// resolver treats them as roots, they keep orbiting the world origin, and
+    /// `hierarchy_report::orphans` on the HUD counts them. Both behaviours are
+    /// defensible; only one of them should be the silent default, and it is the
+    /// one that does not delete entities nobody asked it to.
     void cull_swarm()
     {
         for (std::size_t i = 0; i < swarm_.size(); i += 4)
         {
-            world_.destroy(swarm_[i]);
+            engine::ecs::destroy_subtree(world_, swarm_[i]);
         }
+        tree_.mark_topology_changed();
     }
 
     [[nodiscard]] static Uint32 tint_for(int i)
@@ -584,16 +760,24 @@ private:
 
     // ---- State -------------------------------------------------------------
 
-    static constexpr engine::vec3 k_eye{4.4f, 3.0f, 5.6f};
-
     const char* shot_path_ = nullptr;
     float t_ = 0.0f;
 
     engine::ecs::registry world_;
+    engine::ecs::hierarchy tree_;
+
+    entity sun_;
+    entity camera_entity_;
     std::vector<entity> swarm_;   ///< the ring members, so the keys can find them again
+    std::vector<entity> moons_;
     std::vector<entity> dead_;    ///< reused scratch for lifetime_system
+
     bool materials_hidden_ = false;
     bool orbits_frozen_ = false;
+    bool detached_ = false;
+    bool riding_ = false;
+    bool drifting_ = false;
+    camera_orbit camera_{};
     lcg rng_{0x5EEDu};
 
     engine::asset_store assets_;
@@ -604,16 +788,6 @@ private:
 
     /// The bridge: rebuilt every frame from the ECS, handed to the renderer.
     std::vector<engine::scene_object> objects_;
-
-    const engine::mat4 view_ = engine::look_at(k_eye, {0.0f, 0.0f, 0.0f},
-                                               {0.0f, 1.0f, 0.0f});
-    const engine::projector projector_{
-        engine::perspective(52.0f * 3.14159265f / 180.0f,
-                            static_cast<float>(k_width) / static_cast<float>(k_height),
-                            0.1f, 100.0f),
-        engine::viewport{0.0f, 0.0f, static_cast<float>(k_width),
-                         static_cast<float>(k_height), 0.0f, 1.0f},
-        engine::near_mode::clip};
 
     engine::depth_buffer depth_{k_width, k_height};
     std::vector<engine::raster_triangle> triangles_;

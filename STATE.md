@@ -7,7 +7,7 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-09-04 (after Lesson 5.8 — 53 of 94 lessons)
+updated: 2026-09-04 (after Lesson 5.9 — 54 of 94 lessons)
 
 conventions:
   ecs-storage: THE ECS IS A SPARSE SET, DECIDED IN 5.7 BY MEASUREMENT, NOT TASTE.
@@ -110,6 +110,116 @@ conventions:
         opposite jobs. The namespace keeps them apart; `using namespace engine;`
         plus `using namespace engine::ecs;` makes bare `pool` ambiguous, which is
         the good kind of breakage. The engine never writes `using namespace`.
+  hierarchy: THE MATHS WAS FREE; THE ORDER WAS THE LESSON. 5.9, in
+        engine/include/engine/ecs/hierarchy.hpp + camera.hpp, both header-only —
+        public headers 51 -> 53, no CMake change anywhere.
+        world_from_local(child) = world_from_local(parent) * parent_from_local(child),
+        and NOTHING in math/transform.hpp changed by a character: 2.8 named the
+        function parent_from_local FOR THIS DAY, and said so in a comment at the
+        time. Two components: `parent` {entity} and `world_transform` {mat4}.
+        NO CHILD LIST, deliberately — children are derivable and a stored list is a
+        second source of truth (the same argument registry::destroy makes about a
+        component mask). The bill is visible in destroy_subtree, which sorts the
+        world's links once, O(n log n), rather than maintaining an index forever.
+        AN ENTITY WITH NO `parent` IS A ROOT, so 5.8's flat world is the SPECIAL
+        CASE and nothing had to be migrated.
+        THE ORDER IS THE PROBLEM AND IT IS REAL, NOT THEORETICAL. A parent must be
+        resolved before its children; 5.7 established a pool's dense order is
+        insertion order, disturbed by every swap-and-pop. verify_59 §C churns a
+        48-entity 4-level tree and finds TWELVE sitting ahead of their own parent.
+        A dense-order walk composes those against LAST FRAME'S matrix — wrong in a
+        way nothing reports.
+        DEPTH BUCKETING IS A TOPOLOGICAL SORT, and that is the whole idea: a
+        parent's depth is always exactly one less than its child's, so a counting
+        sort by depth is O(n) and puts every parent first. WITHIN A LEVEL THE ORDER
+        DOES NOT MATTER AT ALL, which is why a level is a parallel_for Module 8
+        will not have to design. It arrived with the choice of order.
+        MEASURED, THREE CANDIDATES, -O2 -DNDEBUG, M4 Pro, medians of 25:
+          DEPTH IS THE AXIS (n = 100,000 in every row, only the shape moves):
+            depth      1     2     4     8    16    32
+            recurse  3.34  6.55 10.08 11.81 13.29 13.55   <- depth-DEPENDENT
+            levels   3.39  4.42  4.83  4.78  5.04  4.94   <- very nearly NOT
+            ratio    1.01  0.67  0.48  0.40  0.38  0.36
+          THE DEPTH-1 ROW IS THE CONTROL: no hierarchy, both arms identical work,
+          1.01x. Without it nothing below is worth reading. And it SATURATES
+          around depth 8.
+          SIZE + ROW ORDER, depth 16, level-order relative to recursion:
+            n =            100   1,000  10,000  100,000
+            index, fresh   0.88   0.85   0.66    0.39
+            packed, fresh  0.87   0.85   0.66    0.39
+            index, SCRAMBLED 0.87 0.81   0.84    0.57
+            packed, SCRAMBLED 0.87 0.81  0.65    0.38
+          PACKING ONLY PAYS ONCE THE ROW ORDER HAS DECAYED: in creation order the
+          rows are already nearly in level order and the permutation achieves
+          nothing. Scrambling costs the index arm 5.00 -> 7.63 (+52%) and the
+          packed arm 4.81 -> 4.91 (+2%).
+          MAINTAINING IT (ns/entity, depth 8): reindex 3.98/4.16/8.98, permute
+          7.73/7.94/7.96, one resolve 4.66/4.78/4.94 at n = 1e3/1e4/1e5. So
+          A REBUILD IS ABOUT ONE RESOLVE AND A PERMUTATION ABOUT 1.6.
+          THE SHIPPED RESOLVER vs THE PROBE: 1.22x / 1.32x / 1.40x. THE ECS COSTS
+          22-40% ON THIS PASS — three sparse lookups per entity instead of three
+          array reads — and that number is published rather than hidden.
+        DECIDED: LEVEL ORDER THROUGH AN INDEX, NO PERMUTATION. It takes all of the
+        depth-independence, needs no row movement, and is the same SHAPE as the
+        packed version so a world that outgrows it adds a permutation to rebuild()
+        without touching the loop. Wrong when: >1e4 entities, decayed rows, stable
+        shape (a streaming world, a crowd).
+        REBUILD IS SPLIT FROM RESOLVE AND THAT IS WORTH MORE THAN THE ORDER.
+        rebuild() reads the parent links and produces the level order — needed only
+        when the SHAPE changes. resolve() runs every frame. A game re-parents
+        rarely and moves constantly. mark_topology_changed() is A FLAG THE CALLER
+        SETS, because 5.8 ships no signals; resolve() asserts order_.size() ==
+        transform pool size, which is the strongest check available without a
+        version counter AND CANNOT SEE an add plus a remove between two resolves.
+        Said out loud rather than papered over; Module 8 revisits it with the editor.
+        THE RESOLVE LOOP HAS NO recursion, NO stack, NO visited set and NO "has my
+        parent been done yet" test, because THE ORDER ALREADY GUARANTEES what those
+        would check. Three "is this a root?" cases — no parent component, dead
+        parent, parent with no world_transform — collapse to one line, which is what
+        makes the orphan policy cheap as well as defensible.
+        TWO POLICIES, BOTH STATED:
+          ORPHAN (parent died) -> BECOMES A ROOT, keeps its local transform, and is
+            COUNTED in hierarchy_report::orphans. Destroying the subtree is a policy
+            a GAME may want and a transform system must not impose; destroy_subtree()
+            is the explicit tool.
+          CYCLE -> BROKEN, COUNTED, LOGGED. A wrong picture is recoverable; A HANG IS
+            NOT. Two defences because `parent` is a PUBLIC component: set_parent()
+            refuses to create one (walking the whole chain, not one link), and
+            rebuild() marks k_in_progress and breaks the chain if one exists anyway.
+        NOT SHIPPED, WITH THE NUMBER: DIRTY FLAGS. moved -> reached -> ratio at
+        1e5/depth 8: 0.1%->0.5%->0.08x, 1%->4.8%->0.15x, 5%->20.7%->0.40x,
+        10%->36.4%->0.65x, 25%->66.3%->1.04x, 50%->87.6%->1.19x, 100%->100%->1.29x.
+        THE AMPLIFICATION IS THE PART NOBODY QUOTES — every descendant of a moved
+        entity has to move too. CROSSOVER AT ~25% MOVED, and past it the
+        "optimisation" is SLOWER. This engine's demo animates 100% of its entities
+        every step, so shipping it would have cost 1.29x. A measurement lesson has
+        to be willing to conclude NO; 5.9 concludes no twice.
+  camera: A CAMERA IS AN ENTITY, NOT A KIND OF THING. 5.9, ecs/camera.hpp.
+        Four components: transform (where), world_transform (…resolved, so it can
+        be PARENTED), camera {fovy, near_plane, far_plane}, active_camera (a TAG).
+        THREE CONSEQUENCES, NONE OF WHICH NEEDED DESIGNING: it can be parented
+        (attach it to a car and it rides, resolved by the same pass); "which camera
+        is active" is a COMPONENT rather than a pointer, so a destroyed camera
+        leaves no dangle; and it is findable by view<camera, active_camera>().
+        active_camera IS AN EMPTY STRUCT AND THAT IS THE FEATURE — a component with
+        no data is a tag and its presence is the information. Costs 1 byte/row
+        because C++ has no zero-sized objects; an engine with hundreds of tags would
+        specialise the pool.
+        ASPECT IS DELIBERATELY NOT A FIELD. It belongs to the SURFACE, which the
+        user can resize; storing it means every camera in a scene file carries a
+        number that was true on the machine that saved it. projection_of(c, aspect).
+        THE VIEW MATRIX IS rigid_inverse OF THE PLACEMENT, and 2.9 already derived
+        it — for M = affine(R, t) with R orthonormal, M^-1 = affine(R^T, -R^T t).
+        Extracted into math/mat4.hpp alongside is_rigid(). STILL NO GENERAL 4x4
+        INVERSE, for 2.9's reason: it would answer a question we never ask.
+        THE IDENTITY, CHECKED BIT FOR BIT (verify_59 §D, worst element 0.000e+00):
+          rigid_inverse(parent_from_local(look_along(e,t,u))) == look_at(e,t,u)
+        look_along answers "where must the camera BE"; look_at answers "what matrix
+        takes the world into its view". Inverses, and now both are spelled out.
+        is_rigid ACCEPTS A REFLECTION (det -1) on purpose — a mirrored camera is
+        legitimate and the inverse is still correct. The check exists to catch SCALE,
+        and a scaled camera is a category mistake (it changes fov by changing units),
+        so it is an ASSERTION rather than an error.
   measurement: A/B TIMING HAS FOUR RULES AND engine/core/bench.hpp IS THEM.
         1 ALTERNATE THE ARMS — one rep of A, one of B, microseconds apart, never
           in blocks. 3.10 published a 10% "improvement" that was session drift.
@@ -2562,8 +2672,57 @@ completed:
   - 5.6  Data-Oriented Design: Why Scene Trees Creak
   - 5.7  An ECS from Scratch: Storage Design
   - 5.8  The ECS Runtime
+  - 5.9  Transform Hierarchy and the Camera System
 
 capabilities:
+  - 5.9 THE ENGINE HAS A TRANSFORM HIERARCHY AND A CAMERA THAT IS AN ENTITY.
+    engine/include/engine/ecs/{hierarchy,camera}.hpp, header-only, 51 -> 53 public
+    headers, no CMake change. Plus rigid_inverse() and is_rigid() in
+    math/mat4.hpp — 2.9's derivation extracted so a camera can be an object.
+    API: parent / world_transform components; set_parent (refuses cycles,
+    parent_status{ok,dead_child,dead_parent,cycle}); is_ancestor_of;
+    destroy_subtree; add_hierarchy_components; hierarchy{rebuild, resolve,
+    rebuild_and_resolve, mark_topology_changed, topology_changed, order, levels,
+    level(i), depth_of, last_report} and hierarchy_report{entities, roots, levels,
+    orphans, cycles}. Camera: camera{fovy,near_plane,far_plane}, active_camera
+    (tag), look_along, view_from_camera, eye_of, projection_of,
+    find_active_camera, set_active_camera.
+    demos/ecs_swarm IS NOW THREE LEVELS DEEP: sun -> ring member -> moon, plus
+    waypoints and a camera entity. 154 entities, 906 components, 10 pools, 129
+    drawn, 3,776 triangles, 2 roots (sun + free camera), 3 levels, 0 orphans, 0
+    cycles. Checkable by hand: 1 + 96 + 32 + 24 + 1 = 154, and 1 + 96 + 32 = 129
+    carry a geometry. New keys: [F] drift the sun and EVERYTHING FOLLOWS with no
+    code that says so; [C] parent the camera to a ring member and it rides;
+    [H] detach the outer half, which then orbits the WORLD origin; [X] now uses
+    destroy_subtree so a planet takes its moons.
+    THE DEMO'S MOONS ARE A TEACHING POINT ON PURPOSE: authored at scale 0.8 under
+    a planet of scale 0.16, so they come out 0.128 in world units and their local
+    orbit radius of 3.6 becomes 0.58. SCALE COMPOSES DOWN THE CHAIN, which is why
+    a "1-metre" prop under a scaled parent is not 1 metre.
+    THE RENDER SEAM MOVED ONE LEVEL DEEPER AND IS STILL A SEAM. render_system now
+    reads a world_transform (a composed mat4) and must get it into a scene_object,
+    which holds a `transform`. The conversion is EXACT and is a trick rather than a
+    design: transform::rotation is a general mat3 with no orthonormality
+    requirement, so {position = translation_of(m), rotation = linear_of(m),
+    scale = 1} reproduces ANY affine matrix bit for bit (verified). Module 6 gives
+    the renderer a matrix directly and those four lines go.
+    scratch/hier_probe.hpp — FOUR arms over three plain arrays (recursive/CSR,
+    level-index, level-packed, dirty), no ECS in the way, for 5.7's reason: an
+    experiment built on the container measures the container. bench_59.cpp is five
+    measurements; verify_59.cpp is 73 checks in seven sections.
+    THE TIMER LIED FIRST. The initial run reported 10.417 ns/entity for two
+    different arms at n = 100 — 25 ticks of a 41.67 ns counter, below the 100-tick
+    floor. Fixed by scaling the workload to 200,000 composes and dividing, which
+    is 4.9's rule applied.
+    EVERY ARM REPORTS `agree`, WHICH 5.6 SAYS SHOULD BE IMPOSSIBLE, and the
+    explanation has a knob: each addend is a float accumulated into a DOUBLE, and a
+    running sum of 1e5 values of magnitude ~1 needs at most 17 + 24 = 41 bits, so
+    NOTHING IS EVER ROUNDED and an exact sum is order-independent. Swap the
+    accumulator to float and the agreement vanishes (49928.1484 vs 49928.2734).
+    verify_59 §F asserts BOTH outcomes.
+    GOLDEN BYTE-IDENTICAL, NINTH LESSON, 1,209,616 bytes. 5.9 added two headers and
+    two functions and touched no line the reference scene executes.
+    verify_45..58 all still green.
   - 5.8 THE ENGINE HAS AN ECS, AND IT IS ABOUT 400 LINES OF LOGIC.
     engine/include/engine/ecs/{entity,pool,registry,view}.hpp, header-only, no
     CMake change. API: create / destroy / alive / add<T> / remove<T> / has<T> /
@@ -4485,6 +4644,7 @@ files:
   engine/include/engine/core/: assert.hpp, bench.hpp, clock.hpp, fixed_step.hpp,
             handle.hpp, input.hpp, log.hpp, pool.hpp, profile.hpp
   engine/include/engine/ecs/: entity.hpp, pool.hpp, registry.hpp, view.hpp   [5.8]
+            hierarchy.hpp, camera.hpp                                       [5.9]
             (header-only — NO entry in engine/CMakeLists.txt. NOTE: ecs/pool.hpp's
              engine::ecs::pool<T> is a DIFFERENT container from core/pool.hpp's
              engine::pool<T>; see conventions:ecs-runtime.)
@@ -4544,14 +4704,23 @@ files:
                  05-04-handles.html, 05-05-asset-system.html,
                  05-06-data-oriented-design.html,
                  05-07-ecs-storage.html,
-                 05-08-ecs-runtime.html
+                 05-08-ecs-runtime.html,
+                 05-09-transform-hierarchy.html
   docs/shared/: course.css, course.js      (THE stylesheet + page script; one copy each)
   docs/_template/: lesson-template.html, README.md, apply-shared.py, check-page.js
   scratch/ (5.7, not shipped with the engine): ecs_probe.hpp, bench_57.cpp,
            verify_57.cpp, measure_57.py, build_bench_57.sh, build_verify_57.sh,
            figs_57.py, build_57.py, l57_body_{a,b}.html, l57_fig{1..6}.svg
   scratch/ (5.8, not shipped with the engine): verify_58.cpp, build_verify_58.sh,
-           figs_58.py, build_58.py, l58_body_{a,b}.html, l58_fig{1..6}.svg
+           figs_58.py, build_58.py, l58_body_{a,b}.html, l58_fig{1..6}.svg,
+           l58_ecs_swarm.cpp  (A PINNED LISTING — see the note in build_58.py:
+           5.9 rewrote demos/ecs_swarm/main.cpp, and re-running build_58.py to
+           repoint one nav link spliced 5.9's demo into 5.8's page. The snapshot is
+           byte-identical to that file at commit dfbdb0f. ANY FILE A LATER LESSON
+           MODIFIES MUST BE PINNED THE SAME WAY.)
+  scratch/ (5.9, not shipped with the engine): hier_probe.hpp, bench_59.cpp,
+           bench_59.log, verify_59.cpp, build_bench_59.sh, build_verify_59.sh,
+           figs_59.py, build_59.py, l59_body_{a,b,c}.html, l59_fig{1..6}.svg
            (NOTE: build_57.py was amended in 5.8 — it no longer stamps a STATE
             block, and it now byte-reproduces the shipped 05-07 page. Any future
             build_NN.py copied from it inherits the correct form.)
@@ -4561,42 +4730,47 @@ files:
   (retired: src/ — the whole directory. hello.cpp.)
 
 
-next: 5.9 — Transform Hierarchy and the Camera System
-      (planned filename: docs/lessons/05-09-transform-hierarchy.html — 5.8's TWO
-      next links point at the index and BOTH need repointing, and build_58.py's
-      TAIL holds the bottom one.)
-      5.8 BUILT THE FLAT WORLD; 5.9 GIVES IT STRUCTURE. Every placement in 5.8 is
-      in world space, which is fine for a swarm orbiting an origin and useless the
-      moment a turret sits on a tank.
-      WHAT MAKES THIS INTERESTING RATHER THAN ROUTINE, and it should be the spine
-      of the lesson: THE PARENT LINK IS A COMPONENT, BUT THE ORDER IN WHICH
-      TRANSFORMS MUST BE RESOLVED IS A PROPERTY OF THE GRAPH, NOT OF ANY POOL'S
-      DENSE ORDER — and 5.7 established that a pool's dense order is its own
-      business. Those two wants are in tension and the lesson is what it costs to
-      reconcile them. A parent must be resolved before its children; a sparse set
-      hands them back in insertion order.
-      THE CANDIDATE ANSWERS, and 5.6/5.7's method says MEASURE rather than pick:
-        1 recurse from roots each frame (pointer-chasing, which is exactly the
-          6.47x shape 5.6 measured on a decayed tree — but at what depth and what
-          fan-out does it bite?)
-        2 keep the transform pool SORTED PARENTS-BEFORE-CHILDREN and walk it flat
-          (this is a GROUP by another name — the ordering constraint 5.7 said a
-          sparse set may adopt later. Note the connection out loud.)
-        3 a dirty flag + a per-frame topological pass over only what moved
-      Do NOT let elegance decide it. The honest experiment is depth x fan-out x
-      fraction-moved-per-frame, on bench.hpp, obeying all four measurement rules.
-      ALSO IN 5.9: the camera stops being a special object. `orbit_camera` is a
-      demo struct today; with an ECS it is an entity with a transform and a
-      camera component, and "which camera is active" becomes a tag component
-      rather than a pointer.
-      THE TEST TO BEAT: golden still byte-identical (NINE lessons) IF the render
-      path is still untouched — but 5.9 may be the lesson that changes it, and if
-      so the golden must be RE-BASELINED DELIBERATELY, with the diff shown and
-      explained, never quietly. verify_59 must cover: a child following its parent,
-      a re-parent mid-frame, a destroyed parent (orphan policy — decide and state
-      it), a cycle (refuse it; a hierarchy that can loop is a hang), depth > 1, and
-      the resolution order actually being respected. Plus verify_45..58 green.
-      CARRY FORWARD FROM 5.8: the view's iteration rule bites hardest here —
-      re-parenting during a hierarchy walk is exactly the mutate-while-iterating
-      hazard, and the collect-then-act pattern will need saying again.
+next: 5.10 — Input Mapping, ImGui, and Debug Draw
+      (planned filename: docs/lessons/05-10-input-imgui-debug-draw.html — 5.9's TWO
+      next links point at the index and BOTH need repointing, and build_59.py's
+      TAIL holds the bottom one. ALSO: if 5.10 modifies demos/ecs_swarm/main.cpp,
+      PIN 5.9's copy in build_59.py the way build_58.py now pins 5.8's — see
+      files: for why.)
+      THREE ITEMS, AND THEY ARE ONLY LOOSELY RELATED, so consider splitting into
+      5.10 and 5.11 if the word count demands it. The curriculum groups them; the
+      lesson need not.
+      1 INPUT MAPPING — ACTIONS, NOT KEYCODES. ecs_swarm reads SDL_SCANCODE_C in a
+        switch, which is fine for a demo and wrong for a game: a player wants to
+        rebind, a gamepad has no scancodes, and a replay system wants to record
+        INTENTIONS rather than keys. The shape: an action is a name; a binding maps
+        a device event onto it; a frame publishes the set of active actions. 1.2's
+        edges-and-levels distinction survives INTACT and must — an action can be a
+        level (thrust) or an edge (jump) and the two are not interchangeable.
+        Honest question to answer in the lesson: does an action live in the ECS as a
+        component, or beside it? A player_input component is tempting and probably
+        right; a global action table is simpler and probably enough. MEASURE
+        NOTHING HERE — this is a design lesson, and say so.
+      2 DEAR IMGUI — THE FIRST THIRD-PARTY UI IN THE COURSE, and §4's rule demands
+        the "why we don't hand-roll this" justification IN THE LESSON. The honest
+        version: a debug UI is a text renderer, a layout engine, an input router and
+        a state machine, none of which is the subject. Also binding: ImGui needs a
+        backend, and this engine has TWO surfaces (SDL_Renderer and SDL_GPU) —
+        decide which gets it first and say why. TOOLING ONLY, never gameplay UI
+        (§4, binding).
+      3 DEBUG DRAW — lines, boxes, spheres, and the rest of the course leans on it
+        constantly. NOTE: engine/gfx/debug_draw.hpp ALREADY EXISTS (line3, draw_mesh,
+        draw_axes3, show_depth, count_differences) — this is a REWORK, not a new
+        file, and the lesson must say what was wrong with the old one rather than
+        quietly replacing it. THE OBVIOUS FIRST CLIENT IS 5.9's HIERARCHY: draw a
+        line from every entity to its parent and the tree becomes visible, which is
+        also how you would debug an orphan or a cycle.
+      THE TEST TO BEAT: golden byte-identical (TENTH lesson) — all three items are
+      additive and none touches the reference scene's path. If ImGui's backend
+      forces a change there, RE-BASELINE DELIBERATELY with the diff shown.
+      verify_510 must cover: an action firing from two different bindings; an edge
+      action firing exactly once across a two-step frame (1.4's trap, and the one
+      most likely to be got wrong); a rebind at runtime; and debug-draw geometry
+      landing where the maths says. Plus verify_45..59 green.
+      CARRY FORWARD FROM 5.9: the demo's key handling is in on_event for 1.4's
+      reason, and an action layer must not quietly move it back into the step.
 ```

@@ -658,7 +658,7 @@ chore. What follows is on disk.
 │   └── Shaders.cmake       # add_hlsl_shader(name stage) -> a GLOBAL PROPERTY   [4.3, reshaped 5.1]
 ├── engine/                 # THE LIBRARY                                        [5.1]
 │   ├── CMakeLists.txt      # produces engine::engine (STATIC)
-│   ├── include/engine/     # ---- THE PUBLIC API. 51 headers. Nothing else. ----
+│   ├── include/engine/     # ---- THE PUBLIC API. 53 headers. Nothing else. ----
 │   │   ├── engine.hpp      # the umbrella: shipped, documented, used by nothing we ship
 │   │   ├── asset/          # NAMES, ROOTS AND LIFETIMES                       [5.5]
 │   │   │   ├── search_path.hpp # ordered roots; the ONLY caller of
@@ -675,7 +675,11 @@ chore. What follows is on disk.
 │   │   │   ├── pool.hpp    # pool_base (cold virtuals) + pool<T> (the sparse set).
 │   │   │   │               #   engine::ecs::pool<T> IS NOT engine::pool<T>
 │   │   │   ├── registry.hpp# the world; component_id_of<T>(); type erasure, no RTTI
-│   │   │   └── view.hpp    # the query. LEADS WITH THE SMALLEST POOL
+│   │   │   ├── view.hpp    # the query. LEADS WITH THE SMALLEST POOL
+│   │   │   ├── hierarchy.hpp # parent + world_transform; LEVEL-ORDER resolve  [5.9]
+│   │   │   │               #   set_parent (refuses cycles), destroy_subtree
+│   │   │   └── camera.hpp  # camera + active_camera (a TAG); look_along;      [5.9]
+│   │   │                   #   view_from_camera = rigid_inverse(placement)
 │   │   ├── math/           # vec2/3/4, mat2/3/4, transform  (header-only)
 │   │   ├── platform/       # HOW A PROGRAM STARTS                          [5.2]
 │   │   │   ├── platform.hpp  # surface, app_config, platform — SDL's lifecycle,
@@ -714,9 +718,10 @@ chore. What follows is on disk.
 │   ├── pong/main.cpp       # Lesson 1.8's game, on engine::app. 87 code lines,
 │   │                       #   no main, no SDL_Init, no loop                  [5.2]
 │   ├── hello_cube/main.cpp # public headers only. THE ACCEPTANCE TEST for the API
-│   └── ecs_swarm/main.cpp  # 121 entities, SIX components, four systems.        [5.8]
+│   └── ecs_swarm/main.cpp  # 154 entities, TEN components, THREE LEVELS.    [5.8, 5.9]
 │                           #   The acceptance test for the ECS: 24 of them are
-│                           #   invisible because they LACK a geometry component
+│                           #   invisible because they LACK a geometry component,
+│                           #   and [F] drifts the sun so everything follows it
 └── tools/                  # editor, asset cooker (Module 8). Not yet.
 ```
 
@@ -1411,6 +1416,84 @@ Built roughly in dependency order — each module's milestone is the next module
   reference shot from Lesson 5.1 is byte-identical for the eighth lesson, and that is a fact
   worth being able to check rather than a coincidence.
 
+- **Transform hierarchy: level order, not recursion** (Lesson 5.9). Two components —
+  `parent {entity}` and `world_transform {mat4}` — and one composition rule,
+  `world(child) = world(parent) × parent_from_local(child)`. Nothing in `math/transform.hpp`
+  changed: Lesson 2.8 named that function `parent_from_local` rather than `world_from_local`
+  precisely so this day would cost nothing, and said so in a comment at the time.
+
+  **The maths was free; the order was the problem.** A parent must be resolved before its
+  children, and Lesson 5.7 established that a pool's dense order is *insertion* order, disturbed
+  by every swap-and-pop. That is not theoretical: churn a 48-entity, 4-level tree the way a
+  running game churns it and **twelve of them sit ahead of their own parent**, which a
+  dense-order walk would compose against the previous frame's matrix — wrong in a way nothing
+  reports.
+
+  Three orders were measured before one was shipped, on a probe of three plain arrays rather
+  than on the ECS (for 5.7's reason: an experiment built on the container measures the
+  container). The deciding table holds the entity count still at 100,000 and moves only the
+  shape:
+
+  | depth | 1 | 2 | 4 | 8 | 16 | 32 |
+  |---|---|---|---|---|---|---|
+  | recurse from roots (ns/entity) | 3.34 | 6.55 | 10.08 | 11.81 | 13.29 | 13.55 |
+  | level order (ns/entity) | 3.39 | 4.42 | 4.83 | 4.78 | 5.04 | 4.94 |
+  | ratio | **1.01×** | 0.67× | 0.48× | 0.40× | 0.38× | **0.36×** |
+
+  The depth-1 row is the **control**: no hierarchy, both arms do identical work, 1.01×. Without
+  it nothing below it would be worth reading. Everything after it says the same thing —
+  **recursion is depth-dependent and level order is very nearly not** — and it saturates around
+  depth 8.
+
+  Depth bucketing works because **depth is a topological order**: a parent's depth is always
+  exactly one less than its child's, so a counting sort by depth is O(*n*) and puts every parent
+  first. Two consequences follow. The resolve loop has *no recursion, no stack, no visited set
+  and no “has my parent been done yet” test*, because the order already guarantees what those
+  would check. And **within a level nothing depends on anything else in it**, so a level is a
+  `parallel_for` that Module 8 will not have to design — it arrived with the choice of order.
+
+  **`rebuild()` is split from `resolve()` and that split is worth more than the order itself.**
+  A rebuild costs about one resolve (measured: 0.93–1.39), and a game re-parents rarely while
+  moving things constantly, so the shape index is rebuilt only when the shape changes.
+  `mark_topology_changed()` is a flag the caller sets — the registry ships no signals — and
+  `resolve()` asserts what it can (the order's length against the transform pool's), which
+  cannot see an add plus a remove between two resolves. That limitation is documented rather
+  than papered over.
+
+  **Two policies, both stated.** An *orphan* (its parent died) becomes a root, keeps its local
+  transform, and is counted in `hierarchy_report::orphans` — destroying the subtree is a policy a
+  game may want and a transform system must not impose, so `destroy_subtree()` is the explicit
+  tool. A *cycle* is broken, counted and logged, and it has two defences because `parent` is a
+  public component: `set_parent()` refuses to create one (walking the whole chain, not one link),
+  and `rebuild()` survives one written directly. **A wrong picture is recoverable; a hang is
+  not.**
+
+  **Two optimisations were measured and refused**, each with its number. Physically packing rows
+  into level order buys ~30% at 100,000 *decayed* entities and nothing at all in a freshly built
+  world, and charges ~1.6 resolves per topology change. And dirty-subtree resolution crosses over
+  at about **25% of the world moving** — because moving 10% of a depth-8 tree dirties 36% of it —
+  and is **1.29× slower** when everything moves, which is exactly what an animated scene does.
+
+  The shipped resolver costs **1.22–1.40× the probe**, which is the ECS's own indirection on this
+  pass, and that number is published rather than hidden.
+
+- **The camera is an entity** (Lesson 5.9). Four components: `transform`, `world_transform`,
+  `camera {fovy, near_plane, far_plane}` and `active_camera` — an **empty struct**, because a
+  component with no data is a tag and its presence is the information. Three consequences fall
+  out without being designed: a camera can be **parented** (attach it to a car and it rides,
+  resolved by the same pass as everything else); “which camera is active” is a component rather
+  than a pointer, so destroying it dangles nothing; and it is findable by
+  `view<camera, active_camera>()`.
+
+  Aspect ratio is deliberately **not** a field — it belongs to the surface, which the user can
+  resize, and storing it would put a machine-specific number in every scene file.
+
+  The view matrix is `rigid_inverse` of the resolved placement, and that is Lesson 2.9's
+  derivation extracted into `math/mat4.hpp` now that a camera has a placement to invert. The
+  identity `rigid_inverse(parent_from_local(look_along(e, t, u))) == look_at(e, t, u)` holds
+  **bit for bit**. There is still no general 4×4 inverse, for the reason `mat4.hpp` gave in
+  Module 2: it would answer a question we never ask.
+
 - **Fixed timestep + render interpolation** (Module 1). The accumulator loop, derived rather
   than pasted as folklore. Simulation determinism is a property you design in early or retrofit
   painfully; physics in Module 7 depends on it already being right.
@@ -1658,7 +1741,7 @@ cmake --build build
 ./build/demos/sandbox --shot scratch/x.ppm   # seven pinned frames, no window          (5.1)
 ./build/demos/hello_cube                     # the acceptance test: public API only    (5.1)
 ./build/demos/hello_cube --shot cube.ppm     # …one frame, no window
-./build/demos/ecs_swarm                      # 121 entities out of six components     (5.8)
+./build/demos/ecs_swarm                      # 154 entities, ten components, 3 levels (5.9)
 ./build/demos/ecs_swarm --shot swarm.ppm     # …one frame, no window, deterministic
 ```
 
