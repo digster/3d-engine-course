@@ -2083,3 +2083,63 @@ The figure pass caught the 5.3 trap again — figures numbered by authoring orde
 order — plus a label sitting on two shapes that no automated check looks at.
 
 > next
+
+---
+
+## 2026-09-04 — "Based on the STATE and the project's claude instructions, work on the next."
+
+> Based on the STATE and the project's claude instructions, work on the next.
+
+Lesson 5.7 — An ECS from Scratch: Storage Design. A design lesson, so the deliverable is a
+**decision with its evidence attached**: no engine code changes, no CMake change, and the golden
+stays byte-identical for the seventh lesson running. 5.6 produced three constraints and then
+refused to choose between archetype and sparse set, because both satisfy all three; 5.7 takes the
+measurement that does separate them — and takes it **before either is built**, which is possible
+because the designs differ in exactly two operations and both are access patterns that
+`scratch/ecs_probe.hpp` simulates in three hundred lines with no entity manager, registry or type
+erasure in the way.
+
+**The query result is not one number.** Identical source code spans 0.96× to 2.40× at 100,000
+entities depending only on how much work the loop body does and whether the pools happen to share
+a dense order — so any comparison quoting one figure for "sparse set overhead" is quoting
+whichever its benchmark happened to build. The lesson therefore measures both ends of both axes
+and says so. Rebuilding with `-fno-vectorize` did two jobs, as it did in 5.6: it killed the n = 4
+anomalies (the archetype's *cheap* query was non-monotonic in K — 2.58 ns at K=3, 0.87 at K=4,
+which is a compiler and not a cache), and it exposed the mechanism. **On a real body with codegen
+held still the redirect costs 1.00× — nothing at all — up to a thousand entities on the
+worst-case world**, because it is latency in the shadow of arithmetic already in flight. It only
+bites when the working set leaves cache **and** the orders have diverged; either alone is free.
+
+**What decides the lesson is the other operation.** Widening an entity from four components to
+twelve — eight the operation never reads or writes — takes an archetype from 13.10 ns to 58.48 ns
+per structural change and leaves the sparse set at 4.25 → 4.23. The byte count predicts 2.3× and
+the truth is 4.5×, and the correction generalises: the cost is *independent memory streams
+touched*, two per column per move, because a column is a separate allocation.
+
+Then the arm that made the recommendation confident rather than grudging. A **group** sorts two
+pools into a common dense order so index *i* means the same entity in both; the query then reads
+no sparse entry at all and walks something byte-identical to an archetype chunk — measured at
+**0.99×** of a real archetype on the archetype's own best case. So **the migration only runs one
+way**: a sparse set can be given an archetype's query later, one group at a time; an archetype
+cannot be given O(1) structural change at any price. That asymmetry, not any ratio, is the
+argument.
+
+Counterweights kept because they argue the other way: archetype fragmentation costs only 1.12× at
+worst even at two entities per chunk; the sparse set pays 12.8 MB of index at 32 component types
+and 10⁵ entities, ~80% of it meaning "absent"; every archetype number is an upper bound because
+the probe's columns are statically typed and a real one's cannot be; and the strongest unmade
+argument for archetypes — *batched* structural change — is stated as exercise 10.5 along with
+what it would take to change the answer. The lesson also refuses to let `pool<T>` decide it:
+5.4's pool *is* a sparse set, and choosing an architecture because we own something shaped like
+one is choosing by accident. Convenience is admissible as a tiebreaker and inadmissible as
+evidence.
+
+verify_57 at 54 checks / 0 failures at both `-O0` and `-O2 -DNDEBUG`; verify_45–57 all green;
+page checks `pass: true` at 1280 and 390. §E caught a real bug and is why it churns 200 frames:
+the archetype's row map has to be written **after** the source chunk is re-packed, because when
+the moved entity was the last row, re-packing patches that entity's own row entry. The figure
+pass caught three more things no automated check looks at — a colour pattern carried by fill
+alone that rendered as 32 identical outlines, two adjacent text runs with no space between them
+(the 5.5 defect, again), and an annotation that contradicted its own caption.
+
+> next

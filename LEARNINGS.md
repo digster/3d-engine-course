@@ -4698,3 +4698,140 @@ from another.
 A check asserted "at least one reordering arm is not bit-identical". It failed: at n = 2,000 all
 three reorderings happened to land on the same bits. Whether a reordering differs is a property of
 the numbers. Replaced with `(a+b)-a != (a-a)+b` at 1e16, which is true regardless of the data.
+
+## ECS storage and measurement facts (Lesson 5.7)
+
+### A design can be measured before it is built, when the candidates differ in an access pattern
+
+Archetype and sparse set differ in exactly **two** operations — reading K components of every
+matching entity, and adding or removing one component from one entity. Everything else about them
+(entity creation, single-component get, registry, scheduling) is either identical in shape or
+orthogonal. So both were simulated in ~300 lines with **no entity manager, no component registry,
+no type erasure, no views and no scheduler**, and timed against each other. That is worth
+generalising: when an architecture argument reduces to "which of these two access patterns is
+cheaper", you can answer it in an afternoon instead of building both and then defending the sunk
+cost.
+
+The corollary is a duty: **say what the simulation gives away.** The probe's archetype has
+statically typed columns, so it pays no per-archetype column lookup and no type-erased stride the
+compiler cannot see. Every archetype number is therefore an *upper bound* on a real archetype's,
+and the lesson has to state that rather than quietly benefit from it.
+
+### The sparse-set redirect is latency, and latency hides behind work
+
+`data[sparse[e]]` is a two-deep dependency chain, which is the shape 5.6 measured at 6.47× for a
+linked list. It is not the same cost, because the chains of *different entities* are independent
+and the entity ids that start them come off a dense array sixteen to a cache line — 5.6's
+memory-level parallelism, so the misses overlap.
+
+With the vectoriser off, so codegen is held still, the redirect on a real body (build a model
+matrix per entity) costs:
+
+| entities | 4 | 100 | 1,000 | 10,000 | 100,000 |
+|---|---|---|---|---|---|
+| pools aligned | 0.99× | 0.99× | 0.98× | 1.02× | 1.02× |
+| pools scrambled | 1.00× | 1.00× | 1.01× | 1.21× | **1.39×** |
+
+**1.00× up to a thousand entities on the worst-case world.** Two conditions must hold together
+before it costs anything: the working set must exceed cache (so the latency to hide is ~200 cycles
+rather than ~4) *and* the pools' dense orders must have diverged (so the prefetcher cannot have
+fetched the line already). Either alone is free. On a cheap body with nothing to hide behind, the
+same code pays up to **2.79×** — so the amount of arithmetic a system does per entity is a
+first-class parameter of any such comparison, and quoting one number for "sparse set overhead"
+without stating it is meaningless.
+
+### A cost model in bytes under-predicts when the bytes live in separate allocations
+
+An archetype move copies an entity's components out of one chunk and into another and re-packs the
+source. Counting bytes: 92 B travelling + 92 B re-packed ≈ 200 B for a 4-component entity, ≈ 456 B
+for a 12-component one, predicting **2.3×**. Measured at 100,000 entities: 13.10 ns → 58.48 ns,
+which is **4.5×**.
+
+The missing term is that **a column is a separate allocation**. Eight extra components are eight
+more vectors in eight unrelated places, each touched *twice* per move (the entity's row, and the
+chunk's last row moved into the hole). 45.4 ns for sixteen additional independent touches is
+~2.8 ns each, which is the right order for a partially-overlapped memory access. The model to
+carry forward is **independent memory streams touched**, not bytes moved.
+
+Meanwhile the sparse set went 4.25 → 4.23 ns across the same widening, because an insert is three
+writes into one pool and has no way to discover what else the entity owns.
+
+### A group is an archetype you can add later — and that asymmetry decides the design
+
+A pool's dense order is nobody else's business: no id outside the pool depends on where an element
+sits. So two pools can be **sorted into a common order**, putting the entities that have both
+components at the front of both dense arrays in the same sequence. Index *i* of one then means the
+same entity as index *i* of the other, the query reads **no sparse entry at all**, and what it
+walks is byte-identical to an archetype chunk. Measured at **0.99×–1.01×** of a real archetype, on
+the archetype's own best case (a query matching one entity in four, where the ungrouped sparse set
+pays 1.46×–1.94×).
+
+EnTT calls this a group; it is a maintenance obligation on top of a storage design, not a
+different one. **The migration only runs one way** — a sparse set can be given an archetype's
+query later, incrementally, guided by a profile; an archetype cannot be given O(1) structural
+change at any price, because moving between archetypes *is* what an archetype is. When two designs
+are close on the numbers, prefer the one that can become the other.
+
+### Convenience is admissible as a tiebreaker and inadmissible as evidence
+
+`engine::pool<T>` (5.4) already *is* a sparse set: `slots_` sparse and stable, `items_` dense and
+packed, `owners_` the way back, plus generations. Noticing that is worth real credit and it is not
+an argument — adopting sparse sets *because* we own one is choosing an architecture by an accident
+of what meshes needed two lessons earlier. Measure first; reach for the convenience only after the
+numbers have decided. (What `pool<T>` actually lacks is one **shared** id space: each pool mints
+its own slot indices, so a handle from one means nothing to another.)
+
+### Measure the argument against your own position too
+
+The standard case against archetypes is fragmentation. Measured — the same entities split across
+up to 4,096 chunks — it is **1.12× at worst**, at nineteen entities per chunk. Splitting a
+contiguous array into 4,096 contiguous arrays does not stop it being contiguous. The lesson
+publishes that even though it argues for sparse sets, and separately marks what it did *not*
+measure (query matching over thousands of archetypes, per-archetype column lookup, allocator
+pressure) so the reader knows which part of the claim is evidence and which is silence.
+
+### The bug that needs N tries: write the index map after the re-pack
+
+`archetype_churn::add_material` recorded where the entity landed in the destination chunk, then
+called `pop_row` on the source. `pop_row` moves the source's last row into the hole and patches
+**that** entity's row index — and when the moved entity was itself the last row, the stale index
+overwrites the fresh one. Silent, no crash, one entity corrupted.
+
+A single-frame test passes forever. It was caught because `verify_57` §E churns **200 frames** and
+then walks the entire row map. **For a 1-in-N bug, the test has to run N times** — and the cheap
+way to get that is to repeat the operation rather than to enumerate the cases.
+
+## Course-infrastructure facts (docs/, Lesson 5.7)
+
+### A colour pattern carried by fill alone does not read
+
+`figs_*.py`'s `box()` emits `fill="{colour}" stroke="{colour}"` plus `fill-opacity`, so the
+**stroke is always full opacity**. Figure 6 drew 32 small elements at fill-opacity 0.26 and 0.07 to
+show "one element in four is wanted" and rendered as 32 identical amber outlines — the whole point
+of the row, invisible. When a diagram distinguishes elements by weight, mute the stroke as well:
+emit the rect directly with `stroke-opacity` (and a grey stroke for the de-emphasised ones).
+
+### `eval(check-page.js)` returns a Promise
+
+`const r = eval(src); return { pass: r.pass }` yields `undefined` for every field, and the MCP
+result serializer **drops undefined keys** — so the output looks like a small, clean result rather
+than an error. Either `await eval(src)` or `return eval(src)` directly and let Playwright await it.
+
+### `figure.dia:nth-of-type(N)` counts every `<figure>`, listings included
+
+Code listings are `<figure class="listing">`, so `nth-of-type` numbers them alongside diagrams and
+asking for figure 6 hands you figure 4. Use Playwright's `figure.dia >> nth=N`, which indexes the
+matched set rather than the sibling type.
+
+### Two adjacent SVG text runs with no space between them — the third occurrence
+
+5.5 fig 6, now 5.7 fig 3: `"AND THE COST IS PER COLUMN."` at x=24 ends at ~x=176 in the 9.5 px
+face, and the following run started at x=178. No check looks for it — `svgTextOverlap` needs >2 px
+of actual overlap — so only reading the rendered figure finds it. Leave ≥ 12 px between the end of
+one run and the start of the next when they share a line.
+
+### An annotation that contradicts its own caption
+
+Figure 3 drew a dashed box around the material pool — the one thing that *is* in the picture —
+under a caption whose point was the pools that are *not*. It passed every automated check because
+it is geometrically fine. Read each figure against its own caption once, out loud.

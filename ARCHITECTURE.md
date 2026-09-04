@@ -1285,8 +1285,66 @@ Built roughly in dependency order — each module's milestone is the next module
     it is not the vtable load. It is the inlining the call prevents.
 
   What 5.6 explicitly does **not** settle is archetype versus sparse set: both are dense, both
-  are contiguous, both permit a subset. That is Lesson 5.7's argument and must not inherit these
-  numbers.
+  are contiguous, both permit a subset.
+
+  **Lesson 5.7 settles it, on its own evidence, and the answer is a sparse set** — one dense
+  array per component *type* plus a sparse map from entity to dense index, as EnTT does, and
+  not the archetype model of Unity DOTS, Flecs and Unreal Mass. The measurement was taken
+  *before either design was built*, which is possible because the two differ in exactly two
+  operations — reading K components of every matching entity, and adding or removing one
+  component from one entity — and both are access patterns that `scratch/ecs_probe.hpp`
+  simulates in three hundred lines with no entity manager, registry or type erasure in the way.
+
+  The argument is **not** that sparse sets are faster. On the query the archetype wins:
+
+  - **Query, all entities match, real body** (build a model matrix per entity): sparse costs
+    0.96×–1.34× at 100,000 entities, and **1.00× below a thousand**. The control that says the
+    harness is honest is K = 1, where both designs perform the same walk and the ratio is
+    0.99×–1.01× at every size.
+  - **The mechanism, isolated by rebuilding with the vectoriser off:** with codegen held still
+    the redirect costs *nothing at all* — 1.00× — on the worst-case world up to a thousand
+    entities. It is **latency in the shadow of work already in flight**, and it only bites when
+    the working set leaves cache *and* the pools' dense orders have diverged. Either condition
+    alone is free. A cheap body with nothing to hide behind pays up to 2.79×.
+  - **Query, one entity in four matches:** the archetype's best case, and it wins by 1.46×–1.94×.
+
+  What decides it is the other operation, and the shape of the escape hatch:
+
+  - **Structural change costs the entity's total width in one design and nothing in the other.**
+    Widening an entity from four components to twelve — eight the operation never reads — takes
+    an archetype from **13.10 ns to 58.48 ns** and leaves the sparse set at **4.25 → 4.23 ns**.
+    The cost model is not bytes moved (that predicts 2.3×; the truth is 4.5×) but *independent
+    memory streams touched*, two per column per move, because a column is a separate allocation.
+    This engine's entity passes twelve components during Module 7.
+  - **A group is an archetype you can add later.** A pool's dense order is nobody else's
+    business, so two pools can be sorted into a common order; index *i* then means the same
+    entity in both, the query reads no sparse entry at all, and what it walks is byte-identical
+    to an archetype chunk. Measured at **0.99×–1.01×** of a real archetype on the archetype's
+    own best case. **The migration only runs one way:** a sparse set can be given an archetype's
+    query later, one group at a time; an archetype cannot be given O(1) structural change at any
+    price.
+
+  Honest counterweights, recorded because they argue the other way: archetype **fragmentation
+  costs only 1.12× at worst** even at two entities per chunk (iteration only — query matching
+  and per-archetype column lookup are unmeasured); the sparse set pays **12.8 MB of index at 32
+  component types and 10⁵ entities**, roughly 80% of it meaning "this entity does not have this
+  component"; and every archetype number is an *upper bound*, because the probe's columns are
+  statically typed and a real one's cannot be. The strongest unmade argument for archetypes is
+  **batched** structural change, which DOTS's command buffers exist for and which 5.7 measures
+  one operation at a time and says so.
+
+  **When the choice would be wrong**, in one sentence: a world past ~10⁴ entities whose
+  component sets are stable and whose systems are narrow — a streaming open world, a crowd, a
+  million-agent boid simulation. Even then the fix is to group two or three pools, not to
+  rewrite the storage.
+
+  Four rules follow for the runtime Lesson 5.8 builds, each paid for with a measurement:
+  components stay small and single-purpose; there is **one shared id space**, minted once and
+  handed to every pool (which is the single thing `engine::pool<T>` lacks — its three arrays are
+  already a sparse set, but each pool mints its own keys); a view **leads with the smallest
+  pool** (worth 1.73× → 1.46× at one-in-four selectivity); and the sparse arrays are **not
+  paged**, because Lesson 5.4's free list keeps the id space's high-water mark at peak *live*
+  entities rather than entities ever created.
 
 - **Fixed timestep + render interpolation** (Module 1). The accumulator loop, derived rather
   than pasted as folklore. Simulation determinism is a property you design in early or retrofit

@@ -7,9 +7,32 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-09-02 (after Lesson 5.6 — 51 of 94 lessons)
+updated: 2026-09-04 (after Lesson 5.7 — 52 of 94 lessons)
 
 conventions:
+  ecs-storage: THE ECS IS A SPARSE SET, DECIDED IN 5.7 BY MEASUREMENT, NOT TASTE.
+        One dense array per component TYPE plus a sparse map entity -> dense index.
+        NOT an archetype. The argument is NOT "sparse sets are faster" — on the
+        query the archetype wins — it is that THE MIGRATION ONLY RUNS ONE WAY:
+        a sparse set can be given an archetype's query later, one GROUP at a time
+        (measured 0.99x of a real archetype on the archetype's own best case),
+        and an archetype can never be given O(1) structural change, because
+        moving between archetypes IS what an archetype is.
+        THE FOUR RULES THAT FOLLOW, and 5.8 must honour all four:
+          1 COMPONENTS STAY SMALL AND SINGLE-PURPOSE. The whole model is that a
+            system pays only for the pools it names; a fat component drags unread
+            bytes exactly as 5.6's 96-byte scene_object did.
+          2 ONE SHARED ID SPACE. pool<T>'s three arrays are already a sparse set
+            (slots_=sparse, items_=data, owners_=dense) but each pool MINTS ITS
+            OWN keys, so a mesh handle means nothing to a texture pool. The
+            entity id must be minted once and handed to every pool.
+          3 A VIEW LEADS WITH THE SMALLEST POOL. One comparison in the view's
+            constructor, worth 1.73x -> 1.46x at one-in-four selectivity, and
+            worth more the rarer the component. Never walk the big pool and skip.
+          4 NO PAGED SPARSE ARRAYS YET, and the reason is 5.4: the free list
+            reuses the most recently freed slot, so the id space's high-water
+            mark is peak LIVE entities, not entities ever created. 10 types x
+            10k peak = 400 KB. Revisit at 32 types x 1e5 (12.8 MB, 3x L2).
   measurement: A/B TIMING HAS FOUR RULES AND engine/core/bench.hpp IS THEM.
         1 ALTERNATE THE ARMS — one rep of A, one of B, microseconds apart, never
           in blocks. 3.10 published a 10% "improvement" that was session drift.
@@ -2439,8 +2462,49 @@ completed:
   - 5.4  Handles: Generational Indices
   - 5.5  The Asset System v1
   - 5.6  Data-Oriented Design: Why Scene Trees Creak
+  - 5.7  An ECS from Scratch: Storage Design
 
 capabilities:
+  - DESIGN 5.7: THE ECS STORAGE QUESTION IS ANSWERED, WITH EVIDENCE ATTACHED, AND
+    NO ENGINE CODE CHANGED. scratch/ecs_probe.hpp simulates BOTH candidate designs
+    (archetype = K parallel dense arrays on one shared index; sparse set = one
+    dense walk + K-1 redirects) well enough to time them, WITHOUT building either:
+    no entity manager, no registry, no type erasure, no views, no scheduler —
+    because the two designs differ in exactly two operations and everything else
+    is identical machinery. bench_57.cpp runs four measurements on bench.hpp;
+    verify_57.cpp is 54 checks; measure_57.py builds twice (-O2 and -fno-vectorize)
+    and prints six tables.
+    THE NUMBERS, -O2 -DNDEBUG, Apple M4 Pro (64 KB L1d, 4 MB L2), medians of 25:
+      QUERY, K=4, sparse relative to archetype, at n = 4/100/1k/10k/100k
+        cheap body, aligned      0.81 0.91 1.06 1.26 1.31
+        cheap body, scrambled    0.84 0.98 1.16 1.92 2.40
+        real body, aligned       0.97 1.05 1.05 1.02 0.96
+        real body, scrambled     0.98 1.05 1.05 1.17 1.34
+        CONTROL: K=1 is 0.99-1.01x at every size — both designs do the same walk,
+        so anything else would be the harness measuring itself.
+      SCALAR (-fno-vectorize), real body, scrambled: 1.00 1.00 1.01 1.21 1.39.
+        1.00x to a THOUSAND entities on the WORST-case world. The redirect is
+        LATENCY IN THE SHADOW OF WORK, and it costs nothing until the working set
+        leaves cache AND the orders have diverged. Either alone is free.
+        The scalar build also kills the n=4 anomalies (archetype cheap K=3 went
+        2.58 -> 0.53 ns): those were vectorisation, and a cost non-monotonic in
+        the work is a compiler, not a cache.
+      STRUCTURAL CHANGE, ns per add-or-remove, 1% of the world per frame:
+        4 comps   archetype 15.4 15.3 12.3 15.0 13.1 | sparse 9.6 9.4 4.5 5.3 4.25
+        12 comps  archetype 29.7 31.4 40.9 39.0 58.5 | sparse 10.1 10.4 4.6 4.4 4.23
+        THE FINDING IS WHICH ROW MOVED. Eight components the operation never reads
+        take the archetype 13.1 -> 58.5 and the sparse set 4.25 -> 4.23.
+        The cost model is NOT bytes moved (that predicts 2.3x, measured 4.5x) but
+        INDEPENDENT MEMORY STREAMS TOUCHED: two per column, per move, because a
+        column is a separate allocation.
+      FRAGMENTATION (archetype's own downside, measured not assumed): 1.12x WORST
+        at 512 chunks of 19 entities. Far less than the folklore. Iteration only —
+        query-matching, per-archetype column lookup and allocator pressure are NOT
+        measured and the case against archetypes must not lean on this.
+      SELECTIVITY (1 in 4 matches), real body, relative to archetype, at 100k:
+        lead small pool 1.46 | scrambled 1.94 | lead big pool 1.73 | GROUPED 0.99
+      MEMORY: 4 types = 25% overhead; 32 types at 1e5 entities = 12.8 MB of sparse
+        index, ~80% of it the value meaning "does not have this component".
   - PERF 5.6: THE ENGINE CAN TIME TWO THINGS FAIRLY. engine/core/bench.hpp —
     header-only, no CMake change, 46 -> 47 public headers. bench_result {median,
     min, max, samples, items, spread()}, bench_run(items, reps, body) with a
@@ -3315,6 +3379,49 @@ capabilities:
   - skills: reading SDL headers as source of truth; debugging with lldb/gdb/VS
 
 decisions:
+  - 5.7 CHOSE THE SPARSE SET, AND THE ARGUMENT IS NOT THE QUERY RATIO. Four
+    reasons in weight order:
+      1 THE MIGRATION ONLY RUNS ONE WAY. A group (EnTT's term) sorts two pools
+        into a common dense order so index i means the same entity in both; the
+        query then reads NO sparse entry and is walking a byte-identical archetype
+        chunk. Measured 0.99-1.01x at every size, on the archetype's BEST case.
+        The reverse does not exist at any price.
+      2 THE COST ACCEPTED IS BOUNDED; THE COST AVOIDED IS NOT. Archetype's query
+        win is <=1.94x, only above 1e4, only when selective, only on ungrouped
+        arms. Its structural-change loss is 13.8x and GROWS WITH EVERY COMPONENT
+        TYPE THE COURSE ADDS — Module 6 materials, Module 7 rigid bodies,
+        colliders, skeletal state. This entity passes 12 components in Module 7.
+      3 NOTHING AT THIS SCALE IS ON THE TABLE. Below 1,000 entities every arm is
+        within 16% and most within 5%. The demos have four objects.
+      4 IT IS A QUARTER OF THE CODE (20 lines vs 100 in the probe) AND THIS IS A
+        COURSE. Admissible only as a tiebreaker, AFTER 1-3 decided it.
+    WHEN IT IS THE WRONG ANSWER, in one sentence: a world past ~1e4 entities whose
+    COMPONENT SETS ARE STABLE and whose SYSTEMS ARE NARROW (little arithmetic per
+    entity, so nothing hides the redirect) — a streaming open world, a crowd, a
+    million-agent boid sim. That is Unity DOTS's shape. Even then the fix is to
+    group two or three pools, not to rewrite the storage.
+    THE STRONGEST UNMADE ARGUMENT FOR THE OTHER SIDE, stated because it is real:
+    BATCHED structural change. Moving a thousand entities between two archetypes
+    at once should cost far less than a thousand single moves (the destination
+    appends become one memcpy), and DOTS defers changes to a command buffer for
+    exactly this. 5.7 measures the operation one at a time and says so; that
+    experiment is exercise 10.5, and it is what would change the answer.
+  - 5.7 REFUSED TO LET pool<T> DECIDE IT, and the refusal is the method. 5.4's
+    pool IS a sparse set (slots_/items_/owners_ = sparse/data/dense, plus
+    generations) and noticing that is worth real credit — but adopting sparse
+    sets BECAUSE we own one is choosing an architecture by an accident of what
+    meshes needed in 5.4. Convenience is admissible as a tiebreaker and
+    inadmissible as evidence. What pool<T> actually lacks is the thing 5.8 must
+    add: ONE shared id space, minted once, instead of each pool minting its own.
+  - 5.7 GAVE THE ARCHETYPE THREE CONCESSIONS AND SAYS SO, so every archetype
+    number is an UPPER BOUND on a real one: statically typed columns (no
+    per-archetype column lookup, no type-erased stride the compiler cannot see),
+    a query that genuinely skips non-matching chunks, and a fragmentation case
+    that is measured rather than assumed to be a disaster.
+  - 5.7 CHANGED NO ENGINE CODE, ON PURPOSE. Not one file under engine/ or demos/,
+    no CMake change, golden byte-identical for the SEVENTH lesson. The output of
+    a design lesson is a decision; one that quietly rewrote the renderer on the
+    way past would be a different lesson.
   - 5.6 CHANGED NOTHING IN THE RENDERER, ON PURPOSE, and the data is the reason:
     the scene is FOUR objects, 384 bytes, every layout within noise, and the whole
     per-object transform work for a frame is ~6 ns. A measurement lesson has to be
@@ -4279,58 +4386,56 @@ files:
                  05-02-platform-layer.html,
                  05-03-logging-and-errors.html,
                  05-04-handles.html, 05-05-asset-system.html,
-                 05-06-data-oriented-design.html
+                 05-06-data-oriented-design.html,
+                 05-07-ecs-storage.html
   docs/shared/: course.css, course.js      (THE stylesheet + page script; one copy each)
   docs/_template/: lesson-template.html, README.md, apply-shared.py, check-page.js
+  scratch/ (5.7, not shipped with the engine): ecs_probe.hpp, bench_57.cpp,
+           verify_57.cpp, measure_57.py, build_bench_57.sh, build_verify_57.sh,
+           figs_57.py, build_57.py, l57_body_{a,b}.html, l57_fig{1..6}.svg
   memory/: 2026-07-16.md … 2026-08-25.md, 2026-08-25-b.md, 2026-08-25-c.md,
            2026-08-26.md, 2026-08-26-b.md, 2026-08-29.md, 2026-09-02.md, 2026-09-02-b.md,
-           2026-09-02-c.md
+           2026-09-02-c.md, 2026-09-04.md
   (retired: src/ — the whole directory. hello.cpp.)
 
 
-next: 5.7 — An ECS from Scratch: Storage Design
-      (planned filename: docs/lessons/05-07-ecs-storage.html — 5.6's TWO next
+next: 5.8 — The ECS Runtime
+      (planned filename: docs/lessons/05-08-ecs-runtime.html — 5.7's TWO next
       links point at the index and BOTH need repointing.)
-      5.6 ESTABLISHED WHAT STORAGE MUST DO and deliberately refused to say HOW.
-      5.7 is the design argument, and it must be made on ITS OWN evidence: nothing
-      5.6 measured distinguishes an archetype from a sparse set, because both are
-      dense, both are contiguous, and both let a system touch a subset.
-      THE THREE CONSTRAINTS 5.7 INHERITS, with their numbers:
-        - dense and COMPACTABLE (6.47x, from the decayed tree)
-        - a system declares which components it touches (12/96 buys 5x, 60/96
-          buys nothing)
-        - iteration must not be virtual (a flat 1.5-1.7x at every N)
-      THE ARGUMENT TO MAKE HONESTLY, both sides:
-        ARCHETYPE (Unity DOTS, Flecs, Unreal Mass): entities with the same
-          component SET live together, so a query over {transform, mesh} is a
-          contiguous walk with NO indirection and no per-entity test. Cost: adding
-          or removing a component MOVES the entity between archetypes, which is a
-          structural change and the thing that goes quadratic if you do it per
-          frame. Also archetype fragmentation — many rare combinations means many
-          small chunks and the contiguity evaporates.
-        SPARSE SET (EnTT): one dense array per component TYPE plus a sparse
-          entity->index map. Add/remove is O(1) and touches one array. Cost: a
-          multi-component query must INTERSECT sets, so one component is walked
-          densely and the others are random-access lookups — exactly 5.6's
-          "addresses known in advance" case, which is the 2.4x arm and not the
-          6.5x one, so BE FAIR ABOUT THE SIZE OF IT.
-      MEASURE SOMETHING, do not just argue. The cheapest honest experiment is a
-      QUERY microbenchmark on 5.6's harness: one dense walk vs a dense walk plus
-      one, two, three sparse lookups, at the same five sizes. That number decides
-      how much archetypes are worth, and it can be taken BEFORE either is built.
-      Second experiment worth having: the cost of a structural change (add a
-      component to 1% of entities per frame) under each scheme.
-      THE CHOICE THIS COURSE SHOULD MAKE, unless the numbers say otherwise: SPARSE
-      SET, because add/remove being O(1) matters for a teaching codebase and for a
-      game with spawning, because it is far less code, and because the query cost
-      is the 2.4x case rather than the 6.5x one. But it must be ARGUED FROM THE
-      MEASUREMENT, and 5.7 must say what it would take to change the answer.
-      THE TEST TO BEAT: golden still byte-identical (seven lessons); a query
-      benchmark that runs on bench.hpp and reports ratios within pairings; and the
-      lesson must state, in one sentence, the scene shape at which its choice
-      becomes the wrong one.
-      WATCH FOR: 5.7 is DESIGN ONLY — 5.8 builds the runtime. Do not start writing
-      the container. And do not let "we already have pool<T>" decide the question:
-      pool<T> is one component's storage, not an ECS, and noticing that is part of
-      the lesson.
+      5.7 DECIDED; 5.8 BUILDS. This is the first lesson since 5.5 to touch
+      engine/, and it is a large one. The four rules in conventions:ecs-storage
+      are binding, and each was paid for with a measurement.
+      WHAT IT MUST PRODUCE, in engine/include/engine/ecs/:
+        entity.hpp    — the id. LIFT 5.4's generational index OUT of pool<T>:
+                        entity = {index, generation}, minted by an entity
+                        allocator with a free list (so the id space stays compact
+                        and no paging is needed — conventions rule 4). This is
+                        the change 5.7 §3.4 identified as the ONE thing pool<T>
+                        lacks; do not re-derive generations, cite 5.4.
+        pool.hpp      — the component sparse set: sparse / dense / data, insert,
+                        erase (swap-and-pop + patch the moved entity's sparse
+                        entry), contains, get, size. This is scratch/ecs_probe.hpp's
+                        pool<T> plus the generation check, ~20 lines of logic.
+                        NAME COLLISION WARNING: engine::pool<T> already exists in
+                        core/pool.hpp and is a DIFFERENT thing (a slot map that
+                        mints its own keys). Namespace it engine::ecs:: and say
+                        in the header comment how the two differ, or the course
+                        has two `pool`s and no explanation.
+        registry.hpp  — the world: the entity allocator plus one pool per type.
+        view.hpp      — the query. MUST LEAD WITH THE SMALLEST POOL (rule 3); this
+                        is the single cheapest correctness-of-design decision in
+                        the lesson and 5.7 measured it at 1.73x -> 1.46x.
+      WHAT IT MUST NOT DO: groups. 5.7 measured them at 0.99x and that is why the
+      sparse set was chosen, but building one now is optimising before there is a
+      profile. Leave a named hole and a comment pointing at 5.7 §5.5.
+      THE TEST TO BEAT: golden still byte-identical (EIGHT lessons) — the ECS is
+      additive, nothing renders through it yet; verify_58 covering id reuse across
+      generations, erase-the-last-element, a view over 2 and 3 components, and
+      the smallest-pool choice actually being made; and verify_45..57 still green.
+      AN HONEST OPENING FOR THE LESSON: the demo still holds four scene_objects in
+      a vector, and 5.6 measured that this is FINE at four. So 5.8's motivation is
+      NOT speed — say so — it is that scene_object has been accreting fields since
+      3.4 (closed, shininess, specular, tint) and every one of them is a component
+      wearing a struct field's clothes. Composition is the argument at this scale;
+      the performance argument is 5.7's and it applies at 1e4.
 ```
