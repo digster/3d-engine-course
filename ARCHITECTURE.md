@@ -658,7 +658,7 @@ chore. What follows is on disk.
 │   └── Shaders.cmake       # add_hlsl_shader(name stage) -> a GLOBAL PROPERTY   [4.3, reshaped 5.1]
 ├── engine/                 # THE LIBRARY                                        [5.1]
 │   ├── CMakeLists.txt      # produces engine::engine (STATIC)
-│   ├── include/engine/     # ---- THE PUBLIC API. 47 headers. Nothing else. ----
+│   ├── include/engine/     # ---- THE PUBLIC API. 51 headers. Nothing else. ----
 │   │   ├── engine.hpp      # the umbrella: shipped, documented, used by nothing we ship
 │   │   ├── asset/          # NAMES, ROOTS AND LIFETIMES                       [5.5]
 │   │   │   ├── search_path.hpp # ordered roots; the ONLY caller of
@@ -669,6 +669,13 @@ chore. What follows is on disk.
 │   │   │   ├── bench.hpp   # A/B timing: alternate, median, keep, agree      [5.6]
 │   │   │   ├── handle.hpp  # handle<T>: 20 index / 12 generation, in 32 bits  [5.4]
 │   │   │   └── pool.hpp    # pool<T>: sparse slots + dense items + free list  [5.4]
+│   │   ├── ecs/            # THE WORLD. Header-only, so NO entry in the         [5.8]
+│   │   │   │               #   library's source list. See §5's ECS notes
+│   │   │   ├── entity.hpp  # entity (20/12, like a handle) + entity_allocator
+│   │   │   ├── pool.hpp    # pool_base (cold virtuals) + pool<T> (the sparse set).
+│   │   │   │               #   engine::ecs::pool<T> IS NOT engine::pool<T>
+│   │   │   ├── registry.hpp# the world; component_id_of<T>(); type erasure, no RTTI
+│   │   │   └── view.hpp    # the query. LEADS WITH THE SMALLEST POOL
 │   │   ├── math/           # vec2/3/4, mat2/3/4, transform  (header-only)
 │   │   ├── platform/       # HOW A PROGRAM STARTS                          [5.2]
 │   │   │   ├── platform.hpp  # surface, app_config, platform — SDL's lifecycle,
@@ -706,7 +713,10 @@ chore. What follows is on disk.
 │   │                       #   Uses engine::platform; keeps its own main() ON PURPOSE
 │   ├── pong/main.cpp       # Lesson 1.8's game, on engine::app. 87 code lines,
 │   │                       #   no main, no SDL_Init, no loop                  [5.2]
-│   └── hello_cube/main.cpp # public headers only. THE ACCEPTANCE TEST for the API
+│   ├── hello_cube/main.cpp # public headers only. THE ACCEPTANCE TEST for the API
+│   └── ecs_swarm/main.cpp  # 121 entities, SIX components, four systems.        [5.8]
+│                           #   The acceptance test for the ECS: 24 of them are
+│                           #   invisible because they LACK a geometry component
 └── tools/                  # editor, asset cooker (Module 8). Not yet.
 ```
 
@@ -1346,6 +1356,61 @@ Built roughly in dependency order — each module's milestone is the next module
   paged**, because Lesson 5.4's free list keeps the id space's high-water mark at peak *live*
   entities rather than entities ever created.
 
+  **Lesson 5.8 builds it**, in four header-only files under `engine/include/engine/ecs/` — so
+  the library's source list is untouched and the public header count goes 47 → 51. All four
+  rules are honoured, and the physical split is what makes them testable:
+
+  | file | knows about | deliberately does *not* know |
+  |---|---|---|
+  | `entity.hpp` | ids, generations, a free list | that components exist at all |
+  | `pool.hpp` | one component type, keyed by id | which ids are alive — it never met the allocator |
+  | `registry.hpp` | both of the above | what any component type *is*, once the pool is built |
+  | `view.hpp` | a set of pools | the registry, liveness, or systems |
+
+  Five decisions inside it are worth recording, because each closes off a plausible alternative:
+
+  - **The entity is its own type, not `handle<entity_tag>`.** It *reuses* `core/handle.hpp`'s
+    constants — 20/12, generation 0 reserved, bump on removal — so the bit budget has one home.
+    But `handle<mesh_data>` names an item *in* one container and an entity names a row *across*
+    every pool there is; aliasing them would make `pool<T>::get(handle<T>)` and a component
+    lookup the same spelling for opposite things.
+  - **`dense_` stores the full 32-bit entity word, not a bare index.** `contains()` is three
+    tests and the third — `dense_[at] == e` — is what rejects a stale or recycled id. Store an
+    index and that test cannot be written, and Lesson 5.4's *aliasing* failure walks back in.
+  - **Type erasure without RTTI.** `component_id_of<T>()` is a monotonic counter behind a
+    function-local static; the id indexes `vector<unique_ptr<pool_base>>` and `static_cast`
+    recovers the type — safe **because the id is what created the pool**, so the downcast is
+    justified by construction rather than checked at use. The ids are global to the program, not
+    per registry, which trades ~80 wasted bytes per registry for an array index instead of a hash.
+  - **Every `pool_base` virtual is cold, and that is a constraint rather than an accident.**
+    Lesson 5.6 measured virtual dispatch on an iteration at 1.5–1.7× *at every world size*, so
+    nothing on the hot path goes through the base: a view holds concrete `pool<T>*`, and
+    `pool<T>` is `final` so even the cold calls devirtualise. `erase` runs once per pool per
+    entity destruction; `entities()` once per view, never per entity.
+  - **`entities()` returning `span<const entity>` for every `T` is what makes rule 3 five
+    lines.** A pack of `pool<Ts>*` becomes an ordinary array of spans, and the smallest is picked
+    by a `for` loop — no dispatch, no metaprogramming, no runtime type information. The lead pool
+    then earns its keep twice, because its own component needs no sparse read: the dense position
+    *is* the loop counter.
+
+  **The one rule a view imposes** is the familiar one: do not add or erase a component the view
+  names while walking it. The walk is over the lead pool's dense array *by position* and both
+  `insert` and `erase` move it — the same hazard as mutating a `std::vector` inside a
+  range-`for`. A debug build catches it in `view::fetch`; the safe patterns are collect-then-act
+  (`lifetime_system` in `ecs_swarm`) or a deferred command list, which Module 8 builds.
+
+  **Groups are deliberately absent.** 5.7's 0.99× measurement is *why* the sparse set was
+  chosen — the migration only runs one way — but building one before there is a profile is
+  optimising on a hunch. `pool::components()` documents that its dense order is nobody's business
+  *precisely so* a future group may sort it. Also absent, each with a reason: exclusion queries,
+  const views, signals, and thread safety (Module 8 revisits every container at once).
+
+  **What 5.8 did not do: render through it.** `collect_triangles` still takes
+  `span<const scene_object>`, so `ecs_swarm`'s render system walks a view and *fills one* — a
+  named, temporary bridge that Module 6 deletes. Because nothing on the render path moved, the
+  reference shot from Lesson 5.1 is byte-identical for the eighth lesson, and that is a fact
+  worth being able to check rather than a coincidence.
+
 - **Fixed timestep + render interpolation** (Module 1). The accumulator loop, derived rather
   than pasted as folklore. Simulation determinism is a property you design in early or retrofit
   painfully; physics in Module 7 depends on it already being right.
@@ -1593,6 +1658,8 @@ cmake --build build
 ./build/demos/sandbox --shot scratch/x.ppm   # seven pinned frames, no window          (5.1)
 ./build/demos/hello_cube                     # the acceptance test: public API only    (5.1)
 ./build/demos/hello_cube --shot cube.ppm     # …one frame, no window
+./build/demos/ecs_swarm                      # 121 entities out of six components     (5.8)
+./build/demos/ecs_swarm --shot swarm.ppm     # …one frame, no window, deterministic
 ```
 
 > **The executable moved and was renamed in Lesson 5.1.** It was `build/engine` through Module 4;

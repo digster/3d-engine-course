@@ -7,7 +7,7 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-09-04 (after Lesson 5.7 — 52 of 94 lessons; + STATE-block consolidation)
+updated: 2026-09-04 (after Lesson 5.8 — 53 of 94 lessons)
 
 conventions:
   ecs-storage: THE ECS IS A SPARSE SET, DECIDED IN 5.7 BY MEASUREMENT, NOT TASTE.
@@ -33,6 +33,83 @@ conventions:
             reuses the most recently freed slot, so the id space's high-water
             mark is peak LIVE entities, not entities ever created. 10 types x
             10k peak = 400 KB. Revisit at 32 types x 1e5 (12.8 MB, 3x L2).
+  ecs-runtime: BUILT IN 5.8, IN engine/include/engine/ecs/, HEADER-ONLY, 4 FILES.
+        entity.hpp   the id + entity_allocator. pool.hpp    pool_base + pool<T>.
+        registry.hpp the world + component_id_of<T>.  view.hpp    the query.
+        No CMake change: header-only, so engine/CMakeLists.txt is untouched and the
+        public header count goes 47 -> 51.
+        THE ID IS ITS OWN TYPE, NOT handle<entity_tag>, and the reason is meaning
+        rather than bits: it REUSES core/handle.hpp's constants (20/12, generation
+        0 reserved, bump on removal) so the budget has one home, but
+        handle<mesh_data> names an item IN one container and an entity names a row
+        ACROSS every pool there is. Aliasing them would make
+        pool<T>::get(handle<T>) and a component lookup the same spelling for
+        opposite things — an odd way to spend the phantom parameter that exists to
+        keep ids from mixing.
+        THE ALLOCATOR SLOT IS 8 BYTES FOR 13 BITS and that is deliberate:
+        {uint32 generation; bool live;} pads to 8, packing would buy 0.4 KB per
+        thousand entities and cost every reader a shift and a mask, and at 10k peak
+        entities the 80 KB is nothing beside the 400 KB of COMPONENT sparse arrays
+        the same 10k imply across ten types. Fields are private; the change is local.
+        dense_ STORES THE FULL ENTITY WORD, NOT A BARE INDEX. contains() is three
+        tests and the third — dense_[at] == e — is what rejects a stale or recycled
+        id. Store an index there and that test CANNOT BE WRITTEN, and 5.4's aliasing
+        failure walks back in.
+        THE SPARSE PATCH IS ONE LINE AND ITS ABSENCE IS SILENT:
+        sparse_[dense_[at].index()] = at; after the swap. The entity swapped into
+        the hole did not ask to move. Without it the symptom is one entity reading
+        another's data, an arbitrary number of frames later, in a different system.
+        The last-element case needs no special handling BECAUSE OF THE ORDER: when
+        at == last the "moved" entity is the erased one, and the final
+        sparse_[e] = k_none overwrites the redundant patch either way.
+        TYPE ERASURE WITHOUT RTTI: component_id_of<T>() is a monotonic counter
+        behind a function-local static (one object per instantiation across every
+        TU, thread-safe to initialise, NOT thread-safe to increment — touch each
+        type once before the job system starts). The id indexes
+        vector<unique_ptr<pool_base>> and static_cast recovers the type, SAFE
+        BECAUSE THE ID IS WHAT CREATED THE POOL — justified by construction, not
+        checked at use. Ids are GLOBAL to the program, not per registry: a registry
+        using only the tenth type ever registered allocates 11 slots, 10 of them
+        null. 80 bytes once, in exchange for an array index instead of a hash.
+        EVERY pool_base VIRTUAL IS COLD, and that is a constraint from 5.6's
+        1.5-1.7x measurement rather than an accident: erase (once per pool per
+        entity destruction), clear (teardown), size, entities (once per VIEW, never
+        per entity). A view holds concrete pool<T>* and calls nothing through the
+        base; pool<T> is `final` so even the cold calls devirtualise.
+        entities() RETURNING span<const entity> FOR EVERY T IS WHAT MAKES RULE 3
+        FIVE LINES. A pack of pool<Ts>* becomes an ordinary array of spans and the
+        smallest is chosen by a `for` loop — no dispatch, no metaprogramming.
+        THE LEAD POOL EARNS ITS KEEP TWICE: fewer candidates (rule 3), and its own
+        component needs NO sparse read because the dense position IS the loop
+        counter. `I == lead_` compares a compile-time constant against a value
+        fixed for the whole loop.
+        THE ONE ITERATION RULE: DO NOT ADD OR ERASE A COMPONENT THE VIEW NAMES
+        WHILE WALKING IT. The walk is over the lead pool's dense array BY POSITION
+        and both insert and erase move it — same hazard as mutating a vector inside
+        a range-for, and no more forgivable. Debug catches it via the assertion in
+        view::fetch (dense position no longer matches the entity). Safe patterns:
+        collect-then-act (lifetime_system), or a deferred command list (Module 8).
+        registry::add TO A DEAD ENTITY IS REFUSED, not filed — a row under a dead id
+        is invisible to every query and never erased, i.e. a leak with no symptom.
+        registry::has DELIBERATELY DOES NOT CHECK LIVENESS: a stale id fails
+        pool::contains anyway, so alive() would be a second slower route on the
+        hottest path.
+        EVERY READ PATH USES storage_if<T>(), NOT storage<T>(). Asking whether an
+        entity has a component must not allocate a pool as a side effect — that
+        makes a query mutating and a const registry impossible. A view naming an
+        unused type is EMPTY, which is the right answer without a special case.
+        NO GROUPS YET, and the hole is named rather than hidden: 5.7 measured a
+        group at 0.99x and THAT is why the sparse set was chosen (the migration
+        only runs one way), but building one now is optimising before there is a
+        profile. pool::components() documents that its dense order is nobody's
+        business PRECISELY so a future group may sort it. Also absent, each with a
+        reason: exclusion queries (Ex 10.2, ~15 lines), const views, signals,
+        thread safety (Module 8, all containers at once).
+        TWO CONTAINERS CALLED pool, ON PURPOSE. engine::pool<T> mints its own keys;
+        engine::ecs::pool<T> is keyed by an id it did not mint. Same three arrays,
+        opposite jobs. The namespace keeps them apart; `using namespace engine;`
+        plus `using namespace engine::ecs;` makes bare `pool` ambiguous, which is
+        the good kind of breakage. The engine never writes `using namespace`.
   measurement: A/B TIMING HAS FOUR RULES AND engine/core/bench.hpp IS THEM.
         1 ALTERNATE THE ARMS — one rep of A, one of B, microseconds apart, never
           in blocks. 3.10 published a 10% "improvement" that was session drift.
@@ -2484,8 +2561,61 @@ completed:
   - 5.5  The Asset System v1
   - 5.6  Data-Oriented Design: Why Scene Trees Creak
   - 5.7  An ECS from Scratch: Storage Design
+  - 5.8  The ECS Runtime
 
 capabilities:
+  - 5.8 THE ENGINE HAS AN ECS, AND IT IS ABOUT 400 LINES OF LOGIC.
+    engine/include/engine/ecs/{entity,pool,registry,view}.hpp, header-only, no
+    CMake change. API: create / destroy / alive / add<T> / remove<T> / has<T> /
+    get<T> / storage<T> / storage_if<T> / view<Ts...> / clear, plus diagnostics
+    (size, pool_count, component_count, entities().slot_count/free_count/
+    generation_wraps).
+    WHAT IT IS FOR AT THIS SCALE IS COMPOSITION, NOT SPEED, AND THE LESSON SAYS SO
+    IN ITS FIRST PARAGRAPH. 5.6 measured that below 1,000 objects every layout is
+    within 1%; the demo has 121 entities. The argument is that scene_object has
+    been accreting fields since 3.1 (tint, then closed, then a whole specular) and
+    a struct is a promise that every instance has every field — so the floor pays
+    for a shininess it never uses and an invisible mover is a null handle plus a
+    branch in the renderer.
+    demos/ecs_swarm — 121 entities, SIX component types, four systems, one new
+    target in demos/CMakeLists.txt. At rest: 121 entities, 468 components, 5 pools
+    (nothing has a `lifetime` until [Space] — an unused type has NO pool), 97 drawn,
+    3,136 triangles, render view leads with pool 1 and 97 candidates. The 24
+    WAYPOINTS are the point: placement + orbit and no geometry, so they move every
+    step and are invisible because the render query names a component they lack.
+    Nobody wrote an `if`. Keys: [Space] 32 sparks (structural churn), [M] strip
+    material from every third ring member — 32 vanish AND THE HUD's lead pool moves
+    1 -> 2 as the material pool becomes smallest, [O] freeze half by removing orbit
+    (they keep spinning: different component, different system), [X] destroy every
+    fourth — slots holds, free climbs, and the next [Space] reuses those slots.
+    The demo keeps a vector<entity> of destroyed ids ON PURPOSE and skips them with
+    alive(); a vector of pointers there would be a vector of landmines.
+    THE RENDER SEAM IS NAMED, NOT HIDDEN. collect_triangles still takes
+    span<const scene_object>, so render_system walks a view and FILLS one — 6 fields
+    per visible entity, ~8 KB at 97 objects, nothing now and not nothing at 1e4.
+    Module 6 deletes it. Nothing renders through the ECS this lesson, which is why
+    the golden CAN be byte-identical and why that fact is worth checking.
+    scratch/verify_58.cpp — 101 checks (99 in a debug build; 2 skip because an
+    assertion fires before the release-path refusal can be observed, and the harness
+    SAYS SO rather than silently passing), seven sections: A ids, B pool, C
+    registry, D views, E churn, F memory, G golden.
+    THE NUMBERS THIS LESSON MEASURED:
+      §D  pools 60/30/12: view<pos,vel> leads with pool 1 (30 candidates); naming
+          them in the other order picks the SAME pool — the decision is by size, not
+          argument order; view<pos,vel,label> leads with label, 12 candidates
+          instead of 60, i.e. 6 rejections instead of 54 for the same 6 answers.
+      §E  200 frames: 518 created, 301 destroyed, 1,061 components added, 131
+          removed, 217 live. ID SPACE ENDS AT 220 SLOTS FOR 518 ENTITIES CREATED —
+          rule 4's premise MEASURED, and why paged sparse arrays can wait. 0
+          generation wraps.
+      §A  4,096 create/destroy pairs on ONE slot => slot_count 1, generation_wraps
+          exactly 1. The 12-bit budget is monitored, not assumed.
+      §F  10,000 entities, 2 types: 78 KB of sparse index. The label pool's sparse
+          array is 9,991 entries for 1,000 components — 90% of it means "absent".
+          Destroy 9/10 and the id space does NOT shrink; the next 9,000 creates
+          reuse those slots rather than growing it.
+      §G  golden byte-identical, 1,209,616 bytes — EIGHTH lesson.
+    verify_45..57 all still green.
   - DESIGN 5.7: THE ECS STORAGE QUESTION IS ANSWERED, WITH EVIDENCE ATTACHED, AND
     NO ENGINE CODE CHANGED. scratch/ecs_probe.hpp simulates BOTH candidate designs
     (archetype = K parallel dense arrays on one shared index; sparse set = one
@@ -4354,6 +4484,10 @@ files:
   engine/include/engine/asset/: search_path.hpp, asset_store.hpp        [5.5]
   engine/include/engine/core/: assert.hpp, bench.hpp, clock.hpp, fixed_step.hpp,
             handle.hpp, input.hpp, log.hpp, pool.hpp, profile.hpp
+  engine/include/engine/ecs/: entity.hpp, pool.hpp, registry.hpp, view.hpp   [5.8]
+            (header-only — NO entry in engine/CMakeLists.txt. NOTE: ecs/pool.hpp's
+             engine::ecs::pool<T> is a DIFFERENT container from core/pool.hpp's
+             engine::pool<T>; see conventions:ecs-runtime.)
   engine/include/engine/gfx/: clip.hpp, colour.hpp, debug_draw.hpp,
             depth_buffer.hpp, framebuffer.hpp, gpu_buffer.hpp, gpu_debug.hpp,
             gpu_device.hpp, gpu_mesh.hpp, gpu_pipeline.hpp, gpu_present.hpp,
@@ -4377,6 +4511,7 @@ files:
   demos/sandbox/: main.cpp
   demos/hello_cube/: main.cpp
   demos/pong/: main.cpp
+  demos/ecs_swarm/: main.cpp                                              [5.8]
   assets/: cube.obj, twisted.obj, quirks.obj, torus.obj, uv_grid.png
   docs/: index.html, conventions.html, math-toolbox.html, cpp-style.html
   docs/lessons/: 00-01-what-is-an-engine.html, 00-02-how-this-course-works.html,
@@ -4408,55 +4543,60 @@ files:
                  05-03-logging-and-errors.html,
                  05-04-handles.html, 05-05-asset-system.html,
                  05-06-data-oriented-design.html,
-                 05-07-ecs-storage.html
+                 05-07-ecs-storage.html,
+                 05-08-ecs-runtime.html
   docs/shared/: course.css, course.js      (THE stylesheet + page script; one copy each)
   docs/_template/: lesson-template.html, README.md, apply-shared.py, check-page.js
   scratch/ (5.7, not shipped with the engine): ecs_probe.hpp, bench_57.cpp,
            verify_57.cpp, measure_57.py, build_bench_57.sh, build_verify_57.sh,
            figs_57.py, build_57.py, l57_body_{a,b}.html, l57_fig{1..6}.svg
+  scratch/ (5.8, not shipped with the engine): verify_58.cpp, build_verify_58.sh,
+           figs_58.py, build_58.py, l58_body_{a,b}.html, l58_fig{1..6}.svg
+           (NOTE: build_57.py was amended in 5.8 — it no longer stamps a STATE
+            block, and it now byte-reproduces the shipped 05-07 page. Any future
+            build_NN.py copied from it inherits the correct form.)
   memory/: 2026-07-16.md … 2026-08-25.md, 2026-08-25-b.md, 2026-08-25-c.md,
            2026-08-26.md, 2026-08-26-b.md, 2026-08-29.md, 2026-09-02.md, 2026-09-02-b.md,
            2026-09-02-c.md, 2026-09-04.md
   (retired: src/ — the whole directory. hello.cpp.)
 
 
-next: 5.8 — The ECS Runtime
-      (planned filename: docs/lessons/05-08-ecs-runtime.html — 5.7's TWO next
-      links point at the index and BOTH need repointing.)
-      5.7 DECIDED; 5.8 BUILDS. This is the first lesson since 5.5 to touch
-      engine/, and it is a large one. The four rules in conventions:ecs-storage
-      are binding, and each was paid for with a measurement.
-      WHAT IT MUST PRODUCE, in engine/include/engine/ecs/:
-        entity.hpp    — the id. LIFT 5.4's generational index OUT of pool<T>:
-                        entity = {index, generation}, minted by an entity
-                        allocator with a free list (so the id space stays compact
-                        and no paging is needed — conventions rule 4). This is
-                        the change 5.7 §3.4 identified as the ONE thing pool<T>
-                        lacks; do not re-derive generations, cite 5.4.
-        pool.hpp      — the component sparse set: sparse / dense / data, insert,
-                        erase (swap-and-pop + patch the moved entity's sparse
-                        entry), contains, get, size. This is scratch/ecs_probe.hpp's
-                        pool<T> plus the generation check, ~20 lines of logic.
-                        NAME COLLISION WARNING: engine::pool<T> already exists in
-                        core/pool.hpp and is a DIFFERENT thing (a slot map that
-                        mints its own keys). Namespace it engine::ecs:: and say
-                        in the header comment how the two differ, or the course
-                        has two `pool`s and no explanation.
-        registry.hpp  — the world: the entity allocator plus one pool per type.
-        view.hpp      — the query. MUST LEAD WITH THE SMALLEST POOL (rule 3); this
-                        is the single cheapest correctness-of-design decision in
-                        the lesson and 5.7 measured it at 1.73x -> 1.46x.
-      WHAT IT MUST NOT DO: groups. 5.7 measured them at 0.99x and that is why the
-      sparse set was chosen, but building one now is optimising before there is a
-      profile. Leave a named hole and a comment pointing at 5.7 §5.5.
-      THE TEST TO BEAT: golden still byte-identical (EIGHT lessons) — the ECS is
-      additive, nothing renders through it yet; verify_58 covering id reuse across
-      generations, erase-the-last-element, a view over 2 and 3 components, and
-      the smallest-pool choice actually being made; and verify_45..57 still green.
-      AN HONEST OPENING FOR THE LESSON: the demo still holds four scene_objects in
-      a vector, and 5.6 measured that this is FINE at four. So 5.8's motivation is
-      NOT speed — say so — it is that scene_object has been accreting fields since
-      3.4 (closed, shininess, specular, tint) and every one of them is a component
-      wearing a struct field's clothes. Composition is the argument at this scale;
-      the performance argument is 5.7's and it applies at 1e4.
+next: 5.9 — Transform Hierarchy and the Camera System
+      (planned filename: docs/lessons/05-09-transform-hierarchy.html — 5.8's TWO
+      next links point at the index and BOTH need repointing, and build_58.py's
+      TAIL holds the bottom one.)
+      5.8 BUILT THE FLAT WORLD; 5.9 GIVES IT STRUCTURE. Every placement in 5.8 is
+      in world space, which is fine for a swarm orbiting an origin and useless the
+      moment a turret sits on a tank.
+      WHAT MAKES THIS INTERESTING RATHER THAN ROUTINE, and it should be the spine
+      of the lesson: THE PARENT LINK IS A COMPONENT, BUT THE ORDER IN WHICH
+      TRANSFORMS MUST BE RESOLVED IS A PROPERTY OF THE GRAPH, NOT OF ANY POOL'S
+      DENSE ORDER — and 5.7 established that a pool's dense order is its own
+      business. Those two wants are in tension and the lesson is what it costs to
+      reconcile them. A parent must be resolved before its children; a sparse set
+      hands them back in insertion order.
+      THE CANDIDATE ANSWERS, and 5.6/5.7's method says MEASURE rather than pick:
+        1 recurse from roots each frame (pointer-chasing, which is exactly the
+          6.47x shape 5.6 measured on a decayed tree — but at what depth and what
+          fan-out does it bite?)
+        2 keep the transform pool SORTED PARENTS-BEFORE-CHILDREN and walk it flat
+          (this is a GROUP by another name — the ordering constraint 5.7 said a
+          sparse set may adopt later. Note the connection out loud.)
+        3 a dirty flag + a per-frame topological pass over only what moved
+      Do NOT let elegance decide it. The honest experiment is depth x fan-out x
+      fraction-moved-per-frame, on bench.hpp, obeying all four measurement rules.
+      ALSO IN 5.9: the camera stops being a special object. `orbit_camera` is a
+      demo struct today; with an ECS it is an entity with a transform and a
+      camera component, and "which camera is active" becomes a tag component
+      rather than a pointer.
+      THE TEST TO BEAT: golden still byte-identical (NINE lessons) IF the render
+      path is still untouched — but 5.9 may be the lesson that changes it, and if
+      so the golden must be RE-BASELINED DELIBERATELY, with the diff shown and
+      explained, never quietly. verify_59 must cover: a child following its parent,
+      a re-parent mid-frame, a destroyed parent (orphan policy — decide and state
+      it), a cycle (refuse it; a hierarchy that can loop is a hang), depth > 1, and
+      the resolution order actually being respected. Plus verify_45..58 green.
+      CARRY FORWARD FROM 5.8: the view's iteration rule bites hardest here —
+      re-parenting during a hierarchy walk is exactly the mutate-while-iterating
+      hazard, and the collect-then-act pattern will need saying again.
 ```

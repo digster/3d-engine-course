@@ -2179,3 +2179,37 @@ Correct. `memory/2026-09-04-b.md` merged into `memory/2026-09-04.md` as a second
 `-b` file deleted. The suffix came from copying the older `2026-09-02{,-b,-c}.md` files, which
 predate the instruction — history, not a pattern. Older dates left untouched as asked. Recorded
 as a standing convention so it does not recur.
+
+> Based on the STATE and the project's claude instructions, work on the next.
+
+**Lesson 5.8 — The ECS Runtime.** Built what 5.7 chose, in four header-only files under
+`engine/include/engine/ecs/` (public headers 47 → 51, no CMake change to the library):
+`entity.hpp` (the id + a generational allocator with a LIFO free list), `pool.hpp` (`pool_base`
+with four cold virtuals + `pool<T> final`, the sparse set), `registry.hpp` (the world, plus
+`component_id_of<T>()` type erasure with no RTTI), `view.hpp` (the query, leading with the
+smallest pool). Plus `demos/ecs_swarm/` — 121 entities, six component types, four systems, one
+new target — and `scratch/verify_58.cpp`, 101 checks in seven sections.
+
+Opened by throwing away the expected argument: 5.6 measured that below a thousand objects every
+layout is within 1%, and the demo has 121, so **speed is not the reason**. The reason is that
+`scene_object` has been accreting fields since 3.1 and a struct is a promise that every instance
+has every field. Twenty-four entities in the demo are invisible because they have no `geometry`
+component, not because anything hid them.
+
+Five decisions recorded rather than assumed: the entity reuses `handle`'s bit layout but is its
+own type; `dense_` stores the full entity word so the staleness test is writable at all; the
+`static_cast` behind type erasure is safe *because the id created the pool*; every `pool_base`
+virtual is cold, by design, because 5.6 measured 1.5–1.7× at every world size; and
+`entities()` returning `span<const entity>` for every `T` is what makes "lead with the smallest
+pool" five lines with no metaprogramming.
+
+**101 checks / 0 failures** (99 in debug, 2 skipped and said so); `verify_45`…`57` still green;
+golden byte-identical for the **eighth** lesson — nothing renders through the ECS yet, and the
+lesson says so. Measured: 200 frames of churn create 518 entities and end at **220 slots**
+(rule 4's premise); a 60/30/12 view walks 12 candidates, not 60.
+
+Also fixed `scratch/build_57.py`, which still stamped the retired STATE block — re-running it to
+repoint one navigation link would have re-added 331 KB. Amended and proved by rebuilding 5.7 to a
+temp file and diffing it against the shipped page.
+
+`next:` is now 5.9 — Transform Hierarchy and the Camera System.

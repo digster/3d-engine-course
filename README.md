@@ -7,7 +7,7 @@ There is no engine to download here and no framework doing the interesting parts
 write the math library, the rasterizer, the ECS, the renderer, the physics, and the editor. By
 the end you have a real engine and a game built on its public API.
 
-**Status:** curriculum and conventions published; lessons in progress — **Modules 0–4 are complete** and Module 5 is under way (52 of 94 lessons). The CPU software rasterizer is finished end to end, the same scene is drawn on a real GPU through SDL_GPU, and the tree is now a static library with a public API, a platform/application layer, its own logging, handle-based resource storage, an asset system that can load, share and free, and a reusable A/B timing harness that has now decided two architecture questions with numbers instead of folklore — most recently **sparse set over archetype** for the ECS, argued from a measurement taken before either design was built. Start at
+**Status:** curriculum and conventions published; lessons in progress — **Modules 0–4 are complete** and Module 5 is under way (53 of 94 lessons). The CPU software rasterizer is finished end to end, the same scene is drawn on a real GPU through SDL_GPU, and the tree is now a static library with a public API, a platform/application layer, its own logging, handle-based resource storage, an asset system that can load, share and free, a reusable A/B timing harness that has decided two architecture questions with numbers instead of folklore, and — as of Lesson 5.8 — **a working from-scratch ECS**: a generational entity id minted once and honoured by every pool, sparse-set component storage, and queries that lead with the smallest pool. Start at
 [`docs/index.html`](docs/index.html).
 
 ---
@@ -208,6 +208,49 @@ released with it, transitively.
 
 Press <kbd>Bksp</kbd> in `sandbox --software` to free the current model out from under the scene
 that is still drawing it. Exactly one object disappears, and the HUD says so.
+
+### An entity is an id; components are filed under it
+
+Since **Lesson 5.8** the engine has an ECS, and it is a sparse set — chosen in Lesson 5.7 by
+measurement rather than taste. An `engine::ecs::entity` is one 32-bit word with the same 20/12
+split as a resource handle, minted by **one** allocator and honoured by **every** component pool:
+
+```cpp
+struct velocity { engine::vec3 linear; };          // a component is a plain struct
+
+engine::ecs::registry world;
+
+const engine::ecs::entity e = world.create();
+world.add<engine::transform>(e, {.position = {0.0f, 1.0f, 0.0f}});
+world.add<velocity>(e, {{0.0f, 0.0f, -3.0f}});
+
+// a system is a free function running one query; h is the fixed step
+world.view<engine::transform, velocity>().each([h](engine::transform& t, const velocity& v) {
+    t.position = t.position + v.linear * h;
+});
+
+world.destroy(e);                                  // …and every pool forgets it
+```
+
+**That one id opening several pools is the whole point**, and it is the one thing
+`engine::pool<T>` could not offer: each of *its* pools mints its own keys, so a mesh handle
+7 and a texture handle 7 have nothing to do with each other.
+
+**A component is a plain struct** — no base class, no macro, no registration. `engine::transform`
+was written in Lesson 2.8 by someone who had never heard of an ECS, and it is used as a component
+unmodified. **A system is a free function**, because Lesson 5.6 measured virtual dispatch on an
+iteration at 1.5–1.7× *at every world size*, four objects included.
+
+**A view leads with the smallest pool.** One comparison in its constructor: over pools of 60, 30
+and 12 it walks twelve candidates rather than sixty, for the same answers. The one rule it
+imposes is the familiar one — *do not add or erase a component the view names while walking it*,
+exactly as you would not erase from a `std::vector` inside a range-`for`. Collect, then act.
+
+Run `ecs_swarm` to see what this buys at a scale where the performance argument does not apply:
+121 entities, six component types, and twenty-four of them invisible **because they have no
+geometry component**, not because anything hid them. Press <kbd>M</kbd> to strip the material
+from a third of the swarm and watch the HUD's lead pool change as the material pool becomes the
+smallest one.
 
 The software path is **not** deprecated. It is the *reference*: every measured claim in Modules 2
 and 3 was made against it, and a port whose reference has been deleted is a port nobody can check.
@@ -555,21 +598,28 @@ Third-party, each with an explicit "why we don't hand-roll this" justification: 
 ## Repository layout
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the full tree and the reasoning behind it. The short
-version, as of **Lesson 5.7**:
+version, as of **Lesson 5.8**:
 
 ```
-engine/include/engine/   the public API — 47 headers, and the only path a demo can name
+engine/include/engine/   the public API — 51 headers, and the only path a demo can name
 engine/include/engine/asset/      search_path, asset_store — names, roots, lifetimes
 engine/include/engine/core/       clock, input, fixed_step, profile, log, assert,
                                   handle, pool, bench
+engine/include/engine/ecs/        entity, pool, registry, view — the world (5.8)
 engine/include/engine/platform/   how a program starts: platform.hpp, app.hpp, main.hpp
 engine/src/              private implementation; stb_image stops here
 demos/common/            content shared by demos and verification harnesses
 demos/sandbox/           Lessons 2.1–4.9, on [Tab] and four flags; keeps its own main()
 demos/hello_cube/        the public-API acceptance test
+demos/ecs_swarm/         Lesson 5.8's world: 121 entities out of six components
 demos/pong/              Lesson 1.8's game, on engine::app — 87 lines, no main()
 tools/                   the editor and asset cooker (Module 8)
 ```
+
+`engine/include/engine/ecs/pool.hpp` declares `engine::ecs::pool<T>`, which is **not**
+`engine::pool<T>` from `core/pool.hpp`. Same three arrays, opposite jobs: the core one mints its
+own keys, the ECS one is keyed by an id it did not mint. The namespace keeps them apart, and the
+header comments say so at both ends.
 
 `engine/include/engine/platform/main.hpp` is the one public header **not** reachable through the
 `engine.hpp` umbrella, and the omission is deliberate: including it defines a program's entry

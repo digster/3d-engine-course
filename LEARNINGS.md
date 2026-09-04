@@ -4882,3 +4882,210 @@ re-indented a line would have shown up as insertions. Pair it with a tag-balance
 every touched file and `apply-shared.py --check` (which re-verifies all 57 pages' relative
 `../shared/` prefixes), and the change is proven without opening a browser — though a real
 Chromium pass over HTTP still confirmed CSS applies and each page now ends Further Reading → nav.
+
+---
+
+## ECS runtime facts (Lesson 5.8)
+
+### The one thing a slot map lacks is a shared id space, and it is structural
+
+`engine::pool<T>` from Lesson 5.4 is a sparse set in every respect — `slots_` sparse and stable,
+`items_` dense and mobile, `owners_` the way back, generations, O(1) everything. What it cannot do
+is answer "does the thing in mesh slot 7 also have a texture?", and the reason is not that the
+answer is slow: **each pool mints its own keys off its own free list, so the question is not well
+formed.** An ECS is the arrangement in which it is. Mint the id once and hand it to every pool;
+everything else — views, systems, composition — is a consequence of that single inversion. Recorded
+because it is easy to look at 5.4's three arrays and conclude the ECS is already written.
+
+### Reuse the bit layout, not the type
+
+`entity` uses `core/handle.hpp`'s constants (20 index / 12 generation, generation 0 reserved, bump
+on removal) so the bit budget has exactly one home — and is still a **different type**, because
+`handle<mesh_data>` names an item *in* one container while an entity names a row *across* every
+pool there is. Aliasing them compiles, and then `pool<T>::get(handle<T>)` and a component lookup
+are the same spelling for opposite operations. The phantom parameter exists to stop ids mixing;
+spending it to make them mix is an odd use of it.
+
+### Store the whole id in the dense array, or the third test cannot be written
+
+`contains()` is three tests: index in range, sparse entry not the "absent" sentinel, and
+`dense_[at] == e`. Only the third rejects a **stale or recycled** id, and it is writable only
+because `dense_` holds the full 32-bit entity word rather than a bare index. Storing an index saves
+nothing and reinstates Lesson 5.4's *aliasing* failure — a probable crash converted into a
+guaranteed silent wrong answer.
+
+### The sparse patch is one line and its absence has no local symptom
+
+```cpp
+if (at != last)
+{
+    dense_[at] = dense_[last];
+    data_[at]  = std::move(data_[last]);
+    sparse_[dense_[at].index()] = at;   // <- this one
+}
+```
+
+The entity swapped into the hole did not ask to move, and its sparse entry still names its old
+position. Leave the patch out and the pool is not obviously broken but **silently** broken: one
+entity reads another's data, an arbitrary number of frames later, in a different system. The
+invariant that catches the whole class in one line is `sparse_[dense_[i].index()] == i` for every
+`i`, asserted after a few hundred frames of churn — not after one.
+
+### The last-element case is saved by the order, not by the branch
+
+When `at == last` the entity that "moves" *is* the entity being erased. If the swap ran anyway it
+would copy the element onto itself and patch its sparse entry to the position it already occupies —
+immediately before the final `sparse_[e] = k_none` overwrites it. Harmless either way. **A test
+that only ever erases from the middle passes forever**, so the last-element erase needs its own
+check.
+
+### Type erasure without RTTI: the cast is justified by construction
+
+`component_id_of<T>()` is a monotonic counter behind a function-local static; the id indexes
+`vector<unique_ptr<pool_base>>`, and `static_cast<pool<T>*>` recovers the type. That is safe
+because **the id is what created the pool** — the object at that slot was constructed as a
+`pool<T>` and nothing else can ever be stored there. This is the difference between a cast that is
+safe and a cast that is merely usually right, and it is why `dynamic_cast` is not merely
+unavailable but unnecessary.
+
+Two consequences worth writing down. The ids are **global to the program**, not per registry, so a
+registry using only the tenth type ever registered allocates eleven slots, ten of them null —
+about eighty wasted bytes, in exchange for an array index instead of a hash. And the magic-static
+initialisation is thread-safe while the **counter increment is not**: touch every component type
+once before any job system starts.
+
+### A type-erased base is fine as long as every virtual on it is cold
+
+Lesson 5.6 measured virtual dispatch on an iteration at 1.5–1.7× *at every world size*, four
+objects included, so "no virtual on the ECS hot path" is a constraint rather than a preference.
+`pool_base` keeps it by having only cold virtuals: `erase` (once per pool per entity destruction),
+`clear` (teardown), `size`, and `entities()` (once per **view**, never per entity). The hot path
+holds concrete `pool<T>*`; `pool<T>` is `final` so even the cold calls devirtualise. **Design the
+base around what may be cold, rather than adding virtuals and hoping.**
+
+### One type-independent accessor removes all the metaprogramming
+
+`entities()` returns `std::span<const entity>` for *every* `T`. That single signature is what turns
+"lead with the smallest pool" into five lines:
+
+```cpp
+const std::span<const entity> spans[] = {pools->entities()...};
+for (std::size_t i = 1; i < sizeof...(Ts); ++i)
+    if (spans[i].size() < spans[lead_].size()) { lead_ = i; }
+```
+
+A pack of differently-typed pointers becomes an ordinary array, and the choice is a `for` loop.
+**When a variadic problem looks like it needs dispatch, look for the projection that erases the
+type first** — the type-dependent part (fetching components) can stay in the pack expansion where
+it belongs.
+
+### The lead pool pays twice
+
+Fewer candidates is the advertised win — over pools of 60 / 30 / 12 the walk considers twelve
+rather than sixty, six rejections instead of fifty-four, for the same six answers. The unadvertised
+one: for the lead pool the dense position **is the loop counter**, so its own component needs no
+sparse read at all. Only the other *K*−1 pools pay the redirect. `I == lead_` compares a
+compile-time constant against a value fixed for the whole loop, so the branch predicts perfectly
+after the first iteration.
+
+### A rule nothing can observe quietly stops being true
+
+Every correctness test of a view passes just as well if the view walks the *biggest* pool — the
+answer is identical, only slower. So `view` exposes `lead()` and `size_hint()` purely so the
+harness can assert that a 60/30/12 view leads with the 12. **When a decision is about behaviour
+rather than output, give it an observable and test the observable.**
+
+### Do not cache the span you are about to iterate
+
+The view re-reads `lead_pool_->entities()` at the top of every walk instead of caching it at
+construction. A cached span dangles the moment anything inserts into the lead pool between building
+the view and walking it — a bug that reproduces only when a vector happens to reallocate, which is
+the worst possible schedule for finding it. One virtual call per walk (not per entity) buys the
+whole class away.
+
+### Two containers may share a name if the namespace explains the relationship
+
+`engine::pool<T>` and `engine::ecs::pool<T>` are the same three arrays doing opposite jobs: one
+mints its own keys, the other is keyed by an id it did not mint. Renaming the second to
+`component_storage` would have hidden a relationship the course spends two lessons drawing out. The
+nesting keeps them apart, both header comments state the difference, and the one arrangement that
+breaks — `using namespace engine;` plus `using namespace engine::ecs;` — produces a compiler
+ambiguity, which is the good kind of breakage.
+
+### Two independent defences mean a single targeted test proves nothing
+
+A recycled entity does not inherit its predecessor's components for **two** reasons:
+`registry::destroy` erases the rows, *and* the generation moved so `dense_[at] == e` fails. Either
+alone would prevent the symptom, so a test aimed at the symptom passes with one of them broken.
+That is why the harness runs 200 frames of churn against an independent `std::map` shadow model
+that shares no code with the thing under test, and then walks every invariant.
+
+### The free list's real payoff is the size of every sparse array
+
+Because a freed slot is reused before a new one is minted, the id space's high-water mark is **peak
+simultaneously live entities**, not entities ever created — measured at **220 slots after creating
+518 entities** over 200 frames of churn. Every component pool's sparse array is sized by that same
+number, which is the entire reason paged sparse arrays can wait. The failure mode is the one 5.4
+already named: high-water marks do not come back down, so **things that exist in millions and die
+in seconds should not be entities.**
+
+---
+
+## Course-infrastructure facts (docs/, Lesson 5.8)
+
+### Figure numbers follow page order — for the third time
+
+`figs_58.py` authored the type-erasure figure before the view figure, so `l58_fig5.svg` was the
+erasure one while §3.4 (the view) came first on the page. The reader saw "Figure 6" above
+"Figure 5". Caught by asking the DOM for `.fignum` and `<title>` together rather than by reading
+the source. **Number figures by where they land, name the file to match, and put the section in a
+comment** — this is the same trap as 5.3 and 5.6.
+
+### `browser_navigate` to a URL you just rebuilt can serve the old page
+
+A figure fix looked like it had not applied: the check reported `unique_ptr<pool_base>` overflowing
+its box when the SVG on disk had already been split into two lines. The page was cached. `grep` the
+built file first, then force `location.reload(true)` (and `fetch(..., {cache:'no-store'})` for the
+checker itself) before believing a post-rebuild verification result.
+
+### A label can overflow its own box without spilling the viewBox
+
+`check-page.js` catches labels outside the SVG, labels on top of each other, and labels on strokes
+— none of which sees a 21-character monospace run in a 108-unit box. `unique_ptr<pool_base>` at
+9.5px is about 120px wide; it rendered across the box edges in every one of five columns. A
+throwaway check (find the `<rect>` whose bounds contain the text's vertical centre, compare
+horizontal extents) found all five at once and is worth keeping in the authoring pass.
+
+### A diagram that carries a derived value must be re-derived, not pattern-matched
+
+Figure 3's third panel showed the free list as `[1]` after `create()` had popped slot 1 — because
+the code derived the display from "is this panel highlighted?" rather than from what the free list
+actually holds. The panels were right about generations and wrong about the list, in a figure whose
+whole subject is reuse. **Spell out per-panel state explicitly instead of deriving it from a
+rendering flag.**
+
+### Count what you claim, including in the figure's own text
+
+The lesson said "five component types" in six places — the deck, the milestone, a figure caption,
+the figure's `<title>`, the figure's on-canvas heading, and the index card — while the demo has six
+(`spin` was omitted). Only building the demo and reading its own printed totals caught it. Two
+sub-lessons: the SVG's accessible `<title>`/`<desc>` are prose too and drift with the rest, and a
+program that prints its own arithmetic (`121 entities, 468 components, 5 pools, 97 drawn`) turns a
+claim into something checkable — 4 + 384 + 32 + 48 = 468 can be verified by hand.
+
+### `pool_count()` is 5 while the demo has 6 component types, and that is the feature
+
+A component type nobody has attached has **no pool**, because every read path goes through
+`storage_if<T>()` rather than `storage<T>()`. Nothing has a `lifetime` until `[Space]` spawns a
+spark, so the at-rest count is five. Worth stating in the lesson rather than quietly reconciling:
+if `has<T>()` created a pool as a side effect, asking a question would be a mutation and a `const`
+registry would be impossible.
+
+### A retired build script keeps stamping what the rule retired
+
+`build_57.py` still had the `<details class="state">` block in its `TAIL` and still read
+`l57_state.txt`, months after the STATE-block consolidation stripped that markup from all 53 pages.
+Re-running it to repoint one navigation link would have re-added a 331 KB block. Fixed by editing
+the builder *and* proving it: rebuilding 5.7 to a temp file and `diff`-ing it against the shipped
+page, which also caught a one-line whitespace drift left by the original strip. **When a builder is
+the source of a page, "the page is correct" is not the same claim as "the builder is correct".**

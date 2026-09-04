@@ -76,3 +76,19 @@ add_executable(hello_cube hello_cube/main.cpp)
 target_link_libraries(hello_cube PRIVATE engine::engine)
 engine_set_warnings(hello_cube)
 engine_use_assets(hello_cube)
+
+# ---- ecs_swarm: Lesson 5.8's world, built out of components ---------------
+#
+# The acceptance test for the ECS, and the answer to "what is this FOR" at a
+# scale where the performance argument does not apply. It links `engine::engine`
+# directly rather than `demo_common`, for the same reason `hello_cube` does: a
+# program that reaches for the shared demo scene is not proving anything about
+# the public API. Everything it draws it builds itself, out of five component
+# types the engine has never heard of.
+#
+# `engine_use_assets` because `asset_store` brings a search path with it, not
+# because this demo loads a file — every mesh in it is generated.
+add_executable(ecs_swarm ecs_swarm/main.cpp)
+target_link_libraries(ecs_swarm PRIVATE engine::engine)
+engine_set_warnings(ecs_swarm)
+engine_use_assets(ecs_swarm)
