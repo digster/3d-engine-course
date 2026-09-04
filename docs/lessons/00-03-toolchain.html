@@ -1224,47 +1224,6 @@ cl /std:c++20 /Bv /EP nul                      # MSVC is fiddlier; see docs</pre
   </ul>
 
   <!-- ================= 12. STATE ================= -->
-  <details class="state">
-    <summary>STATE — resume key</summary>
-<pre>course: Build a Professional 3D Game Engine (SDL3 + C++20)
-version: 1.0
-
-conventions:
-  world: right-handed, Y-up, -Z forward
-  clip: left-handed, +Y up, z in [0,1] (SDL_GPU-fixed; projection absorbs the flip)
-  sw-rasterizer: targets SDL_GPU's exact NDC (port = API change, not maths change)
-  matrices: column vectors, v' = M*v, column-major storage
-  winding: CCW = front, cull back (per-pipeline state; set explicitly every time)
-  units: 1 unit = 1 metre; radians internally; linear colour in renderer
-  axis colours: x/y/z = red/green/blue
-  sdl3: FetchContent at a pinned tag; SDL 3.5.0 verified; shadercross is 3.0.0-preview
-  cpp: C++20, no exceptions/RTTI in core, snake_case, -Wall -Wextra//W4 all fixed
-  build: direct compiler invocation until 0.4; then CMake >= 3.24, 64-bit only
-
-curriculum: 94 lessons, ~433 h, 9 modules
-  M0:6  M1:8  M2:12  M3:10  M4:9  M5:10  M6:15  M7:13  M8:11
-
-completed:
-  - 0.1 — What a Game Engine Actually Is
-  - 0.2 — How This Course Works
-  - 0.3 — Setting Up Your Toolchain
-
-capabilities:
-  - a verified C++20 toolchain (MSVC / GCC / Clang), 64-bit
-  - hello.cpp compiles and runs by hand on all three platforms; C++20 guarded
-    by static_assert on _MSVC_LANG/__cplusplus
-
-files:
-  /: CLAUDE.md, README.md, ARCHITECTURE.md, LEARNINGS.md, PROMPT.md, LICENSE,
-     .gitignore, hello.cpp
-  docs/: index.html, conventions.html, math-toolbox.html, cpp-style.html
-  docs/lessons/: 00-01-what-is-an-engine.html, 00-02-how-this-course-works.html,
-                 00-03-toolchain.html
-  docs/_template/: lesson-template.html, README.md, apply-shared-css.py
-  memory/: 2026-07-16.md
-
-next: 0.4 — CMake From Zero</pre>
-  </details>
 
   <nav class="lesson-nav" aria-label="Lesson navigation (bottom)">
     <a class="prev-l" href="00-02-how-this-course-works.html">

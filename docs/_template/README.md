@@ -19,7 +19,8 @@ the master prompt wins.
    portability: a lesson copied out on its own renders unstyled.
 3. **The only permitted remote is the KaTeX CDN**, and the page must survive its absence
    (see §5).
-4. **All 13 sections of the master prompt's §6, in order.** Not a menu.
+4. **All 12 sections of the master prompt's §6, in order.** Not a menu. (It was 13 until the
+   STATE block moved out to `STATE.md` alone; a page now ends at Further Reading.)
 5. **Zero placeholders in code listings.** No `// ...`, no "rest of the file as before". A file
    that changed appears whole.
 
@@ -318,7 +319,7 @@ Run silently before emitting any lesson (master prompt §11):
 - [ ] Manifest table, per-platform build/run commands, and expected result present?
 - [ ] Pitfalls (symptom → cause → fix) and 2–5 exercises included?
 - [ ] Conventions consistent with `conventions.html`?
-- [ ] Prev/index/next correct in **both** navs, and the STATE block updated?
+- [ ] Prev/index/next correct in **both** navs, and `STATE.md` updated (in place, merged)?
 - [ ] Does the length serve depth — nothing padded, nothing truncated?
 - [ ] Every code listing compiles at this point in the course?
 

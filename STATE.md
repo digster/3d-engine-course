@@ -7,7 +7,7 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-09-04 (after Lesson 5.7 — 52 of 94 lessons)
+updated: 2026-09-04 (after Lesson 5.7 — 52 of 94 lessons; + STATE-block consolidation)
 
 conventions:
   ecs-storage: THE ECS IS A SPARSE SET, DECIDED IN 5.7 BY MEASUREMENT, NOT TASTE.
@@ -1973,6 +1973,27 @@ conventions:
   build: CMake >= 3.24, out-of-source (build/), 64-bit; two phases (configure, build);
          Debug build = -DCMAKE_BUILD_TYPE=Debug (adds -g); sources listed explicitly
          (never file(GLOB)); target_include_directories(engine PRIVATE src)
+  state-block: THERE IS ONE STATE BLOCK AND IT IS THIS FILE. Lesson pages END AT
+         FURTHER READING — no <details class="state">, no per-page copy. CLAUDE.md
+         §9 originally said "end every lesson with a STATE block" because STATE.md
+         DID NOT EXIST YET: 0.1 shipped 2026-07-16 with an in-page block, STATE.md
+         arrived at 0.6 (cba92f1, 2026-07-17) and took over the resume-key job, and
+         the per-lesson rule was never retired. Both then ran for 46 more lessons.
+         BY 5.7 THE COST WAS 3.97 MB = 22.2% OF docs/lessons/ — worse than the 18%
+         CSS duplication that forced the docs-tooling change — and 5.7's own block
+         was 331 KB of a 550 KB page (60%) and BYTE-IDENTICAL to this file's block,
+         4,433 lines each. Stripped 2026-09-04: 53 files, 54,907 lines, PURE
+         DELETION (0 lines added).
+         WHY NOTHING WAS LOST: the standing rule was already "only the newest
+         lesson's STATE block tracks reality", so 51 of 52 pages carried a snapshot
+         that was STALE BY DESIGN. The reader-facing half of the job is §6's
+         Recap & Next, which all 52 lessons have.
+         THE GENERAL LESSON, and it is the second time this exact shape has bitten:
+         A RULE WRITTEN BEFORE ITS REPLACEMENT EXISTED DOES NOT RETIRE ITSELF. When
+         a new artifact takes over an old rule's job, AMEND THE RULE IN THE SAME
+         BREATH — §6 item 13, §9 and §11 all still demanded the block. Amended now.
+         Also removed: the three dead `.state` rules in course.css, the template's
+         SECTION 12 banner, and two checklist lines that asked for the block.
   docs-tooling: the shared CSS and page script are LINKED, not duplicated — ONE copy each,
          at docs/shared/course.css and docs/shared/course.js. Edit those files
          directly; every page picks the change up immediately. (Until the CSS

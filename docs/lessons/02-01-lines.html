@@ -2719,63 +2719,6 @@ cmake --build build</code></pre>
   </ul>
 
   <!-- ================= 12. STATE ================= -->
-  <details class="state">
-    <summary>STATE — resume key</summary>
-<pre>course: Build a Professional 3D Game Engine (SDL3 + C++20)
-version: 1.0
-
-conventions:
-  world: right-handed, Y-up, -Z forward
-  clip: left-handed, +Y up, z in [0,1] (SDL_GPU; projection absorbs the flip)
-  matrices: column vectors, v' = M*v, column-major storage
-  winding: CCW = front, cull back (set explicitly on every pipeline)
-  units: 1 unit = 1 metre; radians internally; linear colour in the renderer
-  axis colours: x/y/z = red/green/blue
-  framebuffer: row-major, index = y*width + x, +y is DOWN
-  lines: endpoint-INCLUSIVE both ends; Bresenham, integer, all eight octants
-  ties: break toward NE (E &gt;= dx). A tie exists iff major/gcd(major,minor) is even,
-        and exactly those lines are asymmetric under endpoint swap (1 in 3).
-
-completed:
-  - 0.1 … 0.6   ===&gt; MODULE 0 COMPLETE &lt;===
-  - 1.1 Events · 1.2 Input · 1.3 Delta Time · 1.4 Fixed Timestep
-  - 1.5 Framebuffer · 1.6 Colour · 1.7 Vectors · 1.8 Pong
-  ===&gt; MODULE 1 COMPLETE &lt;===
-  - 2.1 Lines: DDA, then Bresenham
-
-capabilities:
-  - portable CMake build, eight translation units, FetchContent SDL3 (release-3.4.12)
-  - core: clock, input (levels + edges), fixed_step (accumulator, alpha, spiral guard)
-  - gfx: framebuffer (320x180 ARGB8888), colour (exact sRGB), raster (NEW)
-  - raster: draw_line (Bresenham, integer, 8 octants, verified against a reflect-in/out
-    midpoint reference over 1600 lines), plus draw_line_dda and draw_line_naive kept
-    for the comparison the lesson makes
-  - math: vec2 — length, normalise, dot, perpendicular, project_onto, reflect, lerp
-  - game: Pong, complete and still reachable on [Tab]
-  - demo: rotating 32-spoke octant fan + 8x magnified pixel inspector, algorithm
-    switchable at runtime, live pixel count and per-fan timing
-  - MEASURED (M4 Pro, clang 21, -O2, ns/pixel, stepping only): Bresenham compact 1.32,
-    Bresenham major-axis 0.74, DDA lround 0.60, DDA trunc 0.65. DDA is FASTER; the cost
-    is Bresenham's two data-dependent branches, not the floats. We ship Bresenham anyway,
-    for exactness and because its error term IS 2.2's edge function.
-  - known-and-deliberate: no line clipping (put_pixel discards, so off-screen lines cost
-    real time — Exercise 2.1.4, and Module 3 makes clipping mandatory); no anti-aliasing
-    (Exercise 2.1.5, Module 6); one impact per step in Pong (Module 7)
-
-files:
-  /: CLAUDE.md, README.md, ARCHITECTURE.md, LEARNINGS.md, PROMPT.md, LICENSE,
-     .gitignore, CMakeLists.txt, STATE.md
-  src/: main.cpp
-  src/core/: clock.hpp/.cpp, fixed_step.hpp/.cpp, input.hpp/.cpp
-  src/gfx/: colour.hpp/.cpp, framebuffer.hpp/.cpp, raster.hpp/.cpp
-  src/math/: vec2.hpp
-  src/game/: pong.hpp, pong.cpp
-  docs/: index.html, conventions.html, math-toolbox.html, cpp-style.html
-  docs/lessons/: 00-01 … 00-06, 01-01 … 01-08, 02-01
-  docs/_template/: lesson-template.html, README.md, apply-shared.py
-
-next: 2.2 — The Triangle: Edge Functions</pre>
-  </details>
 
   <nav class="lesson-nav" aria-label="Lesson navigation (bottom)">
     <a class="prev-l" href="01-08-pong.html">

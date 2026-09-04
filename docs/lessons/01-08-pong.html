@@ -3714,60 +3714,6 @@ cmake --build build</code></pre>
   </ul>
 
   <!-- ================= 12. STATE ================= -->
-  <details class="state">
-    <summary>STATE — resume key</summary>
-<pre>course: Build a Professional 3D Game Engine (SDL3 + C++20)
-version: 1.0
-
-conventions:
-  world: right-handed, Y-up, -Z forward
-  clip: left-handed, +Y up, z in [0,1] (SDL_GPU; projection absorbs the flip)
-  matrices: column vectors, v' = M*v, column-major storage
-  winding: CCW = front, cull back (set explicitly on every pipeline)
-  units: 1 unit = 1 metre; radians internally; linear colour in the renderer
-  axis colours: x/y/z = red/green/blue
-  framebuffer: row-major, index = y*width + x, +y is DOWN
-  frame-order: drain events -> clk.tick() -> in.update() -> N fixed steps -> render(lerp)
-  determinism: same binary + machine + seed + intents + step size. h is an input too.
-
-completed:
-  - 0.1 What a Game Engine Actually Is      - 0.2 How This Course Works
-  - 0.3 Setting Up Your Toolchain           - 0.4 CMake From Zero
-  - 0.5 Your First Window                   - 0.6 Reading Headers &amp; the Debugger
-  ===> MODULE 0 COMPLETE <===
-  - 1.1 Events, Properly                    - 1.2 Input: State vs Events
-  - 1.3 Frames, Delta Time, Naive Loops     - 1.4 The Fixed Timestep, Derived
-  - 1.5 The Framebuffer                     - 1.6 Colour, and sRGB
-  - 1.7 2D Vectors, Geometrically           - 1.8 Checkpoint: Pong
-  ===> MODULE 1 COMPLETE <===
-
-capabilities:
-  - portable CMake build, seven translation units, FetchContent SDL3 (release-3.4.12)
-  - core: clock (monotonic ns, clamped dt), input (levels + edges), fixed_step (accumulator,
-    alpha, spiral guard)
-  - gfx: framebuffer (320x180 ARGB8888, clear/put_pixel/fill_rect/row), colour (exact sRGB)
-  - math: vec2 — length, normalise, dot, perpendicular, project_onto, reflect, lerp
-  - game: a complete, winnable Pong — swept collision, angle-choosing paddles, a beatable AI,
-    a deterministic in-state PRNG, and a runtime toggle that reproduces the tunnelling bug
-  - the engine/game directory boundary, uncrossed, ready for the Module 5 refactor
-  - known-and-deliberate: one impact resolved per step (Module 7 iterates); line drawing is
-    still a naive DDA local to main.cpp (Lesson 2.1 moves it); colour converts per-operation
-    (Module 6); explicit Euler still gains energy (Module 7)
-
-files:
-  /: CLAUDE.md, README.md, ARCHITECTURE.md, LEARNINGS.md, PROMPT.md, LICENSE,
-     .gitignore, CMakeLists.txt, STATE.md
-  src/: main.cpp
-  src/core/: clock.hpp/.cpp, fixed_step.hpp/.cpp, input.hpp/.cpp
-  src/gfx/: colour.hpp/.cpp, framebuffer.hpp/.cpp
-  src/math/: vec2.hpp
-  src/game/: pong.hpp, pong.cpp
-  docs/: index.html, conventions.html, math-toolbox.html, cpp-style.html
-  docs/lessons/: 00-01 … 00-06, 01-01 … 01-08
-  docs/_template/: lesson-template.html, README.md, apply-shared.py
-
-next: 2.1 — Lines: DDA, then Bresenham  (FIRST LESSON OF MODULE 2)</pre>
-  </details>
 
   <nav class="lesson-nav" aria-label="Lesson navigation (bottom)">
     <a class="prev-l" href="01-07-vectors-2d.html">

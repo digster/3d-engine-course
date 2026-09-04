@@ -1088,53 +1088,6 @@ cmake --build build
   </ul>
 
   <!-- ================= 12. STATE ================= -->
-  <details class="state">
-    <summary>STATE — resume key</summary>
-<pre>course: Build a Professional 3D Game Engine (SDL3 + C++20)
-version: 1.0
-
-conventions:
-  world: right-handed, Y-up, -Z forward
-  clip: left-handed, +Y up, z in [0,1] (SDL_GPU-fixed; projection absorbs the flip)
-  sw-rasterizer: targets SDL_GPU's exact NDC (port = API change, not maths change)
-  matrices: column vectors, v' = M*v, column-major storage
-  winding: CCW = front, cull back (per-pipeline state; set explicitly every time)
-  units: 1 unit = 1 metre; radians internally; linear colour in renderer
-  axis colours: x/y/z = red/green/blue
-  sdl3: FetchContent, pinned GIT_TAG release-3.4.12; target SDL3::SDL3; SDL_TEST_LIBRARY OFF
-  sdl3-api: bool SDL_Init/SDL_PollEvent; SDL_CreateWindow(title,w,h,flags) no x/y;
-            SDL_CreateRenderer(window,name); event.key.key (NOT keysym.sym);
-            include <SDL3/SDL_main.h> separately for the entry point
-  cpp: C++20, no exceptions/RTTI in core, snake_case, -Wall -Wextra//W4 all fixed
-  build: CMake >= 3.24, out-of-source (build/), 64-bit; two phases (configure, build)
-
-curriculum: 94 lessons, ~433 h, 9 modules
-  M0:6  M1:8  M2:12  M3:10  M4:9  M5:10  M6:15  M7:13  M8:11
-
-completed:
-  - 0.1 — What a Game Engine Actually Is
-  - 0.2 — How This Course Works
-  - 0.3 — Setting Up Your Toolchain
-  - 0.4 — CMake From Zero
-  - 0.5 — Your First Window
-
-capabilities:
-  - portable CMake build; FetchContent fetches+links SDL3 (release-3.4.12)
-  - engine app opens a 1280x720 window, runs an event loop (quit + Esc), clean shutdown
-  - init -> create -> loop -> destroy skeleton established in src/main.cpp
-
-files:
-  /: CLAUDE.md, README.md, ARCHITECTURE.md, LEARNINGS.md, PROMPT.md, LICENSE,
-     .gitignore, CMakeLists.txt
-  src/: main.cpp
-  docs/: index.html, conventions.html, math-toolbox.html, cpp-style.html
-  docs/lessons/: 00-01..00-05 (.html)
-  docs/_template/: lesson-template.html, README.md, apply-shared-css.py
-  memory/: 2026-07-16.md
-  (retired: hello.cpp)
-
-next: 0.6 — Reading Headers &amp; the Debugger</pre>
-  </details>
 
   <nav class="lesson-nav" aria-label="Lesson navigation (bottom)">
     <a class="prev-l" href="00-04-cmake-from-zero.html">

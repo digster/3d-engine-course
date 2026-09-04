@@ -4282,53 +4282,6 @@ x^y corner = 90.000 deg</code></pre>
       of the columns, which is the view this lesson takes.</li>
   </ul>
 
-  <details class="state">
-    <summary>STATE — resume key</summary>
-<pre>course: Build a Professional 3D Game Engine (SDL3 + C++20)
-version: 1.0
-
-conventions:
-  world: right-handed, Y-up, -Z forward
-  clip: left-handed, +Y up, z in [0,1] (SDL_GPU; projection absorbs the flip)
-  matrices: column vectors, v' = M*v, column-major storage
-  composition: A*B applies B first; matrices named a_from_b, adjacent labels must match
-  model matrix: T*R*S — scale first, translate last
-  winding: CCW = front, cull back (set explicitly on every pipeline)
-  units: 1 unit = 1 metre; radians internally
-  axis colours: x/y/z = red/green/blue
-
-completed:
-  - 0.1 What a Game Engine Actually Is      - 1.6 Colour, Honestly
-  - 0.2 How This Course Works               - 1.7 Vectors in 2-D, Geometrically
-  - 0.3 Setting Up Your Toolchain           - 1.8 Checkpoint: Pong
-  - 0.4 CMake from Zero                     - 2.1 Lines
-  - 0.5 The First Window                    - 2.2 The Triangle: Edge Functions
-  - 0.6 Reading Headers, Using a Debugger   - 2.3 Barycentric Coordinates
-  - 1.1 Events, Properly                    - 2.4 Interpolating Attributes
-  - 1.2 Input: State vs Events              - 2.5 Matrices as Basis Transforms
-  - 1.3 Delta Time                          - 2.6 Building mat4 by Hand
-  - 1.4 The Fixed Timestep                  - 2.7 Homogeneous Coordinates
-  - 1.5 The Framebuffer                     - 2.8 The Space Chain: Model to World
-
-capabilities:
-  - window, event loop, input state, fixed timestep with interpolation
-  - CPU framebuffer presented through an SDL streaming texture
-  - lines (Bresenham), triangles (edge functions), barycentric interpolation
-  - vec2/3/4, mat2/3/4 with affine transforms and homogeneous w
-  - transform (position/rotation/scale) -> model matrix, in the derived T*R*S order
-  - a SCENE: one mesh, many objects, a visible world with a ground plane and origin
-
-files:
-  src/: main.cpp
-  src/core/: input.hpp/.cpp, clock.hpp/.cpp, fixed_step.hpp/.cpp
-  src/gfx/: colour.hpp/.cpp, framebuffer.hpp/.cpp, raster.hpp/.cpp
-  src/math/: vec2.hpp, vec3.hpp, vec4.hpp, mat2.hpp, mat3.hpp, mat4.hpp, transform.hpp
-  src/game/: pong.hpp/.cpp
-  docs/: index.html, conventions.html, math-toolbox.html, cpp-style.html
-  docs/lessons/: 00-01 .. 00-06, 01-01 .. 01-08, 02-01 .. 02-08
-
-next: 2.9 — The View Matrix: Deriving Look-At</pre>
-  </details>
 
   <nav class="lesson-nav" aria-label="Lesson navigation (bottom)">
     <a class="prev-l" href="02-07-homogeneous.html">

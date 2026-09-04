@@ -3656,56 +3656,6 @@ scr   (80.9 82.5  d=0.956) px
       things we are about to add.</li>
   </ul>
 
-  <details class="state">
-    <summary>STATE — resume key</summary>
-<pre>course: Build a Professional 3D Game Engine (SDL3 + C++20)
-version: 1.0
-
-conventions:
-  world/view: right-handed, Y-up, -Z forward
-  clip/NDC: left-handed, +Y up, z in [0,1] (SDL_GPU; the projection flips handedness)
-  framebuffer: +Y DOWN, origin top-left; the viewport flips +y there
-  matrices: column vectors, v' = M*v, column-major storage
-  composition: A*B applies B first; matrices named a_from_b, adjacent labels must match
-  model matrix: T*R*S — scale first, translate last
-  view matrix: view_from_world = inverse(world_from_camera); rigid; axes are the ROWS
-  projection: perspective(fovy,aspect,near,far) -> clip; writes -z into w; divide -> NDC
-  viewport: NDC -> pixels + depth; y REVERSED; mirrors SDL_GPUViewport
-  meshes: vertex array + uint16 TRIANGLE indices (not edges); CCW = front, wound
-          outward; validate with V-E+F=2, every edge in exactly 2 faces, degree, winding
-  winding: CCW = front, cull back (set explicitly on every pipeline)
-  units: 1 unit = 1 metre; radians internally
-  axis colours: x/y/z = red/green/blue
-
-completed:
-  MODULE 0 (0.1-0.6) · MODULE 1 (1.1-1.8) · MODULE 2 COMPLETE (2.1-2.12)
-  - 2.1 Lines                        - 2.7 Homogeneous Coordinates
-  - 2.2 The Triangle: Edge Functions - 2.8 The Space Chain: Model to World
-  - 2.3 Barycentric Coordinates      - 2.9 The View Matrix: Deriving Look-At
-  - 2.4 Interpolating Attributes     - 2.10 Perspective from Similar Triangles
-  - 2.5 Matrices as Basis Transforms - 2.11 The Viewport Transform
-  - 2.6 Building mat4 by Hand        - 2.12 MILESTONE: A Spinning Wireframe Mesh
-
-capabilities:
-  - window, event loop, input state, fixed timestep with interpolation
-  - CPU framebuffer presented through an SDL streaming texture
-  - lines (Bresenham), triangles (edge functions), barycentric interpolation
-  - vec2/3/4 (cross, perspective_divide), mat2/3/4 (look_at, perspective), transform,
-    viewport, mesh (indexed geometry: cube + icosahedron)
-  - THE COMPLETE GEOMETRY PIPELINE: model -> world -> view -> clip -> NDC -> screen
-  - a real indexed mesh spinning in perspective, camera flown with the arrows
-
-files:
-  src/: main.cpp
-  src/core/: input.hpp/.cpp, clock.hpp/.cpp, fixed_step.hpp/.cpp
-  src/gfx/: colour.hpp/.cpp, framebuffer.hpp/.cpp, raster.hpp/.cpp, viewport.hpp, mesh.hpp
-  src/math/: vec2.hpp, vec3.hpp, vec4.hpp, mat2.hpp, mat3.hpp, mat4.hpp, transform.hpp
-  src/game/: pong.hpp/.cpp
-  docs/: index.html, conventions.html, math-toolbox.html, cpp-style.html
-  docs/lessons/: 00-01 .. 00-06, 01-01 .. 01-08, 02-01 .. 02-12
-
-next: 3.1 — The Painter's Problem and the Z-Buffer</pre>
-  </details>
 
   <nav class="lesson-nav" aria-label="Lesson navigation (bottom)">
     <a class="prev-l" href="02-11-viewport.html">

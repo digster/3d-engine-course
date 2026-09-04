@@ -2143,3 +2143,39 @@ alone that rendered as 32 identical outlines, two adjacent text runs with no spa
 (the 5.5 defect, again), and an annotation that contradicted its own caption.
 
 > next
+
+> why do all the current and past html files have the STATE block at the end? we already have the
+> STATE.md file which is supposed to be the definite state reference.
+
+**Answer:** because the per-lesson block is **older than `STATE.md`**, and nothing retired it.
+CLAUDE.md §9 mandated it when there was nowhere else to put one; 0.1 shipped with a block on
+2026-07-16, `STATE.md` appeared five lessons later at 0.6 (`cba92f1`, 2026-07-17) and took over
+the resume-key job, and §9 was never amended. Both ran for 46 more lessons. By 5.7 that was
+**3.97 MB — 22.2% of `docs/lessons/`**, worse than the 18% CSS duplication that forced the
+shared-asset extraction; 5.7's own block was 60% of its page and byte-identical to `STATE.md`'s
+(4,433 lines each, verified after unescaping). The user chose "strip all, amend §9".
+
+| Decision | Choice | Why |
+|---|---|---|
+| Strip all 52, or keep Modules 0–3's small ones as period snapshots? | **Strip all** | The standing rule was already "only the newest lesson's STATE block tracks reality" — 51 of 52 were stale *by design*. §6's Recap & Next, present in every lesson, already does the reader-facing job. Git keeps the history. |
+| Replace with a 3-line stub pointing at `STATE.md`? | **No** | A stub is a fourth place to forget to update. The lesson ends at Further Reading. |
+| How to verify a 53-file mass deletion? | **`--numstat`: 0 insertions** | 54,907 deletions and *zero* additions proves no regex over-matched, ate a `<nav>`, or re-indented anything — a stronger guarantee than reading the diff. Then a tag-balance parse, `apply-shared.py --check` (57/57 pages), and real Chromium over HTTP. |
+| Amend §9 how? | **In §7's house style** | §7 already documents its own amendment with a "what was knowingly given up" note. §9 now matches, and records that **`STATE.md` is append-and-merge** — which until now lived only in a memory file. |
+
+Also removed, because deleting a rule means deleting its scaffolding: three dead `.state` rules in
+`course.css`, the template's orphaned `SECTION 12 — STATE BLOCK` banner, two checklist lines (§11
+and `docs/_template/README.md`), and a `course.css` rationale comment that named `.state pre` as a
+co-restater of `pre { overflow-x: auto; }` — a selector that would no longer exist. Grep the class
+name, not just the markup.
+
+Net: **56 files, 7 insertions, 54,945 deletions.** No lesson, no engine code, no CMake change;
+still 52 of 94, `next:` still 5.8.
+
+> why are you appending a letter to the memory files for the same day? i had explicitly asked to
+> merge in the same date file, just fix it for today's file.
+
+Correct. `memory/2026-09-04-b.md` merged into `memory/2026-09-04.md` as a second `##` section
+(H1 broadened to name both items; `## Next` kept last, since it is the resume pointer) and the
+`-b` file deleted. The suffix came from copying the older `2026-09-02{,-b,-c}.md` files, which
+predate the instruction — history, not a pattern. Older dates left untouched as asked. Recorded
+as a standing convention so it does not recur.

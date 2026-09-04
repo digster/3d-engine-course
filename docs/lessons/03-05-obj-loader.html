@@ -8882,55 +8882,6 @@ dir build\Debug\assets
       no index problem to solve at load time — the exporter paid it.</li>
   </ul>
 
-  <details class="state">
-    <summary>STATE — resume key</summary>
-<pre>course: Build a Professional 3D Game Engine (SDL3 + C++20)
-version: 1.0
-
-conventions:
-  world: right-handed, Y-up, -Z forward
-  clip: left-handed, +Y up, z in [0,1] (SDL_GPU; projection absorbs the flip)
-  matrices: column vectors, v' = M*v, column-major storage
-  winding: CCW = front, cull back; front-facing is edge_function &lt; 0 in screen space
-  units: 1 unit = 1 metre; radians internally
-  axis colours: x/y/z = red/green/blue
-  assets: OBJ is 1-based, negative = relative; vt stored as written (flip decided in 3.9)
-
-completed:
-  - 0.1 What a Game Engine Is … 0.6 Headers and the Debugger
-  - 1.1 Events … 1.8 Pong (Module 1 checkpoint)
-  - 2.1 Lines … 2.12 A Spinning Wireframe Mesh (Module 2 complete)
-  - 3.1 The Painter's Problem and the Z-Buffer
-  - 3.2 Perspective-Correct Interpolation
-  - 3.3 Near-Plane Clipping
-  - 3.4 Back-Face Culling
-  - 3.5 A Hand-Rolled OBJ Loader
-
-capabilities:
-  - fixed-timestep loop with render interpolation; input state and events
-  - CPU framebuffer via an SDL3 streaming texture; sRGB-aware colour
-  - hand-built vec2/3/4, mat2/3/4, transforms, look-at, perspective, viewport
-  - triangle raster with edge functions, fill rule, perspective-correct attributes
-  - z-buffer (f32 / unorm24 / unorm16), near-plane clipping, back-face culling
-  - OBJ loading and saving; owning mesh_data; mesh validation (euler, boundary,
-    winding, signed volume); procedural torus
-
-files:
-  /: CLAUDE.md, README.md, ARCHITECTURE.md, LEARNINGS.md, PROMPT.md, LICENSE,
-     .gitignore, CMakeLists.txt, STATE.md
-  src/: main.cpp
-  src/core/: input.hpp/.cpp, clock.hpp/.cpp, fixed_step.hpp/.cpp
-  src/gfx/: clip.hpp/.cpp, colour.hpp/.cpp, depth_buffer.hpp/.cpp,
-            framebuffer.hpp/.cpp, mesh.hpp/.cpp, obj.hpp/.cpp,
-            raster.hpp/.cpp, viewport.hpp
-  src/math/: vec2.hpp, vec3.hpp, vec4.hpp, mat2.hpp, mat3.hpp, mat4.hpp, transform.hpp
-  src/game/: pong.hpp/.cpp
-  assets/: cube.obj, twisted.obj, quirks.obj, torus.obj
-  docs/: index.html, conventions.html, math-toolbox.html, cpp-style.html
-  docs/lessons/: 00-01 … 03-05 (31 lessons)
-
-next: 3.6 — Normals and Lambert's Cosine Law</pre>
-  </details>
 
   <nav class="lesson-nav" aria-label="Lesson navigation (bottom)">
     <a class="prev-l" href="03-04-back-face-culling.html">

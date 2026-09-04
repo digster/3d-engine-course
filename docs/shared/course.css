@@ -510,8 +510,8 @@ blockquote {
    callouts and .worked boxes are bare <pre> blocks with no .listing wrapper, and
    without this they had `overflow-x: visible` — a 677px compiler error spilling
    out of a 302px column and dragging the whole page into horizontal scroll at
-   390px. Both `.listing pre` and `.state pre` restate this; harmless, and it
-   keeps each rule readable on its own. */
+   390px. `.listing pre` restates this; harmless, and it keeps each
+   rule readable on its own. */
 pre { overflow-x: auto; }
 
 /* Horizontal scroll — NEVER wrap. Wrapped code lies about its structure. */
@@ -960,35 +960,6 @@ td code { font-size: 0.82em; }
   margin-right: 0.4em;
 }
 
-/* ---- STATE block --------------------------------------------------------- */
-.state {
-  margin: 2.5em 0 1em;
-  border: 1px dashed var(--rule-strong);
-  border-radius: 9px;
-  background: var(--bg-sunken);
-  overflow: hidden;
-}
-.state > summary {
-  cursor: pointer;
-  padding: 0.6rem 1rem;
-  font-family: var(--font-ui);
-  font-size: 0.72rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.09em;
-  color: var(--text-muted);
-}
-.state pre {
-  margin: 0;
-  padding: 0.9rem 1rem;
-  overflow-x: auto;
-  border-top: 1px solid var(--rule);
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  line-height: 1.6;
-  color: var(--text-muted);
-  white-space: pre;
-}
 
 /* ---- Footer -------------------------------------------------------------- */
 .foot {

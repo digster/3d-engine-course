@@ -4835,3 +4835,50 @@ one run and the start of the next when they share a line.
 Figure 3 drew a dashed box around the material pool — the one thing that *is* in the picture —
 under a caption whose point was the pools that are *not*. It passed every automated check because
 it is geometrically fine. Read each figure against its own caption once, out loud.
+
+## Course-infrastructure facts (docs/, STATE-block consolidation)
+
+### A rule written before its replacement existed does not retire itself
+
+CLAUDE.md §9 said "end every lesson with a fenced `STATE` block" because, when it was written,
+there was nowhere else to put one. `STATE.md` arrived five lessons later (`cba92f1`, with 0.6) and
+took over the resume-key job — but §9 was never amended, so **both** ran for another 46 lessons.
+By 5.7 the in-page copies were **3.97 MB, 22.2% of `docs/lessons/`**, and 5.7's own block was
+331 KB of a 550 KB page (60%) and byte-identical to `STATE.md`'s, 4,433 lines each.
+
+This is the *second* time this exact shape has bitten `docs/` — the shared-CSS extraction was the
+first, at 18% duplication. The tell is identical both times: a cost that grows monotonically with
+lesson count while nobody re-reads the rule that causes it. **When a new artifact takes over an
+old rule's job, amend the rule in the same breath.** Three places still demanded the block (§6
+item 13, §9, §11's pre-flight checklist), plus `docs/_template/README.md`'s authoring checklist.
+
+### "Only the newest copy is accurate" means every other copy is a bug
+
+The standing rule was already *"only the newest lesson's STATE block tracks reality"* — an
+explicit admission that 51 of 52 pages carried a knowingly-stale snapshot. A duplicate that is
+documented as unreliable is not documentation, it is 4 MB of it. Worth asking of any per-page
+copy: if it were wrong, would anything catch it? Here nothing would, because nothing read it.
+
+### Invisible duplication still costs at write time
+
+The blocks were inside `<details>`, collapsed, muted — a reader never saw one, so this never
+showed up as a rendering complaint. The cost was entirely on the authoring side: every lesson
+regenerated 4,400 lines that had to stay consistent with a file that already held them.
+**Absence of a reader-facing symptom is not evidence that duplication is free.**
+
+### Deleting a rule means deleting its scaffolding too
+
+The block was gone but four things still referenced it: three `.state` rules in `course.css`, the
+template's `SECTION 12 — STATE BLOCK` comment banner, and two checklist lines. One more was
+subtler — `course.css`'s rationale comment for `pre { overflow-x: auto; }` cited "`.listing pre`
+and `.state pre` restate this", naming a selector that no longer existed. **Grep for the class
+name, not just the markup**, and read the comments the grep hits.
+
+### Verify a mass deletion by proving it deleted nothing else
+
+`git diff --numstat` over 53 files gave **54,907 deletions and 0 insertions**. That single number
+is a stronger guarantee than reading any diff: a regex that over-matched, ate a `<nav>`, or
+re-indented a line would have shown up as insertions. Pair it with a tag-balance parse across
+every touched file and `apply-shared.py --check` (which re-verifies all 57 pages' relative
+`../shared/` prefixes), and the change is proven without opening a browser — though a real
+Chromium pass over HTTP still confirmed CSS applies and each page now ends Further Reading → nav.

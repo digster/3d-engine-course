@@ -1108,52 +1108,6 @@ Quit requested</code></pre>
   </ul>
 
   <!-- ================= 12. STATE ================= -->
-  <details class="state">
-    <summary>STATE — resume key</summary>
-<pre>course: Build a Professional 3D Game Engine (SDL3 + C++20)
-version: 1.0
-
-conventions:
-  world: right-handed, Y-up, -Z forward
-  clip: left-handed, +Y up, z in [0,1] (SDL_GPU-fixed; projection absorbs the flip)
-  sw-rasterizer: targets SDL_GPU's exact NDC (Module 4 port = API change, not maths change)
-  matrices: column vectors, v' = M*v, column-major storage
-  winding: CCW = front, cull back (per-pipeline state; set explicitly every time)
-  units: 1 unit = 1 metre; radians internally; linear colour in renderer
-  axis colours: x/y/z = red/green/blue
-  sdl3: FetchContent, pinned release-3.4.12; target SDL3::SDL3; SDL_TEST_LIBRARY OFF
-  sdl3-api: bool SDL_Init/PollEvent; SDL_CreateWindow(title,w,h,flags) no x/y;
-            SDL_CreateRenderer(window,name); event.key.key; <SDL3/SDL_main.h> separate;
-            SDL_Event = tagged union, type@0 + timestamp@8 shared by all variants,
-            sizeof 128 (ABI padding); types grouped 0x100 quit / 0x2xx window /
-            0x3xx keyboard / 0x4xx mouse / 0x6xx joystick / 0x8000 user
-  cpp: C++20, no exceptions/RTTI in core, snake_case, -Wall -Wextra//W4 all fixed
-  build: CMake >= 3.24, out-of-source (build/), 64-bit; Debug = -DCMAKE_BUILD_TYPE=Debug
-
-curriculum: 94 lessons, ~433 h, 9 modules
-  M0:6  M1:8  M2:12  M3:10  M4:9  M5:10  M6:15  M7:13  M8:11
-
-completed:
-  - MODULE 0 COMPLETE (0.1 … 0.6)
-  - 1.1 Events, Properly
-
-capabilities:
-  - portable CMake build; FetchContent SDL3 (release-3.4.12)
-  - window + complete switch-based event dispatch (quit, window close, resize, keys)
-  - clean shutdown; startup version log
-  - skills: reading SDL headers as source of truth; lldb/gdb/VS debugging
-
-files:
-  /: CLAUDE.md, README.md, ARCHITECTURE.md, LEARNINGS.md, PROMPT.md, LICENSE,
-     .gitignore, CMakeLists.txt, STATE.md
-  src/: main.cpp
-  docs/: index.html, conventions.html, math-toolbox.html, cpp-style.html
-  docs/lessons/: 00-01..00-06, 01-01-events-properly.html
-  docs/_template/: lesson-template.html, README.md, apply-shared-css.py
-  memory/: 2026-07-16.md
-
-next: 1.2 — Input: State vs Events</pre>
-  </details>
 
   <nav class="lesson-nav" aria-label="Lesson navigation (bottom)">
     <a class="prev-l" href="00-06-headers-and-debugger.html">

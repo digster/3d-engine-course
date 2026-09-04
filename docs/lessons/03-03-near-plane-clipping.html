@@ -7435,61 +7435,6 @@ see what the two obvious alternatives do instead.</code></pre>
     </ul>
   </div>
 
-  <details class="state">
-    <summary>STATE</summary>
-    <pre>course: Build a Professional 3D Game Engine (SDL3 + C++20)
-version: Module 3, Lesson 3.3 complete
-
-conventions:
-  right-handed world, +Y up, camera looks down -Z
-  column-major matrices, written row-by-row, applied as M * v
-  clip/NDC: SDL_GPU — x,y in [-1,1] with +Y UP; z in [0,1], 0 = near
-  DEPTH: smaller is nearer; clear to 1.0 (far); compare with &lt;
-  INTERPOLATION: attributes are perspective-corrected (a/w and 1/w, then divide);
-                 DEPTH IS NOT — device depth is already affine in screen space
-  CLIPPING: near plane only, in CLIP SPACE, BEFORE the divide; inside is
-            z_clip &gt;= 0 (NOT w &gt;= 0, which is the eye plane)
-  viewport: +Y DOWN; the flip lives in viewport::to_screen; it is a PARAMETER
-  winding: counter-clockwise = front face (stated in NDC); the clipper preserves it
-  units: 1 unit = 1 metre; angles in radians internally
-  naming: snake_case; types, functions and files alike
-  axis colours: x/y/z = red/green/blue
-
-completed:
-  MODULE 0 (0.1-0.6) · MODULE 1 (1.1-1.8) · MODULE 2 COMPLETE (2.1-2.12)
-  MODULE 3 (in progress)
-  - 3.1 The Painter&#39;s Problem and the Z-Buffer
-  - 3.2 Perspective-Correct Interpolation
-  - 3.3 Near-Plane Clipping
-
-capabilities:
-  - window, event loop, input state, fixed timestep with interpolation
-  - CPU framebuffer presented through an SDL streaming texture
-  - lines (Bresenham), triangles (edge functions), barycentric interpolation
-  - vec2/3/4, mat2/3/4 (look_at, perspective), transform, viewport
-  - mesh (indexed geometry + uvs: cube, quad, icosahedron, runtime floor)
-  - THE COMPLETE GEOMETRY PIPELINE: model -&gt; world -&gt; view -&gt; clip -&gt; CLIP STAGE
-    -&gt; NDC -&gt; screen
-  - DEPTH BUFFER: per-pixel hidden-surface removal, D32/D24/D16 precision
-  - PERSPECTIVE-CORRECT INTERPOLATION of every vertex attribute
-  - NEAR-PLANE CLIPPING (Sutherland-Hodgman) for polygons AND segments, with
-    attributes; the camera can now move through the world
-  - projector: projection + viewport + near-plane policy as one object
-  - fill_style: render state as an object (interpolation, shading, blend space)
-
-files:
-  src/: main.cpp
-  src/core/: input.hpp/.cpp, clock.hpp/.cpp, fixed_step.hpp/.cpp
-  src/gfx/: clip.hpp/.cpp, colour.hpp/.cpp, depth_buffer.hpp/.cpp,
-            framebuffer.hpp/.cpp, raster.hpp/.cpp, viewport.hpp, mesh.hpp
-  src/math/: vec2.hpp, vec3.hpp, vec4.hpp, mat2.hpp, mat3.hpp, mat4.hpp, transform.hpp
-  src/game/: pong.hpp/.cpp
-  docs/: index.html, conventions.html, math-toolbox.html, cpp-style.html
-  docs/lessons/: 00-01 .. 00-06, 01-01 .. 01-08, 02-01 .. 02-12,
-                 03-01, 03-02, 03-03
-
-next: 3.4 — Back-Face Culling</pre>
-  </details>
 
   <nav class="lesson-nav" aria-label="Lesson navigation (bottom)">
     <a class="prev-l" href="03-02-perspective-correct.html">

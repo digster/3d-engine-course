@@ -91,7 +91,6 @@ Every lesson contains all of the following sections, in this order:
 10. **Exercises** — two to five, ranging from guided tweaks to open "engine challenges," with hints and solution sketches (full solutions when short).
 11. **Recap & Next** — the capability the engine just gained, and the bridge to the next lesson.
 12. **Further Reading** — the relevant Scratchapixel pages, Real-Time Rendering chapters, PBR references, Gaffer on Games posts, vendor docs, etc.
-13. **STATE block** per §9.
 
 ## 7. HTML & diagram specification
 
@@ -123,7 +122,9 @@ Every lesson contains all of the following sections, in this order:
 - After approval, the user drives: `next` produces **exactly one complete lesson** (all sections of §6). The user may also say `redo 3.2`, `expand 4.1's section on samplers`, or `insert a lesson after 2.4 about X` — insertions are numbered `2.4b`; approved lessons are **never renumbered**.
 - **Delivery format:** each lesson as a single fenced code block containing the entire HTML document, preceded by a summary of at most five lines. Code files are likewise fenced and path-labeled (they also appear inside the lesson's own listings section). If your environment provides file-writing tools, write real files into the repository layout instead of fencing them, and state where each was written.
 - If a lesson exceeds your output limit, split it into clearly marked Part 1/2(/3) and continue on `continue` with **zero content loss** — never summarize earlier parts to make room.
-- **The STATE block.** End every lesson with a fenced block labeled `STATE` containing: course name and version; the key conventions in compact form; the list of completed lessons (ids + titles); the engine's current capabilities as a short list; the current file manifest (paths only, grouped by directory); and `next: <lesson id — title>`. This block is the resume key: when a new conversation begins with this master prompt followed by a STATE block, resume from `next` seamlessly, honoring every prior decision and regenerating nothing.
+- **The STATE block, and where it lives.** Maintain exactly one `STATE` block, in **`STATE.md` at the repository root**. It contains: course name and version; the key conventions in compact form; the list of completed lessons (ids + titles); the engine's current capabilities as a short list; the current file manifest (paths only, grouped by directory); and `next: <lesson id — title>`. It is the resume key: a new conversation begins with this master prompt plus `STATE.md`, and resumes from `next` seamlessly, honoring every prior decision and regenerating nothing. **`STATE.md` is append-and-merge** — it accumulates the whole course's decisions, so update it in place at the end of every lesson; never rewrite it from scratch, which silently discards prior modules' conventions.
+  - *Amended from the original rule ("end every lesson with a fenced `STATE` block") at the user's explicit direction.* The rule predated `STATE.md`, which arrived five lessons later at 0.6 and took over the resume-key job without the per-lesson rule ever being retired. By 5.7 the duplication was **3.97 MB — 22.2% of `docs/lessons/`**, and the newest lesson's block was 60% of its own file and byte-identical to `STATE.md`. **Lesson pages now end at Further Reading.**
+  - What was knowingly given up: a lesson page no longer carries a snapshot of the engine as it stood *at that lesson*. In practice it never did — the standing rule was already "only the newest lesson's STATE block tracks reality", so 51 of 52 pages carried a stale copy. The reader-facing half of the job is done by **§6's Recap & Next**, which every lesson has.
 
 ## 10. Accuracy & honesty
 
@@ -134,7 +135,7 @@ Every lesson contains all of the following sections, in this order:
 
 ## 11. Pre-flight checklist (run silently before emitting any lesson)
 
-Objectives all actually covered? Every formula preceded by intuition and followed by a numeric example? Diagrams present, labeled, and referenced from the text? Implementation narrated incrementally *and* full listings complete with zero placeholders? Manifest, build/run commands, and expected result present? Pitfalls and exercises included? Conventions consistent with the Conventions page? Prev/next/index links and an updated STATE block? Does the length serve depth — nothing padded, nothing truncated?
+Objectives all actually covered? Every formula preceded by intuition and followed by a numeric example? Diagrams present, labeled, and referenced from the text? Implementation narrated incrementally *and* full listings complete with zero placeholders? Manifest, build/run commands, and expected result present? Pitfalls and exercises included? Conventions consistent with the Conventions page? Prev/next/index links present, and `STATE.md` updated (in place, merged — never rewritten)? Does the length serve depth — nothing padded, nothing truncated?
 
 ## 12. Definition of done
 

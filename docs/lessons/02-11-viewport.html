@@ -3269,60 +3269,6 @@ scr   (81.8 75.5  d=0.959) px
       abstraction.</li>
   </ul>
 
-  <details class="state">
-    <summary>STATE — resume key</summary>
-<pre>course: Build a Professional 3D Game Engine (SDL3 + C++20)
-version: 1.0
-
-conventions:
-  world/view: right-handed, Y-up, -Z forward
-  clip/NDC: left-handed, +Y up, z in [0,1] (SDL_GPU; the projection flips handedness)
-  framebuffer: +Y DOWN, origin top-left (row 0 = top); the viewport flips +y here
-  matrices: column vectors, v' = M*v, column-major storage
-  composition: A*B applies B first; matrices named a_from_b, adjacent labels must match
-  model matrix: T*R*S — scale first, translate last
-  view matrix: view_from_world = inverse(world_from_camera); rigid; axes are the ROWS
-  projection: perspective(fovy,aspect,near,far) -> clip; writes -z into w; divide -> NDC
-  viewport: NDC [-1,1]^2 x [0,1] -> pixels + depth; y REVERSED (+y up -> +y down);
-            mirrors SDL_GPUViewport (x,y,w,h,min_depth,max_depth)
-  winding: CCW = front, cull back (set explicitly on every pipeline)
-  units: 1 unit = 1 metre; radians internally
-  axis colours: x/y/z = red/green/blue
-
-completed:
-  - 0.1 What a Game Engine Actually Is      - 1.8 Checkpoint: Pong
-  - 0.2 How This Course Works               - 2.1 Lines
-  - 0.3 Setting Up Your Toolchain           - 2.2 The Triangle: Edge Functions
-  - 0.4 CMake from Zero                     - 2.3 Barycentric Coordinates
-  - 0.5 The First Window                    - 2.4 Interpolating Attributes
-  - 0.6 Reading Headers, Using a Debugger   - 2.5 Matrices as Basis Transforms
-  - 1.1 Events, Properly                    - 2.6 Building mat4 by Hand
-  - 1.2 Input: State vs Events              - 2.7 Homogeneous Coordinates
-  - 1.3 Delta Time                          - 2.8 The Space Chain: Model to World
-  - 1.4 The Fixed Timestep                  - 2.9 The View Matrix: Deriving Look-At
-  - 1.5 The Framebuffer                     - 2.10 Perspective from Similar Triangles
-  - 1.6 Colour, Honestly                    - 2.11 The Viewport Transform
-  - 1.7 Vectors in 2-D, Geometrically
-
-capabilities:
-  - window, event loop, input state, fixed timestep with interpolation
-  - CPU framebuffer presented through an SDL streaming texture
-  - lines (Bresenham), triangles (edge functions), barycentric interpolation
-  - vec2/3/4 (cross, perspective_divide), mat2/3/4 (look_at, perspective), transform, viewport
-  - the COMPLETE geometry pipeline: model -> world -> view -> clip -> NDC -> screen
-  - a scene through it all, perspective or ortho ([P]), camera flown with the arrows
-
-files:
-  src/: main.cpp
-  src/core/: input.hpp/.cpp, clock.hpp/.cpp, fixed_step.hpp/.cpp
-  src/gfx/: colour.hpp/.cpp, framebuffer.hpp/.cpp, raster.hpp/.cpp, viewport.hpp
-  src/math/: vec2.hpp, vec3.hpp, vec4.hpp, mat2.hpp, mat3.hpp, mat4.hpp, transform.hpp
-  src/game/: pong.hpp/.cpp
-  docs/: index.html, conventions.html, math-toolbox.html, cpp-style.html
-  docs/lessons/: 00-01 .. 00-06, 01-01 .. 01-08, 02-01 .. 02-11
-
-next: 2.12 — Milestone: A Spinning Wireframe Mesh</pre>
-  </details>
 
   <nav class="lesson-nav" aria-label="Lesson navigation (bottom)">
     <a class="prev-l" href="02-10-perspective.html">
