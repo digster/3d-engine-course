@@ -7,7 +7,7 @@ There is no engine to download here and no framework doing the interesting parts
 write the math library, the rasterizer, the ECS, the renderer, the physics, and the editor. By
 the end you have a real engine and a game built on its public API.
 
-**Status:** curriculum and conventions published; lessons in progress — **Modules 0–4 are complete** and Module 5 is under way (55 of 95 lessons). The CPU software rasterizer is finished end to end, the same scene is drawn on a real GPU through SDL_GPU, and the tree is now a static library with a public API, a platform/application layer, its own logging, handle-based resource storage, an asset system that can load, share and free, a reusable A/B timing harness that has decided three architecture questions with numbers instead of folklore, and **a working from-scratch ECS** — a generational entity id honoured by every pool, sparse-set component storage, queries that lead with the smallest pool, a **transform hierarchy** whose resolve cost is flat in depth with a camera that is an ordinary entity, and (5.10) an **input layer that knows what the player meant** rather than which key they hit. Start at
+**Status:** curriculum and conventions published; lessons in progress — **Modules 0–5 are complete** (56 of 95 lessons). The CPU software rasterizer is finished end to end, the same scene is drawn on a real GPU through SDL_GPU, and the tree is now a static library with a public API, a platform/application layer, its own logging, handle-based resource storage, an asset system that can load, share and free, a reusable A/B timing harness that has decided three architecture questions with numbers instead of folklore, and **a working from-scratch ECS** — a generational entity id honoured by every pool, sparse-set component storage, queries that lead with the smallest pool, a **transform hierarchy** whose resolve cost is flat in depth with a camera that is an ordinary entity, (5.10) an **input layer that knows what the player meant** rather than which key they hit, and — completing the module — (5.11) **a debug-draw system and a tooling UI**: a queue of world-space geometry with lifetimes that anything in the engine can fill, and Dear ImGui behind a 182-line facade. Start at
 [`docs/index.html`](docs/index.html).
 
 ---
@@ -347,6 +347,42 @@ void on_fixed_step(float h) override            // zero or more times per frame
 action's value is the sum. Hold both halves of `steer` and you get exactly zero — a design with
 separate button and axis kinds would have needed a documented rule for that case, and this one
 does not, because −1 + 1 = 0.
+
+### The engine can draw what it is thinking
+
+**Lesson 5.11** split debug drawing into a queue anybody can fill and a backend that draws it:
+
+```cpp
+engine::debug_lines debug;                        // a value, not a global
+
+// Queued from a system that has no framebuffer, no projector and no camera —
+// which is the entire point, and was impossible before the split.
+void hierarchy_debug_system(engine::ecs::registry& world, engine::debug_lines& out)
+{
+    world.view<engine::ecs::world_transform, engine::ecs::parent>().each(
+        [&](const engine::ecs::world_transform& w, const engine::ecs::parent& p) {
+            if (const auto* pw = world.get<engine::ecs::world_transform>(p.value))
+            {
+                out.line(engine::translation_of(w.matrix),
+                         engine::translation_of(pw->matrix), 0xFF78BEFFu);
+            }
+        });
+}
+
+// …and once per frame, in the one place that knows where the camera is:
+engine::draw_debug_lines(fb(), view, projector, debug);   // 2. FLUSH
+debug.advance(time().dt());                               // 3. AGE — last, always
+```
+
+A queued line carries a lifetime, and that is not a convenience. **A collision normal exists for
+one simulation step — 16.7 ms at 60 Hz — against the ~250 ms a person needs to notice anything**,
+so a per-frame drawer can show you *state* and never *events*, and it is usually events you are
+hunting.
+
+Alongside it, Dear ImGui — taken through the **public** boundary where `stb_image` was hidden
+entirely, because that one wraps a *concept* and this one is a *vocabulary*. The engine owns only
+the lifecycle, in 182 lines, and refuses to start when there is no window, so a headless
+`--shot` run behaves exactly as it did before the UI existed.
 
 **An edge is a change in the *action*, not in a signal.** Bind `jump` to both a key and a mouse
 button, press one while the other is held, and there is still exactly one press edge. Derive
@@ -708,21 +744,25 @@ Third-party, each with an explicit "why we don't hand-roll this" justification: 
 ## Repository layout
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the full tree and the reasoning behind it. The short
-version, as of **Lesson 5.10**:
+version, as of **Lesson 5.11**:
 
 ```
-engine/include/engine/   the public API — 54 headers, and the only path a demo can name
+engine/include/engine/   the public API — 56 headers, and the only path a demo can name
 engine/include/engine/asset/      search_path, asset_store — names, roots, lifetimes
 engine/include/engine/core/       clock, input, fixed_step, profile, log, assert,
-                                  handle, pool, bench, actions (5.10)
+                                  handle, pool, bench, actions + masked_input (5.10-5.11)
 engine/include/engine/ecs/        entity, pool, registry, view — the world (5.8)
                                   hierarchy, camera — structure and viewpoint (5.9)
+engine/include/engine/gfx/        debug_lines — the debug QUEUE, which includes
+                                  nothing that can draw; debug_draw draws it (5.11)
 engine/include/engine/platform/   how a program starts: platform.hpp, app.hpp, main.hpp
-engine/src/              private implementation; stb_image stops here
+engine/include/engine/ui/         debug_ui — the Dear ImGui lifecycle. TOOLING ONLY (5.11)
+engine/src/              private implementation; stb_image and <imgui.h> stop here
 demos/common/            content shared by demos and verification harnesses
 demos/sandbox/           Lessons 2.1–4.9, on [Tab] and four flags; keeps its own main()
 demos/hello_cube/        the public-API acceptance test
-demos/ecs_swarm/         Lessons 5.8-5.10: 154 entities, three levels, no scancodes
+demos/ecs_swarm/         Lessons 5.8-5.11: 154 entities, three levels, no scancodes,
+                         152 debug lines and two ImGui panels
 demos/pong/              Lesson 1.8's game, on engine::app — 87 lines, no main()
 tools/                   the editor and asset cooker (Module 8)
 ```

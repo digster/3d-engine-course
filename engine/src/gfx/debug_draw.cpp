@@ -13,7 +13,7 @@
 
 namespace engine {
 
-void line3(framebuffer& fb, vec3 a, vec3 b,
+bool line3(framebuffer& fb, vec3 a, vec3 b,
            Uint32 colour, const projector& pr)
 {
     clip_vertex ca{to_clip(a, pr.proj), {}, colour};
@@ -21,13 +21,17 @@ void line3(framebuffer& fb, vec3 a, vec3 b,
 
     switch (pr.near)
     {
+    // The two `false` returns below are the only behaviour change Lesson 5.11
+    // made to this function, and they change no pixel: both were already `return`
+    // and both already drew nothing. Reporting the fact is what lets
+    // draw_debug_lines print an honest count.
     case near_mode::clip:
-        if (!clip_segment_near(ca, cb)) { return; }
+        if (!clip_segment_near(ca, cb)) { return false; }
         break;
 
     case near_mode::drop:
         if (near_distance(ca.position) < 0.0f
-         || near_distance(cb.position) < 0.0f) { return; }
+         || near_distance(cb.position) < 0.0f) { return false; }
         break;
 
     case near_mode::none:
@@ -38,13 +42,14 @@ void line3(framebuffer& fb, vec3 a, vec3 b,
     const screen_point pb = screen_from_clip(cb.position, pr.vp);
     draw_line(fb, to_pixel(pa.xy.x), to_pixel(pa.xy.y),
                           to_pixel(pb.xy.x), to_pixel(pb.xy.y), colour);
+    return true;
 }
 
-void line3_world(framebuffer& fb, const mat4& view, const projector& pr,
+bool line3_world(framebuffer& fb, const mat4& view, const projector& pr,
                  vec3 a, vec3 b, Uint32 colour)
 {
-    line3(fb, xyz(view * point(a)),
-          xyz(view * point(b)), colour, pr);
+    return line3(fb, xyz(view * point(a)),
+                 xyz(view * point(b)), colour, pr);
 }
 
 void draw_mesh(framebuffer& fb, const mesh& geometry,
@@ -91,9 +96,11 @@ void draw_mesh(framebuffer& fb, const mesh& geometry,
 void draw_axes3(framebuffer& fb, const mat4& m, const projector& pr,
                 float point_w, float dir_w)
 {
-    const Uint32 col[3] = {pack_argb(236, 92, 92),     // x
-                           pack_argb(122, 196, 152),   // y
-                           pack_argb(126, 162, 236)};  // z
+    // Lesson 5.11 moved these three literals into gfx/debug_lines.hpp so the
+    // queue and the immediate path cannot drift apart. The VALUES are unchanged
+    // — a consolidation, not a re-colouring — which is why every picture drawn
+    // before this lesson is still byte-identical afterwards.
+    const Uint32 col[3] = {k_axis_x_colour, k_axis_y_colour, k_axis_z_colour};
     const vec3 basis[3] = {{1.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}};
 
     // Where the object actually is. A position, so w = 1.
@@ -226,6 +233,24 @@ void draw_axes3(framebuffer& fb, const mat4& m, const projector& pr,
         }
     }
     return peak;
+}
+
+int draw_debug_lines(framebuffer& fb, const mat4& view, const projector& pr,
+                     const debug_lines& queue)
+{
+    // Note what this loop does NOT do: sort, batch, cull, or look at the depth
+    // buffer. Every one of those is a real optimisation and every one of them
+    // would be premature here — the queue holds a few hundred lines and it is
+    // budgeted under Lesson 3.10's `zone::overlay`, separately from the scene,
+    // precisely so that debug drawing can never be mistaken for the renderer's
+    // cost. When it does start to matter, the queue is the thing that made
+    // batching POSSIBLE: you cannot batch calls that have already happened.
+    int drawn = 0;
+    for (const debug_line& l : queue.lines())
+    {
+        if (line3_world(fb, view, pr, l.a, l.b, l.colour)) { ++drawn; }
+    }
+    return drawn;
 }
 
 }   // namespace engine

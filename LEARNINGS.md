@@ -5413,3 +5413,237 @@ statement could never do.
 The lesson said "Lesson 5.2's application layer offers six hooks". It offered seven. Caught by
 grepping `virtual ` in `app.hpp` while updating ARCHITECTURE.md, not by re-reading the prose —
 a number in a sentence is a claim, and claims about the codebase are checkable in one command.
+
+---
+
+## Debug drawing and tooling UI facts (Lesson 5.11)
+
+### Two of six parameters were the whole bug
+
+`line3(fb, a, b, colour, pr)` needs a `framebuffer` and a `projector`, so **only code holding
+renderer state can call it** — and the code with something worth drawing (a collision system, an
+ECS pass, a loader) has neither, and should not. Hand a framebuffer down so one of them can draw a
+line and every caller of every caller needs one too. Three apparent problems, one root: it works on
+one surface only, and a line lives exactly one frame, both fall out of the same two parameters.
+
+**Removing an argument is a design change. It made nothing faster and it moved the ceiling.**
+
+### The include list is the interface, and it is transitive
+
+The queue could have gone into `debug_draw.hpp` and everything would compile. It would also mean
+that a physics translation unit including it to draw one box compiles the framebuffer, the depth
+buffer, the projector, the viewport and — via `mesh.hpp` — the whole handle system. Forever, in
+every TU.
+
+That constraint is why `wire_mesh()` takes `span<const vec3>` and `span<const uint16_t>` rather
+than the `mesh` that owns them. **Take the data, not the type**, when the type's header costs more
+than the data does.
+
+### A single-frame marker for a single-frame event is invisible
+
+16.7 ms at 60 Hz, against roughly 250 ms for a person to register that something appeared. So a
+debug drawer without lifetimes **can show you state and never events** — and the events (a
+contact, a re-parent, a spawn, a raycast hit) are usually what you are hunting. This is the
+argument for lifetimes and it is the one that gets dismissed as a nicety.
+
+### The expiry rule: test before you subtract
+
+Measured in `float` at 60 Hz on a 0.5-second line, three rules that all look right:
+
+| rule | advances | 0-second line at `dt == 0` |
+|---|---|---|
+| `if (r <= 0) drop; r -= dt;` — shipped | 31 | dropped |
+| `r -= dt; if (r <= 0) drop;` | 30 | dropped |
+| `r -= dt; if (r < 0) drop;` | 30 | **kept for ever** |
+
+The third is the one you write the moment you want a line to survive the frame its clock runs out
+on — a one-character change. And `dt == 0` is a paused clock, a single-frame `--shot`, a
+breakpoint: **the moments you are looking hardest.** Testing first does not get the answer right,
+it *removes the dependency* on `dt` and on the comparison operator, which is the more durable fix.
+
+### Queue → flush → advance, and `advance()` outside every branch
+
+Ageing before the flush deletes every default-lifetime line before it is drawn. The symptom is a
+debug system that draws **nothing**, which reads as "my queueing code never ran" and sends you to
+instrument the wrong file. Diagnose it in one step: queue something with `seconds = 5`; if that
+appears and the default ones do not, it is the order.
+
+Ageing *inside* the "we have a camera" branch is the same bug with a slower fuse — the queue grows
+without limit on exactly the frames that draw nothing.
+
+### A bound with no counter is a bug that looks like a rendering artifact
+
+The 4,097th line simply is not there, and a missing line looks exactly like a thing that does not
+exist. `queued`, `drawn` and `dropped` only mean anything as a set. Every primitive funnels
+through one private `push()` so the bound has one implementation, which is also why a 12-edge box
+with two free slots is 2 kept and 10 dropped rather than something bespoke.
+
+### Report what you actually know: `line3` now returns whether it survived
+
+The HUD claimed "drawn below queued means something clipped", and `draw_debug_lines` was counting
+what it *submitted*. Giving `line3` a `bool` return made the claim true. It changes no pixel —
+both new `return false` paths were already `return` and already drew nothing — and it is
+deliberately not `[[nodiscard]]`, because six lessons of call sites correctly ignore it.
+
+**A number in a HUD is a checkable claim. One the code cannot back is worse than no number.**
+
+### Never withhold an event from a level tracker
+
+The tempting fix for two consumers of one keyboard is to route: give the event to the UI, and if
+it took it, stop. `engine::input` tracks **levels**, and a level is only ever corrected by the
+event that contradicts it — so a key-*up* routed away leaves that key held down for ever, and no
+later event fixes it, because the key is not going to be released twice.
+
+Both consumers see every event. Arbitrate one layer later, on the levels.
+
+### …and keep updating the map while the UI has focus
+
+Skipping `action_map::update()` while a text field is focused freezes every level: hold a movement
+key, click into the box, and the camera flies away. Updating through a mask reports the masked
+keys as *up*, which fires the **release edge** — which is not damage limitation, it is the
+behaviour you want. Giving focus to a text field genuinely should let go of the movement keys.
+
+### You cannot mask a delta by masking one of its endpoints
+
+A key is a level, so reporting it as up is a complete lie and it works. The cursor is not:
+`action_map` *derives* a delta by differencing two frames. Cursor at 100, UI takes the mouse for
+three frames while it travels to 160, then lets go as it moves to 170:
+
+| approach | delta on the release frame |
+|---|---|
+| report 0 while blocked | **+170** — the whole screen |
+| freeze the last position | **+70** — the whole excursion. *This is the version that ships.* |
+| virtual cursor | **+10** — one frame of real movement |
+
+The middle one is the trap, because it behaves perfectly until somebody drags a slider, and then
+letting go whips the camera round by the distance they dragged.
+
+The fix is a change of frame of reference, not a mask: report `real − offset`, and grow `offset`
+by exactly this frame's real movement on every blocked frame. Reported position stops dead while
+blocked, and the offset stops *growing* the instant the block lifts, so both boundaries are free.
+The cursor stays permanently 60 px behind and is permanently right about how far it moved — which
+is the only question anybody asked it.
+
+The wheel needs none of this, and noticing why tells you when the machinery is needed: `input`
+publishes the wheel as a per-frame **delta** already, so zeroing it is exact. Only a delta the
+*consumer* derives needs the virtual-cursor treatment.
+
+### A concept written for testability turned out to be an architecture
+
+Lesson 5.10 made `action_map::update` a template over an `input_snapshot` concept so a test could
+hand it a six-function fake. One lesson later the mask is the concept's second implementor, and
+**`action_map` did not change by one character**. Against `const input&` the only options were an
+`if` inside the map (the input mapper learning what a UI is) or a copy of `input` with fields
+cleared (a second source of truth about the keyboard).
+
+### `NewFrame` computes the capture flags, so it goes first
+
+ImGui's `WantCaptureKeyboard` / `WantCaptureMouse` are computed *inside* `NewFrame`, from the
+events processed since the last one. Put `NewFrame` next to the panels in `on_overlay` — where it
+looks like it belongs — and every read during the frame answers about the **previous** frame. The
+symptom is exactly one frame of leakage: the first keystroke after clicking into a text field also
+reaches the game, every time, and it is invisible unless you know to look.
+
+The three backend calls also have a fixed order — renderer, then platform, then core — because the
+core derives from what the two backends just filled in.
+
+### Concept versus vocabulary decides whether a dependency can be wrapped
+
+`stb_image` is `PRIVATE` and hidden behind `engine::image` because it wraps a **concept**: decode
+these bytes into pixels, one function and one type. Dear ImGui is `PUBLIC` because its value **is
+its vocabulary** — four hundred widget calls — and a wrapper around that is a re-spelling with no
+content that has to be re-spelt for every widget, forever, by somebody who did not write the
+widget.
+
+So the containment is a *rule about which code may speak it* (tooling only) rather than a link
+flag, and exactly one engine translation unit includes `<imgui.h>`.
+
+### Some libraries ship sources and no build, and that is a feature
+
+ImGui has no `CMakeLists.txt`. `FetchContent_MakeAvailable` notices and only *populates*; the
+target is yours to declare. Being forced to name the seven files you compile is a better position
+than inheriting somebody's build options — and it is where you decide, consciously, to keep
+`imgui_demo.cpp` (11,299 lines) because `ShowDemoWindow()` is the fastest widget reference there
+is and its source is the documentation.
+
+### A static library only contributes what somebody references
+
+`verify_45` … `verify_510` still link without `libimgui.a`, even though the engine archive now
+contains `debug_ui.o`. Only `verify_511` needs it, because only `verify_511` touches
+`engine::debug_ui`. Worth knowing before you go adding libraries to every link line "just in
+case".
+
+### The headless path must be silent, safe, and *logged at info*
+
+`debug_ui::start()` returns false with no window — which is `--shot`, and a build server, and both
+are legitimate. Logging that at error level would put a red line in every headless run in the
+repository and train the reader to ignore red lines. Same argument `engine_set_warnings` makes
+about compiler warnings, one layer up.
+
+Every subsequent call being a no-op — *including* `wants_keyboard()`, which answers false — is
+what lets one program be written once and run correctly on all three surfaces.
+
+---
+
+## Course-infrastructure facts (docs/, Lesson 5.11)
+
+### "Pin the demo" was the wrong rule; pin every file the page lists
+
+`build_510.py` carried a warning to pin `demos/ecs_swarm/main.cpp` before 5.11 touched it. Done,
+verified, and **still not enough**: re-running the builder produced a 173-line diff, because
+`actions.hpp` is also one of 5.10's listings and 5.11 added `masked_input` to it. It read as
+"finished" precisely because it was *5.10's own new header*.
+
+The rule is: **pin every file the page lists that a later lesson touches** — and the cheap way to
+find out which is to re-run the builder and `git diff` the page *before* shipping anything else.
+Third occurrence of an old builder misbehaving (5.7's stamped a retired STATE block, 5.8's spliced
+a newer demo, 5.10's needed two pins).
+
+### `check-page.js` must be run at a stated viewport
+
+Run in the Browser pane at its natural (narrow) size, the spill check reported **every label in
+every figure** as spilling and `pageScrollsX` as true. Nothing was wrong: the SVGs are scaled and
+the comparison degenerates. At 1280×900 and again at 390×844 the same page returns `pass: true`
+with zero findings.
+
+A checker that reports 170 failures for a page with none is worse than no checker, because the
+next real finding is in that list somewhere. **Set the viewport explicitly before believing the
+output.**
+
+### Box-sampling destroys a line drawing; take the peak instead
+
+`figs_45.box_sample` averages each cell, which is right for a shaded surface and catastrophic for
+lines: a one-pixel debug line inside a 3×3 block contributes one ninth of its brightness, so 152
+crisp radial lines averaged into a uniform haze and the figure showed scattered dots. Taking each
+block's **brightest** pixel keeps thin bright features at full strength.
+
+### …and the quantiser's background test is per-channel, not luminance
+
+`figs_45.quantise` calls a cell background only when `r < 14 && g < 14 && b < 14`. This demo's
+background is `(12, 14, 20)` — blue is 20 — so every empty cell snapped to the nearest tint at its
+dimmest step and the whole panel came out solid slate with the lines invisible inside it. The fix
+is to floor dim cells to true black in the sampler, so a cell says "nothing here" in the
+vocabulary the quantiser already speaks.
+
+Both bugs were found by *looking at the rendered figure*. No geometry check can see either.
+
+### A label can overflow its own box, still
+
+Third occurrence. Figure 3's one-frame bar is 92 units wide and carried "queued, drawn, gone" —
+about 99 units of text, spilling out both ends. Inside the viewBox, on top of nothing, overlapping
+nothing, so every automated check passes. Budget roughly **5.2 units per character** for `xs`
+text and check in-bar labels against the bar.
+
+### Calibrate the text-width estimate against pages that shipped
+
+A pre-flight width check flagged fourteen labels using a guessed 5.3 units/character. Measuring
+the *shipped* 5.10 figures — which were browser-verified — showed they pack 134 characters into
+696 units, i.e. 5.19. Half the "failures" were the estimate, not the figures. **Calibrate against
+known-good output before acting on a heuristic.**
+
+### The reliable way to look at a figure is one page per figure
+
+Scrolling a 400 KB lesson page and screenshotting lands somewhere unpredictable — `offsetTop` is
+relative to the offset parent, and `course.css` sets `scroll-behavior: smooth`. Generating a
+throwaway HTML page per SVG that links `course.css`, then `navigate` + `screenshot`, is
+deterministic and shows the figure at its real size in both themes. Delete them afterwards.

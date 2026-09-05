@@ -41,6 +41,10 @@ add_library(engine STATIC
     src/gfx/clip.cpp
     src/gfx/colour.cpp
     src/gfx/debug_draw.cpp
+    # Lesson 5.11. The QUEUE, split from the drawing above it. Two files rather
+    # than one because their include lists must differ: this one is reachable
+    # from a physics system, debug_draw.cpp is reachable only from a renderer.
+    src/gfx/debug_lines.cpp
     src/gfx/depth_buffer.cpp
     src/gfx/framebuffer.cpp
     src/gfx/gpu_buffer.cpp
@@ -64,6 +68,11 @@ add_library(engine STATIC
     # block at the top of that file.
     src/platform/app.cpp
     src/platform/platform.cpp
+    # Lesson 5.11. A new directory again, and the same argument asset/ made in
+    # 5.5: tooling UI is not a graphics subsystem. Module 8's editor lands here
+    # beside it, and the top-level tools/ directory is a different thing — the
+    # executables that USE the engine, not part of it.
+    src/ui/debug_ui.cpp
 )
 
 # `engine::engine` is an ALIAS, and aliases exist for one reason: a name with a
@@ -114,5 +123,18 @@ target_link_libraries(engine PUBLIC SDL3::SDL3)
 # neither see stb nor accidentally start depending on it. That is what a good
 # wrapper buys, and this line is the proof it worked.
 target_include_directories(engine PRIVATE ${stb_SOURCE_DIR})
+
+# Dear ImGui, PUBLIC — the opposite call from stb above, argued at length in
+# engine/include/engine/ui/debug_ui.hpp. The short version: with stb we wrapped a
+# CONCEPT (decode bytes into pixels), which is one function and one type. ImGui's
+# value IS its vocabulary — four hundred widget calls — and a wrapper around that
+# is a re-spelling with no content that has to be re-spelled again forever.
+#
+# So demos include <imgui.h> and call ImGui:: directly, and this line is what
+# makes that legal. Note precisely what it costs: two more directories on the
+# include path of everything that links the engine, and a second third-party
+# vocabulary inside our public API. What makes it acceptable is that the only
+# code allowed to speak it is TOOLING code.
+target_link_libraries(engine PUBLIC imgui::imgui)
 
 engine_set_warnings(engine)

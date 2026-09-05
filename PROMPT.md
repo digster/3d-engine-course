@@ -2282,3 +2282,50 @@ lesson. Pinned 5.9's `ecs_swarm` snapshot in `build_59.py` before touching the d
 that bit `build_58.py` last session.
 
 `next:` is now 5.11 — Dear ImGui and the Debug Draw System.
+
+---
+
+## 2026-09-05 (b) — "Based on the STATE and the project's claude instructions, work on the next."
+
+> Based on the STATE and the project's claude instructions, work on the next.
+
+Lesson 5.11 — Dear ImGui and the Debug Draw System, which completes Module 5 at 11 lessons and
+the course at 56 of 95 published.
+
+Two subsystems, one lesson, because they are one thing: the tooling UI and the tooling in the
+world. **The debug-draw rework was a design problem with one root** — two of `line3`'s six
+parameters are renderer state, so only the renderer could call it, it worked on one surface, and a
+line lived exactly one frame. Removing those two arguments fixes all three, and the fix ships as
+*two headers whose include lists are the interface*: `gfx/debug_lines.hpp` includes maths, a
+colour and the standard library and **nothing that can draw**, so a physics system can queue
+without compiling a renderer. Nothing in `debug_draw.hpp` was deleted — it became the backend, and
+`draw_debug_lines()` is a four-line loop over `line3_world`.
+
+Lifetimes got the argument they are owed: **16.7 ms at 60 Hz against the ~250 ms a person needs**,
+so a per-frame drawer can show state and never events. The expiry rule tests before it subtracts,
+which removes a dependency on `dt` rather than getting it right — measured in `float`, the variant
+with a strict `<` keeps a one-frame line *for ever* when `dt` is zero, which is a paused clock, a
+`--shot`, or a breakpoint.
+
+Dear ImGui went through the **public** boundary where `stb_image` was hidden entirely, and the
+distinction is *concept versus vocabulary*. 41,385 lines not written against 182 that own the
+lifecycle. `begin_frame()` goes first in `on_input()`, not beside the panels, because the capture
+flags are computed inside `NewFrame` — one hook late costs exactly one frame of input leakage,
+every time.
+
+The input seam turned out to be the subtlest part. Two consumers of one keyboard, arbitrated on
+**levels, never by routing events**, because a level is only corrected by the event that
+contradicts it and a stolen key-up is a key held down for ever. 5.10's concept paid for itself:
+`masked_input` is a new type satisfying it and `action_map` did not change by one character. And
+**a delta cannot be masked by masking one of its endpoints** — the shipped virtual cursor gives
++10 on the release frame where freezing the position gives +70, which is the version that ships
+and whips the camera round.
+
+**60 checks / 0 failures** in debug and release; `verify_45`…`510` still green; golden
+byte-identical for the **eleventh** lesson — this time across a signature change on the reference
+render's own call path. Pinned `demos/ecs_swarm/main.cpp` *and* `actions.hpp` in `build_510.py`:
+the demo was expected, `actions.hpp` was not, and it is the reason the rule is now "pin every file
+the page lists that a later lesson touches".
+
+`next:` is now 6.1 — Linear and sRGB: The Gamma Lesson, and Module 6 opens there because every
+lighting result in the module is wrong until the colour space is settled.

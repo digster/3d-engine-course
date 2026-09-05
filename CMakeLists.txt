@@ -74,6 +74,86 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(stb)
 
+# Dear ImGui — Lesson 5.11. The course's first third-party USER INTERFACE, and
+# the first third-party library whose types reach our PUBLIC headers.
+#
+# WHY WE DO NOT HAND-ROLL THIS. The test this course applies to every library is
+# not "is it hard?" — the rasterizer was hard and we wrote it — it is **whether
+# the hard part is the subject**. A debug UI is four subjects at once: a font
+# rasterizer and text shaper, a layout engine, an input router with focus and
+# capture rules, and a widget state machine that has to remember what you were
+# dragging across frames. Not one of those is graphics or engine architecture,
+# and a half-built version of all four is precisely the tool you stop trusting
+# the first time it misreports a number.
+#
+# What we get in exchange is worth naming too, because it is not just "saved
+# time": ImGui is IMMEDIATE MODE, so a debug panel is a function that runs every
+# frame and owns no state. There is no widget tree to keep in sync with the
+# world, which is the failure every retained-mode debug UI eventually has.
+#
+# TOOLING ONLY, NEVER GAMEPLAY UI. That is a binding rule of this course and it
+# is a real engineering line, not a stylistic one: ImGui rebuilds its geometry
+# from scratch every frame and knows nothing about controllers, localisation,
+# safe areas or artists. It is the right tool for the people building the game
+# and the wrong one for the people playing it.
+#
+# IMGUI SHIPS SOURCES, NOT A BUILD. There is no CMakeLists.txt in that
+# repository, which is deliberate on its author's part — the library is nine
+# .cpp files and a backend pair, and every project wants to compile them its own
+# way. FetchContent_MakeAvailable notices the absence and only POPULATES; the
+# target below is ours to declare, and being forced to declare it is how you
+# find out exactly which files you are compiling.
+FetchContent_Declare(
+    imgui
+    GIT_REPOSITORY https://github.com/ocornut/imgui.git
+    GIT_TAG        v1.92.9b   # pinned — never a branch name
+    GIT_SHALLOW    TRUE
+)
+FetchContent_MakeAvailable(imgui)
+
+# The core, plus exactly ONE backend pair. ImGui separates "what a window looks
+# like" (the core) from "how events get in and triangles get out" (a platform
+# backend and a renderer backend), and you pick one of each.
+#
+#   imgui_impl_sdl3         the PLATFORM backend: SDL_Event in, mouse/keyboard/
+#                           text/focus out. Independent of how we draw.
+#   imgui_impl_sdlrenderer3 the RENDERER backend: ImGui's vertex+index draw
+#                           lists out through an SDL_Renderer.
+#
+# Lesson 5.11 §5 explains why the SDL_Renderer pair goes first and what the
+# SDL_GPU one (imgui_impl_sdlgpu3) would need instead. The platform half is
+# shared between them; only the renderer half would change.
+#
+# imgui_demo.cpp is 8,000 lines of showcase and it is included ON PURPOSE:
+# ImGui::ShowDemoWindow() is the fastest widget reference there is, and its
+# source is the documentation. Drop it from this list when a real game ships.
+add_library(imgui STATIC
+    ${imgui_SOURCE_DIR}/imgui.cpp
+    ${imgui_SOURCE_DIR}/imgui_draw.cpp
+    ${imgui_SOURCE_DIR}/imgui_tables.cpp
+    ${imgui_SOURCE_DIR}/imgui_widgets.cpp
+    ${imgui_SOURCE_DIR}/imgui_demo.cpp
+    ${imgui_SOURCE_DIR}/backends/imgui_impl_sdl3.cpp
+    ${imgui_SOURCE_DIR}/backends/imgui_impl_sdlrenderer3.cpp
+)
+add_library(imgui::imgui ALIAS imgui)
+
+# PUBLIC, because anything that includes <imgui.h> needs these two directories
+# and ImGui's headers are reached BY NAME rather than through a prefix — the
+# spelling is <imgui.h>, not <imgui/imgui.h>. That is a real cost of using it and
+# it is worth seeing: two directories go onto the include path of everything that
+# links this target.
+target_include_directories(imgui PUBLIC
+    ${imgui_SOURCE_DIR}
+    ${imgui_SOURCE_DIR}/backends)
+
+# Both backends include SDL3 headers, and imgui_impl_sdlrenderer3 calls into it.
+target_link_libraries(imgui PUBLIC SDL3::SDL3)
+
+# NOT engine_set_warnings(imgui). Third-party code is compiled with its own
+# flags, for the reason cmake/EngineHelpers.cmake gives: warnings we cannot act
+# on train us to ignore the ones we can.
+
 # ---- Shared build rules ----------------------------------------------------
 # Two modules, both of ours. EngineHelpers defines the three functions every
 # target calls; Shaders defines the HLSL toolchain and probes it once, here, at

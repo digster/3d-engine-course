@@ -7,7 +7,7 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-09-05 (after Lesson 5.10 — 55 of 95 lessons; Module 5 split 5.10/5.11)
+updated: 2026-09-05 (after Lesson 5.11 — 56 of 95 lessons; MODULE 5 COMPLETE)
 
 conventions:
   ecs-storage: THE ECS IS A SPARSE SET, DECIDED IN 5.7 BY MEASUREMENT, NOT TASTE.
@@ -110,6 +110,156 @@ conventions:
         opposite jobs. The namespace keeps them apart; `using namespace engine;`
         plus `using namespace engine::ecs;` makes bare `pool` ambiguous, which is
         the good kind of breakage. The engine never writes `using namespace`.
+  debug-draw: SAYING WHAT TO DRAW AND DOING IT ARE TWO FILES, AND THE INCLUDE
+        LISTS ARE THE INTERFACE. 5.11 reworked a header that had been wrong since
+        Module 3 WITHOUT DELETING ANY OF IT.
+        WHAT WAS WRONG WITH line3(fb, a, b, colour, pr): two of six parameters are
+        renderer state, and that ONE fact is three problems.
+          1 THE CALLER MUST BE THE RENDERER. A collision system, an ECS pass and a
+            loader all have something worth drawing and none of them has a
+            framebuffer — and handing one down means every caller of every caller
+            has one too.
+          2 ONE SURFACE ONLY. framebuffer is the software target; surface::gpu has
+            none, so every such call is unavailable on Module 4's whole path.
+          3 A LINE LIVES ONE FRAME = 16.7 ms at 60 Hz, against the ~250 ms a person
+            needs. SO A PER-FRAME DRAWER CAN SHOW STATE AND NEVER EVENTS, and it is
+            usually events you are hunting. This is the argument for lifetimes and
+            it is the one people dismiss.
+        THE FIX REMOVES AN ARGUMENT AND MAKES NOTHING FASTER. debug_lines holds
+        WORLD-SPACE segments — world, not view, because the queuer does not know
+        where the camera is and often runs before it is resolved; a split-screen
+        game flushes the same queue twice.
+        TWO FILES BECAUSE THE INCLUDE LISTS MUST DIFFER, and this is the whole of
+        the physical design. debug_lines.hpp includes colour, mat4, vec3, span,
+        vector — and NOTHING THAT CAN DRAW. debug_draw.hpp includes that plus the
+        framebuffer, depth buffer, mesh, projector and viewport. Include
+        dependencies are TRANSITIVE, so putting the queue in the drawing header
+        would make a physics TU compile the renderer to draw one box.
+        HENCE wire_mesh() TAKES TWO SPANS, NOT `mesh` — mesh.hpp drags in
+        core/pool.hpp and the handle system. TAKE THE DATA, NOT THE TYPE.
+        THE OLD FUNCTIONS BECAME THE BACKEND. draw_debug_lines() is a four-line
+        loop over line3_world(), which has clipped correctly since 3.3. Nothing was
+        rewritten; a queue was put IN FRONT.
+        line3/line3_world NOW RETURN bool = "survived the near plane", NOT
+        [[nodiscard]] because six lessons of call sites correctly ignore it. It
+        changes no pixel — both new `return false` paths were already `return` and
+        already drew nothing — and it makes "queued 152, drawn 151" a real claim
+        instead of the queue size printed twice. A NUMBER IN A HUD IS A CHECKABLE
+        CLAIM; one the code cannot back is worse than no number.
+        EXPIRY TESTS BEFORE IT SUBTRACTS, and the honest statement is not "the
+        obvious rule is broken" but "whether it is broken depends on a comparison
+        operator and on dt". Measured in float at 60 Hz on a 0.5 s line:
+          test-first (shipped)          31 advances; drops a 0 s line at dt == 0
+          subtract-then-test, <=        30 advances; drops a 0 s line at dt == 0
+          subtract-then-test, <         30 advances; KEEPS IT FOREVER at dt == 0
+        dt == 0 is a paused clock, a single-frame --shot, a breakpoint — the
+        moments you are looking hardest. Testing first REMOVES the dependency
+        rather than getting it right. Cost: a 2 s line lives 2 s + 1 frame, which
+        is the right way round to be wrong for a thing whose job is to be seen.
+        ORDER: QUEUE -> FLUSH -> ADVANCE, and advance() is the LAST thing in the
+        frame and OUTSIDE every branch. Age first and every default-lifetime line
+        dies before it is drawn — presenting as a debug system that draws nothing,
+        which reads as "my code did not run". Age inside the has-a-camera branch
+        and the queue grows without limit on the frames that draw nothing.
+        BOUNDED (4096) WITH A DROP COUNTER, because a bound with no counter is a
+        bug that presents as a rendering artifact: the missing line looks exactly
+        like a thing that does not exist. One private push() checks it, so a
+        12-edge box with 2 free slots is 2 kept and 10 dropped, and a primitive
+        added next month cannot forget to ask.
+        NO DEPTH TEST AND NO BATCHING, both named rather than discovered. A flag no
+        backend honours is speculative; and the queue is what makes batching
+        POSSIBLE LATER, because you cannot batch calls that already happened.
+        THE AXIS COLOURS NOW HAVE ONE HOME (k_axis_{x,y,z}_colour), values
+        unchanged from draw_axes3's three literals — a consolidation, not a
+        re-colouring, so every earlier picture is provably identical.
+  debug-ui: DEAR IMGUI, TAKEN PUBLICLY AND CONTAINED. engine/ui/debug_ui.{hpp,cpp},
+        v1.92.9b pinned via FetchContent.
+        WHY NOT HAND-ROLL: the test is not "is it hard" (the rasterizer was hard and
+        we wrote it) but IS THE HARD PART THE SUBJECT. A debug UI is four subjects —
+        text rasterization and shaping, layout, input routing with focus, and widget
+        state across frames — and none is graphics or architecture. 41,385 lines of
+        core + 1,232 of backends against 182 lines of ours.
+        IMMEDIATE MODE IS WHY IT SUITS A DEBUG TOOL SPECIFICALLY: there is no widget
+        object, so THERE IS NOWHERE FOR STALENESS TO LIVE. A retained-mode panel must
+        be kept in sync with the world and the bug is always a number that is no
+        longer true. Checkbox takes the ADDRESS of the program's bool, so the panel
+        is a window onto the state rather than a copy of it.
+        PUBLIC WHERE stb_image IS PRIVATE, and the reason is not laziness: with stb
+        we wrapped a CONCEPT (decode bytes into pixels), one function and one type.
+        ImGui's value IS ITS VOCABULARY — four hundred widget calls — and a wrapper
+        around that is a re-spelling with no content that must be re-spelt for every
+        widget forever. Cost stated out loud: the engine's public API now carries a
+        second third-party vocabulary. What makes it acceptable is CONTAINMENT —
+        only TOOLING code may speak it, and tooling can be rewritten without the
+        game changing by a pixel. debug_ui.hpp itself does NOT include <imgui.h>;
+        owning the lifecycle and speaking the widget language are different jobs.
+        IMGUI SHIPS SOURCES, NOT A BUILD. No CMakeLists.txt, so
+        FetchContent_MakeAvailable only POPULATES and the target is ours to declare —
+        which is how you find out exactly which files you compile. imgui_demo.cpp
+        (11,299 lines) is included on purpose: ShowDemoWindow() is the fastest widget
+        reference there is and its source is the documentation. NOT
+        engine_set_warnings(imgui) — third-party code keeps its own flags (5.1).
+        BACKEND: SDL_Renderer FIRST. ecs_swarm is on surface::renderer, and there
+        on_overlay() already sits after the blit and before the present. On
+        surface::gpu the PROGRAM owns device, command buffer and render pass, so the
+        UI must be handed all three. imgui_impl_sdlgpu3 needs TWO calls, not one —
+        PrepareDrawData before the pass, RenderDrawData inside it — which is 4.2's
+        model. Declared out of scope with the real signatures and an exercise.
+        NewFrame ORDER IS FIXED: renderer, then platform, then core, because the
+        core derives from what the two backends just filled in.
+        begin_frame() GOES FIRST IN on_input(), NOT beside the panels where it looks
+        like it belongs. The capture flags are computed INSIDE NewFrame, and the mask
+        reads them two lines later; put NewFrame in on_overlay and every read answers
+        about the PREVIOUS frame — one frame of leakage, every time, invisible unless
+        you look. 5.11 ADDS NO HOOK: 5.10's on_input already runs exactly once per
+        frame before the simulation, which is the property this needs.
+        HEADLESS IS A CONFIGURATION, NOT A FAILURE. start() returns false with no
+        window or no renderer, logs at INFO (an error line in every --shot run trains
+        the reader to ignore error lines — the same argument engine_set_warnings
+        makes one layer up), and every other call is a safe no-op INCLUDING
+        wants_keyboard(), so the mask blocks nothing and the program behaves exactly
+        as it did before this lesson. That is what keeps 5.1's golden byte-identical.
+        THE ONE SINGLETON IN THIS ENGINE, AND NOT BY CHOICE. asset_store (5.5),
+        registry (5.8), action_map (5.10) and debug_lines (5.11) are all VALUES.
+        debug_ui cannot be: ImGui keeps its context in a library global that every
+        ImGui:: call reads. start() REFUSES a second instance and says so — an
+        enforced limit you can read beats an undocumented one you discover.
+        NO imgui.ini: ImGui persists window positions beside the WORKING DIRECTORY
+        by default, so a tool would behave differently depending on where it was
+        launched from — 3.5's reproducibility problem, in a UI.
+  input-mask: TWO CONSUMERS OF ONE KEYBOARD, ARBITRATED ON LEVELS, NEVER BY ROUTING
+        EVENTS. engine::masked_input<Source>, in core/actions.hpp.
+        NEVER WITHHOLD AN EVENT. engine::input tracks LEVELS, and A LEVEL IS ONLY
+        EVER CORRECTED BY THE EVENT THAT CONTRADICTS IT — so a key-UP routed to the
+        UI and not passed on leaves that key held DOWN FOREVER, and no later event
+        fixes it because the key is not released twice. Both consumers see every
+        event; the arbitration happens one layer later.
+        AND STILL CALL update(). Skipping it while the UI has focus freezes every
+        level: hold [Left], click a text field, and the camera yaws forever.
+        Updating THROUGH the mask reports masked keys as UP, which fires the RELEASE
+        edge — not damage limitation but the behaviour you want, because focusing a
+        text field genuinely should let go of the movement keys.
+        5.10's CONCEPT PAID FOR ITSELF ONE LESSON LATER. masked_input is a different
+        TYPE satisfying input_snapshot, so action_map::update took it with NOT ONE
+        CHARACTER CHANGED. Against `const input&` the only options were an `if`
+        inside the map (the mapper learning what a UI is) or a copy of input with
+        fields cleared (a second source of truth about the keyboard).
+        YOU CANNOT MASK A DELTA BY MASKING ONE OF ITS ENDPOINTS. A key is a level, so
+        reporting it up is a complete lie. The cursor is not: action_map DERIVES a
+        delta by differencing two frames. Cursor 100 -> 160 over three blocked
+        frames, then on to 170:
+          report 0 while blocked      release frame sees +170  (the whole screen)
+          freeze the last position    release frame sees  +70  (THE ONE THAT SHIPS)
+          virtual cursor (shipped)    release frame sees  +10  (one frame's motion)
+        THE VIRTUAL CURSOR: reported = real - offset, and offset += (real -
+        real_previous) on every blocked frame. Reported stops dead while blocked
+        (delta exactly 0) and the offset stops GROWING the instant the block lifts,
+        so the next difference is one frame's movement rather than the excursion.
+        The cursor stays permanently 60 px behind and is permanently right about how
+        far it moved, which is the only question anyone asked it.
+        THE WHEEL NEEDS NONE OF THIS because input publishes it as a PER-FRAME DELTA
+        already — zeroing a delta is exact, not a lie about a level. The machinery is
+        needed only where the CONSUMER derives the delta.
   actions: AN ACTION IS A NAME; A BINDING MAPS A SIGNAL ONTO IT; A FRAME PUBLISHES
         THE VALUE. 5.10, engine/core/actions.hpp + actions.cpp (53 -> 54 public
         headers; FIRST new SOURCE file since 5.5, so engine/CMakeLists.txt changed).
@@ -930,6 +1080,15 @@ conventions:
         edited dependency is one you can no longer update.
         ALWAYS ASK FOR 4 CHANNELS. Costs a byte per pixel on opaque images and
         means nothing downstream branches on what shape a file was.
+        5.11 AMENDED "A DEPENDENCY REACHES AS FAR AS ITS TYPES APPEAR IN HEADERS":
+        Dear ImGui is the FIRST one taken PUBLICLY, on purpose. The distinction is
+        CONCEPT vs VOCABULARY — stb wraps to one function and one type; ImGui's
+        value is four hundred widget calls, and a wrapper around those is a
+        re-spelling with no content that must be re-spelt forever. So demos include
+        <imgui.h> and engine/CMakeLists.txt links imgui PUBLIC, and the containment
+        is a RULE ABOUT WHICH CODE MAY SPEAK IT (tooling only) rather than a link
+        flag. See conventions:debug-ui. The rest of this block stands unchanged —
+        stb is still PRIVATE and still reaches exactly one translation unit.
   uniform-data: THERE IS NO UNIFORM BUFFER OBJECT IN SDL_GPU. Look for
         SDL_GPU_BUFFERUSAGE_UNIFORM in SDL_gpu.h: it is not there. The six bits
         are VERTEX, INDEX, INDIRECT, GRAPHICS_STORAGE_READ, COMPUTE_STORAGE_READ,
@@ -2776,8 +2935,34 @@ completed:
          Draw": three engine subsystems, each with its own design argument, and
          §3.8 forbids truncating. ImGui + debug draw became 5.11. Module 5 is now
          11 lessons, inside its stated 9-11, and the course total is 95.)
+  - 5.11 Dear ImGui and the Debug Draw System
+  ===> MODULE 5 COMPLETE <===
 
 capabilities:
+  - 5.11 THE ENGINE CAN DRAW WHAT IT IS THINKING, AND BE ASKED QUESTIONS.
+    TWO SUBSYSTEMS, 54 -> 56 public headers, 30 -> 32 engine sources, and the first
+    third-party library in the PUBLIC link line.
+    engine/gfx/debug_lines.{hpp,cpp}  the QUEUE. engine/ui/debug_ui.{hpp,cpp}  ImGui.
+    engine/gfx/debug_draw.{hpp,cpp}   gains draw_debug_lines(); line3/line3_world
+                                      now RETURN bool (survived the near plane).
+    engine/core/actions.hpp           gains masked_input<Source>.
+    API (queue): debug_line{a,b,colour,remaining} / debug_lines{line, ray, axes,
+    box (AABB and OBB), sphere, wire_mesh, advance, clear, lines, size, capacity,
+    full, dropped} + k_axis_{x,y,z}_colour, k_debug_this_frame,
+    k_default_debug_line_capacity (4096).
+    API (ui): debug_ui{start, stop, running, handle_event, begin_frame, render,
+    wants_keyboard, wants_mouse, wants_text, version}.
+    API (mask): masked_input{update(source, block_keyboard, block_mouse), the six
+    input_snapshot accessors, blocking_keyboard, blocking_mouse, cursor_offset_x/y}.
+    demos/ecs_swarm DRAWS ITS OWN HIERARCHY: 152 lines = 96 ring + 32 moons + 24
+    waypoints, and the hierarchy report independently says 2 roots (sun + camera),
+    so 154 = 152 + 2 is TWO SUBSYSTEMS COUNTING THE SAME STRUCTURE TWO WAYS.
+    Its five SDL_RenderDebugTextFormat lines at hand-placed y = 6/20/34/48/62 are
+    GONE, replaced by two ImGui panels with tables, a slider, buttons that call the
+    same functions the keys call, and a TEXT FIELD that is the input seam's demo.
+    Three new actions: [F1] panels, [L] links, [G] triads. The world is otherwise
+    unchanged (154/906/10/129/3776), because this lesson added tooling only.
+    demos/ecs_swarm/main.cpp 933 -> 1,341 lines.
   - 5.10 THE ENGINE CAN BE TOLD WHAT THE PLAYER MEANT.
     engine/core/actions.hpp + engine/src/core/actions.cpp (53 -> 54 public headers;
     FIRST new source file since 5.5, so engine/CMakeLists.txt gained a line), plus
@@ -4785,6 +4970,7 @@ files:
              engine::ecs::pool<T> is a DIFFERENT container from core/pool.hpp's
              engine::pool<T>; see conventions:ecs-runtime.)
   engine/include/engine/gfx/: clip.hpp, colour.hpp, debug_draw.hpp,
+            debug_lines.hpp                                                 [5.11]
             depth_buffer.hpp, framebuffer.hpp, gpu_buffer.hpp, gpu_debug.hpp,
             gpu_device.hpp, gpu_mesh.hpp, gpu_pipeline.hpp, gpu_present.hpp,
             gpu_scene.hpp, gpu_shader.hpp, gpu_texture.hpp, gpu_uniform.hpp,
@@ -4794,15 +4980,20 @@ files:
             vec2.hpp, vec3.hpp, vec4.hpp
   engine/include/engine/platform/: platform.hpp, app.hpp,
             main.hpp   (NOT in engine.hpp — it defines the entry point)
+  engine/include/engine/ui/: debug_ui.hpp                                   [5.11]
+            (a new directory, same argument asset/ made in 5.5: tooling UI is not a
+             graphics subsystem. Does NOT include <imgui.h> — see debug-ui.)
   engine/src/asset/: search_path.cpp, asset_store.cpp                   [5.5]
   engine/src/core/: actions.cpp [5.10], clock.cpp, fixed_step.cpp, input.cpp,
             log.cpp, profile.cpp
-  engine/src/gfx/: clip.cpp, colour.cpp, debug_draw.cpp, depth_buffer.cpp,
+  engine/src/gfx/: clip.cpp, colour.cpp, debug_draw.cpp, debug_lines.cpp [5.11],
+            depth_buffer.cpp,
             framebuffer.cpp, gpu_buffer.cpp, gpu_debug.cpp, gpu_device.cpp,
             gpu_mesh.cpp, gpu_pipeline.cpp, gpu_present.cpp, gpu_scene.cpp,
             gpu_shader.cpp, gpu_texture.cpp, image.cpp, mesh.cpp, obj.cpp,
             raster.cpp, soft_renderer.cpp, texture.cpp
   engine/src/platform/: platform.cpp, app.cpp
+  engine/src/ui/: debug_ui.cpp   [5.11 — THE ONLY engine TU that includes <imgui.h>]
   demos/: CMakeLists.txt
   demos/common/: demo_scene.hpp, demo_scene.cpp, pong.hpp, pong.cpp
   demos/sandbox/: main.cpp
@@ -4843,7 +5034,8 @@ files:
                  05-07-ecs-storage.html,
                  05-08-ecs-runtime.html,
                  05-09-transform-hierarchy.html,
-                 05-10-input-mapping.html
+                 05-10-input-mapping.html,
+                 05-11-imgui-debug-draw.html
   docs/shared/: course.css, course.js      (THE stylesheet + page script; one copy each)
   docs/_template/: lesson-template.html, README.md, apply-shared.py, check-page.js
   scratch/ (5.7, not shipped with the engine): ecs_probe.hpp, bench_57.cpp,
@@ -4858,9 +5050,16 @@ files:
            MODIFIES MUST BE PINNED THE SAME WAY.)
   scratch/ (5.10, not shipped with the engine): verify_510.cpp,
            build_verify_510.sh, figs_510.py, build_510.py,
-           l510_body_{a,b,c}.html, l510_fig{1..5}.svg
-           (build_510.py PINS NOTHING YET but keeps the machinery and the warning:
-            if 5.11 touches demos/ecs_swarm/main.cpp, snapshot 5.10's copy FIRST.)
+           l510_body_{a,b,c}.html, l510_fig{1..5}.svg,
+           l510_ecs_swarm.cpp AND l510_actions.hpp — TWO PINNED LISTINGS, both
+           byte-identical to commit c697e14. The demo was expected. actions.hpp was
+           NOT, and that is the lesson: it was 5.10's OWN NEW HEADER, so it read as
+           finished, and 5.11 added masked_input to it. Rebuilding 5.10 spliced a
+           class that mentions Lesson 5.11 into Lesson 5.10's listings (+173 lines,
+           caught by `git diff` on the page).
+           THE RULE IS NOT "PIN THE DEMO" — IT IS: PIN EVERY FILE THE PAGE LISTS
+           THAT A LATER LESSON TOUCHES, and the cheap way to find out which is to
+           re-run the builder and diff the page BEFORE shipping.
   scratch/ (5.9, not shipped with the engine): hier_probe.hpp, bench_59.cpp,
            bench_59.log, verify_59.cpp, build_bench_59.sh, build_verify_59.sh,
            figs_59.py, build_59.py, l59_body_{a,b,c}.html, l59_fig{1..6}.svg,
@@ -4870,61 +5069,72 @@ files:
            (NOTE: build_57.py was amended in 5.8 — it no longer stamps a STATE
             block, and it now byte-reproduces the shipped 05-07 page. Any future
             build_NN.py copied from it inherits the correct form.)
+  scratch/ (5.11, not shipped with the engine): verify_511.cpp,
+           build_verify_511.sh, figs_511.py, build_511.py,
+           l511_body_{a,b,c}.html, l511_fig{1..7}.svg
+           (figs_511.py adds peak_sample() — a MAX downsampler, because 5.7's
+            box_sample AVERAGES and a 1-pixel debug line inside a 3x3 block
+            contributes one ninth of its brightness, so 152 crisp lines average
+            into a haze. It also floors dim cells to true black, because
+            figs_45.quantise() calls a cell background only when ALL THREE channels
+            are under 14 and this demo's background is (12, 14, 20) — blue is 20,
+            so every empty cell snapped to a tint and the panel came out solid
+            slate with the lines invisible inside it.
+            build_511.py PINS NOTHING YET. It lists BOTH CMakeLists.txt files, the
+            umbrella header and actions.hpp, and Module 6 will edit at least the
+            first three — so it will need pins, and the warning in it says so.)
   memory/: 2026-07-16.md … 2026-08-25.md, 2026-08-25-b.md, 2026-08-25-c.md,
            2026-08-26.md, 2026-08-26-b.md, 2026-08-29.md, 2026-09-02.md, 2026-09-02-b.md,
            2026-09-02-c.md, 2026-09-04.md
   (retired: src/ — the whole directory. hello.cpp.)
 
 
-next: 5.11 — Dear ImGui and the Debug Draw System
-      (planned filename: docs/lessons/05-11-imgui-debug-draw.html — 5.10's TWO next
-      links point at the index and BOTH need repointing, and build_510.py's TAIL
-      holds the bottom one. AND: if 5.11 touches demos/ecs_swarm/main.cpp, PIN
-      5.10's copy in build_510.py FIRST —
-        git show <5.10 commit>:demos/ecs_swarm/main.cpp > scratch/l510_ecs_swarm.cpp
-      verified with `git show ... | diff - <snapshot>`. This trap has now bitten
-      twice; the machinery and the warning are already in build_510.py.)
-      THE SECOND HALF OF THE CURRICULUM'S 5.10, SPLIT OUT IN 5.10 BECAUSE THREE
-      ENGINE SUBSYSTEMS DO NOT FIT ONE LESSON. Both halves are TOOLING, which is
-      what makes them one lesson rather than two: ImGui is the tooling UI and debug
-      draw is the tooling in the world, and Module 8's editor consumes both.
-      1 DEAR IMGUI — THE COURSE'S FIRST THIRD-PARTY UI, and §4's rule demands the
-        "why we don't hand-roll this" justification IN THE LESSON. The honest
-        version: a debug UI is a text renderer, a layout engine, an input router and
-        a state machine, and not one of those is the subject of this course. Note
-        what the course DOES hand-roll and why the line falls here.
-        THE BUILD IS PART OF THE LESSON: ImGui via FetchContent, pinned, like SDL3.
-        THE BACKEND IS A REAL DECISION — this engine has TWO surfaces
-        (SDL_Renderer and SDL_GPU; see conventions:surfaces and program-modes).
-        Decide which gets it first and say why. ecs_swarm is on the RENDERER path
-        and is the natural first client; sandbox's GPU path is the harder one.
-        TOOLING ONLY, NEVER GAMEPLAY UI (§4, binding).
-        WATCH THE INPUT INTERACTION: ImGui wants events and has its own
-        "want-capture-keyboard/mouse" flags. 5.10's action_map must NOT fire while
-        a text field has focus, and that seam is worth a section — it is the first
-        time two input consumers have existed.
-      2 DEBUG DRAW — A REWORK, NOT A NEW FILE. engine/gfx/debug_draw.hpp has existed
-        since Module 3 (line3, draw_mesh, draw_axes3, show_depth,
-        count_differences). THE LESSON MUST SAY WHAT IS WRONG WITH IT rather than
-        quietly replacing it. Candidate answers to check before writing: it draws
-        IMMEDIATELY into a framebuffer rather than queueing, so it cannot work on
-        the GPU path; it takes a projector and a framebuffer at every call; and it
-        has no lifetime concept (a line that persists for N frames, or until
-        cleared). A queue-then-flush design fixes all three and is what every engine
-        converges on.
-        THE OBVIOUS FIRST CLIENT IS 5.9's HIERARCHY: a line from every entity to its
-        parent makes the tree visible, and is how you would SEE an orphan (a line
-        that vanished) or a cycle (a loop). That is a genuinely useful tool rather
-        than a demo of a tool.
-      THE TEST TO BEAT: golden byte-identical (ELEVENTH lesson) — both items are
-      additive IF debug_draw's rework keeps its existing entry points working, which
-      is worth checking early because write_reference_shot calls draw_world. IF THE
-      REWORK CHANGES THE REFERENCE PICTURE, RE-BASELINE DELIBERATELY with the diff
-      shown and explained, never quietly.
-      verify_511 must cover: debug geometry landing where the maths says; a queued
-      line surviving to the flush and not past it; lifetimes expiring; and the ImGui
-      capture flags actually suppressing an action. Plus verify_45..510 green.
-      CARRY FORWARD FROM 5.10: `on_input` is where action_map::update runs, and
-      ImGui's event handling happens in on_event — so the capture flags are read
-      one hook LATER than they are set. Check that ordering rather than assuming it.
+next: 6.1 — Linear and sRGB: The Gamma Lesson
+      (planned filename: docs/lessons/06-01-linear-and-srgb.html — 5.11's TWO next
+      links point at the index and BOTH need repointing, and build_511.py's TAIL
+      holds the bottom one. AND: build_511.py PINS NOTHING. It lists BOTH
+      CMakeLists.txt files, engine.hpp and actions.hpp, and Module 6 will edit at
+      least the CMake files (shaders) — so before touching any of them:
+        git show <5.11 commit>:<path> > scratch/l511_<name>
+      verified with `git show ... | diff - <snapshot>`. The trap has now bitten
+      THREE times, and 5.10's second pin proves the rule is "pin every file the
+      page lists that a later lesson touches", not "pin the demo".)
+      MODULE 5 IS COMPLETE — 11 lessons, and the engine now has a public API, a
+      platform/app layer, logging and assertions, handles, an asset store, an ECS
+      with hierarchy and cameras, an input mapper, a debug-draw system and a
+      tooling UI. MODULE 6 IS ADVANCED RENDERING, and it opens where §5 says it
+      must, for a reason that is not stylistic: EVERY LIGHTING RESULT IN THE MODULE
+      IS WRONG UNTIL THE COLOUR SPACE IS SETTLED, so PBR cannot come first.
+      1 THE DEBT IS ALREADY BOOKED, TWICE, AND BOTH ENTRIES MUST BE PAID HERE.
+        1.6 gave the "first honest teaser" of sRGB vs linear and said Module 6
+        settles it. 4.7's conventions:textures-gpu found that _SRGB IS ONE ENUM AND
+        IT DECIDES WHETHER THE LIGHTING IS CORRECT. 4.8 then measured the two
+        renderers agreeing to within one float ULP on the shading equation but
+        differing by ONE CODE IN THE DARKS, which is two implementations of the
+        sRGB curve parting company — that measurement is this lesson's opening
+        exhibit and it already exists.
+      2 THE ENGINE ALREADY HAS blend_space (2.4) AND linear_to_srgb_u8 (1.6/3.x).
+        This lesson is NOT a from-scratch build; it is the derivation those two
+        were written in anticipation of, plus an audit of every place the engine
+        currently encodes or decodes. Grep for both before writing a line.
+      3 SHOW THE FAILURE FIRST (§3.5). The washed-out mid-tones of a naive
+        multiply, the too-dark 50% grey, and the classic: a texture sampled without
+        _SRGB used as an albedo, which is wrong by the 2.2 power exactly where the
+        eye is most sensitive. All three are producible on this engine TODAY.
+      4 THE MATHS IS SMALL AND THE INTUITION IS NOT. Derive from what a sensor
+        integrates and what a display emits; the piecewise sRGB curve with its
+        linear toe is a fact to be stated with its constants and a numeric example,
+        not derived. Say which is which (§10).
+      THE TEST TO BEAT: golden byte-identical is PROBABLY OVER. If the reference
+      render's colour handling changes — and settling this may well change it —
+      RE-BASELINE DELIBERATELY, with the diff shown, the per-channel magnitude
+      stated, and the old hash recorded beside the new one. Never quietly.
+      verify_61 must cover: round-trip encode/decode within a stated tolerance, the
+      piecewise curve's two branches INCLUDING the join, the 8-bit table against
+      the analytic form, and the claim that lighting in the wrong space is wrong by
+      a measurable amount rather than "looks off". Plus verify_45..511 green.
+      CARRY FORWARD FROM 5.11: the debug queue is now the tool for making Module 6
+      visible — shadow-map frustums, tangent frames, culling bounds — and the ImGui
+      panel is where a BRDF's terms get separate sliders. Both are already built;
+      neither should be rebuilt.
 ```

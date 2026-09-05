@@ -49,6 +49,7 @@
 #include <engine/gfx/clip.hpp>
 #include <engine/gfx/colour.hpp>
 #include <engine/gfx/debug_draw.hpp>
+#include <engine/gfx/debug_lines.hpp>
 #include <engine/gfx/depth_buffer.hpp>
 #include <engine/gfx/framebuffer.hpp>
 #include <engine/gfx/image.hpp>
@@ -83,3 +84,13 @@
 // must not be a way to get a `main` by accident.
 #include <engine/platform/app.hpp>
 #include <engine/platform/platform.hpp>
+
+// ---- Tooling ---------------------------------------------------------------
+//
+// Lesson 5.11. `debug_ui.hpp` is here and <imgui.h> is NOT, and the distinction
+// is the same one that keeps `main.hpp` out of this file: this header owns the
+// UI's LIFECYCLE, which every program can safely have, while the widget
+// vocabulary belongs to the tooling code that actually draws panels. A program
+// that wants panels includes <imgui.h> itself, deliberately, in the file that
+// draws them.
+#include <engine/ui/debug_ui.hpp>

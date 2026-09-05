@@ -170,6 +170,179 @@ static_assert(input_snapshot<input>,
               "engine::input must satisfy input_snapshot — if this fires, input.hpp changed "
               "one of the six accessors the action map reads");
 
+// ---- Handing the input to somebody else, for a while -----------------------
+
+/// An input snapshot with the keyboard and/or the mouse withheld.
+///
+/// **Lesson 5.11, and it is the concept above earning its keep one lesson after
+/// it was written.** The moment a debug UI exists there are TWO consumers of one
+/// keyboard, and while a text field has focus the game must not act on what is
+/// being typed into it. Typing `spawn` into a filter box must not spawn
+/// anything.
+///
+/// This is a `Source` that satisfies `input_snapshot` by wrapping another one and
+/// lying about parts of it. `action_map::update` takes it without knowing, and
+/// **not one character of Lesson 5.10's map changed** — which is the difference
+/// between depending on a shape and depending on a type. Had `update` taken a
+/// `const input&`, the only ways in would have been an `if` inside the map (the
+/// map learning about UI) or a copy of `input` with fields cleared (a second
+/// source of truth about the keyboard).
+///
+/// ---------------------------------------------------------------------------
+/// WHY THIS IS NOT SIMPLY "SKIP update() WHILE THE UI HAS FOCUS"
+/// ---------------------------------------------------------------------------
+///
+/// Because the map's state is levels and edges, and a level that stops being
+/// updated is a level that is stuck. Hold **W**, click into a text field: if the
+/// map is not updated, `held(forward)` stays true forever and the camera flies
+/// away while you type. Updating through a mask reports the key as UP, which
+/// produces the RELEASE edge — the correct and desirable behaviour, because
+/// giving focus to a text field genuinely should let go of the movement keys.
+///
+/// It is also why we do NOT withhold the EVENT from `engine::input`. Both
+/// consumers see every event; the arbitration happens here, on levels, one layer
+/// later. Steal a key-up from `input` and `input` believes the key is still down
+/// — a stuck key that survives the UI closing, and a bug that looks like SDL's.
+///
+/// ---------------------------------------------------------------------------
+/// THE PART THAT IS NOT OBVIOUS: YOU CANNOT MASK A DELTA
+/// ---------------------------------------------------------------------------
+///
+/// A key is a level, so masking it is a lie told about one frame and it is
+/// complete. The cursor is not: `action_map` derives a mouse delta by
+/// subtracting the previous frame's position from this one's, and **suppressing
+/// one endpoint of a difference does not suppress the difference**.
+///
+///   - Report 0 while blocked and the frame the block ends reports a delta the
+///     size of the whole screen.
+///   - Report the last position before the block and the frame the block ends
+///     reports the entire distance the cursor travelled while you were using the
+///     UI — a camera that whips round when you close a panel. This is the
+///     version people ship, because it looks right until somebody drags a
+///     slider.
+///
+/// So this class keeps a **virtual cursor**: an offset that absorbs exactly the
+/// movement that happened while blocked. The reported position is
+/// `real - offset`, and the offset grows by `real - real_previous` on every
+/// blocked frame. The reported position therefore stops dead while the UI has
+/// the mouse and resumes from where it stopped, with no jump on either boundary
+/// — and the consumer never learns that anything happened. Worked example in
+/// Lesson 5.11 §6.
+///
+/// The wheel needs none of that, because `input` publishes it as a per-frame
+/// delta already: zeroing a delta is exact, not a lie about a level.
+///
+/// **Update it once per frame, immediately before `action_map::update`:**
+///
+///     gate_.update(in(), ui_.wants_keyboard(), ui_.wants_mouse());
+///     actions_.update(gate_);
+template <input_snapshot Source>
+class masked_input
+{
+public:
+    /// Point at this frame's source and set the two blocks.
+    ///
+    /// The source is taken per frame rather than at construction so that this
+    /// object can be a plain member of an `app` — `in()` is not available in a
+    /// member initialiser, and a reference member would make the class
+    /// non-assignable for no gain. It is a **non-owning pointer with a
+    /// frame-long lifetime**: the source must outlive the queries, which for
+    /// every real caller means "it is the platform's input, which outlives
+    /// everything".
+    void update(const Source& source, bool block_keyboard, bool block_mouse)
+    {
+        source_ = &source;
+        block_keyboard_ = block_keyboard;
+        block_mouse_ = block_mouse;
+
+        const float raw_x = source.mouse_x();
+        const float raw_y = source.mouse_y();
+
+        if (!have_previous_)
+        {
+            have_previous_ = true;
+        }
+        else if (block_mouse_)
+        {
+            // Absorb exactly this frame's real movement, so that the reported
+            // position — real minus offset — comes out unchanged. Accumulating
+            // per frame rather than latching a position at the start of the
+            // block is what makes the END of the block free: the offset simply
+            // stops growing, and the next frame's difference is one frame's
+            // worth of real movement, not the whole excursion.
+            offset_x_ += raw_x - previous_raw_x_;
+            offset_y_ += raw_y - previous_raw_y_;
+        }
+
+        previous_raw_x_ = raw_x;
+        previous_raw_y_ = raw_y;
+    }
+
+    // ---- The six the concept asks for --------------------------------------
+    //
+    // Every one is a straight forward with one branch. There is no virtual call
+    // here and no indirection that survives optimisation: `action_map::update`
+    // is a template, so the compiler sees these bodies at the call site.
+
+    [[nodiscard]] bool key_down(SDL_Scancode key) const
+    {
+        return (!block_keyboard_ && source_ != nullptr) && source_->key_down(key);
+    }
+
+    [[nodiscard]] bool mouse_down(int button) const
+    {
+        return (!block_mouse_ && source_ != nullptr) && source_->mouse_down(button);
+    }
+
+    [[nodiscard]] float mouse_x() const
+    {
+        return (source_ != nullptr) ? source_->mouse_x() - offset_x_ : 0.0f;
+    }
+
+    [[nodiscard]] float mouse_y() const
+    {
+        return (source_ != nullptr) ? source_->mouse_y() - offset_y_ : 0.0f;
+    }
+
+    [[nodiscard]] float wheel_x() const
+    {
+        return (block_mouse_ || source_ == nullptr) ? 0.0f : source_->wheel_x();
+    }
+
+    [[nodiscard]] float wheel_y() const
+    {
+        return (block_mouse_ || source_ == nullptr) ? 0.0f : source_->wheel_y();
+    }
+
+    // ---- Diagnostics -------------------------------------------------------
+
+    [[nodiscard]] bool blocking_keyboard() const { return block_keyboard_; }
+    [[nodiscard]] bool blocking_mouse() const { return block_mouse_; }
+
+    /// How far the virtual cursor has fallen behind the real one. Exists to be
+    /// asserted on: it is the whole of the delta argument above, in one number,
+    /// and a HUD that prints it makes the mechanism visible while you use it.
+    [[nodiscard]] float cursor_offset_x() const { return offset_x_; }
+    [[nodiscard]] float cursor_offset_y() const { return offset_y_; }
+
+private:
+    const Source* source_ = nullptr;
+
+    bool block_keyboard_ = false;
+    bool block_mouse_ = false;
+
+    float offset_x_ = 0.0f;
+    float offset_y_ = 0.0f;
+
+    float previous_raw_x_ = 0.0f;
+    float previous_raw_y_ = 0.0f;
+    bool have_previous_ = false;
+};
+
+static_assert(input_snapshot<masked_input<input>>,
+              "a masked input must itself be an input snapshot — that is the entire trick, and "
+              "a static_assert is the cheapest possible place to find out it is not");
+
 // ---- The map ---------------------------------------------------------------
 
 /// Declared actions, their bindings, and this frame's values.

@@ -42,6 +42,23 @@
 //     zero or more times per frame — so a two-step frame must not spawn twice
 //     and a zero-step frame must not lose the press
 //
+// LESSON 5.11 GAVE IT EYES AND A CONTROL PANEL, and the two halves argue for
+// each other. The tree above was, until this lesson, a claim in a comment: you
+// could see 154 objects moving and had to TAKE ON FAITH that a moon's placement
+// composes through a planet's. Now [L] draws a line from every entity to its
+// parent and the tree is a picture. Press [H] to detach half the ring and the
+// lines to the sun vanish; press [F] and the sun drifts, dragging its lines with
+// it. That is a debug view doing the only job a debug view has — making a claim
+// checkable.
+//
+// The panel is Dear ImGui, and it replaced five SDL_RenderDebugText lines with
+// hand-placed y coordinates. Note what the panel can do that they could not:
+// tables, a slider that changes a value while you watch it, buttons that call
+// the same functions the keys call, and a TEXT FIELD — which is the whole reason
+// this lesson has an input section. Type "spawn" into the filter box and the
+// world does not fill with sparks, because `masked_input` is withholding the
+// keyboard from the action map while ImGui has focus.
+//
 //     cmake --build build --target ecs_swarm
 //     ./build/demos/ecs_swarm                        a window
 //     ./build/demos/ecs_swarm --shot swarm.ppm       one frame, no window
@@ -52,6 +69,8 @@
 #include <engine/ecs/hierarchy.hpp>
 #include <engine/ecs/registry.hpp>
 #include <engine/gfx/colour.hpp>
+#include <engine/gfx/debug_draw.hpp>
+#include <engine/gfx/debug_lines.hpp>
 #include <engine/gfx/depth_buffer.hpp>
 #include <engine/gfx/image.hpp>
 #include <engine/gfx/light.hpp>
@@ -64,6 +83,13 @@
 #include <engine/math/mat4.hpp>
 #include <engine/math/transform.hpp>
 #include <engine/platform/app.hpp>
+#include <engine/ui/debug_ui.hpp>
+
+// The one third-party header a demo in this course is allowed to include, and it
+// is allowed because engine/CMakeLists.txt links imgui PUBLIC — argued in
+// engine/include/engine/ui/debug_ui.hpp. Everything below that says `ImGui::` is
+// TOOLING; not one pixel of the world is drawn with it.
+#include <imgui.h>
 
 #include <engine/platform/main.hpp>
 
@@ -262,6 +288,61 @@ void render_system(engine::ecs::registry& world, std::vector<engine::scene_objec
         });
 }
 
+/// Draw the hierarchy: one line from every entity to its parent.
+///
+/// **LOOK AT THE SIGNATURE.** A registry, a queue, two booleans. No framebuffer,
+/// no projector, no camera, no viewport — which is exactly what Lesson 5.11's
+/// split bought, and the reason this function can sit here among the simulation
+/// systems instead of inside the renderer. Before the rework it could not have
+/// been written at all without handing a `framebuffer&` down to it, and the
+/// moment you do that every caller of every caller needs one too.
+///
+/// It is also the cheapest useful debug view there is, because a tree is exactly
+/// the kind of structure that is obvious as a picture and invisible as numbers.
+/// An orphan is a line that is not there; a re-parent is a line that moved; a
+/// cycle would be a loop you can see. `hierarchy_report` counts all three and
+/// this shows you WHICH.
+void hierarchy_debug_system(engine::ecs::registry& world,
+                            engine::debug_lines& out, bool links, bool axes)
+{
+    if (!links && !axes) { return; }
+
+    // Two colours, because the two ends of a link mean different things: the
+    // child is where the line starts and the parent is what it points at.
+    constexpr Uint32 k_link = engine::pack_argb(120, 190, 255, 255);
+    constexpr Uint32 k_root = engine::pack_argb(255, 190, 90, 255);
+
+    world.view<engine::ecs::world_transform, engine::ecs::parent>().each(
+        [&](engine::ecs::entity e, const engine::ecs::world_transform& w,
+            const engine::ecs::parent& p) {
+            (void)e;
+            if (axes)
+            {
+                // A short triad, so a hundred of them do not become a hedge.
+                out.axes(w.matrix, 0.35f);
+            }
+            if (!links) { return; }
+
+            const engine::ecs::world_transform* pw =
+                world.get<engine::ecs::world_transform>(p.value);
+
+            // NO PARENT TRANSFORM MEANS NO PARENT: either the field is
+            // `null_entity` (a root) or it names something that has been
+            // destroyed (an orphan, which the resolver has already promoted to a
+            // root). Both draw a stub straight up, so a root is visible AS a root
+            // rather than as an entity that simply drew nothing.
+            if (pw == nullptr)
+            {
+                const engine::vec3 at = engine::translation_of(w.matrix);
+                out.line(at, at + engine::vec3{0.0f, 0.35f, 0.0f}, k_root);
+                return;
+            }
+
+            out.line(engine::translation_of(w.matrix), engine::translation_of(pw->matrix),
+                     k_link);
+        });
+}
+
 // ===========================================================================
 //  THE PROGRAM
 // ===========================================================================
@@ -340,9 +421,33 @@ public:
 
         build_world();
 
+        // The UI, on the window and renderer the platform already made.
+        //
+        // THE RETURN VALUE IS DELIBERATELY DISCARDED and that is not sloppiness:
+        // false here means `--shot` (no window) or a GPU surface (no
+        // SDL_Renderer), and neither is a reason for this program to fail to
+        // start. `debug_ui` logs which it was, at info, and every subsequent call
+        // is a safe no-op — so the code below never asks again except where a
+        // panel would actually be built.
+        (void)ui_.start(window(), renderer());
+
         // A pose that does not depend on the clock, so `--shot` is reproducible.
         if (shot_path_ != nullptr) { t_ = 1.234f; step_world(1.234f); }
         return true;
+    }
+
+    /// Give ImGui every event — and give it to `in()` as well, which the engine
+    /// already did before this hook ran (Lesson 5.2's ordering guarantee).
+    ///
+    /// **Both consumers see everything.** It is tempting to "route" events —
+    /// hand them to the UI and stop if it takes one — and it is wrong: steal a
+    /// key-UP from `engine::input` and `input` goes on believing the key is
+    /// held, forever, because a level is only ever corrected by the event that
+    /// contradicts it. The arbitration happens one layer later and on LEVELS
+    /// rather than events, in `on_input` below.
+    void on_event(const SDL_Event& event) override
+    {
+        (void)ui_.handle_event(event);
     }
 
     /// Map this frame's input onto actions, then act on the frame-scoped edges.
@@ -359,7 +464,28 @@ public:
     /// `on_fixed_step`.
     void on_input() override
     {
-        actions_.update(in());
+        // FIRST, BEFORE ANYTHING READS A CAPTURE FLAG. ImGui computes
+        // WantCaptureKeyboard and WantCaptureMouse inside NewFrame, from the
+        // events processed since the last one. Open the frame later — down in
+        // on_overlay, next to the panels, where it looks like it belongs — and
+        // every read below answers about the PREVIOUS frame, so the first
+        // keystroke after clicking into a text field also reaches the game. One
+        // frame of leakage, every time, and invisible unless you look for it.
+        ui_.begin_frame();
+
+        // THE SEAM, IN TWO LINES. `gate_` is an `engine::input` with the
+        // keyboard and/or mouse withheld — a different TYPE that satisfies the
+        // same concept — so `action_map::update` takes it without knowing, and
+        // not one character of Lesson 5.10's map had to change.
+        //
+        // Note that the map is still updated. Skipping the update instead would
+        // freeze every level: hold [Left], click into the filter box, and the
+        // camera would yaw forever. Updating through the mask reports the key as
+        // UP, which produces the release edge — which is the behaviour you want,
+        // because giving focus to a text field genuinely should let go of the
+        // movement keys.
+        gate_.update(in(), ui_.wants_keyboard(), ui_.wants_mouse());
+        actions_.update(gate_);
 
         if (actions_.pressed(a_quit_))     { request_quit(); }
         if (actions_.pressed(a_materials_)) { toggle_materials(); }
@@ -370,6 +496,9 @@ public:
         if (actions_.pressed(a_detach_))   { toggle_detach(); }
         if (actions_.pressed(a_drift_))    { drifting_ = !drifting_; }
         if (actions_.pressed(a_rebind_))   { rebind_spawn(); }
+        if (actions_.pressed(a_panels_))   { show_panels_ = !show_panels_; }
+        if (actions_.pressed(a_links_))    { show_links_ = !show_links_; }
+        if (actions_.pressed(a_axes_))     { show_axes_ = !show_axes_; }
     }
 
     void on_fixed_step(float h) override
@@ -408,6 +537,13 @@ public:
 
         render_system(world_, objects_);
 
+        // QUEUE, ONCE PER FRAME, AFTER THE RESOLVE. The only ordering this has
+        // is "after `world_transform` is current", which the fixed steps have
+        // just made true. It is called here rather than from `step_world`
+        // because a step runs zero or more times per frame (Lesson 1.4) and a
+        // two-step frame would queue every line twice.
+        hierarchy_debug_system(world_, debug_, show_links_, show_axes_);
+
         fb().clear(k_background);
         depth_.clear();
 
@@ -440,7 +576,30 @@ public:
                                            .cull = engine::cull_mode::back,
                                            .eye = eye};
             engine::draw_triangles(fb(), &depth_, triangles_, false, style);
+
+            // THE FLUSH, AFTER THE SCENE, so debug geometry draws on top of it.
+            // This is the only line in the program that knows both what was
+            // queued and where the camera is, and it is four words long because
+            // the queue did the decoupling.
+            debug_drawn_ = engine::draw_debug_lines(fb(), view, proj, debug_);
         }
+
+        // AGE THE QUEUE AT THE END OF THE FRAME, AFTER THE FLUSH — and this is
+        // the single most likely thing to get wrong in the whole system. Run it
+        // first and every line queued this frame with the default lifetime is
+        // deleted before it is ever drawn, which presents as a debug view that
+        // shows nothing, which reads as "my code did not run".
+        //
+        // It is outside the camera branch on purpose: a frame with no active
+        // camera draws nothing, and a queue that is not aged because nothing was
+        // drawn is a queue that grows without limit while you are looking at a
+        // black screen.
+        //
+        // The count is taken BEFORE the ageing, because that is the number that
+        // describes this frame: afterwards the single-frame lines are gone, which
+        // is the system working correctly and a useless thing to report.
+        debug_queued_ = debug_.size();
+        debug_.advance(time().dt());
 
         if (shot_path_ != nullptr)
         {
@@ -452,60 +611,246 @@ public:
             SDL_Log("ecs_swarm: hierarchy %zu rows, %zu roots, %zu levels, %zu orphans, "
                     "%zu cycles",
                     r.entities, r.roots, r.levels, r.orphans, r.cycles);
+
+            // Lesson 5.11. Printed on the headless path because a picture cannot
+            // be asserted on and three integers can: `drawn` below `queued` means
+            // the near-plane clipper rejected something, and `dropped` above zero
+            // means the capacity is too small for this world.
+            SDL_Log("ecs_swarm: debug lines queued %zu, drawn %d, dropped %zu, ui %s",
+                    debug_queued_, debug_drawn_, debug_.dropped(),
+                    ui_.running() ? "on" : "off");
             request_quit(engine::save_ppm(fb(), shot_path_));
         }
     }
 
+    /// The panels, and then the UI's own draw.
+    ///
+    /// **This hook is where a debug UI belongs and there is exactly one reason
+    /// why**: it runs after `blit_framebuffer()` and before `present()`, which
+    /// is the only moment at which "over the rendered frame, under the vsync
+    /// wait" is true. Draw earlier and the framebuffer blit paints over the
+    /// panel; draw later and there is nothing left to draw into.
+    ///
+    /// WHAT THIS REPLACED is worth a moment. Until Lesson 5.11 this function was
+    /// five `SDL_RenderDebugTextFormat` calls with hand-placed y coordinates —
+    /// 6, 20, 34, 48, 62 — a layout maintained by arithmetic in a comment. It
+    /// could not be scrolled, collapsed, sorted, or edited, and adding a line in
+    /// the middle meant renumbering the ones below it. That is the "why we do
+    /// not hand-roll this" argument in miniature: none of what ImGui gives back
+    /// is graphics, and all of it is work.
     void on_overlay() override
     {
-        SDL_Renderer* const r = renderer();
-        if (r == nullptr) { return; }
+        if (!ui_.running()) { return; }
 
-        const engine::ecs::hierarchy_report& h = tree_.last_report();
-        const auto v = world_.view<engine::ecs::world_transform, geometry, material>();
-
-        SDL_SetRenderScale(r, 2.0f, 2.0f);
-        SDL_SetRenderDrawColor(r, 210, 212, 220, 255);
-        SDL_RenderDebugTextFormat(r, 6.0f, 6.0f,
-                                  "ECS  entities %3zu   components %4zu   pools %zu",
-                                  world_.size(), world_.component_count(),
-                                  world_.pool_count());
-        SDL_RenderDebugTextFormat(r, 6.0f, 20.0f,
-                                  "hierarchy  rows %3zu  roots %3zu  levels %zu  "
-                                  "orphans %zu  cycles %zu",
-                                  h.entities, h.roots, h.levels, h.orphans, h.cycles);
-        SDL_RenderDebugTextFormat(r, 6.0f, 34.0f,
-                                  "render view  lead %zu   candidates %3zu   drawn %3zu"
-                                  "   tris %4d",
-                                  v.lead(), v.size_hint(), objects_.size(),
-                                  static_cast<int>(triangles_.size()));
-        SDL_RenderDebugTextFormat(r, 6.0f, 48.0f,
-                                  "camera %s   sun %s   fps %5.1f",
-                                  riding_ ? "PARENTED to a ring member" : "free orbit",
-                                  drifting_ ? "drifting" : "still",
-                                  static_cast<double>(time().fps()));
-        // The HUD reads the BINDING TABLE rather than a hard-coded string, so it
-        // cannot go stale when [K] rebinds something. That is a small thing and it
-        // is the first dividend an action layer pays: the program can now describe
-        // its own controls, which a switch statement could never do.
-        SDL_RenderDebugTextFormat(r, 6.0f, 62.0f,
-                                  "actions %2zu   bindings %2zu   spawn on %s   "
-                                  "yaw %+.0f  zoom %+.0f",
-                                  actions_.action_count(), actions_.bindings().size(),
-                                  spawn_on_enter_ ? "[Enter]" : "[Space]/[LMB]",
-                                  static_cast<double>(actions_.value(a_yaw_)),
-                                  static_cast<double>(actions_.value(a_zoom_)));
-        SDL_RenderDebugText(r, 6.0f, 100.0f,
-                            "[Arrows] orbit  [ ] [ ] / wheel zoom  [K] rebind spawn");
-        SDL_RenderDebugText(r, 6.0f, 112.0f,
-                            "[F] drift the sun  [C] ride a planet  [H] detach half  "
-                            "[Space]/[LMB] sparks");
-        SDL_RenderDebugText(r, 6.0f, 124.0f,
-                            "[M] materials  [O] orbits  [X] cull  [R] rebuild  [Esc] quit");
-        SDL_SetRenderScale(r, 1.0f, 1.0f);
+        build_panels();
+        ui_.render();
     }
 
 private:
+    // ---- The panels ---------------------------------------------------------
+
+    /// Everything the old text HUD said, plus everything it could not.
+    ///
+    /// IMMEDIATE MODE IS THE WHOLE POINT. There is no widget tree here, no
+    /// `Panel` object, nothing to keep in sync with the world and nothing to
+    /// invalidate when an entity is destroyed. This function runs from scratch
+    /// every frame and reads the live world, so the panel CANNOT show a stale
+    /// number — which is the failure mode of every retained-mode debug UI ever
+    /// built, and the reason a debug tool in particular wants this model.
+    ///
+    /// The checkboxes below write the SAME booleans the keys in `on_input`
+    /// toggle. That is deliberate: a control panel must not be a second source
+    /// of truth about the program's state, or it becomes another thing to debug.
+    void build_panels()
+    {
+        if (!show_panels_) { return; }
+
+        ImGui::SetNextWindowPos(ImVec2(12.0f, 12.0f), ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowSize(ImVec2(340.0f, 470.0f), ImGuiCond_FirstUseEver);
+        if (ImGui::Begin("ecs_swarm"))
+        {
+            const engine::ecs::hierarchy_report& h = tree_.last_report();
+            const auto v = world_.view<engine::ecs::world_transform, geometry, material>();
+
+            ImGui::Text("%.1f fps  (%.2f ms)", static_cast<double>(time().fps()),
+                        1000.0 * static_cast<double>(time().dt()));
+
+            if (ImGui::CollapsingHeader("World", ImGuiTreeNodeFlags_DefaultOpen))
+            {
+                // A TABLE, which is the first thing five lines of debug text
+                // wanted to be and could never become. It aligns, it resizes with
+                // the window, and adding a row does not renumber anything.
+                if (ImGui::BeginTable("world", 2, ImGuiTableFlags_SizingStretchProp))
+                {
+                    row_u("entities", world_.size());
+                    row_u("components", world_.component_count());
+                    row_u("pools", world_.pool_count());
+                    row_u("hierarchy rows", h.entities);
+                    row_u("roots", h.roots);
+                    row_u("levels", h.levels);
+                    row_u("orphans", h.orphans);
+                    row_u("cycles", h.cycles);
+                    row_u("view candidates", v.size_hint());
+                    row_u("drawn", objects_.size());
+                    row_u("triangles", triangles_.size());
+                    ImGui::EndTable();
+                }
+            }
+
+            if (ImGui::CollapsingHeader("Debug draw", ImGuiTreeNodeFlags_DefaultOpen))
+            {
+                ImGui::Checkbox("hierarchy links  [L]", &show_links_);
+                ImGui::Checkbox("axis triads  [G]", &show_axes_);
+                ImGui::SliderFloat("marker seconds", &marker_seconds_, 0.0f, 8.0f, "%.1f s");
+                ImGui::SetItemTooltip("How long the markers left by [H] and [Space] survive. "
+                                      "Zero means one frame — which is to say, invisible.");
+
+                // QUEUED, DRAWN AND DROPPED, TOGETHER. The three numbers only
+                // mean anything as a set: drawn less than queued means something
+                // clipped, and dropped above zero means the picture you are
+                // looking at is not the whole picture — which is the failure a
+                // bounded queue would otherwise hide.
+                ImGui::Text("queued %zu / %zu   drawn %d   dropped %zu",
+                            debug_queued_, debug_.capacity(), debug_drawn_,
+                            debug_.dropped());
+                ImGui::ProgressBar(static_cast<float>(debug_queued_)
+                                       / static_cast<float>(debug_.capacity()),
+                                   ImVec2(-1.0f, 6.0f), "");
+                if (ImGui::Button("clear queue")) { debug_.clear(); }
+            }
+
+            if (ImGui::CollapsingHeader("World controls", ImGuiTreeNodeFlags_DefaultOpen))
+            {
+                // BUTTONS THAT CALL THE FUNCTIONS THE KEYS CALL — not copies of
+                // what the keys do. Two ways in, one implementation; the moment
+                // they diverge the panel starts lying.
+                if (ImGui::Button("rebuild [R]")) { build_world(); }
+                ImGui::SameLine();
+                if (ImGui::Button("cull [X]")) { cull_swarm(); }
+                ImGui::SameLine();
+                if (ImGui::Button("sparks [Space]")) { spawn_sparks(); }
+
+                ImGui::Checkbox("sun drifts  [F]", &drifting_);
+                bool detached = detached_;
+                if (ImGui::Checkbox("outer half detached  [H]", &detached)) { toggle_detach(); }
+                bool riding = riding_;
+                if (ImGui::Checkbox("camera rides a planet  [C]", &riding))
+                {
+                    toggle_camera_ride();
+                }
+            }
+        }
+        ImGui::End();
+
+        build_input_panel();
+    }
+
+    /// The input panel — and the reason this lesson has an input section at all.
+    ///
+    /// The filter box is a TEXT FIELD, which is the one widget that makes the
+    /// two consumers of the keyboard genuinely collide. Click into it, type
+    /// `spawn`, and watch: the `p` does not toggle anything, the space bar does
+    /// not spawn sparks, and the two "blocked" lines below turn on. Click out
+    /// and every key works again — including, on that very frame, a release edge
+    /// for anything you were holding when you clicked in.
+    void build_input_panel()
+    {
+        ImGui::SetNextWindowPos(ImVec2(12.0f, 494.0f), ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowSize(ImVec2(340.0f, 210.0f), ImGuiCond_FirstUseEver);
+        if (ImGui::Begin("input"))
+        {
+            ImGui::InputTextWithHint("##filter", "filter actions — type here",
+                                     filter_, sizeof(filter_));
+
+            // THE SEAM, MADE VISIBLE. Three numbers that are normally invisible
+            // machinery: what the UI is claiming, and how far the virtual cursor
+            // has fallen behind the real one while it claimed the mouse.
+            ImGui::TextColored(gate_.blocking_keyboard() ? ImVec4(1.0f, 0.55f, 0.3f, 1.0f)
+                                                         : ImVec4(0.5f, 0.6f, 0.5f, 1.0f),
+                               "keyboard: %s", gate_.blocking_keyboard() ? "UI" : "game");
+            ImGui::SameLine();
+            ImGui::TextColored(gate_.blocking_mouse() ? ImVec4(1.0f, 0.55f, 0.3f, 1.0f)
+                                                      : ImVec4(0.5f, 0.6f, 0.5f, 1.0f),
+                               "   mouse: %s", gate_.blocking_mouse() ? "UI" : "game");
+            ImGui::Text("cursor offset %+.0f, %+.0f px",
+                        static_cast<double>(gate_.cursor_offset_x()),
+                        static_cast<double>(gate_.cursor_offset_y()));
+            ImGui::SetItemTooltip("How far the game's virtual cursor has fallen behind the "
+                                  "real one. It grows only while the UI owns the mouse, and "
+                                  "it is what stops the camera whipping round when you let "
+                                  "go of a slider.");
+
+            ImGui::Separator();
+            ImGui::Text("spawn is on %s", spawn_on_enter_ ? "[Enter]" : "[Space] / [LMB]");
+            ImGui::SameLine();
+            if (ImGui::SmallButton("rebind [K]")) { rebind_spawn(); }
+
+            // THE BINDING TABLE, READ FROM THE MAP rather than written out — so
+            // it cannot go stale when [K] rebinds something, and so a settings
+            // screen is now a straightforward exercise rather than a feature.
+            if (ImGui::BeginTable("bindings", 3,
+                                  ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY
+                                      | ImGuiTableFlags_SizingStretchProp,
+                                  ImVec2(0.0f, 0.0f)))
+            {
+                ImGui::TableSetupColumn("action");
+                ImGui::TableSetupColumn("source");
+                ImGui::TableSetupColumn("value");
+                ImGui::TableHeadersRow();
+
+                for (const engine::binding& b : actions_.bindings())
+                {
+                    const std::string_view name = actions_.name_of(b.action);
+                    if (filter_[0] != '\0' && name.find(filter_) == std::string_view::npos)
+                    {
+                        continue;
+                    }
+
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    ImGui::TextUnformatted(name.data(), name.data() + name.size());
+                    ImGui::TableNextColumn();
+                    ImGui::TextUnformatted(source_name(b));
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%+.2f", static_cast<double>(actions_.value(b.action)));
+                }
+                ImGui::EndTable();
+            }
+        }
+        ImGui::End();
+    }
+
+    /// One "label | value" row. A named helper because it appears eleven times,
+    /// and eleven copies of two lines is how a table starts drifting.
+    static void row_u(const char* label, std::size_t value)
+    {
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn();
+        ImGui::TextUnformatted(label);
+        ImGui::TableNextColumn();
+        ImGui::Text("%zu", value);
+    }
+
+    /// A binding's source, spelled for a human.
+    ///
+    /// SDL_GetScancodeName is the right answer for a key and it is worth knowing
+    /// it exists: a rebinding UI that prints `SDL_SCANCODE_LEFTBRACKET` is a
+    /// rebinding UI nobody can use, and the layout-correct name is the platform's
+    /// to know, not ours.
+    [[nodiscard]] static const char* source_name(const engine::binding& b)
+    {
+        switch (b.source)
+        {
+        case engine::input_source::key:
+            return SDL_GetScancodeName(static_cast<SDL_Scancode>(b.code));
+        case engine::input_source::mouse_button:
+            return "mouse button";
+        case engine::input_source::mouse_axis:
+            return "mouse / wheel";
+        }
+        return "?";
+    }
+
     // ---- Actions ------------------------------------------------------------
 
     /// Declare every action this program has, then bind the defaults.
@@ -530,6 +875,9 @@ private:
         a_yaw_       = actions_.declare("camera_yaw");
         a_pitch_     = actions_.declare("camera_pitch");
         a_zoom_      = actions_.declare("camera_zoom");
+        a_panels_    = actions_.declare("toggle_panels");
+        a_links_     = actions_.declare("toggle_hierarchy_links");
+        a_axes_      = actions_.declare("toggle_axis_triads");
 
         actions_.bind_key(a_quit_, SDL_SCANCODE_ESCAPE);
         actions_.bind_key(a_spawn_, SDL_SCANCODE_SPACE);
@@ -550,6 +898,16 @@ private:
         actions_.bind_key(a_detach_, SDL_SCANCODE_H);
         actions_.bind_key(a_drift_, SDL_SCANCODE_F);
         actions_.bind_key(a_rebind_, SDL_SCANCODE_K);
+
+        // Lesson 5.11's three. They are actions rather than scancodes for the
+        // same reason everything else here is, and there is a second reason now:
+        // a key that toggles the debug UI must keep working while the debug UI
+        // is on screen, which means it has to go through the same mask as
+        // everything else. Bind it outside the action system and it would fire
+        // while you were typing its letter into the filter box.
+        actions_.bind_key(a_panels_, SDL_SCANCODE_F1);
+        actions_.bind_key(a_links_, SDL_SCANCODE_L);
+        actions_.bind_key(a_axes_, SDL_SCANCODE_G);
 
         // AXES FROM PAIRS OF KEYS. Two bindings with opposite scales, and the
         // action's value is their sum — so holding both gives exactly zero and
@@ -758,6 +1116,17 @@ private:
             engine::ecs::set_parent(world_, e, sun_);
         }
         tree_.mark_topology_changed();
+
+        // A MARKER AT THE ORIGIN OF THE BURST, and note where this line is
+        // written from: a function called out of `on_fixed_step`, which has no
+        // framebuffer, no projector and no camera. Before the queue existed this
+        // could not have been written here at any price.
+        if (const engine::ecs::world_transform* w =
+                world_.get<engine::ecs::world_transform>(sun_))
+        {
+            debug_.sphere(engine::translation_of(w->matrix), 1.2f,
+                          engine::pack_argb(120, 224, 255), marker_seconds_, 20);
+        }
     }
 
     /// Park the camera on a ring member, or take it off again.
@@ -805,6 +1174,20 @@ private:
             if (!world_.alive(swarm_[i])) { continue; }
             engine::ecs::set_parent(world_, swarm_[i],
                                     detached_ ? engine::ecs::null_entity : sun_);
+
+            // THE ARGUMENT FOR LIFETIMES, IN ONE FEATURE. Re-parenting happens
+            // in a single frame — 16 ms — and the hierarchy lines simply look
+            // different afterwards. A box that outlives the event by two seconds
+            // is what turns "the tree changed" into "THESE forty-eight changed",
+            // and no amount of staring at a per-frame view would tell you that.
+            if (const engine::ecs::world_transform* w =
+                    world_.get<engine::ecs::world_transform>(swarm_[i]))
+            {
+                debug_.box(w->matrix, {0.28f, 0.28f, 0.28f},
+                           detached_ ? engine::pack_argb(255, 140, 90)
+                                     : engine::pack_argb(140, 255, 160),
+                           marker_seconds_);
+            }
         }
         tree_.mark_topology_changed();
     }
@@ -903,7 +1286,32 @@ private:
     engine::action_id a_quit_, a_spawn_, a_materials_, a_orbits_, a_cull_, a_rebuild_;
     engine::action_id a_ride_, a_detach_, a_drift_, a_rebind_;
     engine::action_id a_yaw_, a_pitch_, a_zoom_;
+    engine::action_id a_panels_, a_links_, a_axes_;
     bool spawn_on_enter_ = false;
+
+    // ---- Lesson 5.11 --------------------------------------------------------
+
+    /// The debug UI. Not started under `--shot`, and harmless when it is not.
+    engine::debug_ui ui_;
+
+    /// `in()`, with whatever ImGui is currently claiming withheld. Updated once
+    /// per frame in `on_input`, immediately before the action map reads it.
+    engine::masked_input<engine::input> gate_;
+
+    /// World-space debug geometry, queued by anybody and drawn by the renderer.
+    engine::debug_lines debug_;
+    std::size_t debug_queued_ = 0;
+    int debug_drawn_ = 0;
+
+    bool show_panels_ = true;
+    bool show_links_ = true;
+    bool show_axes_ = false;
+    float marker_seconds_ = 2.0f;
+
+    /// The filter box's buffer. A fixed array because that is what
+    /// `ImGui::InputText` takes — ImGui is a C++ library with a C heart, and it
+    /// will not allocate on your behalf.
+    char filter_[64] = {};
 
     bool materials_hidden_ = false;
     bool orbits_frozen_ = false;

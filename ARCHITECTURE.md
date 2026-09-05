@@ -652,13 +652,14 @@ Module 5 opened with a dedicated refactor arc, taught as a **first-class archite
 chore. What follows is on disk.
 
 ```
-├── CMakeLists.txt          # acquires SDL3 + stb, declares the shaders, adds the two subdirs
+├── CMakeLists.txt          # acquires SDL3 + stb + ImGui, declares the shaders and the
+│                           #   imgui target ImGui does not ship, adds the two subdirs
 ├── cmake/
 │   ├── EngineHelpers.cmake # engine_set_warnings / _use_assets / _use_shaders   [5.1]
 │   └── Shaders.cmake       # add_hlsl_shader(name stage) -> a GLOBAL PROPERTY   [4.3, reshaped 5.1]
 ├── engine/                 # THE LIBRARY                                        [5.1]
 │   ├── CMakeLists.txt      # produces engine::engine (STATIC)
-│   ├── include/engine/     # ---- THE PUBLIC API. 54 headers. Nothing else. ----
+│   ├── include/engine/     # ---- THE PUBLIC API. 56 headers. Nothing else. ----
 │   │   ├── engine.hpp      # the umbrella: shipped, documented, used by nothing we ship
 │   │   ├── asset/          # NAMES, ROOTS AND LIFETIMES                       [5.5]
 │   │   │   ├── search_path.hpp # ordered roots; the ONLY caller of
@@ -667,7 +668,9 @@ chore. What follows is on disk.
 │   │   ├── core/           # clock, fixed_step, input, profile,
 │   │   │   │               #   log.hpp + assert.hpp                          [5.3]
 │   │   │   ├── actions.hpp # actions, bindings, and the input_snapshot     [5.10]
-│   │   │   │               #   CONCEPT. Buttons and axes are one mechanism
+│   │   │   │               #   CONCEPT. Buttons and axes are one mechanism.
+│   │   │   │               #   + masked_input<Source>: the concept's SECOND  [5.11]
+│   │   │   │               #   implementor, and it is not a test
 │   │   │   ├── bench.hpp   # A/B timing: alternate, median, keep, agree      [5.6]
 │   │   │   ├── handle.hpp  # handle<T>: 20 index / 12 generation, in 32 bits  [5.4]
 │   │   │   └── pool.hpp    # pool<T>: sparse slots + dense items + free list  [5.4]
@@ -690,6 +693,11 @@ chore. What follows is on disk.
 │   │   │   │                 #   (the 4 SDL callbacks) — the engine keeps the loop
 │   │   │   └── main.hpp      # ENGINE_MAIN. ONE .cpp per program; no main() in it.
 │   │   │                     #   NOT in engine.hpp, deliberately
+│   │   ├── ui/             # TOOLING UI. Never gameplay UI (§4, binding)   [5.11]
+│   │   │   └── debug_ui.hpp  # the Dear ImGui lifecycle + the capture flags.
+│   │   │                     #   Does NOT include <imgui.h>: owning the
+│   │   │                     #   lifecycle and speaking the widget language
+│   │   │                     #   are different jobs
 │   │   └── gfx/            # everything from §2.1's gfx/, plus four new headers:
 │   │       ├── projector.hpp     # near_mode, projector, screen_point, to_clip,
 │   │       │                     #   to_pixel, screen_from_clip. Its own header
@@ -700,12 +708,23 @@ chore. What follows is on disk.
 │   │       │                     #   projection_scratch, camera_view,
 │   │       │                     #   render_options, collect_stats,
 │   │       │                     #   collect_triangles / sort / draw_triangles
+│   │       ├── debug_lines.hpp   # THE QUEUE: world-space segments +         [5.11]
+│   │       │                     #   lifetimes, bounded and counted. INCLUDES
+│   │       │                     #   NOTHING THAT CAN DRAW — that list is the
+│   │       │                     #   interface, and it is what lets a physics
+│   │       │                     #   system queue without compiling a renderer
 │   │       └── debug_draw.hpp    # line3, draw_mesh, draw_axes3, show_depth,
-│   │                             #   count_differences — grouped by PURPOSE
-│   └── src/                # ---- PRIVATE. 26 sources; no demo can name this path ----
+│   │                             #   count_differences — grouped by PURPOSE.
+│   │                             #   + draw_debug_lines(): the SOFTWARE BACKEND
+│   │                             #   for the queue above, four lines long   [5.11]
+│   └── src/                # ---- PRIVATE. 32 sources; no demo can name this path ----
 │       ├── core/           # actions [5.10], clock, fixed_step, input, log, profile
 │       ├── platform/       # platform.cpp, app.cpp                            [5.2]
-│       └── gfx/            # …+ soft_renderer.cpp, debug_draw.cpp; image.cpp is the
+│       ├── ui/             # debug_ui.cpp — THE ONLY engine TU that          [5.11]
+│       │                   #   includes <imgui.h>. That containment is what
+│       │                   #   made a PUBLIC dependency acceptable
+│       └── gfx/            # …+ soft_renderer.cpp, debug_draw.cpp,
+│                           #   debug_lines.cpp [5.11]; image.cpp is the
 │                           #   ONE unit that contains stb_image + save_ppm
 ├── demos/                  # executables; link engine, include ONLY public headers
 │   ├── CMakeLists.txt
@@ -720,10 +739,14 @@ chore. What follows is on disk.
 │   ├── pong/main.cpp       # Lesson 1.8's game, on engine::app. 87 code lines,
 │   │                       #   no main, no SDL_Init, no loop                  [5.2]
 │   ├── hello_cube/main.cpp # public headers only. THE ACCEPTANCE TEST for the API
-│   └── ecs_swarm/main.cpp  # 154 entities, THREE LEVELS, and NO SCANCODES  [5.8-5.10]
-│                           #   The acceptance test for the ECS: 24 of them are
-│                           #   invisible because they LACK a geometry component,
-│                           #   and [F] drifts the sun so everything follows it
+│   └── ecs_swarm/main.cpp  # 154 entities, THREE LEVELS, NO SCANCODES,   [5.8-5.11]
+│                           #   and now DRAWING ITS OWN TREE: 152 debug lines
+│                           #   (96 ring + 32 moons + 24 waypoints) queued by a
+│                           #   function whose signature has no framebuffer in
+│                           #   it, plus two ImGui panels. The acceptance test
+│                           #   for the ECS: 24 entities are invisible because
+│                           #   they LACK a geometry component, and [F] drifts
+│                           #   the sun so everything follows it
 └── tools/                  # editor, asset cooker (Module 8). Not yet.
 ```
 
@@ -892,6 +915,30 @@ within the public API, since 5.2:
 `math` depends on nothing but the standard library — which is exactly why it is the first thing
 under test. `core` may not include `gfx`. Nothing in `engine/` may include from `demos/`. A
 cycle here is a design error, not an inconvenience to work around.
+
+**Lesson 5.11 added a second, finer-grained direction *inside* `gfx/`, and it is enforced by
+include lists rather than by the build:**
+
+```
+anybody (physics, ECS, loaders) ──► gfx/debug_lines.hpp   (says what to draw)
+                                          ▲
+        code that already owns a  ────────┘
+        framebuffer               ──► gfx/debug_draw.hpp   (draws it)
+```
+
+`debug_lines.hpp` includes `colour`, `mat4`, `vec3` and three standard headers, and **nothing
+that can draw**. That list *is* the interface: C++ include dependencies are transitive, so one
+renderer type in it would make every physics translation unit compile the framebuffer, the depth
+buffer, the projector and the handle system in order to draw a box. It is also why
+`wire_mesh()` takes two spans instead of the `mesh` that owns them — `mesh.hpp` drags in
+`core/pool.hpp`.
+
+**Dear ImGui is the one dependency that is deliberately PUBLIC** (5.11), against `stb_image`'s
+`PRIVATE` (4.7). The distinction is *concept* versus *vocabulary*: stb wraps to one function and
+one type, while ImGui's value is four hundred widget calls, and a wrapper around those is a
+re-spelling with no content that must be re-spelt for every widget forever. The containment is
+therefore a rule about **which code may speak it — tooling only** — rather than a link flag, and
+`engine/src/ui/debug_ui.cpp` is the only engine translation unit that includes `<imgui.h>`.
 
 Since Lesson 5.1 this is no longer a rule people follow — it is a rule the build enforces, in two
 independent ways. Horizontally, `engine/src` is `PRIVATE`, so a demo cannot name it. Vertically,
@@ -1490,6 +1537,69 @@ Built roughly in dependency order — each module's milestone is the next module
   Aspect ratio is deliberately **not** a field — it belongs to the surface, which the user can
   resize, and storing it would put a machine-specific number in every scene file.
 
+- **Debug drawing is a queue, and the queue includes nothing that can draw** (Lesson 5.11).
+  `debug_lines` holds world-space segments with lifetimes — world rather than view, because the
+  queuer does not know where the camera is and often runs before it is resolved, and because a
+  split-screen game flushes the same queue twice. `draw_debug_lines()` in `debug_draw.hpp` is the
+  software backend and is a four-line loop over `line3_world`, which has clipped correctly since
+  Lesson 3.3: **nothing was rewritten, a queue was put in front.**
+
+  Three problems came from one fact — two of `line3`'s six parameters were renderer state — and
+  removing them fixes all three: only the renderer could call it, it worked on one surface, and a
+  line lived exactly one frame. That last one is the argument for lifetimes and it is the one
+  people dismiss: **16.7 ms at 60 Hz against the ~250 ms a person needs**, so a per-frame drawer
+  can show you *state* and never *events*, and it is usually events you are hunting.
+
+  The expiry rule **tests before it subtracts**, which removes a dependency rather than getting it
+  right: measured in `float` at 60 Hz on a half-second line, test-first gives 31 advances,
+  subtract-then-test with `<=` gives 30 and is also correct, and subtract-then-test with `<`
+  gives 30 *and keeps a one-frame line for ever when `dt` is zero* — a paused clock, a
+  single-frame `--shot`, a breakpoint. The order in the frame is **queue → flush → advance**, with
+  `advance()` last and outside every branch.
+
+  Bounded at 4,096 lines **with a drop counter**, because a bound with no counter is a bug that
+  presents as a rendering artifact: the missing line looks exactly like a thing that does not
+  exist. No depth test and no batching, both named rather than discovered — and the queue is
+  precisely what makes batching possible later, since you cannot batch calls that already
+  happened.
+
+- **The debug UI is the one singleton, and not by choice** (Lesson 5.11). `asset_store`,
+  `registry`, `action_map` and `debug_lines` are all values; `debug_ui` cannot be, because ImGui
+  keeps its context in a library global that every `ImGui::` call reads. `start()` refuses a
+  second instance and logs why — an enforced limit you can read beats an undocumented one you
+  discover.
+
+  On a surface with no renderer it does nothing, safely: `start()` returns false and logs at
+  *info* (an error line in every headless run trains the reader to ignore error lines), and every
+  other call is a no-op **including `wants_keyboard()`**, so the mask blocks nothing and a program
+  behaves exactly as it did before the UI existed. That is what keeps Lesson 5.1's reference image
+  byte-identical.
+
+  `begin_frame()` goes **first in `on_input()`**, not beside the panels where it looks like it
+  belongs: ImGui computes its capture flags inside `NewFrame`, and the mask reads them two lines
+  later. Put `NewFrame` in `on_overlay` and every read answers about the *previous* frame — one
+  frame of input leakage, every time, invisible unless you look for it.
+
+- **Two consumers of one keyboard are separated on levels, never by routing events** (Lesson
+  5.11). `engine::input` tracks levels, and **a level is only ever corrected by the event that
+  contradicts it** — so a key-up routed to the UI and not passed on leaves that key held down
+  for ever. Both consumers see every event; `masked_input<Source>` withholds what the UI has
+  claimed one layer later, and because it satisfies Lesson 5.10's `input_snapshot` concept,
+  `action_map::update` took it with **not one character changed**.
+
+  The map is still updated while the UI has focus. Skipping it would freeze every level — hold a
+  movement key, click into a text field, and the camera flies away — whereas updating through the
+  mask reports masked keys as *up*, which fires the release edge, which is the behaviour you
+  actually want.
+
+  **A delta cannot be masked by masking one of its endpoints.** The cursor is not a level:
+  `action_map` derives a delta by differencing two frames. With the cursor travelling 100 → 160
+  over three blocked frames and on to 170, reporting zero gives **+170** on the release frame,
+  freezing the last position gives **+70** (this is the version that ships), and the shipped
+  virtual cursor — `reported = real − offset`, with `offset` absorbing exactly the movement that
+  happened while blocked — gives **+10**, which is one frame of real motion. The wheel needs none
+  of it, because `input` publishes the wheel as a per-frame delta already.
+
   The view matrix is `rigid_inverse` of the resolved placement, and that is Lesson 2.9's
   derivation extracted into `math/mat4.hpp` now that a camera has a placement to invert. The
   identity `rigid_inverse(parent_from_local(look_along(e, t, u))) == look_at(e, t, u)` holds
@@ -1774,7 +1884,7 @@ Commands that are not obvious from reading files.
 ### Build
 
 ```sh
-cmake -S . -B build              # first run compiles SDL3 via FetchContent — minutes
+cmake -S . -B build              # first run compiles SDL3 and ImGui via FetchContent — minutes
 cmake --build build
 
 ./build/demos/sandbox                        # the GPU scene (4.8)
@@ -1784,15 +1894,24 @@ cmake --build build
 ./build/demos/sandbox --shot scratch/x.ppm   # seven pinned frames, no window          (5.1)
 ./build/demos/hello_cube                     # the acceptance test: public API only    (5.1)
 ./build/demos/hello_cube --shot cube.ppm     # …one frame, no window
-./build/demos/ecs_swarm                      # 154 entities, ten components, 3 levels (5.9)
-./build/demos/ecs_swarm --shot swarm.ppm     # …one frame, no window, deterministic
+./build/demos/ecs_swarm                      # 154 entities, 3 levels, 152 debug lines,
+                                             #   and two ImGui panels               (5.9-5.11)
+./build/demos/ecs_swarm --shot swarm.ppm     # …one frame, no window, deterministic;
+                                             #   the UI declines to start and says so
 ```
 
 > **The executable moved and was renamed in Lesson 5.1.** It was `build/engine` through Module 4;
 > that name now belongs to the library. Anything in Modules 0–4 that says `./build/engine` means
 > `./build/demos/sandbox`.
 
-`FetchContent` pins SDL3 to a tag. A fresh clone needs no SDL install and no submodule ritual.
+`FetchContent` pins SDL3 and Dear ImGui to tags, and `stb` to a commit SHA because it has no
+tags. **ImGui ships no `CMakeLists.txt`**, deliberately — so `FetchContent_MakeAvailable` only
+*populates* it and the root `CMakeLists.txt` declares the `imgui` target itself, naming the seven
+files it compiles: the four core sources, `imgui_demo.cpp` (kept, because
+`ImGui::ShowDemoWindow()` is the fastest widget reference there is), and the SDL3 platform +
+SDL_Renderer backend pair. `engine_set_warnings` is deliberately **not** applied to it.
+
+A fresh clone needs no SDL install and no submodule ritual.
 The tradeoff (a one-time source build) was accepted over vendored submodules specifically to
 kill the "forgot `git submodule update --init`" failure mode.
 
@@ -1841,6 +1960,11 @@ c++ -std=c++20 -O2 -Wall -Wextra \
 Link `libdemo_common.a` only when the harness needs the demo's *content* — the scene, the floor,
 the reference shot. A harness that checks the engine should link the engine alone, and that
 distinction is now expressible.
+
+**Since Lesson 5.11 a harness that touches `engine::debug_ui` needs `build/libimgui.a` on the
+link line as well.** `verify_45` through `verify_510` do not, and that is not luck: a static
+library only contributes the objects somebody references, and `debug_ui.cpp` is the only engine
+translation unit that calls into ImGui.
 
 **Output goes in `build/demos/`** so that `SDL_GetBasePath()` finds `assets/` and `shaders/`,
 which the build copies next to each executable. Run the script from the repository root.
@@ -1900,7 +2024,7 @@ Full detail with diagrams in [`docs/conventions.html`](docs/conventions.html); t
 | Matrices | Column vectors, `v' = M·v`, stored **column-major** (maps onto HLSL's default) |
 | Winding | **CCW = front**, cull back — *our* choice, set explicitly on every pipeline |
 | Units | 1 unit = 1 metre; **radians** internally, degrees only at UI edges |
-| Axis colours | x/y/z = **red/green/blue**, course-wide, in every diagram |
+| Axis colours | x/y/z = **red/green/blue**, course-wide, in every diagram — and since 5.11 in exactly one place in the code: `k_axis_{x,y,z}_colour` in `gfx/debug_lines.hpp` |
 | Angles | Radians. Always. |
 | Performance units | **ns per covered pixel** and **ns per triangle** — never ms/frame |
 | Timing statistic | **median** for a frame, **minimum** for a kernel, never the mean |

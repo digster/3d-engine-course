@@ -9,12 +9,32 @@
 // Grouping them is Lesson 5.1's second smallest decision and its most repeatable
 // one: they were scattered through the demo because each arrived alone, and the
 // thing they have in common is not their shape but their PURPOSE. Debug code is
-// a component, not a leftover — it ships disabled, it is budgeted separately
-// (Lesson 3.10's `zone::overlay`), and Lesson 5.10 turns this header into a real
-// debug-draw system with a command queue behind it.
+// a component, not a leftover — it ships disabled and it is budgeted separately
+// (Lesson 3.10's `zone::overlay`).
+//
+// ---------------------------------------------------------------------------
+// LESSON 5.11 SPLIT THIS FILE IN TWO, AND KEPT BOTH HALVES
+// ---------------------------------------------------------------------------
+//
+// Everything below draws IMMEDIATELY into a framebuffer, through a projector,
+// from a caller that must be holding both. gfx/debug_lines.hpp explains at
+// length why that is the wrong shape for a debug-draw SYSTEM — the caller has to
+// be the renderer, it only works on one surface, and a line cannot outlive the
+// frame that asked for it.
+//
+// What it is exactly the right shape for is a BACKEND. So nothing here was
+// deleted or rewritten: `draw_debug_lines()` at the bottom of this file walks a
+// queue and hands each segment to `line3_world()`, which has clipped correctly
+// since Lesson 3.3 and is well tested by six lessons of use. The rework is a
+// queue put IN FRONT of these functions, not a replacement for them.
+//
+// The reading order is: debug_lines.hpp says what to draw and can be included by
+// anybody; this file draws it and may be included only by code that already
+// owns a framebuffer.
 
 #pragma once
 
+#include <engine/gfx/debug_lines.hpp>
 #include <engine/gfx/depth_buffer.hpp>
 #include <engine/gfx/framebuffer.hpp>
 #include <engine/gfx/mesh.hpp>
@@ -34,12 +54,21 @@ namespace engine {
 /// then divide. Before Lesson 3.3 a line crossing the near plane simply vanished —
 /// which is why walking over a gridline used to make it disappear rather than run
 /// off the bottom of the screen.
-void line3(framebuffer& fb, vec3 a, vec3 b,
+///
+/// Returns whether the segment SURVIVED THE NEAR PLANE and reached the
+/// rasterizer. Deliberately not `[[nodiscard]]`: six lessons of call sites
+/// correctly ignore it, and the answer is only interesting in bulk — see
+/// `draw_debug_lines`, where "queued 152, drawn 151" is the only way to notice
+/// that one line went behind the eye. It is NOT a promise that pixels changed;
+/// a segment fully off the side of the viewport still counts, because that is a
+/// rasterizer question and this function does not ask it (Lesson 5.11 §7).
+bool line3(framebuffer& fb, vec3 a, vec3 b,
            Uint32 colour, const projector& pr);
 
 /// Draw a WORLD-space line through the view matrix and the projector. Convenience
 /// for the world grid and axes, whose endpoints are natural world-space constants.
-void line3_world(framebuffer& fb, const mat4& view, const projector& pr,
+/// Returns what `line3` returned.
+bool line3_world(framebuffer& fb, const mat4& view, const projector& pr,
                  vec3 a, vec3 b, Uint32 colour);
 
 // ---------------------------------------------------------------------------
@@ -128,5 +157,31 @@ struct depth_range { float lo = 1.0f; float hi = 0.0f; };
 /// The value is an *encoded* channel (Lesson 1.6), because that is what the screen
 /// shows and what the reader can compare against the picture.
 [[nodiscard]] int brightest_channel(const framebuffer& fb, const viewport& vp);
+
+// ---------------------------------------------------------------------------
+// The software backend for a debug-line queue — Lesson 5.11
+// ---------------------------------------------------------------------------
+
+/// Draw every live line in `queue` into `fb`. Returns how many survived the near
+/// plane — see `line3`, and note that this is a strictly honest count rather
+/// than `queue.size()` spelled twice.
+///
+/// **This is the whole of the software backend**, and its brevity is the point:
+/// a queue of world-space segments plus a view matrix and a projector is exactly
+/// what `line3_world` already wanted, one at a time. The queue bought the
+/// decoupling; it did not have to buy a new rasterizer.
+///
+/// NO DEPTH TEST, and that is a decision rather than an omission. Debug geometry
+/// draws over the scene, which is what you want nine times in ten — a contact
+/// normal buried inside the two objects that produced it is a contact normal you
+/// cannot see. The tenth time you *do* want occlusion, because a hierarchy line
+/// that passes behind a wall should say so, and that wants a per-line flag and a
+/// depth buffer this function is not given. Lesson 5.11 Exercise 3.
+///
+/// The return value exists so a HUD can print it beside `queue.dropped()`: drawn
+/// and refused together are the two numbers that tell you whether the picture
+/// you are looking at is the whole picture.
+int draw_debug_lines(framebuffer& fb, const mat4& view, const projector& pr,
+                     const debug_lines& queue);
 
 }   // namespace engine
