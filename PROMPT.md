@@ -2246,3 +2246,39 @@ navigation link spliced 5.9's demo into 5.8's listings, because listings are rea
 repo. Fixed with a pinned snapshot, verified byte-identical to the file at commit `dfbdb0f`.
 
 `next:` is now 5.10 — Input Mapping, ImGui, and Debug Draw.
+
+> next
+
+**Lesson 5.10 — Input Mapping: Actions, Not Keycodes.** The curriculum grouped input mapping,
+Dear ImGui and debug draw into one lesson; that is three engine subsystems with three separate
+design arguments, and §3.8 forbids truncating to fit. **Split**: 5.10 is input mapping, 5.11 is
+the ImGui + debug-draw tooling pair. Module 5 goes to 11 lessons, inside its stated 9–11, and the
+course total to 95.
+
+Shipped `engine/core/actions.hpp` + `actions.cpp` (53 → 54 public headers; first new *source*
+file since 5.5, so `engine/CMakeLists.txt` gained a line) and the `on_input()` hook in
+`platform/app.{hpp,cpp}`.
+
+The lesson **measures nothing and says so** — the alternatives differ in what they can express,
+not in cost, and manufacturing a benchmark would attach a number to a decision the number did not
+make. One mechanism covers buttons and axes: every binding contributes a signed float and an
+action's value is the sum, so holding both halves of an axis gives exactly zero with no rule
+anywhere saying so.
+
+Two decisions that are invisible until they bite, both tested on purpose. **An edge is a change
+in the action, not in a signal** — bind one action to a key and a mouse button, press the second
+while the first is held, and a binding-derived edge fires twice for one intention. **A fixed step
+needs a second kind of edge** — `on_fixed_step` runs 0..N times, so a frame edge read there fires
+twice on a two-step frame *and* is lost on a zero-step one; a four-deep press queue closes both,
+and the cap is a decision rather than an overflow.
+
+`update` is templated on a C++20 `concept` — the course's first — because `input::update()`
+samples SDL's live keyboard state and a test could not otherwise exist. **Declined to add gamepad
+support**, out loud: it could not be run here, and untested device code is a liability that looks
+like support.
+
+**62 checks / 0 failures**; `verify_45`…`59` still green; golden byte-identical for the **tenth**
+lesson. Pinned 5.9's `ecs_swarm` snapshot in `build_59.py` before touching the demo — the trap
+that bit `build_58.py` last session.
+
+`next:` is now 5.11 — Dear ImGui and the Debug Draw System.

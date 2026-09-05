@@ -658,7 +658,7 @@ chore. What follows is on disk.
 │   └── Shaders.cmake       # add_hlsl_shader(name stage) -> a GLOBAL PROPERTY   [4.3, reshaped 5.1]
 ├── engine/                 # THE LIBRARY                                        [5.1]
 │   ├── CMakeLists.txt      # produces engine::engine (STATIC)
-│   ├── include/engine/     # ---- THE PUBLIC API. 53 headers. Nothing else. ----
+│   ├── include/engine/     # ---- THE PUBLIC API. 54 headers. Nothing else. ----
 │   │   ├── engine.hpp      # the umbrella: shipped, documented, used by nothing we ship
 │   │   ├── asset/          # NAMES, ROOTS AND LIFETIMES                       [5.5]
 │   │   │   ├── search_path.hpp # ordered roots; the ONLY caller of
@@ -666,6 +666,8 @@ chore. What follows is on disk.
 │   │   │   └── asset_store.hpp # load / find / insert / derive / unload
 │   │   ├── core/           # clock, fixed_step, input, profile,
 │   │   │   │               #   log.hpp + assert.hpp                          [5.3]
+│   │   │   ├── actions.hpp # actions, bindings, and the input_snapshot     [5.10]
+│   │   │   │               #   CONCEPT. Buttons and axes are one mechanism
 │   │   │   ├── bench.hpp   # A/B timing: alternate, median, keep, agree      [5.6]
 │   │   │   ├── handle.hpp  # handle<T>: 20 index / 12 generation, in 32 bits  [5.4]
 │   │   │   └── pool.hpp    # pool<T>: sparse slots + dense items + free list  [5.4]
@@ -684,8 +686,8 @@ chore. What follows is on disk.
 │   │   ├── platform/       # HOW A PROGRAM STARTS                          [5.2]
 │   │   │   ├── platform.hpp  # surface, app_config, platform — SDL's lifecycle,
 │   │   │   │                 #   owned once. YOU keep the loop
-│   │   │   ├── app.hpp       # app (7 hooks), app_runner (the 4 SDL callbacks) —
-│   │   │   │                 #   the engine keeps the loop
+│   │   │   ├── app.hpp       # app (8 hooks — on_input added in 5.10), app_runner
+│   │   │   │                 #   (the 4 SDL callbacks) — the engine keeps the loop
 │   │   │   └── main.hpp      # ENGINE_MAIN. ONE .cpp per program; no main() in it.
 │   │   │                     #   NOT in engine.hpp, deliberately
 │   │   └── gfx/            # everything from §2.1's gfx/, plus four new headers:
@@ -701,7 +703,7 @@ chore. What follows is on disk.
 │   │       └── debug_draw.hpp    # line3, draw_mesh, draw_axes3, show_depth,
 │   │                             #   count_differences — grouped by PURPOSE
 │   └── src/                # ---- PRIVATE. 26 sources; no demo can name this path ----
-│       ├── core/           # clock, fixed_step, input, log, profile
+│       ├── core/           # actions [5.10], clock, fixed_step, input, log, profile
 │       ├── platform/       # platform.cpp, app.cpp                            [5.2]
 │       └── gfx/            # …+ soft_renderer.cpp, debug_draw.cpp; image.cpp is the
 │                           #   ONE unit that contains stb_image + save_ppm
@@ -718,7 +720,7 @@ chore. What follows is on disk.
 │   ├── pong/main.cpp       # Lesson 1.8's game, on engine::app. 87 code lines,
 │   │                       #   no main, no SDL_Init, no loop                  [5.2]
 │   ├── hello_cube/main.cpp # public headers only. THE ACCEPTANCE TEST for the API
-│   └── ecs_swarm/main.cpp  # 154 entities, TEN components, THREE LEVELS.    [5.8, 5.9]
+│   └── ecs_swarm/main.cpp  # 154 entities, THREE LEVELS, and NO SCANCODES  [5.8-5.10]
 │                           #   The acceptance test for the ECS: 24 of them are
 │                           #   invisible because they LACK a geometry component,
 │                           #   and [F] drifts the sun so everything follows it
@@ -1493,6 +1495,47 @@ Built roughly in dependency order — each module's milestone is the next module
   identity `rigid_inverse(parent_from_local(look_along(e, t, u))) == look_at(e, t, u)` holds
   **bit for bit**. There is still no general 4×4 inverse, for the reason `mat4.hpp` gave in
   Module 2: it would answer a question we never ask.
+
+- **Actions, not keycodes** (Lesson 5.10). An action is a name, a binding maps a signal onto it,
+  and a frame publishes the value. The four things this buys are all about *expression* rather
+  than cost — rebinding, multi-device input, recordable intentions, and code that says what it
+  does — so **this is the one subsystem in Module 5 chosen without a benchmark**, and the lesson
+  says so rather than manufacturing one.
+
+  **One mechanism covers buttons and axes:** every binding contributes a signed float and an
+  action's value is the sum. `steer` bound to A at −1 and D at +1 gives exactly zero when both
+  are held, and no rule anywhere says so. A design with separate button and axis kinds would have
+  needed one.
+
+  Two decisions in it are invisible until they bite, and both are tested on purpose:
+
+  - **An edge is a change in the ACTION, not in a signal.** Bind one action to a key *and* a
+    mouse button; press the second while the first is held, and a binding-derived edge fires
+    again — two presses for one intention. Deriving from the summed level gives one. The bug
+    works perfectly with a single binding, which is what a first implementation and its first
+    test both have.
+  - **A fixed-timestep engine needs a second kind of edge.** `on_fixed_step` runs zero or more
+    times per frame, so a frame-scoped edge read there fires twice on a two-step frame *and* is
+    lost entirely on a zero-step one. `consume_pressed()` pops one queued press and fires exactly
+    once however the steps fall. The queue is four deep and overflow is dropped, which is a
+    decision — an unbounded queue replays a burst of jumps after the player has stopped asking.
+
+  **`app` gained its eighth hook**, `on_input()`, because none of the existing ones runs exactly
+  once *before* the simulation. `on_frame` is the near miss: right frequency, wrong place, and a
+  map updated there leaves every step reading last frame's actions — invisible in a demo and a
+  real 16 ms of input delay in a game.
+
+  **`action_map::update` is templated on a C++20 concept**, `input_snapshot`, which names the six
+  questions it asks. That is the course's first concept and it was forced by a test that could
+  not otherwise exist: `input::update()` samples SDL's live keyboard state, so a harness wanting a
+  key held would have to persuade SDL of it. A concept beats an abstract base on three counts —
+  it changes nothing in `input.hpp`, costs no virtual call on a per-binding-per-frame loop, and is
+  open, since `engine::input` satisfies it without knowing it exists.
+
+  **There is no gamepad support, and the lesson says why:** it could not be run on the machine
+  this was written on, and untested device code is a liability that looks like support. What *is*
+  demonstrated is the property the gamepad claim rests on — one action, several bindings, more
+  than one device.
 
 - **Fixed timestep + render interpolation** (Module 1). The accumulator loop, derived rather
   than pasted as folklore. Simulation determinism is a property you design in early or retrofit

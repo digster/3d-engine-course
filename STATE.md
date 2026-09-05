@@ -7,7 +7,7 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-09-04 (after Lesson 5.9 — 54 of 94 lessons)
+updated: 2026-09-05 (after Lesson 5.10 — 55 of 95 lessons; Module 5 split 5.10/5.11)
 
 conventions:
   ecs-storage: THE ECS IS A SPARSE SET, DECIDED IN 5.7 BY MEASUREMENT, NOT TASTE.
@@ -110,6 +110,104 @@ conventions:
         opposite jobs. The namespace keeps them apart; `using namespace engine;`
         plus `using namespace engine::ecs;` makes bare `pool` ambiguous, which is
         the good kind of breakage. The engine never writes `using namespace`.
+  actions: AN ACTION IS A NAME; A BINDING MAPS A SIGNAL ONTO IT; A FRAME PUBLISHES
+        THE VALUE. 5.10, engine/core/actions.hpp + actions.cpp (53 -> 54 public
+        headers; FIRST new SOURCE file since 5.5, so engine/CMakeLists.txt changed).
+        WHY, AND NONE OF THE FOUR IS ABOUT SPEED: a hard-coded scancode cannot be
+        rebound, is about one device, cannot be recorded (a replay wants the
+        INTENTION — the binding may have changed since), and SAYS THE WRONG THING
+        (key_pressed(SDL_SCANCODE_SPACE) in a jump handler is a sentence about
+        hardware in a file about jumping).
+        THIS LESSON MEASURES NOTHING AND SAYS SO. The alternatives differ in what
+        they can EXPRESS and all are nanoseconds. Producing a benchmark anyway
+        would attach a number to a decision the number did not make, and the next
+        reader would think the number was the reason. A design lesson says it is one.
+        ONE MECHANISM FOR BUTTONS AND AXES: EVERY BINDING CONTRIBUTES A SIGNED
+        FLOAT AND AN ACTION'S VALUE IS THE SUM. jump <- Space(+1); steer <- A(-1)
+        and D(+1); look_x <- mouse dx * 0.5. Holding BOTH halves of an axis gives
+        exactly 0 — and a design with separate button/axis kinds would have needed
+        a documented rule for that case. There is none, because -1 + 1 = 0.
+        NOT CLAMPED, deliberately: two keys on one button action sum to 2, which
+        held() does not care about, and a mouse flick SHOULD be big. Clamping would
+        need to know which kind of action it was looking at, which is the thing this
+        design exists to avoid knowing.
+        held() = |value| >= 0.5. The threshold is for sources that are NOT keys —
+        an analog stick must be PUSHED, not brushed. fabs, so a two-way axis is
+        "held" either way: legal, and rarely the question you meant.
+        EDGES COME FROM THE ACTION'S LEVEL, NEVER FROM A BINDING'S. Bind jump to
+        Space AND the left mouse button, then: Space down (ONE press), mouse down
+        while Space held (NO second press — the action was already active), Space up
+        while mouse held (NO release — still active), mouse up (ONE release).
+        Binding-derived edges give two of each and A DOUBLE JUMP. THE BUG IS
+        INVISIBLE WITH ONE BINDING PER ACTION, which is what a first implementation
+        has and what a first test writes; it ships as "sometimes it jumps twice" the
+        week somebody binds a controller. verify_510 §C binds two on purpose.
+        A FIXED STEP NEEDS A SECOND KIND OF EDGE, and this is 1.4's trap closed
+        rather than documented. on_fixed_step runs 0..N times, so pressed() read
+        there FAILS BOTH WAYS: a two-step frame acts twice, a zero-step frame loses
+        the press entirely. Neither is fixable by the caller without cross-frame
+        state, so the map keeps it: every rising edge queues one press,
+        consume_pressed() pops one. QUEUE IS 4 DEEP AND OVERFLOW IS DROPPED — a
+        DECISION, not a bug: an unbounded queue replays a burst of jumps after the
+        player stopped asking, which feels worse than losing them. A fighting game
+        raises the number and calls it design.
+        THE RULE FOR CALLERS: pressed()/released() in on_input, on_frame, on_event
+        (each runs once per frame). In on_fixed_step use consume_pressed() for edges
+        and held()/value() for LEVELS, which are frame-coherent and safe.
+        find() DOES NOT DECLARE. A lookup that created things would turn a typo in a
+        config file into a brand-new action with no bindings and no reader — a
+        perfectly functioning thing that does nothing. declare() is idempotent, so
+        two subsystems may both declare "quit" without coordinating.
+        reset() CLEARS LEVELS, EDGES, THE QUEUE **AND THE MOUSE ORIGIN**. For focus
+        loss and scene changes; without the last part the first frame back delivers
+        the whole distance the cursor travelled while you were away.
+        NOT A SINGLETON — the third application of 5.5's and 5.8's rule. A two-player
+        local game needs TWO maps with different bindings, and a per-entity game puts
+        one in a component. THE ENGINE DOES NOT KNOW HOW MANY OF A THING A GAME
+        NEEDS, SO IT DECLINES TO DECIDE. What it DOES provide is the moment at which
+        updating one is correct — see app-hooks.
+        NO GAMEPAD, AND THE REASON IS STATED IN THE LESSON RATHER THAN BURIED: it
+        could not be RUN on this machine, and untested device code in an engine is a
+        liability that looks like support. §7 lists the five steps to add one and
+        marks the SDL3 signatures as needing verification against SDL_gamepad.h
+        (SDL3 renamed the whole SDL_GameController* family; axes are signed 16-bit
+        and need normalising). The property the gamepad claim RESTS on — one action,
+        several bindings, more than one device — IS demonstrated, with a keyboard
+        and a mouse.
+        THE HARD PART OF ADDING ONE IS DEVICE DISCONNECTION, and the right answer is
+        in the SNAPSHOT, not the map: a disconnected pad answers false, the sum
+        drops to zero, the level goes false, and the release edge falls out of the
+        existing machinery. IF YOU FIND YOURSELF SPECIAL-CASING action_map, THE
+        ABSTRACTION BOUNDARY IS IN THE WRONG PLACE.
+  app-hooks: SIX HOOKS, AND 5.10 ADDED THE SIXTH BECAUSE NONE OF THE FIVE FIT.
+        configure / on_start / on_event / **on_input** / on_fixed_step / on_frame /
+        on_overlay / on_stop.
+        on_input RUNS ONCE PER FRAME, AFTER INPUT IS PUBLISHED AND BEFORE ANY STEP.
+        That is the only moment at which updating an action map is correct, and
+        nothing else in the frame is it: on_event runs several times a frame or
+        none; on_fixed_step runs 0..N times AND is where the answers get read; and
+        on_frame is THE NEAR MISS — right frequency, wrong place, because it runs
+        AFTER the steps, so every step would read LAST frame's actions. Invisible in
+        a demo, a real 16 ms of input delay in a game.
+        A HOOK THAT SERVES ONE CALLER IS A SMELL, so: on_input is also where a
+        network snapshot is read, a debug scrubber sampled, or a replay's recorded
+        intentions latched. It was missing before 5.10 happened to need it.
+        FRAME-SCOPED EDGES ARE VALID IN on_input AND NOT IN on_fixed_step.
+  concepts: DEPEND ON A SHAPE, NOT A TYPE — first use of a C++20 concept in the
+        course, 5.10, and it was forced by a test that could not otherwise exist.
+        input::update() samples SDL's LIVE keyboard state, so a harness that wants a
+        key held would have to persuade SDL that a key is held. action_map::update
+        is therefore templated on `input_snapshot`, which names the six questions it
+        actually asks (key_down, mouse_down, mouse_x/y, wheel_x/y). The harness
+        writes a struct with six functions and the shipping logic runs unchanged.
+        A CONCEPT BEATS AN ABSTRACT BASE HERE ON THREE COUNTS: it does not change
+        input.hpp (not one character of 1.2's header moved); it costs no virtual
+        call on a per-binding-per-frame loop; and it is OPEN — engine::input
+        satisfies it without knowing it exists, where a base class is only
+        implemented by types whose author said so.
+        A static_assert BESIDE THE CONCEPT KEEPS THE CLAIM HONEST: rename one of the
+        six accessors in input.hpp and the engine fails to build with a message
+        naming the requirement, rather than failing deep inside a template.
   hierarchy: THE MATHS WAS FREE; THE ORDER WAS THE LESSON. 5.9, in
         engine/include/engine/ecs/hierarchy.hpp + camera.hpp, both header-only —
         public headers 51 -> 53, no CMake change anywhere.
@@ -2544,7 +2642,7 @@ conventions:
         apart") WITHIN A DAY, on the code that lesson was written about. 3.10's
         published numbers STAND; nothing needed restating.
 
-curriculum: 94 lessons, ~433 h, 9 modules
+curriculum: 95 lessons, ~438 h, 9 modules   (5.10 split into 5.10 + 5.11 in 5.10)
   M0:6  M1:8  M2:12  M3:10  M4:9  M5:10  M6:15  M7:13  M8:11
 
   the-boundary: THE ENGINE IS A STATIC LIBRARY WITH AN OUTSIDE, and the outside is
@@ -2673,8 +2771,45 @@ completed:
   - 5.7  An ECS from Scratch: Storage Design
   - 5.8  The ECS Runtime
   - 5.9  Transform Hierarchy and the Camera System
+  - 5.10 Input Mapping: Actions, Not Keycodes
+        (5.10 was SPLIT from the curriculum's "Input Mapping, ImGui, and Debug
+         Draw": three engine subsystems, each with its own design argument, and
+         §3.8 forbids truncating. ImGui + debug draw became 5.11. Module 5 is now
+         11 lessons, inside its stated 9-11, and the course total is 95.)
 
 capabilities:
+  - 5.10 THE ENGINE CAN BE TOLD WHAT THE PLAYER MEANT.
+    engine/core/actions.hpp + engine/src/core/actions.cpp (53 -> 54 public headers;
+    FIRST new source file since 5.5, so engine/CMakeLists.txt gained a line), plus
+    the on_input() hook in platform/app.{hpp,cpp}.
+    API: action_id / input_source / mouse_axis / binding / input_snapshot (a C++20
+    concept) / action_map{declare, find, name_of, action_count, bind_key,
+    bind_mouse_button, bind_mouse_axis, clear_bindings, bindings, binding_count,
+    update<Source>, reset, value, held, pressed, released, consume_pressed,
+    pending_presses, clear_pending}.
+    demos/ecs_swarm HAS NO SCANCODES IN ITS GAMEPLAY CODE. 13 actions, 19 bindings.
+    The picture is unchanged (154 entities, 906 components, 10 pools, 129 drawn,
+    3,776 triangles) because this lesson changed how input ARRIVES and nothing about
+    what is drawn. New: arrow keys drive camera_yaw/camera_pitch as key-pair axes,
+    [ and ] and the wheel drive camera_zoom (a digital pair AND a continuous source
+    on ONE action), and [K] rebinds spawn from Space to Enter AT RUNTIME.
+    THE HUD READS THE BINDING TABLE rather than a hard-coded string, so it cannot go
+    stale — press [K] and it says so. That is the first dividend an action layer
+    pays: THE PROGRAM CAN DESCRIBE ITS OWN CONTROLS, which a switch never could.
+    THE DEMO DOES ONE OF EACH KIND OF EDGE ON PURPOSE: the UI toggles read pressed()
+    in on_input (once per frame), and spawn reads consume_pressed() in
+    on_fixed_step (0..N times per frame).
+    scratch/verify_510.cpp — 62 checks in seven sections: A declaring, B the value
+    rule, C EDGES FROM THE LEVEL, D THE FIXED-STEP TRAP, E rebinding + reset,
+    F continuous sources, G the golden. §C and §D are the only two that could catch
+    a plausible wrong implementation; the rest check things that are hard to get
+    wrong.
+    NUMBERS WORTH KEEPING: six presses with no step queues 4 and drains to exactly 4
+    (the cap, working). A two-step frame consumes ONE. A zero-step frame does not
+    lose the press. The first frame after start-up or reset reports a mouse delta of
+    ZERO, because there is no previous position — reporting the absolute position
+    would fling the camera on frame one.
+    GOLDEN BYTE-IDENTICAL, TENTH LESSON. verify_45..59 all still green.
   - 5.9 THE ENGINE HAS A TRANSFORM HIERARCHY AND A CAMERA THAT IS AN ENTITY.
     engine/include/engine/ecs/{hierarchy,camera}.hpp, header-only, 51 -> 53 public
     headers, no CMake change. Plus rigid_inverse() and is_rigid() in
@@ -4642,7 +4777,8 @@ files:
   engine/include/engine/: engine.hpp                      (the umbrella)
   engine/include/engine/asset/: search_path.hpp, asset_store.hpp        [5.5]
   engine/include/engine/core/: assert.hpp, bench.hpp, clock.hpp, fixed_step.hpp,
-            handle.hpp, input.hpp, log.hpp, pool.hpp, profile.hpp
+            handle.hpp, input.hpp, log.hpp, pool.hpp, profile.hpp,
+            actions.hpp                                                     [5.10]
   engine/include/engine/ecs/: entity.hpp, pool.hpp, registry.hpp, view.hpp   [5.8]
             hierarchy.hpp, camera.hpp                                       [5.9]
             (header-only — NO entry in engine/CMakeLists.txt. NOTE: ecs/pool.hpp's
@@ -4659,7 +4795,8 @@ files:
   engine/include/engine/platform/: platform.hpp, app.hpp,
             main.hpp   (NOT in engine.hpp — it defines the entry point)
   engine/src/asset/: search_path.cpp, asset_store.cpp                   [5.5]
-  engine/src/core/: clock.cpp, fixed_step.cpp, input.cpp, log.cpp, profile.cpp
+  engine/src/core/: actions.cpp [5.10], clock.cpp, fixed_step.cpp, input.cpp,
+            log.cpp, profile.cpp
   engine/src/gfx/: clip.cpp, colour.cpp, debug_draw.cpp, depth_buffer.cpp,
             framebuffer.cpp, gpu_buffer.cpp, gpu_debug.cpp, gpu_device.cpp,
             gpu_mesh.cpp, gpu_pipeline.cpp, gpu_present.cpp, gpu_scene.cpp,
@@ -4705,7 +4842,8 @@ files:
                  05-06-data-oriented-design.html,
                  05-07-ecs-storage.html,
                  05-08-ecs-runtime.html,
-                 05-09-transform-hierarchy.html
+                 05-09-transform-hierarchy.html,
+                 05-10-input-mapping.html
   docs/shared/: course.css, course.js      (THE stylesheet + page script; one copy each)
   docs/_template/: lesson-template.html, README.md, apply-shared.py, check-page.js
   scratch/ (5.7, not shipped with the engine): ecs_probe.hpp, bench_57.cpp,
@@ -4718,9 +4856,17 @@ files:
            repoint one nav link spliced 5.9's demo into 5.8's page. The snapshot is
            byte-identical to that file at commit dfbdb0f. ANY FILE A LATER LESSON
            MODIFIES MUST BE PINNED THE SAME WAY.)
+  scratch/ (5.10, not shipped with the engine): verify_510.cpp,
+           build_verify_510.sh, figs_510.py, build_510.py,
+           l510_body_{a,b,c}.html, l510_fig{1..5}.svg
+           (build_510.py PINS NOTHING YET but keeps the machinery and the warning:
+            if 5.11 touches demos/ecs_swarm/main.cpp, snapshot 5.10's copy FIRST.)
   scratch/ (5.9, not shipped with the engine): hier_probe.hpp, bench_59.cpp,
            bench_59.log, verify_59.cpp, build_bench_59.sh, build_verify_59.sh,
-           figs_59.py, build_59.py, l59_body_{a,b,c}.html, l59_fig{1..6}.svg
+           figs_59.py, build_59.py, l59_body_{a,b,c}.html, l59_fig{1..6}.svg,
+           l59_ecs_swarm.cpp  (A PINNED LISTING, byte-identical to that file at
+           commit c1c5ea7 — 5.10 rewrote the demo, so build_59.py must not read the
+           live one. SAME TRAP AS build_58.py; see its comment.)
            (NOTE: build_57.py was amended in 5.8 — it no longer stamps a STATE
             block, and it now byte-reproduces the shipped 05-07 page. Any future
             build_NN.py copied from it inherits the correct form.)
@@ -4730,47 +4876,55 @@ files:
   (retired: src/ — the whole directory. hello.cpp.)
 
 
-next: 5.10 — Input Mapping, ImGui, and Debug Draw
-      (planned filename: docs/lessons/05-10-input-imgui-debug-draw.html — 5.9's TWO
-      next links point at the index and BOTH need repointing, and build_59.py's
-      TAIL holds the bottom one. ALSO: if 5.10 modifies demos/ecs_swarm/main.cpp,
-      PIN 5.9's copy in build_59.py the way build_58.py now pins 5.8's — see
-      files: for why.)
-      THREE ITEMS, AND THEY ARE ONLY LOOSELY RELATED, so consider splitting into
-      5.10 and 5.11 if the word count demands it. The curriculum groups them; the
-      lesson need not.
-      1 INPUT MAPPING — ACTIONS, NOT KEYCODES. ecs_swarm reads SDL_SCANCODE_C in a
-        switch, which is fine for a demo and wrong for a game: a player wants to
-        rebind, a gamepad has no scancodes, and a replay system wants to record
-        INTENTIONS rather than keys. The shape: an action is a name; a binding maps
-        a device event onto it; a frame publishes the set of active actions. 1.2's
-        edges-and-levels distinction survives INTACT and must — an action can be a
-        level (thrust) or an edge (jump) and the two are not interchangeable.
-        Honest question to answer in the lesson: does an action live in the ECS as a
-        component, or beside it? A player_input component is tempting and probably
-        right; a global action table is simpler and probably enough. MEASURE
-        NOTHING HERE — this is a design lesson, and say so.
-      2 DEAR IMGUI — THE FIRST THIRD-PARTY UI IN THE COURSE, and §4's rule demands
-        the "why we don't hand-roll this" justification IN THE LESSON. The honest
+next: 5.11 — Dear ImGui and the Debug Draw System
+      (planned filename: docs/lessons/05-11-imgui-debug-draw.html — 5.10's TWO next
+      links point at the index and BOTH need repointing, and build_510.py's TAIL
+      holds the bottom one. AND: if 5.11 touches demos/ecs_swarm/main.cpp, PIN
+      5.10's copy in build_510.py FIRST —
+        git show <5.10 commit>:demos/ecs_swarm/main.cpp > scratch/l510_ecs_swarm.cpp
+      verified with `git show ... | diff - <snapshot>`. This trap has now bitten
+      twice; the machinery and the warning are already in build_510.py.)
+      THE SECOND HALF OF THE CURRICULUM'S 5.10, SPLIT OUT IN 5.10 BECAUSE THREE
+      ENGINE SUBSYSTEMS DO NOT FIT ONE LESSON. Both halves are TOOLING, which is
+      what makes them one lesson rather than two: ImGui is the tooling UI and debug
+      draw is the tooling in the world, and Module 8's editor consumes both.
+      1 DEAR IMGUI — THE COURSE'S FIRST THIRD-PARTY UI, and §4's rule demands the
+        "why we don't hand-roll this" justification IN THE LESSON. The honest
         version: a debug UI is a text renderer, a layout engine, an input router and
-        a state machine, none of which is the subject. Also binding: ImGui needs a
-        backend, and this engine has TWO surfaces (SDL_Renderer and SDL_GPU) —
-        decide which gets it first and say why. TOOLING ONLY, never gameplay UI
-        (§4, binding).
-      3 DEBUG DRAW — lines, boxes, spheres, and the rest of the course leans on it
-        constantly. NOTE: engine/gfx/debug_draw.hpp ALREADY EXISTS (line3, draw_mesh,
-        draw_axes3, show_depth, count_differences) — this is a REWORK, not a new
-        file, and the lesson must say what was wrong with the old one rather than
-        quietly replacing it. THE OBVIOUS FIRST CLIENT IS 5.9's HIERARCHY: draw a
-        line from every entity to its parent and the tree becomes visible, which is
-        also how you would debug an orphan or a cycle.
-      THE TEST TO BEAT: golden byte-identical (TENTH lesson) — all three items are
-      additive and none touches the reference scene's path. If ImGui's backend
-      forces a change there, RE-BASELINE DELIBERATELY with the diff shown.
-      verify_510 must cover: an action firing from two different bindings; an edge
-      action firing exactly once across a two-step frame (1.4's trap, and the one
-      most likely to be got wrong); a rebind at runtime; and debug-draw geometry
-      landing where the maths says. Plus verify_45..59 green.
-      CARRY FORWARD FROM 5.9: the demo's key handling is in on_event for 1.4's
-      reason, and an action layer must not quietly move it back into the step.
+        a state machine, and not one of those is the subject of this course. Note
+        what the course DOES hand-roll and why the line falls here.
+        THE BUILD IS PART OF THE LESSON: ImGui via FetchContent, pinned, like SDL3.
+        THE BACKEND IS A REAL DECISION — this engine has TWO surfaces
+        (SDL_Renderer and SDL_GPU; see conventions:surfaces and program-modes).
+        Decide which gets it first and say why. ecs_swarm is on the RENDERER path
+        and is the natural first client; sandbox's GPU path is the harder one.
+        TOOLING ONLY, NEVER GAMEPLAY UI (§4, binding).
+        WATCH THE INPUT INTERACTION: ImGui wants events and has its own
+        "want-capture-keyboard/mouse" flags. 5.10's action_map must NOT fire while
+        a text field has focus, and that seam is worth a section — it is the first
+        time two input consumers have existed.
+      2 DEBUG DRAW — A REWORK, NOT A NEW FILE. engine/gfx/debug_draw.hpp has existed
+        since Module 3 (line3, draw_mesh, draw_axes3, show_depth,
+        count_differences). THE LESSON MUST SAY WHAT IS WRONG WITH IT rather than
+        quietly replacing it. Candidate answers to check before writing: it draws
+        IMMEDIATELY into a framebuffer rather than queueing, so it cannot work on
+        the GPU path; it takes a projector and a framebuffer at every call; and it
+        has no lifetime concept (a line that persists for N frames, or until
+        cleared). A queue-then-flush design fixes all three and is what every engine
+        converges on.
+        THE OBVIOUS FIRST CLIENT IS 5.9's HIERARCHY: a line from every entity to its
+        parent makes the tree visible, and is how you would SEE an orphan (a line
+        that vanished) or a cycle (a loop). That is a genuinely useful tool rather
+        than a demo of a tool.
+      THE TEST TO BEAT: golden byte-identical (ELEVENTH lesson) — both items are
+      additive IF debug_draw's rework keeps its existing entry points working, which
+      is worth checking early because write_reference_shot calls draw_world. IF THE
+      REWORK CHANGES THE REFERENCE PICTURE, RE-BASELINE DELIBERATELY with the diff
+      shown and explained, never quietly.
+      verify_511 must cover: debug geometry landing where the maths says; a queued
+      line surviving to the flush and not past it; lifetimes expiring; and the ImGui
+      capture flags actually suppressing an action. Plus verify_45..510 green.
+      CARRY FORWARD FROM 5.10: `on_input` is where action_map::update runs, and
+      ImGui's event handling happens in on_event — so the capture flags are read
+      one hook LATER than they are set. Check that ordering rather than assuming it.
 ```

@@ -30,11 +30,24 @@
 // member: it rides along, resolved by the same pass as everything else, and the
 // renderer never learns that anything changed.
 //
+// LESSON 5.10 TOOK THE KEYBOARD OUT OF THE GAMEPLAY CODE. Every one of those
+// bracketed keys above used to be an `SDL_SCANCODE_*` in a switch; they are now
+// ACTIONS, declared by name and bound in one place. Nothing below asks about a
+// key. Press [K] and the spawn action is rebound from Space to Enter at runtime,
+// which is a thing the old switch could not do at any price.
+//
+// It also demonstrates the two ways to read an edge, and WHY there are two:
+//   - the UI toggles are read in `on_input`, which runs exactly once per frame
+//   - `spawn` is read with `consume_pressed` inside `on_fixed_step`, which runs
+//     zero or more times per frame — so a two-step frame must not spawn twice
+//     and a zero-step frame must not lose the press
+//
 //     cmake --build build --target ecs_swarm
 //     ./build/demos/ecs_swarm                        a window
 //     ./build/demos/ecs_swarm --shot swarm.ppm       one frame, no window
 
 #include <engine/asset/asset_store.hpp>
+#include <engine/core/actions.hpp>
 #include <engine/ecs/camera.hpp>
 #include <engine/ecs/hierarchy.hpp>
 #include <engine/ecs/registry.hpp>
@@ -319,6 +332,8 @@ public:
                                                         engine::normal_style::smooth));
         torus_ = assets_.insert_mesh("torus", engine::make_torus(40, 20, 1.0f, 0.34f));
 
+        declare_actions();
+
         lights_.key.direction = engine::normalised(engine::vec3{-0.4f, -0.7f, -0.55f});
         lights_.key.colour = {1.0f, 0.97f, 0.90f};
         lights_.key.intensity = 1.0f;
@@ -330,35 +345,60 @@ public:
         return true;
     }
 
-    /// Discrete presses, handled here rather than in `on_fixed_step`.
+    /// Map this frame's input onto actions, then act on the frame-scoped edges.
     ///
-    /// Lesson 1.4's rule: EDGES BELONG TO THE FRAME AND LEVELS BELONG TO THE STEP.
-    /// `on_fixed_step` runs zero or more times per frame, so `key_pressed()` in it
-    /// would fire twice on a two-step frame and spawn sixty-four sparks.
-    void on_event(const SDL_Event& event) override
+    /// **This hook exists because of this file** (Lesson 5.10). It runs exactly
+    /// once per frame, after `in()` is published and before any simulation step,
+    /// which is the only moment at which updating an action map is correct: a map
+    /// updated in `on_frame` would leave every step of the frame reading last
+    /// frame's actions.
+    ///
+    /// The toggles below are read with `pressed()`, the frame-scoped edge, and
+    /// that is safe HERE and nowhere else — Lesson 1.4's rule, unchanged. The one
+    /// action that a step needs, `spawn`, is read differently; see
+    /// `on_fixed_step`.
+    void on_input() override
     {
-        if (event.type != SDL_EVENT_KEY_DOWN || event.key.repeat) { return; }
+        actions_.update(in());
 
-        switch (event.key.scancode)
-        {
-        case SDL_SCANCODE_ESCAPE: request_quit(); break;
-        case SDL_SCANCODE_SPACE:  spawn_sparks(); break;
-        case SDL_SCANCODE_M:      toggle_materials(); break;
-        case SDL_SCANCODE_O:      toggle_orbits(); break;
-        case SDL_SCANCODE_X:      cull_swarm(); break;
-        case SDL_SCANCODE_R:      build_world(); break;
-        case SDL_SCANCODE_C:      toggle_camera_ride(); break;
-        case SDL_SCANCODE_H:      toggle_detach(); break;
-        case SDL_SCANCODE_F:      drifting_ = !drifting_; break;
-        default: break;
-        }
+        if (actions_.pressed(a_quit_))     { request_quit(); }
+        if (actions_.pressed(a_materials_)) { toggle_materials(); }
+        if (actions_.pressed(a_orbits_))   { toggle_orbits(); }
+        if (actions_.pressed(a_cull_))     { cull_swarm(); }
+        if (actions_.pressed(a_rebuild_))  { build_world(); }
+        if (actions_.pressed(a_ride_))     { toggle_camera_ride(); }
+        if (actions_.pressed(a_detach_))   { toggle_detach(); }
+        if (actions_.pressed(a_drift_))    { drifting_ = !drifting_; }
+        if (actions_.pressed(a_rebind_))   { rebind_spawn(); }
     }
 
     void on_fixed_step(float h) override
     {
         if (shot_path_ != nullptr) { return; }
+
+        // THE ONE EDGE THAT IS READ IN A STEP, and it is read differently for a
+        // reason worth pausing on. `on_fixed_step` runs zero or more times per
+        // frame, so `pressed()` here would spawn twice on a two-step frame and
+        // lose the press entirely on a zero-step one. `consume_pressed` takes one
+        // queued press and returns true at most once per physical press, however
+        // the steps fall.
+        if (actions_.consume_pressed(a_spawn_)) { spawn_sparks(); }
+
         t_ += h;
-        if (!riding_) { camera_.azimuth += 0.15f * h; }
+
+        // LEVELS, read in the step — which is the other half of Lesson 1.4's rule
+        // and is exactly as correct as the edges above are not. `value()` is the
+        // summed contribution of every binding, so Left and Right cancel and the
+        // camera holds still, with no `if` anywhere saying so.
+        if (!riding_)
+        {
+            camera_.azimuth += (0.15f + 2.0f * actions_.value(a_yaw_)) * h;
+            camera_.elevation += 1.5f * actions_.value(a_pitch_) * h;
+            camera_.elevation = std::fmax(-1.4f, std::fmin(1.4f, camera_.elevation));
+            camera_.radius += 6.0f * actions_.value(a_zoom_) * h;
+            camera_.radius = std::fmax(2.5f, std::fmin(24.0f, camera_.radius));
+        }
+
         step_world(h);
     }
 
@@ -444,15 +484,102 @@ public:
                                   riding_ ? "PARENTED to a ring member" : "free orbit",
                                   drifting_ ? "drifting" : "still",
                                   static_cast<double>(time().fps()));
+        // The HUD reads the BINDING TABLE rather than a hard-coded string, so it
+        // cannot go stale when [K] rebinds something. That is a small thing and it
+        // is the first dividend an action layer pays: the program can now describe
+        // its own controls, which a switch statement could never do.
+        SDL_RenderDebugTextFormat(r, 6.0f, 62.0f,
+                                  "actions %2zu   bindings %2zu   spawn on %s   "
+                                  "yaw %+.0f  zoom %+.0f",
+                                  actions_.action_count(), actions_.bindings().size(),
+                                  spawn_on_enter_ ? "[Enter]" : "[Space]/[LMB]",
+                                  static_cast<double>(actions_.value(a_yaw_)),
+                                  static_cast<double>(actions_.value(a_zoom_)));
+        SDL_RenderDebugText(r, 6.0f, 100.0f,
+                            "[Arrows] orbit  [ ] [ ] / wheel zoom  [K] rebind spawn");
         SDL_RenderDebugText(r, 6.0f, 112.0f,
                             "[F] drift the sun  [C] ride a planet  [H] detach half  "
-                            "[Space] sparks");
+                            "[Space]/[LMB] sparks");
         SDL_RenderDebugText(r, 6.0f, 124.0f,
                             "[M] materials  [O] orbits  [X] cull  [R] rebuild  [Esc] quit");
         SDL_SetRenderScale(r, 1.0f, 1.0f);
     }
 
 private:
+    // ---- Actions ------------------------------------------------------------
+
+    /// Declare every action this program has, then bind the defaults.
+    ///
+    /// **Note that these two things are separable, and that is the whole point.**
+    /// The declarations are what the program is about; the bindings are a policy
+    /// that a settings screen, a config file or Module 8's serializer could
+    /// replace wholesale without any of the code below changing. Today they are
+    /// adjacent because there is nowhere else to put them yet.
+    void declare_actions()
+    {
+        a_quit_      = actions_.declare("quit");
+        a_spawn_     = actions_.declare("spawn_sparks");
+        a_materials_ = actions_.declare("toggle_materials");
+        a_orbits_    = actions_.declare("toggle_orbits");
+        a_cull_      = actions_.declare("cull_swarm");
+        a_rebuild_   = actions_.declare("rebuild_world");
+        a_ride_      = actions_.declare("ride_camera");
+        a_detach_    = actions_.declare("detach_half");
+        a_drift_     = actions_.declare("drift_sun");
+        a_rebind_    = actions_.declare("rebind_spawn");
+        a_yaw_       = actions_.declare("camera_yaw");
+        a_pitch_     = actions_.declare("camera_pitch");
+        a_zoom_      = actions_.declare("camera_zoom");
+
+        actions_.bind_key(a_quit_, SDL_SCANCODE_ESCAPE);
+        actions_.bind_key(a_spawn_, SDL_SCANCODE_SPACE);
+
+        // TWO BINDINGS, ONE ACTION, ON TWO DEVICES — which is the property the
+        // whole design exists for, demonstrated with hardware this machine has.
+        // Hold Space, then also press the left mouse button, then release Space:
+        // the action stays active throughout and fires exactly ONE press edge,
+        // because edges come from the action's level rather than from any
+        // binding's. A switch statement cannot express this at all.
+        actions_.bind_mouse_button(a_spawn_, SDL_BUTTON_LEFT);
+
+        actions_.bind_key(a_materials_, SDL_SCANCODE_M);
+        actions_.bind_key(a_orbits_, SDL_SCANCODE_O);
+        actions_.bind_key(a_cull_, SDL_SCANCODE_X);
+        actions_.bind_key(a_rebuild_, SDL_SCANCODE_R);
+        actions_.bind_key(a_ride_, SDL_SCANCODE_C);
+        actions_.bind_key(a_detach_, SDL_SCANCODE_H);
+        actions_.bind_key(a_drift_, SDL_SCANCODE_F);
+        actions_.bind_key(a_rebind_, SDL_SCANCODE_K);
+
+        // AXES FROM PAIRS OF KEYS. Two bindings with opposite scales, and the
+        // action's value is their sum — so holding both gives exactly zero and
+        // nothing anywhere had to special-case it.
+        actions_.bind_key(a_yaw_, SDL_SCANCODE_LEFT, -1.0f);
+        actions_.bind_key(a_yaw_, SDL_SCANCODE_RIGHT, +1.0f);
+        actions_.bind_key(a_pitch_, SDL_SCANCODE_DOWN, -1.0f);
+        actions_.bind_key(a_pitch_, SDL_SCANCODE_UP, +1.0f);
+
+        // …and an axis from a continuous source, through the same mechanism.
+        actions_.bind_key(a_zoom_, SDL_SCANCODE_LEFTBRACKET, +1.0f);
+        actions_.bind_key(a_zoom_, SDL_SCANCODE_RIGHTBRACKET, -1.0f);
+        actions_.bind_mouse_axis(a_zoom_, engine::mouse_axis::wheel_y, -4.0f);
+    }
+
+    /// Rebind `spawn_sparks` at runtime, which the old switch could not do.
+    ///
+    /// Clear then bind, rather than a single `rebind()`, because an action may
+    /// legitimately keep several bindings and a one-call version would have to
+    /// guess which one is being replaced. Here it deliberately drops the mouse
+    /// binding too, so the effect is visible.
+    void rebind_spawn()
+    {
+        spawn_on_enter_ = !spawn_on_enter_;
+        actions_.clear_bindings(a_spawn_);
+        actions_.bind_key(a_spawn_, spawn_on_enter_ ? SDL_SCANCODE_RETURN
+                                                    : SDL_SCANCODE_SPACE);
+        if (!spawn_on_enter_) { actions_.bind_mouse_button(a_spawn_, SDL_BUTTON_LEFT); }
+    }
+
     // ---- Building the world ------------------------------------------------
 
     /// Wipe the world and repopulate it — now with a shape as well as a set of
@@ -771,6 +898,12 @@ private:
     std::vector<entity> swarm_;   ///< the ring members, so the keys can find them again
     std::vector<entity> moons_;
     std::vector<entity> dead_;    ///< reused scratch for lifetime_system
+
+    engine::action_map actions_;
+    engine::action_id a_quit_, a_spawn_, a_materials_, a_orbits_, a_cull_, a_rebuild_;
+    engine::action_id a_ride_, a_detach_, a_drift_, a_rebind_;
+    engine::action_id a_yaw_, a_pitch_, a_zoom_;
+    bool spawn_on_enter_ = false;
 
     bool materials_hidden_ = false;
     bool orbits_frozen_ = false;

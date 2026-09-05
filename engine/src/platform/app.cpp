@@ -38,6 +38,7 @@ void app::on_event(const SDL_Event& event) { (void)event; }
 
 void app::on_fixed_step(float h) { (void)h; }
 
+void app::on_input() {}
 void app::on_overlay() {}
 
 void app::on_stop() {}
@@ -123,12 +124,20 @@ SDL_AppResult app_runner::iterate(void* appstate)
     //     drain events  ->  SDL did that, and called on_event for each one
     //     tick clock    ->  begin_frame()
     //     update input  ->  begin_frame()
+    //     map actions   ->  on_input()                                    (5.10)
     //     N fixed steps ->  the while below
     //     render        ->  on_frame(alpha)
     //     present       ->  blit_framebuffer() + on_overlay() + present()
     //
     // Nothing about the loop changed. What changed is who says `while`.
     sys.begin_frame();
+
+    // Lesson 5.10. Exactly here, and nowhere else: input has just been published
+    // by begin_frame() and no step has run yet, so an action map updated in this
+    // hook is the one every step of this frame will read. Updating it after the
+    // steps — in on_frame, which is the only other once-per-frame hook — would
+    // give every step last frame's actions.
+    self->on_input();
 
     while (sys.next_step())
     {

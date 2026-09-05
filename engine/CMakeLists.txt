@@ -27,6 +27,12 @@ add_library(engine STATIC
     # home a joke six lessons before it is written.
     src/asset/asset_store.cpp
     src/asset/search_path.cpp
+    # Lesson 5.10. The action layer has a source file where the ECS did not,
+    # and the reason is that it has real per-frame work to do: `update()` walks
+    # the binding table and derives every action's level and edges. A header-only
+    # version would put that loop in every translation unit that asks a question
+    # about input, which is most of them.
+    src/core/actions.cpp
     src/core/clock.cpp
     src/core/fixed_step.cpp
     src/core/input.cpp

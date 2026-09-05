@@ -1,0 +1,3562 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>5.10 — Input Mapping: Actions, Not Keycodes · Build a Professional 3D Game Engine</title>
+<meta name="description" content="An input mapping layer for a fixed-timestep engine: actions, bindings and values, where every binding contributes a signed float so buttons and axes are one mechanism. Covers the two decisions that are invisible until they bite — why an edge must be derived from an action's level rather than from any binding's, which fails as a double jump the week somebody binds a second device, and why a fixed step needs a queued edge that survives both a two-step frame and a zero-step one. Measures nothing, and says so.">
+
+<!-- SHARED-CSS:BEGIN -->
+<!-- The shared course stylesheet, linked rather than inlined. Single source of
+     truth: docs/shared/course.css. Edit that file; this page carries no copy.
+     Still no build step - the link resolves straight off the filesystem, so this
+     page opens by double-clicking, offline. -->
+<link rel="stylesheet" href="../shared/course.css">
+<!-- SHARED-CSS:END -->
+
+<!-- KaTeX (optional). If unreachable the raw TeX remains readable, and every
+     equation is also stated in prose + .eq-plain, so nothing is lost. -->
+<link rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css"
+      integrity="sha384-nB0miv6/jRmo5UMMR1wu3Gz6NLsoTkbqJghGIsx//Rlm+ZU03BU6SQNC66uf4l5+"
+      crossorigin="anonymous">
+</head>
+<body>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <a class="course" href="../index.html">Build a Professional 3D Game Engine</a>
+    <span class="spacer"></span>
+    <a href="../index.html">Contents</a>
+    <a href="../conventions.html">Conventions</a>
+    <a href="../math-toolbox.html">Math Toolbox</a>
+    <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Toggle colour theme">Theme</button>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="05-09-transform-hierarchy.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">5.9 — Transform Hierarchy and the Camera System</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="../index.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">5.11 — Dear ImGui and the Debug Draw System</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 5 — Becoming an Engine · Lesson 5.10</div>
+    <h1>Input Mapping: Actions, Not Keycodes</h1>
+    <p class="deck">
+      Every program in this course reads input by switching on a scancode, which is fine for a
+      demo and wrong for a game in four separate ways — none of them about speed. This lesson
+      puts a name in the middle. It measures nothing, and says so: the argument is entirely about
+      what the code can express. Two things in it are worth the price of admission on their own —
+      why an edge must be derived from an action's <em>level</em> rather than from any binding's,
+      and why a fixed-timestep engine needs a second kind of edge that the first cannot provide.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 4 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="01-02-input-state-vs-events.html">1.2 — Input: State vs Events</a>,
+          <a href="01-04-fixed-timestep.html">1.4 — The Fixed Timestep</a>,
+          <a href="05-02-platform-layer.html">5.2 — The Platform and Application Layer</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd><code>engine/include/engine/core/actions.hpp</code>,
+            <code>engine/src/core/actions.cpp</code>,
+            <code>engine/include/engine/platform/app.hpp</code>,
+            <code>engine/src/platform/app.cpp</code>,
+            <code>engine/CMakeLists.txt</code>,
+            <code>demos/ecs_swarm/main.cpp</code>, <code>scratch/verify_510.cpp</code></dd>
+
+        <dt>Milestone</dt>
+        <dd>A demo with no scancodes in its gameplay code, controls that can be rebound while it
+            runs, and a camera driven by axes built out of key pairs. 62 checks green; the
+            reference shot byte-identical for the <strong>tenth</strong> lesson.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…name the four things a hard-coded keycode cannot do, and notice that none of them is a
+          performance problem.</li>
+      <li>…design a binding table in which buttons and axes are the same mechanism, and say what
+          a design with two mechanisms would have had to decide that this one does not.</li>
+      <li>…explain why an edge must come from an action's level rather than from a binding's, and
+          construct the input sequence that exposes the difference.</li>
+      <li>…state precisely why a frame-scoped edge is unsafe inside a fixed step, in both
+          directions, and implement the queue that fixes it.</li>
+      <li>…decide where in the frame an input mapper must run, and defend the answer against the
+          two hooks that nearly work.</li>
+      <li>…use a C++20 <code>concept</code> to depend on a shape rather than a type, and explain
+          what that buys a test that could not otherwise be written.</li>
+      <li>…argue about who should own an input map, using the same reasoning this course used for
+          the asset store and the registry.</li>
+      <li>…recognise when a lesson has no measurement to make, and say so instead of inventing
+          one.</li>
+    </ul>
+  </section>
+
+  <details class="toc" open>
+    <summary>Contents</summary>
+    <ol>
+      <li><a href="#problem">The Problem</a></li>
+      <li><a href="#intuition">Building Intuition</a>
+        <ol>
+          <li><a href="#intuition-name">A name in the middle</a></li>
+          <li><a href="#intuition-own">Who owns the map</a></li>
+        </ol>
+      </li>
+      <li><a href="#theory">One Mechanism</a>
+        <ol>
+          <li><a href="#theory-sum">Every binding contributes a signed value</a></li>
+          <li><a href="#theory-threshold">The threshold, and what it is for</a></li>
+        </ol>
+      </li>
+      <li><a href="#edges">Edges Come From the Level</a></li>
+      <li><a href="#step">The Edge That Survives the Step</a>
+        <ol>
+          <li><a href="#step-where">Where the map must run</a></li>
+          <li><a href="#step-queue">Two failures, one queue</a></li>
+        </ol>
+      </li>
+      <li><a href="#concept">A Concept, and the Test It Makes Possible</a></li>
+      <li><a href="#gamepad">The Device That Is Not Here</a></li>
+      <li><a href="#listings">Complete Code Listings</a></li>
+      <li><a href="#build">Build &amp; Run</a></li>
+      <li><a href="#pitfalls">Common Pitfalls &amp; Debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; Next</a></li>
+      <li><a href="#reading">Further Reading</a></li>
+    </ol>
+  </details>
+
+  <!-- =================================================================
+       1 — THE PROBLEM
+       ================================================================= -->
+  <h2 id="problem"><span class="num">1</span>The Problem</h2>
+
+  <p>
+    Here is how <code>ecs_swarm</code> read input at the end of Lesson 5.9, and how every program
+    in this course has read it since Lesson 1.2:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">demos/ecs_swarm/main.cpp — before</span></figcaption>
+    <pre><code class="lang-cpp">switch (event.key.scancode)
+{
+case SDL_SCANCODE_ESCAPE: request_quit(); break;
+case SDL_SCANCODE_SPACE:  spawn_sparks(); break;
+case SDL_SCANCODE_C:      toggle_camera_ride(); break;
+// …
+}</code></pre>
+  </figure>
+
+  <p>
+    That is not slow, and it is not wrong in any way a compiler or a profiler will tell you
+    about. It is wrong in four ways that only show up when somebody tries to use the program.
+  </p>
+
+    <figure class="dia bleed">
+    <svg viewBox="0 0 720 400" role="img" aria-labelledby="l510f1-t l510f1-d">
+      <title id="l510f1-t">A hard-coded keycode compared with an action, a binding and a value</title>
+      <desc id="l510f1-d">Above, a switch on a scancode and the four things it cannot do. Below, the same decision expressed as a named action, a binding that maps a signal onto it, and a value published once per frame.</desc>
+      <defs>
+        <marker id="e-i-l510f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+        <marker id="e-s-l510f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+        <marker id="e-h-l510f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+        <marker id="e-b-l510f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+        <marker id="e-g-l510f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+      </defs>
+    <text x="20" y="20" class="sm" text-anchor="start">One level of indirection, and the four things it buys.</text>
+    <text x="24" y="48" class="xs t-bad" text-anchor="start">TODAY — the keycode IS the decision</text>
+    <rect x="60" y="60" width="300" height="24" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.14"/>
+    <text x="210" y="76" class="xs mono" text-anchor="middle">case SDL_SCANCODE_C: ride_camera();</text>
+    <line x1="370" y1="72" x2="396" y2="72" class="ink-soft" stroke-width="1.0"/>
+    <rect x="410" y="52" width="250" height="18" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" stroke-dasharray="3 3" fill-opacity="0.1"/>
+    <text x="535" y="65" class="xs muted" text-anchor="middle">cannot be rebound</text>
+    <rect x="410" y="74" width="250" height="18" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" stroke-dasharray="3 3" fill-opacity="0.1"/>
+    <text x="535" y="87" class="xs muted" text-anchor="middle">is about ONE device</text>
+    <rect x="410" y="96" width="250" height="18" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" stroke-dasharray="3 3" fill-opacity="0.1"/>
+    <text x="535" y="109" class="xs muted" text-anchor="middle">cannot be recorded</text>
+    <rect x="410" y="118" width="250" height="18" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" stroke-dasharray="3 3" fill-opacity="0.1"/>
+    <text x="535" y="131" class="xs muted" text-anchor="middle">says the wrong thing</text>
+    <line x1="366" y1="72" x2="404" y2="72" stroke="#e05c5c" stroke-width="1.2" marker-end="url(#e-b-l510f1)"/>
+    <line x1="24" y1="154" x2="696" y2="154" class="grid" stroke-width="1.2"/>
+    <text x="24" y="176" class="xs t-ok" text-anchor="start">LESSON 5.10 — a NAME in the middle</text>
+    <rect x="40" y="192" width="200" height="20" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.24"/>
+    <text x="140" y="206" class="xs mono" text-anchor="middle">an ACTION</text>
+    <rect x="40" y="214" width="200" height="20" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.1"/>
+    <text x="140" y="228" class="xs mono" text-anchor="middle">"ride_camera"</text>
+    <text x="140" y="248" class="xs muted" text-anchor="middle">a name the game means</text>
+    <line x1="242" y1="218" x2="262" y2="218" class="hi" stroke-width="1.2" marker-end="url(#e-h-l510f1)"/>
+    <rect x="264" y="192" width="200" height="20" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.24"/>
+    <text x="364" y="206" class="xs mono" text-anchor="middle">a BINDING</text>
+    <rect x="264" y="214" width="200" height="20" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.1"/>
+    <text x="364" y="228" class="xs mono" text-anchor="middle">C  -&gt;  +1</text>
+    <text x="364" y="248" class="xs muted" text-anchor="middle">one signal, mapped onto it</text>
+    <line x1="466" y1="218" x2="486" y2="218" class="hi" stroke-width="1.2" marker-end="url(#e-h-l510f1)"/>
+    <rect x="488" y="192" width="200" height="20" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.24"/>
+    <text x="588" y="206" class="xs mono" text-anchor="middle">a VALUE</text>
+    <rect x="488" y="214" width="200" height="20" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.1"/>
+    <text x="588" y="228" class="xs mono" text-anchor="middle">1.0  held  pressed</text>
+    <text x="588" y="248" class="xs muted" text-anchor="middle">published once per frame</text>
+    <rect x="60" y="272" width="600" height="18" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.1"/>
+    <text x="360" y="285" class="xs muted" text-anchor="middle">a settings screen can change it</text>
+    <rect x="60" y="294" width="600" height="18" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.1"/>
+    <text x="360" y="307" class="xs muted" text-anchor="middle">a keyboard, a mouse, a gamepad — same action</text>
+    <rect x="60" y="316" width="600" height="18" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.1"/>
+    <text x="360" y="329" class="xs muted" text-anchor="middle">a replay records the INTENTION, not the key</text>
+    <rect x="60" y="338" width="600" height="18" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.1"/>
+    <text x="360" y="351" class="xs muted" text-anchor="middle">the code says what it does</text>
+    <text x="24" y="382" class="xs t-hi" text-anchor="start">None of the four is a performance argument, and this lesson measures nothing. It is a design lesson and says so.</text>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 1.</span>
+      The whole lesson in one picture, and note that <strong>none of the four losses on the right is a performance problem</strong>. A hard-coded scancode is not slow; it is unable to say the thing the program means, and the four consequences follow from that one failure. Putting a NAME in the middle &#8212; an action the game means, a binding that maps a signal onto it, a value published once per frame &#8212; dissolves all four, and the indirection earns its keep because it is <em>naming</em> the layer below rather than hiding it. A wrapper that renamed <code>key_pressed</code> to <code>button_pressed</code> would be pure cost.
+    </figcaption>
+  </figure>
+
+
+  <p>
+    <strong>It cannot be rebound.</strong> The scancode is compiled in. A left-handed player, a
+    player whose keyboard puts that key somewhere awkward, a player with a disability that makes
+    it unreachable — every one of them is out of luck, and the fix is a recompile. This is the
+    one that matters most and gets thought about least.
+  </p>
+
+  <p>
+    <strong>It is about one device.</strong> A gamepad has no scancodes. Adding one means a second
+    switch, which must be kept in step with the first by hand, for the life of the program. The
+    third device makes it three.
+  </p>
+
+  <p>
+    <strong>It cannot be recorded.</strong> A replay system, a demo recording, an automated test
+    that drives the game — all of them want to store what the player <em>meant</em>. Storing
+    <code>SDL_SCANCODE_SPACE</code> records a fact about a keyboard; if the binding changes
+    between the recording and the playback, the replay does something else.
+  </p>
+
+  <p>
+    <strong>And it says the wrong thing.</strong> <code>if (key_pressed(SDL_SCANCODE_SPACE))</code>
+    inside a jump handler is a sentence about hardware in a file about jumping. That is not a
+    performance problem or a portability problem; it is code failing to describe what it does,
+    which is the kind of problem that compounds quietly for years.
+  </p>
+
+  <div class="callout note">
+    <span class="label">This lesson measures nothing, and that is deliberate</span>
+    <p>
+      Lessons 5.6, 5.7 and 5.9 each turned on a benchmark, because each was choosing between
+      designs that differed in <em>cost</em>. This one is not: the alternatives differ in what
+      they can express, and every one of them is far too cheap to matter — an action map's
+      per-frame work is a loop over a couple of dozen bindings, which is nanoseconds.
+    </p>
+    <p>
+      Producing a benchmark anyway would be worse than useless. It would attach a number to a
+      decision the number did not make, and the next reader would think the number was the reason.
+      <strong>A design lesson should say it is a design lesson.</strong>
+    </p>
+  </div>
+
+  <!-- =================================================================
+       2 — BUILDING INTUITION
+       ================================================================= -->
+  <h2 id="intuition"><span class="num">2</span>Building Intuition</h2>
+
+  <h3 id="intuition-name">2.1 A name in the middle</h3>
+
+  <p>
+    All four problems have the same shape — the code names a <em>signal</em> where it means an
+    <em>intention</em> — and therefore the same fix. Put a name in the middle:
+  </p>
+
+  <div class="worked">
+    <span class="label">The three pieces</span>
+    <p><strong>An action is a name.</strong> <code>"jump"</code>, <code>"camera_yaw"</code>. It is
+       what the game means.</p>
+    <p><strong>A binding maps a signal onto it.</strong> Space contributes +1 to
+       <code>"jump"</code>. There may be several, on several devices.</p>
+    <p><strong>A frame publishes the values.</strong> Once per frame,
+       <code>jump = 1.0, held, pressed this frame</code>.</p>
+  </div>
+
+  <p>
+    That is the entire idea, and every one of the four problems dissolves against it. Rebinding
+    edits the middle row. A second device adds a row. A replay records the left column. And the
+    game code reads <code>actions.pressed(jump)</code>, which is a sentence about jumping.
+  </p>
+
+  <p>
+    The indirection is one level deep and it is worth being suspicious of it anyway, because
+    "add a layer" is the answer to everything and is usually wrong. What makes it right here is
+    that the layer is not <em>hiding</em> the thing below it — it is <strong>naming</strong> it.
+    A wrapper that renamed <code>key_pressed</code> to <code>button_pressed</code> would be pure
+    cost. This one changes what can be said.
+  </p>
+
+  <h3 id="intuition-own">2.2 Who owns the map</h3>
+
+  <p>
+    The engine could own one. It owns exactly one <code>input</code>, after all — <code>platform</code>
+    creates it and publishes it once per frame, and that is right, because there is one keyboard
+    and one mouse and no program wants two views of them.
+  </p>
+
+  <p>
+    An action map is different, and the difference is the same one this course has now hit three
+    times. Lesson 5.5 refused to make <code>asset_store</code> a singleton because
+    <code>sandbox</code> holds three in one program. Lesson 5.8 refused to make
+    <code>registry</code> one because the harness holds four in one function. Here: a
+    <strong>two-player local game needs two maps</strong>, with different bindings, and a game that
+    wants per-entity input puts one in a component and lets <code>view&lt;player_input&gt;</code>
+    find it.
+  </p>
+
+  <div class="callout note">
+    <span class="label">The rule, stated once and applied for the third time</span>
+    <p>
+      <strong>The engine does not know how many of a thing a game needs, so it declines to
+      decide.</strong> <code>action_map</code> is a value: construct one on the stack, hold
+      several, put one in a component, throw one away. There is no global, no
+      <code>get_instance()</code>, and nothing in the engine holds a pointer to yours.
+    </p>
+    <p>
+      What the engine <em>does</em> provide is the moment at which updating one is correct, which
+      turns out to be the interesting part — see <a href="#step-where">§5.1</a>.
+    </p>
+  </div>
+
+  <!-- =================================================================
+       3 — ONE MECHANISM
+       ================================================================= -->
+  <h2 id="theory"><span class="num">3</span>One Mechanism</h2>
+
+  <h3 id="theory-sum">3.1 Every binding contributes a signed value</h3>
+
+  <p>
+    An input system has to do two jobs that look different. It has to answer "is the player
+    jumping" — a yes or no — and "how hard is the player steering" — a number between −1 and 1.
+    The obvious design gives those two jobs two mechanisms: button actions and axis actions,
+    declared differently and queried differently.
+  </p>
+
+  <p>
+    There is a better one, and it is smaller:
+  </p>
+
+  <div class="worked">
+    <span class="label">The rule</span>
+    <p><strong>Every binding contributes a signed float to its action. An action's value is the
+       sum of its bindings' contributions.</strong></p>
+  </div>
+
+    <figure class="dia bleed">
+    <svg viewBox="0 0 720 380" role="img" aria-labelledby="l510f2-t l510f2-d">
+      <title id="l510f2-t">One binding rule covering buttons, key axes and analog axes</title>
+      <desc id="l510f2-d">Three actions: jump bound to one key, steer bound to two keys with opposite scales so they cancel, and look_x bound to a scaled mouse delta. All three use the same rule: sum the bindings' signed contributions.</desc>
+      <defs>
+        <marker id="e-i-l510f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+        <marker id="e-s-l510f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+        <marker id="e-h-l510f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+        <marker id="e-b-l510f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+        <marker id="e-g-l510f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+      </defs>
+    <text x="20" y="20" class="sm" text-anchor="start">Every binding contributes a SIGNED value. An action's value is the sum. That is the whole rule.</text>
+    <rect x="50" y="56" width="110" height="22" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.26"/>
+    <text x="105" y="71" class="xs mono" text-anchor="middle">jump</text>
+    <rect x="190" y="56" width="96" height="22" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.14"/>
+    <text x="238" y="71" class="xs mono" text-anchor="middle">Space +1</text>
+    <line x1="298" y1="67" x2="320" y2="67" class="hi" stroke-width="1.2" marker-end="url(#e-h-l510f2)"/>
+    <rect x="324" y="56" width="108" height="22" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.2"/>
+    <text x="378" y="71" class="xs mono" text-anchor="middle">0 or 1</text>
+    <text x="444" y="71" class="xs muted" text-anchor="start">ask held() / pressed()</text>
+    <text x="50" y="94" class="xs muted" text-anchor="start">a button</text>
+    <rect x="50" y="120" width="110" height="22" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.26"/>
+    <text x="105" y="135" class="xs mono" text-anchor="middle">steer</text>
+    <rect x="190" y="120" width="96" height="22" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.14"/>
+    <text x="238" y="135" class="xs mono" text-anchor="middle">A -1</text>
+    <rect x="296" y="120" width="96" height="22" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.14"/>
+    <text x="344" y="135" class="xs mono" text-anchor="middle">D +1</text>
+    <line x1="404" y1="131" x2="426" y2="131" class="hi" stroke-width="1.2" marker-end="url(#e-h-l510f2)"/>
+    <rect x="430" y="120" width="108" height="22" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.2"/>
+    <text x="484" y="135" class="xs mono" text-anchor="middle">-1, 0 or +1</text>
+    <text x="550" y="135" class="xs muted" text-anchor="start">ask value()</text>
+    <text x="50" y="158" class="xs muted" text-anchor="start">an axis from two keys — and holding BOTH gives exactly 0</text>
+    <rect x="50" y="184" width="110" height="22" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.26"/>
+    <text x="105" y="199" class="xs mono" text-anchor="middle">look_x</text>
+    <rect x="190" y="184" width="96" height="22" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.14"/>
+    <text x="238" y="199" class="xs mono" text-anchor="middle">mouse dx x 0.5</text>
+    <line x1="298" y1="195" x2="320" y2="195" class="hi" stroke-width="1.2" marker-end="url(#e-h-l510f2)"/>
+    <rect x="324" y="184" width="108" height="22" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.2"/>
+    <text x="378" y="199" class="xs mono" text-anchor="middle">unbounded</text>
+    <text x="444" y="199" class="xs muted" text-anchor="start">ask value()</text>
+    <text x="50" y="222" class="xs muted" text-anchor="start">an axis from a continuous source</text>
+    <line x1="24" y1="254" x2="696" y2="254" class="grid" stroke-width="1.2"/>
+    <text x="24" y="276" class="xs t-hi" text-anchor="start">THERE IS NO “BUTTON MODE” AND “AXIS MODE” TO CHOOSE BETWEEN,</text>
+    <text x="24" y="292" class="xs muted" text-anchor="start">because the second is what the first already is once you allow a scale. A design with two kinds would have needed</text>
+    <text x="24" y="306" class="xs muted" text-anchor="start">a rule for “what does A and D held together mean”. This one does not: -1 + 1 = 0, and nothing anywhere says so.</text>
+    <rect x="60" y="326" width="600" height="22" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.1"/>
+    <text x="360" y="341" class="xs mono" text-anchor="middle">held(a)  =  |value(a)| &gt;= 0.5</text>
+    <text x="24" y="370" class="xs muted" text-anchor="start">The threshold is what makes an analog source have to be PUSHED rather than brushed. A key contributes 1, so it clears it easily.</text>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 2.</span>
+      One rule covering both jobs an input system has. A button, an axis built from two keys, and an axis from a continuous source are all the same mechanism &#8212; every binding contributes a signed value and the action sums them. <strong>The middle row is what pays for the design:</strong> a system with separate button and axis kinds would have needed a documented rule for &#8220;what does holding both halves mean&#8221;, and would have had to write it, test it and explain it. Here there is no rule, because &#8722;1 + 1 = 0 and arithmetic already knew that. The threshold at the bottom exists for sources that are not keys: an analog stick should have to be pushed, not brushed.
+    </figcaption>
+  </figure>
+
+
+  <p>
+    Work the three cases through and notice that nothing special happens in any of them.
+  </p>
+
+  <div class="worked">
+    <span class="label">Worked example — three actions, one rule</span>
+    <p><code>jump</code> is bound to Space with scale +1. Space down → value 1. Space up →
+       value 0. Ask <code>held()</code>.</p>
+    <p><code>steer</code> is bound to A with −1 and D with +1. A alone → −1. D alone → +1.
+       <strong>Both held → −1 + 1 = 0.</strong> Ask <code>value()</code>.</p>
+    <p><code>look_x</code> is bound to the mouse's x delta with scale 0.5. A ten-pixel move →
+       10 × 0.5 = 5. No movement → 0. Ask <code>value()</code>.</p>
+  </div>
+
+  <p>
+    The third line of the middle case is the one that pays for the design. <strong>A system with
+    two mechanisms would have needed a rule for "what does holding both halves of an axis
+    mean"</strong> — and would have had to write it, document it and test it. Here there is no
+    rule, because −1 + 1 is 0 and arithmetic already knew that.
+  </p>
+
+  <p>
+    It also means an action's value is not clamped, and that is deliberate rather than an
+    oversight. Two keys both bound to <code>jump</code> with +1, both held, gives 2. For a button
+    that is meaningless and harmless — you asked <code>held()</code>, which does not care. For a
+    mouse delta scaled by 0.5 it is the whole point, since a fast flick should produce a big
+    number. Clamping would have had to know which kind of action it was looking at, and knowing
+    that is precisely what this design avoids.
+  </p>
+
+  <h3 id="theory-threshold">3.2 The threshold, and what it is for</h3>
+
+  <p>
+    <code>held()</code> is not "value is non-zero". It is:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/include/engine/core/actions.hpp — the level</span></figcaption>
+    <pre><code class="lang-cpp">inline constexpr float k_action_press_threshold = 0.5f;
+
+// …
+const bool now = std::fabs(values_[i]) &gt;= k_action_press_threshold;</code></pre>
+  </figure>
+
+  <p>
+    A digital binding contributes ±1, so any threshold above 0 and at or below 1 would behave
+    identically for keys. It exists for the sources that are not keys: a gamepad trigger resting
+    at 0.02 because the spring is tired, a stick with a little drift. <strong>An analog source
+    should have to be pushed, not brushed</strong>, and 0.5 is the conventional halfway point.
+  </p>
+
+  <p>
+    Note the <code>fabs</code>. A two-way axis is "held" when pushed <em>either</em> way, which is
+    legal, occasionally useful — "is the player steering at all?" — and rarely the question you
+    meant to ask of an axis. The header says so.
+  </p>
+
+  <!-- =================================================================
+       4 — EDGES
+       ================================================================= -->
+  <h2 id="edges"><span class="num">4</span>Edges Come From the Level</h2>
+
+  <p>
+    Lesson 1.2 established the distinction this whole course has run on: a <strong>level</strong>
+    is "is it down now", an <strong>edge</strong> is "did it change this frame", and confusing
+    them produces two different bugs. That distinction survives into the action layer unchanged —
+    <code>held()</code>, <code>pressed()</code>, <code>released()</code> — and there is exactly
+    one new decision to make, which is where the edge is computed <em>from</em>.
+  </p>
+
+  <p>
+    It looks like it should not matter. Space goes down; the binding sees a rising edge; the
+    action fires. Why would you compute it any other way?
+  </p>
+
+  <p>
+    Because an action may have more than one binding, and then the two answers differ.
+  </p>
+
+    <figure class="dia bleed">
+    <svg viewBox="0 0 720 400" role="img" aria-labelledby="l510f3-t l510f3-d">
+      <title id="l510f3-t">Edges derived from an action's level rather than from its bindings</title>
+      <desc id="l510f3-d">Five frames in which a jump action bound to both a key and a mouse button is activated by one, then the other, then released in turn. The level stays true throughout, so there is exactly one press edge and one release edge.</desc>
+      <defs>
+        <marker id="e-i-l510f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+        <marker id="e-s-l510f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+        <marker id="e-h-l510f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+        <marker id="e-b-l510f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+        <marker id="e-g-l510f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+      </defs>
+    <text x="20" y="20" class="sm" text-anchor="start">“jump” bound to Space AND the left mouse button. Five frames.</text>
+    <text x="174" y="46" class="xs muted" text-anchor="middle">idle</text>
+    <text x="282" y="46" class="xs muted" text-anchor="middle">Space</text>
+    <text x="282" y="58" class="xs muted" text-anchor="middle">down</text>
+    <text x="390" y="46" class="xs muted" text-anchor="middle">…and</text>
+    <text x="390" y="58" class="xs muted" text-anchor="middle">LMB down</text>
+    <text x="498" y="46" class="xs muted" text-anchor="middle">Space</text>
+    <text x="498" y="58" class="xs muted" text-anchor="middle">up</text>
+    <text x="606" y="46" class="xs muted" text-anchor="middle">LMB</text>
+    <text x="606" y="58" class="xs muted" text-anchor="middle">up</text>
+    <text x="122" y="93" class="xs mono muted" text-anchor="end">Space</text>
+    <rect x="130" y="78" width="88" height="22" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.1"/>
+    <text x="174" y="93" class="xs mono" text-anchor="middle">up</text>
+    <rect x="238" y="78" width="88" height="22" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.42"/>
+    <text x="282" y="93" class="xs mono" text-anchor="middle">down</text>
+    <rect x="346" y="78" width="88" height="22" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.42"/>
+    <text x="390" y="93" class="xs mono" text-anchor="middle">down</text>
+    <rect x="454" y="78" width="88" height="22" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.1"/>
+    <text x="498" y="93" class="xs mono" text-anchor="middle">up</text>
+    <rect x="562" y="78" width="88" height="22" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.1"/>
+    <text x="606" y="93" class="xs mono" text-anchor="middle">up</text>
+    <text x="122" y="121" class="xs mono muted" text-anchor="end">LMB</text>
+    <rect x="130" y="106" width="88" height="22" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.1"/>
+    <text x="174" y="121" class="xs mono" text-anchor="middle">up</text>
+    <rect x="238" y="106" width="88" height="22" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.1"/>
+    <text x="282" y="121" class="xs mono" text-anchor="middle">up</text>
+    <rect x="346" y="106" width="88" height="22" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.42"/>
+    <text x="390" y="121" class="xs mono" text-anchor="middle">down</text>
+    <rect x="454" y="106" width="88" height="22" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.42"/>
+    <text x="498" y="121" class="xs mono" text-anchor="middle">down</text>
+    <rect x="562" y="106" width="88" height="22" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.1"/>
+    <text x="606" y="121" class="xs mono" text-anchor="middle">up</text>
+    <text x="122" y="155" class="xs mono muted" text-anchor="end">action level</text>
+    <rect x="130" y="140" width="88" height="22" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.1"/>
+    <text x="174" y="155" class="xs mono" text-anchor="middle">up</text>
+    <rect x="238" y="140" width="88" height="22" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.42"/>
+    <text x="282" y="155" class="xs mono" text-anchor="middle">down</text>
+    <rect x="346" y="140" width="88" height="22" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.42"/>
+    <text x="390" y="155" class="xs mono" text-anchor="middle">down</text>
+    <rect x="454" y="140" width="88" height="22" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.42"/>
+    <text x="498" y="155" class="xs mono" text-anchor="middle">down</text>
+    <rect x="562" y="140" width="88" height="22" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.1"/>
+    <text x="606" y="155" class="xs mono" text-anchor="middle">up</text>
+    <text x="122" y="187" class="xs mono muted" text-anchor="end">edges</text>
+    <text x="174" y="187" class="xs muted" text-anchor="middle"></text>
+    <rect x="238" y="174" width="88" height="20" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.28"/>
+    <text x="282" y="188" class="xs mono" text-anchor="middle">PRESSED</text>
+    <text x="390" y="187" class="xs muted" text-anchor="middle">—</text>
+    <text x="498" y="187" class="xs muted" text-anchor="middle">—</text>
+    <rect x="562" y="174" width="88" height="20" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.28"/>
+    <text x="606" y="188" class="xs mono" text-anchor="middle">RELEASED</text>
+    <line x1="24" y1="210" x2="696" y2="210" class="grid" stroke-width="1.2"/>
+    <text x="24" y="232" class="xs t-ok" text-anchor="start">ONE rising edge and ONE falling edge for the whole sequence, and that is the correct answer.</text>
+    <text x="24" y="252" class="xs muted" text-anchor="start">Frame 3: the mouse goes down while the action is ALREADY active, so there is no second press.</text>
+    <text x="24" y="266" class="xs muted" text-anchor="start">Frame 4: Space comes up but the action is STILL active through the mouse, so there is no release.</text>
+    <line x1="24" y1="286" x2="696" y2="286" class="grid" stroke-width="1.0" stroke-dasharray="3 3"/>
+    <text x="24" y="306" class="xs t-bad" text-anchor="start">DERIVE EDGES FROM THE BINDINGS INSTEAD AND YOU GET TWO OF EACH —</text>
+    <rect x="238" y="318" width="88" height="20" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.26"/>
+    <text x="282" y="332" class="xs mono" text-anchor="middle">PRESSED</text>
+    <rect x="346" y="318" width="88" height="20" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.26"/>
+    <text x="390" y="332" class="xs mono" text-anchor="middle">PRESSED</text>
+    <rect x="454" y="318" width="88" height="20" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.26"/>
+    <text x="498" y="332" class="xs mono" text-anchor="middle">RELEASED</text>
+    <rect x="562" y="318" width="88" height="20" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.26"/>
+    <text x="606" y="332" class="xs mono" text-anchor="middle">RELEASED</text>
+    <text x="24" y="358" class="xs muted" text-anchor="start">…and the player jumps twice for one press. The bug is invisible until an action has more than one binding, which is why</text>
+    <text x="24" y="372" class="xs muted" text-anchor="start">verify_510 §C binds two and the rest of the harness would not have caught it.</text>
+    <text x="24" y="394" class="xs t-hi" text-anchor="start">AN EDGE IS A CHANGE IN THE ACTION, NOT A CHANGE IN A SIGNAL.</text>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 3.</span>
+      The decision that is invisible until an action has TWO bindings &#8212; which is to say, invisible in a first implementation and in the first test written for it. Follow the level row: it goes true in frame 2 and stays true until frame 5, so there is exactly one rising edge and one falling edge. Derive the edges from the BINDINGS instead and frames 3 and 4 each fire one too, giving <strong>two presses for one intention and a double jump</strong>. The correct rule is one sentence: an edge is a change in the ACTION, not a change in a signal. It ships as &#8220;sometimes it jumps twice&#8221; on somebody else&#8217;s machine, the week they bind a controller alongside their keyboard.
+    </figcaption>
+  </figure>
+
+
+  <p>
+    Follow the five frames. <code>jump</code> is bound to Space <em>and</em> the left mouse
+    button, which is an ordinary thing to want — a keyboard binding and a mouse binding for the
+    same intention.
+  </p>
+
+  <ol>
+    <li>Nothing held. No edges.</li>
+    <li>Space goes down. The action becomes active: <strong>one press edge</strong>. Correct
+        either way.</li>
+    <li>The mouse button goes down <em>while Space is still held</em>. A binding-derived edge
+        fires again — <strong>a second press, and the player jumps twice</strong>. A
+        level-derived edge does not, because the action was already active and nothing changed.</li>
+    <li>Space comes up, the mouse is still down. A binding-derived edge fires a
+        <em>release</em> — while the action is plainly still active. A level-derived edge does
+        not.</li>
+    <li>The mouse comes up. The action goes inactive: <strong>one release edge</strong>.</li>
+  </ol>
+
+  <p>
+    So the rule is:
+  </p>
+
+  <div class="worked">
+    <span class="label">The decision</span>
+    <p><strong>An edge is a change in the ACTION, not a change in a signal.</strong></p>
+    <p>Compute the level first — sum the bindings, compare against the threshold — and derive the
+       edges by comparing this frame's level against last frame's. Exactly as
+       <code>engine::input</code> derives key edges from two snapshots, one layer up.</p>
+  </div>
+
+  <p>
+    The implementation is four lines, and its shape matters more than its length:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/include/engine/core/actions.hpp — the edge, derived</span></figcaption>
+    <pre><code class="lang-cpp">for (std::size_t i = 0; i &lt; values_.size(); ++i)
+{
+    const bool now = std::fabs(values_[i]) &gt;= k_action_press_threshold;
+    const bool was = held_prev_[i] != 0u;
+    held_[i] = now ? 1u : 0u;
+
+    if (now &amp;&amp; !was &amp;&amp; queued_[i] &lt; k_action_press_queue) { ++queued_[i]; }
+}</code></pre>
+  </figure>
+
+  <p>
+    The loop is over <em>actions</em>, not over bindings. By the time it runs, the bindings have
+    already been summed away and there is nothing left to be confused by.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">A bug that hides until the second binding</span>
+    <p>
+      Everything about the wrong version works perfectly with one binding per action, which is
+      what a first implementation has and what a first test writes. It fails the moment a player
+      binds a controller button alongside their keyboard — in production, on somebody else's
+      machine, as "sometimes it jumps twice".
+    </p>
+    <p>
+      §C of the verification harness binds two on purpose and walks the five frames above,
+      asserting one rising edge and one falling edge for the whole sequence. It is four lines of
+      setup and it is the only part of the harness that could have caught this.
+    </p>
+  </div>
+
+
+  <!-- =================================================================
+       5 — THE EDGE THAT SURVIVES THE STEP
+       ================================================================= -->
+  <h2 id="step"><span class="num">5</span>The Edge That Survives the Step</h2>
+
+  <h3 id="step-where">5.1 Where the map must run</h3>
+
+  <p>
+    An action map has to be updated once per frame, after input is published. Lesson 5.2's
+    application layer offers seven hooks — <code>configure</code>, <code>on_start</code>,
+    <code>on_event</code>, <code>on_fixed_step</code>, <code>on_frame</code>,
+    <code>on_overlay</code>, <code>on_stop</code> — and it turns out that <em>none of them</em> is
+    the right place, which is the sort of discovery that means either the design is wrong or
+    something is missing.
+  </p>
+
+    <figure class="dia bleed">
+    <svg viewBox="0 0 720 348" role="img" aria-labelledby="l510f4-t l510f4-d">
+      <title id="l510f4-t">The frame's stages and the hook added for the action map</title>
+      <desc id="l510f4-d">The frame runs event drain, clock tick, input publish, the new on_input hook, zero or more fixed steps, and render. on_input is the only point at which input is fresh and no step has consumed it.</desc>
+      <defs>
+        <marker id="e-i-l510f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+        <marker id="e-s-l510f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+        <marker id="e-h-l510f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+        <marker id="e-b-l510f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+        <marker id="e-g-l510f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+      </defs>
+    <text x="20" y="20" class="sm" text-anchor="start">One frame, and the gap Lesson 5.10 had to fill.</text>
+    <rect x="60" y="52" width="190" height="24" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.16"/>
+    <text x="155" y="68" class="xs mono" text-anchor="middle">drain events</text>
+    <text x="266" y="68" class="xs muted" text-anchor="start">on_event, per event</text>
+    <line x1="155" y1="78" x2="155" y2="92" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-l510f4)"/>
+    <rect x="60" y="94" width="190" height="24" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.16"/>
+    <text x="155" y="110" class="xs mono" text-anchor="middle">tick clock</text>
+    <line x1="155" y1="120" x2="155" y2="134" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-l510f4)"/>
+    <rect x="60" y="136" width="190" height="24" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.16"/>
+    <text x="155" y="152" class="xs mono" text-anchor="middle">publish input</text>
+    <text x="266" y="152" class="xs muted" text-anchor="start">input::update()</text>
+    <line x1="155" y1="162" x2="155" y2="176" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-l510f4)"/>
+    <rect x="60" y="178" width="190" height="24" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.26"/>
+    <text x="155" y="194" class="xs mono" text-anchor="middle">MAP ACTIONS</text>
+    <text x="266" y="194" class="xs muted" text-anchor="start">on_input()   &lt;- new</text>
+    <line x1="155" y1="204" x2="155" y2="218" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-l510f4)"/>
+    <rect x="60" y="220" width="190" height="24" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.16"/>
+    <text x="155" y="236" class="xs mono" text-anchor="middle">N fixed steps</text>
+    <text x="266" y="236" class="xs muted" text-anchor="start">on_fixed_step, 0..N times</text>
+    <line x1="155" y1="246" x2="155" y2="260" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-l510f4)"/>
+    <rect x="60" y="262" width="190" height="24" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.16"/>
+    <text x="155" y="278" class="xs mono" text-anchor="middle">render</text>
+    <text x="266" y="278" class="xs muted" text-anchor="start">on_frame(alpha)</text>
+    <rect x="56" y="172" width="198" height="30" rx="3" fill="none" stroke="#f0961e" stroke-width="1.5" stroke-dasharray="4 3"/>
+    <line x1="24" y1="306" x2="696" y2="306" class="grid" stroke-width="1.0" stroke-dasharray="3 3"/>
+    <text x="470" y="180" class="xs t-hi" text-anchor="start">the ONLY moment at which</text>
+    <text x="470" y="193" class="xs muted" text-anchor="start">an action map may be updated</text>
+    <text x="470" y="232" class="xs t-ok" text-anchor="start">pressed() is valid HERE</text>
+    <text x="470" y="245" class="xs muted" text-anchor="start">(runs exactly once)</text>
+    <text x="470" y="268" class="xs t-bad" text-anchor="start">pressed() is NOT valid here</text>
+    <text x="470" y="281" class="xs muted" text-anchor="start">use consume_pressed()</text>
+    <line x1="462" y1="176" x2="440" y2="184" class="hi" stroke-width="1.1" marker-end="url(#e-h-l510f4)"/>
+    <line x1="462" y1="228" x2="440" y2="184" stroke="#5ac878" stroke-width="1.1" marker-end="url(#e-g-l510f4)"/>
+    <line x1="462" y1="264" x2="440" y2="226" stroke="#e05c5c" stroke-width="1.1" marker-end="url(#e-b-l510f4)"/>
+    <text x="24" y="322" class="xs muted" text-anchor="start">Before 5.10 nothing ran exactly once, after input was refreshed and before any step.</text>
+    <text x="24" y="334" class="xs muted" text-anchor="start">A map updated in on_frame would leave every step reading LAST frame's actions.</text>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 4.</span>
+      Why Lesson 5.10 had to add a hook, which is not a thing to do lightly. An action map must be updated once per frame, after input is published and before anything reads it &#8212; and the simulation reads it. <code>on_event</code> runs several times a frame or none; <code>on_fixed_step</code> runs zero or more times and is also where the answers get read; and <code>on_frame</code> is the near miss, right in frequency and wrong in <em>place</em>, because it runs AFTER the steps and would leave every step of the frame reading last frame&#8217;s actions. Invisible in a demo; a real 16 ms of input delay in a game.
+    </figcaption>
+  </figure>
+
+
+  <div class="tbl-scroll">
+  <table>
+    <caption class="visually-hidden">Why each existing hook is the wrong place to update an action
+             map.</caption>
+    <thead><tr><th>hook</th><th>runs</th><th>why not</th></tr></thead>
+    <tbody>
+      <tr><td><code>on_event</code></td><td>once per event</td>
+          <td>Several times a frame, or none. An update per event would publish a different
+              answer to every event handler.</td></tr>
+      <tr><td><code>on_fixed_step</code></td><td>zero or more times</td>
+          <td>The same problem, and worse — it is <em>also</em> where the answers get read.</td></tr>
+      <tr><td><code>on_frame</code></td><td>exactly once</td>
+          <td>The right frequency, the wrong <em>place</em>: it runs <strong>after</strong> the
+              steps, so every step of the frame would read last frame's actions.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    <code>on_frame</code> is the near miss, and it is worth being precise about why it fails,
+    because "once per frame" sounds like the whole requirement. It is not. The requirement is
+    <strong>once per frame, after input is published, and before anything reads it</strong> — and
+    the simulation reads it. A map updated in <code>on_frame</code> is a map that is always
+    exactly one frame stale from the simulation's point of view, which is invisible in a demo and
+    is a real 16-millisecond input delay in a game.
+  </p>
+
+  <p>
+    So Lesson 5.10 adds an eighth. One virtual, with an empty default, in the one gap the other
+    seven left:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/src/platform/app.cpp — the frame, with the new line</span></figcaption>
+    <pre><code class="lang-cpp">sys.begin_frame();          // ticks the clock and publishes input
+
+self-&gt;on_input();           // <- Lesson 5.10. Exactly here, and nowhere else.
+
+while (sys.next_step())
+{
+    self-&gt;on_fixed_step(sys.steps().h());
+}
+
+self-&gt;on_frame(sys.steps().alpha());</code></pre>
+  </figure>
+
+  <p>
+    Adding a hook to a framework is not free — every hook is a thing every future reader has to
+    learn — so it is worth saying what else it is good for, because a hook that serves one caller
+    is a smell. <code>on_input</code> is the once-per-frame, pre-simulation moment, and that is
+    also where you would read a network snapshot, sample a debug scrubber, or latch a replay's
+    recorded intentions. It was missing before this lesson happened to need it.
+  </p>
+
+  <h3 id="step-queue">5.2 Two failures, one queue</h3>
+
+  <p>
+    Now the harder half, and it is Lesson 1.4's trap in its most expensive form.
+  </p>
+
+  <p>
+    <code>on_fixed_step</code> runs <em>zero or more times per frame</em> — the accumulator decides,
+    and Lesson 1.4 measured 0, 1, 2, 1, 2 across five consecutive frames on this machine. A
+    frame-scoped edge read inside it fails in <strong>both</strong> directions:
+  </p>
+
+    <figure class="dia bleed">
+    <svg viewBox="0 0 720 400" role="img" aria-labelledby="l510f5-t l510f5-d">
+      <title id="l510f5-t">A frame-scoped edge compared with a queued one across variable steps</title>
+      <desc id="l510f5-d">Reading a frame edge inside the fixed step double-fires on a two-step frame and loses the press on a zero-step frame; consuming a queued press fires exactly once in both cases.</desc>
+      <defs>
+        <marker id="e-i-l510f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+        <marker id="e-s-l510f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+        <marker id="e-h-l510f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+        <marker id="e-b-l510f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+        <marker id="e-g-l510f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+      </defs>
+    <text x="20" y="20" class="sm" text-anchor="start">Why a fixed-timestep engine needs a second kind of edge.</text>
+    <text x="24" y="46" class="xs t-bad" text-anchor="start">READING pressed() INSIDE THE STEP</text>
+    <text x="24" y="64" class="xs t-hi" text-anchor="start">a TWO-step frame</text>
+    <rect x="60" y="76" width="120" height="22" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.24"/>
+    <text x="120" y="91" class="xs mono" text-anchor="middle">one press</text>
+    <line x1="182" y1="87" x2="206" y2="87" class="ink-soft" stroke-width="1.1" marker-end="url(#e-s-l510f5)"/>
+    <rect x="212" y="76" width="80" height="22" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.2"/>
+    <text x="252" y="91" class="xs mono" text-anchor="middle">step 1</text>
+    <rect x="300" y="76" width="80" height="22" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.2"/>
+    <text x="340" y="91" class="xs mono" text-anchor="middle">step 2</text>
+    <rect x="452" y="76" width="216" height="22" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.3"/>
+    <text x="560" y="91" class="xs mono" text-anchor="middle">jumps TWICE</text>
+    <text x="60" y="114" class="xs muted" text-anchor="start">the edge is true for the whole frame, and the frame ran the step twice</text>
+    <text x="24" y="130" class="xs t-hi" text-anchor="start">a ZERO-step frame</text>
+    <rect x="60" y="142" width="120" height="22" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.24"/>
+    <text x="120" y="157" class="xs mono" text-anchor="middle">one press</text>
+    <line x1="182" y1="153" x2="206" y2="153" class="ink-soft" stroke-width="1.1" marker-end="url(#e-s-l510f5)"/>
+    <rect x="212" y="142" width="168" height="22" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" stroke-dasharray="3 3" fill-opacity="0.1"/>
+    <text x="296" y="157" class="xs muted" text-anchor="middle">no step ran</text>
+    <rect x="452" y="142" width="216" height="22" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.3"/>
+    <text x="560" y="157" class="xs mono" text-anchor="middle">jump LOST</text>
+    <text x="60" y="180" class="xs muted" text-anchor="start">the edge came and went during a frame in which nothing was listening</text>
+    <line x1="24" y1="196" x2="696" y2="196" class="grid" stroke-width="1.2"/>
+    <text x="24" y="218" class="xs t-ok" text-anchor="start">READING consume_pressed() INSTEAD</text>
+    <text x="24" y="236" class="xs t-hi" text-anchor="start">a TWO-step frame</text>
+    <rect x="60" y="248" width="120" height="22" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.24"/>
+    <text x="120" y="263" class="xs mono" text-anchor="middle">one press</text>
+    <line x1="182" y1="259" x2="206" y2="259" class="ink-soft" stroke-width="1.1" marker-end="url(#e-s-l510f5)"/>
+    <rect x="212" y="248" width="80" height="22" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.2"/>
+    <text x="252" y="263" class="xs mono" text-anchor="middle">step 1</text>
+    <rect x="300" y="248" width="80" height="22" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.2"/>
+    <text x="340" y="263" class="xs mono" text-anchor="middle">step 2</text>
+    <rect x="452" y="248" width="216" height="22" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.3"/>
+    <text x="560" y="263" class="xs mono" text-anchor="middle">jumps ONCE</text>
+    <text x="60" y="286" class="xs muted" text-anchor="start">the first step takes the queued press; the second finds the queue empty</text>
+    <text x="24" y="302" class="xs t-hi" text-anchor="start">a ZERO-step frame</text>
+    <rect x="60" y="314" width="120" height="22" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.24"/>
+    <text x="120" y="329" class="xs mono" text-anchor="middle">one press</text>
+    <line x1="182" y1="325" x2="206" y2="325" class="ink-soft" stroke-width="1.1" marker-end="url(#e-s-l510f5)"/>
+    <rect x="212" y="314" width="168" height="22" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" stroke-dasharray="3 3" fill-opacity="0.1"/>
+    <text x="296" y="329" class="xs muted" text-anchor="middle">no step ran</text>
+    <rect x="452" y="314" width="216" height="22" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.3"/>
+    <text x="560" y="329" class="xs mono" text-anchor="middle">queued, not lost</text>
+    <text x="60" y="352" class="xs muted" text-anchor="start">the press waits in the queue until a step actually runs</text>
+    <text x="24" y="372" class="xs muted" text-anchor="start">The queue is FOUR deep and presses past that are dropped, which is a decision: an unbounded queue replays a burst of jumps</text>
+    <text x="24" y="386" class="xs muted" text-anchor="start">after the player has stopped asking, and that feels worse than losing them. A fighting game would raise the number and call it design.</text>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 5.</span>
+      Lesson 1.4&#8217;s trap in its most expensive form, and it fails in BOTH directions, which is why neither is fixable by the caller. A frame-scoped edge read inside the step is true for the whole frame, so a two-step frame acts on it twice; and it is gone by the next frame, so a zero-step frame loses it entirely. Queueing the press fixes both with the same mechanism &#8212; the first step takes it, the second finds the queue empty, and a frame that ran no steps leaves it waiting. <strong>The four-deep cap is a decision rather than an overflow bug:</strong> an unbounded queue replays a burst of jumps after the player has stopped asking, which feels worse than losing them.
+    </figcaption>
+  </figure>
+
+
+  <p>
+    A <strong>two-step frame</strong> reads <code>pressed()</code> twice, both times true, and the
+    player jumps twice for one press. A <strong>zero-step frame</strong> reads it not at all, and
+    by the next frame the edge is gone — <strong>the press is silently lost</strong>. Neither is
+    fixable by the caller without keeping state across frames, so the map keeps it:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/include/engine/core/actions.hpp — the queued edge</span></figcaption>
+    <pre><code class="lang-cpp">/// Take one queued press, if there is one. **Safe inside `on_fixed_step`.**
+[[nodiscard]] bool consume_pressed(action_id id);</code></pre>
+  </figure>
+
+  <p>
+    Every rising edge pushes one press onto a small per-action queue. <code>consume_pressed</code>
+    pops one and returns true. A two-step frame takes it once and the second step finds the queue
+    empty; a zero-step frame leaves it queued until a step actually happens.
+  </p>
+
+  <div class="worked">
+    <span class="label">Worked example — six presses and no steps</span>
+    <p>The queue is <code>k_action_press_queue = 4</code> deep. Press and release six times with
+       no step running: the harness finds <strong>4</strong> queued, and draining gives exactly
+       4. Two presses were dropped.</p>
+    <p><strong>That is a decision, not an overflow bug.</strong> An unbounded queue turns a hitch
+       into a burst of jumps arriving after the player has stopped asking, which feels worse than
+       losing them. Four survives a stutter and is short enough not to feel like a recording.</p>
+  </div>
+
+  <p>
+    A fighting game with a deliberate input buffer would raise that number and call it a design
+    parameter — which is exactly what it is. The engine's job is to make the number visible and
+    the behaviour predictable, not to guess the genre.
+  </p>
+
+  <p>
+    So the rule for a caller is two lines long:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption class="visually-hidden">Which edge query to use where.</caption>
+    <thead><tr><th>where</th><th>use</th><th>why</th></tr></thead>
+    <tbody>
+      <tr><td><code>on_input</code>, <code>on_frame</code>, <code>on_event</code></td>
+          <td><code>pressed()</code> / <code>released()</code></td>
+          <td>runs once per frame; the frame-scoped edge is exactly right</td></tr>
+      <tr><td><code>on_fixed_step</code></td>
+          <td><code>consume_pressed()</code> for edges,<br><code>held()</code> /
+              <code>value()</code> for levels</td>
+          <td>runs 0..N times; levels are frame-coherent and safe, edges are not</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    The demo does one of each, on purpose:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">demos/ecs_swarm/main.cpp — both kinds, side by side</span></figcaption>
+    <pre><code class="lang-cpp">void on_input() override                     // exactly once per frame
+{
+    actions_.update(in());
+    if (actions_.pressed(a_materials_)) { toggle_materials(); }   // a frame edge
+    // …
+}
+
+void on_fixed_step(float h) override         // zero or more times per frame
+{
+    if (actions_.consume_pressed(a_spawn_)) { spawn_sparks(); }   // a queued edge
+
+    camera_.azimuth += (0.15f + 2.0f * actions_.value(a_yaw_)) * h;   // a level
+}</code></pre>
+  </figure>
+
+  <p>
+    The last line is worth a second look. <code>a_yaw_</code> is bound to Left with −1 and Right
+    with +1, so holding both gives exactly zero and the camera holds still — and there is no
+    <code>if</code> anywhere that says so. That is §3's arithmetic arriving in gameplay code.
+  </p>
+
+  <!-- =================================================================
+       6 — A CONCEPT
+       ================================================================= -->
+  <h2 id="concept"><span class="num">6</span>A Concept, and the Test It Makes Possible</h2>
+
+  <p>
+    There is a problem with testing any of this, and it is worth meeting because the solution is
+    a C++20 feature this course has not needed until now.
+  </p>
+
+  <p>
+    <code>engine::input::update()</code> samples SDL's live keyboard state — that is the whole
+    point of Lesson 1.2's design, and it is right. It also means a test that wants a key held
+    would have to <em>persuade SDL that a key is held</em>, which SDL offers no supported way to
+    do. So a harness cannot construct an <code>input</code> in a chosen state, and every
+    interesting behaviour above — the two-binding edge case, the queue across variable steps —
+    would go untested.
+  </p>
+
+  <p>
+    Look at what <code>update()</code> actually needs, though. Six questions:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/include/engine/core/actions.hpp — the requirement, named</span></figcaption>
+    <pre><code class="lang-cpp">template &lt;typename T&gt;
+concept input_snapshot = requires(const T&amp; t, SDL_Scancode key, int button) {
+    { t.key_down(key) }    -&gt; std::convertible_to&lt;bool&gt;;
+    { t.mouse_down(button) } -&gt; std::convertible_to&lt;bool&gt;;
+    { t.mouse_x() }        -&gt; std::convertible_to&lt;float&gt;;
+    { t.mouse_y() }        -&gt; std::convertible_to&lt;float&gt;;
+    { t.wheel_x() }        -&gt; std::convertible_to&lt;float&gt;;
+    { t.wheel_y() }        -&gt; std::convertible_to&lt;float&gt;;
+};</code></pre>
+  </figure>
+
+  <p>
+    <code>update</code> is templated on that, and the whole test problem evaporates: the harness
+    writes a struct with six functions and the mapping logic runs exactly as it ships.
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">scratch/verify_510.cpp — a complete input device</span></figcaption>
+    <pre><code class="lang-cpp">struct fake_input
+{
+    std::set&lt;int&gt; keys;
+    std::set&lt;int&gt; buttons;
+    float mx = 0.0f, my = 0.0f, wx = 0.0f, wy = 0.0f;
+
+    [[nodiscard]] bool key_down(SDL_Scancode k) const { return keys.count((int)k) != 0; }
+    [[nodiscard]] bool mouse_down(int b) const { return buttons.count(b) != 0; }
+    [[nodiscard]] float mouse_x() const { return mx; }
+    // …
+};
+static_assert(engine::input_snapshot&lt;fake_input&gt;);</code></pre>
+  </figure>
+
+  <div class="callout cpp">
+    <span class="label">C++ in place — a concept describes a shape, not a hierarchy</span>
+    <p>
+      The alternative is an abstract base class: <code>struct input_source { virtual bool
+      key_down(...) = 0; };</code>, with <code>input</code> inheriting from it. That would work,
+      and it would cost three things a concept does not. <strong>It changes
+      <code>input</code></strong> — Lesson 1.2's header would have to know about a base class it
+      has no other use for. <strong>It costs a virtual call per query</strong>, on a loop that
+      runs per binding per frame. And it is <em>closed</em>: a type can only be an
+      <code>input_source</code> if its author said so.
+    </p>
+    <p>
+      <code>engine::input</code> satisfies <code>input_snapshot</code> without knowing the concept
+      exists. Not one character of <code>input.hpp</code> changed in this lesson. That is the
+      property worth having: <strong>a concept describes a shape, and types that already have
+      that shape are already members.</strong>
+    </p>
+    <p>
+      It is also free. The compiler instantiates one copy of <code>update</code> per source type
+      and inlines the six accessors, so the production path compiles to exactly what a
+      hand-written <code>update(const input&amp;)</code> would have. The `static_assert` beside the
+      concept keeps the claim honest: if <code>input.hpp</code> ever renames one of the six, the
+      engine fails to build with a message naming the requirement rather than failing somewhere
+      inside a template.
+    </p>
+  </div>
+
+  <!-- =================================================================
+       7 — THE DEVICE THAT IS NOT HERE
+       ================================================================= -->
+  <h2 id="gamepad"><span class="num">7</span>The Device That Is Not Here</h2>
+
+  <p>
+    The second of §1's four problems was "it is about one device", and the natural way to prove
+    that fixed would be to add gamepad support. This lesson does not, and it would be dishonest
+    to let that pass without saying why.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">There is no gamepad code here, and this is the reason</span>
+    <p>
+      <strong>It could not be run on the machine this was written on.</strong> SDL3's gamepad API
+      needs <code>SDL_INIT_GAMEPAD</code>, device add/remove events, an opened
+      <code>SDL_Gamepad*</code> per controller, and axis values that need a deadzone whose right
+      value is a matter of taste and hardware. Every one of those is easy to write and impossible
+      to be confident about without a controller in your hand.
+    </p>
+    <p>
+      <strong>Untested device code in an engine is a liability rather than a feature.</strong> It
+      looks like support, it compiles, it appears in the API — and the first person to plug in a
+      controller finds out it was never run. Shipping the enum with an unimplemented arm would be
+      worse still.
+    </p>
+  </div>
+
+  <p>
+    What the design <em>does</em> demonstrate, with hardware this machine has, is the property
+    the gamepad claim actually rests on: <strong>one action, several bindings, on more than one
+    device.</strong> The demo binds <code>spawn_sparks</code> to Space and to the left mouse
+    button, and §4's five-frame walk is exactly the multi-device case in miniature. A gamepad is a
+    third device that behaves like the second.
+  </p>
+
+  <p>
+    And here is what adding one would take, so the claim is checkable rather than asserted:
+  </p>
+
+  <ol>
+    <li>Two enumerators on <code>input_source</code>: <code>gamepad_button</code> and
+        <code>gamepad_axis</code>.</li>
+    <li>Two arms in <code>update()</code>'s switch, reading <code>SDL_GetGamepadButton</code> and
+        <code>SDL_GetGamepadAxis</code>. <strong>⚠ VERIFY</strong> both signatures and the axis
+        range against <code>SDL3/SDL_gamepad.h</code> before typing them: SDL3 renamed this whole
+        family from SDL2's <code>SDL_GameController*</code>, and the axis value is a signed 16-bit
+        integer that has to be normalised before it can be scaled.</li>
+    <li>Two more accessors on the <code>input_snapshot</code> concept, which is the only part
+        that touches existing code — and it touches it additively.</li>
+    <li>A deadzone, which belongs on the <em>binding</em> rather than the action, because two
+        sticks on the same pad can want different ones.</li>
+    <li>Device connect/disconnect handling, which is the part that is actually hard: an action
+        bound to a controller that has been unplugged must go inactive, and the release edge must
+        fire.</li>
+  </ol>
+
+  <p>
+    Exercise 11.2 does it. Point 5 is the one worth thinking about before you start.
+  </p>
+
+
+  <!-- =================================================================
+       8 — LISTINGS
+       ================================================================= -->
+  <h2 id="listings"><span class="num">8</span>Complete Code Listings</h2>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption class="visually-hidden">Every file this lesson creates or modifies.</caption>
+    <thead><tr><th>path</th><th>state</th><th>purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>engine/include/engine/core/actions.hpp</code></td><td>new</td>
+          <td><code>action_id</code>, <code>binding</code>, the <code>input_snapshot</code>
+              concept, and <code>action_map</code> including the templated
+              <code>update</code></td></tr>
+      <tr><td><code>engine/src/core/actions.cpp</code></td><td>new</td>
+          <td>declaring, finding, binding, and the queries</td></tr>
+      <tr><td><code>engine/include/engine/platform/app.hpp</code></td><td>modified</td>
+          <td>the <code>on_input()</code> hook</td></tr>
+      <tr><td><code>engine/src/platform/app.cpp</code></td><td>modified</td>
+          <td>…and where in the frame it is called</td></tr>
+      <tr><td><code>engine/CMakeLists.txt</code></td><td>modified</td>
+          <td>one source file</td></tr>
+      <tr><td><code>demos/ecs_swarm/main.cpp</code></td><td>modified</td>
+          <td>no scancodes in the gameplay code; a camera on axes; a runtime rebind</td></tr>
+      <tr><td><code>scratch/verify_510.cpp</code></td><td>new</td>
+          <td>62 checks in seven sections</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    The engine's public header count goes from 53 to <strong>54</strong>, and this is the first
+    lesson since 5.5 to add a <em>source</em> file — which is why <code>engine/CMakeLists.txt</code>
+    changes at all. The reason it has one is in the file's own header comment: the mapping logic
+    is real per-frame work, and a header-only version would put that loop into every translation
+    unit that asks a question about input.
+  </p>
+
+    <figure class="listing">
+    <figcaption>
+      <span class="path">engine/include/engine/core/actions.hpp</span>
+      <span class="tag new">new</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// engine/include/engine/core/actions.hpp — what the player MEANT, not which key they hit.
+//
+// Lesson 5.10. Every program in this course so far reads input like this:
+//
+//     case SDL_SCANCODE_C: toggle_camera_ride(); break;
+//
+// which is fine for a demo and wrong for a game, in four separate ways:
+//
+//   1. IT CANNOT BE REBOUND. The scancode is compiled in. A left-handed player, a
+//      player on a keyboard where that key is awkward, a player with a disability
+//      that makes it unreachable — all of them are out of luck, and the fix is a
+//      recompile.
+//   2. IT IS ABOUT ONE DEVICE. A gamepad has no scancodes. Adding one means a
+//      second switch that must be kept in step with the first, forever, by hand.
+//   3. IT CANNOT BE RECORDED. A replay system wants to store what the player
+//      MEANT — &quot;jump&quot; — because the binding may have changed between the
+//      recording and the playback. Storing `SDL_SCANCODE_SPACE` records a fact
+//      about a keyboard rather than a fact about the game.
+//   4. IT SAYS THE WRONG THING. `if (key_pressed(SDL_SCANCODE_SPACE))` inside a
+//      jump handler is a sentence about hardware in a file about jumping. That is
+//      not a performance problem or a portability problem; it is the code failing
+//      to describe what it does, which is the kind of problem that compounds.
+//
+// One level of indirection fixes all four:
+//
+//     an ACTION is a NAME          &quot;jump&quot;, &quot;camera_yaw&quot;
+//     a BINDING maps a signal onto it   Space -&gt; jump, +1
+//     a FRAME publishes the values      jump = 1.0, held, pressed this frame
+//
+// THE ONE MECHANISM. Every binding contributes a SIGNED FLOAT to its action, and
+// an action&#x27;s value is the sum of its bindings&#x27; contributions. That single rule
+// covers both things an input system has to do:
+//
+//     jump    &lt;- Space (+1)                  value 0 or 1; ask held()/pressed()
+//     steer   &lt;- A (-1) and D (+1)           value -1, 0 or +1; ask value()
+//     look_x  &lt;- mouse delta x (x sensitivity) value unbounded; ask value()
+//
+// There is no &quot;button action&quot; and &quot;axis action&quot; mode to choose between, because
+// the second is what the first already is once you allow a scale.
+//
+// WHAT THIS FILE DOES NOT DO, and it is the motivation in point 2 above, so it is
+// said out loud rather than buried: THERE IS NO GAMEPAD SUPPORT HERE. Not because
+// the design cannot take one — `binding::source` has room and `action_map::update`
+// has one arm to add — but because it could not be RUN on the machine this was
+// written on, and untested device code in an engine is a liability rather than a
+// feature. Lesson 5.10 §7 says exactly what would need writing and verifying, and
+// Exercise 10.2 does it. What IS demonstrated here is the property the gamepad
+// claim rests on: one action, several bindings, on more than one device.
+
+#pragma once
+
+#include &lt;engine/core/input.hpp&gt;
+
+#include &lt;SDL3/SDL.h&gt;
+
+#include &lt;cmath&gt;
+#include &lt;concepts&gt;
+#include &lt;cstddef&gt;
+#include &lt;cstdint&gt;
+#include &lt;span&gt;
+#include &lt;string&gt;
+#include &lt;string_view&gt;
+#include &lt;vector&gt;
+
+namespace engine {
+
+// ---- Naming an action ------------------------------------------------------
+
+/// A declared action, as a small integer.
+///
+/// A handle, not a string, for the reason every hot path in this engine is an
+/// array index: `value(jump)` is `values_[jump.index]`, and comparing two ids is
+/// comparing two `uint16_t`. The NAME still exists — `action_map::name_of()` —
+/// because serialization, a rebinding UI and a debug HUD all need it, and none of
+/// them is on a hot path.
+///
+/// Stable for the lifetime of the `action_map` that issued it. Declaring the same
+/// name twice returns the same id, so a subsystem may declare the actions it uses
+/// without knowing whether somebody else already did.
+struct action_id
+{
+    static constexpr std::uint16_t k_invalid = 0xFFFFu;
+
+    std::uint16_t index = k_invalid;
+
+    [[nodiscard]] constexpr bool valid() const { return index != k_invalid; }
+    [[nodiscard]] explicit constexpr operator bool() const { return valid(); }
+    [[nodiscard]] friend constexpr bool operator==(action_id, action_id) = default;
+};
+
+/// Where a binding&#x27;s value comes from.
+///
+/// The extension point. A gamepad button and a gamepad axis are two more
+/// enumerators and two more arms in `update()`; see the note at the top of this
+/// file for why they are not here.
+enum class input_source : std::uint8_t
+{
+    key,            ///&lt; `code` is an SDL_Scancode. Contributes `scale` while held.
+    mouse_button,   ///&lt; `code` is 1..5 (SDL_BUTTON_LEFT…). Contributes `scale` while held.
+    mouse_axis,     ///&lt; `code` is a `mouse_axis`. Contributes delta x `scale`.
+};
+
+/// Which continuous quantity a `mouse_axis` binding reads.
+///
+/// All four are DELTAS — how much the quantity moved during this frame — because
+/// an absolute cursor position is not a useful thing to bind an action to. The
+/// deltas for `x` and `y` are computed by `action_map` from consecutive frames&#x27;
+/// positions; the wheel is already a per-frame delta in `input`.
+enum class mouse_axis : std::uint8_t
+{
+    x,        ///&lt; cursor movement right, in window pixels
+    y,        ///&lt; cursor movement DOWN, in window pixels (+Y is down — 1.5&#x27;s convention)
+    wheel_x,
+    wheel_y,
+};
+
+/// One signal, mapped onto one action.
+///
+/// `scale` is what makes a single mechanism cover buttons and axes: bind a key
+/// with +1 and another with −1 and the action is a two-way axis; bind a mouse
+/// delta with 0.2 and the action is a sensitivity-scaled look control.
+///
+/// Trivially copyable and free of pointers, so a binding table is
+/// `std::vector&lt;binding&gt;` and Module 8&#x27;s serializer will write it as bytes.
+struct binding
+{
+    action_id action;
+    input_source source = input_source::key;
+    std::int32_t code = 0;
+    float scale = 1.0f;
+};
+
+/// The threshold at which an action counts as &quot;held&quot;.
+///
+/// A digital binding contributes ±1, so anything above zero would do; 0.5 is
+/// chosen so that an analog source (a gamepad trigger, when one arrives) has to
+/// be pushed halfway rather than brushed. `held()` compares the ABSOLUTE value,
+/// so a two-way axis is &quot;held&quot; when pushed either way — legal, occasionally
+/// useful, and rarely what you want to ask of an axis.
+inline constexpr float k_action_press_threshold = 0.5f;
+
+/// How many unconsumed presses of one action are remembered. See
+/// `action_map::consume_pressed`.
+inline constexpr std::uint8_t k_action_press_queue = 4;
+
+// ---- What `update` needs -----------------------------------------------------
+
+/// Anything that can answer the six questions a binding table asks.
+///
+/// `engine::input` satisfies this without being told about it — no base class, no
+/// registration, and not one character changed in Lesson 1.2&#x27;s header. That is
+/// the property a concept has and an interface does not: it describes a shape,
+/// and types that already have that shape are already members.
+///
+/// The reason it exists at all is testability. `input::update()` samples SDL&#x27;s
+/// live keyboard state, so a test that wants a key held would have to convince
+/// SDL that a key is held. With this, the test writes a struct with six functions
+/// and the mapping logic is exercised exactly as it ships.
+template &lt;typename T&gt;
+concept input_snapshot = requires(const T&amp; t, SDL_Scancode key, int button) {
+    { t.key_down(key) } -&gt; std::convertible_to&lt;bool&gt;;
+    { t.mouse_down(button) } -&gt; std::convertible_to&lt;bool&gt;;
+    { t.mouse_x() } -&gt; std::convertible_to&lt;float&gt;;
+    { t.mouse_y() } -&gt; std::convertible_to&lt;float&gt;;
+    { t.wheel_x() } -&gt; std::convertible_to&lt;float&gt;;
+    { t.wheel_y() } -&gt; std::convertible_to&lt;float&gt;;
+};
+
+static_assert(input_snapshot&lt;input&gt;,
+              &quot;engine::input must satisfy input_snapshot — if this fires, input.hpp changed &quot;
+              &quot;one of the six accessors the action map reads&quot;);
+
+// ---- The map ---------------------------------------------------------------
+
+/// Declared actions, their bindings, and this frame&#x27;s values.
+///
+/// **Not a singleton, and not owned by the engine.** It is a value: a program
+/// holds one, a two-player game holds two, and a game that wants per-entity input
+/// puts one in a component and lets `view&lt;player_input&gt;` find it. That is the
+/// same argument `asset_store` made in Lesson 5.5 and `registry` in 5.8, and it
+/// is the reason none of them is reachable through a global — the engine does not
+/// know how many of a thing a game needs, so it declines to decide.
+///
+/// **The per-frame contract is `input`&#x27;s, one layer up**, and it is the same
+/// contract for the same reason (Lesson 1.2):
+///
+///   1. drain the SDL event queue into `input::feed_event`
+///   2. `input::update()`
+///   3. `action_map::update(input)`   &lt;- exactly once, here
+///   4. query as much as you like; the answers are frozen until the next update
+///
+/// Step 3 must follow step 2, because an action&#x27;s value is derived from the
+/// input snapshot and a map updated first would publish last frame&#x27;s answer.
+class action_map
+{
+public:
+    // ---- Declaring ---------------------------------------------------------
+
+    /// Declare an action, or return the id it already has.
+    ///
+    /// Idempotent on purpose: two subsystems may both declare `&quot;quit&quot;` without
+    /// coordinating, and a scene file that names an action the program already
+    /// knows about must not create a second one. Returns an invalid id only if
+    /// the name is empty or the map is full (65,534 actions).
+    [[nodiscard]] action_id declare(std::string_view name);
+
+    /// The id for `name`, or an invalid id. Does NOT declare — a lookup that
+    /// created things would make a typo in a config file into a silent new action
+    /// with no bindings and no behaviour.
+    [[nodiscard]] action_id find(std::string_view name) const;
+
+    /// The name `id` was declared with, or an empty view.
+    [[nodiscard]] std::string_view name_of(action_id id) const;
+
+    [[nodiscard]] std::size_t action_count() const { return names_.size(); }
+
+    // ---- Binding -----------------------------------------------------------
+
+    /// Bind a key. `scale` is the value it contributes while held: +1 for a
+    /// button, ±1 for the two halves of an axis.
+    bool bind_key(action_id id, SDL_Scancode key, float scale = 1.0f);
+
+    /// Bind a mouse button, 1..5 (`SDL_BUTTON_LEFT` … `SDL_BUTTON_X2`).
+    bool bind_mouse_button(action_id id, int button, float scale = 1.0f);
+
+    /// Bind a mouse or wheel delta. `scale` is the sensitivity, and it is the
+    /// caller&#x27;s job to pick one that suits the units — a pixel of cursor
+    /// movement and a notch of wheel are not comparable quantities.
+    bool bind_mouse_axis(action_id id, mouse_axis axis, float scale);
+
+    /// Remove every binding for `id`. Returns how many went.
+    ///
+    /// The first half of a rebind: clear, then bind. Two calls rather than one
+    /// `rebind()`, because an action may legitimately keep several bindings and a
+    /// single-call rebind would have to guess which one is being replaced.
+    std::size_t clear_bindings(action_id id);
+
+    /// Every binding, in the order they were added.
+    ///
+    /// This is what a settings screen enumerates and what Module 8&#x27;s serializer
+    /// writes. It is deliberately a flat list rather than a per-action map: the
+    /// natural question a rebinding UI asks is &quot;what is bound to this action&quot;,
+    /// which is a filter over a short list, and the natural question a conflict
+    /// checker asks is &quot;what else is bound to this key&quot;, which a per-action map
+    /// would answer badly.
+    [[nodiscard]] std::span&lt;const binding&gt; bindings() const { return bindings_; }
+
+    /// How many bindings `id` has.
+    [[nodiscard]] std::size_t binding_count(action_id id) const;
+
+    // ---- The frame ---------------------------------------------------------
+
+    /// Publish one frame of actions. Call once per frame, AFTER `input::update()`.
+    ///
+    /// **Templated on the SHAPE of its argument rather than its type**, and the
+    /// reason is worth more than the six lines it costs. This function needs
+    /// something that can answer six questions — is this key down, is this mouse
+    /// button down, where is the cursor, how far has the wheel turned. `input`
+    /// is one such thing. A test&#x27;s hand-built fake is another, and without this
+    /// the fake would be impossible: `input::update()` samples SDL&#x27;s live
+    /// keyboard state, so a test that wanted a key held would have to make SDL
+    /// believe a key was held.
+    ///
+    /// The `input_snapshot` concept says exactly that requirement, in code the
+    /// compiler checks, so a type that nearly satisfies it fails at the
+    /// definition with a readable message rather than deep inside a template.
+    /// `engine::input` satisfies it without knowing this file exists — no base
+    /// class, no registration, no change to Lesson 1.2&#x27;s header.
+    ///
+    /// It is also free. There is no virtual call and no indirection: the compiler
+    /// instantiates one copy per source type and inlines the accessors, so the
+    /// production path compiles to exactly what a hand-written
+    /// `update(const input&amp;)` would have.
+    template &lt;input_snapshot Source&gt;
+    void update(const Source&amp; in)
+    {
+        // Last frame&#x27;s levels become the comparison. Every edge below is derived
+        // from this pair, and deriving them from the BINDINGS instead would be
+        // wrong in a way that is easy to miss — see the note after the loop.
+        held_prev_ = held_;
+
+        const float dx = have_mouse_ ? in.mouse_x() - mouse_x_ : 0.0f;
+        const float dy = have_mouse_ ? in.mouse_y() - mouse_y_ : 0.0f;
+        mouse_x_ = in.mouse_x();
+        mouse_y_ = in.mouse_y();
+        have_mouse_ = true;
+
+        for (float&amp; v : values_) { v = 0.0f; }
+
+        for (const binding&amp; b : bindings_)
+        {
+            if (!in_range(b.action)) { continue; }
+
+            float contribution = 0.0f;
+            switch (b.source)
+            {
+            case input_source::key:
+                if (in.key_down(static_cast&lt;SDL_Scancode&gt;(b.code))) { contribution = b.scale; }
+                break;
+
+            case input_source::mouse_button:
+                if (in.mouse_down(b.code)) { contribution = b.scale; }
+                break;
+
+            case input_source::mouse_axis:
+                switch (static_cast&lt;mouse_axis&gt;(b.code))
+                {
+                case mouse_axis::x:       contribution = dx * b.scale; break;
+                case mouse_axis::y:       contribution = dy * b.scale; break;
+                case mouse_axis::wheel_x: contribution = in.wheel_x() * b.scale; break;
+                case mouse_axis::wheel_y: contribution = in.wheel_y() * b.scale; break;
+                }
+                break;
+            }
+
+            values_[b.action.index] += contribution;
+        }
+
+        // THE EDGES COME FROM THE ACTION&#x27;S LEVEL, NOT FROM ANY BINDING&#x27;S EDGE,
+        // and the difference shows up the moment an action has two bindings. Bind
+        // &quot;jump&quot; to both Space and the left mouse button, then: hold Space (one
+        // rising edge, correct); press the mouse while still holding Space (the
+        // action was ALREADY active, so there must be NO second edge); release
+        // Space (still active through the mouse, so NO falling edge); release the
+        // mouse (one falling edge). Deriving from bindings would give two rising
+        // edges and a double jump. Deriving from the level gives one, because the
+        // level is what the question was about.
+        for (std::size_t i = 0; i &lt; values_.size(); ++i)
+        {
+            const bool now = std::fabs(values_[i]) &gt;= k_action_press_threshold;
+            const bool was = held_prev_[i] != 0u;
+            held_[i] = now ? 1u : 0u;
+
+            if (now &amp;&amp; !was &amp;&amp; queued_[i] &lt; k_action_press_queue) { ++queued_[i]; }
+        }
+    }
+
+    /// Forget every value, edge and queued press.
+    ///
+    /// For a scene change or a window losing focus: without it, a key held while
+    /// the player alt-tabs away is still &quot;held&quot; when they come back, and the
+    /// release edge that should have fired never did.
+    void reset();
+
+    // ---- Asking ------------------------------------------------------------
+
+    /// The summed value of every binding. Meaningful for an axis; for a button,
+    /// prefer `held()` — two keys bound to one button action both held sum to 2.
+    [[nodiscard]] float value(action_id id) const;
+
+    /// Is the action active right now? **A level** (Lesson 1.2).
+    [[nodiscard]] bool held(action_id id) const;
+
+    /// Did it become active this frame? **An edge, and it belongs to the FRAME.**
+    ///
+    /// Read this in `on_event` or `on_frame`, never in `on_fixed_step` — the step
+    /// runs zero or more times per frame (Lesson 1.4), so an edge read there fires
+    /// twice on a two-step frame and not at all on a zero-step one. That is the
+    /// same rule `input::key_pressed` carries, inherited unchanged because the
+    /// underlying hazard is unchanged.
+    ///
+    /// If you need an edge inside the step — and physics genuinely does — use
+    /// `consume_pressed()`, which exists precisely because this function cannot
+    /// safely be used there.
+    [[nodiscard]] bool pressed(action_id id) const;
+
+    /// Did it become inactive this frame? The falling edge, same frame rule.
+    [[nodiscard]] bool released(action_id id) const;
+
+    // ---- The edge that survives the step -----------------------------------
+
+    /// Take one queued press, if there is one. **Safe inside `on_fixed_step`.**
+    ///
+    /// THE PROBLEM THIS SOLVES is Lesson 1.4&#x27;s, and it is worth stating in full
+    /// because it is the single most-often-got-wrong thing in a fixed-timestep
+    /// engine. `on_fixed_step` runs a variable number of times per frame:
+    ///
+    ///     a frame with TWO steps   -&gt; `pressed()` is true in both, and the player
+    ///                                 jumps twice for one press
+    ///     a frame with ZERO steps  -&gt; `pressed()` was true during a frame in which
+    ///                                 no step ran, and the jump is LOST
+    ///
+    /// Neither is fixable by the caller without keeping state, so the map keeps it.
+    /// Every rising edge pushes one press onto a small queue; this function pops
+    /// one and returns true. A two-step frame consumes it once and the second step
+    /// gets nothing; a zero-step frame leaves it queued until a step happens.
+    ///
+    /// **The queue is `k_action_press_queue` deep and presses past that are
+    /// dropped**, which is a decision rather than an oversight: an unbounded queue
+    /// turns a hitch into a burst of queued jumps arriving after the player has
+    /// stopped asking, which feels worse than losing them. Four is enough to
+    /// survive a stutter and short enough not to feel like a recording. A fighting
+    /// game with a deliberate input buffer would raise it and call the number a
+    /// design parameter, which is exactly what it is.
+    [[nodiscard]] bool consume_pressed(action_id id);
+
+    /// How many presses are queued and unconsumed. Diagnostics, and the way a
+    /// test can prove the queue is doing what it claims.
+    [[nodiscard]] std::uint8_t pending_presses(action_id id) const;
+
+    /// Drop every queued press without acting on them. Call it when a step is
+    /// deliberately skipped — a pause menu, a loading screen — so that resuming
+    /// does not replay what was queued while nothing was listening.
+    void clear_pending();
+
+private:
+    [[nodiscard]] bool in_range(action_id id) const { return id.index &lt; names_.size(); }
+
+    void grow_to_fit();
+
+    std::vector&lt;std::string&gt; names_;
+    std::vector&lt;binding&gt; bindings_;
+
+    // Parallel arrays, indexed by action_id::index. Three states rather than one,
+    // for the same reason `input` keeps two snapshots: an edge is a comparison
+    // between frames, and deriving it needs both sides.
+    std::vector&lt;float&gt; values_;
+    std::vector&lt;std::uint8_t&gt; held_;
+    std::vector&lt;std::uint8_t&gt; held_prev_;
+    std::vector&lt;std::uint8_t&gt; queued_;
+
+    // The mouse deltas are this map&#x27;s business rather than `input`&#x27;s, because
+    // `input` publishes a cursor POSITION and a delta needs two of them. Keeping
+    // the previous position here means `input` does not grow a field that only one
+    // caller wants.
+    float mouse_x_ = 0.0f;
+    float mouse_y_ = 0.0f;
+    bool have_mouse_ = false;
+};
+
+}   // namespace engine
+</code></pre>
+  </figure>
+
+    <figure class="listing">
+    <figcaption>
+      <span class="path">engine/src/core/actions.cpp</span>
+      <span class="tag new">new</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// engine/src/core/actions.cpp — the action map&#x27;s implementation.
+//
+// Lesson 5.10. `update()` is NOT here — it is a template in the header, because
+// it is parameterised on the SHAPE of its input source rather than on `input`
+// itself, which is what makes the mapping logic testable without persuading SDL
+// that a key is held. See the `input_snapshot` concept.
+//
+// What is left is declaration, lookup and binding: the operations that happen
+// tens of times at start-up rather than thousands of times a second, and that
+// therefore belong in a translation unit rather than in every caller.
+
+#include &lt;engine/core/actions.hpp&gt;
+
+#include &lt;engine/core/assert.hpp&gt;
+#include &lt;engine/core/log.hpp&gt;
+
+#include &lt;algorithm&gt;
+#include &lt;cmath&gt;
+
+namespace engine {
+
+// ---- Declaring -------------------------------------------------------------
+
+action_id action_map::declare(std::string_view name)
+{
+    if (name.empty())
+    {
+        ENGINE_LOG_ERROR(log_core, &quot;action_map: an action must have a name&quot;);
+        return {};
+    }
+
+    if (const action_id existing = find(name); existing.valid()) { return existing; }
+
+    if (names_.size() &gt;= action_id::k_invalid)
+    {
+        ENGINE_LOG_ERROR(log_core, &quot;action_map: out of action ids (%u max)&quot;,
+                         action_id::k_invalid);
+        return {};
+    }
+
+    names_.emplace_back(name);
+    grow_to_fit();
+    return action_id{static_cast&lt;std::uint16_t&gt;(names_.size() - 1u)};
+}
+
+action_id action_map::find(std::string_view name) const
+{
+    // A linear scan, and it is the right structure. Actions are declared once at
+    // start-up and number in the dozens; the hot path is `value(id)`, which is an
+    // array index. A hash map here would optimise the operation that happens
+    // hundreds of times over the lifetime of the program and leave the one that
+    // happens thousands of times a second exactly where it was.
+    for (std::size_t i = 0; i &lt; names_.size(); ++i)
+    {
+        if (names_[i] == name) { return action_id{static_cast&lt;std::uint16_t&gt;(i)}; }
+    }
+    return {};
+}
+
+std::string_view action_map::name_of(action_id id) const
+{
+    return in_range(id) ? std::string_view{names_[id.index]} : std::string_view{};
+}
+
+void action_map::grow_to_fit()
+{
+    values_.resize(names_.size(), 0.0f);
+    held_.resize(names_.size(), 0u);
+    held_prev_.resize(names_.size(), 0u);
+    queued_.resize(names_.size(), 0u);
+}
+
+// ---- Binding ---------------------------------------------------------------
+
+bool action_map::bind_key(action_id id, SDL_Scancode key, float scale)
+{
+    if (!in_range(id)) { return false; }
+    if (key &lt; 0 || static_cast&lt;int&gt;(key) &gt;= SDL_SCANCODE_COUNT)
+    {
+        ENGINE_LOG_ERROR(log_core, &quot;action_map: scancode %d is out of range for action &#x27;%s&#x27;&quot;,
+                         static_cast&lt;int&gt;(key), names_[id.index].c_str());
+        return false;
+    }
+    bindings_.push_back(binding{id, input_source::key, static_cast&lt;std::int32_t&gt;(key), scale});
+    return true;
+}
+
+bool action_map::bind_mouse_button(action_id id, int button, float scale)
+{
+    if (!in_range(id)) { return false; }
+    if (button &lt; 1 || button &gt; 5)
+    {
+        ENGINE_LOG_ERROR(log_core, &quot;action_map: mouse button %d is out of range (1..5)&quot;, button);
+        return false;
+    }
+    bindings_.push_back(binding{id, input_source::mouse_button, button, scale});
+    return true;
+}
+
+bool action_map::bind_mouse_axis(action_id id, mouse_axis axis, float scale)
+{
+    if (!in_range(id)) { return false; }
+    bindings_.push_back(
+        binding{id, input_source::mouse_axis, static_cast&lt;std::int32_t&gt;(axis), scale});
+    return true;
+}
+
+std::size_t action_map::clear_bindings(action_id id)
+{
+    if (!in_range(id)) { return 0; }
+    const std::size_t before = bindings_.size();
+    bindings_.erase(std::remove_if(bindings_.begin(), bindings_.end(),
+                                   [id](const binding&amp; b) { return b.action == id; }),
+                    bindings_.end());
+    return before - bindings_.size();
+}
+
+std::size_t action_map::binding_count(action_id id) const
+{
+    std::size_t n = 0;
+    for (const binding&amp; b : bindings_)
+    {
+        if (b.action == id) { ++n; }
+    }
+    return n;
+}
+
+// ---- The frame -------------------------------------------------------------
+
+void action_map::reset()
+{
+    std::fill(values_.begin(), values_.end(), 0.0f);
+    std::fill(held_.begin(), held_.end(), 0u);
+    std::fill(held_prev_.begin(), held_prev_.end(), 0u);
+    std::fill(queued_.begin(), queued_.end(), 0u);
+    have_mouse_ = false;
+}
+
+// ---- Asking ----------------------------------------------------------------
+
+float action_map::value(action_id id) const
+{
+    return in_range(id) ? values_[id.index] : 0.0f;
+}
+
+bool action_map::held(action_id id) const
+{
+    return in_range(id) &amp;&amp; held_[id.index] != 0u;
+}
+
+bool action_map::pressed(action_id id) const
+{
+    return in_range(id) &amp;&amp; held_[id.index] != 0u &amp;&amp; held_prev_[id.index] == 0u;
+}
+
+bool action_map::released(action_id id) const
+{
+    return in_range(id) &amp;&amp; held_[id.index] == 0u &amp;&amp; held_prev_[id.index] != 0u;
+}
+
+bool action_map::consume_pressed(action_id id)
+{
+    if (!in_range(id) || queued_[id.index] == 0u) { return false; }
+    --queued_[id.index];
+    return true;
+}
+
+std::uint8_t action_map::pending_presses(action_id id) const
+{
+    return in_range(id) ? queued_[id.index] : std::uint8_t{0};
+}
+
+void action_map::clear_pending()
+{
+    std::fill(queued_.begin(), queued_.end(), 0u);
+}
+
+}   // namespace engine
+</code></pre>
+  </figure>
+
+    <figure class="listing">
+    <figcaption>
+      <span class="path">demos/ecs_swarm/main.cpp</span>
+      <span class="tag modified">modified</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// demos/ecs_swarm/main.cpp — composition, and now structure.
+//
+// Lesson 5.8 built this program to make one argument: an entity is which
+// components it has, and twenty-four of the things on screen are invisible
+// because they lack a `geometry` rather than because anything hid them. That
+// argument still stands and the entities that made it are still here.
+//
+// LESSON 5.9 ADDS THE ONE THING A FLAT WORLD CANNOT DO. Every placement used to
+// be in world space, which is fine for a swarm orbiting an origin and useless the
+// moment one thing has to move with another. Now:
+//
+//     sun ── ring member ── moon          three levels, and the middle one is
+//      │         │                        where the interesting sentence lives
+//      │         └── (every sixth)
+//      ├── waypoint (invisible mover)
+//      └── camera   (when you press [C])
+//
+// A moon&#x27;s world position is computed by NOBODY. It falls out of
+//
+//     world(moon) = world(planet) * local(moon)
+//
+// which is the composition rule and the whole of a scene graph. Press [F] and
+// the sun drifts; every ring member, every moon and every waypoint follows,
+// because following is not a feature anyone implemented — it is what &quot;my
+// placement is relative to my parent&quot; MEANS.
+//
+// THE CAMERA IS AN ENTITY NOW, and that is the other half of the lesson. It has
+// a `transform`, a `world_transform`, a `camera` and — while it is the one being
+// rendered from — an `active_camera` tag. Press [C] and it is PARENTED to a ring
+// member: it rides along, resolved by the same pass as everything else, and the
+// renderer never learns that anything changed.
+//
+// LESSON 5.10 TOOK THE KEYBOARD OUT OF THE GAMEPLAY CODE. Every one of those
+// bracketed keys above used to be an `SDL_SCANCODE_*` in a switch; they are now
+// ACTIONS, declared by name and bound in one place. Nothing below asks about a
+// key. Press [K] and the spawn action is rebound from Space to Enter at runtime,
+// which is a thing the old switch could not do at any price.
+//
+// It also demonstrates the two ways to read an edge, and WHY there are two:
+//   - the UI toggles are read in `on_input`, which runs exactly once per frame
+//   - `spawn` is read with `consume_pressed` inside `on_fixed_step`, which runs
+//     zero or more times per frame — so a two-step frame must not spawn twice
+//     and a zero-step frame must not lose the press
+//
+//     cmake --build build --target ecs_swarm
+//     ./build/demos/ecs_swarm                        a window
+//     ./build/demos/ecs_swarm --shot swarm.ppm       one frame, no window
+
+#include &lt;engine/asset/asset_store.hpp&gt;
+#include &lt;engine/core/actions.hpp&gt;
+#include &lt;engine/ecs/camera.hpp&gt;
+#include &lt;engine/ecs/hierarchy.hpp&gt;
+#include &lt;engine/ecs/registry.hpp&gt;
+#include &lt;engine/gfx/colour.hpp&gt;
+#include &lt;engine/gfx/depth_buffer.hpp&gt;
+#include &lt;engine/gfx/image.hpp&gt;
+#include &lt;engine/gfx/light.hpp&gt;
+#include &lt;engine/gfx/mesh.hpp&gt;
+#include &lt;engine/gfx/projector.hpp&gt;
+#include &lt;engine/gfx/raster.hpp&gt;
+#include &lt;engine/gfx/scene.hpp&gt;
+#include &lt;engine/gfx/soft_renderer.hpp&gt;
+#include &lt;engine/gfx/viewport.hpp&gt;
+#include &lt;engine/math/mat4.hpp&gt;
+#include &lt;engine/math/transform.hpp&gt;
+#include &lt;engine/platform/app.hpp&gt;
+
+#include &lt;engine/platform/main.hpp&gt;
+
+#include &lt;cmath&gt;
+#include &lt;vector&gt;
+
+namespace {
+
+using engine::ecs::entity;
+
+// ===========================================================================
+//  THE COMPONENTS
+// ===========================================================================
+//
+// Six demo components, plus four the engine now supplies: `parent` and
+// `world_transform` from ecs/hierarchy.hpp, `camera` and `active_camera` from
+// ecs/camera.hpp. Every one of them is a plain struct with no base class, no
+// virtual anything and no registration macro — `registry` asks a component type
+// for nothing but that it be movable.
+
+/// Where an entity is, **relative to its parent**.
+///
+/// The same `engine::transform` as in Lesson 5.8, and the same alias — but the
+/// meaning widened, and it widened without the type changing by one character.
+/// That was designed for in Lesson 2.8, which is why the function that turns one
+/// into a matrix is called `parent_from_local` and not `world_from_local`. An
+/// entity with no `parent` component has the world as its parent, so 5.8&#x27;s flat
+/// interpretation is the special case rather than the rule.
+using placement = engine::transform;
+
+/// What shape an entity is, and whether it is closed enough to cull.
+struct geometry
+{
+    engine::mesh_handle mesh;
+    bool closed = true;
+};
+
+/// What an entity looks like: `scene_object`&#x27;s `tint` and `surface`, which have
+/// always described the same thing and never been the same thing.
+struct material
+{
+    Uint32 tint = 0xFFFFFFFFu;
+    engine::specular surface{};
+};
+
+/// A circular path — now around the entity&#x27;s PARENT rather than around the world.
+///
+/// Nothing in this struct changed in Lesson 5.9, and nothing in `orbit_system`
+/// changed either. What changed is where the number it writes ends up meaning
+/// something, which is the cheapest possible demonstration that a hierarchy is a
+/// property of the composition and not of the data.
+struct orbit
+{
+    float radius = 1.0f;
+    float speed = 1.0f;
+    float phase = 0.0f;
+    float tilt = 0.0f;
+};
+
+/// A tumble, integrated over the fixed step.
+///
+/// Two Euler angles rather than an axis and an angle, because axis-angle rotation
+/// does not exist in this engine yet — Module 7 derives it by way of quaternions.
+/// The component does not care: when that lands, this becomes
+/// `{ quat orientation; vec3 angular_velocity; }` and not one line of `registry`,
+/// `pool`, `view` or `hierarchy` changes.
+struct spin
+{
+    float rate = 1.0f;
+    float wobble = 0.5f;
+    float angle = 0.0f;
+};
+
+/// Seconds until this entity destroys itself. Only the sparks have one.
+struct lifetime
+{
+    float remaining = 1.0f;
+};
+
+/// The orbit angles a free camera flies on. One entity has this; it is a
+/// component like any other, and the camera is an entity like any other.
+struct camera_orbit
+{
+    float radius = 9.0f;
+    float azimuth = 0.0f;
+    float elevation = 0.32f;
+    engine::vec3 target{0.0f, 0.0f, 0.0f};
+};
+
+// ===========================================================================
+//  THE SYSTEMS
+// ===========================================================================
+
+/// Put every orbiting entity where its orbit says — **in its parent&#x27;s space**.
+///
+/// Byte for byte the function Lesson 5.8 shipped. It writes a `placement`, which
+/// used to be a world position and is now a local one, and it has no idea which.
+/// That is the point: a system that reads and writes local data does not need to
+/// know whether anything is parented to anything.
+void orbit_system(engine::ecs::registry&amp; world, float t)
+{
+    world.view&lt;placement, orbit&gt;().each([t](placement&amp; p, const orbit&amp; o) {
+        const float a = o.phase + o.speed * t;
+        // A circle of radius r in the x-z plane, tilted by `tilt` about the x
+        // axis: x is untouched by the tilt (it is the axis), and the y-z pair is
+        // the rotation. Multiplying x by cos(tilt) as well would give an ellipse
+        // that looks similar and is not a circle.
+        const float ct = std::cos(o.tilt);
+        const float st = std::sin(o.tilt);
+        p.position = {o.radius * std::cos(a),
+                      o.radius * std::sin(a) * st,
+                      o.radius * std::sin(a) * ct};
+    });
+}
+
+/// Advance every spinning entity by one simulation step.
+///
+/// Also unchanged — and worth pausing on, because the sun has one of these. A
+/// rotation applied to a parent rotates *its children&#x27;s whole coordinate frame*,
+/// so spinning the sun sweeps the entire ring around with it. Nothing in this
+/// function knows that.
+void spin_system(engine::ecs::registry&amp; world, float h)
+{
+    world.view&lt;placement, spin&gt;().each([h](placement&amp; p, spin&amp; s) {
+        s.angle += s.rate * h;
+        p.rotation = engine::rotation_y(s.angle) * engine::rotation_x(s.wobble * s.angle);
+    });
+}
+
+/// Age the sparks, and destroy the ones that have run out.
+///
+/// **The two-phase shape is the one rule a view imposes**, and Lesson 5.9 gives
+/// it a second reason to exist: destroying an entity changes the SHAPE of the
+/// hierarchy, so the resolver&#x27;s level order goes stale and has to be told. Both
+/// facts are handled in the same three lines.
+void lifetime_system(engine::ecs::registry&amp; world, engine::ecs::hierarchy&amp; tree, float h,
+                     std::vector&lt;entity&gt;&amp; scratch)
+{
+    scratch.clear();
+    world.view&lt;lifetime&gt;().each([h, &amp;scratch](entity e, lifetime&amp; l) {
+        l.remaining -= h;
+        if (l.remaining &lt;= 0.0f) { scratch.push_back(e); }
+    });
+    if (scratch.empty()) { return; }
+
+    for (entity e : scratch) { world.destroy(e); }
+    tree.mark_topology_changed();
+}
+
+/// Aim the free camera from its orbit angles.
+///
+/// `look_along` builds the transform that PUTS a camera somewhere looking at
+/// something — the inverse of Lesson 2.9&#x27;s question, which asked for the matrix
+/// that takes the world into the camera&#x27;s view. Writing the placement and letting
+/// `view_from_camera` invert it is what makes a camera an ordinary object.
+void camera_orbit_system(engine::ecs::registry&amp; world)
+{
+    world.view&lt;placement, camera_orbit&gt;().each([](placement&amp; p, const camera_orbit&amp; c) {
+        const engine::vec3 eye =
+            c.target + engine::vec3{c.radius * std::cos(c.elevation) * std::sin(c.azimuth),
+                                    c.radius * std::sin(c.elevation),
+                                    c.radius * std::cos(c.elevation) * std::cos(c.azimuth)};
+        p = engine::ecs::look_along(eye, c.target, {0.0f, 1.0f, 0.0f});
+    });
+}
+
+/// Turn everything visible into the `scene_object` array the renderer wants.
+///
+/// **The seam moved one level deeper and is still a seam.** In Lesson 5.8 this
+/// read a `placement` and copied it; now it reads a `world_transform` — a
+/// composed 4x4 — and has to get that matrix into a `scene_object`, which holds a
+/// `transform`.
+///
+/// The conversion below is EXACT and is a trick worth understanding rather than
+/// copying. `parent_from_local` builds `affine(columns scaled by `scale`,
+/// position)`, and `transform::rotation` is a general `mat3` with no orthonormality
+/// requirement — so setting the rotation to the matrix&#x27;s whole linear part and the
+/// scale to 1 reproduces any affine matrix bit for bit. It abuses the fact that
+/// the field is named `rotation` and typed `mat3`, which is precisely why it is a
+/// bridge and not a design. Module 6 gives the renderer a matrix directly and
+/// this function loses its last four lines.
+void render_system(engine::ecs::registry&amp; world, std::vector&lt;engine::scene_object&gt;&amp; out)
+{
+    out.clear();
+    world.view&lt;engine::ecs::world_transform, geometry, material&gt;().each(
+        [&amp;out](const engine::ecs::world_transform&amp; w, const geometry&amp; g, const material&amp; m) {
+            out.push_back(engine::scene_object{
+                .xform = {.position = engine::translation_of(w.matrix),
+                          .rotation = engine::linear_of(w.matrix),
+                          .scale = {1.0f, 1.0f, 1.0f}},
+                .geometry = g.mesh,
+                .name = &quot;entity&quot;,
+                .tint = m.tint,
+                .closed = g.closed,
+                .surface = m.surface});
+        });
+}
+
+// ===========================================================================
+//  THE PROGRAM
+// ===========================================================================
+
+constexpr int k_width = 480;
+constexpr int k_height = 270;
+constexpr Uint32 k_background = 0xFF0C0E14u;   // pack_argb(12, 14, 20)
+
+constexpr int k_ring_count = 96;
+constexpr int k_waypoint_count = 24;
+constexpr int k_spark_burst = 32;
+constexpr int k_moons_every = 6;     ///&lt; every sixth ring member gets moons
+constexpr int k_moons_each = 2;
+
+/// A tiny linear congruential generator, seeded by hand.
+///
+/// Deterministic on purpose: `--shot` has to produce the same picture on every
+/// machine and every run, and `std::rand` is neither seeded the same way
+/// everywhere nor required to produce the same sequence. Numerical Recipes&#x27;
+/// constants; good enough to scatter a swarm and not good enough for anything
+/// else, which is stated here so nobody borrows it for a simulation.
+class lcg
+{
+public:
+    explicit constexpr lcg(std::uint32_t seed) : state_(seed) {}
+
+    [[nodiscard]] std::uint32_t next()
+    {
+        state_ = state_ * 1664525u + 1013904223u;
+        return state_;
+    }
+
+    /// Uniform-ish in [lo, hi).
+    [[nodiscard]] float range(float lo, float hi)
+    {
+        const float u = static_cast&lt;float&gt;(next() &gt;&gt; 8) / static_cast&lt;float&gt;(1u &lt;&lt; 24);
+        return lo + u * (hi - lo);
+    }
+
+private:
+    std::uint32_t state_;
+};
+
+class swarm_app final : public engine::app
+{
+public:
+    [[nodiscard]] engine::app_config configure(int argc, char* argv[]) override
+    {
+        for (int i = 1; i &lt; argc; ++i)
+        {
+            if (SDL_strcmp(argv[i], &quot;--shot&quot;) == 0 &amp;&amp; i + 1 &lt; argc) { shot_path_ = argv[++i]; }
+        }
+
+        return {.title = &quot;ecs_swarm — one world, ten components, three levels&quot;,
+                .draw_to = (shot_path_ != nullptr) ? engine::surface::headless
+                                                   : engine::surface::renderer,
+                .fb_width = k_width,
+                .fb_height = k_height};
+    }
+
+    [[nodiscard]] bool on_start() override
+    {
+        cube_ = assets_.insert_mesh(&quot;cube&quot;,
+                                    engine::with_normals(engine::cube_mesh(),
+                                                         engine::normal_style::flat));
+        ico_ = assets_.insert_mesh(&quot;icosahedron&quot;,
+                                   engine::with_normals(engine::icosahedron_mesh(),
+                                                        engine::normal_style::smooth));
+        torus_ = assets_.insert_mesh(&quot;torus&quot;, engine::make_torus(40, 20, 1.0f, 0.34f));
+
+        declare_actions();
+
+        lights_.key.direction = engine::normalised(engine::vec3{-0.4f, -0.7f, -0.55f});
+        lights_.key.colour = {1.0f, 0.97f, 0.90f};
+        lights_.key.intensity = 1.0f;
+
+        build_world();
+
+        // A pose that does not depend on the clock, so `--shot` is reproducible.
+        if (shot_path_ != nullptr) { t_ = 1.234f; step_world(1.234f); }
+        return true;
+    }
+
+    /// Map this frame&#x27;s input onto actions, then act on the frame-scoped edges.
+    ///
+    /// **This hook exists because of this file** (Lesson 5.10). It runs exactly
+    /// once per frame, after `in()` is published and before any simulation step,
+    /// which is the only moment at which updating an action map is correct: a map
+    /// updated in `on_frame` would leave every step of the frame reading last
+    /// frame&#x27;s actions.
+    ///
+    /// The toggles below are read with `pressed()`, the frame-scoped edge, and
+    /// that is safe HERE and nowhere else — Lesson 1.4&#x27;s rule, unchanged. The one
+    /// action that a step needs, `spawn`, is read differently; see
+    /// `on_fixed_step`.
+    void on_input() override
+    {
+        actions_.update(in());
+
+        if (actions_.pressed(a_quit_))     { request_quit(); }
+        if (actions_.pressed(a_materials_)) { toggle_materials(); }
+        if (actions_.pressed(a_orbits_))   { toggle_orbits(); }
+        if (actions_.pressed(a_cull_))     { cull_swarm(); }
+        if (actions_.pressed(a_rebuild_))  { build_world(); }
+        if (actions_.pressed(a_ride_))     { toggle_camera_ride(); }
+        if (actions_.pressed(a_detach_))   { toggle_detach(); }
+        if (actions_.pressed(a_drift_))    { drifting_ = !drifting_; }
+        if (actions_.pressed(a_rebind_))   { rebind_spawn(); }
+    }
+
+    void on_fixed_step(float h) override
+    {
+        if (shot_path_ != nullptr) { return; }
+
+        // THE ONE EDGE THAT IS READ IN A STEP, and it is read differently for a
+        // reason worth pausing on. `on_fixed_step` runs zero or more times per
+        // frame, so `pressed()` here would spawn twice on a two-step frame and
+        // lose the press entirely on a zero-step one. `consume_pressed` takes one
+        // queued press and returns true at most once per physical press, however
+        // the steps fall.
+        if (actions_.consume_pressed(a_spawn_)) { spawn_sparks(); }
+
+        t_ += h;
+
+        // LEVELS, read in the step — which is the other half of Lesson 1.4&#x27;s rule
+        // and is exactly as correct as the edges above are not. `value()` is the
+        // summed contribution of every binding, so Left and Right cancel and the
+        // camera holds still, with no `if` anywhere saying so.
+        if (!riding_)
+        {
+            camera_.azimuth += (0.15f + 2.0f * actions_.value(a_yaw_)) * h;
+            camera_.elevation += 1.5f * actions_.value(a_pitch_) * h;
+            camera_.elevation = std::fmax(-1.4f, std::fmin(1.4f, camera_.elevation));
+            camera_.radius += 6.0f * actions_.value(a_zoom_) * h;
+            camera_.radius = std::fmax(2.5f, std::fmin(24.0f, camera_.radius));
+        }
+
+        step_world(h);
+    }
+
+    void on_frame(float alpha) override
+    {
+        (void)alpha;
+
+        render_system(world_, objects_);
+
+        fb().clear(k_background);
+        depth_.clear();
+
+        // The camera is looked up rather than held. If the entity tagged
+        // `active_camera` were destroyed, this would return null and the frame
+        // would draw nothing — which is a case a scene can legitimately be in,
+        // and is why it is a branch rather than an assertion.
+        const entity cam = engine::ecs::find_active_camera(world_);
+        const engine::ecs::world_transform* cam_world =
+            cam.valid() ? world_.get&lt;engine::ecs::world_transform&gt;(cam) : nullptr;
+        const engine::ecs::camera* lens =
+            cam.valid() ? world_.get&lt;engine::ecs::camera&gt;(cam) : nullptr;
+
+        if (cam_world != nullptr &amp;&amp; lens != nullptr)
+        {
+            const engine::mat4 view = engine::ecs::view_from_camera(*cam_world);
+            const engine::vec3 eye = engine::ecs::eye_of(*cam_world);
+            const engine::projector proj{
+                engine::ecs::projection_of(*lens, static_cast&lt;float&gt;(k_width)
+                                                      / static_cast&lt;float&gt;(k_height)),
+                engine::viewport{0.0f, 0.0f, static_cast&lt;float&gt;(k_width),
+                                 static_cast&lt;float&gt;(k_height), 0.0f, 1.0f},
+                engine::near_mode::clip};
+
+            const engine::render_options opts{.cull = engine::cull_choice::back};
+            engine::collect_triangles(triangles_, scratch_, objects_, assets_.meshes(),
+                                      {view, eye}, proj, lights_, opts, &amp;stats_);
+
+            const engine::fill_style style{.shade = engine::shading::vertex_colour,
+                                           .cull = engine::cull_mode::back,
+                                           .eye = eye};
+            engine::draw_triangles(fb(), &amp;depth_, triangles_, false, style);
+        }
+
+        if (shot_path_ != nullptr)
+        {
+            const engine::ecs::hierarchy_report&amp; r = tree_.last_report();
+            SDL_Log(&quot;ecs_swarm: %zu entities, %zu components, %zu pools, %zu drawn, &quot;
+                    &quot;%d triangles&quot;,
+                    world_.size(), world_.component_count(), world_.pool_count(),
+                    objects_.size(), static_cast&lt;int&gt;(triangles_.size()));
+            SDL_Log(&quot;ecs_swarm: hierarchy %zu rows, %zu roots, %zu levels, %zu orphans, &quot;
+                    &quot;%zu cycles&quot;,
+                    r.entities, r.roots, r.levels, r.orphans, r.cycles);
+            request_quit(engine::save_ppm(fb(), shot_path_));
+        }
+    }
+
+    void on_overlay() override
+    {
+        SDL_Renderer* const r = renderer();
+        if (r == nullptr) { return; }
+
+        const engine::ecs::hierarchy_report&amp; h = tree_.last_report();
+        const auto v = world_.view&lt;engine::ecs::world_transform, geometry, material&gt;();
+
+        SDL_SetRenderScale(r, 2.0f, 2.0f);
+        SDL_SetRenderDrawColor(r, 210, 212, 220, 255);
+        SDL_RenderDebugTextFormat(r, 6.0f, 6.0f,
+                                  &quot;ECS  entities %3zu   components %4zu   pools %zu&quot;,
+                                  world_.size(), world_.component_count(),
+                                  world_.pool_count());
+        SDL_RenderDebugTextFormat(r, 6.0f, 20.0f,
+                                  &quot;hierarchy  rows %3zu  roots %3zu  levels %zu  &quot;
+                                  &quot;orphans %zu  cycles %zu&quot;,
+                                  h.entities, h.roots, h.levels, h.orphans, h.cycles);
+        SDL_RenderDebugTextFormat(r, 6.0f, 34.0f,
+                                  &quot;render view  lead %zu   candidates %3zu   drawn %3zu&quot;
+                                  &quot;   tris %4d&quot;,
+                                  v.lead(), v.size_hint(), objects_.size(),
+                                  static_cast&lt;int&gt;(triangles_.size()));
+        SDL_RenderDebugTextFormat(r, 6.0f, 48.0f,
+                                  &quot;camera %s   sun %s   fps %5.1f&quot;,
+                                  riding_ ? &quot;PARENTED to a ring member&quot; : &quot;free orbit&quot;,
+                                  drifting_ ? &quot;drifting&quot; : &quot;still&quot;,
+                                  static_cast&lt;double&gt;(time().fps()));
+        // The HUD reads the BINDING TABLE rather than a hard-coded string, so it
+        // cannot go stale when [K] rebinds something. That is a small thing and it
+        // is the first dividend an action layer pays: the program can now describe
+        // its own controls, which a switch statement could never do.
+        SDL_RenderDebugTextFormat(r, 6.0f, 62.0f,
+                                  &quot;actions %2zu   bindings %2zu   spawn on %s   &quot;
+                                  &quot;yaw %+.0f  zoom %+.0f&quot;,
+                                  actions_.action_count(), actions_.bindings().size(),
+                                  spawn_on_enter_ ? &quot;[Enter]&quot; : &quot;[Space]/[LMB]&quot;,
+                                  static_cast&lt;double&gt;(actions_.value(a_yaw_)),
+                                  static_cast&lt;double&gt;(actions_.value(a_zoom_)));
+        SDL_RenderDebugText(r, 6.0f, 100.0f,
+                            &quot;[Arrows] orbit  [ ] [ ] / wheel zoom  [K] rebind spawn&quot;);
+        SDL_RenderDebugText(r, 6.0f, 112.0f,
+                            &quot;[F] drift the sun  [C] ride a planet  [H] detach half  &quot;
+                            &quot;[Space]/[LMB] sparks&quot;);
+        SDL_RenderDebugText(r, 6.0f, 124.0f,
+                            &quot;[M] materials  [O] orbits  [X] cull  [R] rebuild  [Esc] quit&quot;);
+        SDL_SetRenderScale(r, 1.0f, 1.0f);
+    }
+
+private:
+    // ---- Actions ------------------------------------------------------------
+
+    /// Declare every action this program has, then bind the defaults.
+    ///
+    /// **Note that these two things are separable, and that is the whole point.**
+    /// The declarations are what the program is about; the bindings are a policy
+    /// that a settings screen, a config file or Module 8&#x27;s serializer could
+    /// replace wholesale without any of the code below changing. Today they are
+    /// adjacent because there is nowhere else to put them yet.
+    void declare_actions()
+    {
+        a_quit_      = actions_.declare(&quot;quit&quot;);
+        a_spawn_     = actions_.declare(&quot;spawn_sparks&quot;);
+        a_materials_ = actions_.declare(&quot;toggle_materials&quot;);
+        a_orbits_    = actions_.declare(&quot;toggle_orbits&quot;);
+        a_cull_      = actions_.declare(&quot;cull_swarm&quot;);
+        a_rebuild_   = actions_.declare(&quot;rebuild_world&quot;);
+        a_ride_      = actions_.declare(&quot;ride_camera&quot;);
+        a_detach_    = actions_.declare(&quot;detach_half&quot;);
+        a_drift_     = actions_.declare(&quot;drift_sun&quot;);
+        a_rebind_    = actions_.declare(&quot;rebind_spawn&quot;);
+        a_yaw_       = actions_.declare(&quot;camera_yaw&quot;);
+        a_pitch_     = actions_.declare(&quot;camera_pitch&quot;);
+        a_zoom_      = actions_.declare(&quot;camera_zoom&quot;);
+
+        actions_.bind_key(a_quit_, SDL_SCANCODE_ESCAPE);
+        actions_.bind_key(a_spawn_, SDL_SCANCODE_SPACE);
+
+        // TWO BINDINGS, ONE ACTION, ON TWO DEVICES — which is the property the
+        // whole design exists for, demonstrated with hardware this machine has.
+        // Hold Space, then also press the left mouse button, then release Space:
+        // the action stays active throughout and fires exactly ONE press edge,
+        // because edges come from the action&#x27;s level rather than from any
+        // binding&#x27;s. A switch statement cannot express this at all.
+        actions_.bind_mouse_button(a_spawn_, SDL_BUTTON_LEFT);
+
+        actions_.bind_key(a_materials_, SDL_SCANCODE_M);
+        actions_.bind_key(a_orbits_, SDL_SCANCODE_O);
+        actions_.bind_key(a_cull_, SDL_SCANCODE_X);
+        actions_.bind_key(a_rebuild_, SDL_SCANCODE_R);
+        actions_.bind_key(a_ride_, SDL_SCANCODE_C);
+        actions_.bind_key(a_detach_, SDL_SCANCODE_H);
+        actions_.bind_key(a_drift_, SDL_SCANCODE_F);
+        actions_.bind_key(a_rebind_, SDL_SCANCODE_K);
+
+        // AXES FROM PAIRS OF KEYS. Two bindings with opposite scales, and the
+        // action&#x27;s value is their sum — so holding both gives exactly zero and
+        // nothing anywhere had to special-case it.
+        actions_.bind_key(a_yaw_, SDL_SCANCODE_LEFT, -1.0f);
+        actions_.bind_key(a_yaw_, SDL_SCANCODE_RIGHT, +1.0f);
+        actions_.bind_key(a_pitch_, SDL_SCANCODE_DOWN, -1.0f);
+        actions_.bind_key(a_pitch_, SDL_SCANCODE_UP, +1.0f);
+
+        // …and an axis from a continuous source, through the same mechanism.
+        actions_.bind_key(a_zoom_, SDL_SCANCODE_LEFTBRACKET, +1.0f);
+        actions_.bind_key(a_zoom_, SDL_SCANCODE_RIGHTBRACKET, -1.0f);
+        actions_.bind_mouse_axis(a_zoom_, engine::mouse_axis::wheel_y, -4.0f);
+    }
+
+    /// Rebind `spawn_sparks` at runtime, which the old switch could not do.
+    ///
+    /// Clear then bind, rather than a single `rebind()`, because an action may
+    /// legitimately keep several bindings and a one-call version would have to
+    /// guess which one is being replaced. Here it deliberately drops the mouse
+    /// binding too, so the effect is visible.
+    void rebind_spawn()
+    {
+        spawn_on_enter_ = !spawn_on_enter_;
+        actions_.clear_bindings(a_spawn_);
+        actions_.bind_key(a_spawn_, spawn_on_enter_ ? SDL_SCANCODE_RETURN
+                                                    : SDL_SCANCODE_SPACE);
+        if (!spawn_on_enter_) { actions_.bind_mouse_button(a_spawn_, SDL_BUTTON_LEFT); }
+    }
+
+    // ---- Building the world ------------------------------------------------
+
+    /// Wipe the world and repopulate it — now with a shape as well as a set of
+    /// components. Four kinds of entity became five, and the new one (a moon) is
+    /// distinguished from a ring member by nothing except who its parent is.
+    void build_world()
+    {
+        world_.clear();
+        swarm_.clear();
+        moons_.clear();
+        materials_hidden_ = false;
+        orbits_frozen_ = false;
+        detached_ = false;
+        riding_ = false;
+
+        lcg rng{0x5EEDu};
+
+        // ---- the sun: the root of everything -----------------------------
+        sun_ = world_.create();
+        engine::ecs::add_hierarchy_components(
+            world_, sun_,
+            placement{.position = {0.0f, 0.0f, 0.0f},
+                      .rotation = engine::mat3::identity(),
+                      .scale = {0.9f, 0.9f, 0.9f}});
+        world_.add&lt;geometry&gt;(sun_, geometry{.mesh = torus_, .closed = true});
+        world_.add&lt;material&gt;(sun_, material{.tint = 0xFFE8B84Cu,
+                                            .surface = {.colour = {0.7f, 0.65f, 0.5f},
+                                                        .shininess = 64.0f}});
+        world_.add&lt;spin&gt;(sun_, spin{.rate = 0.6f, .wobble = 0.35f});
+
+        // ---- the ring: children of the sun -------------------------------
+        //
+        // Their orbits are now LOCAL. Spin the sun and the whole ring sweeps with
+        // it; drift the sun and the ring goes too. Neither behaviour is
+        // implemented anywhere — both are what the composition rule says.
+        for (int i = 0; i &lt; k_ring_count; ++i)
+        {
+            const entity e = world_.create();
+            const float band = static_cast&lt;float&gt;(i % 3);
+
+            engine::ecs::add_hierarchy_components(
+                world_, e, placement{.scale = engine::vec3{0.16f, 0.16f, 0.16f}});
+            world_.add&lt;orbit&gt;(e, orbit{.radius = 2.4f + 0.85f * band,
+                                       .speed = 0.75f - 0.16f * band,
+                                       .phase = rng.range(0.0f, 6.2831853f),
+                                       .tilt = rng.range(-0.55f, 0.55f)});
+            world_.add&lt;geometry&gt;(e, geometry{.mesh = (i % 2 == 0) ? cube_ : ico_,
+                                             .closed = true});
+            world_.add&lt;material&gt;(e, material{.tint = tint_for(i),
+                                             .surface = {.colour = {0.45f, 0.45f, 0.5f},
+                                                         .shininess = 24.0f}});
+            if (i % 3 == 0)
+            {
+                world_.add&lt;spin&gt;(e, spin{.rate = rng.range(1.2f, 3.0f),
+                                         .wobble = rng.range(-0.9f, 0.9f)});
+            }
+            engine::ecs::set_parent(world_, e, sun_);
+            swarm_.push_back(e);
+
+            // ---- moons: children of a ring member, so DEPTH 3 -------------
+            //
+            // A moon&#x27;s world position is computed by nobody. Two composes deep,
+            // and the only thing that makes it a moon rather than a planet is
+            // which entity its `parent` names.
+            if (i % k_moons_every == 0)
+            {
+                for (int m = 0; m &lt; k_moons_each; ++m)
+                {
+                    const entity moon = world_.create();
+                    // NOTE THE NUMBERS, because they are the hierarchy being
+                    // honest. This scale is 0.8 in the PLANET&#x27;s space, and the
+                    // planet is itself 0.16 of the sun&#x27;s — so a moon comes out
+                    // 0.128 in world units, and its local orbit radius of 3.6
+                    // becomes 0.58. Scale composes down the chain exactly as
+                    // rotation and translation do, which surprises people the
+                    // first time a &quot;1-metre&quot; prop under a scaled parent turns out
+                    // to be 20 cm. It is not a bug in the composition; it is what
+                    // &quot;relative to my parent&quot; means, applied to size.
+                    engine::ecs::add_hierarchy_components(
+                        world_, moon, placement{.scale = engine::vec3{0.8f, 0.8f, 0.8f}});
+                    world_.add&lt;orbit&gt;(moon, orbit{.radius = 3.6f,
+                                                  .speed = rng.range(2.5f, 4.5f),
+                                                  .phase = rng.range(0.0f, 6.2831853f),
+                                                  .tilt = rng.range(-1.3f, 1.3f)});
+                    world_.add&lt;geometry&gt;(moon, geometry{.mesh = ico_, .closed = true});
+                    world_.add&lt;material&gt;(moon,
+                                         material{.tint = 0xFFF2F4F8u,
+                                                  .surface = {.colour = {0.85f, 0.85f, 0.9f},
+                                                              .shininess = 80.0f}});
+                    engine::ecs::set_parent(world_, moon, e);
+                    moons_.push_back(moon);
+                }
+            }
+        }
+
+        // ---- waypoints: placement + orbit, and nothing else ---------------
+        //
+        // Lesson 5.8&#x27;s argument, still standing: they move every step and are
+        // invisible, because the render query asks for a `geometry` they do not
+        // have. Nobody wrote an `if`.
+        for (int i = 0; i &lt; k_waypoint_count; ++i)
+        {
+            const entity e = world_.create();
+            engine::ecs::add_hierarchy_components(world_, e, placement{});
+            world_.add&lt;orbit&gt;(e, orbit{.radius = 1.6f,
+                                       .speed = 1.4f,
+                                       .phase = rng.range(0.0f, 6.2831853f),
+                                       .tilt = rng.range(-1.2f, 1.2f)});
+            engine::ecs::set_parent(world_, e, sun_);
+        }
+
+        // ---- the camera: an entity, like everything else ------------------
+        camera_entity_ = world_.create();
+        engine::ecs::add_hierarchy_components(world_, camera_entity_, placement{});
+        world_.add&lt;engine::ecs::camera&gt;(camera_entity_, engine::ecs::camera{
+                                                            .fovy = 52.0f * 3.14159265f / 180.0f,
+                                                            .near_plane = 0.1f,
+                                                            .far_plane = 100.0f});
+        world_.add&lt;camera_orbit&gt;(camera_entity_, camera_);
+        engine::ecs::set_active_camera(world_, camera_entity_);
+
+        rng_ = rng;
+        tree_.mark_topology_changed();
+        step_world(0.0f);
+    }
+
+    /// One simulation step: local transforms first, then one resolve.
+    ///
+    /// **The order of these five lines is the lesson.** Everything above the
+    /// resolve writes LOCAL data and knows nothing about parents; the resolve
+    /// turns local into world, once, in an order that guarantees a parent is
+    /// finished before its children are started. Nothing below it has to think
+    /// about hierarchy at all.
+    void step_world(float h)
+    {
+        if (drifting_)
+        {
+            // Move the ROOT. Everything under it follows, and no code says so.
+            if (placement* p = world_.get&lt;placement&gt;(sun_))
+            {
+                p-&gt;position = {1.6f * std::sin(t_ * 0.35f), 0.5f * std::sin(t_ * 0.5f), 0.0f};
+            }
+        }
+
+        orbit_system(world_, t_);
+        spin_system(world_, h);
+        lifetime_system(world_, tree_, h, dead_);
+        if (camera_orbit* c = world_.get&lt;camera_orbit&gt;(camera_entity_)) { *c = camera_; }
+        camera_orbit_system(world_);
+
+        if (tree_.topology_changed()) { tree_.rebuild(world_); }
+        tree_.resolve(world_);
+    }
+
+    // ---- The demonstrations -------------------------------------------------
+
+    /// Spawn a burst of short-lived sparks, parented to the sun.
+    void spawn_sparks()
+    {
+        for (int i = 0; i &lt; k_spark_burst; ++i)
+        {
+            const entity e = world_.create();
+            if (!e) { break; }   // id space exhausted; the world&#x27;s failure, not ours
+
+            engine::ecs::add_hierarchy_components(
+                world_, e, placement{.scale = engine::vec3{0.07f, 0.07f, 0.07f}});
+            world_.add&lt;orbit&gt;(e, orbit{.radius = rng_.range(1.8f, 4.8f),
+                                       .speed = rng_.range(-2.6f, 2.6f),
+                                       .phase = rng_.range(0.0f, 6.2831853f),
+                                       .tilt = rng_.range(-1.4f, 1.4f)});
+            world_.add&lt;geometry&gt;(e, geometry{.mesh = ico_, .closed = true});
+            world_.add&lt;material&gt;(e, material{.tint = 0xFF7FE0FFu,
+                                             .surface = {.colour = {0.9f, 0.9f, 0.9f},
+                                                         .shininess = 96.0f}});
+            world_.add&lt;lifetime&gt;(e, lifetime{.remaining = rng_.range(0.8f, 2.4f)});
+            engine::ecs::set_parent(world_, e, sun_);
+        }
+        tree_.mark_topology_changed();
+    }
+
+    /// Park the camera on a ring member, or take it off again.
+    ///
+    /// **Two lines of consequence for the whole feature.** `set_parent` links the
+    /// camera into the tree; the resolver composes it with everything else; and
+    /// `view_from_camera` inverts whatever came out. The renderer is not told, the
+    /// camera type does not change, and nothing anywhere holds a pointer to a
+    /// &quot;current camera object&quot;.
+    void toggle_camera_ride()
+    {
+        riding_ = !riding_;
+        if (riding_)
+        {
+            // A vantage point beside the planet, expressed in the PLANET&#x27;s space.
+            const entity host = swarm_.empty() ? sun_ : swarm_[k_moons_every];
+            if (!world_.alive(host)) { riding_ = false; return; }
+
+            world_.remove&lt;camera_orbit&gt;(camera_entity_);
+            if (placement* p = world_.get&lt;placement&gt;(camera_entity_))
+            {
+                *p = engine::ecs::look_along({0.0f, 3.5f, 9.0f}, {0.0f, 0.0f, 0.0f},
+                                             {0.0f, 1.0f, 0.0f});
+            }
+            engine::ecs::set_parent(world_, camera_entity_, host);
+        }
+        else
+        {
+            engine::ecs::set_parent(world_, camera_entity_, engine::ecs::null_entity);
+            world_.add&lt;camera_orbit&gt;(camera_entity_, camera_);
+        }
+        tree_.mark_topology_changed();
+    }
+
+    /// Detach the outer half of the ring from the sun, or re-attach it.
+    ///
+    /// Detached entities keep their `orbit`, so they keep circling — but they
+    /// circle the WORLD origin instead of the sun, because their placement is now
+    /// relative to nothing. Drift the sun with [F] and the split is unmistakable.
+    void toggle_detach()
+    {
+        detached_ = !detached_;
+        for (std::size_t i = swarm_.size() / 2; i &lt; swarm_.size(); ++i)
+        {
+            if (!world_.alive(swarm_[i])) { continue; }
+            engine::ecs::set_parent(world_, swarm_[i],
+                                    detached_ ? engine::ecs::null_entity : sun_);
+        }
+        tree_.mark_topology_changed();
+    }
+
+    /// Take the material component away from every third ring member, or give it
+    /// back. They disappear and reappear, and no renderer branch was involved.
+    void toggle_materials()
+    {
+        for (std::size_t i = 0; i &lt; swarm_.size(); i += 3)
+        {
+            const entity e = swarm_[i];
+
+            // `swarm_` may hold ids that [X] destroyed. Nothing needs to prune it:
+            // a stale entity fails `alive()` and every pool lookup, which is
+            // Lesson 5.4&#x27;s argument arriving in ordinary code.
+            if (!world_.alive(e)) { continue; }
+
+            if (materials_hidden_)
+            {
+                world_.add&lt;material&gt;(e, material{.tint = tint_for(static_cast&lt;int&gt;(i)),
+                                                 .surface = {.colour = {0.45f, 0.45f, 0.5f},
+                                                             .shininess = 24.0f}});
+            }
+            else
+            {
+                world_.remove&lt;material&gt;(e);
+            }
+        }
+        materials_hidden_ = !materials_hidden_;
+    }
+
+    /// Freeze half the ring by removing its orbits. They keep spinning, because
+    /// spinning is a different component read by a different system.
+    void toggle_orbits()
+    {
+        for (std::size_t i = swarm_.size() / 2; i &lt; swarm_.size(); ++i)
+        {
+            const entity e = swarm_[i];
+            if (!world_.alive(e)) { continue; }
+
+            if (orbits_frozen_)
+            {
+                const float band = static_cast&lt;float&gt;(i % 3);
+                world_.add&lt;orbit&gt;(e, orbit{.radius = 2.4f + 0.85f * band,
+                                           .speed = 0.75f - 0.16f * band,
+                                           .phase = static_cast&lt;float&gt;(i) * 0.37f,
+                                           .tilt = 0.2f});
+            }
+            else
+            {
+                world_.remove&lt;orbit&gt;(e);
+            }
+        }
+        orbits_frozen_ = !orbits_frozen_;
+    }
+
+    /// Destroy every fourth ring member — **and its moons with it**.
+    ///
+    /// `destroy_subtree` is the explicit alternative to the orphan policy. Use
+    /// plain `destroy()` here instead and the moons survive as orphans: the
+    /// resolver treats them as roots, they keep orbiting the world origin, and
+    /// `hierarchy_report::orphans` on the HUD counts them. Both behaviours are
+    /// defensible; only one of them should be the silent default, and it is the
+    /// one that does not delete entities nobody asked it to.
+    void cull_swarm()
+    {
+        for (std::size_t i = 0; i &lt; swarm_.size(); i += 4)
+        {
+            engine::ecs::destroy_subtree(world_, swarm_[i]);
+        }
+        tree_.mark_topology_changed();
+    }
+
+    [[nodiscard]] static Uint32 tint_for(int i)
+    {
+        static constexpr Uint32 k_tints[] = {0xFFE07A3Cu, 0xFF4CB8E0u, 0xFF8FD46Au,
+                                             0xFFD46AB8u, 0xFFE0D04Cu, 0xFF9A8FE0u};
+        return k_tints[static_cast&lt;std::size_t&gt;(i) % std::size(k_tints)];
+    }
+
+    // ---- State -------------------------------------------------------------
+
+    const char* shot_path_ = nullptr;
+    float t_ = 0.0f;
+
+    engine::ecs::registry world_;
+    engine::ecs::hierarchy tree_;
+
+    entity sun_;
+    entity camera_entity_;
+    std::vector&lt;entity&gt; swarm_;   ///&lt; the ring members, so the keys can find them again
+    std::vector&lt;entity&gt; moons_;
+    std::vector&lt;entity&gt; dead_;    ///&lt; reused scratch for lifetime_system
+
+    engine::action_map actions_;
+    engine::action_id a_quit_, a_spawn_, a_materials_, a_orbits_, a_cull_, a_rebuild_;
+    engine::action_id a_ride_, a_detach_, a_drift_, a_rebind_;
+    engine::action_id a_yaw_, a_pitch_, a_zoom_;
+    bool spawn_on_enter_ = false;
+
+    bool materials_hidden_ = false;
+    bool orbits_frozen_ = false;
+    bool detached_ = false;
+    bool riding_ = false;
+    bool drifting_ = false;
+    camera_orbit camera_{};
+    lcg rng_{0x5EEDu};
+
+    engine::asset_store assets_;
+    engine::mesh_handle cube_;
+    engine::mesh_handle ico_;
+    engine::mesh_handle torus_;
+    engine::lighting lights_;
+
+    /// The bridge: rebuilt every frame from the ECS, handed to the renderer.
+    std::vector&lt;engine::scene_object&gt; objects_;
+
+    engine::depth_buffer depth_{k_width, k_height};
+    std::vector&lt;engine::raster_triangle&gt; triangles_;
+    engine::projection_scratch scratch_;
+    engine::collect_stats stats_;
+};
+
+}   // namespace
+
+ENGINE_MAIN(swarm_app)
+</code></pre>
+  </figure>
+
+    <figure class="listing">
+    <figcaption>
+      <span class="path">scratch/verify_510.cpp</span>
+      <span class="tag new">new</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// scratch/verify_510.cpp — Lesson 5.10&#x27;s harness: actions, bindings, and the two edges.
+//
+//   §A  declaring and naming
+//   §B  the one mechanism: every binding contributes a signed value
+//   §C  EDGES COME FROM THE ACTION&#x27;S LEVEL, NOT FROM ANY BINDING&#x27;S
+//   §D  the fixed-step trap: an edge that survives zero steps and two steps
+//   §E  rebinding at runtime, and reset
+//   §F  continuous sources: deltas, and the frame that has none
+//   §G  the golden is still byte-identical
+//
+// §C and §D are the sections that would catch a plausible wrong implementation.
+// Everything else checks behaviour that is hard to get wrong; those two check
+// decisions, and both decisions are invisible in a single-binding, one-step-per-
+// frame world — which is every world a test writes by accident.
+//
+// THE FAKE IS THE POINT OF THE CONCEPT. `input::update()` samples SDL&#x27;s live
+// keyboard state, so a harness that wanted a key held would have to persuade SDL
+// that a key is held. `action_map::update` is templated on `input_snapshot`
+// instead, so six functions in a struct are a complete input device and the
+// mapping logic is exercised exactly as it ships.
+//
+// Build and run:  sh scratch/build_verify_510.sh
+
+#include &lt;engine/core/actions.hpp&gt;
+#include &lt;engine/core/assert.hpp&gt;
+
+#include &quot;../demos/common/demo_scene.hpp&quot;
+
+#include &lt;SDL3/SDL.h&gt;
+
+#include &lt;cmath&gt;
+#include &lt;cstdarg&gt;
+#include &lt;cstdint&gt;
+#include &lt;cstdio&gt;
+#include &lt;set&gt;
+#include &lt;string&gt;
+
+namespace {
+
+using engine::action_id;
+using engine::action_map;
+using engine::mouse_axis;
+
+int g_checks = 0;
+int g_failures = 0;
+
+void check(bool ok, const char* what)
+{
+    ++g_checks;
+    if (!ok) { ++g_failures; }
+    std::printf(&quot;  [%s] %s\n&quot;, ok ? &quot;PASS&quot; : &quot;FAIL&quot;, what);
+}
+
+void checkf(bool ok, const char* fmt, ...)
+{
+    char line[512];
+    va_list args;
+    va_start(args, fmt);
+    SDL_vsnprintf(line, sizeof(line), fmt, args);
+    va_end(args);
+    check(ok, line);
+}
+
+[[nodiscard]] std::string read_file(const char* path)
+{
+    std::size_t size = 0;
+    void* data = SDL_LoadFile(path, &amp;size);
+    if (data == nullptr) { return {}; }
+    std::string out(static_cast&lt;const char*&gt;(data), size);
+    SDL_free(data);
+    return out;
+}
+
+/// A complete input device in six functions.
+struct fake_input
+{
+    std::set&lt;int&gt; keys;
+    std::set&lt;int&gt; buttons;
+    float mx = 0.0f;
+    float my = 0.0f;
+    float wx = 0.0f;
+    float wy = 0.0f;
+
+    [[nodiscard]] bool key_down(SDL_Scancode k) const { return keys.count(static_cast&lt;int&gt;(k)) != 0; }
+    [[nodiscard]] bool mouse_down(int b) const { return buttons.count(b) != 0; }
+    [[nodiscard]] float mouse_x() const { return mx; }
+    [[nodiscard]] float mouse_y() const { return my; }
+    [[nodiscard]] float wheel_x() const { return wx; }
+    [[nodiscard]] float wheel_y() const { return wy; }
+
+    void hold(SDL_Scancode k) { keys.insert(static_cast&lt;int&gt;(k)); }
+    void release(SDL_Scancode k) { keys.erase(static_cast&lt;int&gt;(k)); }
+};
+
+static_assert(engine::input_snapshot&lt;fake_input&gt;,
+              &quot;the harness&#x27;s fake must satisfy the same concept engine::input does&quot;);
+static_assert(engine::input_snapshot&lt;engine::input&gt;,
+              &quot;…and so must the real thing, without knowing the concept exists&quot;);
+
+// ===========================================================================
+//  §A — DECLARING AND NAMING
+// ===========================================================================
+
+void section_a_declaring()
+{
+    std::printf(&quot;\n=== A. Declaring and naming ===\n&quot;);
+
+    action_map m;
+
+    const action_id jump = m.declare(&quot;jump&quot;);
+    check(jump.valid(), &quot;declare returns a valid id&quot;);
+    check(m.declare(&quot;jump&quot;) == jump,
+          &quot;declaring the same name again returns the SAME id — two subsystems may both &quot;
+          &quot;declare an action without coordinating&quot;);
+    checkf(m.action_count() == 1, &quot;…and did not create a second action (%zu)&quot;, m.action_count());
+
+    const action_id fire = m.declare(&quot;fire&quot;);
+    check(fire.valid() &amp;&amp; !(fire == jump), &quot;a different name is a different id&quot;);
+
+    check(m.find(&quot;jump&quot;) == jump, &quot;find returns the id&quot;);
+    check(!m.find(&quot;nonexistent&quot;).valid(),
+          &quot;find of an unknown name is INVALID and does not declare — a typo in a config file &quot;
+          &quot;must not become a silent new action with no bindings&quot;);
+    checkf(m.action_count() == 2, &quot;…and the count is still %zu&quot;, m.action_count());
+
+    check(m.name_of(jump) == &quot;jump&quot;, &quot;name_of round-trips&quot;);
+    check(m.name_of(action_id{}).empty(), &quot;name_of an invalid id is empty, not a crash&quot;);
+
+    check(!m.declare(&quot;&quot;).valid(), &quot;an empty name is refused&quot;);
+
+    // Every query on an invalid id must be safe: an id that failed to declare
+    // will be passed to these functions by code that did not check.
+    const action_id bad{};
+    check(m.value(bad) == 0.0f &amp;&amp; !m.held(bad) &amp;&amp; !m.pressed(bad) &amp;&amp; !m.released(bad),
+          &quot;every query on an invalid id answers harmlessly rather than reading out of bounds&quot;);
+    check(!m.consume_pressed(bad) &amp;&amp; m.pending_presses(bad) == 0,
+          &quot;…including the queue&quot;);
+}
+
+// ===========================================================================
+//  §B — THE ONE MECHANISM
+// ===========================================================================
+
+void section_b_values()
+{
+    std::printf(&quot;\n=== B. Every binding contributes a signed value ===\n&quot;);
+
+    action_map m;
+    fake_input in;
+
+    const action_id jump = m.declare(&quot;jump&quot;);
+    const action_id steer = m.declare(&quot;steer&quot;);
+
+    check(m.bind_key(jump, SDL_SCANCODE_SPACE), &quot;bind a key&quot;);
+    check(m.bind_key(steer, SDL_SCANCODE_A, -1.0f) &amp;&amp; m.bind_key(steer, SDL_SCANCODE_D, +1.0f),
+          &quot;bind two keys with opposite scales — an axis&quot;);
+    checkf(m.binding_count(steer) == 2, &quot;steer has %zu bindings&quot;, m.binding_count(steer));
+
+    check(!m.bind_key(jump, static_cast&lt;SDL_Scancode&gt;(-1)), &quot;an out-of-range scancode is refused&quot;);
+    check(!m.bind_mouse_button(jump, 0) &amp;&amp; !m.bind_mouse_button(jump, 9),
+          &quot;a mouse button outside 1..5 is refused&quot;);
+    check(!m.bind_key(action_id{}, SDL_SCANCODE_Q), &quot;binding an invalid action is refused&quot;);
+
+    m.update(in);
+    check(m.value(jump) == 0.0f &amp;&amp; !m.held(jump), &quot;nothing held, nothing active&quot;);
+
+    in.hold(SDL_SCANCODE_SPACE);
+    m.update(in);
+    check(m.value(jump) == 1.0f &amp;&amp; m.held(jump), &quot;a held key contributes its scale&quot;);
+
+    // THE AXIS, and the property that makes one mechanism enough for two jobs.
+    in.release(SDL_SCANCODE_SPACE);
+    in.hold(SDL_SCANCODE_A);
+    m.update(in);
+    check(m.value(steer) == -1.0f, &quot;A alone gives -1&quot;);
+
+    in.hold(SDL_SCANCODE_D);
+    m.update(in);
+    check(m.value(steer) == 0.0f,
+          &quot;A and D together give EXACTLY ZERO — they cancel, and no code anywhere says so. &quot;
+          &quot;A separate &#x27;axis&#x27; concept would have needed a rule for this case&quot;);
+    check(!m.held(steer), &quot;…and the action is not held, because held() tests |value|&quot;);
+
+    in.release(SDL_SCANCODE_A);
+    m.update(in);
+    check(m.value(steer) == 1.0f, &quot;D alone gives +1&quot;);
+
+    // A scale that is not ±1.
+    const action_id boost = m.declare(&quot;boost&quot;);
+    m.bind_key(boost, SDL_SCANCODE_LSHIFT, 0.25f);
+    in.hold(SDL_SCANCODE_LSHIFT);
+    m.update(in);
+    checkf(std::fabs(m.value(boost) - 0.25f) &lt; 1e-6f, &quot;a scale of 0.25 gives %.2f&quot;,
+           static_cast&lt;double&gt;(m.value(boost)));
+    check(!m.held(boost),
+          &quot;…and it is NOT held, because 0.25 is below the 0.5 threshold — which is what the &quot;
+          &quot;threshold is for: an analog source must be pushed, not brushed&quot;);
+}
+
+// ===========================================================================
+//  §C — EDGES COME FROM THE LEVEL
+// ===========================================================================
+//
+// The section that would catch the most plausible wrong implementation, and it
+// is invisible unless an action has more than one binding.
+
+void section_c_edges()
+{
+    std::printf(&quot;\n=== C. Edges come from the action&#x27;s level ===\n&quot;);
+
+    action_map m;
+    fake_input in;
+
+    const action_id jump = m.declare(&quot;jump&quot;);
+    m.bind_key(jump, SDL_SCANCODE_SPACE);
+    m.bind_mouse_button(jump, SDL_BUTTON_LEFT);
+
+    int rising = 0;
+    int falling = 0;
+    auto tick = [&amp;] {
+        m.update(in);
+        if (m.pressed(jump)) { ++rising; }
+        if (m.released(jump)) { ++falling; }
+    };
+
+    tick();
+    check(rising == 0 &amp;&amp; falling == 0, &quot;idle: no edges&quot;);
+
+    in.hold(SDL_SCANCODE_SPACE);
+    tick();
+    checkf(rising == 1 &amp;&amp; m.held(jump), &quot;pressing the key gives ONE rising edge (%d)&quot;, rising);
+
+    in.buttons.insert(SDL_BUTTON_LEFT);
+    tick();
+    checkf(rising == 1,
+           &quot;pressing the MOUSE while the key is still held gives NO second edge (%d) — the &quot;
+           &quot;action was already active, and an edge is a change in the ACTION, not in a binding&quot;,
+           rising);
+
+    in.release(SDL_SCANCODE_SPACE);
+    tick();
+    checkf(falling == 0 &amp;&amp; m.held(jump),
+           &quot;releasing the key while the mouse is still down gives NO falling edge (%d), and the &quot;
+           &quot;action is still active&quot;, falling);
+
+    in.buttons.erase(SDL_BUTTON_LEFT);
+    tick();
+    checkf(falling == 1 &amp;&amp; !m.held(jump), &quot;releasing the last one gives ONE falling edge (%d)&quot;,
+           falling);
+
+    check(rising == 1 &amp;&amp; falling == 1,
+          &quot;ONE rising and ONE falling edge for the whole sequence. Deriving edges from bindings &quot;
+          &quot;would have given two of each — and a double jump&quot;);
+
+    // An edge lasts exactly one frame.
+    in.hold(SDL_SCANCODE_SPACE);
+    m.update(in);
+    check(m.pressed(jump), &quot;the edge is true on the frame it happened&quot;);
+    m.update(in);
+    check(!m.pressed(jump) &amp;&amp; m.held(jump),
+          &quot;…and false on the next frame, while the level stays true. That is Lesson 1.2&#x27;s &quot;
+          &quot;distinction, unchanged one layer up&quot;);
+}
+
+// ===========================================================================
+//  §D — THE FIXED-STEP TRAP
+// ===========================================================================
+
+void section_d_step()
+{
+    std::printf(&quot;\n=== D. The edge that survives the step ===\n&quot;);
+
+    action_map m;
+    fake_input in;
+    const action_id jump = m.declare(&quot;jump&quot;);
+    m.bind_key(jump, SDL_SCANCODE_SPACE);
+
+    // ---- a TWO-step frame must not double-fire ---------------------------
+    m.update(in);
+    in.hold(SDL_SCANCODE_SPACE);
+    m.update(in);                       // one frame, one press
+
+    checkf(m.pending_presses(jump) == 1, &quot;one press queued (%u)&quot;, m.pending_presses(jump));
+    int jumps = 0;
+    for (int step = 0; step &lt; 2; ++step)
+    {
+        if (m.consume_pressed(jump)) { ++jumps; }
+    }
+    checkf(jumps == 1,
+           &quot;a TWO-step frame jumps %d time — `pressed()` read here would have given 2, which is &quot;
+           &quot;the single most-often-got-wrong thing in a fixed-timestep engine&quot;, jumps);
+
+    // ---- a ZERO-step frame must not lose it ------------------------------
+    m.reset();
+    in.keys.clear();
+    m.update(in);
+    in.hold(SDL_SCANCODE_SPACE);
+    m.update(in);                       // pressed…
+    in.release(SDL_SCANCODE_SPACE);
+    m.update(in);                       // …and released, with NO step in between
+
+    check(!m.pressed(jump) &amp;&amp; !m.held(jump),
+          &quot;by the time a step runs, the frame-scoped edge is long gone and the key is up&quot;);
+    checkf(m.consume_pressed(jump) == true,
+           &quot;…but the QUEUED press survives, so a frame that ran no steps does not swallow the &quot;
+           &quot;input&quot;);
+    check(!m.consume_pressed(jump), &quot;…and it is consumed exactly once&quot;);
+
+    // ---- several presses queue, up to the cap ----------------------------
+    m.reset();
+    in.keys.clear();
+    for (int i = 0; i &lt; 6; ++i)
+    {
+        m.update(in);
+        in.hold(SDL_SCANCODE_SPACE);
+        m.update(in);
+        in.release(SDL_SCANCODE_SPACE);
+    }
+    checkf(m.pending_presses(jump) == engine::k_action_press_queue,
+           &quot;six presses with no step queued %u, capped at %u — an UNBOUNDED queue would replay &quot;
+           &quot;a burst of jumps after the player stopped asking, which feels worse than losing them&quot;,
+           m.pending_presses(jump), engine::k_action_press_queue);
+
+    int drained = 0;
+    while (m.consume_pressed(jump)) { ++drained; }
+    checkf(drained == engine::k_action_press_queue, &quot;…and drains to exactly %d&quot;, drained);
+
+    // ---- clear_pending, for a deliberately skipped step -------------------
+    m.reset();
+    in.keys.clear();
+    m.update(in);
+    in.hold(SDL_SCANCODE_SPACE);
+    m.update(in);
+    check(m.pending_presses(jump) == 1, &quot;one queued&quot;);
+    m.clear_pending();
+    check(m.pending_presses(jump) == 0 &amp;&amp; !m.consume_pressed(jump),
+          &quot;clear_pending drops it — what a pause menu calls, so that resuming does not replay &quot;
+          &quot;what was queued while nothing was listening&quot;);
+    check(m.held(jump), &quot;…and the LEVEL is untouched, because the key really is still down&quot;);
+}
+
+// ===========================================================================
+//  §E — REBINDING, AND RESET
+// ===========================================================================
+
+void section_e_rebinding()
+{
+    std::printf(&quot;\n=== E. Rebinding at runtime ===\n&quot;);
+
+    action_map m;
+    fake_input in;
+    const action_id jump = m.declare(&quot;jump&quot;);
+    m.bind_key(jump, SDL_SCANCODE_SPACE);
+    m.bind_mouse_button(jump, SDL_BUTTON_LEFT);
+
+    in.hold(SDL_SCANCODE_SPACE);
+    m.update(in);
+    check(m.held(jump), &quot;Space works before the rebind&quot;);
+
+    checkf(m.clear_bindings(jump) == 2, &quot;clear_bindings removed both&quot;);
+    check(m.binding_count(jump) == 0 &amp;&amp; m.bindings().empty(), &quot;…and the table is empty&quot;);
+
+    m.update(in);
+    check(!m.held(jump),
+          &quot;with no bindings the action is dead even though the key is still physically down — &quot;
+          &quot;which is the whole point: the action is not the key&quot;);
+
+    m.bind_key(jump, SDL_SCANCODE_J);
+    m.update(in);
+    check(!m.held(jump), &quot;the OLD key no longer works&quot;);
+
+    in.release(SDL_SCANCODE_SPACE);
+    in.hold(SDL_SCANCODE_J);
+    m.update(in);
+    check(m.held(jump), &quot;…and the new one does. A recompile was not required&quot;);
+
+    // The binding table is what a settings screen enumerates and a serializer writes.
+    checkf(m.bindings().size() == 1 &amp;&amp; m.bindings()[0].action == jump
+               &amp;&amp; m.bindings()[0].code == static_cast&lt;std::int32_t&gt;(SDL_SCANCODE_J),
+           &quot;the binding table is inspectable: %zu entry naming the action and the code&quot;,
+           m.bindings().size());
+
+    // reset(), for a focus loss or a scene change.
+    m.update(in);
+    check(m.held(jump), &quot;held before reset&quot;);
+    m.reset();
+    check(!m.held(jump) &amp;&amp; !m.pressed(jump) &amp;&amp; m.pending_presses(jump) == 0,
+          &quot;reset clears levels, edges and the queue — what a window losing focus needs, so a &quot;
+          &quot;key held while the player alt-tabs away is not still held when they return&quot;);
+    m.update(in);
+    check(m.pressed(jump),
+          &quot;…and the next update sees a fresh rising edge, because reset made the level false&quot;);
+}
+
+// ===========================================================================
+//  §F — CONTINUOUS SOURCES
+// ===========================================================================
+
+void section_f_axes()
+{
+    std::printf(&quot;\n=== F. Continuous sources ===\n&quot;);
+
+    action_map m;
+    fake_input in;
+
+    const action_id look = m.declare(&quot;look_x&quot;);
+    const action_id zoom = m.declare(&quot;zoom&quot;);
+    m.bind_mouse_axis(look, mouse_axis::x, 0.5f);
+    m.bind_mouse_axis(zoom, mouse_axis::wheel_y, -4.0f);
+
+    in.mx = 100.0f;
+    m.update(in);
+    checkf(m.value(look) == 0.0f,
+           &quot;THE FIRST FRAME HAS NO DELTA (%.1f) — there is no previous position to subtract, and &quot;
+           &quot;reporting 100 would have flung the camera on the first frame the program ran&quot;,
+           static_cast&lt;double&gt;(m.value(look)));
+
+    in.mx = 110.0f;
+    m.update(in);
+    checkf(std::fabs(m.value(look) - 5.0f) &lt; 1e-6f,
+           &quot;a 10-pixel move at 0.5 sensitivity gives %.1f&quot;,
+           static_cast&lt;double&gt;(m.value(look)));
+
+    m.update(in);
+    check(m.value(look) == 0.0f, &quot;…and a frame with no movement gives zero, not the last delta&quot;);
+
+    in.wy = 2.0f;
+    m.update(in);
+    checkf(std::fabs(m.value(zoom) + 8.0f) &lt; 1e-6f,
+           &quot;the wheel is already a per-frame delta: 2 notches at -4 gives %.1f&quot;,
+           static_cast&lt;double&gt;(m.value(zoom)));
+
+    // reset() forgets the mouse origin, so the frame after it has no delta either.
+    in.wy = 0.0f;
+    m.reset();
+    in.mx = 500.0f;
+    m.update(in);
+    check(m.value(look) == 0.0f,
+          &quot;after reset the next frame has no delta either — otherwise a scene change would &quot;
+          &quot;deliver the whole distance the cursor moved while the level was loading&quot;);
+}
+
+// ===========================================================================
+//  §G — THE GOLDEN
+// ===========================================================================
+
+void section_g_golden()
+{
+    std::printf(&quot;\n=== G. The golden ===\n&quot;);
+
+    const char* path = &quot;build/demos/verify_510.ppm&quot;;
+    check(demo::write_reference_shot(path) == 0, &quot;write_reference_shot() succeeded&quot;);
+
+    const std::string ours = read_file(path);
+    const std::string golden = read_file(&quot;scratch/shot_52.ppm&quot;);
+    checkf(!ours.empty() &amp;&amp; ours.size() == golden.size(), &quot;same size: %zu bytes&quot;, ours.size());
+    check(ours == golden,
+          &quot;BYTE-IDENTICAL to the golden written in Lesson 5.1 — TEN lessons. 5.10 added one &quot;
+          &quot;header, one source file and one hook, and touched no line the reference scene runs&quot;);
+}
+
+}   // namespace
+
+int main()
+{
+    std::printf(&quot;verify_510 — Lesson 5.10: input mapping\n&quot;);
+    std::printf(&quot;(debug assertions %s)\n&quot;,
+                engine::debug_assertions_enabled() ? &quot;ON&quot; : &quot;OFF&quot;);
+
+    section_a_declaring();
+    section_b_values();
+    section_c_edges();
+    section_d_step();
+    section_e_rebinding();
+    section_f_axes();
+    section_g_golden();
+
+    std::printf(&quot;\n%d checks, %d failures\n&quot;, g_checks, g_failures);
+    return g_failures == 0 ? 0 : 1;
+}
+</code></pre>
+  </figure>
+
+
+  <!-- =================================================================
+       9 — BUILD & RUN
+       ================================================================= -->
+  <h2 id="build"><span class="num">9</span>Build &amp; Run</h2>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">macOS / Linux</span></figcaption>
+    <pre><code class="lang-bash">cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo
+cmake --build build -j
+
+./build/demos/ecs_swarm                            # a window
+./build/demos/ecs_swarm --shot swarm.ppm           # one frame, no window, no display
+
+sh scratch/build_verify_510.sh                              # correctness, -O0
+ENGINE_CFLAGS="-O2 -DNDEBUG" sh scratch/build_verify_510.sh # …and optimised</code></pre>
+  </figure>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">Windows (PowerShell, MSVC)</span></figcaption>
+    <pre><code class="lang-bash">cmake -S . -B build
+cmake --build build --config RelWithDebInfo
+
+.\build\demos\RelWithDebInfo\ecs_swarm.exe</code></pre>
+  </figure>
+
+  <p>
+    <strong>What you should see.</strong> Exactly the picture Lesson 5.9 left — a golden torus,
+    ninety-six orbiting planets, thirty-two white moons, twenty-four invisible waypoints — because
+    this lesson changed how input arrives and nothing about what is drawn. The HUD gains one line,
+    and it is worth looking at:
+  </p>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">the new HUD line</span></figcaption>
+    <pre><code class="lang-bash">actions 13   bindings 19   spawn on [Space]/[LMB]   yaw +0  zoom +0</code></pre>
+  </figure>
+
+  <p>
+    <strong>That line reads the binding table rather than a hard-coded string</strong>, so it
+    cannot go stale. Press <kbd>K</kbd> and it becomes <code>spawn on [Enter]</code>, because the
+    binding really changed. It is a small thing and it is the first dividend an action layer pays:
+    the program can now <em>describe its own controls</em>, which a switch statement could never do.
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption class="visually-hidden">What each control demonstrates.</caption>
+    <thead><tr><th>control</th><th>action</th><th>what it demonstrates</th></tr></thead>
+    <tbody>
+      <tr><td><kbd>Space</kbd> <em>or</em> left mouse</td><td><code>spawn_sparks</code></td>
+          <td><strong>Two bindings, two devices, one action.</strong> Hold Space, then also press
+              the mouse, then release Space: sparks spawn once, not twice, because the edge came
+              from the action's level. This is §4, live.</td></tr>
+      <tr><td><kbd>K</kbd></td><td><code>rebind_spawn</code></td>
+          <td>Rebinds spawning to <kbd>Enter</kbd> while the program runs. The HUD follows.</td></tr>
+      <tr><td><kbd>←</kbd> <kbd>→</kbd></td><td><code>camera_yaw</code></td>
+          <td>An axis from two keys. <strong>Hold both and the camera stops</strong>, because
+              −1 + 1 = 0 and nothing says so.</td></tr>
+      <tr><td><kbd>↑</kbd> <kbd>↓</kbd></td><td><code>camera_pitch</code></td>
+          <td>The same, on the other axis, clamped by the caller rather than the map.</td></tr>
+      <tr><td><kbd>[</kbd> <kbd>]</kbd> <em>or</em> the wheel</td><td><code>camera_zoom</code></td>
+          <td>A digital pair and a continuous source feeding <em>the same</em> action.</td></tr>
+      <tr><td><kbd>F</kbd> <kbd>C</kbd> <kbd>H</kbd> <kbd>M</kbd> <kbd>O</kbd> <kbd>X</kbd>
+              <kbd>R</kbd></td><td>the 5.8/5.9 demonstrations</td>
+          <td>Unchanged behaviour, entirely rewritten plumbing — none of them names a key any
+              more.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    The verification harness prints its own arithmetic, and two lines are worth checking by hand:
+  </p>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">selected output — <code>sh scratch/build_verify_510.sh</code></span></figcaption>
+    <pre><code class="lang-bash">=== C. Edges come from the action's level ===
+  [PASS] pressing the MOUSE while the key is still held gives NO second edge (1)
+  [PASS] releasing the key while the mouse is still down gives NO falling edge (0)
+  [PASS] ONE rising and ONE falling edge for the whole sequence
+
+=== D. The edge that survives the step ===
+  [PASS] a TWO-step frame jumps 1 time
+  [PASS] …but the QUEUED press survives, so a frame that ran no steps does not swallow the input
+  [PASS] six presses with no step queued 4, capped at 4
+
+62 checks, 0 failures</code></pre>
+  </figure>
+
+  <!-- =================================================================
+       10 — PITFALLS
+       ================================================================= -->
+  <h2 id="pitfalls"><span class="num">10</span>Common Pitfalls &amp; Debugging</h2>
+
+  <div class="callout pitfall">
+    <span class="label">The player jumps twice, but only sometimes</span>
+    <p><strong>Symptom.</strong> One press, two jumps — on some machines, on some frames, and
+       never while you are watching.</p>
+    <p><strong>Cause.</strong> Two possibilities, and they need different fixes.
+       <em>Either</em> the edge was read inside <code>on_fixed_step</code> on a two-step frame,
+       <em>or</em> the action has two bindings and the edges were derived from the bindings
+       instead of the level.</p>
+    <p><strong>Fix.</strong> For the first, <code>consume_pressed()</code>. For the second,
+       derive from the level. To tell them apart: unbind everything but one key. If it stops, it
+       was the second; if it persists, it was the first.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">An input is occasionally ignored entirely</span>
+    <p><strong>Symptom.</strong> A press does nothing, roughly once in a hundred, more often when
+       the machine is busy.</p>
+    <p><strong>Cause.</strong> A zero-step frame. The accumulator had not built up a full step's
+       worth of time, so <code>on_fixed_step</code> did not run, and a frame-scoped edge came and
+       went with nothing listening.</p>
+    <p><strong>Fix.</strong> <code>consume_pressed()</code>, which queues it until a step happens.
+       This one is genuinely hard to reproduce deliberately, which is why the harness simulates the
+       frame structure directly rather than hoping to catch it.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">Every step of the frame reacts to input one frame late</span>
+    <p><strong>Symptom.</strong> The game feels slightly mushy. Nothing is broken; everything is
+       16 ms behind.</p>
+    <p><strong>Cause.</strong> <code>action_map::update()</code> is being called in
+       <code>on_frame</code>, which runs <em>after</em> the steps.</p>
+    <p><strong>Fix.</strong> <code>on_input()</code>. It exists for exactly this, and the symptom
+       is worth knowing because it is the kind that gets attributed to the display, the driver, or
+       the mouse.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">A key held while alt-tabbing is still held on return</span>
+    <p><strong>Symptom.</strong> Come back to the window and the character is walking.</p>
+    <p><strong>Cause.</strong> The level was true when focus was lost, and nothing said otherwise
+       while the window was in the background.</p>
+    <p><strong>Fix.</strong> <code>reset()</code> on <code>SDL_EVENT_WINDOW_FOCUS_LOST</code>. It
+       clears levels, edges and the queue, so the next update sees a fresh rising edge if the key
+       really is still down. Note that it also forgets the mouse origin, deliberately — otherwise
+       the first frame back delivers the entire distance the cursor travelled while you were away.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">An axis reads a huge value on the first frame</span>
+    <p><strong>Symptom.</strong> The camera snaps somewhere absurd exactly once, at start-up or
+       after a scene change.</p>
+    <p><strong>Cause.</strong> A mouse delta computed against a previous position that was never
+       set, so the first frame's "delta" is the cursor's absolute position.</p>
+    <p><strong>Fix.</strong> The map tracks whether it has a previous sample and reports zero
+       until it does. §F of the harness asserts exactly this, and also that
+       <code>reset()</code> puts it back into that state.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">An action silently does nothing after editing a config file</span>
+    <p><strong>Symptom.</strong> A control stops working, with no error anywhere.</p>
+    <p><strong>Cause.</strong> A typo in an action name. If lookup <em>declared</em> on miss, the
+       typo would create a brand-new action with no bindings and no code reading it — a perfectly
+       functioning thing that does nothing.</p>
+    <p><strong>Fix.</strong> <code>find()</code> returns an invalid id and does not declare;
+       <code>declare()</code> is the only thing that creates. Check the return. The harness asserts
+       that <code>find</code> of an unknown name leaves the action count unchanged.</p>
+  </div>
+
+  <!-- =================================================================
+       11 — EXERCISES
+       ================================================================= -->
+  <h2 id="exercises"><span class="num">11</span>Exercises</h2>
+
+  <ol class="exercises">
+    <li>
+      <p><strong>11.1 — Save and load the bindings.</strong> Write the binding table to a text
+         file and read it back, so a player's rebinds survive a restart. Actions by
+         <em>name</em>, not by id — the ids are assignment order and will change the moment
+         somebody adds a <code>declare</code> call.</p>
+      <details><summary>Hint</summary>
+         <p>One line per binding: action name, source, code, scale. Loading is
+            <code>declare(name)</code> — which is idempotent, so it does the right thing whether
+            or not the program declared it first — then the matching <code>bind_*</code>.</p>
+      </details>
+      <details><summary>Solution sketch</summary>
+         <p>The interesting part is not the parsing, it is what to do when a file names an action
+            the program does not have. Declaring it is wrong (it will never be read); refusing to
+            load the file is wrong (one stale line should not lose every rebind). Skip the line and
+            log it — the same shape Lesson 5.3's log/error rules produce everywhere else.</p>
+      </details>
+    </li>
+
+    <li>
+      <p><strong>11.2 — Add the gamepad.</strong> §7 lists the five steps and marks the SDL3
+         signature as needing verification against the headers. Do all five. Then unplug the
+         controller while an action bound to it is held, and make sure the release edge fires.</p>
+      <details><summary>Hint</summary>
+         <p>The first four are mechanical. The fifth is the exercise: a disconnected device stops
+            answering, and "stops answering" must become "contributes zero" rather than "keeps
+            its last value". Where does that belong — in the binding, or in whatever owns the
+            <code>SDL_Gamepad*</code>?</p>
+      </details>
+      <details><summary>Solution sketch</summary>
+         <p>In the snapshot, not in the map. A disconnected pad's <code>key_down</code> equivalent
+            returns false, the sum drops to zero, the level goes false, and the release edge falls
+            out of §4's existing machinery with no new code at all. <strong>If you found yourself
+            adding a special case to <code>action_map</code>, the abstraction boundary is in the
+            wrong place</strong> — and noticing that is worth more than the feature.</p>
+      </details>
+    </li>
+
+    <li>
+      <p><strong>11.3 — Record and replay.</strong> Record the action values of every frame to a
+         buffer, then play them back through a snapshot type that reads from the buffer instead of
+         from a device. Check that the demo reproduces itself exactly.</p>
+      <details><summary>Hint</summary>
+         <p>You do not need to record inputs at all — record the <em>action values</em>, and make
+            the playback source a type satisfying <code>input_snapshot</code> whose six functions
+            are backed by the recording. This is §1's third problem, solved.</p>
+      </details>
+      <details><summary>Solution sketch</summary>
+         <p>It will not reproduce exactly, and finding out why is the exercise. The simulation is
+            deterministic (Lesson 1.4 verified that) but the number of steps per frame is not — it
+            depends on wall-clock time. A replay has to record and replay the <em>step count</em>
+            as well as the input, or drive the loop at a fixed step count. That is why replay
+            systems and fixed timesteps are always discussed together.</p>
+      </details>
+    </li>
+
+    <li>
+      <p><strong>11.4 — Conflict detection.</strong> Add
+         <code>action_map::conflicts(SDL_Scancode)</code>, returning every action already bound to
+         a key, so a settings screen can warn before a rebind silently shadows something. Then
+         decide: should <code>bind_key</code> refuse a conflict?</p>
+      <details><summary>Solution sketch</summary>
+         <p>It should not. Two actions on one key is often deliberate — "accept" and "shoot" in
+            different contexts, a modifier-free chord — and a binding layer that refuses it forces
+            the caller to work around it. Report the conflict and let the caller decide, which is
+            the same shape as Lesson 5.5's asset store reporting a load failure instead of
+            substituting a default. <strong>The flat binding list this exercise walks is the
+            reason §8's table is flat rather than per-action.</strong></p>
+      </details>
+    </li>
+
+    <li>
+      <p><strong>11.5 — Put the map in a component.</strong> §2.2 claims a two-player game holds
+         two maps and a per-entity game puts one in a component. Prove it: add a
+         <code>player_input</code> component holding an <code>action_map</code>, give two entities
+         one each with different bindings, and drive them from a single
+         <code>view&lt;player_input, placement&gt;</code>.</p>
+      <details><summary>Hint</summary>
+         <p><code>action_map</code> holds vectors, so it is movable but not trivially copyable —
+            which is fine, because Lesson 5.8's <code>pool&lt;T&gt;</code> requires only movability.
+            Worth checking that claim rather than assuming it.</p>
+      </details>
+      <details><summary>Solution sketch</summary>
+         <p>It works, and the interesting discovery is where <code>update()</code> goes: once per
+            map, per frame, in <code>on_input</code> — which is a <code>view&lt;player_input&gt;</code>
+            walk, and therefore a system like any other. Lesson 5.7's rule 1 (components stay small)
+            argues against it at scale, since an <code>action_map</code> is several vectors; the
+            honest alternative is a component holding an <em>index</em> into a small array of maps.</p>
+      </details>
+    </li>
+  </ol>
+
+  <!-- =================================================================
+       12 — RECAP & NEXT
+       ================================================================= -->
+  <h2 id="recap"><span class="num">12</span>Recap &amp; Next</h2>
+
+  <p>
+    The engine can now be told what the player meant. What it gained:
+  </p>
+
+  <ul>
+    <li><strong>Actions, bindings and values</strong> — one name in the middle, and the four
+        things §1 could not do all become possible. No gameplay code in the demo names a key.</li>
+    <li><strong>One mechanism for buttons and axes.</strong> Every binding contributes a signed
+        value; an action's value is the sum. Holding both halves of an axis gives exactly zero,
+        and no rule anywhere says so.</li>
+    <li><strong>Edges derived from the action's level.</strong> The bug this avoids is invisible
+        with one binding per action and fires as "sometimes it jumps twice" the moment somebody
+        binds a second device.</li>
+    <li><strong>A second kind of edge for the fixed step.</strong> <code>consume_pressed()</code>
+        fires exactly once per press however many times the step runs — including zero — which is
+        Lesson 1.4's trap closed rather than documented.</li>
+    <li><strong>The hook that was missing.</strong> <code>on_input()</code>: once per frame,
+        after input, before the simulation. Nothing else in the frame is that.</li>
+    <li><strong>A concept instead of an interface.</strong> <code>input_snapshot</code> makes the
+        mapping logic testable without a base class, without a virtual call, and without one
+        character changing in Lesson 1.2's header.</li>
+  </ul>
+
+  <p>
+    And what it did not gain, said plainly: <strong>a gamepad</strong>. §7 gives the reason —
+    it could not be run here, and untested device code is a liability — along with the five steps
+    and the one that is actually hard. What <em>is</em> demonstrated is the property the gamepad
+    claim rests on: one action, several bindings, more than one device.
+  </p>
+
+  <p>
+    The reference shot from Lesson 5.1 is byte-identical for the <strong>tenth</strong> lesson.
+  </p>
+
+  <p>
+    <strong>Next: 5.11 — Dear ImGui and the Debug Draw System.</strong> The tooling pair, and both
+    halves have an argument to make. ImGui is the first third-party UI in the course, so it owes
+    the “why we don't hand-roll this” justification the course demands of every dependency — and
+    a decision about which of the engine's two surfaces gets the backend first. Debug draw is not
+    a new file: <code>engine/gfx/debug_draw.hpp</code> has existed since Module 3, so the lesson
+    has to say what is wrong with it rather than quietly replacing it. Its first client is
+    obvious and immediately useful — draw a line from every entity to its parent, and Lesson 5.9's
+    hierarchy becomes something you can look at, which is also how you would debug an orphan or a
+    cycle.
+  </p>
+
+  <!-- =================================================================
+       13 — FURTHER READING
+       ================================================================= -->
+  <h2 id="reading"><span class="num">13</span>Further Reading</h2>
+
+  <ul class="reading">
+    <li><strong>Unity's Input System package</strong> — the same three-layer shape (actions,
+        bindings, control schemes) at production scale, with the composite bindings this lesson's
+        signed-sum rule replaces. Their “1D Axis” composite is exactly §3's two keys with
+        opposite scales, given a name and a UI.</li>
+    <li><strong>Unreal's Enhanced Input</strong> — the other production answer, and interestingly
+        different: modifiers and triggers are first-class objects in the binding chain rather than
+        a scale. Worth reading against §3 to see what a richer mechanism buys and costs.</li>
+    <li><strong>SDL3 <code>SDL_gamepad.h</code></strong> — the header to read before attempting
+        Exercise 11.2, and the authority for the signatures §7 declines to guess at.</li>
+    <li><strong>Glenn Fiedler, “Fix Your Timestep!”</strong> — the source of the accumulator this
+        lesson's queue exists to survive. Re-read the variable-step-count section with §5.2 in
+        mind; the input problem is a consequence of the loop and is rarely mentioned alongside it.</li>
+    <li><strong>Lesson 1.2</strong> for the level-versus-edge distinction this builds on,
+        <strong>1.4</strong> for the accumulator, and <strong>5.2</strong> for the application
+        layer that gained a hook.</li>
+  </ul>
+
+  <nav class="lesson-nav" aria-label="Lesson navigation (bottom)">
+    <a class="prev-l" href="05-09-transform-hierarchy.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">5.9 — Transform Hierarchy and the Camera System</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="../index.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">5.11 — Dear ImGui and the Debug Draw System</span>
+    </a>
+  </nav>
+
+</div>
+
+<!-- SHARED-SCRIPT:BEGIN -->
+<!-- The shared page script (theme toggle, TOC scrollspy, syntax highlighter),
+     linked rather than inlined. Single source of truth: docs/shared/course.js.
+     A plain classic script at end of body, so it runs exactly where the inline
+     copy used to: after the DOM is parsed, before KaTeX's deferred render. -->
+<script src="../shared/course.js"></script>
+<script defer
+        src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"
+        integrity="sha384-7zkQWkzuo3B5mTepMUcHkMB5jZaolc2xDwL6VFqjFALcbeS9Ggm/Yr2r3Dy4lfFg"
+        crossorigin="anonymous"></script>
+<script defer
+        src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+        integrity="sha384-43gviWU0YVjaDtb/GhzOouOXtZMP/7XUzwPTstBeZFe/+rCMvRwr4yROQP43s0Xk"
+        crossorigin="anonymous"
+        onload="renderMathInElement(document.body, {
+          delimiters: [
+            {left: '\\[', right: '\\]', display: true},
+            {left: '\\(', right: '\\)', display: false}
+          ],
+          throwOnError: false
+        });"></script>
+<!-- SHARED-SCRIPT:END -->
+</body>
+</html>

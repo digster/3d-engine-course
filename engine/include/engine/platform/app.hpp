@@ -115,6 +115,25 @@ public:
     /// reading `in()`.
     virtual void on_event(const SDL_Event& event);
 
+    /// Once per frame, after input is published and BEFORE any simulation step.
+    ///
+    /// **Lesson 5.10 added this hook, and the reason is a gap the other five could
+    /// not cover.** `on_event` runs per event, `on_fixed_step` runs zero or more
+    /// times, and `on_frame` runs after the steps. Nothing ran exactly once, at the
+    /// moment `in()` had just been refreshed and no step had yet consumed it — and
+    /// that is precisely the moment an `action_map` has to be updated, because a
+    /// map updated in `on_frame` would leave every step in the frame reading last
+    /// frame's actions.
+    ///
+    /// Also the right place for anything else that is once-per-frame and must
+    /// precede the simulation: reading a network snapshot, sampling a debug
+    /// scrubber, latching a replay's recorded intentions.
+    ///
+    /// **Frame-scoped edges are valid in here** — `in().key_pressed()`,
+    /// `action_map::pressed()` — because this runs exactly once. They are NOT
+    /// valid in `on_fixed_step`; see Lesson 1.4 and `action_map::consume_pressed`.
+    virtual void on_input();
+
     /// Advance the simulation by exactly `h` seconds. Called zero or more times
     /// per frame — never assume once.
     ///

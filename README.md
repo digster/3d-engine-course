@@ -7,7 +7,7 @@ There is no engine to download here and no framework doing the interesting parts
 write the math library, the rasterizer, the ECS, the renderer, the physics, and the editor. By
 the end you have a real engine and a game built on its public API.
 
-**Status:** curriculum and conventions published; lessons in progress — **Modules 0–4 are complete** and Module 5 is under way (54 of 94 lessons). The CPU software rasterizer is finished end to end, the same scene is drawn on a real GPU through SDL_GPU, and the tree is now a static library with a public API, a platform/application layer, its own logging, handle-based resource storage, an asset system that can load, share and free, a reusable A/B timing harness that has decided three architecture questions with numbers instead of folklore, and **a working from-scratch ECS** — a generational entity id honoured by every pool, sparse-set component storage, queries that lead with the smallest pool, and (5.9) a **transform hierarchy** whose resolve cost is flat in depth, with a camera that is an ordinary entity. Start at
+**Status:** curriculum and conventions published; lessons in progress — **Modules 0–4 are complete** and Module 5 is under way (55 of 95 lessons). The CPU software rasterizer is finished end to end, the same scene is drawn on a real GPU through SDL_GPU, and the tree is now a static library with a public API, a platform/application layer, its own logging, handle-based resource storage, an asset system that can load, share and free, a reusable A/B timing harness that has decided three architecture questions with numbers instead of folklore, and **a working from-scratch ECS** — a generational entity id honoured by every pool, sparse-set component storage, queries that lead with the smallest pool, a **transform hierarchy** whose resolve cost is flat in depth with a camera that is an ordinary entity, and (5.10) an **input layer that knows what the player meant** rather than which key they hit. Start at
 [`docs/index.html`](docs/index.html).
 
 ---
@@ -314,6 +314,53 @@ camera now *has* a placement to invert.
 Run `ecs_swarm` and press <kbd>F</kbd>: the sun drifts and the entire system — ninety-six
 planets, thirty-two moons, twenty-four invisible waypoints — follows it. Press <kbd>C</kbd> and
 the camera parks on a planet and rides.
+
+### Nothing names a key
+
+Since **Lesson 5.10** gameplay code asks about *actions*, not scancodes:
+
+```cpp
+engine::action_map actions;
+
+const engine::action_id jump  = actions.declare("jump");
+const engine::action_id steer = actions.declare("steer");
+
+actions.bind_key(jump, SDL_SCANCODE_SPACE);
+actions.bind_mouse_button(jump, SDL_BUTTON_LEFT);   // same action, second device
+actions.bind_key(steer, SDL_SCANCODE_A, -1.0f);     // …and an axis is two bindings
+actions.bind_key(steer, SDL_SCANCODE_D, +1.0f);     //    with opposite scales
+
+void on_input() override            // once per frame, before the simulation
+{
+    actions.update(in());
+    if (actions.pressed(jump)) { /* a frame-scoped edge, safe here */ }
+}
+
+void on_fixed_step(float h) override            // zero or more times per frame
+{
+    if (actions.consume_pressed(jump)) { /* …and a queued one, safe HERE */ }
+    turn(actions.value(steer) * h);             // a level; A and D cancel to 0
+}
+```
+
+**One mechanism covers buttons and axes:** every binding contributes a signed float and an
+action's value is the sum. Hold both halves of `steer` and you get exactly zero — a design with
+separate button and axis kinds would have needed a documented rule for that case, and this one
+does not, because −1 + 1 = 0.
+
+**An edge is a change in the *action*, not in a signal.** Bind `jump` to both a key and a mouse
+button, press one while the other is held, and there is still exactly one press edge. Derive
+edges from bindings instead and the player jumps twice — a bug that works perfectly with one
+binding and appears the week somebody adds a controller.
+
+**And a fixed-timestep engine needs two kinds of edge.** `on_fixed_step` runs zero or more times
+per frame, so a frame-scoped edge read there fires twice on a two-step frame *and* is lost
+entirely on a zero-step one. `consume_pressed()` takes one queued press and fires exactly once
+however the steps fall.
+
+Run `ecs_swarm` and press <kbd>K</kbd>: spawning is rebound from <kbd>Space</kbd> to
+<kbd>Enter</kbd> while the program runs, and the HUD says so — because it reads the binding table
+rather than a hard-coded string.
 
 The software path is **not** deprecated. It is the *reference*: every measured claim in Modules 2
 and 3 was made against it, and a port whose reference has been deleted is a port nobody can check.
@@ -661,13 +708,13 @@ Third-party, each with an explicit "why we don't hand-roll this" justification: 
 ## Repository layout
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the full tree and the reasoning behind it. The short
-version, as of **Lesson 5.9**:
+version, as of **Lesson 5.10**:
 
 ```
-engine/include/engine/   the public API — 53 headers, and the only path a demo can name
+engine/include/engine/   the public API — 54 headers, and the only path a demo can name
 engine/include/engine/asset/      search_path, asset_store — names, roots, lifetimes
 engine/include/engine/core/       clock, input, fixed_step, profile, log, assert,
-                                  handle, pool, bench
+                                  handle, pool, bench, actions (5.10)
 engine/include/engine/ecs/        entity, pool, registry, view — the world (5.8)
                                   hierarchy, camera — structure and viewpoint (5.9)
 engine/include/engine/platform/   how a program starts: platform.hpp, app.hpp, main.hpp
@@ -675,7 +722,7 @@ engine/src/              private implementation; stb_image stops here
 demos/common/            content shared by demos and verification harnesses
 demos/sandbox/           Lessons 2.1–4.9, on [Tab] and four flags; keeps its own main()
 demos/hello_cube/        the public-API acceptance test
-demos/ecs_swarm/         Lessons 5.8-5.9: 154 entities, ten components, three levels
+demos/ecs_swarm/         Lessons 5.8-5.10: 154 entities, three levels, no scancodes
 demos/pong/              Lesson 1.8's game, on engine::app — 87 lines, no main()
 tools/                   the editor and asset cooker (Module 8)
 ```

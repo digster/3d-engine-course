@@ -5268,3 +5268,148 @@ also works and brings its own surprises with trailing whitespace.)
 The "break even" label on the dirty-flag chart was right-anchored at the plot's right edge —
 directly on top of the 1.29× bar it was there to explain. The right-hand bars are the tall ones in
 any chart whose series rises. Anchor annotations on the side the data has left empty.
+
+---
+
+## Input mapping facts (Lesson 5.10)
+
+### Four reasons to add a layer, none of them performance
+
+A hard-coded scancode cannot be rebound, is about one device, cannot be recorded (a replay wants
+the *intention*, because the binding may have changed since), and **says the wrong thing** —
+`key_pressed(SDL_SCANCODE_SPACE)` inside a jump handler is a sentence about hardware in a file
+about jumping. Recorded because the fourth is the one that gets dismissed and is the one that
+compounds: code that fails to describe itself gets harder to change every year.
+
+### A design lesson should say it is a design lesson
+
+Modules 5.6, 5.7 and 5.9 each turned on a benchmark because each was choosing between designs
+that differed in *cost*. This one was not, and manufacturing a benchmark anyway would have been
+worse than useless: it would attach a number to a decision the number did not make, and the next
+reader would believe the number was the reason. **Say "this measures nothing, and here is why"
+rather than measuring something irrelevant to look rigorous.**
+
+### One signed float per binding covers buttons and axes
+
+`jump` bound to Space with +1; `steer` bound to A with −1 and D with +1; `look_x` bound to a mouse
+delta with 0.5. Same rule, three jobs. The payoff is the case nobody thinks about: **holding both
+halves of an axis gives exactly zero, and no rule anywhere says so.** A design with separate
+button and axis kinds would have needed to define, document and test that case.
+
+The corollary is that the value must *not* be clamped. Two keys on one button action sum to 2,
+which `held()` does not care about; a mouse flick should be big. Clamping would have to know which
+kind of action it was looking at, and not knowing that is the whole point.
+
+### An edge is a change in the action, not in a signal
+
+Bind one action to a key *and* a mouse button. Press the key (one rising edge, correct). Press the
+mouse while the key is held — a binding-derived edge fires **again**, and the player jumps twice.
+Release the key while the mouse is down — a binding-derived edge fires a *release* while the
+action is plainly still active.
+
+Derive from the summed level and all four frames are right. **The bug is invisible with one
+binding per action**, which is what a first implementation has and what a first test writes; it
+ships as "sometimes it jumps twice" the week a player binds a controller alongside their keyboard.
+The test that catches it is four lines of setup and nothing else in the harness would have.
+
+### A fixed-timestep engine needs two kinds of edge
+
+`on_fixed_step` runs zero or more times per frame, so a frame-scoped edge read there fails in
+**both** directions: a two-step frame acts on it twice, and a zero-step frame loses it entirely
+because the edge came and went while nothing was listening. Neither is fixable by the caller
+without cross-frame state, so the map keeps it — every rising edge queues a press,
+`consume_pressed()` pops one.
+
+This is Lesson 1.4's trap *closed* rather than documented, and it is worth noticing the
+difference. Documenting a hazard moves the cost to every future caller; closing it costs one
+`uint8_t` per action.
+
+### A bounded queue is a decision, not an overflow bug
+
+Four deep, and presses past that are dropped. An unbounded queue turns a hitch into a burst of
+jumps arriving after the player has stopped asking, which feels worse than losing them. Four
+survives a stutter and is short enough not to feel like a recording; a fighting game with a
+deliberate input buffer raises it and calls the number a design parameter, **which is exactly
+what it is.** The engine's job is to make the number visible and the behaviour predictable, not
+to guess the genre.
+
+### "Once per frame" is not the whole requirement
+
+`on_frame` runs exactly once per frame and is still the wrong place to update an input map,
+because it runs *after* the simulation steps — so every step reads last frame's actions. The
+requirement is **once per frame, after input is published, and before anything reads it**. That
+gap had no hook, so 5.10 added `on_input()`.
+
+The symptom of getting it wrong is worth knowing because it gets misattributed: everything works,
+nothing is broken, and the game feels 16 ms mushy. People blame the display, the driver or the
+mouse.
+
+### A hook that serves one caller is a smell — check before adding it
+
+`on_input` is defensible because the once-per-frame, pre-simulation moment is also where you read
+a network snapshot, sample a debug scrubber, or latch a replay's recorded intentions. It was
+missing before this lesson happened to need it. If the only answer to "what else is this for" had
+been "nothing", the right move would have been to let the caller update the map at the top of its
+own first fixed step and document the ordering.
+
+### A concept when the test cannot otherwise exist
+
+`input::update()` samples SDL's live keyboard state, so a harness that wants a key held would have
+to persuade SDL that a key is held — which SDL offers no supported way to do. Templating
+`action_map::update` on an `input_snapshot` concept (six accessors) makes a hand-written struct a
+complete input device, and the shipping logic runs unchanged.
+
+A concept beats an abstract base here on three counts, and all three are worth separating:
+**it changes nothing in `input.hpp`** (not one character of Lesson 1.2's header moved);
+**it costs no virtual call** on a loop that runs per binding per frame; and **it is open** —
+`engine::input` satisfies it without knowing it exists, where a base class is implemented only by
+types whose author agreed to. Put a `static_assert` beside the concept so a rename in the source
+type fails at the requirement rather than deep inside a template.
+
+### Do not ship device code you cannot run
+
+The lesson's second motivation is "a gamepad has no scancodes", so the obvious move is to add
+gamepad support — and it was declined, deliberately and out loud. It could not be exercised on
+this machine, and **untested device code in an engine is a liability that looks like support**: it
+compiles, it appears in the API, and the first person to plug in a controller discovers it was
+never run.
+
+What was shipped instead is the property the claim actually rests on — one action, several
+bindings, more than one device — demonstrated with a keyboard and a mouse, plus the five steps and
+an explicit ⚠ VERIFY on the SDL3 signatures. **A named gap beats an unverified feature.**
+
+### The hardest part of a new device is disconnection, and it does not belong in the mapper
+
+An action bound to a controller that has been unplugged must go inactive, and the release edge
+must fire. The right place for that is the *snapshot*: a disconnected pad answers false, the sum
+drops to zero, the level goes false, and the release edge falls out of the existing machinery with
+no new code. **If you find yourself special-casing the mapper, the abstraction boundary is in the
+wrong place.**
+
+### A lookup that declares turns a typo into a silent no-op
+
+`find()` returns an invalid id and does not create. If it declared on miss, a misspelled action
+name in a config file would produce a brand-new action with no bindings and no code reading it —
+a perfectly functioning thing that does nothing, with no error anywhere. Same shape as Lesson
+5.5's "no fallback asset": substituting something plausible removes the program's ability to
+notice.
+
+### `reset()` has to forget the mouse origin too
+
+Clearing levels, edges and the queue on focus loss is obvious. Forgetting the *previous cursor
+position* is not, and without it the first frame back delivers the entire distance the cursor
+travelled while the window was in the background — as a single camera-flinging delta. The same
+applies at start-up, which is why the first frame ever reports a delta of zero.
+
+### A HUD that reads the binding table cannot go stale
+
+The demo prints `spawn on [Space]/[LMB]` by asking the map, not from a string literal. Press the
+rebind key and it says `[Enter]`, because the binding really changed. Small, and it is the first
+dividend the layer pays: **a program that can describe its own controls**, which a switch
+statement could never do.
+
+### Count the thing before writing the number down
+
+The lesson said "Lesson 5.2's application layer offers six hooks". It offered seven. Caught by
+grepping `virtual ` in `app.hpp` while updating ARCHITECTURE.md, not by re-reading the prose —
+a number in a sentence is a claim, and claims about the codebase are checkable in one command.
