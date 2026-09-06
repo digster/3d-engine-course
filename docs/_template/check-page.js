@@ -253,7 +253,11 @@
   // wrong until you see a grey and an amber "modified" in the same page.
   //
   // Cheapest possible guard: enumerate the modifiers .tag actually defines.
-  const TAG_MODIFIERS = ['new', 'modified'];
+  // 'unchanged' arrived in Lesson 6.1, for a page that reproduces a file it did
+  // not edit. Note that this list and course.css's rules are two places that have
+  // to agree — which is the very duplication this check exists to police, so it
+  // is worth saying: ADD THE CSS RULE FIRST, then this line.
+  const TAG_MODIFIERS = ['new', 'modified', 'unchanged'];
   out.unknownTagClasses = [];
   document.querySelectorAll('.listing figcaption .tag').forEach(el => {
     [...el.classList].forEach(cls => {

@@ -2329,3 +2329,47 @@ the page lists that a later lesson touches".
 
 `next:` is now 6.1 — Linear and sRGB: The Gamma Lesson, and Module 6 opens there because every
 lighting result in the module is wrong until the colour space is settled.
+
+---
+
+## 2026-09-05 (c) — `next` (Lesson 6.1: Linear and sRGB — The Gamma Lesson)
+
+> next
+
+Module 6 opens, and it opens here because **every lighting result in the module is wrong until
+the colour space is settled** — there is no point deriving a BRDF whose inputs are not quantities
+of light.
+
+The lesson turns Lesson 1.6's rule into a **pipeline**: two conversions, at the edges, with light
+in between. The difference from 1.6's per-operation conversion is structural rather than a matter
+of diligence — converting at the edges makes the middle a region where ordinary arithmetic is
+valid *because there is nothing else there*.
+
+Applying that as an **audit** — fifteen conversion sites, each given a job — left one row over.
+**The GPU path had an input edge and no output edge at all.** SDL claims windows with
+`SWAPCHAINCOMPOSITION_SDR`, whose own header says "pixel values are in sRGB encoding", and
+`scene.frag.hlsl` has returned linear *light* into it since Lesson 4.8. Measured on real
+downloaded pixels: **linear 0.5 stored as 128 where 188 was meant.** The error is a ratio — **13×
+too dark in shadow, 1.1× near white** — which is the whole answer to how four modules of looking
+at the picture missed it, and why 4.8's pixel-by-pixel comparison sat on top of it and reported
+87% agreement: that harness built its own `_SRGB` target and tested a configuration the shipped
+program does not use.
+
+The theory is derived rather than quoted. The encoding is a **budget** (26 codes in the darkest
+tenth spent evenly, against 90 under sRGB; 8 bits of linear light needs ~12 to look as smooth),
+and the linear toe falls out of the slope of x^(1/2.4) being **infinite** at zero. `pow(x, 1/2.2)`
+is a different curve and is off by **8 codes** down in the toe.
+
+The fix is one call — asked, set, and then **read back** — with the answer stored as a
+`gpu_report` field so a renderer and a harness cannot silently disagree again. A shader fallback
+covers machines that refuse, and is explicitly the *second*-best answer, because hardware blending
+happens after the fragment shader. Found a latent second instance on the way: `set_present_mode()`
+passed a literal `SDR` and would have undone the fix on the first vsync toggle.
+
+**34 checks / 0 failures**; `verify_45`…`511` green; and the golden **byte-identical for the
+twelfth lesson** — which this lesson's own plan predicted it would not be. The prediction failed
+for a statable reason, and the reason is the finding: the software renderer had been right since
+1.6, and the whole defect was on a stage the reference render never touches.
+
+`next:` is now 6.2 — Radiometry-Lite and What a BRDF Is, where the golden genuinely is at risk,
+because the π currently hiding in the light's intensity belongs in the BRDF.

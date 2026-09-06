@@ -88,6 +88,25 @@ struct gpu_report
     /// load-bearing rather than informational.
     SDL_GPUTextureFormat swapchain_format = SDL_GPU_TEXTUREFORMAT_INVALID;
 
+    /// Which colour space the swapchain is in — **Lesson 6.1**, and the single
+    /// most consequential field in this struct for whether the picture is right.
+    ///
+    /// SDL claims a window with `SDR`, whose header definition is "pixel values
+    /// are in sRGB **encoding**": a shader writing there is writing codes. Our
+    /// fragment shader writes *light*. `gpu_device::create` therefore asks for
+    /// `SDR_LINEAR`, which gives an `_SRGB` swapchain format and moves the
+    /// encode into the hardware's write stage where it is free and exact.
+    SDL_GPUSwapchainComposition composition = SDL_GPU_SWAPCHAINCOMPOSITION_SDR;
+
+    /// True when the swapchain format encodes on write, so a shader may return
+    /// linear light directly. **False means the shader must encode**, and it is
+    /// false whenever the `SDR_LINEAR` request above was refused.
+    ///
+    /// A renderer must read this rather than assume either answer: assuming true
+    /// gives the too-dark picture Lesson 6.1 opens with, and assuming false
+    /// double-encodes and gives a washed-out, milky one.
+    bool output_encodes_in_hardware = false;
+
     /// Which present modes this window supports. VSYNC is guaranteed everywhere;
     /// the other two are not, which is why they are asked about rather than used.
     bool supports_immediate = false;
@@ -191,6 +210,24 @@ private:
 /// The name SDL uses for a texture format, for logs. Covers the formats this
 /// engine can meet as a swapchain; anything else reports its numeric value.
 [[nodiscard]] const char* name_of(SDL_GPUTextureFormat f);
+
+/// The name of a swapchain composition, for logs. **Lesson 6.1.**
+[[nodiscard]] const char* name_of(SDL_GPUSwapchainComposition c);
+
+/// Does this format apply the sRGB transfer function on read and on write?
+///
+/// **Lesson 6.1 promoted this out of a file-local helper**, and the reason is
+/// worth a line: it was private to `gpu_present.cpp` while exactly one file
+/// asked the question. Two files ask it now — the present target, to decide
+/// whether its mirror texture must cancel the swapchain's decode, and the
+/// device, to answer `output_encodes_in_hardware`. A predicate two callers need
+/// is not a detail of either of them.
+///
+/// The list is short and honest: these are the 8-bit sRGB formats a swapchain
+/// can arrive as. It is deliberately **not** "does the name contain SRGB" —
+/// there is no such query in SDL, and inventing one over a string would be a
+/// guess dressed as a check.
+[[nodiscard]] bool is_srgb_format(SDL_GPUTextureFormat f);
 
 /// The names of the bits set in a shader-format mask, e.g. "MSL | METALLIB".
 ///

@@ -49,7 +49,10 @@ cbuffer Light : register(b0, space3)
     float3 key;         // 16 — the lamp's LINEAR colour times its intensity
     float  pad1;        // 28
     float3 ambient;     // 32 — light.hpp's honest fudge
-    float  pad2;        // 44
+    float  encode_output; // 44 — Lesson 6.1: 1 = this shader must encode sRGB,
+                          //      0 = the swapchain is _SRGB and does it for us.
+                          //      Was `pad2`; HLSL's packing had already reserved
+                          //      the slot, so the flag cost nothing.
     float3 eye_world;   // 48 — a highlight is view-dependent (Lesson 3.7)
     float  spec_model;  // 60 — 0 = none, 1 = Phong, 2 = Blinn
 };
@@ -141,6 +144,38 @@ float4 main(Input input) : SV_Target0
     // past the terminator on geometry the light cannot reach.
     const float3 incoming = key * n_dot_l;
     const float3 lit = base * (incoming + ambient) + specular * incoming * spec;
+
+    // ---- The last place light exists — Lesson 6.1 ---------------------------
+    //
+    // `lit` is a QUANTITY OF LIGHT. Everything above this line is arithmetic on
+    // light and is only meaningful because it is: a reflectance multiplies an
+    // amount of light, and two lights add. What a display consumes is not light,
+    // it is a CODE, and the transfer function between them is not optional.
+    //
+    // There are exactly two right answers to "who applies it", and this shader
+    // supports both because SDL guarantees only the second-best one:
+    //
+    //   encode_output == 0  the swapchain is an _SRGB format (SDR_LINEAR), so the
+    //                       hardware encodes during the write. Free, exact, and
+    //                       correct through blending — which is the reason to
+    //                       prefer it: hardware blending happens AFTER this
+    //                       shader, and if we encode here, the blender adds codes.
+    //   encode_output == 1  the swapchain is plain SDR, whose values are already
+    //                       sRGB codes, so we must encode. Correct for opaque
+    //                       geometry and wrong the moment anything blends.
+    //
+    // The curve is the EXACT piecewise sRGB transform — the same constants as
+    // engine::linear_to_srgb, because two implementations of "the sRGB curve"
+    // that disagree are a bug that only shows up in a diff. Never pow(x, 1/2.2):
+    // that misses the linear toe and is visibly wrong in the darkest codes, which
+    // is precisely where this whole subject does its damage.
+    if (encode_output > 0.5f)
+    {
+        const float3 c = saturate(lit);
+        const float3 low  = c * 12.92f;
+        const float3 high = 1.055f * pow(c, 1.0f / 2.4f) - 0.055f;
+        return float4(c <= 0.0031308f ? low : high, 1.0f);
+    }
 
     return float4(lit, 1.0f);
 }

@@ -223,7 +223,23 @@ struct scene_light_uniforms
     vec3  key;         ///< 16 — the lamp's linear colour TIMES its intensity
     float pad1;        ///< 28
     vec3  ambient;     ///< 32 — light.hpp's honest fudge, in linear light
-    float pad2;        ///< 44
+
+    /// 44 — **Lesson 6.1**, and it cost nothing to add, which is the point.
+    ///
+    /// 1 means "the shader must apply the sRGB transfer function before
+    /// returning"; 0 means the swapchain is an `_SRGB` format and the hardware
+    /// does it on write. Fill it from
+    /// `!gpu_device::report().output_encodes_in_hardware` and never guess: one
+    /// wrong answer gives a picture 2.3x too dark at mid grey, the other gives a
+    /// washed-out one.
+    ///
+    /// THIS SLOT WAS ALREADY HERE. It was `pad2`, and it existed because HLSL
+    /// packs a `float3` and a `float` into one 16-byte register (Lesson 4.6) —
+    /// so the padding was never wasted space, it was an unused field. The struct
+    /// is still 64 bytes, every offset is unchanged, and the `static_assert`s
+    /// below did not move. A flag that costs zero bytes and zero repacking is a
+    /// flag you can afford to read on every fragment.
+    float encode_output;
     vec3  eye_world;   ///< 48 — where the camera is; a highlight needs it
     float spec_model;  ///< 60 — 0 = none, 1 = Phong, 2 = Blinn (3.7's enum)
 };

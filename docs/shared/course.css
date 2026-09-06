@@ -504,6 +504,11 @@ blockquote {
 }
 .listing figcaption .tag.new      { background: #1f4433; color: #7fd6a5; }
 .listing figcaption .tag.modified { background: #453a1c; color: #e0be74; }
+/* Lesson 6.1 added the third state. Some lessons reproduce a file they did NOT
+   change — 6.1 lists colour.hpp/colour.cpp whole because it is the lesson that
+   owns them, not the one that edited them — and labelling that "modified" would
+   be a small lie in a caption. Deliberately the quietest of the three. */
+.listing figcaption .tag.unchanged { background: #33373f; color: #a8adb8; }
 .listing figcaption .lang { margin-left: auto; opacity: 0.65; }
 
 /* Every <pre> scrolls, not just the ones inside a listing. Transcripts inside

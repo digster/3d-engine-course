@@ -7,7 +7,7 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-09-05 (after Lesson 5.11 — 56 of 95 lessons; MODULE 5 COMPLETE)
+updated: 2026-09-05 (after Lesson 6.1 — 57 of 95 lessons; Module 6 begun)
 
 conventions:
   ecs-storage: THE ECS IS A SPARSE SET, DECIDED IN 5.7 BY MEASUREMENT, NOT TASTE.
@@ -110,6 +110,77 @@ conventions:
         opposite jobs. The namespace keeps them apart; `using namespace engine;`
         plus `using namespace engine::ecs;` makes bare `pool` ambiguous, which is
         the good kind of breakage. The engine never writes `using namespace`.
+  colour-pipeline: TWO CONVERSIONS, AT THE EDGES — NOT ONE PER OPERATION, AND NOT
+        "CAREFULLY". 6.1 turned 1.6's rule into a pipeline and found the missing
+        edge. THIS SUPERSEDES NOTHING IN conventions:colour, which stands entire;
+        it pays the first two clauses of that block's "NOT YET LINEAR" note.
+        THE TWO INTEGERS: code 128 emits 0.2159 of white (not half); half the
+        light is code 188. Sixty codes apart, and every mistake in this subject is
+        a variation on that gap.
+        THE ENCODING IS A BUDGET, NOT A CRT ARTEFACT — and the CRT story, while
+        true, is useless because CRTs are gone and the encoding is not. The eye
+        judges RATIOS, so equal code steps should be equal ratios. MEASURED on 256
+        codes: evenly spaced in LIGHT puts 26 in the darkest tenth and 128 in the
+        brightest half where nobody can tell two apart; sRGB puts 90 in the darks
+        and 68 in the bright half. 8 bits of linear light needs ~12 to look as
+        smooth. Frame it as perceptual compression and it stops being history.
+        THE TOE IS DERIVED, NOT DECREED. d/dx of x^(1/2.4) is (1/2.4)x^-0.583,
+        which goes to INFINITY at zero — unbounded gain at black, so sensor noise
+        becomes banding, the inverse is unstable, and an 8-bit boundary is
+        arbitrarily sensitive. Hence 12.92*x below 0.0031308. MEASURED back out of
+        the shipped function as 12.9200. The four constants are not independent:
+        0.04045 = 12.92 * 0.0031308, and 1.055/0.055 make the pieces MEET (step at
+        the join measured at 8.02e-05, a fiftieth of a code).
+        pow(x, 1/2.2) IS A DIFFERENT CURVE: worst disagreement 8 CODES near linear
+        0.0010, down in the toe where the eye has the most codes to notice with.
+        Fine as a stylistic brightness knob; NEVER as the output transfer
+        function, because that one must agree to the code with every hardware
+        sampler in the pipeline.
+        THE AUDIT IS THE METHOD, and it is the part to copy: grep every conversion
+        (15 sites outside colour.{hpp,cpp}) and give each a JOB — input edge,
+        output edge, or per-operation. One row was left over.
+        THE HOLE: THE GPU PATH HAD AN INPUT EDGE AND NO OUTPUT EDGE. SDL claims a
+        window with SWAPCHAINCOMPOSITION_SDR, whose header says "pixel values are
+        in sRGB ENCODING", and scene.frag.hlsl has returned linear LIGHT since 4.8.
+        MEASURED, on real downloaded pixels: linear 0.5 -> code 128, correct 188.
+        Ramp (linear / raw / correct): 0.02/5/39, 0.05/13/63, 0.10/26/89,
+        0.20/51/124, 0.35/89/160, 0.50/128/188, 0.65/166/211, 0.80/204/231,
+        0.95/242/249.
+        THE ERROR IS A RATIO, NOT AN OFFSET: 13x at linear 0.02, 1.1x at 0.95.
+        THAT SHAPE IS WHY FOUR MODULES DID NOT FIND IT — the bright half is nearly
+        right and the dark half reads as a deliberate grade. An error shaped like
+        this hides wherever there is least contrast to spare.
+        AND IT IS WHY 4.8's COMPARISON MISSED IT: verify_48 rendered into
+        R8G8B8A8_UNORM_SRGB, so inside the test the encode happened and the two
+        renderers genuinely agreed (87% byte-identical). The measurement was sound
+        and measured a configuration THE SHIPPED PROGRAM DOES NOT USE. A TEST THAT
+        CONSTRUCTS ITS OWN ENVIRONMENT TESTS THE ENVIRONMENT IT CONSTRUCTED —
+        which is why the answer is now a FIELD on gpu_report rather than a literal
+        in two places.
+        THE FIX, AND THE FOUR HABITS IN IT: ask (WindowSupportsGPUSwapchainComposition)
+        then set then READ THE FORMAT BACK; store the answer as a field, because a
+        comment would be true on one machine; promote a predicate the moment a
+        second caller needs it; and a TWO-PARAMETER SETTER MUST PASS THROUGH THE
+        PARAMETER IT IS NOT CHANGING — set_present_mode passed a literal SDR and
+        would have silently undone the fix on the first vsync toggle.
+        THE SHADER FALLBACK IS THE SECOND-BEST ANSWER, and the reason is the
+        POSITION OF THE BLEND STAGE: hardware blending happens AFTER the fragment
+        shader, so a shader that encodes hands the blender codes to interpolate —
+        correct for opaque geometry, wrong the moment anything is transparent.
+        Prefer the swapchain; keep the fallback; read the field to know which.
+        THREE IMPLEMENTATIONS OF ONE CURVE AGREE EXACTLY on nine flat samples —
+        hardware write, our HLSL, engine::linear_to_srgb_u8, worst disagreement 0
+        codes. This does NOT contradict 4.8's one-code floor: these are flat values
+        chosen away from code boundaries; 4.8's came off interpolated textured
+        geometry. A tighter result on an easier test is not a better result.
+        THE SOFTWARE PATH NEEDED NOTHING. Its output edge (to_encoded in
+        raster.cpp) has been right since 1.6, which is why the golden survived —
+        see the prediction note under decisions.
+        STILL OWED, NAMED RATHER THAN DISCOVERED: headroom above 1.0 + a float
+        target + tonemapping (the HDR lesson); the software renderer's three
+        remaining per-operation conversions (clip.cpp, light.hpp, soft_renderer.cpp
+        — all CORRECT, just not a pipeline); and colour SPACES as opposed to
+        transfer functions (primaries — this course stays in sRGB primaries).
   debug-draw: SAYING WHAT TO DRAW AND DOING IT ARE TWO FILES, AND THE INCLUDE
         LISTS ARE THE INTERFACE. 5.11 reworked a header that had been wrong since
         Module 3 WITHOUT DELETING ANY OF IT.
@@ -2937,8 +3008,30 @@ completed:
          11 lessons, inside its stated 9-11, and the course total is 95.)
   - 5.11 Dear ImGui and the Debug Draw System
   ===> MODULE 5 COMPLETE <===
+  - 6.1  Linear and sRGB: The Gamma Lesson
 
 capabilities:
+  - 6.1 THE ENGINE'S OUTPUT STAGE IS CORRECT ON BOTH SURFACES.
+    NO NEW HEADERS, NO NEW SOURCES — 56 public headers and 32 sources, unchanged.
+    This lesson CLOSED A GAP rather than adding a subsystem.
+    gpu_device.{hpp,cpp}  asks for SDL_GPU_SWAPCHAINCOMPOSITION_SDR_LINEAR;
+                          gpu_report gains `composition` and
+                          `output_encodes_in_hardware`; name_of(composition);
+                          is_srgb_format PROMOTED from a file-local helper in
+                          gpu_present.cpp to the public header (two callers now).
+    gpu_present.cpp       uses the promoted predicate instead of its own copy.
+    gpu_uniform.hpp       scene_light_uniforms::pad2 -> encode_output. SAME 64
+                          BYTES, SAME OFFSETS: HLSL packing had already reserved
+                          the slot, so the flag cost nothing (4.6).
+    scene.frag.hlsl       applies the EXACT piecewise sRGB curve when
+                          encode_output > 0.5, and returns light otherwise.
+    demos/sandbox         fills the flag from gpu.report(), never a constant.
+    docs/shared/course.css + docs/_template/check-page.js gained a THIRD listing
+                          tag, `unchanged`, for a page that reproduces a file it
+                          did not edit. The CSS rule and the checker's allowlist
+                          are two places that must agree; add the CSS first.
+    MEASURED ON THIS MACHINE: the swapchain was B8G8R8A8_UNORM and is now
+    B8G8R8A8_UNORM_SRGB. Linear 0.5 was stored as 128 where 188 was meant.
   - 5.11 THE ENGINE CAN DRAW WHAT IT IS THINKING, AND BE ASKED QUESTIONS.
     TWO SUBSYSTEMS, 54 -> 56 public headers, 30 -> 32 engine sources, and the first
     third-party library in the PUBLIC link line.
@@ -5035,7 +5128,8 @@ files:
                  05-08-ecs-runtime.html,
                  05-09-transform-hierarchy.html,
                  05-10-input-mapping.html,
-                 05-11-imgui-debug-draw.html
+                 05-11-imgui-debug-draw.html,
+                 06-01-linear-and-srgb.html
   docs/shared/: course.css, course.js      (THE stylesheet + page script; one copy each)
   docs/_template/: lesson-template.html, README.md, apply-shared.py, check-page.js
   scratch/ (5.7, not shipped with the engine): ecs_probe.hpp, bench_57.cpp,
@@ -5069,6 +5163,16 @@ files:
            (NOTE: build_57.py was amended in 5.8 — it no longer stamps a STATE
             block, and it now byte-reproduces the shipped 05-07 page. Any future
             build_NN.py copied from it inherits the correct form.)
+  scratch/ (6.1, not shipped with the engine): verify_61.cpp, build_verify_61.sh,
+           figs_61.py, build_61.py, l61_body_{a,b,c}.html, l61_fig{1..6}.svg,
+           probe_61.cpp (a THROWAWAY that established the facts before a line of
+           the lesson was written: it printed the default swapchain format, asked
+           which compositions this window supports, and tabulated what raw linear
+           values look like when read as codes. Kept because "write the probe
+           first" is the habit, not the file.)
+           (build_61.py PINS NOTHING YET and lists gpu_device.{hpp,cpp},
+            gpu_uniform.hpp, scene.frag.hlsl AND colour.{hpp,cpp} whole. The rest
+            of Module 6 will touch several of those, so it will need pins.)
   scratch/ (5.11, not shipped with the engine): verify_511.cpp,
            build_verify_511.sh, figs_511.py, build_511.py,
            l511_body_{a,b,c}.html, l511_fig{1..7}.svg
@@ -5089,52 +5193,55 @@ files:
   (retired: src/ — the whole directory. hello.cpp.)
 
 
-next: 6.1 — Linear and sRGB: The Gamma Lesson
-      (planned filename: docs/lessons/06-01-linear-and-srgb.html — 5.11's TWO next
-      links point at the index and BOTH need repointing, and build_511.py's TAIL
-      holds the bottom one. AND: build_511.py PINS NOTHING. It lists BOTH
-      CMakeLists.txt files, engine.hpp and actions.hpp, and Module 6 will edit at
-      least the CMake files (shaders) — so before touching any of them:
-        git show <5.11 commit>:<path> > scratch/l511_<name>
-      verified with `git show ... | diff - <snapshot>`. The trap has now bitten
-      THREE times, and 5.10's second pin proves the rule is "pin every file the
-      page lists that a later lesson touches", not "pin the demo".)
-      MODULE 5 IS COMPLETE — 11 lessons, and the engine now has a public API, a
-      platform/app layer, logging and assertions, handles, an asset store, an ECS
-      with hierarchy and cameras, an input mapper, a debug-draw system and a
-      tooling UI. MODULE 6 IS ADVANCED RENDERING, and it opens where §5 says it
-      must, for a reason that is not stylistic: EVERY LIGHTING RESULT IN THE MODULE
-      IS WRONG UNTIL THE COLOUR SPACE IS SETTLED, so PBR cannot come first.
-      1 THE DEBT IS ALREADY BOOKED, TWICE, AND BOTH ENTRIES MUST BE PAID HERE.
-        1.6 gave the "first honest teaser" of sRGB vs linear and said Module 6
-        settles it. 4.7's conventions:textures-gpu found that _SRGB IS ONE ENUM AND
-        IT DECIDES WHETHER THE LIGHTING IS CORRECT. 4.8 then measured the two
-        renderers agreeing to within one float ULP on the shading equation but
-        differing by ONE CODE IN THE DARKS, which is two implementations of the
-        sRGB curve parting company — that measurement is this lesson's opening
-        exhibit and it already exists.
-      2 THE ENGINE ALREADY HAS blend_space (2.4) AND linear_to_srgb_u8 (1.6/3.x).
-        This lesson is NOT a from-scratch build; it is the derivation those two
-        were written in anticipation of, plus an audit of every place the engine
-        currently encodes or decodes. Grep for both before writing a line.
-      3 SHOW THE FAILURE FIRST (§3.5). The washed-out mid-tones of a naive
-        multiply, the too-dark 50% grey, and the classic: a texture sampled without
-        _SRGB used as an albedo, which is wrong by the 2.2 power exactly where the
-        eye is most sensitive. All three are producible on this engine TODAY.
-      4 THE MATHS IS SMALL AND THE INTUITION IS NOT. Derive from what a sensor
-        integrates and what a display emits; the piecewise sRGB curve with its
-        linear toe is a fact to be stated with its constants and a numeric example,
-        not derived. Say which is which (§10).
-      THE TEST TO BEAT: golden byte-identical is PROBABLY OVER. If the reference
-      render's colour handling changes — and settling this may well change it —
-      RE-BASELINE DELIBERATELY, with the diff shown, the per-channel magnitude
-      stated, and the old hash recorded beside the new one. Never quietly.
-      verify_61 must cover: round-trip encode/decode within a stated tolerance, the
-      piecewise curve's two branches INCLUDING the join, the 8-bit table against
-      the analytic form, and the claim that lighting in the wrong space is wrong by
-      a measurable amount rather than "looks off". Plus verify_45..511 green.
-      CARRY FORWARD FROM 5.11: the debug queue is now the tool for making Module 6
-      visible — shadow-map frustums, tangent frames, culling bounds — and the ImGui
-      panel is where a BRDF's terms get separate sliders. Both are already built;
-      neither should be rebuilt.
+next: 6.2 — Radiometry-Lite and What a BRDF Is
+      (planned filename: docs/lessons/06-02-what-a-brdf-is.html — 6.1's TWO next
+      links point at the index and BOTH need repointing, and build_61.py's TAIL
+      holds the bottom one. AND: build_61.py PINS NOTHING while listing
+      gpu_device.{hpp,cpp}, gpu_uniform.hpp, scene.frag.hlsl and colour.{hpp,cpp}
+      WHOLE. 6.2 will almost certainly touch light.hpp and scene.frag.hlsl, so
+      before editing either:
+        git show <6.1 commit>:<path> > scratch/l61_<name>
+      verified with `git show ... | diff - <snapshot>`. The trap has bitten three
+      times; 5.10's second pin is why the rule is "pin every file the page lists
+      that a later lesson touches", not "pin the demo".)
+      6.1 SETTLED THE UNITS; 6.2 ASKS WHAT THE QUANTITY IS. The numbers leaving
+      the renderer are now genuinely quantities of light, which is the
+      precondition for asking what KIND — and Lambert has been standing in since
+      3.6 with light.hpp's own comment admitting it is a convenient guess.
+      1 RADIOMETRY-LITE, AND NO MORE THAN LITE. Flux, irradiance, radiance, and
+        the one distinction that actually matters for a renderer: RADIANCE IS WHAT
+        A PIXEL MEASURES, and it is per unit solid angle per unit projected area,
+        which is why it is the quantity that is invariant along a ray. Derive the
+        cosine factor from PROJECTED AREA rather than restating "Lambert's law" —
+        3.6 already used the geometric picture, so this is the spiral's second
+        turn and must go deeper, not repeat.
+      2 A BRDF IS A RATIO, and stating it as one is most of the lesson:
+        outgoing radiance per unit of incoming irradiance, a function of two
+        directions. Units of inverse steradian, which is worth dwelling on because
+        it explains why a BRDF can exceed 1 without breaking anything.
+      3 LAMBERT RE-UNDERSTOOD AS A BRDF: albedo/pi, and THE PI IS THE PART TO
+        DERIVE — it falls out of integrating a constant BRDF over the hemisphere
+        and demanding energy conservation. Most treatments drop it silently or
+        fold it into the light's intensity; this engine currently does the latter
+        without saying so, and light.hpp should be made honest about it.
+      4 ENERGY CONSERVATION AS A TESTABLE CLAIM, not a slogan: integrate the BRDF
+        over the hemisphere numerically and check it does not exceed 1. That is a
+        verify_62 section, and it is the shape every later BRDF gets checked with.
+      THE TEST TO BEAT: golden byte-identical is genuinely at risk this time, and
+      for a real reason rather than a guessed one — if the pi lands in the BRDF
+      where it currently hides in the light's intensity, every shaded pixel in the
+      reference render moves. IF SO, RE-BASELINE DELIBERATELY: show the diff, state
+      the per-channel magnitude, record the old hash (905BF27E) beside the new one,
+      and say in the lesson that the OLD picture was not wrong, it was
+      parameterised differently. Do not quietly renormalise the light to keep the
+      hash.
+      verify_62 must cover: the hemispherical integral of the Lambert BRDF
+      (numerically, against 1); radiance invariance along a ray; the cosine factor
+      derived from projected area against a direct geometric computation; and
+      whichever normalisation choice is made, asserted so it cannot drift. Plus
+      verify_45..61 green.
+      CARRY FORWARD FROM 6.1: the output stage is settled and must stay settled —
+      6.2 changes what is COMPUTED, never where it is encoded. If a picture looks
+      wrong after a BRDF change, check the BRDF; the transfer function is now
+      pinned by 34 checks and is not the suspect it used to be.
 ```

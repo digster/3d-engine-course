@@ -7,7 +7,7 @@ There is no engine to download here and no framework doing the interesting parts
 write the math library, the rasterizer, the ECS, the renderer, the physics, and the editor. By
 the end you have a real engine and a game built on its public API.
 
-**Status:** curriculum and conventions published; lessons in progress — **Modules 0–5 are complete** (56 of 95 lessons). The CPU software rasterizer is finished end to end, the same scene is drawn on a real GPU through SDL_GPU, and the tree is now a static library with a public API, a platform/application layer, its own logging, handle-based resource storage, an asset system that can load, share and free, a reusable A/B timing harness that has decided three architecture questions with numbers instead of folklore, and **a working from-scratch ECS** — a generational entity id honoured by every pool, sparse-set component storage, queries that lead with the smallest pool, a **transform hierarchy** whose resolve cost is flat in depth with a camera that is an ordinary entity, (5.10) an **input layer that knows what the player meant** rather than which key they hit, and — completing the module — (5.11) **a debug-draw system and a tooling UI**: a queue of world-space geometry with lifetimes that anything in the engine can fill, and Dear ImGui behind a 182-line facade. Start at
+**Status:** curriculum and conventions published; lessons in progress — **Modules 0–5 are complete** and Module 6 has begun (57 of 95 lessons). The CPU software rasterizer is finished end to end, the same scene is drawn on a real GPU through SDL_GPU, and the tree is now a static library with a public API, a platform/application layer, its own logging, handle-based resource storage, an asset system that can load, share and free, a reusable A/B timing harness that has decided three architecture questions with numbers instead of folklore, and **a working from-scratch ECS** — a generational entity id honoured by every pool, sparse-set component storage, queries that lead with the smallest pool, a **transform hierarchy** whose resolve cost is flat in depth with a camera that is an ordinary entity, (5.10) an **input layer that knows what the player meant** rather than which key they hit, (5.11) **a debug-draw system and a tooling UI** — a queue of world-space geometry with lifetimes that anything in the engine can fill, and Dear ImGui behind a 182-line facade — and, opening Module 6, (6.1) **a colour pipeline that is correct at both ends**, which found and fixed a four-module-old bug that had every GPU-rendered pixel too dark. Start at
 [`docs/index.html`](docs/index.html).
 
 ---
@@ -383,6 +383,31 @@ Alongside it, Dear ImGui — taken through the **public** boundary where `stb_im
 entirely, because that one wraps a *concept* and this one is a *vocabulary*. The engine owns only
 the lifecycle, in 182 lines, and refuses to start when there is no window, so a headless
 `--shot` run behaves exactly as it did before the UI existed.
+
+### Colour is a pipeline, with exactly two conversions
+
+**Lesson 6.1** is the gamma lesson, and it opens Module 6 because every lighting result in that
+module is wrong until the colour space is settled. Two integers carry the subject: **code 128
+emits 0.2159 of white's light, not half, and half the light is code 188.**
+
+The rule is not "convert carefully" — it is **convert twice, at the edges**, with light in
+between, so that ordinary arithmetic is valid in the middle by construction rather than by anyone
+remembering. Applying that rule as an *audit* — fifteen conversion sites, each given a job — found
+a hole:
+
+```
+  swapchain format: B8G8R8A8_UNORM            # before: values here MEAN sRGB codes
+  swapchain format: B8G8R8A8_UNORM_SRGB       # after
+  composition     : SDR_LINEAR  (the hardware encodes sRGB)
+```
+
+SDL claims windows with a swapchain whose header says *"pixel values are in sRGB encoding"*, and
+the fragment shader had been returning linear **light** into it since Module 4. Measured on real
+downloaded pixels, linear 0.5 was stored as **128 where 188 was meant**. The error is a *ratio* —
+**13× too dark in shadow, 1.1× near white** — which is exactly why four modules of looking at the
+picture never found it, and why a pixel-by-pixel comparison in Lesson 4.8 sat on top of it and
+reported 87% agreement: the harness had built its own `_SRGB` target and tested a configuration
+the shipped program did not use.
 
 **An edge is a change in the *action*, not in a signal.** Bind `jump` to both a key and a mouse
 button, press one while the other is held, and there is still exactly one press edge. Derive

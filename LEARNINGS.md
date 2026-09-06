@@ -5647,3 +5647,159 @@ Scrolling a 400 KB lesson page and screenshotting lands somewhere unpredictable 
 relative to the offset parent, and `course.css` sets `scroll-behavior: smooth`. Generating a
 throwaway HTML page per SVG that links `course.css`, then `navigate` + `screenshot`, is
 deterministic and shows the figure at its real size in both themes. Delete them afterwards.
+
+---
+
+## Colour pipeline facts (Lesson 6.1)
+
+### The two integers
+
+Code 128 emits **0.2159** of white's light, not half. Half the light is code **188**. Sixty codes
+apart, and every mistake in this subject is a variation on that gap. If a 50% grey looks too dark
+in a renderer, this is the first thing to check and it takes one line of arithmetic.
+
+### The encoding is a budget, not a CRT artefact
+
+The CRT story is true and useless — CRTs are gone and the encoding is not. Derive it from
+perception instead: the eye judges **ratios**, so equal code steps should be equal ratios. Counted
+over 256 codes:
+
+| codes falling in… | evenly spaced in light | spaced by sRGB |
+|---|---|---|
+| the darkest tenth of the range | 26 | **90** |
+| the brightest half of the range | 128 | **68** |
+
+The even scheme spends half its budget where the eye can barely tell two neighbours apart. 8 bits
+of *linear* light needs about **12 bits** to look as smooth as sRGB does in 8. Framed as
+perceptual compression, the encoding stops being history and starts being a design.
+
+### The toe is derived, not decreed
+
+The derivative of x^(1/2.4) is (1/2.4)·x^(−0.583), which goes to **infinity** at zero. A pure
+power curve therefore has unbounded gain at black: sensor noise becomes visible banding, the
+inverse is numerically unstable, and an 8-bit code boundary is arbitrarily sensitive. Replacing
+the bottom with a line of slope 12.92 fixes all three.
+
+The four constants are not independent — 0.04045 = 12.92 × 0.0031308, and 1.055/0.055 are chosen
+so the pieces **meet** (measured step at the join: 8.02 × 10⁻⁵, a fiftieth of a code).
+
+`pow(x, 1/2.2)` is a **different curve**: worst disagreement **8 codes**, near linear 0.0010 —
+down in the toe, exactly where the eye has the most codes to notice with. Fine as a stylistic
+brightness knob; never as the output transfer function, which has to agree to the code with every
+hardware sampler in the pipeline.
+
+### Convert twice, at the edges — and the difference is structural
+
+Per-operation conversion (which is what Lesson 1.6 shipped, and said so) is not merely slower. It
+makes every *new* operation a chance to forget, and it quantises to 8 bits after every step.
+Converting at the edges makes the middle a region where ordinary arithmetic is valid **because
+there is nothing else there** — a property of the pipeline's shape rather than of anyone's care.
+
+### The audit is the method
+
+Not "be careful about colour spaces". Grep every conversion, list them, and give each one a job:
+**input edge, output edge, or per-operation.** Fifteen sites in this engine outside
+`colour.{hpp,cpp}`, and one row left over — the GPU path had an input edge and **no output edge at
+all**.
+
+Do this to a codebase you did not write and the interesting outcome is not "found a bug"; it is
+discovering how many pipelines have *three* conversions and stay correct by cancellation. Those
+break when somebody adds a post-processing pass.
+
+### SDL claims windows with an sRGB-**encoded** swapchain
+
+Straight from `SDL_gpu.h`, and it had been on disk since Lesson 0.4:
+
+> `SDR: B8G8R8A8 or R8G8B8A8 swapchain. Pixel values are in sRGB encoding.`
+> `SDR_LINEAR: B8G8R8A8_SRGB … accessed in shaders in "linear sRGB"`
+
+and `SDL_ClaimWindowForGPUDevice` creates the swapchain with **SDR**. A fragment shader that
+returns light into that is writing a linear value into a slot that means a code. Measured on this
+machine, that is what the engine did for four modules.
+
+### An error that is a *ratio* hides
+
+Linear 0.5 stored as 128 where 188 was meant is 60 codes. But expressed as emitted light the error
+is **13× at linear 0.02 and 1.1× at 0.95** — savage in shadow, absent near white. The bright half
+of every image looked nearly right and the dark half read as a deliberate moody grade.
+
+**An error shaped like a ratio hides wherever there is least contrast to spare.** Worth carrying
+as a general diagnostic instinct: when a defect survived a long time, ask what shape it had.
+
+### A test that constructs its own environment tests the environment it constructed
+
+Lesson 4.8 compared the two renderers pixel by pixel and reported **87% byte-identical**. It was a
+sound measurement of a configuration the shipped program does not use: the harness created its
+render target as `R8G8B8A8_UNORM_SRGB` while the program renders to the swapchain, which was
+`UNORM`. One enum, and it was the entire subject.
+
+The fix is not "be more careful" — it is to make the production value a **readable field**
+(`gpu_report::output_encodes_in_hardware`) so a harness can assert on it instead of writing its own
+literal.
+
+### Ask, set, then read it back
+
+`SDL_WindowSupportsGPUSwapchainComposition` → `SDL_SetGPUSwapchainParameters` →
+`SDL_GetGPUSwapchainTextureFormat`. The third call is the one people skip, and it is the only one
+that reports what actually happened. SDL guarantees only `SDR`; everything else is a request.
+
+### A two-parameter setter must pass through the parameter it is not changing
+
+`SDL_SetGPUSwapchainParameters` sets composition **and** present mode together.
+`set_present_mode()` passed a literal `SDL_GPU_SWAPCHAINCOMPOSITION_SDR` — correct when written,
+because there had only ever been one composition — and would have silently undone this lesson's
+fix the first time anybody toggled vsync. **This lesson's own bug, latent three functions away, by
+a different route.**
+
+### Encoding in the fragment shader is the second-best answer, and the reason is the blend stage
+
+Hardware blending happens **after** the fragment shader. A shader that encodes hands the blend
+unit *codes* to interpolate — which is the whole mistake, moved one stage later. Correct for
+opaque geometry, wrong the moment anything is transparent. Prefer an `_SRGB` target; keep the
+shader path as a fallback; read a field to know which one you are on.
+
+### `pad2` was never wasted space
+
+HLSL packs a `float3` and a `float` into one 16-byte register, so `scene_light_uniforms` already
+had an addressable float sitting at offset 44 doing nothing. Renaming it `encode_output` cost
+**zero bytes and zero repacking** — the struct is still 64 bytes and Lesson 4.6's `static_assert`s
+did not move. Padding created by an alignment rule is an *unused field*, and it is free to use.
+
+### A prediction that fails for a reason you can state is worth more than one that succeeds
+
+Module 5's plan said the golden was "probably over" — surely a lesson that settles colour changes
+the reference render. It did not, and the reason **is** the result: the software renderer had been
+correct since Lesson 1.6, and the entire defect was on the GPU path's output stage, which the
+golden never touches.
+
+---
+
+## Course-infrastructure facts (docs/, Lesson 6.1)
+
+### Inline KaTeX fails the page check, every time
+
+`check-page.js` asserts `katexRendered === eqBlocks`, and `eqBlocks` counts `<div class="eq">`. A
+single inline `\(…\)` anywhere makes the two disagree — this page had seven and reported
+`katexRendered: 10, eqBlocks: 3`. Write inline maths as HTML (`<em>x</em><sup>1/2.4</sup>`) and
+keep KaTeX for display blocks only. Already recorded in the pipeline notes; recorded again because
+it was still made.
+
+### A new listing tag needs the CSS rule *and* the checker's allowlist
+
+6.1 added a third state, `unchanged`, for a page that reproduces a file it did not edit (labelling
+that "modified" is a small lie in a caption). `check-page.js` keeps its own `TAG_MODIFIERS` list —
+deliberately, since the check exists to catch a class that matches no CSS rule. So both files have
+to be edited, and **the CSS rule goes first**.
+
+### When a label cannot find clear space among the data, stop looking among the data
+
+Figure 1's curve label was placed twice inside the plot and sat on something both times — first
+the polyline it named, then a dashed leader. The interior of a plot is mostly lines. Moving it to
+the surrounding text column and naming the curve in words solved it immediately.
+
+### Write the throwaway probe before the lesson
+
+`scratch/probe_61.cpp` — forty lines, no test framework — established every fact the lesson rests
+on before a word was written: the default swapchain format, which compositions this window
+supports, whether the request succeeds, and what raw linear values look like when read as codes.
+Reasoning found the bug; the probe is what made it a claim.

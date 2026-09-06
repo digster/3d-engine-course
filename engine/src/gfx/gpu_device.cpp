@@ -51,6 +51,29 @@ const char* name_of(SDL_GPUTextureFormat f)
     }
 }
 
+const char* name_of(SDL_GPUSwapchainComposition c)
+{
+    // Lesson 6.1. The names are short because a log line is where they appear,
+    // but the SEMANTICS are the whole lesson and belong beside them:
+    //   SDR         8-bit swapchain whose values ARE sRGB codes  -> we encode
+    //   SDR_LINEAR  _SRGB swapchain, shaders see linear          -> it encodes
+    //   HDR_*       float / 10-bit, values outside [0,1] allowed -> Module 6 later
+    switch (c)
+    {
+    case SDL_GPU_SWAPCHAINCOMPOSITION_SDR:                 return "SDR";
+    case SDL_GPU_SWAPCHAINCOMPOSITION_SDR_LINEAR:          return "SDR_LINEAR";
+    case SDL_GPU_SWAPCHAINCOMPOSITION_HDR_EXTENDED_LINEAR: return "HDR_EXTENDED_LINEAR";
+    case SDL_GPU_SWAPCHAINCOMPOSITION_HDR10_ST2084:        return "HDR10_ST2084";
+    default:                                               return "(other)";
+    }
+}
+
+bool is_srgb_format(SDL_GPUTextureFormat f)
+{
+    return f == SDL_GPU_TEXTUREFORMAT_B8G8R8A8_UNORM_SRGB
+        || f == SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM_SRGB;
+}
+
 void format_shader_formats(SDL_GPUShaderFormat mask, char* out, std::size_t cap)
 {
     if (cap == 0) { return; }
@@ -163,11 +186,57 @@ gpu_report gpu_device::create(SDL_Window* window, bool debug)
     // with an answer.
     if (window != nullptr)
     {
-        r.swapchain_format = SDL_GetGPUSwapchainTextureFormat(device_, window);
         r.supports_immediate =
             SDL_WindowSupportsGPUPresentMode(device_, window, SDL_GPU_PRESENTMODE_IMMEDIATE);
         r.supports_mailbox =
             SDL_WindowSupportsGPUPresentMode(device_, window, SDL_GPU_PRESENTMODE_MAILBOX);
+
+        // ---- LESSON 6.1: ASK FOR A SWAPCHAIN THAT ENCODES FOR US ------------
+        //
+        // SDL claims a window with SDL_GPU_SWAPCHAINCOMPOSITION_SDR, and its
+        // header says exactly what that means: "B8G8R8A8 or R8G8B8A8 swapchain.
+        // **Pixel values are in sRGB encoding.**" A shader writing there is
+        // writing CODES, not light.
+        //
+        // Our fragment shader returns light — `base * (incoming + ambient) + …`
+        // is a quantity of light and has been since Lesson 3.6. From Module 4
+        // until this lesson those linear values went into an SDR swapchain
+        // untouched, and the display read them as codes. THE PICTURE WAS TOO
+        // DARK, worst in the shadows: linear 0.05 was shown as 0.0040, which is
+        // 12.4x too dark, while linear 0.8 was shown as 0.60, only 1.3x off. That
+        // shape is why it survived four modules of looking at it — the bright
+        // half looks nearly right and the dark half looks "moody".
+        //
+        // SDR_LINEAR is the fix and it is one call: the swapchain becomes an
+        // _SRGB format, so the hardware applies the transfer function on write
+        // and the shader goes on writing light. Free, exact, and done in the
+        // fixed-function blend/write stage where it belongs.
+        //
+        // ASKED FOR, NEVER ASSUMED. SDL guarantees only SDR, so a machine may
+        // refuse — and `output_encodes_in_hardware` below is how the renderer
+        // finds out that it has to encode in the shader instead. Both paths are
+        // real and both are tested (verify_61 §E, §F).
+        if (SDL_WindowSupportsGPUSwapchainComposition(
+                device_, window, SDL_GPU_SWAPCHAINCOMPOSITION_SDR_LINEAR)
+            && SDL_SetGPUSwapchainParameters(device_, window,
+                                             SDL_GPU_SWAPCHAINCOMPOSITION_SDR_LINEAR,
+                                             SDL_GPU_PRESENTMODE_VSYNC))
+        {
+            r.composition = SDL_GPU_SWAPCHAINCOMPOSITION_SDR_LINEAR;
+        }
+        else
+        {
+            // Not an error, and deliberately not logged as one: SDR is a valid
+            // machine, and the engine has a correct path for it. What would be an
+            // error is not NOTICING, which is what the flag below prevents.
+            r.composition = SDL_GPU_SWAPCHAINCOMPOSITION_SDR;
+        }
+
+        // Re-ask rather than assume: the format is a consequence of the
+        // composition, and reading it back is how we learn whether the request
+        // actually took effect.
+        r.swapchain_format = SDL_GetGPUSwapchainTextureFormat(device_, window);
+        r.output_encodes_in_hardware = is_srgb_format(r.swapchain_format);
     }
     r.frames_in_flight = 2;   // SDL's documented default at device creation
 
@@ -204,11 +273,13 @@ bool gpu_device::set_present_mode(SDL_GPUPresentMode mode)
         return false;
     }
 
-    // The composition stays as it is. SDL_SDR is the plain 8-bit-per-channel
-    // pipeline; the HDR compositions belong to Module 6, and changing one thing
-    // at a time is why this parameter is not a knob yet.
-    if (!SDL_SetGPUSwapchainParameters(device_, window_,
-                                       SDL_GPU_SWAPCHAINCOMPOSITION_SDR, mode))
+    // THE COMPOSITION IS CARRIED, NOT RESET — Lesson 6.1's bug, in miniature.
+    // SDL_SetGPUSwapchainParameters sets BOTH parameters, so passing a literal
+    // SDR here (which this function did until 6.1) would silently undo the
+    // linear swapchain the moment anybody changed the present mode. A function
+    // that takes two parameters and is called to change one of them must pass
+    // the other one through.
+    if (!SDL_SetGPUSwapchainParameters(device_, window_, report_.composition, mode))
     {
         ENGINE_LOG_ERROR(engine::log_gpu, "SDL_SetGPUSwapchainParameters failed: %s", SDL_GetError());
         return false;
@@ -216,6 +287,7 @@ bool gpu_device::set_present_mode(SDL_GPUPresentMode mode)
 
     // The format can change with the parameters, so re-ask rather than assume.
     report_.swapchain_format = SDL_GetGPUSwapchainTextureFormat(device_, window_);
+    report_.output_encodes_in_hardware = is_srgb_format(report_.swapchain_format);
     return true;
 }
 
@@ -259,6 +331,9 @@ void gpu_device::log_report() const
     ENGINE_LOG_INFO(engine::log_gpu, "  shaders granted : %s", granted);
 
     ENGINE_LOG_INFO(engine::log_gpu, "  swapchain format: %s", name_of(r.swapchain_format));
+    ENGINE_LOG_INFO(engine::log_gpu, "  composition     : %s  (%s encodes sRGB)",
+            name_of(r.composition),
+            r.output_encodes_in_hardware ? "the hardware" : "the SHADER");
     ENGINE_LOG_INFO(engine::log_gpu, "  present modes   : VSYNC%s%s",
             r.supports_immediate ? " IMMEDIATE" : "",
             r.supports_mailbox ? " MAILBOX" : "");

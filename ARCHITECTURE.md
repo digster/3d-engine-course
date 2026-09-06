@@ -267,6 +267,33 @@ Three rules follow, and they are load-bearing for everything after Module 3:
 - **The dependency runs framebuffer → colour**, never the reverse. A framebuffer is a container of
   colours and may know what one is; a colour has no business knowing where it is stored.
 
+**Colour, as of Lesson 6.1 — the rule became a pipeline.** 1.6's three rules stand entire; what
+6.1 added is *where* the conversions go. **Two conversions, at the edges**, with light in between
+— not one per operation, and not "carefully". The difference is structural rather than a matter of
+diligence: converting at the edges makes the middle a region where ordinary arithmetic is valid,
+so a new operation added there is automatically working on light, and there is exactly one
+quantisation to 8 bits instead of one per step.
+
+The lesson audited all fifteen conversion sites outside `colour.{hpp,cpp}` and found one row left
+over: **the GPU path had an input edge and no output edge at all.** SDL claims a window with
+`SDL_GPU_SWAPCHAINCOMPOSITION_SDR`, whose header says "pixel values are in sRGB encoding", and
+`scene.frag.hlsl` had been returning linear *light* into it since Lesson 4.8. Measured on real
+downloaded pixels: linear 0.5 stored as **128 where 188 was meant**, and the error is a *ratio* —
+13× at linear 0.02, 1.1× at 0.95 — which is why four modules of looking at the picture did not
+find it.
+
+`gpu_device::create` now asks for `SDR_LINEAR`, reads the resulting format back rather than
+believing its own request, and records the answer in two `gpu_report` fields. `scene.frag.hlsl`
+carries the exact piecewise curve for the machines that refuse. **Prefer the swapchain and keep
+the fallback**, and the reason is the position of the blend stage: hardware blending happens
+*after* the fragment shader, so a shader that encodes hands the blend unit codes to interpolate —
+correct for opaque geometry and wrong the moment anything is transparent.
+
+Three things are named as still owed rather than left to be discovered: headroom above 1.0 with a
+float target and tonemapping (the HDR lesson); the software renderer's three remaining
+per-operation conversions, which are *correct* but not a pipeline; and colour **spaces** as
+opposed to transfer functions — this course stays in sRGB primaries throughout.
+
 We convert **per operation**, which is both slower and lossier than a real pipeline — each round
 trip requantises to 256 steps. A properly linear renderer decodes once on the way in and encodes
 once on the way out, which needs a float or half-float framebuffer, headroom above 1.0, and a
@@ -2025,6 +2052,8 @@ Full detail with diagrams in [`docs/conventions.html`](docs/conventions.html); t
 | Winding | **CCW = front**, cull back — *our* choice, set explicitly on every pipeline |
 | Units | 1 unit = 1 metre; **radians** internally, degrees only at UI edges |
 | Axis colours | x/y/z = **red/green/blue**, course-wide, in every diagram — and since 5.11 in exactly one place in the code: `k_axis_{x,y,z}_colour` in `gfx/debug_lines.hpp` |
+| Colour storage | **sRGB-encoded**; arithmetic is **linear**. Convert twice, at the edges (6.1) |
+| Swapchain | `SDR_LINEAR` where supported, so the hardware encodes on write; `gpu_report::output_encodes_in_hardware` says which (6.1) |
 | Angles | Radians. Always. |
 | Performance units | **ns per covered pixel** and **ns per triangle** — never ms/frame |
 | Timing statistic | **median** for a frame, **minimum** for a kernel, never the mean |

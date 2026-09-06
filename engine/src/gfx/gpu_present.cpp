@@ -38,20 +38,10 @@ blit_rect fit_centred(Uint32 src_w, Uint32 src_h, Uint32 dst_w, Uint32 dst_h)
     return out;
 }
 
-/// Is this format one that decodes on read and encodes on write?
-///
-/// A free function in the .cpp rather than a method, because nothing outside
-/// this file needs to ask, and the list is short enough to be honest about:
-/// these are the two 8-bit sRGB formats a swapchain can arrive as.
-namespace {
-
-bool is_srgb_format(SDL_GPUTextureFormat f)
-{
-    return f == SDL_GPU_TEXTUREFORMAT_B8G8R8A8_UNORM_SRGB
-        || f == SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM_SRGB;
-}
-
-} // namespace
+// `is_srgb_format` used to live here, in an anonymous namespace, because exactly
+// one file asked the question. Lesson 6.1 gave it a second caller — the device,
+// which must report whether a shader has to encode — so it moved to
+// gpu_device.hpp. Nothing about it changed except who can see it.
 
 gpu_present_target::~gpu_present_target()
 {

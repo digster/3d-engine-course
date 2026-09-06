@@ -3503,6 +3503,14 @@ int run_gpu_scene(SDL_Window* window, bool trace_and_exit)
                 light.spec_model = (ctl.spec == engine::specular_model::none) ? 0.0f
                     : ((ctl.spec == engine::specular_model::phong) ? 1.0f : 2.0f);
 
+                // LESSON 6.1. Asked, never assumed — and asked of the device
+                // rather than of a constant, because the answer is a property of
+                // this machine's swapchain and was different on this one before
+                // 6.1 changed what we request. Getting it wrong in either
+                // direction is a picture-wide error: too dark one way, milky the
+                // other.
+                light.encode_output = gpu.report().output_encodes_in_hardware ? 0.0f : 1.0f;
+
                 stats = renderer.render(cb, pass, items, item_count, camera, light,
                                         ctl.smooth_texture ? sampler_linear.handle()
                                                            : sampler_nearest.handle(),
