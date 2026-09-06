@@ -2373,3 +2373,53 @@ for a statable reason, and the reason is the finding: the software renderer had 
 
 `next:` is now 6.2 — Radiometry-Lite and What a BRDF Is, where the golden genuinely is at risk,
 because the π currently hiding in the light's intensity belongs in the BRDF.
+
+---
+
+## 2026-09-06 — "Based on the STATE and the project's claude instructions, work on the next."
+
+Delivered **Lesson 6.2 — Radiometry-Lite: What a BRDF Is** (58 of 95 published), and the shape of
+the lesson was decided by a probe rather than by the plan.
+
+The plan in `STATE.md` predicted the golden would break: "if the π lands in the BRDF, every shaded
+pixel moves". It was right about the mechanism and wrong about the outcome, because it assumed the
+light would keep its old value. Deriving the exposure — a white Lambertian square-on to irradiance
+π renders at exactly 1.0 — makes the two parameterisations the same product, so the interesting
+question became whether they are the same product *in floating point*. Measured: **154,240 of
+342,225 sampled results move by one to two ULP, and zero 8-bit codes move**, through both
+encoders. The golden is byte-identical for the **thirteenth** lesson, and here that is the
+*measurement* — the negative control passing — rather than a survival.
+
+The lesson's own content: four radiometric quantities with units; the steradian derived from the
+geometry of a sphere; radiance invariance from the two 1/d² factors cancelling; the cosine
+re-derived as **projected area** and therefore moved onto the light's side of the equation; a BRDF
+stated as a ratio in **inverse steradians**, with the cone example (0.3183 against 2.7210, both
+reflecting everything) that settles "but it is greater than one"; and **the π derived** — the
+shadows of the hemisphere's patches tile the unit disc exactly once, so a constant BRDF returns
+k·π and energy conservation forces k = albedo/π.
+
+Then the audit: four lines of algebra give `intensity = E_perp / π`, so the engine's light scalar
+has been an irradiance with the Lambert BRDF's own constant divided out of it, unlabelled, since
+Lesson 3.6. Renamed `intensity` → `irradiance` deliberately, because the correct new value is π
+and there is no diagnostic for "same type, new meaning".
+
+**Two things the probes overturned**, and both are in the lesson because they were measured:
+- The ambient term, called "a fudge" since 3.6, is **exactly right** for a uniform environment —
+  its own π cancels against the hemisphere it is integrated over.
+- Blinn-Phong fails energy conservation, but *not* where expected. The 1/π tames the raw lobe
+  (2.6650 at shininess 1 without it). What survives is that diffuse and specular are **added with
+  no coupling**: a white surface with a white highlight reflects **1.1386**. That is the door into
+  6.4's Fresnel, and the first draft of that paragraph would have been confidently wrong.
+
+**32 checks / 0 failures** in debug and release; `verify_45`…`61` green — after repairing
+`verify_48` §F, which filled the GPU light uniform from the colour alone and had been silently
+correct for four modules only because the scalar was 1. Same failure class as 6.1's `_SRGB`-target
+harness bug; two occurrences make it a rule.
+
+Also: pinned `build_61.py`'s six listings **before** editing anything (first time on time rather
+than after a diff caught it); added §7b "Radiometry and BRDFs" to the Math Toolbox, since four
+lessons will be written in that vocabulary before the module boundary reissue; and found two dead
+prereq links by resolving every href on the page against the filesystem, which `check-page.js`
+does not cover.
+
+`next:` is 6.3 — Microfacet Theory, and the door into it is 1.1386.

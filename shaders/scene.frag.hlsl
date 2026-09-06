@@ -12,7 +12,14 @@
 //     mirror_direction(n, l)                   n * (2*dot(n,l)) - l
 //     halfway(l, v) = normalised(l + v)        normalize(l + v)
 //     pow(min(1, alignment), shininess)        pow(min(1, alignment), shininess)
-//     albedo * (i + ambient) + spec * i * s    the return statement
+//     lambert_brdf(albedo) = albedo * inv_pi   base * k_inv_pi
+//     specular_brdf(surface, lobe)             specular * lobe * k_inv_pi
+//     (f_d + f_s) * E + albedo * ambient       the return statement
+//
+// LESSON 6.2 UPDATED THREE OF THOSE ROWS AND THE PICTURE DID NOT MOVE, which is
+// the strongest evidence available that the two implementations really are one
+// equation: the pi came out of the light and went into the BRDF on both sides,
+// independently, and verify_48's pixel-for-pixel comparison still agrees.
 //
 // THE ONE REAL DIFFERENCE IS WHERE IT RUNS, and it is not a difference in the
 // maths. `shade()` is called once per VERTEX under Gouraud and once per PIXEL
@@ -46,9 +53,15 @@ cbuffer Light : register(b0, space3)
 {
     float3 to_light;    //  0 — toward the lamp, world space, unit length
     float  pad0;        // 12
-    float3 key;         // 16 — the lamp's LINEAR colour times its intensity
+    float3 key;         // 16 — the lamp's LINEAR colour times its IRRADIANCE
+                        //      (Lesson 6.2). E_perp: the light landing on a
+                        //      surface held square-on to the beam. The cosine
+                        //      below projects it onto the surface we have.
     float  pad1;        // 28
-    float3 ambient;     // 32 — light.hpp's honest fudge
+    float3 ambient;     // 32 — a uniform hemispherical RADIANCE (Lesson 6.2).
+                        //      Its own pi cancelled against the hemisphere it is
+                        //      integrated over, which is why the albedo multiplies
+                        //      it bare while everything else goes through a BRDF.
     float  encode_output; // 44 — Lesson 6.1: 1 = this shader must encode sRGB,
                           //      0 = the swapchain is _SRGB and does it for us.
                           //      Was `pad2`; HLSL's packing had already reserved
@@ -65,6 +78,16 @@ cbuffer Material : register(b1, space3)
     float3 specular;    // 16 — the highlight's reflectance ratio; black = matte
     float  textured;    // 28 — 0 = use `albedo`, 1 = sample `albedo_map`
 };
+
+// ---- Lesson 6.2 -------------------------------------------------------------
+//
+// One over pi, the constant that makes the Lambert BRDF conserve energy. HLSL has
+// no <numbers>, so the digits are written out — and they are written to more
+// precision than a float can hold on purpose, so the compiler rounds once, the
+// same way `std::numbers::inv_pi_v<float>` does. `engine::k_inv_pi` is the same
+// number on the CPU side; two spellings of a constant that disagree in the last
+// bit is the sort of thing that costs an afternoon in a pixel diff.
+static const float k_inv_pi = 0.318309886183790671538f;
 
 struct Input
 {
@@ -93,7 +116,7 @@ float4 main(Input input) : SV_Target0
     // must pay nothing for this lesson existing. On a GPU "pay nothing" is worth
     // less than it sounds, because a warp executes both sides of a branch when
     // its lanes disagree; §5.3 measures what this one actually costs.
-    float spec = 0.0f;
+    float lobe = 0.0f;
     const bool shiny = (specular.r + specular.g + specular.b) > 0.0f;
 
     if (n_dot_l > 0.0f && spec_model > 0.5f && shiny)
@@ -115,7 +138,7 @@ float4 main(Input input) : SV_Target0
         // product is a cosine and cannot exceed 1, but it can ROUND above it, and
         // `pow` amplifies the excess rather than absorbing it — light.hpp
         // measured an un-clamped peak of 1.00001. `min` here is `std::min` there.
-        spec = (alignment <= 0.0f) ? 0.0f : pow(min(1.0f, alignment), shininess);
+        lobe = (alignment <= 0.0f) ? 0.0f : pow(min(1.0f, alignment), shininess);
     }
 
     // ---- Where the surface's own colour comes from --------------------------
@@ -133,17 +156,33 @@ float4 main(Input input) : SV_Target0
 
     // ---- The shading equation, which is `shade()`'s return statement --------
     //
-    // Arriving light per channel is the key scaled by the cosine. The diffuse
-    // part multiplies it by the albedo and the specular part by the highlight
-    // colour, which is why they cannot be added together first.
+    // LESSON 6.2, and the three factors are three separate physical claims:
+    //
+    //     L_o  =  (f_d + f_s) * E_perp * cos(theta)  +  albedo * L_ambient
+    //
+    // `e` is WHAT THE LIGHT DELIVERS: irradiance measured square-on to the beam,
+    // projected onto this surface by the cosine. No albedo appears in it, because
+    // how much light arrives cannot depend on the colour of what it lands on.
     //
     // BOTH TERMS CARRY n_dot_l, and light.hpp explains why at length: the cosine
     // law is about how much light ARRIVES per unit of surface, and says nothing
     // about what the surface then does with it. Classic Phong shading as
     // published left it off the specular, and the artifact is a highlight glowing
-    // past the terminator on geometry the light cannot reach.
-    const float3 incoming = key * n_dot_l;
-    const float3 lit = base * (incoming + ambient) + specular * incoming * spec;
+    // past the terminator on geometry the light cannot reach. Stated this way the
+    // rule needs no defending: the cosine is on the LIGHT's side of the product,
+    // so of course it multiplies everything the surface does.
+    const float3 e = key * n_dot_l;
+
+    // `f_d` and `f_s` are WHAT THE SURFACE DOES, both per steradian, added
+    // because a real surface scatters some light and mirrors some at once. The
+    // 1/pi on the specular is not a normalisation — light.hpp measures exactly
+    // how un-normalised it remains, and Lesson 6.4 fixes it with Fresnel.
+    const float3 f_d = base * k_inv_pi;
+    const float3 f_s = specular * lobe * k_inv_pi;
+
+    // The ambient term stands outside the product because its own pi already
+    // cancelled against the hemisphere it was integrated over (light.hpp).
+    const float3 lit = (f_d + f_s) * e + base * ambient;
 
     // ---- The last place light exists — Lesson 6.1 ---------------------------
     //

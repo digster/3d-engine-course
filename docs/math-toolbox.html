@@ -94,6 +94,7 @@
       <li><a href="#depth">Depth and screen-space interpolation</a></li>
       <li><a href="#intersection">Geometry and intersection</a></li>
       <li><a href="#meshes">Measuring a mesh</a></li>
+      <li><a href="#radiometry">Radiometry and BRDFs</a></li>
       <li><a href="#performance">Reasoning about cost</a></li>
       <li><a href="#pipelining">Two processors, overlapped</a></li>
       <li><a href="#coming">Coming as the course proceeds</a></li>
@@ -1831,6 +1832,152 @@
     </div>
   </div>
 
+  <h2 id="radiometry"><span class="num">7b</span>Radiometry and BRDFs</h2>
+
+  <p>
+    Module 6 opens by giving the shading equation units, and these four tools are the vocabulary
+    the rest of it is written in. They arrived in Lesson 6.2, and the reason they are a separate
+    section rather than an addition to &sect;7 is that &sect;7&rsquo;s entries are geometry &mdash;
+    they answer &ldquo;which way does this point?&rdquo; &mdash; while these answer
+    &ldquo;how much light is that, exactly?&rdquo;
+  </p>
+
+  <div class="tool">
+    <h3>Solid angle, and the differential element <span class="from">Lesson 6.2</span></h3>
+    <div class="eq">
+      <span>\[ d\omega \;=\; \sin\theta \, d\theta \, d\varphi
+             \qquad \int_{\text{sphere}} d\omega = 4\pi
+             \qquad \int_{\Omega} d\omega = 2\pi \]</span>
+      <span class="eq-plain">the solid-angle element is sin&thinsp;&theta; d&theta; d&phi;; the
+        whole sphere measures 4&pi; steradians and a hemisphere 2&pi;</span>
+    </div>
+    <p>
+      A steradian is to a sphere what a radian is to a circle, and the analogy is exact rather
+      than decorative. An angle is measured by the <em>arc</em> a unit circle cuts off, so a full
+      turn is 2&pi;; a solid angle is measured by the <em>area</em> a unit sphere cuts off, so all
+      of directional space is 4&pi;.
+    </p>
+    <p>
+      The <code>sin&nbsp;&theta;</code> is there because circles of constant <code>&theta;</code>
+      shrink toward the pole &mdash; the same factor that makes lines of longitude converge. Leave
+      it out and every hemisphere integral comes back exactly half its true value, which is the
+      most common way to get this wrong.
+    </p>
+  </div>
+
+  <div class="tool">
+    <h3>The cosine-weighted hemisphere <span class="from">Lesson 6.2</span></h3>
+    <div class="eq">
+      <span>\[ \int_{\Omega} \cos\theta \, d\omega
+             \;=\; \int_{0}^{2\pi}\!\!\int_{0}^{\pi/2}
+                     \cos\theta \sin\theta \, d\theta \, d\varphi
+             \;=\; \pi \]</span>
+      <span class="eq-plain">integrating cos&nbsp;&theta; over the hemisphere gives &pi;, not
+        2&pi;</span>
+    </div>
+    <p>
+      <strong>This is the single most load-bearing number in physically based rendering</strong>,
+      and it is worth having the picture as well as the integral: every patch of the hemisphere,
+      projected straight down onto the plane below, casts a shadow of its own size times
+      <code>cos&nbsp;&theta;</code>. Those shadows tile the unit disc <em>exactly once</em>. So the
+      cosine-weighted hemisphere <em>is</em> that disc, and its measure is the disc&rsquo;s area,
+      <code>&pi;&middot;1&sup2;</code>.
+    </p>
+    <p>
+      Light-transport integrals essentially always carry this cosine, for &sect;7&rsquo;s
+      projected-area reason. That is why &pi; appears in shading constants and 2&pi; almost never
+      does &mdash; and why a stray factor of two in a lighting result usually means a missing
+      cosine rather than a missing two.
+    </p>
+    <div class="worked">
+      <span class="label">Worked</span>
+      <p>
+        Numerically, on a regular midpoint grid: <code>1024&times;2048</code> samples give
+        <code>3.1415939</code>, which is &pi; to 1.2e&minus;6.
+        <strong>Convergence is the diagnostic.</strong> Quadrature error shrinks as the grid
+        refines; a wrong constant does not shrink at all, it just sits there. If your integral
+        settles on 2.0 the cosine is missing; on 0.5, the <code>sin&nbsp;&theta;</code> is.
+      </p>
+    </div>
+  </div>
+
+  <div class="tool">
+    <h3>The BRDF, and why it may exceed 1 <span class="from">Lesson 6.2</span></h3>
+    <div class="eq">
+      <span>\[ f_r(\mathbf{l}, \mathbf{v}) \;=\; \frac{dL_o(\mathbf{v})}{dE(\mathbf{l})}
+             \qquad \left[\,\mathrm{sr}^{-1}\,\right] \]</span>
+      <span class="eq-plain">the BRDF is outgoing radiance divided by incoming irradiance; its
+        unit is inverse steradians</span>
+    </div>
+    <p>
+      Radiance is W/(m&sup2;&middot;sr) and irradiance is W/m&sup2;, so the watts and the square
+      metres cancel and <strong>sr&#8315;&#185;</strong> survives. That unit answers the question
+      everybody asks once: a BRDF above 1 invents no energy, because it is a density
+      <em>per steradian</em>, and &ldquo;per steradian&rdquo; is large exactly when the light is
+      squeezed into a small solid angle. A perfect mirror&rsquo;s BRDF is unbounded and still
+      reflects at most what arrived. The quantity genuinely capped at 1 is its <em>integral</em>,
+      below.
+    </p>
+    <p>
+      With one directional light the reflection integral collapses to a single evaluation, which
+      is the shading equation every renderer in this course computes:
+    </p>
+    <div class="eq">
+      <span>\[ L_o(\mathbf{v}) \;=\; f_r(\mathbf{l}, \mathbf{v}) \; E_{\perp} \cos\theta \]</span>
+      <span class="eq-plain">outgoing radiance = BRDF times the light&rsquo;s perpendicular
+        irradiance times the cosine</span>
+    </div>
+    <div class="worked">
+      <span class="label">Worked</span>
+      <p>
+        A surface that reflects everything uniformly into a cone of half-angle
+        <code>&alpha;</code> spreads it over a projected solid angle of
+        <code>&pi;&nbsp;sin&sup2;&alpha;</code>, so its BRDF is the reciprocal. At
+        <code>&alpha; = 90&deg;</code> that is <code>1/&pi; = 0.3183</code> &mdash; Lambert. At
+        <code>&alpha; = 20&deg;</code> it is <code>1/0.3675 = 2.7210</code>.
+        <strong>Both reflect 100% of the arriving light.</strong>
+      </p>
+    </div>
+  </div>
+
+  <div class="tool">
+    <h3>The Lambert BRDF, and where its &pi; comes from <span class="from">Lesson 6.2</span></h3>
+    <div class="eq">
+      <span>\[ f_r = k \;\Longrightarrow\;
+             R = \int_{\Omega} k \cos\theta \, d\omega = k\pi
+             \;\Longrightarrow\;
+             f_r = \frac{\text{albedo}}{\pi} \]</span>
+      <span class="eq-plain">a constant BRDF k returns k&pi; of the arriving light; setting that
+        equal to the albedo forces k = albedo/&pi;</span>
+    </div>
+    <p>
+      <strong>Derived, not decreed.</strong> &ldquo;Lambertian&rdquo; means the BRDF is a constant
+      &mdash; that is its whole physical content, and it fixes nothing numerically. What fixes the
+      constant is refusing to let the surface emit more light than it received: integrate over the
+      hemisphere (with the cosine, always with the cosine) and the answer is <code>k&pi;</code>.
+      Demand that this equal the albedo &mdash; no more, no less &mdash; and <code>k</code> has
+      exactly one value.
+    </p>
+    <p>
+      The generalisation is the test every later BRDF gets run through, the
+      <strong>directional-hemispherical reflectance</strong>:
+    </p>
+    <div class="eq">
+      <span>\[ R(\mathbf{v}) \;=\; \int_{\Omega} f_r(\mathbf{l}, \mathbf{v})
+             \cos\theta \, d\omega \;\le\; 1 \]</span>
+      <span class="eq-plain">the fraction of arriving light that leaves, for one outgoing
+        direction; energy conservation is this being at most 1 for every v</span>
+    </div>
+    <p>
+      It is twenty lines of code and it turns &ldquo;is this model physically plausible?&rdquo;
+      from an opinion into a number. Run on the engine&rsquo;s own Blinn-Phong highlight it
+      returns <strong>2.6650</strong> at shininess 1 with no normalising constant &mdash; and
+      <strong>1.1386</strong> for a white surface with a white highlight even with one, because
+      diffuse and specular are added with no coupling between them. That second number is what
+      Fresnel fixes in 6.4.
+    </p>
+  </div>
+
   <h2 id="performance"><span class="num">8</span>Reasoning about cost</h2>
 
   <p>
@@ -2033,10 +2180,15 @@
   </div>
 
   <div class="pending">
-    <b>Module 6 — Physically based rendering.</b> Solid angle and radiometry-lite · the
-    rendering equation, honestly scoped · BRDFs · microfacet distributions (GGX) · the geometry
-    and Fresnel terms · Schlick's approximation · <strong>the sRGB transfer function</strong> ·
-    the TBN basis · tonemapping curves · spherical harmonics for irradiance.
+    <b>Module 6 — Physically based rendering.</b> <strong>Solid angle and the
+    solid-angle element</strong> · <strong>the cosine-weighted hemisphere, and the π it puts
+    into every shading constant</strong> · <strong>the BRDF as a ratio in inverse
+    steradians</strong> · <strong>the Lambert BRDF derived from energy conservation</strong> ·
+    <strong>directional-hemispherical reflectance as an energy test</strong> (§7b above, all
+    five from 6.2) · the rendering equation, honestly scoped · microfacet distributions
+    (GGX) · the geometry and Fresnel terms · Schlick's approximation · <strong>the sRGB
+    transfer function</strong> · the TBN basis · tonemapping curves · spherical harmonics
+    for irradiance.
   </div>
 
   <div class="pending">

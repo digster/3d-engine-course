@@ -5803,3 +5803,167 @@ the surrounding text column and naming the curve in words solved it immediately.
 on before a word was written: the default swapchain format, which compositions this window
 supports, whether the request succeeds, and what raw linear values look like when read as codes.
 Reasoning found the bug; the probe is what made it a claim.
+
+---
+
+## Radiometry and BRDF facts (Lesson 6.2)
+
+### The π in `albedo/π` is the area of a disc, and it has to be derived every time
+
+The cosine-weighted hemisphere measures **π**, not 2π, and that single number is why π appears in
+shading constants at all. The geometric reading is the one that sticks: every patch of the
+hemisphere, projected straight down, casts a shadow of its own size times cos θ, and those shadows
+tile the unit disc exactly once. So a constant BRDF *k* returns *k·π* of everything arriving, and
+demanding that equal the albedo forces `k = albedo/π`.
+
+Two diagnostics fall straight out, and they are worth memorising because they identify the bug
+from the value alone:
+
+| Your hemisphere integral of a white Lambert BRDF returns | What is missing |
+|---|---|
+| 1.0 | nothing — correct |
+| 2.0 | the **cos θ** weight (you integrated 1/π over 2π sr) |
+| 0.5 | the **sin θ** in `dω = sin θ dθ dφ` |
+| 6.28 | the **π** in the BRDF |
+
+And: **convergence is the diagnostic**. Quadrature error shrinks as the grid refines (1.0001004 at
+64×128 → 1.0000004 at 1024×2048); a wrong constant does not shrink at all.
+
+### A BRDF above 1 invents no energy — its unit is per steradian
+
+The confusion is real and it is settled by the unit. Radiance (W/m²·sr) over irradiance (W/m²)
+leaves **sr⁻¹**. A surface reflecting 100% of arriving light into a cone of half-angle α spreads it
+over a projected solid angle of `π sin²α`, so its BRDF is the reciprocal: **0.3183 sr⁻¹** at
+α = 90° (Lambert), **2.7210** at α = 20°, unbounded for a mirror. The quantity actually capped at 1
+is the *integral*. Confusing the function with its integral is the whole of the mistake.
+
+### A renderer with no units has a constant hiding somewhere — find it by asking one question
+
+**What value of the light makes a perfect white surface render at exactly full scale?** If the
+answer is 1, the diffuse BRDF has no π and the π is inside the light. If it is π, the BRDF has it.
+Anything else means a third constant nobody has mentioned.
+
+This works because it is a *measurement* rather than a reading of the code — two minutes with a
+white quad settles what an hour of grepping might not. In this engine the answer was 1, and four
+lines of algebra then said exactly what the field had been: `intensity = E_perp / π`, since Lesson
+3.6.
+
+### Rename the field when the meaning changes, even though the type has not
+
+Moving the π into the BRDF makes every existing `intensity = 1.0f` wrong by 3.14 — and there is no
+compiler diagnostic for "same type, new meaning". Renaming to `irradiance` turns each call site
+into an error a human must answer. The engine has now made this bargain three times (3.1's `z`
+ahead of `colour`, 3.7's defaultless `to_eye`, 6.2's rename) and it has never been the wrong call.
+
+**And set the default to the meaningful value, not to 1.** A default of 1.0 compiles everywhere,
+mentions nothing, and darkens every defaulted scene by π — which is the exact silent failure the
+rename existed to prevent, walked back in through the constructor.
+
+### Re-associating float multiplies is not a no-op, and 8-bit output absorbs it
+
+`albedo * (key * 1.0f * ndl)` against `(albedo * inv_pi) * (key * pi * ndl)` moved **154,240 of
+342,225** sampled results, worst relative error 2.465e−07 — one to two ULP. Not one 8-bit code
+moved, through either encoder. Report both halves: "byte-identical" alone reads as "you changed
+nothing", and "the arithmetic changed" alone reads as "the picture moved".
+
+A related fact worth having: `std::numbers::pi_v<float> * std::numbers::inv_pi_v<float>` is
+**exactly 1.0f**, and `1.0f/pi_v<float>` has the same bits as `inv_pi_v<float>`. Neither is
+guaranteed by anything; both were checked rather than assumed.
+
+### An empty diff can be evidence — but only next to a measurement that something changed
+
+The claim was "the π is hiding in the light". That predicts that taking it out and putting the
+light at π reproduces the image *exactly*. 1,209,616 bytes of agreement is the negative control
+passing. It is evidence **because** the float sweep independently shows the arithmetic differed; a
+change that did nothing at all would prove nothing at all.
+
+### A constant that exists in two languages will eventually disagree
+
+HLSL has no `<numbers>`, so `scene.frag.hlsl` carries its own 1/π. Write more digits than a float
+can hold so the compiler rounds once — then *assert it*: `verify_62` §F reads the shader source,
+parses the literal and compares bit patterns against `engine::k_inv_pi` (both `0x3EA2F983`). Three
+lines against a class of bug otherwise found months later in a one-code pixel diff.
+
+### "Not energy conserving" was true for a different reason than expected
+
+The guess was that the un-normalised Blinn-Phong lobe would exceed unit reflectance at the
+shininess values the engine actually uses. **It does not** — on the 1/π scale it reaches only
+0.1386 at shininess 32. The failure that survives is structural: diffuse and specular are *added
+with no coupling*, so a white surface with a white highlight reflects **1.1386** of what arrives,
+and 1.7333 at shininess 2. The same light is counted once as having bounced off and once as having
+gone in.
+
+This reframes what Cook–Torrance's Fresnel term is *for*: not a better lobe shape, but the
+mechanism that makes the two terms dependent — `kD = 1 − F`. **Measure before writing the
+paragraph that explains the failure**; the probe that overturned this took ten minutes and the
+wrong version would have shipped as a confident sentence.
+
+### Give a lobe and a BRDF different names in a function that holds both
+
+`specular_term()` returns a bare `cos^s` — a *shape*. `specular_brdf()` returns that shape with
+units. `shade()` contains both, so the local variable was renamed `spec` → `lobe`. Dividing the
+lobe by π is also documented as explicitly **not** a normalisation, because it normalises nothing;
+calling it one would stop the next reader from asking the question that found 1.1386.
+
+### A harness that builds its own environment tests the environment it built — second occurrence
+
+`verify_48` §F filled the GPU light uniform from the lamp's *colour alone*, dropping the scalar.
+Silently correct for four modules because the scalar was 1; the moment it became π, worst
+|CPU − GPU| went from 1.2e−07 to **5.3e−01**. The shipped renderer never had the bug —
+`gpu_scene.cpp` has always multiplied. **The instrument was wrong, and only changing a value the
+instrument assumed constant could expose it.**
+
+Lesson 6.1 recorded the same failure with a different constant (a harness building an `_SRGB`
+target while the program used `UNORM`). Two occurrences make it a rule: when a harness constructs
+inputs the shipped path also constructs, one of them will drift, and the drift is invisible while
+the value is a default.
+
+**The ratio names the bug.** Divide the two disagreeing values; if you get π, look for a missing
+multiply by the light's scalar, not for a shading error.
+
+---
+
+## Course-infrastructure facts (docs/, Lesson 6.2)
+
+### Pinning a published page's listings before editing — the rule applied on time
+
+`build_61.py` was pinned to commit `373dd4b` **before a line of 6.2 was written**, all six
+repository listings, each verified byte-identical with `git show <commit>:<path> | diff - <pin>`.
+Re-running the builder then produced a diff of exactly the four nav lines that were *meant* to
+change. That is what a correct pin looks like, and it is the first time in this pipeline the rule
+was applied ahead of the damage rather than after a `git diff` caught it.
+
+Pin **all** the listings, not only the ones you expect to touch: 5.10 needed two pins and only
+predicted one.
+
+### A wrong relative href in a prereq link fails silently — check every link, mechanically
+
+Two of this lesson's four prereq links were wrong (`03-06-lighting.html` for
+`03-06-normals-and-lambert.html`; `03-07-specular.html` for `03-07-specular-blinn-phong.html`).
+Nothing throws and nothing looks broken; the link is simply dead. `check-page.js` does not cover
+this. Twelve lines of Python that resolve every `href`/`src` against the filesystem do:
+
+```python
+for href in re.findall(r'href="([^"]+)"', html):
+    if href.startswith(("http", "#", "mailto:")): continue
+    if not os.path.exists(os.path.join(os.path.dirname(page), href.split("#")[0])):
+        print("BROKEN", href)
+```
+
+Guessing a filename from a lesson *title* is the specific trap — the titles and the slugs diverge.
+
+### A label on a shape the eye reads as background
+
+`check-page.js` flagged figure 3's `n` label as sitting on an `ink-soft` line. It was true and
+invisible: at θ = 0 the surface normal points straight back up the beam, so the label and the
+centre beam arrow wanted the same pixels. Removing the arrow fixed it. **The geometry check sees
+what the eye slides over**, which is exactly why it exists — a drawing can be wrong and still look
+fine.
+
+### Write the second probe when the first overturns a guess
+
+`probe_62.cpp` answered its four questions and turned one over: the raw Blinn lobe does *not*
+exceed unity where the engine actually runs. `probe_62b.cpp` existed only because of that, and it
+found the failure that does survive. The habit is not "write a probe"; it is **write another one
+the moment a probe disagrees with you**, because the paragraph you were about to write is now
+wrong and you do not yet know what replaces it.

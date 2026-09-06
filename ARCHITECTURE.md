@@ -294,6 +294,50 @@ float target and tonemapping (the HDR lesson); the software renderer's three rem
 per-operation conversions, which are *correct* but not a pipeline; and colour **spaces** as
 opposed to transfer functions — this course stays in sRGB primaries throughout.
 
+**Shading, as of Lesson 6.2 — the equation has units, and they are separable.** 6.1 settled what
+the numbers mean at the output stage; 6.2 settles what they are on the way there. The shading
+equation is now three factors carrying three distinct physical claims, and every later lesson in
+Module 6 refines one of them rather than replacing the shape:
+
+```
+L_o = ( f_diffuse + f_specular ) · E_perp · cos θ  +  albedo · L_ambient
+```
+
+**The BRDF is what the surface does**, measured in **inverse steradians** — `lambert_brdf(albedo)`
+= albedo/π and `specular_brdf(surface, lobe)` = colour·lobe/π, both in `gfx/light.hpp`. **`E_perp ·
+cos θ` is what the light delivers**: `directional_light::irradiance` (renamed from `intensity`)
+projected onto the surface, and `irradiance_on(normal)` is where that cosine now lives — which is
+also where a point light's 1/d² will go. The **ambient term stands outside the product** because
+its own π cancels against the hemisphere it is integrated over, which makes `albedo * ambient`
+exactly right for a uniform environment rather than the fudge it was called in 3.6.
+
+The rename is load-bearing. `intensity` had no unit, and four lines of algebra show what it
+silently was: `intensity = E_perp / π`. The Lambert BRDF's own constant had been living inside the
+light since Lesson 3.6. Renaming the field was the only tool that reaches every call site, because
+the correct new value is π rather than the old 1.0 and there is no diagnostic for "same type, new
+meaning". Its default is `k_reference_irradiance` (= π) so that defaulted lights stay correctly
+exposed — **that constant is this engine's exposure, named and derived**, and Lesson 6.10's
+tonemapper is what demotes it from rule to default.
+
+`scene.frag.hlsl` mirrors all of it, with its own `k_inv_pi` because HLSL has no `<numbers>`;
+`verify_62` §F parses the shader source and compares bit patterns, since a constant that exists
+twice can disagree in its last bit. `scene_light_uniforms` did **not** change — the field was
+always the product `colour × scalar` rather than the two factors, so giving one factor a unit
+could not reach the GPU. A boundary that carries results rather than inputs is one the far side
+cannot be wrong about.
+
+**The energy test is now engine apparatus, not prose.** `R(v) = ∫ f_r cos θ dω ≤ 1` is twenty
+lines in `verify_62`, and every BRDF from here on is run through it unchanged. Its first two
+results: the raw Blinn-Phong lobe returns **2.6650** at shininess 1 with no constant, and — the
+defect that survives the 1/π — diffuse and specular are **added with no coupling**, so a white
+surface with a white highlight reflects **1.1386** of what arrives. `specular_brdf`'s division by π
+is therefore documented as *not* a normalisation. Lesson 6.4's Fresnel term is the fix, and it is a
+mechanism rather than a constant.
+
+Named as owed: specular normalisation (6.3–6.4), reciprocity, real photometric units (6.10), and
+transmission — a BRDF describes only light leaving the side it arrived on, which is why this
+renderer cannot make a convincing wax candle.
+
 We convert **per operation**, which is both slower and lossier than a real pipeline — each round
 trip requantises to 256 steps. A properly linear renderer decodes once on the way in and encodes
 once on the way out, which needs a float or half-float framebuffer, headroom above 1.0, and a
@@ -2054,6 +2098,9 @@ Full detail with diagrams in [`docs/conventions.html`](docs/conventions.html); t
 | Axis colours | x/y/z = **red/green/blue**, course-wide, in every diagram — and since 5.11 in exactly one place in the code: `k_axis_{x,y,z}_colour` in `gfx/debug_lines.hpp` |
 | Colour storage | **sRGB-encoded**; arithmetic is **linear**. Convert twice, at the edges (6.1) |
 | Swapchain | `SDR_LINEAR` where supported, so the hardware encodes on write; `gpu_report::output_encodes_in_hardware` says which (6.1) |
+| Shading equation | `L_o = (f_d + f_s)·E_perp·cos θ + albedo·L_ambient` — BRDFs in **sr⁻¹**, light in **irradiance** (6.2) |
+| Light units | `directional_light::irradiance`, E⊥ on a surface square-on to the beam; `k_reference_irradiance` = π is the engine's exposure (6.2) |
+| Energy test | `R(v) = ∫ f_r cos θ dω ≤ 1`, integrated numerically; every BRDF is run through it (6.2) |
 | Angles | Radians. Always. |
 | Performance units | **ns per covered pixel** and **ns per triangle** — never ms/frame |
 | Timing statistic | **median** for a frame, **minimum** for a kernel, never the mean |

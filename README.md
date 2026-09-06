@@ -7,7 +7,7 @@ There is no engine to download here and no framework doing the interesting parts
 write the math library, the rasterizer, the ECS, the renderer, the physics, and the editor. By
 the end you have a real engine and a game built on its public API.
 
-**Status:** curriculum and conventions published; lessons in progress — **Modules 0–5 are complete** and Module 6 has begun (57 of 95 lessons). The CPU software rasterizer is finished end to end, the same scene is drawn on a real GPU through SDL_GPU, and the tree is now a static library with a public API, a platform/application layer, its own logging, handle-based resource storage, an asset system that can load, share and free, a reusable A/B timing harness that has decided three architecture questions with numbers instead of folklore, and **a working from-scratch ECS** — a generational entity id honoured by every pool, sparse-set component storage, queries that lead with the smallest pool, a **transform hierarchy** whose resolve cost is flat in depth with a camera that is an ordinary entity, (5.10) an **input layer that knows what the player meant** rather than which key they hit, (5.11) **a debug-draw system and a tooling UI** — a queue of world-space geometry with lifetimes that anything in the engine can fill, and Dear ImGui behind a 182-line facade — and, opening Module 6, (6.1) **a colour pipeline that is correct at both ends**, which found and fixed a four-module-old bug that had every GPU-rendered pixel too dark. Start at
+**Status:** curriculum and conventions published; lessons in progress — **Modules 0–5 are complete** and Module 6 is under way (58 of 95 lessons). The CPU software rasterizer is finished end to end, the same scene is drawn on a real GPU through SDL_GPU, and the tree is now a static library with a public API, a platform/application layer, its own logging, handle-based resource storage, an asset system that can load, share and free, a reusable A/B timing harness that has decided three architecture questions with numbers instead of folklore, and **a working from-scratch ECS** — a generational entity id honoured by every pool, sparse-set component storage, queries that lead with the smallest pool, a **transform hierarchy** whose resolve cost is flat in depth with a camera that is an ordinary entity, (5.10) an **input layer that knows what the player meant** rather than which key they hit, (5.11) **a debug-draw system and a tooling UI** — a queue of world-space geometry with lifetimes that anything in the engine can fill, and Dear ImGui behind a 182-line facade — and, opening Module 6, (6.1) **a colour pipeline that is correct at both ends**, which found and fixed a four-module-old bug that had every GPU-rendered pixel too dark, and (6.2) **a shading equation with units** — a BRDF measured in inverse steradians, a light measured in irradiance, and a hemisphere integrator that turns "is this model physically plausible?" into a number. Start at
 [`docs/index.html`](docs/index.html).
 
 ---
@@ -408,6 +408,51 @@ downloaded pixels, linear 0.5 was stored as **128 where 188 was meant**. The err
 picture never found it, and why a pixel-by-pixel comparison in Lesson 4.8 sat on top of it and
 reported 87% agreement: the harness had built its own `_SRGB` target and tested a configuration
 the shipped program did not use.
+
+### A BRDF is a ratio, and the π was in the wrong place
+
+**Lesson 6.2** gives the shading equation units, and the exercise finds something. Before it,
+`shade()` multiplied an albedo by a light and called the product "the light leaving the surface" —
+a sentence with no unit anywhere in it, which makes "is this model energy-conserving?" a question
+the code cannot even be asked.
+
+With units, the equation separates into three claims that can each be checked alone:
+
+```
+L_o = ( f_diffuse + f_specular ) · E_perp · cos θ  +  albedo · L_ambient
+      \_______ the surface ______/   \__ the light __/
+```
+
+A **BRDF** is radiance out over irradiance in, so its unit is **inverse steradians** — which is
+why one may exceed 1 without inventing energy. A surface reflecting *all* the arriving light into
+a 20° cone has a BRDF of **2.7210 sr⁻¹** against Lambert's 0.3183; a mirror's is unbounded. The
+quantity actually capped at 1 is the *integral*.
+
+And the π in `albedo/π` is **derived, not quoted**: every patch of the hemisphere projects onto
+the plane below as its own size times cos θ, those shadows tile the unit disc exactly once, so the
+cosine-weighted hemisphere measures π. A constant BRDF *k* therefore returns *k·π* of what
+arrives; demanding that equal the albedo forces *k* = albedo/π and nothing else.
+
+Which raises the question the lesson is really about — **if the π belongs in the BRDF, where has
+it been?** Four lines of algebra answer it:
+
+```
+albedo · (key · intensity · n·l)  ==  (albedo/π) · E_perp · n·l
+                    ⟹  intensity = E_perp / π
+```
+
+The engine's light scalar was never a free parameter. It was an irradiance with the Lambert
+BRDF's own constant divided out of it, unlabelled, **since Lesson 3.6**. Moving it into the open
+changes **154,240 of 342,225** floating-point results and **not one 8-bit code** — and the
+reference render is byte-identical for the thirteenth lesson, which here is the *measurement*
+rather than a survival: had the π been anywhere else, the picture could not have come back.
+
+Two pieces of unexpected news. The ambient term, called "a fudge" since 3.6, turns out to be
+**exactly right** for a uniform environment, because its own π cancels against the hemisphere it
+is integrated over. And the highlight, run through the new hemisphere integrator, fails energy
+conservation — but not in the expected way. The 1/π tames the raw lobe; what survives is that
+diffuse and specular are **added with no coupling**, so a white surface with a white highlight
+reflects **1.1386** of what hits it. That number is the door into Lesson 6.4's Fresnel term.
 
 **An edge is a change in the *action*, not in a signal.** Bind `jump` to both a key and a mouse
 button, press one while the other is held, and there is still exactly one press edge. Derive

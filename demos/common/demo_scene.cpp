@@ -550,7 +550,11 @@ int write_reference_shot(const char* path)
                                     ce * std::cos(k_shot_light_azim)};
         lights.key.direction = -to_light;
         lights.key.colour = {1.0f, 0.97f, 0.90f};
-        lights.key.intensity = 1.0f;
+        // Lesson 6.2: `intensity` became `irradiance`, and the value became pi.
+        // A light of "intensity 1" was always a light of irradiance pi; the
+        // pi has moved into the BRDF where it belongs, so it must now be
+        // written down here. Same picture, stated honestly.
+        lights.key.irradiance = engine::k_reference_irradiance;
     }
 
     const orbit_camera cam;

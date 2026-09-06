@@ -417,7 +417,11 @@ public:
 
         lights_.key.direction = engine::normalised(engine::vec3{-0.4f, -0.7f, -0.55f});
         lights_.key.colour = {1.0f, 0.97f, 0.90f};
-        lights_.key.intensity = 1.0f;
+        // Lesson 6.2: `intensity` became `irradiance`, and the value became pi.
+        // A light of "intensity 1" was always a light of irradiance pi; the
+        // pi has moved into the BRDF where it belongs, so it must now be
+        // written down here. Same picture, stated honestly.
+        lights_.key.irradiance = engine::k_reference_irradiance;
 
         build_world();
 

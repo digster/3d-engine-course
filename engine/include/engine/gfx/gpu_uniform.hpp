@@ -205,12 +205,21 @@ static_assert(offsetof(object_uniforms, normal_from_model) == 64, "");
 /// carry fields one of them ignores. The probe's block stays exactly as 4.7 left
 /// it; nothing that worked stops working.
 ///
-/// **`key` is colour times intensity, multiplied on the CPU.** `directional_light`
+/// **`key` is colour times IRRADIANCE, multiplied on the CPU.** `directional_light`
 /// keeps them apart so a lamp's hue and its brightness can be authored
 /// separately (light.hpp says why); nothing downstream of authoring needs them
 /// apart, so they arrive here as one product. That is the same reasoning as
 /// decoding the tint to linear before it is pushed: work that is constant over a
 /// draw belongs on the side that runs once.
+///
+/// **Lesson 6.2 renamed the scalar and changed nothing here** — which is worth a
+/// sentence, because it is the test of whether a uniform block was designed or
+/// merely filled in. The field was already the *product* rather than the two
+/// factors, so giving one factor a physical unit could not reach it. Had this
+/// struct carried `colour` and `intensity` separately, the rename would have
+/// crossed the CPU/GPU boundary and the shader would have needed to know what a
+/// lamp's authoring model is. A boundary that carries results rather than inputs
+/// is one the far side cannot be wrong about.
 ///
 /// **`eye_world` is here because a highlight is view-dependent** — Lesson 3.7's
 /// whole point, and the reason the composed `view_from_model` matrix had to be
@@ -220,9 +229,9 @@ struct scene_light_uniforms
 {
     vec3  to_light;    ///<  0 — toward the lamp, world space, unit length
     float pad0;        ///< 12
-    vec3  key;         ///< 16 — the lamp's linear colour TIMES its intensity
+    vec3  key;         ///< 16 — the lamp's linear colour TIMES its irradiance
     float pad1;        ///< 28
-    vec3  ambient;     ///< 32 — light.hpp's honest fudge, in linear light
+    vec3  ambient;     ///< 32 — a uniform hemispherical radiance (Lesson 6.2)
 
     /// 44 — **Lesson 6.1**, and it cost nothing to add, which is the point.
     ///

@@ -3257,7 +3257,11 @@ int run_gpu_scene(SDL_Window* window, bool trace_and_exit)
         // light TRAVELS, so it is the negation of the direction toward it.
         lights.key.direction = -to_light;
         lights.key.colour = {1.0f, 0.97f, 0.90f};
-        lights.key.intensity = 1.0f;
+        // Lesson 6.2: `intensity` became `irradiance`, and the value became pi.
+        // A light of "intensity 1" was always a light of irradiance pi; the
+        // pi has moved into the BRDF where it belongs, so it must now be
+        // written down here. Same picture, stated honestly.
+        lights.key.irradiance = engine::k_reference_irradiance;
 
         // ---- Turn the scene into draws -------------------------------------
         engine::gpu_draw_item items[demo::k_max_objects];
@@ -3494,9 +3498,12 @@ int run_gpu_scene(SDL_Window* window, bool trace_and_exit)
 
                 engine::scene_light_uniforms light{};
                 light.to_light = to_light;
-                light.key = engine::vec3{lights.key.colour.r * lights.key.intensity,
-                                         lights.key.colour.g * lights.key.intensity,
-                                         lights.key.colour.b * lights.key.intensity};
+                // Colour times IRRADIANCE (Lesson 6.2's rename), so the shader
+                // receives `E_perp` per channel and applies the cosine and the
+                // BRDF itself — the same three factors as `engine::shade()`.
+                light.key = engine::vec3{lights.key.colour.r * lights.key.irradiance,
+                                         lights.key.colour.g * lights.key.irradiance,
+                                         lights.key.colour.b * lights.key.irradiance};
                 light.ambient = engine::vec3{lights.ambient.r, lights.ambient.g,
                                              lights.ambient.b};
                 light.eye_world = eye;
@@ -4175,7 +4182,11 @@ int main(int argc, char* argv[])
                 // about this because it is the classic sign error.
                 lights.key.direction = -to_light;
                 lights.key.colour = {1.0f, 0.97f, 0.90f};   // a touch warm, like daylight
-                lights.key.intensity = 1.0f;
+                // Lesson 6.2: `intensity` became `irradiance`, and the value became pi.
+                // A light of "intensity 1" was always a light of irradiance pi; the
+                // pi has moved into the BRDF where it belongs, so it must now be
+                // written down here. Same picture, stated honestly.
+                lights.key.irradiance = engine::k_reference_irradiance;
             }
 
             {

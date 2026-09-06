@@ -7,7 +7,7 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-09-05 (after Lesson 6.1 — 57 of 95 lessons; Module 6 begun)
+updated: 2026-09-06 (after Lesson 6.2 — 58 of 95 lessons)
 
 conventions:
   ecs-storage: THE ECS IS A SPARSE SET, DECIDED IN 5.7 BY MEASUREMENT, NOT TASTE.
@@ -2940,6 +2940,50 @@ curriculum: 95 lessons, ~438 h, 9 modules   (5.10 split into 5.10 + 5.11 in 5.10
         straddling, 36 out.
         MOVE WITHOUT CHANGING, THEN CHANGE WITHOUT MOVING, verifying separately.
         Both passes byte-identical; verify_50 (which LINKS) also byte-identical.
+  radiometry: LESSON 6.2 GAVE THE SHADING EQUATION UNITS, AND THE UNITS ARE THE
+        CONVENTION — every later BRDF must be stated in them.
+          L_o = (f_diffuse + f_specular) * E_perp * cos(theta) + albedo * L_ambient
+        RADIANCE, W/(m^2 sr), IS WHAT A PIXEL HOLDS. Not irradiance: doubling the
+        distance divides irradiance by 4 AND the subtended solid angle by 4, so
+        their ratio is invariant along a ray. That cancellation is the entire
+        reason a framebuffer needs no distance term. Fails in participating media,
+        which this course does not reach.
+        A BRDF IS A RATIO WITH UNITS OF INVERSE STERADIAN. Radiance out over
+        irradiance in. It may exceed 1 without inventing energy — a surface
+        reflecting 100% into a 20-degree cone is 2.7210 sr^-1 against Lambert's
+        0.3183, and a mirror's is unbounded. The quantity capped at 1 is the
+        INTEGRAL, R(v) = integral of f_r cos(theta) dw.
+        THE PI IS THE AREA OF A DISC, and it is DERIVED, never quoted: every patch
+        of the hemisphere projects down as its own size times cos(theta), those
+        shadows tile the unit disc exactly once, so the cosine-weighted hemisphere
+        measures pi. A constant BRDF k therefore returns k*pi; demanding that
+        equal the albedo forces k = albedo/pi and nothing else.
+        THE COSINE IS ON THE LIGHT'S SIDE. `albedo * n_dot_l` written as one
+        expression fuses two independent facts, and the fusion is exactly why the
+        pi had nowhere to live. directional_light::irradiance_on() is where the
+        cosine now lives, and it is where a point light's 1/d^2 will go.
+        EXPOSURE: k_reference_irradiance = pi is THIS ENGINE'S EXPOSURE, named and
+        derived (a white Lambertian square-on to it renders at exactly 1.0f, and
+        pi * inv_pi IS exactly 1.0f in IEEE single). It is a CHOICE, not a law —
+        6.10's tonemapper replaces it, at which point lights get authored in lux
+        and this becomes a default.
+        THE AMBIENT TERM'S PI CANCELS. Uniform hemispherical radiance L_a through
+        albedo/pi integrates to albedo * L_a exactly. So `albedo * ambient`, used
+        since 3.6 because it looked right, IS right for a uniform environment —
+        the one term needing no constant is the one nobody put a constant in. What
+        is wrong with it is the ASSUMPTION (real bounced light is not uniform),
+        which is 6.12's subject, and that is now a precise statement rather than
+        the word "fudge".
+        BLINN-PHONG IS NOT ENERGY CONSERVING, AND NOT FOR THE EXPECTED REASON.
+        The 1/pi tames the raw lobe (2.6650 at shininess 1 without it; first under
+        1 between shininess 8 and 12). What survives is that DIFFUSE AND SPECULAR
+        ARE ADDED WITH NO COUPLING: white albedo + white highlight reflects 1.1386
+        at shininess 32, 1.7333 at 2. specular_brdf's /pi is therefore NOT called a
+        normalisation anywhere, and verify_62 §F asserts the choice so it cannot
+        drift. 6.4's Fresnel is the fix, and it is a MECHANISM, not a constant.
+        NOT DONE, NAMED: no specular normalisation, no reciprocity (Blinn's term
+        happens to be reciprocal, Phong's is not), no real photometric unit, no
+        transmission (BTDF / subsurface).
 
 completed:
   - 0.1  What a Game Engine Actually Is
@@ -3009,8 +3053,34 @@ completed:
   - 5.11 Dear ImGui and the Debug Draw System
   ===> MODULE 5 COMPLETE <===
   - 6.1  Linear and sRGB: The Gamma Lesson
+  - 6.2  Radiometry-Lite: What a BRDF Is
 
 capabilities:
+  - 6.2 THE SHADING EQUATION HAS UNITS, AND THEY ARE SEPARABLE.
+    NO NEW HEADERS, NO NEW SOURCES — 56 public headers and 32 sources, unchanged
+    for a SECOND lesson. 6.2 renamed things; it did not add a subsystem.
+    THE EQUATION, and every later lesson refines it rather than replacing it:
+        L_o = (f_diffuse + f_specular) * E_perp * cos(theta) + albedo * L_ambient
+    light.hpp   k_inv_pi (std::numbers::inv_pi_v<float>) and
+                k_reference_irradiance (= pi). directional_light::intensity
+                RENAMED to ::irradiance, defaulting to k_reference_irradiance, plus
+                irradiance_on(normal). lambert_brdf(albedo) = albedo/pi and
+                specular_brdf(surface, lobe) = colour*lobe/pi, both sr^-1.
+                shade()'s local `spec` renamed `lobe` — a lobe is a shape, a BRDF
+                is a shape with units, and the function now contains both.
+    scene.frag.hlsl  the same three factors, with its OWN k_inv_pi (HLSL has no
+                <numbers>), written to more digits than a float holds so the
+                compiler rounds once. verify_62 §F PARSES THE SHADER and compares
+                bit patterns: both 0x3EA2F983.
+    gpu_uniform.hpp  DOCUMENTATION ONLY — zero bytes, zero offsets moved. The
+                field was always the PRODUCT colour*scalar, so giving one factor a
+                unit could not reach the GPU. A boundary that carries results
+                rather than inputs is one the far side cannot be wrong about.
+    demos       five call sites, each the compile error the rename existed for.
+    MEASURED: over 342,225 channel samples the re-parameterisation moves 154,240
+    float results by 1-2 ULP (worst relative 2.465e-07) and ZERO 8-bit codes,
+    through BOTH encoders. The golden is byte-identical for the THIRTEENTH lesson
+    and here that is the RESULT, not a survival — see the next: block.
   - 6.1 THE ENGINE'S OUTPUT STAGE IS CORRECT ON BOTH SURFACES.
     NO NEW HEADERS, NO NEW SOURCES — 56 public headers and 32 sources, unchanged.
     This lesson CLOSED A GAP rather than adding a subsystem.
@@ -5129,7 +5199,8 @@ files:
                  05-09-transform-hierarchy.html,
                  05-10-input-mapping.html,
                  05-11-imgui-debug-draw.html,
-                 06-01-linear-and-srgb.html
+                 06-01-linear-and-srgb.html,
+                 06-02-what-a-brdf-is.html
   docs/shared/: course.css, course.js      (THE stylesheet + page script; one copy each)
   docs/_template/: lesson-template.html, README.md, apply-shared.py, check-page.js
   scratch/ (5.7, not shipped with the engine): ecs_probe.hpp, bench_57.cpp,
@@ -5170,9 +5241,30 @@ files:
            which compositions this window supports, and tabulated what raw linear
            values look like when read as codes. Kept because "write the probe
            first" is the habit, not the file.)
-           (build_61.py PINS NOTHING YET and lists gpu_device.{hpp,cpp},
-            gpu_uniform.hpp, scene.frag.hlsl AND colour.{hpp,cpp} whole. The rest
-            of Module 6 will touch several of those, so it will need pins.)
+           PINNED BY 6.2, BEFORE A LINE OF 6.2 WAS WRITTEN — and this is the first
+           time the rule was applied on time rather than after a diff caught it.
+           ALL SIX repository listings frozen at 373dd4b and verified byte-identical:
+           l61_gpu_device.{hpp,cpp}, l61_gpu_uniform.hpp, l61_scene.frag.hlsl,
+           l61_colour.{hpp,cpp}. Two were certain to be touched (gpu_uniform.hpp,
+           scene.frag.hlsl); the other four were pinned anyway, because the file
+           that bites you is the one you were sure was finished. Re-running
+           build_61.py then produced a diff of exactly the four nav lines that were
+           MEANT to change, which is what "pinned correctly" looks like.
+  scratch/ (6.2, not shipped with the engine): verify_62.cpp, build_verify_62.sh,
+           figs_62.py, build_62.py, l62_body_{a,b,c}.html, l62_fig{1..6}.svg,
+           probe_62.cpp and probe_62b.cpp (THROWAWAYS, kept: the first established
+           that pi*inv_pi is exactly 1.0f and that no 8-bit code moves; the second
+           was written BECAUSE THE FIRST OVERTURNED A GUESS — I expected the raw
+           Blinn lobe to break energy conservation at the shininess values the
+           engine uses, and it does not, so 62b went looking for the failure that
+           does survive and found it in the un-coupled SUM. Write the probe first,
+           and write a second one when it tells you something you did not expect.)
+           figview/ — one throwaway HTML page per figure, because scrolling a
+           220 KB page to look at figure 5 lands unpredictably (5.11's note).
+           (build_62.py PINS NOTHING YET and lists light.hpp and scene.frag.hlsl
+            WHOLE. Those are the two files the ENTIRE REST OF MODULE 6 edits — 6.3
+            adds a microfacet distribution, 6.4 replaces specular_brdf outright,
+            6.5 pulls the material parameters out. Pin before touching either.)
   scratch/ (5.11, not shipped with the engine): verify_511.cpp,
            build_verify_511.sh, figs_511.py, build_511.py,
            l511_body_{a,b,c}.html, l511_fig{1..7}.svg
@@ -5193,55 +5285,64 @@ files:
   (retired: src/ — the whole directory. hello.cpp.)
 
 
-next: 6.2 — Radiometry-Lite and What a BRDF Is
-      (planned filename: docs/lessons/06-02-what-a-brdf-is.html — 6.1's TWO next
-      links point at the index and BOTH need repointing, and build_61.py's TAIL
-      holds the bottom one. AND: build_61.py PINS NOTHING while listing
-      gpu_device.{hpp,cpp}, gpu_uniform.hpp, scene.frag.hlsl and colour.{hpp,cpp}
-      WHOLE. 6.2 will almost certainly touch light.hpp and scene.frag.hlsl, so
-      before editing either:
-        git show <6.1 commit>:<path> > scratch/l61_<name>
-      verified with `git show ... | diff - <snapshot>`. The trap has bitten three
-      times; 5.10's second pin is why the rule is "pin every file the page lists
-      that a later lesson touches", not "pin the demo".)
-      6.1 SETTLED THE UNITS; 6.2 ASKS WHAT THE QUANTITY IS. The numbers leaving
-      the renderer are now genuinely quantities of light, which is the
-      precondition for asking what KIND — and Lambert has been standing in since
-      3.6 with light.hpp's own comment admitting it is a convenient guess.
-      1 RADIOMETRY-LITE, AND NO MORE THAN LITE. Flux, irradiance, radiance, and
-        the one distinction that actually matters for a renderer: RADIANCE IS WHAT
-        A PIXEL MEASURES, and it is per unit solid angle per unit projected area,
-        which is why it is the quantity that is invariant along a ray. Derive the
-        cosine factor from PROJECTED AREA rather than restating "Lambert's law" —
-        3.6 already used the geometric picture, so this is the spiral's second
-        turn and must go deeper, not repeat.
-      2 A BRDF IS A RATIO, and stating it as one is most of the lesson:
-        outgoing radiance per unit of incoming irradiance, a function of two
-        directions. Units of inverse steradian, which is worth dwelling on because
-        it explains why a BRDF can exceed 1 without breaking anything.
-      3 LAMBERT RE-UNDERSTOOD AS A BRDF: albedo/pi, and THE PI IS THE PART TO
-        DERIVE — it falls out of integrating a constant BRDF over the hemisphere
-        and demanding energy conservation. Most treatments drop it silently or
-        fold it into the light's intensity; this engine currently does the latter
-        without saying so, and light.hpp should be made honest about it.
-      4 ENERGY CONSERVATION AS A TESTABLE CLAIM, not a slogan: integrate the BRDF
-        over the hemisphere numerically and check it does not exceed 1. That is a
-        verify_62 section, and it is the shape every later BRDF gets checked with.
-      THE TEST TO BEAT: golden byte-identical is genuinely at risk this time, and
-      for a real reason rather than a guessed one — if the pi lands in the BRDF
-      where it currently hides in the light's intensity, every shaded pixel in the
-      reference render moves. IF SO, RE-BASELINE DELIBERATELY: show the diff, state
-      the per-channel magnitude, record the old hash (905BF27E) beside the new one,
-      and say in the lesson that the OLD picture was not wrong, it was
-      parameterised differently. Do not quietly renormalise the light to keep the
-      hash.
-      verify_62 must cover: the hemispherical integral of the Lambert BRDF
-      (numerically, against 1); radiance invariance along a ray; the cosine factor
-      derived from projected area against a direct geometric computation; and
-      whichever normalisation choice is made, asserted so it cannot drift. Plus
-      verify_45..61 green.
-      CARRY FORWARD FROM 6.1: the output stage is settled and must stay settled —
-      6.2 changes what is COMPUTED, never where it is encoded. If a picture looks
-      wrong after a BRDF change, check the BRDF; the transfer function is now
-      pinned by 34 checks and is not the suspect it used to be.
+next: 6.3 — Microfacet Theory
+      (planned filename: docs/lessons/06-03-microfacet-theory.html — 6.2's TWO next
+      links point at the index and BOTH need repointing; scratch/l62_body_a.html
+      holds the top one and build_62.py's TAIL holds the bottom one. AND:
+      build_62.py PINS NOTHING while listing light.hpp and scene.frag.hlsl WHOLE.
+      6.3 edits BOTH — it is a lighting lesson and they are the two lighting files
+      — so before touching either:
+        git show <6.2 commit>:<path> > scratch/l62_<name>
+      verified with `git show ... | diff - <snapshot>`, then re-run build_62.py and
+      `git diff` the page. 6.2 did this to build_61.py on time and the diff came
+      out to exactly the lines that were meant to move; that is the standard.
+      6.2 GAVE THE EQUATION UNITS; 6.3 ASKS WHAT A SURFACE IS. The apparatus is now
+      in place — a BRDF is a ratio in sr^-1, and R(v) = integral of f_r cos dw is a
+      NUMBER that says whether a model is plausible. 6.3 is the lesson that number
+      was built for.
+      1 THE DOOR IN IS 1.1386, measured in 6.2 §6 and asserted in verify_62 §D: a
+        white surface with a white highlight reflects more light than arrives,
+        because diffuse and specular are ADDED with no coupling. Do not open 6.3 on
+        "here is a better distribution function". Open it on the number, and on the
+        question the number forces: if that light bounced off the surface, how can
+        it also have gone into it?
+      2 A SURFACE AS A LANDSCAPE OF TINY MIRRORS, and the payoff is that ROUGHNESS
+        STOPS BEING A SLIDER. shininess (light.hpp, since 3.7) is an exponent with
+        no physical reading, not comparable between Phong and Blinn (3.7 measured
+        the 4x rule), and 6.2 has now measured that its reflectance swings 5.36x
+        with view angle for no reason anyone asked for. Roughness is a statement
+        about the DISTRIBUTION OF MICROFACET SLOPES, which is a thing that can be
+        measured off a real surface.
+      3 THE NDF FIRST, ALONE. D(h) is the fraction of microfacets whose normal is
+        h — a probability density on the sphere, so it INTEGRATES TO 1 against
+        cos(theta_h), which is a checkable claim and belongs in verify_63 as the
+        first thing written. Beckmann then GGX, and GGX's tail is the whole reason
+        it won: derive it, do not assert it. Blinn-Phong's lobe should be shown to
+        BE a (badly normalised) NDF, so 3.7 is retrospectively promoted rather than
+        thrown away — that is the spiral, and 6.2 already set it up by calling the
+        halfway vector "the normal this surface would need".
+      4 THE GEOMETRY TERM IS A CONSEQUENCE, NOT A FUDGE: microfacets shadow and
+        mask each other, and at grazing angles that is most of the effect. Its
+        absence is why an un-normalised lobe misbehaves at grazing angles, which
+        6.2 measured as the 0.1386-vs-0.0259 swing without being able to explain it.
+      5 DECISION TO MAKE EARLY: does 6.3 ship code, or is it derivation + verify
+        only, with 6.4 assembling? The curriculum splits microfacet theory (6.3)
+        from Cook-Torrance assembled (6.4), which suggests 6.3 ships D and G as
+        FUNCTIONS with their own tests and 6.4 wires them into shade(). That keeps
+        each lesson's verify honest and avoids a half-BRDF being live in the
+        renderer for one lesson. Prefer it unless 6.3 comes out thin.
+      THE TEST TO BEAT: golden byte-identical for a FOURTEENTH lesson is likely IF
+      6.3 ships D and G as unwired functions (nothing in shade() moves). It is
+      certainly over in 6.4. Either way, verify_63 must cover: D integrates to 1
+      against cos(theta_h) for every roughness tested; D is normalised for both
+      Beckmann and GGX; the Blinn exponent that best matches a given GGX roughness,
+      fitted rather than guessed; G's range and its limits at normal and grazing
+      incidence; and 6.2's hemisphere integrator reused UNCHANGED, because a test
+      that gets rewritten for each new BRDF is not a test of the new BRDF.
+      Plus verify_45..62 green.
+      CARRY FORWARD FROM 6.2: the units are settled and must stay settled. Every
+      new term is either a BRDF (sr^-1, goes inside the f_r sum) or a factor of the
+      light (dimensionless or W/m^2, goes outside it). If a term will not sort into
+      one of those two, that is the signal to stop and work out what it actually is
+      — it is how the pi got lost in the first place.
 ```
