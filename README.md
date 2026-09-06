@@ -7,7 +7,7 @@ There is no engine to download here and no framework doing the interesting parts
 write the math library, the rasterizer, the ECS, the renderer, the physics, and the editor. By
 the end you have a real engine and a game built on its public API.
 
-**Status:** curriculum and conventions published; lessons in progress — **Modules 0–5 are complete** and Module 6 is under way (58 of 95 lessons). The CPU software rasterizer is finished end to end, the same scene is drawn on a real GPU through SDL_GPU, and the tree is now a static library with a public API, a platform/application layer, its own logging, handle-based resource storage, an asset system that can load, share and free, a reusable A/B timing harness that has decided three architecture questions with numbers instead of folklore, and **a working from-scratch ECS** — a generational entity id honoured by every pool, sparse-set component storage, queries that lead with the smallest pool, a **transform hierarchy** whose resolve cost is flat in depth with a camera that is an ordinary entity, (5.10) an **input layer that knows what the player meant** rather than which key they hit, (5.11) **a debug-draw system and a tooling UI** — a queue of world-space geometry with lifetimes that anything in the engine can fill, and Dear ImGui behind a 182-line facade — and, opening Module 6, (6.1) **a colour pipeline that is correct at both ends**, which found and fixed a four-module-old bug that had every GPU-rendered pixel too dark, and (6.2) **a shading equation with units** — a BRDF measured in inverse steradians, a light measured in irradiance, and a hemisphere integrator that turns "is this model physically plausible?" into a number. Start at
+**Status:** curriculum and conventions published; lessons in progress — **Modules 0–5 are complete** and Module 6 is under way (59 of 95 lessons). The CPU software rasterizer is finished end to end, the same scene is drawn on a real GPU through SDL_GPU, and the tree is now a static library with a public API, a platform/application layer, its own logging, handle-based resource storage, an asset system that can load, share and free, a reusable A/B timing harness that has decided three architecture questions with numbers instead of folklore, and **a working from-scratch ECS** — a generational entity id honoured by every pool, sparse-set component storage, queries that lead with the smallest pool, a **transform hierarchy** whose resolve cost is flat in depth with a camera that is an ordinary entity, (5.10) an **input layer that knows what the player meant** rather than which key they hit, (5.11) **a debug-draw system and a tooling UI** — a queue of world-space geometry with lifetimes that anything in the engine can fill, and Dear ImGui behind a 182-line facade — and, opening Module 6, (6.1) **a colour pipeline that is correct at both ends**, which found and fixed a four-module-old bug that had every GPU-rendered pixel too dark, (6.2) **a shading equation with units** — a BRDF measured in inverse steradians, a light measured in irradiance, and a hemisphere integrator that turns "is this model physically plausible?" into a number — and (6.3) **a story about what a surface is**: three microfacet distributions and a masking term, each held to an identity that has a right-hand side. Start at
 [`docs/index.html`](docs/index.html).
 
 ---
@@ -453,6 +453,45 @@ is integrated over. And the highlight, run through the new hemisphere integrator
 conservation — but not in the expected way. The 1/π tames the raw lobe; what survives is that
 diffuse and specular are **added with no coupling**, so a white surface with a white highlight
 reflects **1.1386** of what hits it. That number is the door into Lesson 6.4's Fresnel term.
+
+### A surface is a landscape of tiny mirrors, and that claim can be tested
+
+**Lesson 6.3** throws out `shininess`. Not because it looks bad — because it is a number that
+makes the highlight the right size and measures nothing: not comparable between models (3.7 fitted
+Blinn against Phong at 4.38×), not measurable on any real material, not transferable between
+renderers.
+
+In its place, one sentence taken literally: **a surface is a landscape of microscopic *perfect*
+mirrors.** Shading then collapses into a counting problem, because a facet reflects **l** to
+**v** only if its own normal is **h** — so the highlight's shape is a *histogram of surface
+slopes*, and roughness is that histogram's width. A profilometer can measure that.
+
+And because a histogram is a **distribution**, it has to satisfy something:
+
+```
+∫ D(h) · cos θₕ · dω  =  1
+```
+
+which is the first equation in this shading arc with a right-hand side you can hold a model to.
+Read backwards it says the microfacets' *projected areas* add up to the flat area they stand on,
+so the cosine in it is not a convention.
+
+That test then does the work. It shows **Blinn-Phong was a microfacet distribution all along**,
+missing only its constant — and that this engine ships `1/π` where `(s+2)/2π` is required, wrong
+by exactly **17× at the default shininess**, silently absorbed by every specular colour an artist
+ever tuned. It prices GGX against Beckmann at **456× the tail** 45° off the peak. It explains
+6.2's unexplained 5.36× view-angle swing as shadowing and masking — a *consequence* of the
+landscape picture rather than a correction bolted on. And it measures the model's own remaining
+error: single scattering returns **0.3069** at full roughness, **losing 69%** to the second
+bounce it forgets, which is why rough metal renders dark in every engine that has not bought it
+back.
+
+Then the test finds a bug that has nothing to do with microfacets. The textbook GGX denominator,
+`cos²θₕ(α²−1) + 1`, is a catastrophic cancellation in `float` and **loses 1.1% of the model's
+energy at mirror roughness**. One line of algebra removes it — `(1−c)(1+c) + α²c²`, identical
+arithmetic, and Sterbenz's lemma makes `1.0f - c` exact for `c ≥ 0.5`. A 450× improvement,
+diagnosed in two runs by a rule worth keeping: **quadrature error shrinks when the grid refines;
+arithmetic error does not.**
 
 **An edge is a change in the *action*, not in a signal.** Bind `jump` to both a key and a mouse
 button, press one while the other is held, and there is still exactly one press edge. Derive

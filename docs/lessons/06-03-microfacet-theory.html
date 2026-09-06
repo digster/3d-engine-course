@@ -1,0 +1,2740 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>6.3 — Microfacet Theory · Build a Professional 3D Game Engine</title>
+<meta name="description" content="A surface as a landscape of microscopic perfect mirrors, so that roughness stops being a slider and becomes a statistical claim about slopes. Derives the normal distribution function and the identity it must satisfy, shows that Blinn-Phong was a microfacet distribution all along and that this engine ships its constant wrong by exactly 17x, measures what GGX's tail buys over Beckmann at 456x, derives shadowing and masking as a consequence rather than a correction, and measures the 69% of light that single-scattering microfacet theory loses at full roughness. Along the way the normalisation test finds catastrophic cancellation in the textbook GGX denominator.">
+
+<!-- SHARED-CSS:BEGIN -->
+<!-- The shared course stylesheet, linked rather than inlined. Single source of
+     truth: docs/shared/course.css. Edit that file; this page carries no copy.
+     Still no build step - the link resolves straight off the filesystem, so this
+     page opens by double-clicking, offline. -->
+<link rel="stylesheet" href="../shared/course.css">
+<!-- SHARED-CSS:END -->
+
+<!-- KaTeX (optional). If unreachable the raw TeX remains readable, and every
+     equation is also stated in prose + .eq-plain, so nothing is lost. -->
+<link rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css"
+      integrity="sha384-nB0miv6/jRmo5UMMR1wu3Gz6NLsoTkbqJghGIsx//Rlm+ZU03BU6SQNC66uf4l5+"
+      crossorigin="anonymous">
+</head>
+<body>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <a class="course" href="../index.html">Build a Professional 3D Game Engine</a>
+    <span class="spacer"></span>
+    <a href="../index.html">Contents</a>
+    <a href="../conventions.html">Conventions</a>
+    <a href="../math-toolbox.html">Math Toolbox</a>
+    <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Toggle colour theme">Theme</button>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="06-02-what-a-brdf-is.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">6.2 — Radiometry-Lite: What a BRDF Is</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="../index.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">6.4 — Cook–Torrance PBR, Derived</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 6 — Advanced Rendering · Lesson 6.3</div>
+    <h1>Microfacet Theory</h1>
+    <p class="deck">
+      Lesson 6.2 ended on a number: <strong>1.1386</strong> — a white surface with a white
+      highlight reflecting more light than arrives. That number is the door into this lesson, and
+      the question it forces is not "which constant is wrong?" but a much better one:
+      <em>if that light bounced off the surface, how can it also have gone into it?</em> Answering
+      it means replacing <code>shininess</code> — a number that makes the highlight the right size
+      and measures nothing — with a <strong>statistical claim about what a surface is</strong>.
+      Along the way, Blinn-Phong turns out to have been a microfacet distribution all along, and
+      the constant this engine has shipped since Lesson 3.7 turns out to be wrong by
+      <strong>exactly 17×</strong>.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 5 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="03-07-specular-blinn-phong.html">3.7 — Specular and Blinn-Phong</a>,
+          <a href="06-02-what-a-brdf-is.html">6.2 — Radiometry-Lite: What a BRDF Is</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd><code>engine/include/engine/gfx/microfacet.hpp</code> <em>(new)</em>,
+            <code>engine/include/engine/gfx/light.hpp</code>,
+            <code>scratch/verify_63.cpp</code></dd>
+
+        <dt>Milestone</dt>
+        <dd>Three microfacet distributions and a masking term, each with its own test — including
+            the one test that matters, which is that a distribution <em>integrates to one</em>.
+            27 checks green; the reference render byte-identical for the
+            <strong>fourteenth</strong> lesson, because nothing here is wired in yet. That is
+            deliberate: Lesson 6.4 assembles.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…explain what a microfacet model claims about a surface, and why that claim makes the
+          highlight's shape a <em>histogram</em>.</li>
+      <li>…state the normalisation identity an NDF must satisfy, say why the cosine is in it, and
+          test any distribution against it in twenty lines.</li>
+      <li>…derive the constant Blinn-Phong needs to be a distribution, and compute what a renderer
+          using a different one is off by.</li>
+      <li>…say what separates Beckmann from GGX in one sentence, and back it with a number.</li>
+      <li>…tell the difference between a mapping that matches two lobes' <em>peaks</em> and one
+          that matches their <em>shapes</em>, and know which one the folklore gives you.</li>
+      <li>…explain shadowing and masking as a consequence of the microfacet picture rather than a
+          correction bolted onto it.</li>
+      <li>…measure how much energy a single-scattering model loses, and say where it went.</li>
+      <li>…recognise catastrophic cancellation in a shading formula, and use Sterbenz's lemma to
+          rearrange it away.</li>
+    </ul>
+  </section>
+
+  <details class="toc" open>
+    <summary>Contents</summary>
+    <ol>
+      <li><a href="#problem">The Problem</a></li>
+      <li><a href="#landscape">A Landscape of Tiny Mirrors</a></li>
+      <li><a href="#distribution">The Distribution, and What Makes It One</a>
+        <ol>
+          <li><a href="#dist-identity">The identity, and why the cosine is in it</a></li>
+          <li><a href="#dist-check">What it buys: a test with a known answer</a></li>
+        </ol>
+      </li>
+      <li><a href="#blinn">Blinn-Phong Was a Microfacet Model</a></li>
+      <li><a href="#tail">Beckmann, GGX, and the Tail</a></li>
+      <li><a href="#fit">Matching the Peak Is Not Matching the Lobe</a></li>
+      <li><a href="#masking">Shadowing and Masking</a></li>
+      <li><a href="#energy">The Energy Budget</a></li>
+      <li><a href="#float">The Test Found a Bug in <code>float</code></a></li>
+      <li><a href="#impl">Implementation</a></li>
+      <li><a href="#notdone">What This Lesson Does Not Do</a></li>
+      <li><a href="#listings">Complete Code Listings</a></li>
+      <li><a href="#build">Build &amp; Run</a></li>
+      <li><a href="#pitfalls">Common Pitfalls &amp; Debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; Next</a></li>
+      <li><a href="#reading">Further Reading</a></li>
+    </ol>
+  </details>
+
+  <!-- =================================================================
+       1 — THE PROBLEM
+       ================================================================= -->
+  <h2 id="problem"><span class="num">1</span>The Problem</h2>
+
+  <p>
+    Lesson 6.2 gave the shading equation units and then used them to measure the model the engine
+    actually ships. Two of those measurements are worth putting back on the table, because this
+    lesson is the answer to both:
+  </p>
+
+  <div class="callout warn">
+    <span class="label">What 6.2 measured, and could not explain</span>
+    <p><strong>A white surface with a white highlight reflects 1.1386 of the light that hits
+       it</strong> — diffuse and specular are added with no coupling, so the same photon is
+       counted once as having bounced off the surface and once as having gone into it.</p>
+    <p>And <strong>the same surface reflects 0.1386 toward an eye 37° off the normal and 0.0259
+       toward one at 75°</strong> — a swing of 5.36× that no parameter controls and nothing in
+       the model asked for.</p>
+  </div>
+
+  <p>
+    It would be possible to patch both. A normalising constant would pull the first under 1; some
+    ad-hoc falloff would flatten the second. Both patches would be wrong, and the reason they
+    would be wrong is the actual subject of this lesson.
+  </p>
+
+  <p>
+    <strong>The model has no story about what a surface is.</strong> <code>shininess</code> is a
+    number you turn until the highlight looks the right size. Consider what that means:
+  </p>
+
+  <ul>
+    <li>It is <strong>not comparable between models.</strong> Lesson 3.7 measured that Blinn's
+        exponent must be roughly 4× Phong's for the same visual tightness — fitted at 4.38×
+        falling to 4.01×. A parameter whose meaning depends on which formula consumes it is not
+        describing the surface.</li>
+    <li>It is <strong>not measurable.</strong> There is no experiment you could perform on a piece
+        of brushed aluminium to determine its shininess. There is no instrument, because there is
+        no physical quantity.</li>
+    <li>It is <strong>not transferable.</strong> A shininess copied from one renderer to another
+        means nothing, which is why every asset pipeline that has tried has produced materials
+        that look different in every engine.</li>
+  </ul>
+
+  <p>
+    So the two symptoms in the callout are not two bugs. They are one absence, showing up twice.
+    A model that cannot say what a surface <em>is</em> cannot say how much of it is visible, and
+    cannot say how the light that bounced off it relates to the light that went in.
+  </p>
+
+  <p>
+    Microfacet theory supplies the missing story, and it supplies it in a form that can be
+    checked — which is the difference that matters. By the end of §3 you will have an equation
+    whose right-hand side is the number <strong>1</strong>, and a twenty-line test that says
+    whether any distribution satisfies it. That test is what finds everything else in this lesson,
+    including a bug in the arithmetic that every reference on the subject prints.
+  </p>
+
+  <!-- =================================================================
+       2 — A LANDSCAPE OF TINY MIRRORS
+       ================================================================= -->
+  <h2 id="landscape"><span class="num">2</span>A Landscape of Tiny Mirrors</h2>
+
+  <p>
+    Here is the whole idea, and it fits in a sentence: <strong>a surface is not smooth, it is a
+    landscape of microscopic mirrors, and each one is perfect.</strong>
+  </p>
+
+  <p>
+    Take that literally for a moment, because the payoff comes from taking it literally. Not "a
+    surface is a bit rough". Every microfacet is a <em>flawless mirror</em>, obeying the
+    reflection law exactly. The facets are far smaller than a pixel — so you never see one — and
+    far larger than a wavelength — so ordinary geometric reflection applies to each and we can
+    ignore diffraction. Between those two scales, a rough surface is a huge number of tiny
+    perfect mirrors pointing in slightly different directions.
+  </p>
+
+  <p>
+    Now ask the shading question. Light arrives from <strong>l</strong> and your eye is at
+    <strong>v</strong>. A given microfacet sends light from <strong>l</strong> to
+    <strong>v</strong> only if it is a mirror oriented to do exactly that — and Lesson 3.7 already
+    worked out which orientation that is. The halfway vector was derived there as
+    <em>"the normal this surface would need in order to bounce the light straight into the
+    eye"</em>. In a microfacet model that sentence stops being a way of putting it and becomes the
+    mechanism:
+  </p>
+
+  <div class="callout note">
+    <span class="label">A facet contributes if and only if its own normal is <strong>h</strong></span>
+    <p>Which turns the whole of specular shading into a counting problem. <em>How many of the
+       surface's microfacets happen to face <strong>h</strong>?</em> That is the only question the
+       model asks, and everything that follows is bookkeeping on the answer.</p>
+  </div>
+
+    <figure class="dia bleed">
+    <svg viewBox="0 0 720 430" role="img" aria-labelledby="l63f1-t l63f1-d">
+      <title id="l63f1-t">A surface as a landscape of microfacets</title>
+      <desc id="l63f1-d">A cross-section of a rough surface with every facet's normal drawn. Light arrives from l and leaves toward v; only the few facets whose own normal is close to the halfway vector h reflect between them, so the highlight's shape is a histogram of surface slopes.</desc>
+      <defs>
+        <marker id="e-i-l63f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+        <marker id="e-s-l63f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+        <marker id="e-h-l63f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+        <marker id="e-b-l63f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+        <marker id="e-g-l63f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+      </defs>
+    <text x="20" y="20" class="sm" text-anchor="start">The whole model, in one picture: every microfacet is a perfect mirror, so only the ones facing h send light at you.</text>
+    <path d="M 56 266 L 56.0 199.6 L 68.7 206.7 L 81.3 207.8 L 94.0 204.8 L 106.7 207.6 L 119.3 214.6 L 132.0 215.3 L 144.7 210.2 L 157.3 213.2 L 170.0 228.5 L 182.7 240.4 L 195.3 233.3 L 208.0 214.0 L 220.7 201.0 L 233.3 199.1 L 246.0 199.1 L 258.7 197.7 L 271.3 203.4 L 284.0 218.0 L 296.7 227.8 L 309.3 222.4 L 322.0 211.9 L 334.7 213.6 L 347.3 226.0 L 360.0 231.9 L 372.7 223.6 L 385.3 211.7 L 398.0 206.0 L 410.7 201.9 L 423.3 194.0 L 436.0 191.3 L 448.7 204.6 L 461.3 226.1 L 474.0 235.6 L 486.7 227.5 L 499.3 217.1 L 512.0 217.0 L 524.7 221.0 L 537.3 217.9 L 550.0 211.1 L 562.7 210.2 L 575.3 212.3 L 588.0 206.0 L 600.7 193.4 L 613.3 191.6 L 626.0 208.6 L 638.7 229.5 L 651.3 236.2 L 664.0 230.0 L 664 266 Z" class="fill-soft grid" stroke-width="1.5"/>
+    <line x1="62.333333333333336" y1="203.1080645099198" x2="68.6947467526813" y2="191.77085059696307" class="grid" stroke-width="1.0"/>
+    <line x1="75.0" y1="207.2365968193667" x2="76.1751075882333" y2="194.28981644137014" class="grid" stroke-width="1.0"/>
+    <line x1="87.66666666666666" y1="206.28767879421207" x2="84.62572435991709" y2="193.64834851579064" class="grid" stroke-width="1.0"/>
+    <line x1="100.33333333333333" y1="206.16083406488582" x2="103.13338376626061" y2="193.46596433049848" class="grid" stroke-width="1.0"/>
+    <line x1="113.0" y1="211.0815073127701" x2="119.32053881995104" y2="199.72145497902216" class="grid" stroke-width="1.0"/>
+    <line x1="125.66666666666667" y1="214.92807413899112" x2="126.3284145270848" y2="201.944927764971" class="grid" stroke-width="1.0"/>
+    <line x1="138.33333333333334" y1="212.7037630478475" x2="133.4826299700927" y2="200.64264050963217" class="grid" stroke-width="1.0"/>
+    <line x1="151.0" y1="211.65373603886687" x2="153.99056335268529" y2="199.00239101813582" class="grid" stroke-width="1.0"/>
+    <line x1="163.66666666666666" y1="220.8438241649491" x2="173.70308788057605" y2="212.58124289654458" class="grid" stroke-width="1.0"/>
+    <line x1="176.33333333333334" y1="234.45345097338276" x2="185.2078947215978" y2="224.9538636051901" class="grid" stroke-width="1.0"/>
+    <line x1="189.0" y1="236.8255852624648" x2="182.65111498483216" y2="225.4813506446434" class="grid" stroke-width="1.0"/>
+    <line x1="201.66666666666669" y1="223.64602996670095" x2="190.80338738515653" y2="216.50536030259295" class="grid" stroke-width="1.0"/>
+    <line x1="214.33333333333331" y1="207.4815749042052" x2="205.00191186913054" y2="198.43035545832853" class="grid" stroke-width="1.0"/>
+    <line x1="239.66666666666669" y1="199.11713726760433" x2="239.65395972041063" y2="186.11714347785517" class="grid" stroke-width="1.0"/>
+    <line x1="265.0" y1="200.53322827482987" x2="270.3197448966503" y2="188.6715119473095" class="grid" stroke-width="1.0"/>
+    <line x1="277.6666666666667" y1="210.68452732642317" x2="287.4924877903776" y2="202.17258047245159" class="grid" stroke-width="1.0"/>
+    <line x1="290.3333333333333" y1="222.90028462050353" x2="298.2932153723593" y2="212.62213897428936" class="grid" stroke-width="1.0"/>
+    <line x1="303.0" y1="225.08580379076204" x2="297.87103848618534" y2="213.14035470796034" class="grid" stroke-width="1.0"/>
+    <line x1="315.6666666666667" y1="217.15307432368473" x2="307.40461663197846" y2="207.1162157900444" class="grid" stroke-width="1.0"/>
+    <line x1="328.33333333333337" y1="212.76945915230334" x2="330.02217421595145" y2="199.87962531034876" class="grid" stroke-width="1.0"/>
+    <line x1="341.0" y1="219.81466002990575" x2="350.10559592083047" y2="210.5362914811492" class="grid" stroke-width="1.0"/>
+    <line x1="353.66666666666663" y1="228.9759552084723" x2="359.1494089340907" y2="217.18869355747796" class="grid" stroke-width="1.0"/>
+    <line x1="366.33333333333337" y1="227.75318012824425" x2="359.1859217352933" y2="216.894335463723" class="grid" stroke-width="1.0"/>
+    <line x1="379.0" y1="217.63621742622428" x2="370.1001746113768" y2="208.1602948826395" class="grid" stroke-width="1.0"/>
+    <line x1="391.66666666666663" y1="208.83719812987496" x2="386.33079488185194" y2="196.98272756826748" class="grid" stroke-width="1.0"/>
+    <line x1="404.33333333333337" y1="203.9194496406871" x2="400.2998829326658" y2="191.5609999860842" class="grid" stroke-width="1.0"/>
+    <line x1="417.0" y1="197.91668218500143" x2="410.1383546302978" y2="186.8750417805849" class="grid" stroke-width="1.0"/>
+    <line x1="429.66666666666663" y1="192.6277627982015" x2="426.95040638644963" y2="179.91470140095672" class="grid" stroke-width="1.0"/>
+    <line x1="442.33333333333337" y1="197.94523052937262" x2="451.7609904626081" y2="188.994293089482" class="grid" stroke-width="1.0"/>
+    <line x1="455.0" y1="215.35813414368369" x2="466.1985990965134" y2="208.75575742953228" class="grid" stroke-width="1.0"/>
+    <line x1="467.66666666666663" y1="230.84373723786206" x2="475.4596631343545" y2="220.43848827137384" class="grid" stroke-width="1.0"/>
+    <line x1="480.33333333333337" y1="231.53938686136138" x2="473.33255930254785" y2="220.58543036291394" class="grid" stroke-width="1.0"/>
+    <line x1="493.0" y1="222.2937722953185" x2="484.75261157777646" y2="212.244862692134" class="grid" stroke-width="1.0"/>
+    <line x1="505.66666666666663" y1="217.07199026263055" x2="505.61769354851555" y2="204.07208250781557" class="grid" stroke-width="1.0"/>
+    <line x1="518.3333333333334" y1="219.01864790843848" x2="522.1954596738515" y2="206.60559106776154" class="grid" stroke-width="1.0"/>
+    <line x1="531.0" y1="219.45953690217223" x2="527.9479915216357" y2="206.82287420001893" class="grid" stroke-width="1.0"/>
+    <line x1="543.6666666666666" y1="214.51329566868532" x2="537.4944676100661" y2="203.07196887474663" class="grid" stroke-width="1.0"/>
+    <line x1="569.0" y1="211.2157535134034" x2="571.1088605229512" y2="198.3879435953099" class="grid" stroke-width="1.0"/>
+    <line x1="581.6666666666667" y1="209.12825616536807" x2="575.9088806683462" y2="197.47287541665187" class="grid" stroke-width="1.0"/>
+    <line x1="594.3333333333333" y1="199.6958600875286" x2="585.1625157601413" y2="190.48195184839173" class="grid" stroke-width="1.0"/>
+    <line x1="619.6666666666667" y1="200.13704610607408" x2="630.0892628047048" y2="192.36726555940785" class="grid" stroke-width="1.0"/>
+    <line x1="632.3333333333333" y1="219.07796143366141" x2="643.4495351313235" y2="212.337779122599" class="grid" stroke-width="1.0"/>
+    <line x1="645.0" y1="232.85509304586816" x2="651.0526970740451" y2="221.35010029794148" class="grid" stroke-width="1.0"/>
+    <line x1="657.6666666666667" y1="233.0803686650773" x2="651.9415443182893" y2="221.40890885509168" class="grid" stroke-width="1.0"/>
+    <line x1="220.7" y1="201.0" x2="233.3" y2="199.1" stroke="#9b7ede" stroke-width="3.4"/>
+    <line x1="227.0" y1="200.0377530066939" x2="223.14166987283582" y2="173.31485479879328" class="hi" stroke-width="1.8"/>
+    <circle cx="223.1" cy="173.3" r="2.6" fill="#9b7ede" stroke="none"/>
+    <line x1="246.0" y1="199.1" x2="258.7" y2="197.7" stroke="#9b7ede" stroke-width="3.4"/>
+    <line x1="252.33333333333331" y1="198.40190019176487" x2="249.32932340212403" y2="171.56953308908092" class="hi" stroke-width="1.8"/>
+    <circle cx="249.3" cy="171.6" r="2.6" fill="#9b7ede" stroke="none"/>
+    <line x1="550.0" y1="211.1" x2="562.7" y2="210.2" stroke="#9b7ede" stroke-width="3.4"/>
+    <line x1="556.3333333333334" y1="210.63562549247723" x2="554.372964560884" y2="183.70688704679424" class="hi" stroke-width="1.8"/>
+    <circle cx="554.4" cy="183.7" r="2.6" fill="#9b7ede" stroke="none"/>
+    <line x1="600.7" y1="193.4" x2="613.3" y2="191.6" stroke="#9b7ede" stroke-width="3.4"/>
+    <line x1="607.0" y1="192.51674269493523" x2="603.3031654611832" y2="165.77102501167587" class="hi" stroke-width="1.8"/>
+    <circle cx="603.3" cy="165.8" r="2.6" fill="#9b7ede" stroke="none"/>
+    <line x1="426.0439036266123" y1="132.34983810614898" x2="549.4759949277164" y2="206.5153208931968" class="hi" stroke-width="1.8" marker-end="url(#e-h-l63f1)"/>
+    <text x="409.75789601818695" y="126.16938120722835" class="sm mono t-hi" text-anchor="middle">l</text>
+    <line x1="562.2784919371526" y1="205.28258064160636" x2="669.2913468058973" y2="108.92777332593079" class="ink-soft" stroke-width="1.5" stroke-dasharray="5 3" marker-end="url(#e-s-l63f1)"/>
+    <text x="684.6953743625809" y="99.55994483690677" class="sm mono" text-anchor="middle">v</text>
+    <line x1="556.3333333333334" y1="210.63562549247723" x2="548.0905986165941" y2="125.03155243289986" class="ink" stroke-width="1.7" marker-end="url(#e-i-l63f1)"/>
+    <text x="550.9404495863514" y="117.08679805249372" class="sm mono t-hi" text-anchor="middle">h</text>
+    <text x="360.0" y="296" class="sm t-hi" text-anchor="middle">4 of 48 facets face h closely enough to count</text>
+    <text x="360.0" y="314" class="xs muted" text-anchor="middle">— and “how many?” is the only question the model asks</text>
+    <rect x="24" y="344" width="672" height="66" rx="4" class="fill-soft grid" stroke-width="1.2"/>
+    <text x="360.0" y="368" class="sm t-hi" text-anchor="middle">So the shape of a highlight is a HISTOGRAM of surface slopes, and roughness is that histogram’s width.</text>
+    <text x="360.0" y="390" class="xs muted" text-anchor="middle">Lesson 3.7 already derived that h is “the normal this surface would need in order to bounce the light into the eye”. That stops being a metaphor here.</text>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 1.</span>
+      The whole model in one picture, and it is a counting problem. Every microfacet is a PERFECT mirror &#8212; not &#8220;a bit rough&#8221; &#8212; so a facet sends light from l to v only if its own normal happens to be h. Lesson 3.7 derived h as &#8220;the normal this surface would need in order to bounce the light into the eye&#8221;; here that stops being a way of putting it and becomes the mechanism. <strong>4 of these 48 facets qualify</strong>, and the faint normals are the ones that do not. Roughness is how widely those normals are spread &#8212; which is a HISTOGRAM OF SLOPES, a thing you can measure with an instrument, unlike a shininess exponent.
+    </figcaption>
+  </figure>
+
+
+  <p>
+    Look at what happened to the parameter. A surface where the facets nearly all face the same
+    way is <em>smooth</em>: almost all of them line up with <strong>h</strong> at once, when
+    <strong>h</strong> is near the surface normal, so the highlight is small and intense. A surface
+    where the facets point every which way is <em>rough</em>: only a few line up with any
+    particular <strong>h</strong>, but that stays true as <strong>h</strong> moves, so the
+    highlight is broad and dim.
+  </p>
+
+  <p>
+    <strong>Roughness is the width of a histogram of surface slopes.</strong> That is a physical
+    property. You can measure it with a profilometer. It transfers between renderers. It means the
+    same thing in every model that uses it — which is exactly the list of things
+    <code>shininess</code> was not.
+  </p>
+
+  <div class="callout note">
+    <span class="label">The ninety-percent picture</span>
+    <p>Two simplifications are baked in here and are worth naming rather than discovering. First,
+       the facets are treated as a <em>statistical</em> ensemble with no spatial arrangement — the
+       model knows how many face each way but not <em>where</em> they are, which is why it cannot
+       produce the glinty sparkle of real snow or car paint. That needs an actual normal map at
+       microfacet scale, and it is a live research area.</p>
+    <p>Second, light is allowed to bounce off <em>one</em> facet and then leave. Real light in a
+       valley bounces several times before escaping. §8 measures exactly what that costs, and it
+       turns out to cost a great deal.</p>
+  </div>
+
+  <!-- =================================================================
+       3 — THE DISTRIBUTION
+       ================================================================= -->
+  <h2 id="distribution"><span class="num">3</span>The Distribution, and What Makes It One</h2>
+
+  <p>
+    "How many microfacets face this way" is a distribution over directions, and it gets a name and
+    a letter: the <strong>normal distribution function</strong>, <em>D</em>(<strong>h</strong>).
+    Feed it a direction, get back how much of the surface faces that way.
+  </p>
+
+  <h3 id="dist-identity">3.1 The identity, and why the cosine is in it</h3>
+
+  <p>
+    Here is where a distribution stops being a curve someone drew. If <em>D</em> reports what
+    fraction of the surface faces each way, then <strong>the fractions have to add up to the whole
+    surface</strong>. Integrate over every direction and you must get the surface back:
+  </p>
+
+  <div class="eq">
+    \[ \int_{\Omega} D(\mathbf{h}) \cos\theta_h \, d\omega = 1 \]
+  </div>
+
+  <p class="eq-plain">
+    In prose, so this survives the CDN being unreachable: the integral over the hemisphere of D of
+    h, times the cosine of the angle between h and the surface normal, is exactly 1.
+  </p>
+
+  <p>
+    The cosine is the part worth stopping on, because it is easy to read as a convention and it is
+    not one. A microfacet tilted away from the macroscopic surface presents <em>less of itself</em>
+    to that surface — its own area, projected down, is <em>cos θ<sub>h</sub></em> times its true
+    area. It is Lesson 6.2 §3's projected-area factor again, in its third appearance this module,
+    and it is the same factor for the same reason.
+  </p>
+
+  <p>
+    Which gives the identity a much better reading than "the distribution is normalised":
+  </p>
+
+  <div class="callout note">
+    <span class="label">Read it backwards</span>
+    <p>The microfacets' <strong>projected areas add up to the area of the flat surface they stand
+       on.</strong></p>
+    <p>Nothing else could possibly be true. If they summed to more, the surface would have area it
+       does not have; if less, part of it would be missing. Stated that way the identity is not a
+       normalisation rule imposed from outside — it is the definition of the facets being
+       <em>on</em> the surface.</p>
+  </div>
+
+    <figure class="dia bleed">
+    <svg viewBox="0 0 720 430" role="img" aria-labelledby="l63f2-t l63f2-d">
+      <title id="l63f2-t">The NDF as a probability density</title>
+      <desc id="l63f2-d">Three GGX distributions at roughness 0.50, 0.71 and 1.00, plotted against microfacet tilt and weighted by the cosine. The peaks differ by a factor of sixteen; the area under each is exactly 1, which is what makes it a distribution rather than a chosen curve.</desc>
+      <defs>
+        <marker id="e-i-l63f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+        <marker id="e-s-l63f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+        <marker id="e-h-l63f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+        <marker id="e-b-l63f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+        <marker id="e-g-l63f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+      </defs>
+    <text x="20" y="20" class="sm" text-anchor="start">An NDF is not a curve chosen to look right. It is a distribution, so it has to add up to one — and that can be checked.</text>
+    <line x1="92" y1="266" x2="488" y2="266" class="grid" stroke-width="1.2"/>
+    <line x1="92" y1="58" x2="92" y2="266" class="grid" stroke-width="1.2"/>
+    <text x="290.0" y="304" class="xs muted" text-anchor="middle">θₕ — how far a microfacet is tilted from the surface</text>
+    <text x="58" y="46" class="xs muted" text-anchor="start">D(h) · cos θₕ</text>
+    <line x1="92.0" y1="266" x2="92.0" y2="271" class="grid" stroke-width="1.0"/>
+    <text x="92.0" y="284" class="xs muted" text-anchor="middle">0°</text>
+    <line x1="224.0" y1="266" x2="224.0" y2="271" class="grid" stroke-width="1.0"/>
+    <text x="224.0" y="284" class="xs muted" text-anchor="middle">30°</text>
+    <line x1="356.0" y1="266" x2="356.0" y2="271" class="grid" stroke-width="1.0"/>
+    <text x="356.0" y="284" class="xs muted" text-anchor="middle">60°</text>
+    <line x1="488.0" y1="266" x2="488.0" y2="271" class="grid" stroke-width="1.0"/>
+    <text x="488.0" y="284" class="xs muted" text-anchor="middle">90°</text>
+    <path d="M 92.0 76.8 L 94.2 77.3 L 96.4 78.6 L 98.6 80.7 L 100.8 83.7 L 103.0 87.4 L 105.2 91.7 L 107.4 96.6 L 109.6 102.1 L 111.8 108.0 L 114.0 114.1 L 116.2 120.6 L 118.4 127.1 L 120.6 133.8 L 122.8 140.4 L 125.0 147.0 L 127.2 153.5 L 129.4 159.9 L 131.6 166.0 L 133.8 172.0 L 136.0 177.7 L 138.2 183.1 L 140.4 188.3 L 142.6 193.2 L 144.8 197.9 L 147.0 202.3 L 149.2 206.4 L 151.4 210.3 L 153.6 214.0 L 155.8 217.4 L 158.0 220.5 L 160.2 223.5 L 162.4 226.3 L 164.6 228.9 L 166.8 231.3 L 169.0 233.5 L 171.2 235.6 L 173.4 237.5 L 175.6 239.3 L 177.8 241.0 L 180.0 242.6 L 182.2 244.0 L 184.4 245.4 L 186.6 246.6 L 188.8 247.8 L 191.0 248.9 L 193.2 249.9 L 195.4 250.9 L 197.6 251.7 L 199.8 252.6 L 202.0 253.3 L 204.2 254.1 L 206.4 254.7 L 208.6 255.3 L 210.8 255.9 L 213.0 256.5 L 215.2 257.0 L 217.4 257.5 L 219.6 257.9 L 221.8 258.3 L 224.0 258.7 L 226.2 259.1 L 228.4 259.5 L 230.6 259.8 L 232.8 260.1 L 235.0 260.4 L 237.2 260.7 L 239.4 260.9 L 241.6 261.2 L 243.8 261.4 L 246.0 261.6 L 248.2 261.8 L 250.4 262.0 L 252.6 262.2 L 254.8 262.3 L 257.0 262.5 L 259.2 262.7 L 261.4 262.8 L 263.6 262.9 L 265.8 263.1 L 268.0 263.2 L 270.2 263.3 L 272.4 263.4 L 274.6 263.5 L 276.8 263.6 L 279.0 263.7 L 281.2 263.8 L 283.4 263.9 L 285.6 264.0 L 287.8 264.1 L 290.0 264.1 L 292.2 264.2 L 294.4 264.3 L 296.6 264.4 L 298.8 264.4 L 301.0 264.5 L 303.2 264.5 L 305.4 264.6 L 307.6 264.6 L 309.8 264.7 L 312.0 264.7 L 314.2 264.8 L 316.4 264.8 L 318.6 264.9 L 320.8 264.9 L 323.0 264.9 L 325.2 265.0 L 327.4 265.0 L 329.6 265.0 L 331.8 265.1 L 334.0 265.1 L 336.2 265.1 L 338.4 265.2 L 340.6 265.2 L 342.8 265.2 L 345.0 265.3 L 347.2 265.3 L 349.4 265.3 L 351.6 265.3 L 353.8 265.3 L 356.0 265.4 L 358.2 265.4 L 360.4 265.4 L 362.6 265.4 L 364.8 265.4 L 367.0 265.5 L 369.2 265.5 L 371.4 265.5 L 373.6 265.5 L 375.8 265.5 L 378.0 265.5 L 380.2 265.6 L 382.4 265.6 L 384.6 265.6 L 386.8 265.6 L 389.0 265.6 L 391.2 265.6 L 393.4 265.6 L 395.6 265.7 L 397.8 265.7 L 400.0 265.7 L 402.2 265.7 L 404.4 265.7 L 406.6 265.7 L 408.8 265.7 L 411.0 265.7 L 413.2 265.7 L 415.4 265.8 L 417.6 265.8 L 419.8 265.8 L 422.0 265.8 L 424.2 265.8 L 426.4 265.8 L 428.6 265.8 L 430.8 265.8 L 433.0 265.8 L 435.2 265.8 L 437.4 265.8 L 439.6 265.8 L 441.8 265.9 L 444.0 265.9 L 446.2 265.9 L 448.4 265.9 L 450.6 265.9 L 452.8 265.9 L 455.0 265.9 L 457.2 265.9 L 459.4 265.9 L 461.6 265.9 L 463.8 265.9 L 466.0 265.9 L 468.2 265.9 L 470.4 265.9 L 472.6 266.0 L 474.8 266.0 L 477.0 266.0 L 479.2 266.0 L 481.4 266.0 L 483.6 266.0 L 485.8 266.0 L 488.0 266.0 L 488 266 L 92 266 Z" fill="#5ac878" fill-opacity="0.10" stroke="none"/>
+    <path d="M 92.0 76.8 L 94.2 77.3 L 96.4 78.6 L 98.6 80.7 L 100.8 83.7 L 103.0 87.4 L 105.2 91.7 L 107.4 96.6 L 109.6 102.1 L 111.8 108.0 L 114.0 114.1 L 116.2 120.6 L 118.4 127.1 L 120.6 133.8 L 122.8 140.4 L 125.0 147.0 L 127.2 153.5 L 129.4 159.9 L 131.6 166.0 L 133.8 172.0 L 136.0 177.7 L 138.2 183.1 L 140.4 188.3 L 142.6 193.2 L 144.8 197.9 L 147.0 202.3 L 149.2 206.4 L 151.4 210.3 L 153.6 214.0 L 155.8 217.4 L 158.0 220.5 L 160.2 223.5 L 162.4 226.3 L 164.6 228.9 L 166.8 231.3 L 169.0 233.5 L 171.2 235.6 L 173.4 237.5 L 175.6 239.3 L 177.8 241.0 L 180.0 242.6 L 182.2 244.0 L 184.4 245.4 L 186.6 246.6 L 188.8 247.8 L 191.0 248.9 L 193.2 249.9 L 195.4 250.9 L 197.6 251.7 L 199.8 252.6 L 202.0 253.3 L 204.2 254.1 L 206.4 254.7 L 208.6 255.3 L 210.8 255.9 L 213.0 256.5 L 215.2 257.0 L 217.4 257.5 L 219.6 257.9 L 221.8 258.3 L 224.0 258.7 L 226.2 259.1 L 228.4 259.5 L 230.6 259.8 L 232.8 260.1 L 235.0 260.4 L 237.2 260.7 L 239.4 260.9 L 241.6 261.2 L 243.8 261.4 L 246.0 261.6 L 248.2 261.8 L 250.4 262.0 L 252.6 262.2 L 254.8 262.3 L 257.0 262.5 L 259.2 262.7 L 261.4 262.8 L 263.6 262.9 L 265.8 263.1 L 268.0 263.2 L 270.2 263.3 L 272.4 263.4 L 274.6 263.5 L 276.8 263.6 L 279.0 263.7 L 281.2 263.8 L 283.4 263.9 L 285.6 264.0 L 287.8 264.1 L 290.0 264.1 L 292.2 264.2 L 294.4 264.3 L 296.6 264.4 L 298.8 264.4 L 301.0 264.5 L 303.2 264.5 L 305.4 264.6 L 307.6 264.6 L 309.8 264.7 L 312.0 264.7 L 314.2 264.8 L 316.4 264.8 L 318.6 264.9 L 320.8 264.9 L 323.0 264.9 L 325.2 265.0 L 327.4 265.0 L 329.6 265.0 L 331.8 265.1 L 334.0 265.1 L 336.2 265.1 L 338.4 265.2 L 340.6 265.2 L 342.8 265.2 L 345.0 265.3 L 347.2 265.3 L 349.4 265.3 L 351.6 265.3 L 353.8 265.3 L 356.0 265.4 L 358.2 265.4 L 360.4 265.4 L 362.6 265.4 L 364.8 265.4 L 367.0 265.5 L 369.2 265.5 L 371.4 265.5 L 373.6 265.5 L 375.8 265.5 L 378.0 265.5 L 380.2 265.6 L 382.4 265.6 L 384.6 265.6 L 386.8 265.6 L 389.0 265.6 L 391.2 265.6 L 393.4 265.6 L 395.6 265.7 L 397.8 265.7 L 400.0 265.7 L 402.2 265.7 L 404.4 265.7 L 406.6 265.7 L 408.8 265.7 L 411.0 265.7 L 413.2 265.7 L 415.4 265.8 L 417.6 265.8 L 419.8 265.8 L 422.0 265.8 L 424.2 265.8 L 426.4 265.8 L 428.6 265.8 L 430.8 265.8 L 433.0 265.8 L 435.2 265.8 L 437.4 265.8 L 439.6 265.8 L 441.8 265.9 L 444.0 265.9 L 446.2 265.9 L 448.4 265.9 L 450.6 265.9 L 452.8 265.9 L 455.0 265.9 L 457.2 265.9 L 459.4 265.9 L 461.6 265.9 L 463.8 265.9 L 466.0 265.9 L 468.2 265.9 L 470.4 265.9 L 472.6 266.0 L 474.8 266.0 L 477.0 266.0 L 479.2 266.0 L 481.4 266.0 L 483.6 266.0 L 485.8 266.0 L 488.0 266.0" fill="none" stroke="#5ac878" stroke-width="2.0"/>
+    <text x="498" y="80.8" class="xs" text-anchor="start" fill="#5ac878">roughness 0.50</text>
+    <line x1="488" y1="76.83298192506155" x2="494" y2="76.83298192506155" class="grid" stroke-width="1.0"/>
+    <path d="M 92.0 219.5 L 94.2 219.5 L 96.4 219.6 L 98.6 219.7 L 100.8 219.8 L 103.0 220.0 L 105.2 220.3 L 107.4 220.6 L 109.6 220.9 L 111.8 221.2 L 114.0 221.7 L 116.2 222.1 L 118.4 222.6 L 120.6 223.1 L 122.8 223.6 L 125.0 224.2 L 127.2 224.8 L 129.4 225.4 L 131.6 226.0 L 133.8 226.7 L 136.0 227.3 L 138.2 228.0 L 140.4 228.7 L 142.6 229.4 L 144.8 230.2 L 147.0 230.9 L 149.2 231.6 L 151.4 232.4 L 153.6 233.1 L 155.8 233.9 L 158.0 234.6 L 160.2 235.4 L 162.4 236.1 L 164.6 236.8 L 166.8 237.6 L 169.0 238.3 L 171.2 239.0 L 173.4 239.7 L 175.6 240.4 L 177.8 241.1 L 180.0 241.8 L 182.2 242.4 L 184.4 243.1 L 186.6 243.7 L 188.8 244.4 L 191.0 245.0 L 193.2 245.6 L 195.4 246.2 L 197.6 246.7 L 199.8 247.3 L 202.0 247.9 L 204.2 248.4 L 206.4 248.9 L 208.6 249.4 L 210.8 249.9 L 213.0 250.4 L 215.2 250.9 L 217.4 251.3 L 219.6 251.8 L 221.8 252.2 L 224.0 252.6 L 226.2 253.0 L 228.4 253.4 L 230.6 253.8 L 232.8 254.1 L 235.0 254.5 L 237.2 254.8 L 239.4 255.2 L 241.6 255.5 L 243.8 255.8 L 246.0 256.1 L 248.2 256.4 L 250.4 256.7 L 252.6 257.0 L 254.8 257.3 L 257.0 257.5 L 259.2 257.8 L 261.4 258.0 L 263.6 258.3 L 265.8 258.5 L 268.0 258.7 L 270.2 258.9 L 272.4 259.1 L 274.6 259.3 L 276.8 259.5 L 279.0 259.7 L 281.2 259.9 L 283.4 260.1 L 285.6 260.3 L 287.8 260.4 L 290.0 260.6 L 292.2 260.8 L 294.4 260.9 L 296.6 261.1 L 298.8 261.2 L 301.0 261.3 L 303.2 261.5 L 305.4 261.6 L 307.6 261.7 L 309.8 261.8 L 312.0 262.0 L 314.2 262.1 L 316.4 262.2 L 318.6 262.3 L 320.8 262.4 L 323.0 262.5 L 325.2 262.6 L 327.4 262.7 L 329.6 262.8 L 331.8 262.9 L 334.0 263.0 L 336.2 263.1 L 338.4 263.1 L 340.6 263.2 L 342.8 263.3 L 345.0 263.4 L 347.2 263.5 L 349.4 263.5 L 351.6 263.6 L 353.8 263.7 L 356.0 263.7 L 358.2 263.8 L 360.4 263.9 L 362.6 263.9 L 364.8 264.0 L 367.0 264.0 L 369.2 264.1 L 371.4 264.2 L 373.6 264.2 L 375.8 264.3 L 378.0 264.3 L 380.2 264.4 L 382.4 264.4 L 384.6 264.5 L 386.8 264.5 L 389.0 264.6 L 391.2 264.6 L 393.4 264.6 L 395.6 264.7 L 397.8 264.7 L 400.0 264.8 L 402.2 264.8 L 404.4 264.8 L 406.6 264.9 L 408.8 264.9 L 411.0 265.0 L 413.2 265.0 L 415.4 265.0 L 417.6 265.1 L 419.8 265.1 L 422.0 265.1 L 424.2 265.2 L 426.4 265.2 L 428.6 265.2 L 430.8 265.3 L 433.0 265.3 L 435.2 265.3 L 437.4 265.4 L 439.6 265.4 L 441.8 265.4 L 444.0 265.5 L 446.2 265.5 L 448.4 265.5 L 450.6 265.5 L 452.8 265.6 L 455.0 265.6 L 457.2 265.6 L 459.4 265.7 L 461.6 265.7 L 463.8 265.7 L 466.0 265.7 L 468.2 265.8 L 470.4 265.8 L 472.6 265.8 L 474.8 265.8 L 477.0 265.9 L 479.2 265.9 L 481.4 265.9 L 483.6 265.9 L 485.8 266.0 L 488.0 266.0 L 488 266 L 92 266 Z" fill="#5082e6" fill-opacity="0.10" stroke="none"/>
+    <path d="M 92.0 219.5 L 94.2 219.5 L 96.4 219.6 L 98.6 219.7 L 100.8 219.8 L 103.0 220.0 L 105.2 220.3 L 107.4 220.6 L 109.6 220.9 L 111.8 221.2 L 114.0 221.7 L 116.2 222.1 L 118.4 222.6 L 120.6 223.1 L 122.8 223.6 L 125.0 224.2 L 127.2 224.8 L 129.4 225.4 L 131.6 226.0 L 133.8 226.7 L 136.0 227.3 L 138.2 228.0 L 140.4 228.7 L 142.6 229.4 L 144.8 230.2 L 147.0 230.9 L 149.2 231.6 L 151.4 232.4 L 153.6 233.1 L 155.8 233.9 L 158.0 234.6 L 160.2 235.4 L 162.4 236.1 L 164.6 236.8 L 166.8 237.6 L 169.0 238.3 L 171.2 239.0 L 173.4 239.7 L 175.6 240.4 L 177.8 241.1 L 180.0 241.8 L 182.2 242.4 L 184.4 243.1 L 186.6 243.7 L 188.8 244.4 L 191.0 245.0 L 193.2 245.6 L 195.4 246.2 L 197.6 246.7 L 199.8 247.3 L 202.0 247.9 L 204.2 248.4 L 206.4 248.9 L 208.6 249.4 L 210.8 249.9 L 213.0 250.4 L 215.2 250.9 L 217.4 251.3 L 219.6 251.8 L 221.8 252.2 L 224.0 252.6 L 226.2 253.0 L 228.4 253.4 L 230.6 253.8 L 232.8 254.1 L 235.0 254.5 L 237.2 254.8 L 239.4 255.2 L 241.6 255.5 L 243.8 255.8 L 246.0 256.1 L 248.2 256.4 L 250.4 256.7 L 252.6 257.0 L 254.8 257.3 L 257.0 257.5 L 259.2 257.8 L 261.4 258.0 L 263.6 258.3 L 265.8 258.5 L 268.0 258.7 L 270.2 258.9 L 272.4 259.1 L 274.6 259.3 L 276.8 259.5 L 279.0 259.7 L 281.2 259.9 L 283.4 260.1 L 285.6 260.3 L 287.8 260.4 L 290.0 260.6 L 292.2 260.8 L 294.4 260.9 L 296.6 261.1 L 298.8 261.2 L 301.0 261.3 L 303.2 261.5 L 305.4 261.6 L 307.6 261.7 L 309.8 261.8 L 312.0 262.0 L 314.2 262.1 L 316.4 262.2 L 318.6 262.3 L 320.8 262.4 L 323.0 262.5 L 325.2 262.6 L 327.4 262.7 L 329.6 262.8 L 331.8 262.9 L 334.0 263.0 L 336.2 263.1 L 338.4 263.1 L 340.6 263.2 L 342.8 263.3 L 345.0 263.4 L 347.2 263.5 L 349.4 263.5 L 351.6 263.6 L 353.8 263.7 L 356.0 263.7 L 358.2 263.8 L 360.4 263.9 L 362.6 263.9 L 364.8 264.0 L 367.0 264.0 L 369.2 264.1 L 371.4 264.2 L 373.6 264.2 L 375.8 264.3 L 378.0 264.3 L 380.2 264.4 L 382.4 264.4 L 384.6 264.5 L 386.8 264.5 L 389.0 264.6 L 391.2 264.6 L 393.4 264.6 L 395.6 264.7 L 397.8 264.7 L 400.0 264.8 L 402.2 264.8 L 404.4 264.8 L 406.6 264.9 L 408.8 264.9 L 411.0 265.0 L 413.2 265.0 L 415.4 265.0 L 417.6 265.1 L 419.8 265.1 L 422.0 265.1 L 424.2 265.2 L 426.4 265.2 L 428.6 265.2 L 430.8 265.3 L 433.0 265.3 L 435.2 265.3 L 437.4 265.4 L 439.6 265.4 L 441.8 265.4 L 444.0 265.5 L 446.2 265.5 L 448.4 265.5 L 450.6 265.5 L 452.8 265.6 L 455.0 265.6 L 457.2 265.6 L 459.4 265.7 L 461.6 265.7 L 463.8 265.7 L 466.0 265.7 L 468.2 265.8 L 470.4 265.8 L 472.6 265.8 L 474.8 265.8 L 477.0 265.9 L 479.2 265.9 L 481.4 265.9 L 483.6 265.9 L 485.8 266.0 L 488.0 266.0" fill="none" stroke="#5082e6" stroke-width="2.0"/>
+    <text x="498" y="223.5" class="xs" text-anchor="start" fill="#5082e6">roughness 0.71</text>
+    <line x1="488" y1="219.47439380463" x2="494" y2="219.47439380463" class="grid" stroke-width="1.0"/>
+    <path d="M 92.0 254.2 L 94.2 254.2 L 96.4 254.2 L 98.6 254.2 L 100.8 254.2 L 103.0 254.2 L 105.2 254.2 L 107.4 254.2 L 109.6 254.2 L 111.8 254.2 L 114.0 254.2 L 116.2 254.2 L 118.4 254.2 L 120.6 254.3 L 122.8 254.3 L 125.0 254.3 L 127.2 254.3 L 129.4 254.3 L 131.6 254.3 L 133.8 254.3 L 136.0 254.4 L 138.2 254.4 L 140.4 254.4 L 142.6 254.4 L 144.8 254.4 L 147.0 254.5 L 149.2 254.5 L 151.4 254.5 L 153.6 254.5 L 155.8 254.6 L 158.0 254.6 L 160.2 254.6 L 162.4 254.6 L 164.6 254.7 L 166.8 254.7 L 169.0 254.7 L 171.2 254.8 L 173.4 254.8 L 175.6 254.8 L 177.8 254.9 L 180.0 254.9 L 182.2 254.9 L 184.4 255.0 L 186.6 255.0 L 188.8 255.0 L 191.0 255.1 L 193.2 255.1 L 195.4 255.2 L 197.6 255.2 L 199.8 255.2 L 202.0 255.3 L 204.2 255.3 L 206.4 255.4 L 208.6 255.4 L 210.8 255.5 L 213.0 255.5 L 215.2 255.6 L 217.4 255.6 L 219.6 255.7 L 221.8 255.7 L 224.0 255.8 L 226.2 255.8 L 228.4 255.9 L 230.6 255.9 L 232.8 256.0 L 235.0 256.0 L 237.2 256.1 L 239.4 256.1 L 241.6 256.2 L 243.8 256.3 L 246.0 256.3 L 248.2 256.4 L 250.4 256.4 L 252.6 256.5 L 254.8 256.6 L 257.0 256.6 L 259.2 256.7 L 261.4 256.7 L 263.6 256.8 L 265.8 256.9 L 268.0 256.9 L 270.2 257.0 L 272.4 257.1 L 274.6 257.1 L 276.8 257.2 L 279.0 257.3 L 281.2 257.4 L 283.4 257.4 L 285.6 257.5 L 287.8 257.6 L 290.0 257.6 L 292.2 257.7 L 294.4 257.8 L 296.6 257.9 L 298.8 257.9 L 301.0 258.0 L 303.2 258.1 L 305.4 258.2 L 307.6 258.2 L 309.8 258.3 L 312.0 258.4 L 314.2 258.5 L 316.4 258.6 L 318.6 258.6 L 320.8 258.7 L 323.0 258.8 L 325.2 258.9 L 327.4 259.0 L 329.6 259.1 L 331.8 259.1 L 334.0 259.2 L 336.2 259.3 L 338.4 259.4 L 340.6 259.5 L 342.8 259.6 L 345.0 259.6 L 347.2 259.7 L 349.4 259.8 L 351.6 259.9 L 353.8 260.0 L 356.0 260.1 L 358.2 260.2 L 360.4 260.3 L 362.6 260.4 L 364.8 260.4 L 367.0 260.5 L 369.2 260.6 L 371.4 260.7 L 373.6 260.8 L 375.8 260.9 L 378.0 261.0 L 380.2 261.1 L 382.4 261.2 L 384.6 261.3 L 386.8 261.4 L 389.0 261.5 L 391.2 261.6 L 393.4 261.7 L 395.6 261.8 L 397.8 261.9 L 400.0 262.0 L 402.2 262.1 L 404.4 262.2 L 406.6 262.2 L 408.8 262.3 L 411.0 262.4 L 413.2 262.5 L 415.4 262.6 L 417.6 262.7 L 419.8 262.8 L 422.0 262.9 L 424.2 263.0 L 426.4 263.1 L 428.6 263.2 L 430.8 263.3 L 433.0 263.4 L 435.2 263.5 L 437.4 263.6 L 439.6 263.7 L 441.8 263.8 L 444.0 263.9 L 446.2 264.0 L 448.4 264.2 L 450.6 264.3 L 452.8 264.4 L 455.0 264.5 L 457.2 264.6 L 459.4 264.7 L 461.6 264.8 L 463.8 264.9 L 466.0 265.0 L 468.2 265.1 L 470.4 265.2 L 472.6 265.3 L 474.8 265.4 L 477.0 265.5 L 479.2 265.6 L 481.4 265.7 L 483.6 265.8 L 485.8 265.9 L 488.0 266.0 L 488 266 L 92 266 Z" fill="#9b7ede" fill-opacity="0.10" stroke="none"/>
+    <path d="M 92.0 254.2 L 94.2 254.2 L 96.4 254.2 L 98.6 254.2 L 100.8 254.2 L 103.0 254.2 L 105.2 254.2 L 107.4 254.2 L 109.6 254.2 L 111.8 254.2 L 114.0 254.2 L 116.2 254.2 L 118.4 254.2 L 120.6 254.3 L 122.8 254.3 L 125.0 254.3 L 127.2 254.3 L 129.4 254.3 L 131.6 254.3 L 133.8 254.3 L 136.0 254.4 L 138.2 254.4 L 140.4 254.4 L 142.6 254.4 L 144.8 254.4 L 147.0 254.5 L 149.2 254.5 L 151.4 254.5 L 153.6 254.5 L 155.8 254.6 L 158.0 254.6 L 160.2 254.6 L 162.4 254.6 L 164.6 254.7 L 166.8 254.7 L 169.0 254.7 L 171.2 254.8 L 173.4 254.8 L 175.6 254.8 L 177.8 254.9 L 180.0 254.9 L 182.2 254.9 L 184.4 255.0 L 186.6 255.0 L 188.8 255.0 L 191.0 255.1 L 193.2 255.1 L 195.4 255.2 L 197.6 255.2 L 199.8 255.2 L 202.0 255.3 L 204.2 255.3 L 206.4 255.4 L 208.6 255.4 L 210.8 255.5 L 213.0 255.5 L 215.2 255.6 L 217.4 255.6 L 219.6 255.7 L 221.8 255.7 L 224.0 255.8 L 226.2 255.8 L 228.4 255.9 L 230.6 255.9 L 232.8 256.0 L 235.0 256.0 L 237.2 256.1 L 239.4 256.1 L 241.6 256.2 L 243.8 256.3 L 246.0 256.3 L 248.2 256.4 L 250.4 256.4 L 252.6 256.5 L 254.8 256.6 L 257.0 256.6 L 259.2 256.7 L 261.4 256.7 L 263.6 256.8 L 265.8 256.9 L 268.0 256.9 L 270.2 257.0 L 272.4 257.1 L 274.6 257.1 L 276.8 257.2 L 279.0 257.3 L 281.2 257.4 L 283.4 257.4 L 285.6 257.5 L 287.8 257.6 L 290.0 257.6 L 292.2 257.7 L 294.4 257.8 L 296.6 257.9 L 298.8 257.9 L 301.0 258.0 L 303.2 258.1 L 305.4 258.2 L 307.6 258.2 L 309.8 258.3 L 312.0 258.4 L 314.2 258.5 L 316.4 258.6 L 318.6 258.6 L 320.8 258.7 L 323.0 258.8 L 325.2 258.9 L 327.4 259.0 L 329.6 259.1 L 331.8 259.1 L 334.0 259.2 L 336.2 259.3 L 338.4 259.4 L 340.6 259.5 L 342.8 259.6 L 345.0 259.6 L 347.2 259.7 L 349.4 259.8 L 351.6 259.9 L 353.8 260.0 L 356.0 260.1 L 358.2 260.2 L 360.4 260.3 L 362.6 260.4 L 364.8 260.4 L 367.0 260.5 L 369.2 260.6 L 371.4 260.7 L 373.6 260.8 L 375.8 260.9 L 378.0 261.0 L 380.2 261.1 L 382.4 261.2 L 384.6 261.3 L 386.8 261.4 L 389.0 261.5 L 391.2 261.6 L 393.4 261.7 L 395.6 261.8 L 397.8 261.9 L 400.0 262.0 L 402.2 262.1 L 404.4 262.2 L 406.6 262.2 L 408.8 262.3 L 411.0 262.4 L 413.2 262.5 L 415.4 262.6 L 417.6 262.7 L 419.8 262.8 L 422.0 262.9 L 424.2 263.0 L 426.4 263.1 L 428.6 263.2 L 430.8 263.3 L 433.0 263.4 L 435.2 263.5 L 437.4 263.6 L 439.6 263.7 L 441.8 263.8 L 444.0 263.9 L 446.2 264.0 L 448.4 264.2 L 450.6 264.3 L 452.8 264.4 L 455.0 264.5 L 457.2 264.6 L 459.4 264.7 L 461.6 264.8 L 463.8 264.9 L 466.0 265.0 L 468.2 265.1 L 470.4 265.2 L 472.6 265.3 L 474.8 265.4 L 477.0 265.5 L 479.2 265.6 L 481.4 265.7 L 483.6 265.8 L 485.8 265.9 L 488.0 266.0" fill="none" stroke="#9b7ede" stroke-width="2.0"/>
+    <text x="498" y="258.2" class="xs" text-anchor="start" fill="#9b7ede">roughness 1.00</text>
+    <line x1="488" y1="254.17706137031635" x2="494" y2="254.17706137031635" class="grid" stroke-width="1.0"/>
+    <text x="274.15999999999997" y="88" class="xs t-hi" text-anchor="middle">the peaks differ 16×; the AREAS are all exactly 1</text>
+    <text x="274.15999999999997" y="104" class="xs muted" text-anchor="middle">(measured: 1.0000004 at 400k samples)</text>
+    <rect x="24" y="318" width="672" height="100" rx="4" class="fill-soft grid" stroke-width="1.2"/>
+    <text x="360.0" y="344" class="sm mono t-hi" text-anchor="middle">∫ D(h) · cos θₕ · dω  =  1</text>
+    <text x="360.0" y="366" class="xs muted" text-anchor="middle">Read backwards it says something better than a normalisation rule: the microfacets’ PROJECTED AREAS add up to the flat area</text>
+    <text x="360.0" y="382" class="xs muted" text-anchor="middle">they stand on. Nothing else could be true, which is why the cosine is in there and not a convention.</text>
+    <text x="360.0" y="404" class="xs t-hi" text-anchor="middle">A bare cosˢ lobe integrates to 0.1848, not 1 — which is exactly why it is a shape and not a model. The constant it lacks is 2π/(s+2).</text>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 2.</span>
+      Why this is a model and not a curve someone drew. Three GGX distributions, cosine-weighted: the peaks differ by <strong>sixteen times</strong> and the areas are all <strong>exactly 1</strong> &#8212; measured at 1.0000004 on a 400,000-step grid. The identity is worth reading backwards, because that reading is much better than &#8220;the distribution is normalised&#8221;: <strong>the microfacets&#8217; projected areas add up to the area of the flat surface they stand on.</strong> Nothing else could be true, which is why the cosine is in the integral and is not a convention. Lesson 3.7&#8217;s bare cos&#8345; lobe integrates to 0.1848 instead, which is precisely what makes it a shape rather than a model.
+    </figcaption>
+  </figure>
+
+
+  <h3 id="dist-check">3.2 What it buys: a test with a known answer</h3>
+
+  <p>
+    This is the practical difference between this lesson and everything before it in the shading
+    arc, and it is worth being explicit about.
+  </p>
+
+  <p>
+    <code>shininess</code> could not be wrong. Whatever value it had produced whatever highlight it
+    produced, and the only test available was whether someone liked the picture. <em>D</em> can be
+    wrong, in a way a machine can detect, because the identity above has a right-hand side and the
+    right-hand side is <strong>1</strong>.
+  </p>
+
+  <p>
+    <code>verify_63</code> §A integrates all three distributions on a 400,000-step grid and reports
+    a worst error of <strong>3.74e−07</strong>. That is quadrature noise, and the way you know it
+    is quadrature noise rather than a wrong constant is that it shrinks when the grid refines — §9
+    turns that observation into a bug hunt.
+  </p>
+
+  <div class="worked">
+    <span class="label">Worked example — the constant a lobe is missing</span>
+    <p>Take the bare <code>cos<sup>s</sup>(θ<sub>h</sub>)</code> that Lesson 3.7 shipped, with no
+       constant at all, and put it through the identity at <em>s</em> = 32. The integral separates:
+       the azimuth contributes 2π, and</p>
+    <p class="mono">∫₀^(π/2) cos^32(θ) · cos(θ) · sin(θ) dθ = ∫₀¹ u^33 du = 1/34</p>
+    <p>substituting <em>u</em> = cos θ. So the whole integral is</p>
+    <p class="mono">2π / 34 = 0.1848</p>
+    <p>and <code>verify_63</code> §A measures exactly that. <strong>The lobe is not a
+       distribution; it is a shape, off by a factor of 5.41.</strong> Generalising, the integral is
+       <code>2π/(s+2)</code>, so the constant that fixes it is its reciprocal —
+       <code>(s+2)/2π</code>. That is the number §4 is about.</p>
+  </div>
+
+  <!-- =================================================================
+       4 — BLINN-PHONG WAS A MICROFACET MODEL
+       ================================================================= -->
+  <h2 id="blinn"><span class="num">4</span>Blinn-Phong Was a Microfacet Model</h2>
+
+  <p>
+    The worked example above did something worth noticing. It put Lesson 3.7's specular lobe
+    through the NDF identity — and the integral came out finite, and a single constant fixes it.
+    That is not a coincidence and it is not a curiosity:
+  </p>
+
+  <div class="callout note">
+    <span class="label">Blinn-Phong's lobe <em>is</em> a microfacet distribution</span>
+    <p>Give <code>cos<sup>s</sup>(θ<sub>h</sub>)</code> the constant <code>(s+2)/2π</code> and it
+       satisfies the identity exactly, for every exponent. It has always been a distribution over
+       microfacet normals. What it has never had is its normalisation.</p>
+  </div>
+
+  <p>
+    This is the spiral paying off, and it is worth being precise about what is being claimed.
+    Lesson 3.7 introduced <code>dot(n, h)</code> raised to a power as a shape that looked right,
+    and <em>said so</em> — it called the halfway vector "the normal this surface would need", and
+    noted that "Blinn-Phong is the first, crudest microfacet model". Three modules later that
+    sentence turns out to have been literally true. 3.7 was not wrong. It was
+    <strong>un-normalised</strong>, which is a much more specific and much more fixable complaint.
+  </p>
+
+  <p>
+    So: what constant <em>is</em> the engine using? Lesson 6.2 divided the specular lobe by π, so
+    that both lobes shared the light's units — and was careful to say that this was a scale
+    choice and explicitly not a normalisation. Now we can price that choice.
+  </p>
+
+  <div class="worked">
+    <span class="label">Worked example — the ratio, and there is no π in it</span>
+    <p>The engine multiplies the lobe by <code>1/π</code>. A distribution requires
+       <code>(s+2)/2π</code>. The ratio is</p>
+    <p class="mono">((s + 2) / 2π) ÷ (1 / π) = (s + 2) / 2</p>
+    <p>Both constants carry a π and it cancels, so the answer is a plain integer arithmetic in the
+       exponent. At the demo's default shininess of 32:</p>
+    <p class="mono">(32 + 2) / 2 = <strong>17</strong></p>
+    <p><code>verify_63</code> §B checks the identity across five exponents and finds the ratio is
+       exactly <code>(s+2)/2</code> to 1e−4 — which is float noise, because the relation is
+       algebraic.</p>
+  </div>
+
+    <figure class="dia bleed">
+    <svg viewBox="0 0 720 400" role="img" aria-labelledby="l63f3-t l63f3-d">
+      <title id="l63f3-t">The constant Blinn-Phong was missing</title>
+      <desc id="l63f3-d">For five shininess values, the constant the engine multiplies the lobe by against the one a normalised distribution requires. The ratio is (s+2)/2, which is 17 at the default shininess of 32.</desc>
+      <defs>
+        <marker id="e-i-l63f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+        <marker id="e-s-l63f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+        <marker id="e-h-l63f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+        <marker id="e-b-l63f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+        <marker id="e-g-l63f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+      </defs>
+    <text x="20" y="20" class="sm" text-anchor="start">Blinn-Phong is a microfacet distribution. It has only ever been missing its constant — and the engine ships the wrong one.</text>
+    <text x="150" y="58" class="xs muted" text-anchor="start">the constant multiplying cosˢ:</text>
+    <text x="140" y="86" class="xs mono muted" text-anchor="end">shininess 4</text>
+    <rect x="150" y="74" width="2.0" height="9" rx="2" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.75"/>
+    <rect x="150" y="85" width="4.392677999999999" height="9" rx="2" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.55"/>
+    <text x="164.392678" y="90" class="xs mono t-bad" text-anchor="start">3×</text>
+    <text x="140" y="112" class="xs mono muted" text-anchor="end">shininess 8</text>
+    <rect x="150" y="100" width="2.0" height="9" rx="2" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.75"/>
+    <rect x="150" y="111" width="7.3211254" height="9" rx="2" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.55"/>
+    <text x="167.3211254" y="116" class="xs mono t-bad" text-anchor="start">5×</text>
+    <text x="140" y="138" class="xs mono muted" text-anchor="end">shininess 32</text>
+    <rect x="150" y="126" width="2.0" height="9" rx="2" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.75"/>
+    <rect x="150" y="137" width="24.891832799999996" height="9" rx="2" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.55"/>
+    <text x="184.8918328" y="142" class="xs mono t-bad" text-anchor="start">17×</text>
+    <text x="140" y="164" class="xs mono muted" text-anchor="end">shininess 128</text>
+    <rect x="150" y="152" width="2.0" height="9" rx="2" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.75"/>
+    <rect x="150" y="163" width="95.1746532" height="9" rx="2" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.55"/>
+    <text x="255.1746532" y="168" class="xs mono t-bad" text-anchor="start">65×</text>
+    <text x="140" y="190" class="xs mono muted" text-anchor="end">shininess 512</text>
+    <rect x="150" y="178" width="2.0" height="9" rx="2" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.75"/>
+    <rect x="150" y="189" width="376.30594859999997" height="9" rx="2" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.55"/>
+    <text x="536.3059486" y="194" class="xs mono t-bad" text-anchor="start">257×</text>
+    <rect x="150" y="212" width="26" height="9" rx="2" fill="#e05c5c" fill-opacity="0.75" stroke="#e05c5c" stroke-width="1"/>
+    <text x="182" y="220" class="xs" text-anchor="start">what the engine uses: 1/π, for every exponent</text>
+    <rect x="150" y="227" width="26" height="9" rx="2" fill="#5ac878" fill-opacity="0.55" stroke="#5ac878" stroke-width="1"/>
+    <text x="182" y="235" class="xs" text-anchor="start">what a distribution needs: (s+2)/2π</text>
+    <rect x="24" y="300" width="672" height="84" rx="4" class="fill-soft grid" stroke-width="1.2"/>
+    <text x="360.0" y="324" class="sm t-hi" text-anchor="middle">The ratio is (s+2)/2 exactly — no π, because both carry one and it cancels. At the default shininess of 32 that is 17×.</text>
+    <text x="360.0" y="346" class="xs muted" text-anchor="middle">So this engine’s highlights have always been seventeen times dimmer than the distribution says, and every material has quietly</text>
+    <text x="360.0" y="362" class="xs muted" text-anchor="middle">compensated with a specular colour larger than a real surface could have. Nothing looked wrong; the parameter absorbed it.</text>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 3.</span>
+      The finding, and it has been shipping since Lesson 3.7. Blinn-Phong&#8217;s lobe IS a microfacet distribution &#8212; it satisfies Figure 2&#8217;s identity exactly, once given the constant <code>(s+2)/2&#960;</code>. The engine uses <code>1/&#960;</code>. The ratio is <code>(s+2)/2</code>, with no &#960; in it because both carry one and it cancels: <strong>17&#215; at the default shininess of 32</strong>, and 257&#215; at 512. Nothing ever looked wrong, and that is the part worth remembering &#8212; <code>specular::colour</code> absorbed it, so every shiny material in this engine has been authored at seventeen times a physically plausible reflectance. An error a PARAMETER can absorb is invisible until someone tries to author against real values.
+    </figcaption>
+  </figure>
+
+
+  <p>
+    <strong>So this engine's highlights have been seventeen times dimmer than the distribution
+    says</strong>, at the default material, since Lesson 3.7. And nothing looked wrong — which is
+    the part worth dwelling on, because it is how this class of error survives.
+  </p>
+
+  <p>
+    The reason is that <code>specular::colour</code> absorbed it. An artist setting up a shiny
+    surface turns the specular colour up until the highlight looks right, and the value they land
+    on is seventeen times what a physically plausible reflectance would be. The picture is fine.
+    The parameter is nonsense, and it is nonsense in a way that only shows up when you try to
+    <em>author</em> against physical values, or load a material from another renderer, or ask
+    whether the surface conserves energy — which is exactly what Lesson 6.2 tried to do and why it
+    found 1.1386.
+  </p>
+
+  <div class="callout note">
+    <span class="label">Reading the old materials into the new vocabulary</span>
+    <p>The mapping runs both ways, and the reverse direction is the useful one right now. Inverting
+       <code>s = 2/α² − 2</code> gives <code>α = √(2/(s+2))</code>, so the demo's shininess of 32
+       means <strong>α = 0.2425</strong> — a perceptual roughness of <strong>0.49</strong>.</p>
+    <p>Almost exactly half way, which is a perfectly reasonable thing for a default material to be,
+       and was arrived at by nobody choosing it. <code>verify_63</code> §B also checks that
+       shininess → α → shininess round-trips to 1e−5 relative, because a material that changes when
+       you convert it to the new vocabulary and back is not a conversion, it is a bug.</p>
+  </div>
+
+  <!-- =================================================================
+       5 — BECKMANN, GGX, AND THE TAIL
+       ================================================================= -->
+  <h2 id="tail"><span class="num">5</span>Beckmann, GGX, and the Tail</h2>
+
+  <p>
+    Blinn-Phong's exponent lobe is <em>a</em> distribution. It is not one that any surface actually
+    has, and the reason is that it was chosen for being cheap to evaluate rather than for
+    describing a slope histogram. Two distributions that were chosen for the second reason:
+  </p>
+
+  <p>
+    <strong>Beckmann's</strong> assumes the microfacet <em>slopes</em> are Gaussian — the natural
+    assumption for a surface produced by a large number of small independent processes, which is
+    what grinding, weathering and casting are. It is the distribution physical-optics derivations
+    arrive at, and for thirty years it was what "physically based" meant.
+  </p>
+
+  <div class="eq">
+    \[ D_{\text{Beckmann}}(\mathbf{h}) =
+       \frac{\exp\!\left(-\tan^2\theta_h / \alpha^2\right)}
+            {\pi \alpha^2 \cos^4\theta_h} \]
+  </div>
+
+  <p class="eq-plain">
+    In prose: e to the minus tangent-squared of θₕ over α², all divided by π α² cos⁴θₕ.
+  </p>
+
+  <p>
+    <strong>GGX</strong> — also called Trowbridge–Reitz, after the 1975 paper that got there
+    first and was forgotten for thirty years — replaces the exponential with a rational function:
+  </p>
+
+  <div class="eq">
+    \[ D_{\text{GGX}}(\mathbf{h}) =
+       \frac{\alpha^2}{\pi \left( \cos^2\theta_h (\alpha^2 - 1) + 1 \right)^2} \]
+  </div>
+
+  <p class="eq-plain">
+    In prose: α² divided by π times the square of (cos²θₕ times (α²−1), plus 1). §9 is about why
+    the implementation does not compute that denominator the way it is written here.
+  </p>
+
+  <p>
+    Both integrate to 1. Both peak at the same height for the same α — <code>verify_63</code> §C
+    checks that, and gets <strong>3.5368</strong> for each at α = 0.3. So they are not "a bright
+    one and a dim one". Every difference between them is a difference of <em>shape</em>.
+  </p>
+
+    <figure class="dia bleed">
+    <svg viewBox="0 0 720 430" role="img" aria-labelledby="l63f4-t l63f4-d">
+      <title id="l63f4-t">GGX against Beckmann: the tail</title>
+      <desc id="l63f4-d">Both distributions at roughness alpha 0.3, on a log scale. They share a peak; GGX is lower near it and 456 times higher 45 degrees out, because a rational function has a power-law tail and an exponential does not.</desc>
+      <defs>
+        <marker id="e-i-l63f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+        <marker id="e-s-l63f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+        <marker id="e-h-l63f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+        <marker id="e-b-l63f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+        <marker id="e-g-l63f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+      </defs>
+    <text x="20" y="20" class="sm" text-anchor="start">Same peak, same roughness, completely different tail — and the tail is the whole reason GGX replaced Beckmann.</text>
+    <line x1="92" y1="296" x2="512" y2="296" class="grid" stroke-width="1.2"/>
+    <line x1="92" y1="66" x2="92" y2="296" class="grid" stroke-width="1.2"/>
+    <line x1="92" y1="296.0" x2="512" y2="296.0" class="grid" stroke-width="0.7" stroke-dasharray="2 4"/>
+    <text x="84" y="300.0" class="xs mono muted" text-anchor="end">10⁻⁸</text>
+    <line x1="92" y1="244.88888888888889" x2="512" y2="244.88888888888889" class="grid" stroke-width="0.7" stroke-dasharray="2 4"/>
+    <text x="84" y="248.88888888888889" class="xs mono muted" text-anchor="end">10⁻⁶</text>
+    <line x1="92" y1="193.77777777777777" x2="512" y2="193.77777777777777" class="grid" stroke-width="0.7" stroke-dasharray="2 4"/>
+    <text x="84" y="197.77777777777777" class="xs mono muted" text-anchor="end">10⁻⁴</text>
+    <line x1="92" y1="142.66666666666666" x2="512" y2="142.66666666666666" class="grid" stroke-width="0.7" stroke-dasharray="2 4"/>
+    <text x="84" y="146.66666666666666" class="xs mono muted" text-anchor="end">10⁻²</text>
+    <line x1="92" y1="91.55555555555554" x2="512" y2="91.55555555555554" class="grid" stroke-width="0.7" stroke-dasharray="2 4"/>
+    <text x="84" y="95.55555555555554" class="xs mono muted" text-anchor="end">10⁰</text>
+    <line x1="92.0" y1="296" x2="92.0" y2="301" class="grid" stroke-width="1.0"/>
+    <text x="92.0" y="314" class="xs muted" text-anchor="middle">0°</text>
+    <line x1="176.0" y1="296" x2="176.0" y2="301" class="grid" stroke-width="1.0"/>
+    <text x="176.0" y="314" class="xs muted" text-anchor="middle">15°</text>
+    <line x1="260.0" y1="296" x2="260.0" y2="301" class="grid" stroke-width="1.0"/>
+    <text x="260.0" y="314" class="xs muted" text-anchor="middle">30°</text>
+    <line x1="344.0" y1="296" x2="344.0" y2="301" class="grid" stroke-width="1.0"/>
+    <text x="344.0" y="314" class="xs muted" text-anchor="middle">45°</text>
+    <line x1="428.0" y1="296" x2="428.0" y2="301" class="grid" stroke-width="1.0"/>
+    <text x="428.0" y="314" class="xs muted" text-anchor="middle">60°</text>
+    <line x1="512.0" y1="296" x2="512.0" y2="301" class="grid" stroke-width="1.0"/>
+    <text x="512.0" y="314" class="xs muted" text-anchor="middle">75°</text>
+    <text x="302.0" y="332" class="xs muted" text-anchor="middle">θₕ — degrees off the peak</text>
+    <text x="46" y="54" class="xs muted" text-anchor="start">D(h), log scale</text>
+    <path d="M 92.0 77.5 L 94.8 77.5 L 97.6 77.6 L 100.4 77.6 L 103.2 77.7 L 106.0 77.7 L 108.8 77.8 L 111.6 77.9 L 114.4 78.0 L 117.2 78.2 L 120.0 78.3 L 122.8 78.5 L 125.6 78.7 L 128.4 78.9 L 131.2 79.1 L 134.0 79.3 L 136.8 79.5 L 139.6 79.8 L 142.4 80.1 L 145.2 80.4 L 148.0 80.7 L 150.8 81.0 L 153.6 81.4 L 156.4 81.7 L 159.2 82.1 L 162.0 82.5 L 164.8 83.0 L 167.6 83.4 L 170.4 83.9 L 173.2 84.3 L 176.0 84.9 L 178.8 85.4 L 181.6 85.9 L 184.4 86.5 L 187.2 87.1 L 190.0 87.7 L 192.8 88.3 L 195.6 89.0 L 198.4 89.7 L 201.2 90.4 L 204.0 91.1 L 206.8 91.9 L 209.6 92.7 L 212.4 93.5 L 215.2 94.3 L 218.0 95.2 L 220.8 96.1 L 223.6 97.0 L 226.4 98.0 L 229.2 99.0 L 232.0 100.0 L 234.8 101.0 L 237.6 102.1 L 240.4 103.3 L 243.2 104.4 L 246.0 105.6 L 248.8 106.9 L 251.6 108.2 L 254.4 109.5 L 257.2 110.8 L 260.0 112.3 L 262.8 113.7 L 265.6 115.2 L 268.4 116.8 L 271.2 118.4 L 274.0 120.0 L 276.8 121.7 L 279.6 123.5 L 282.4 125.3 L 285.2 127.2 L 288.0 129.1 L 290.8 131.1 L 293.6 133.2 L 296.4 135.4 L 299.2 137.6 L 302.0 139.9 L 304.8 142.2 L 307.6 144.7 L 310.4 147.2 L 313.2 149.8 L 316.0 152.5 L 318.8 155.3 L 321.6 158.2 L 324.4 161.2 L 327.2 164.3 L 330.0 167.6 L 332.8 170.9 L 335.6 174.3 L 338.4 177.9 L 341.2 181.6 L 344.0 185.5 L 346.8 189.5 L 349.6 193.6 L 352.4 197.9 L 355.2 202.4 L 358.0 207.0 L 360.8 211.8 L 363.6 216.8 L 366.4 222.0 L 369.2 227.4 L 372.0 233.1 L 374.8 238.9 L 377.6 245.0 L 380.4 251.4 L 383.2 258.0 L 386.0 264.9 L 388.8 272.2 L 391.6 279.7 L 394.4 287.6 L 397.2 295.8 L 400.0 296.0 L 402.8 296.0 L 405.6 296.0 L 408.4 296.0 L 411.2 296.0 L 414.0 296.0 L 416.8 296.0 L 419.6 296.0 L 422.4 296.0 L 425.2 296.0 L 428.0 296.0 L 430.8 296.0 L 433.6 296.0 L 436.4 296.0 L 439.2 296.0 L 442.0 296.0 L 444.8 296.0 L 447.6 296.0 L 450.4 296.0 L 453.2 296.0 L 456.0 296.0 L 458.8 296.0 L 461.6 296.0 L 464.4 296.0 L 467.2 296.0 L 470.0 296.0 L 472.8 296.0 L 475.6 296.0 L 478.4 296.0 L 481.2 296.0 L 484.0 296.0 L 486.8 296.0 L 489.6 296.0 L 492.4 296.0 L 495.2 296.0 L 498.0 296.0 L 500.8 296.0 L 503.6 296.0 L 506.4 296.0 L 509.2 296.0 L 512.0 296.0" fill="none" stroke="#5082e6" stroke-width="2.0"/>
+    <path d="M 92.0 77.5 L 94.8 77.6 L 97.6 77.6 L 100.4 77.7 L 103.2 77.8 L 106.0 78.0 L 108.8 78.1 L 111.6 78.4 L 114.4 78.6 L 117.2 78.9 L 120.0 79.2 L 122.8 79.5 L 125.6 79.9 L 128.4 80.2 L 131.2 80.6 L 134.0 81.1 L 136.8 81.5 L 139.6 82.0 L 142.4 82.4 L 145.2 82.9 L 148.0 83.4 L 150.8 84.0 L 153.6 84.5 L 156.4 85.0 L 159.2 85.6 L 162.0 86.1 L 164.8 86.7 L 167.6 87.3 L 170.4 87.9 L 173.2 88.4 L 176.0 89.0 L 178.8 89.6 L 181.6 90.2 L 184.4 90.8 L 187.2 91.4 L 190.0 91.9 L 192.8 92.5 L 195.6 93.1 L 198.4 93.7 L 201.2 94.3 L 204.0 94.9 L 206.8 95.4 L 209.6 96.0 L 212.4 96.6 L 215.2 97.1 L 218.0 97.7 L 220.8 98.3 L 223.6 98.8 L 226.4 99.4 L 229.2 99.9 L 232.0 100.4 L 234.8 101.0 L 237.6 101.5 L 240.4 102.0 L 243.2 102.5 L 246.0 103.0 L 248.8 103.6 L 251.6 104.1 L 254.4 104.5 L 257.2 105.0 L 260.0 105.5 L 262.8 106.0 L 265.6 106.5 L 268.4 106.9 L 271.2 107.4 L 274.0 107.9 L 276.8 108.3 L 279.6 108.7 L 282.4 109.2 L 285.2 109.6 L 288.0 110.0 L 290.8 110.5 L 293.6 110.9 L 296.4 111.3 L 299.2 111.7 L 302.0 112.1 L 304.8 112.5 L 307.6 112.9 L 310.4 113.3 L 313.2 113.7 L 316.0 114.0 L 318.8 114.4 L 321.6 114.8 L 324.4 115.1 L 327.2 115.5 L 330.0 115.8 L 332.8 116.2 L 335.6 116.5 L 338.4 116.9 L 341.2 117.2 L 344.0 117.5 L 346.8 117.8 L 349.6 118.1 L 352.4 118.5 L 355.2 118.8 L 358.0 119.1 L 360.8 119.4 L 363.6 119.7 L 366.4 120.0 L 369.2 120.2 L 372.0 120.5 L 374.8 120.8 L 377.6 121.1 L 380.4 121.3 L 383.2 121.6 L 386.0 121.9 L 388.8 122.1 L 391.6 122.4 L 394.4 122.6 L 397.2 122.8 L 400.0 123.1 L 402.8 123.3 L 405.6 123.6 L 408.4 123.8 L 411.2 124.0 L 414.0 124.2 L 416.8 124.4 L 419.6 124.6 L 422.4 124.9 L 425.2 125.1 L 428.0 125.3 L 430.8 125.5 L 433.6 125.6 L 436.4 125.8 L 439.2 126.0 L 442.0 126.2 L 444.8 126.4 L 447.6 126.5 L 450.4 126.7 L 453.2 126.9 L 456.0 127.0 L 458.8 127.2 L 461.6 127.4 L 464.4 127.5 L 467.2 127.7 L 470.0 127.8 L 472.8 128.0 L 475.6 128.1 L 478.4 128.2 L 481.2 128.4 L 484.0 128.5 L 486.8 128.6 L 489.6 128.7 L 492.4 128.9 L 495.2 129.0 L 498.0 129.1 L 500.8 129.2 L 503.6 129.3 L 506.4 129.4 L 509.2 129.5 L 512.0 129.6" fill="none" stroke="#9b7ede" stroke-width="2.0"/>
+    <text x="266.8" y="142.2" class="xs" text-anchor="end" fill="#5082e6">Beckmann</text>
+    <text x="453.2" y="110.7" class="xs" text-anchor="middle" fill="#9b7ede">GGX</text>
+    <line x1="344.0" y1="185.46780693792664" x2="344.0" y2="117.51234533690311" class="hi" stroke-width="2.0"/>
+    <text x="352.0" y="155.49007613741486" class="xs mono t-hi" text-anchor="start">456×</text>
+    <rect x="24" y="336" width="672" height="80" rx="4" class="fill-soft grid" stroke-width="1.2"/>
+    <text x="360.0" y="358" class="sm t-hi" text-anchor="middle">GGX is LOWER than Beckmann near the peak (0.71× at 20°) and 456× higher at 45°. The tail is paid for.</text>
+    <text x="360.0" y="380" class="xs muted" text-anchor="middle">Beckmann’s exponential is numerically zero by 60° (1.9e−13); GGX’s rational function has a power-law tail that never quite stops. Real</text>
+    <text x="360.0" y="396" class="xs muted" text-anchor="middle">surfaces have that glow around a highlight, which is why every engine now ships GGX.</text>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 4.</span>
+      Same roughness, same peak (3.5368 for both), and the log axis is the only way to see what separates them. <strong>GGX is LOWER than Beckmann near the peak</strong> &#8212; 0.71&#215; at 20&#176; &#8212; and then crosses over to <strong>456&#215; at 45&#176;</strong>. It has taken energy out of the shoulder and put it in the tail, which it must, since both integrate to 1. The mechanism is in the formulas: Beckmann&#8217;s exponential dies faster than any power and is numerically zero (1.9e&#8722;13) by 60&#176;, a hard edge where a real surface has a soft one; GGX&#8217;s rational function has a power-law tail that never quite stops. That faint glow around a highlight is why every engine now ships GGX.
+    </figcaption>
+  </figure>
+
+
+  <p>
+    And the shape difference is dramatic, in a way a linear plot completely hides — which is why
+    the figure is on a log axis. Read the measured table:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead>
+      <tr><th>θ<sub>h</sub></th><th>Beckmann</th><th>GGX</th><th>GGX / Beckmann</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>10°</td><td>2.6618</td><td>2.0771</td><td>0.78</td></tr>
+      <tr><td>20°</td><td>1.0409</td><td>0.7423</td><td>0.71</td></tr>
+      <tr><td>30°</td><td>0.1549</td><td>0.2842</td><td>1.83</td></tr>
+      <tr><td>45°</td><td>2.11 × 10⁻⁴</td><td>9.64 × 10⁻²</td><td><strong>456</strong></td></tr>
+      <tr><td>60°</td><td>1.9 × 10⁻¹³</td><td>4.80 × 10⁻²</td><td>2.5 × 10¹¹</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    <strong>GGX is <em>lower</em> near the peak</strong> — 0.71× Beckmann at 20° — and then
+    crosses over and is 456× higher at 45°. It has taken energy out of the shoulder and put it in
+    the tail. It has to: both integrate to 1, so anything one gains somewhere it loses elsewhere.
+  </p>
+
+  <p>
+    The mechanism is visible in the two formulas. Beckmann's exponential dies faster than any
+    power, so by 60° it is <strong>1.9 × 10⁻¹³</strong> — numerically zero in a shader, and a hard
+    edge to the highlight where a real surface has a soft one. GGX's denominator is a polynomial,
+    so its tail is a power law: it falls off and never quite stops.
+  </p>
+
+  <div class="callout note">
+    <span class="label">Why this won, and what it says about how graphics research goes</span>
+    <p>Real surfaces have a faint glow around a highlight, extending much further than a Gaussian
+       slope distribution predicts. Everybody could see it; the standard answer for years was to
+       add a second, broader lobe and tune the mix. Walter et al. pointed out in 2007 that a
+       distribution with a heavier tail reproduces it with no extra lobe and no extra parameter —
+       and that Trowbridge and Reitz had published exactly such a distribution in 1975 by fitting
+       measured data rather than deriving from optics.</p>
+    <p>The lesson is not "GGX is better". It is that <strong>the distribution is where the
+       physical claim lives</strong>, so when a model looks wrong, the distribution is the first
+       place to look and the last place people looked.</p>
+  </div>
+
+  <!-- =================================================================
+       6 — MATCHING THE PEAK IS NOT MATCHING THE LOBE
+       ================================================================= -->
+  <h2 id="fit"><span class="num">6</span>Matching the Peak Is Not Matching the Lobe</h2>
+
+  <p>
+    Every reference that mentions both gives you the same conversion from a GGX roughness to a
+    Blinn exponent:
+  </p>
+
+  <div class="eq">
+    \[ s = \frac{2}{\alpha^2} - 2 \]
+  </div>
+
+  <p>
+    It is easy to derive, and deriving it shows immediately what it is and is not. Set the two
+    distributions equal <em>at the peak</em>, where <strong>h</strong> = <strong>n</strong> and
+    both cosines are 1:
+  </p>
+
+  <div class="eq">
+    \[ \frac{s+2}{2\pi} = \frac{\alpha^2}{\pi \left(\alpha^2\right)^2}
+       = \frac{1}{\pi \alpha^2}
+       \quad\Longrightarrow\quad s + 2 = \frac{2}{\alpha^2} \]
+  </div>
+
+  <p class="eq-plain">
+    In prose: Blinn's peak value is (s+2)/2π, GGX's is 1/(πα²), and setting them equal gives
+    s + 2 = 2/α².
+  </p>
+
+  <p>
+    <code>verify_63</code> §E confirms the mapping does exactly what it was derived to do: the two
+    peaks agree to a relative <strong>5.99e−08</strong>, which is one float ULP. So it is correct —
+    for the question it answers, which is <em>"which exponent gives the same peak height?"</em>
+  </p>
+
+  <p>
+    Now ask a different question — <em>"which exponent gives the most similar lobe?"</em> — and fit
+    it numerically, minimising the difference over the whole hemisphere. §E scans the exponent on a
+    log grid and reports:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead>
+      <tr><th>α</th><th>peak-match <em>s</em></th><th>fitted <em>s</em></th><th>ratio</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>0.10</td><td>198.0</td><td>159.5</td><td>0.806</td></tr>
+      <tr><td>0.20</td><td>48.0</td><td>38.6</td><td>0.803</td></tr>
+      <tr><td>0.30</td><td>20.2</td><td>16.1</td><td>0.794</td></tr>
+      <tr><td>0.50</td><td>6.0</td><td>4.6</td><td>0.759</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    Consistently about <strong>0.80×</strong>, drifting further apart as the surface roughens. And
+    the fit is not converging on the "true" answer with the peak match as a bad approximation —
+    <em>both numbers are exactly right</em>, for the two different questions. A lobe fit trades
+    peak height for tail coverage, because GGX has a tail Blinn cannot reproduce at any exponent
+    whatsoever, and the least-bad compromise is to sit slightly wider than the peak match.
+  </p>
+
+  <div class="callout note">
+    <span class="label">This is what folklore is, and how to handle it</span>
+    <p>The formula is not wrong. What is missing, in every place it is quoted, is the
+       <em>criterion</em> — and without the criterion you cannot know whether it is the right
+       conversion for your problem. Matching a legacy asset's peak intensity? Use it. Matching how
+       an old material <em>looked</em>? You want the 0.80×.</p>
+    <p>The transferable habit is small and worth keeping: <strong>when you meet a conversion
+       formula, derive it far enough to see what it optimised.</strong> Two minutes of algebra
+       here revealed that a widely-quoted mapping answers a narrower question than the one people
+       use it for.</p>
+  </div>
+
+  <!-- =================================================================
+       7 — SHADOWING AND MASKING
+       ================================================================= -->
+  <h2 id="masking"><span class="num">7</span>Shadowing and Masking</h2>
+
+  <p>
+    <em>D</em> counts the facets that face <strong>h</strong>. It does not ask whether they can be
+    seen, or whether the light can reach them — and on a landscape, both questions have real
+    answers. A facet down in a valley may face exactly the right way and be completely hidden
+    behind the ridge in front of it.
+  </p>
+
+  <p>
+    Two effects, and they are the same effect from the two ends of the light path.
+    <strong>Shadowing</strong> is a facet the light cannot reach. <strong>Masking</strong> is a
+    facet the eye cannot see. Together they are the <strong>geometry term</strong>, <em>G</em>,
+    and the crucial thing about it is that it is not a correction bolted onto the model to make
+    the numbers behave — it is a <em>consequence</em> of the picture in §2. Once you have said
+    "landscape", you have said "some of it is hidden".
+  </p>
+
+    <figure class="dia bleed">
+    <svg viewBox="0 0 720 420" role="img" aria-labelledby="l63f5-t l63f5-d">
+      <title id="l63f5-t">Shadowing and masking</title>
+      <desc id="l63f5-d">Left: a rough profile under a grazing light, with the facets in shadow drawn faint and the lit ones highlighted. Right: Smith's G1 against angle for four roughnesses, falling from 1 at the normal toward 0 at grazing incidence, and falling faster the rougher the surface.</desc>
+      <defs>
+        <marker id="e-i-l63f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+        <marker id="e-s-l63f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+        <marker id="e-h-l63f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+        <marker id="e-b-l63f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+        <marker id="e-g-l63f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+      </defs>
+    <text x="20" y="20" class="sm" text-anchor="start">The second term, and it is a consequence rather than a fudge: facets hide behind each other.</text>
+    <path d="M 44 240 L 44.0 182.2 L 50.3 183.2 L 56.7 186.2 L 63.0 189.5 L 69.4 191.7 L 75.7 192.1 L 82.1 191.2 L 88.4 190.1 L 94.8 190.3 L 101.1 193.0 L 107.5 198.2 L 113.8 205.0 L 120.2 211.4 L 126.5 215.5 L 132.9 215.7 L 139.2 211.6 L 145.6 204.0 L 151.9 195.1 L 158.3 186.9 L 164.6 181.6 L 171.0 180.1 L 177.3 181.9 L 183.7 185.9 L 190.0 190.1 L 196.3 193.1 L 202.7 194.1 L 209.0 193.6 L 215.4 192.8 L 221.7 193.2 L 228.1 195.7 L 234.4 200.5 L 240.8 206.5 L 247.1 212.0 L 253.5 214.9 L 259.8 214.0 L 266.2 208.9 L 272.5 200.8 L 278.9 191.7 L 285.2 183.8 L 291.6 179.2 L 297.9 178.5 L 304.3 181.4 L 310.6 186.3 L 317.0 191.4 L 323.3 195.0 L 329.7 196.5 L 336.0 196.3 L 336 240 Z" class="fill-soft grid" stroke-width="1.3"/>
+    <line x1="44.0" y1="182.2" x2="50.3" y2="183.2" stroke="#f0961e" stroke-width="3.0" stroke-opacity="0.95"/>
+    <line x1="50.3" y1="183.2" x2="56.7" y2="186.2" stroke="#8f918a" stroke-width="1.8" stroke-opacity="0.45"/>
+    <line x1="56.7" y1="186.2" x2="63.0" y2="189.5" stroke="#8f918a" stroke-width="1.8" stroke-opacity="0.45"/>
+    <line x1="63.0" y1="189.5" x2="69.4" y2="191.7" stroke="#8f918a" stroke-width="1.8" stroke-opacity="0.45"/>
+    <line x1="69.4" y1="191.7" x2="75.7" y2="192.1" stroke="#8f918a" stroke-width="1.8" stroke-opacity="0.45"/>
+    <line x1="75.7" y1="192.1" x2="82.1" y2="191.2" stroke="#8f918a" stroke-width="1.8" stroke-opacity="0.45"/>
+    <line x1="82.1" y1="191.2" x2="88.4" y2="190.1" stroke="#f0961e" stroke-width="3.0" stroke-opacity="0.95"/>
+    <line x1="88.4" y1="190.1" x2="94.8" y2="190.3" stroke="#f0961e" stroke-width="3.0" stroke-opacity="0.95"/>
+    <line x1="94.8" y1="190.3" x2="101.1" y2="193.0" stroke="#8f918a" stroke-width="1.8" stroke-opacity="0.45"/>
+    <line x1="101.1" y1="193.0" x2="107.5" y2="198.2" stroke="#8f918a" stroke-width="1.8" stroke-opacity="0.45"/>
+    <line x1="107.5" y1="198.2" x2="113.8" y2="205.0" stroke="#8f918a" stroke-width="1.8" stroke-opacity="0.45"/>
+    <line x1="113.8" y1="205.0" x2="120.2" y2="211.4" stroke="#8f918a" stroke-width="1.8" stroke-opacity="0.45"/>
+    <line x1="120.2" y1="211.4" x2="126.5" y2="215.5" stroke="#8f918a" stroke-width="1.8" stroke-opacity="0.45"/>
+    <line x1="126.5" y1="215.5" x2="132.9" y2="215.7" stroke="#8f918a" stroke-width="1.8" stroke-opacity="0.45"/>
+    <line x1="132.9" y1="215.7" x2="139.2" y2="211.6" stroke="#8f918a" stroke-width="1.8" stroke-opacity="0.45"/>
+    <line x1="139.2" y1="211.6" x2="145.6" y2="204.0" stroke="#8f918a" stroke-width="1.8" stroke-opacity="0.45"/>
+    <line x1="145.6" y1="204.0" x2="151.9" y2="195.1" stroke="#8f918a" stroke-width="1.8" stroke-opacity="0.45"/>
+    <line x1="151.9" y1="195.1" x2="158.3" y2="186.9" stroke="#f0961e" stroke-width="3.0" stroke-opacity="0.95"/>
+    <line x1="158.3" y1="186.9" x2="164.6" y2="181.6" stroke="#f0961e" stroke-width="3.0" stroke-opacity="0.95"/>
+    <line x1="164.6" y1="181.6" x2="171.0" y2="180.1" stroke="#f0961e" stroke-width="3.0" stroke-opacity="0.95"/>
+    <line x1="171.0" y1="180.1" x2="177.3" y2="181.9" stroke="#8f918a" stroke-width="1.8" stroke-opacity="0.45"/>
+    <line x1="177.3" y1="181.9" x2="183.7" y2="185.9" stroke="#8f918a" stroke-width="1.8" stroke-opacity="0.45"/>
+    <line x1="183.7" y1="185.9" x2="190.0" y2="190.1" stroke="#8f918a" stroke-width="1.8" stroke-opacity="0.45"/>
+    <line x1="190.0" y1="190.1" x2="196.3" y2="193.1" stroke="#8f918a" stroke-width="1.8" stroke-opacity="0.45"/>
+    <line x1="196.3" y1="193.1" x2="202.7" y2="194.1" stroke="#8f918a" stroke-width="1.8" stroke-opacity="0.45"/>
+    <line x1="202.7" y1="194.1" x2="209.0" y2="193.6" stroke="#8f918a" stroke-width="1.8" stroke-opacity="0.45"/>
+    <line x1="209.0" y1="193.6" x2="215.4" y2="192.8" stroke="#8f918a" stroke-width="1.8" stroke-opacity="0.45"/>
+    <line x1="215.4" y1="192.8" x2="221.7" y2="193.2" stroke="#8f918a" stroke-width="1.8" stroke-opacity="0.45"/>
+    <line x1="221.7" y1="193.2" x2="228.1" y2="195.7" stroke="#8f918a" stroke-width="1.8" stroke-opacity="0.45"/>
+    <line x1="228.1" y1="195.7" x2="234.4" y2="200.5" stroke="#8f918a" stroke-width="1.8" stroke-opacity="0.45"/>
+    <line x1="234.4" y1="200.5" x2="240.8" y2="206.5" stroke="#8f918a" stroke-width="1.8" stroke-opacity="0.45"/>
+    <line x1="240.8" y1="206.5" x2="247.1" y2="212.0" stroke="#8f918a" stroke-width="1.8" stroke-opacity="0.45"/>
+    <line x1="247.1" y1="212.0" x2="253.5" y2="214.9" stroke="#8f918a" stroke-width="1.8" stroke-opacity="0.45"/>
+    <line x1="253.5" y1="214.9" x2="259.8" y2="214.0" stroke="#8f918a" stroke-width="1.8" stroke-opacity="0.45"/>
+    <line x1="259.8" y1="214.0" x2="266.2" y2="208.9" stroke="#8f918a" stroke-width="1.8" stroke-opacity="0.45"/>
+    <line x1="266.2" y1="208.9" x2="272.5" y2="200.8" stroke="#8f918a" stroke-width="1.8" stroke-opacity="0.45"/>
+    <line x1="272.5" y1="200.8" x2="278.9" y2="191.7" stroke="#f0961e" stroke-width="3.0" stroke-opacity="0.95"/>
+    <line x1="278.9" y1="191.7" x2="285.2" y2="183.8" stroke="#f0961e" stroke-width="3.0" stroke-opacity="0.95"/>
+    <line x1="285.2" y1="183.8" x2="291.6" y2="179.2" stroke="#f0961e" stroke-width="3.0" stroke-opacity="0.95"/>
+    <line x1="291.6" y1="179.2" x2="297.9" y2="178.5" stroke="#f0961e" stroke-width="3.0" stroke-opacity="0.95"/>
+    <line x1="297.9" y1="178.5" x2="304.3" y2="181.4" stroke="#8f918a" stroke-width="1.8" stroke-opacity="0.45"/>
+    <line x1="304.3" y1="181.4" x2="310.6" y2="186.3" stroke="#8f918a" stroke-width="1.8" stroke-opacity="0.45"/>
+    <line x1="310.6" y1="186.3" x2="317.0" y2="191.4" stroke="#8f918a" stroke-width="1.8" stroke-opacity="0.45"/>
+    <line x1="317.0" y1="191.4" x2="323.3" y2="195.0" stroke="#8f918a" stroke-width="1.8" stroke-opacity="0.45"/>
+    <line x1="323.3" y1="195.0" x2="329.7" y2="196.5" stroke="#8f918a" stroke-width="1.8" stroke-opacity="0.45"/>
+    <line x1="329.7" y1="196.5" x2="336.0" y2="196.3" stroke="#8f918a" stroke-width="1.8" stroke-opacity="0.45"/>
+    <line x1="-39.4454324597357" y1="161.3863935937364" x2="39.14852136862002" y2="180.98206713730949" class="ink-soft" stroke-width="1.1" marker-end="url(#e-s-l63f5)"/>
+    <line x1="-1.3584759379965732" y1="170.38392456132732" x2="77.23547789035915" y2="189.97959810490042" class="ink-soft" stroke-width="1.1" marker-end="url(#e-s-l63f5)"/>
+    <line x1="74.81543710548168" y1="166.13532382309126" x2="153.4093909338374" y2="185.73099736666435" class="ink-soft" stroke-width="1.1" marker-end="url(#e-s-l63f5)"/>
+    <line x1="189.07630667069907" y1="180.0024735584997" x2="267.6702604990548" y2="199.5981471020728" class="ink-soft" stroke-width="1.1" marker-end="url(#e-s-l63f5)"/>
+    <line x1="208.1197849315687" y1="158.35152771632582" x2="286.7137387599244" y2="177.94720125989892" class="ink-soft" stroke-width="1.1" marker-end="url(#e-s-l63f5)"/>
+    <text x="190.0" y="262" class="xs t-hi" text-anchor="middle">10 of 46 facets are lit at all</text>
+    <text x="190.0" y="278" class="xs muted" text-anchor="middle">the rest are in each other's shadow</text>
+    <line x1="432" y1="256" x2="648" y2="256" class="grid" stroke-width="1.2"/>
+    <line x1="432" y1="70" x2="432" y2="256" class="grid" stroke-width="1.2"/>
+    <text x="540.0" y="292" class="xs muted" text-anchor="middle">angle from the normal</text>
+    <text x="424" y="58" class="xs muted" text-anchor="start">G₁ — the fraction still visible</text>
+    <line x1="432.0" y1="256" x2="432.0" y2="261" class="grid" stroke-width="1.0"/>
+    <text x="432.0" y="274" class="xs muted" text-anchor="middle">0°</text>
+    <line x1="540.0" y1="256" x2="540.0" y2="261" class="grid" stroke-width="1.0"/>
+    <text x="540.0" y="274" class="xs muted" text-anchor="middle">45°</text>
+    <line x1="648.0" y1="256" x2="648.0" y2="261" class="grid" stroke-width="1.0"/>
+    <text x="648.0" y="274" class="xs muted" text-anchor="middle">90°</text>
+    <text x="424" y="260.0" class="xs mono muted" text-anchor="end">0</text>
+    <text x="424" y="74.0" class="xs mono muted" text-anchor="end">1</text>
+    <path d="M 432.0 70.0 L 434.4 70.0 L 436.8 70.0 L 439.2 70.0 L 441.6 70.0 L 444.0 70.0 L 446.4 70.0 L 448.8 70.0 L 451.2 70.0 L 453.6 70.0 L 456.0 70.0 L 458.4 70.0 L 460.8 70.0 L 463.2 70.0 L 465.6 70.0 L 468.0 70.0 L 470.4 70.0 L 472.8 70.0 L 475.2 70.0 L 477.6 70.0 L 480.0 70.0 L 482.4 70.0 L 484.8 70.0 L 487.2 70.0 L 489.6 70.0 L 492.0 70.0 L 494.4 70.0 L 496.8 70.0 L 499.2 70.0 L 501.6 70.0 L 504.0 70.0 L 506.4 70.0 L 508.8 70.0 L 511.2 70.0 L 513.6 70.0 L 516.0 70.1 L 518.4 70.1 L 520.8 70.1 L 523.2 70.1 L 525.6 70.1 L 528.0 70.1 L 530.4 70.1 L 532.8 70.1 L 535.2 70.1 L 537.6 70.1 L 540.0 70.1 L 542.4 70.1 L 544.8 70.1 L 547.2 70.1 L 549.6 70.1 L 552.0 70.2 L 554.4 70.2 L 556.8 70.2 L 559.2 70.2 L 561.6 70.2 L 564.0 70.2 L 566.4 70.2 L 568.8 70.3 L 571.2 70.3 L 573.6 70.3 L 576.0 70.3 L 578.4 70.4 L 580.8 70.4 L 583.2 70.4 L 585.6 70.5 L 588.0 70.5 L 590.4 70.5 L 592.8 70.6 L 595.2 70.7 L 597.6 70.7 L 600.0 70.8 L 602.4 70.9 L 604.8 71.0 L 607.2 71.2 L 609.6 71.3 L 612.0 71.5 L 614.4 71.7 L 616.8 72.0 L 619.2 72.4 L 621.6 72.8 L 624.0 73.4 L 626.4 74.2 L 628.8 75.2 L 631.2 76.7 L 633.6 78.9 L 636.0 82.4 L 638.4 88.1 L 640.8 98.5 L 643.2 118.7 L 645.6 161.8 L 648.0 256.0" fill="none" stroke="#5ac878" stroke-width="1.8"/>
+    <line x1="628.8" y1="75.21027015405696" x2="654" y2="75.21027015405696" class="grid" stroke-width="0.8" stroke-dasharray="2 3"/>
+    <text x="658" y="79.2" class="xs" text-anchor="start" fill="#5ac878">r 0.22</text>
+    <path d="M 432.0 70.0 L 434.4 70.0 L 436.8 70.0 L 439.2 70.0 L 441.6 70.0 L 444.0 70.0 L 446.4 70.0 L 448.8 70.0 L 451.2 70.0 L 453.6 70.0 L 456.0 70.1 L 458.4 70.1 L 460.8 70.1 L 463.2 70.1 L 465.6 70.1 L 468.0 70.1 L 470.4 70.2 L 472.8 70.2 L 475.2 70.2 L 477.6 70.2 L 480.0 70.3 L 482.4 70.3 L 484.8 70.3 L 487.2 70.3 L 489.6 70.4 L 492.0 70.4 L 494.4 70.5 L 496.8 70.5 L 499.2 70.5 L 501.6 70.6 L 504.0 70.6 L 506.4 70.7 L 508.8 70.7 L 511.2 70.8 L 513.6 70.9 L 516.0 70.9 L 518.4 71.0 L 520.8 71.1 L 523.2 71.1 L 525.6 71.2 L 528.0 71.3 L 530.4 71.4 L 532.8 71.5 L 535.2 71.6 L 537.6 71.7 L 540.0 71.9 L 542.4 72.0 L 544.8 72.1 L 547.2 72.3 L 549.6 72.5 L 552.0 72.6 L 554.4 72.8 L 556.8 73.0 L 559.2 73.2 L 561.6 73.5 L 564.0 73.7 L 566.4 74.0 L 568.8 74.3 L 571.2 74.6 L 573.6 75.0 L 576.0 75.4 L 578.4 75.8 L 580.8 76.3 L 583.2 76.8 L 585.6 77.4 L 588.0 78.0 L 590.4 78.7 L 592.8 79.5 L 595.2 80.4 L 597.6 81.4 L 600.0 82.5 L 602.4 83.8 L 604.8 85.2 L 607.2 86.9 L 609.6 88.8 L 612.0 90.9 L 614.4 93.4 L 616.8 96.4 L 619.2 99.8 L 621.6 103.8 L 624.0 108.5 L 626.4 114.2 L 628.8 120.9 L 631.2 129.0 L 633.6 138.7 L 636.0 150.4 L 638.4 164.5 L 640.8 181.5 L 643.2 202.0 L 645.6 226.6 L 648.0 256.0" fill="none" stroke="#5082e6" stroke-width="1.8"/>
+    <line x1="628.8" y1="120.91771187756606" x2="654" y2="120.91771187756606" class="grid" stroke-width="0.8" stroke-dasharray="2 3"/>
+    <text x="658" y="124.9" class="xs" text-anchor="start" fill="#5082e6">r 0.45</text>
+    <path d="M 432.0 70.0 L 434.4 70.0 L 436.8 70.0 L 439.2 70.0 L 441.6 70.1 L 444.0 70.1 L 446.4 70.1 L 448.8 70.2 L 451.2 70.2 L 453.6 70.3 L 456.0 70.4 L 458.4 70.4 L 460.8 70.5 L 463.2 70.6 L 465.6 70.7 L 468.0 70.8 L 470.4 71.0 L 472.8 71.1 L 475.2 71.2 L 477.6 71.4 L 480.0 71.5 L 482.4 71.7 L 484.8 71.9 L 487.2 72.1 L 489.6 72.3 L 492.0 72.5 L 494.4 72.7 L 496.8 73.0 L 499.2 73.2 L 501.6 73.5 L 504.0 73.8 L 506.4 74.1 L 508.8 74.4 L 511.2 74.7 L 513.6 75.1 L 516.0 75.5 L 518.4 75.9 L 520.8 76.3 L 523.2 76.7 L 525.6 77.2 L 528.0 77.6 L 530.4 78.2 L 532.8 78.7 L 535.2 79.3 L 537.6 79.9 L 540.0 80.5 L 542.4 81.2 L 544.8 81.9 L 547.2 82.7 L 549.6 83.5 L 552.0 84.3 L 554.4 85.2 L 556.8 86.1 L 559.2 87.1 L 561.6 88.2 L 564.0 89.3 L 566.4 90.6 L 568.8 91.8 L 571.2 93.2 L 573.6 94.6 L 576.0 96.2 L 578.4 97.8 L 580.8 99.6 L 583.2 101.4 L 585.6 103.4 L 588.0 105.6 L 590.4 107.8 L 592.8 110.3 L 595.2 112.9 L 597.6 115.7 L 600.0 118.6 L 602.4 121.8 L 604.8 125.3 L 607.2 129.0 L 609.6 132.9 L 612.0 137.2 L 614.4 141.7 L 616.8 146.6 L 619.2 151.9 L 621.6 157.6 L 624.0 163.7 L 626.4 170.2 L 628.8 177.2 L 631.2 184.8 L 633.6 192.9 L 636.0 201.7 L 638.4 211.1 L 640.8 221.1 L 643.2 232.0 L 645.6 243.6 L 648.0 256.0" fill="none" stroke="#9b7ede" stroke-width="1.8"/>
+    <line x1="628.8" y1="177.24729597775817" x2="654" y2="177.24729597775817" class="grid" stroke-width="0.8" stroke-dasharray="2 3"/>
+    <text x="658" y="181.2" class="xs" text-anchor="start" fill="#9b7ede">r 0.71</text>
+    <path d="M 432.0 70.0 L 434.4 70.0 L 436.8 70.1 L 439.2 70.1 L 441.6 70.2 L 444.0 70.4 L 446.4 70.5 L 448.8 70.7 L 451.2 70.9 L 453.6 71.2 L 456.0 71.4 L 458.4 71.7 L 460.8 72.1 L 463.2 72.4 L 465.6 72.8 L 468.0 73.2 L 470.4 73.7 L 472.8 74.2 L 475.2 74.7 L 477.6 75.2 L 480.0 75.8 L 482.4 76.4 L 484.8 77.0 L 487.2 77.7 L 489.6 78.4 L 492.0 79.1 L 494.4 79.9 L 496.8 80.7 L 499.2 81.6 L 501.6 82.4 L 504.0 83.4 L 506.4 84.3 L 508.8 85.3 L 511.2 86.3 L 513.6 87.4 L 516.0 88.5 L 518.4 89.6 L 520.8 90.8 L 523.2 92.1 L 525.6 93.3 L 528.0 94.6 L 530.4 96.0 L 532.8 97.4 L 535.2 98.9 L 537.6 100.4 L 540.0 101.9 L 542.4 103.5 L 544.8 105.2 L 547.2 106.9 L 549.6 108.6 L 552.0 110.4 L 554.4 112.3 L 556.8 114.2 L 559.2 116.2 L 561.6 118.3 L 564.0 120.4 L 566.4 122.6 L 568.8 124.8 L 571.2 127.2 L 573.6 129.5 L 576.0 132.0 L 578.4 134.5 L 580.8 137.2 L 583.2 139.8 L 585.6 142.6 L 588.0 145.5 L 590.4 148.4 L 592.8 151.5 L 595.2 154.6 L 597.6 157.9 L 600.0 161.2 L 602.4 164.6 L 604.8 168.2 L 607.2 171.8 L 609.6 175.6 L 612.0 179.5 L 614.4 183.5 L 616.8 187.7 L 619.2 192.0 L 621.6 196.4 L 624.0 201.0 L 626.4 205.7 L 628.8 210.6 L 631.2 215.6 L 633.6 220.8 L 636.0 226.2 L 638.4 231.7 L 640.8 237.5 L 643.2 243.5 L 645.6 249.6 L 648.0 256.0" fill="none" stroke="#e05c5c" stroke-width="1.8"/>
+    <line x1="628.8" y1="210.55265445303095" x2="654" y2="210.55265445303095" class="grid" stroke-width="0.8" stroke-dasharray="2 3"/>
+    <text x="658" y="214.6" class="xs" text-anchor="start" fill="#e05c5c">r 1.00</text>
+    <rect x="24" y="312" width="672" height="96" rx="4" class="fill-soft grid" stroke-width="1.2"/>
+    <text x="360.0" y="336" class="sm t-hi" text-anchor="middle">At 75° a near-smooth surface still shows 0.9920 of itself and a fully rough one only 0.4112.</text>
+    <text x="360.0" y="358" class="xs muted" text-anchor="middle">THIS IS THE TERM LESSON 6.2 WAS MISSING when it measured a 5.36× view-angle swing it could not explain. A rough surface really does</text>
+    <text x="360.0" y="374" class="xs muted" text-anchor="middle">hide part of itself from you, and a model with no G has no way to say so — which is why its swing looked arbitrary.</text>
+    <text x="360.0" y="396" class="xs t-hi" text-anchor="middle">Separable Smith assumes “lit” and “visible” are independent. They share a height field. Measured 1.715× apart at grazing.</text>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 5.</span>
+      The second term, and it is a CONSEQUENCE rather than a correction: once you have said &#8220;landscape&#8221;, you have said &#8220;some of it is hidden&#8221;. On the left, a grazing light reaches only <strong>10 of 46</strong> facets; the rest are in each other&#8217;s shadow. On the right, Smith&#8217;s G&#8321; against angle &#8212; 1 looking straight down, falling toward 0 at grazing, and falling faster the rougher the surface. <strong>This is the term Lesson 6.2 was missing</strong> when it measured a 5.36&#215; view-angle swing it could not explain: at 75&#176; a near-smooth surface still shows 0.9920 of itself and a fully rough one only 0.4112. The effect was always real; what it lacked was a reason.
+    </figcaption>
+  </figure>
+
+
+  <p>
+    Smith's formulation is the standard one, and its idea is that the fraction of the surface
+    visible from a direction can be derived from the same slope distribution that produced
+    <em>D</em> — which is what makes it a consequence rather than a second model. For GGX the
+    result is exact and compact:
+  </p>
+
+  <div class="eq">
+    \[ G_1(\mathbf{x}) = \frac{2 (\mathbf{n}\cdot\mathbf{x})}
+       {(\mathbf{n}\cdot\mathbf{x}) + \sqrt{\alpha^2 + (1-\alpha^2)(\mathbf{n}\cdot\mathbf{x})^2}} \]
+  </div>
+
+  <p class="eq-plain">
+    In prose: twice the cosine, divided by the cosine plus the square root of (α² plus (1−α²) times
+    the cosine squared).
+  </p>
+
+  <p>
+    It is 1 looking straight down — nothing hides from directly above — and falls toward 0 at
+    grazing incidence. <strong>How fast it falls is entirely a question of roughness</strong>, and
+    that is the whole content of the term:
+  </p>
+
+  <div class="worked">
+    <span class="label">Worked example — the term 6.2 was missing</span>
+    <p>At <strong>75° from the normal</strong>, measured in <code>verify_63</code> §D:</p>
+    <p class="mono">roughness 0.22 → G₁ = 0.9920<br>
+                    roughness 1.00 → G₁ = 0.4112</p>
+    <p>A near-smooth surface still shows you 99% of itself at a glancing angle; a fully rough one
+       shows you 41%. <strong>That is what Lesson 6.2's unexplained 5.36× view-angle swing
+       was.</strong> A rough surface genuinely does hide more of itself as you move round to the
+       side — but Blinn-Phong has no term that can say so, so its own swing came out of the lobe's
+       geometry by accident, in an amount nobody chose and no parameter controls.</p>
+    <p>Note what changed: the effect is still there, and it is still large. It has stopped being
+       arbitrary.</p>
+  </div>
+
+  <h3>7.1 The assumption in the multiplication</h3>
+
+  <p>
+    The obvious way to combine the two is to multiply: mask for the light, then mask for the eye.
+    <code>smith_g_separable</code> does exactly that, and its name is a warning label.
+  </p>
+
+  <p>
+    Multiplying two probabilities assumes they are <strong>independent</strong> — that whether a
+    facet is lit tells you nothing about whether it is visible. That is plainly false: both depend
+    on the facet's height in the <em>same</em> landscape, so a facet down in a valley tends to be
+    hidden from both directions at once, and the separable form counts it as hidden twice.
+  </p>
+
+  <p>
+    Heitz's height-correlated form resolves the two together over the shared height distribution.
+    The usual presentation treats the choice as a matter of taste. <code>verify_63</code> §D
+    measures it instead:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead>
+      <tr><th>α</th><th>both directions at</th><th>separable</th><th>height-correlated</th><th>ratio</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>0.1</td><td>20°</td><td>0.9993</td><td>0.9993</td><td>1.000</td></tr>
+      <tr><td>0.4</td><td>60°</td><td>0.8141</td><td>0.8220</td><td>1.010</td></tr>
+      <tr><td>0.8</td><td>60°</td><td>0.5451</td><td>0.5852</td><td>1.074</td></tr>
+      <tr><td>0.8</td><td>80°</td><td>0.1255</td><td>0.2152</td><td><strong>1.715</strong></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    Identical to four decimals on smooth surfaces and at steep angles — and <strong>1.715×
+    apart</strong> on a rough surface at grazing incidence, where the separable form throws away
+    nearly half the light. Rough materials seen at glancing angles are sunsets, wet roads, worn
+    metal and the rim of every object in every scene. "Either is fine" would have been a
+    comfortable sentence to write, and measuring it made it an untrue one.
+  </p>
+
+  <!-- =================================================================
+       8 — THE ENERGY BUDGET
+       ================================================================= -->
+  <h2 id="energy"><span class="num">8</span>The Energy Budget</h2>
+
+  <p>
+    Lesson 6.2 built a hemisphere integrator to answer "does this model conserve energy?" as a
+    number. Point it at the new machinery — and point it at the <em>same</em> integrator, character
+    for character, because a test rewritten for each new subject is a test of the test:
+  </p>
+
+  <div class="eq">
+    \[ R(\mathbf{v}) = \int_{\Omega} \frac{D\,G}{4(\mathbf{n}\cdot\mathbf{l})(\mathbf{n}\cdot\mathbf{v})}
+       \cos\theta \, d\omega \]
+  </div>
+
+  <p class="eq-plain">
+    In prose: the directional-hemispherical reflectance of the specular microfacet BRDF — D times
+    G, over four times the two cosines — with Fresnel set to 1, so nothing is absorbed and any
+    shortfall is light the model itself loses. (The <em>4</em> in the denominator is a Jacobian
+    from changing variables between the light direction and the halfway vector; Lesson 6.4 derives
+    it, because it belongs with the assembly rather than with the parts.)
+  </p>
+
+    <figure class="dia bleed">
+    <svg viewBox="0 0 720 420" role="img" aria-labelledby="l63f6-t l63f6-d">
+      <title id="l63f6-t">The microfacet model's energy budget</title>
+      <desc id="l63f6-d">Directional-hemispherical reflectance of the specular microfacet BRDF with Fresnel set to 1, against roughness. It never exceeds 1, but falls to 0.3069 at full roughness because single-scattering theory loses the light that would have bounced a second time.</desc>
+      <defs>
+        <marker id="e-i-l63f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+        <marker id="e-s-l63f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+        <marker id="e-h-l63f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+        <marker id="e-b-l63f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+        <marker id="e-g-l63f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+      </defs>
+    <text x="20" y="20" class="sm" text-anchor="start">6.2’s energy test, unchanged, pointed at the new machinery. The shape of the answer is completely different.</text>
+    <text x="150" y="60" class="xs muted" text-anchor="start">R(v) for D·G / (4 n·l n·v), with F = 1:</text>
+    <line x1="470.0" y1="70" x2="470.0" y2="228" class="hi" stroke-width="1.6" stroke-dasharray="4 3"/>
+    <text x="476.0" y="60" class="xs t-hi" text-anchor="start">1.0</text>
+    <text x="140" y="92" class="xs mono muted" text-anchor="end">roughness 0.22</text>
+    <rect x="150" y="78" width="319.232" height="10" rx="2" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.55"/>
+    <rect x="150" y="90" width="312.8" height="10" rx="2" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.45"/>
+    <rect x="469.232" y="78" width="0.7679999999999865" height="10" rx="2" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.16"/>
+    <text x="496.0" y="94" class="xs mono" text-anchor="start">0.9976</text>
+    <text x="552.0" y="94" class="xs mono muted" text-anchor="start">loses 0%</text>
+    <text x="140" y="122" class="xs mono muted" text-anchor="end">roughness 0.50</text>
+    <rect x="150" y="108" width="293.056" height="10" rx="2" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.55"/>
+    <rect x="150" y="120" width="268.576" height="10" rx="2" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.45"/>
+    <rect x="443.056" y="108" width="26.944000000000017" height="10" rx="2" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.16"/>
+    <text x="496.0" y="124" class="xs mono" text-anchor="start">0.9158</text>
+    <text x="552.0" y="124" class="xs mono muted" text-anchor="start">loses 8%</text>
+    <text x="140" y="152" class="xs mono muted" text-anchor="end">roughness 0.71</text>
+    <rect x="150" y="138" width="218.81599999999997" height="10" rx="2" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.55"/>
+    <rect x="150" y="150" width="243.2" height="10" rx="2" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.45"/>
+    <rect x="368.816" y="138" width="101.18400000000001" height="10" rx="2" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.16"/>
+    <text x="496.0" y="154" class="xs mono" text-anchor="start">0.6838</text>
+    <text x="552.0" y="154" class="xs mono t-bad" text-anchor="start">loses 32%</text>
+    <text x="140" y="182" class="xs mono muted" text-anchor="end">roughness 0.87</text>
+    <rect x="150" y="168" width="146.784" height="10" rx="2" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.55"/>
+    <rect x="150" y="180" width="215.104" height="10" rx="2" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.45"/>
+    <rect x="296.784" y="168" width="173.216" height="10" rx="2" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.16"/>
+    <text x="496.0" y="184" class="xs mono" text-anchor="start">0.4587</text>
+    <text x="552.0" y="184" class="xs mono t-bad" text-anchor="start">loses 54%</text>
+    <text x="140" y="212" class="xs mono muted" text-anchor="end">roughness 1.00</text>
+    <rect x="150" y="198" width="98.208" height="10" rx="2" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.55"/>
+    <rect x="150" y="210" width="188.99200000000002" height="10" rx="2" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.45"/>
+    <rect x="248.208" y="198" width="221.79200000000003" height="10" rx="2" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.16"/>
+    <text x="496.0" y="214" class="xs mono" text-anchor="start">0.3069</text>
+    <text x="552.0" y="214" class="xs mono t-bad" text-anchor="start">loses 69%</text>
+    <rect x="150" y="238" width="26" height="9" rx="2" fill="#5082e6" fill-opacity="0.55" stroke="#5082e6" stroke-width="1"/>
+    <text x="182" y="246" class="xs" text-anchor="start">eye at 0°</text>
+    <rect x="268" y="238" width="26" height="9" rx="2" fill="#5ac878" fill-opacity="0.45" stroke="#5ac878" stroke-width="1"/>
+    <text x="300" y="246" class="xs" text-anchor="start">eye at 75°</text>
+    <rect x="24" y="302" width="672" height="102" rx="4" class="fill-soft grid" stroke-width="1.2"/>
+    <text x="360.0" y="324" class="sm t-hi" text-anchor="middle">It NEVER exceeds 1 — unlike Blinn-Phong, which was over at every shininess. That is what the machinery bought.</text>
+    <text x="360.0" y="346" class="xs muted" text-anchor="middle">But look at the other end. A fully rough surface returns only 0.3069 of what arrives, and that is not rounding: this is SINGLE-scattering</text>
+    <text x="360.0" y="362" class="xs muted" text-anchor="middle">microfacet theory, which lets a facet bounce light once and then forgets it. The missing 69% hit a second facet on the way out.</text>
+    <text x="360.0" y="382" class="xs t-hi" text-anchor="middle">Rough metal rendered this way is visibly too dark, and multiple-scattering compensation is the standard fix — named in §9, not built.</text>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 6.</span>
+      Lesson 6.2&#8217;s energy test, reused character for character, pointed at the new machinery &#8212; and the shape of the answer is completely different. <strong>It never exceeds 1</strong>, at any roughness or view angle, where Blinn-Phong was over at every shininess. That is what the machinery bought, and it is guaranteed rather than hoped for, because D is a distribution and G is a fraction. But read the other end: a fully rough surface returns only <strong>0.3069</strong> of what arrives with Fresnel set to 1 &#8212; a surface that absorbs nothing. The pink is light the MODEL loses, because single-scattering theory lets a facet bounce light once and then forgets it. The missing 69% hit a second facet on the way out. That is why rough metal renders dark, in every engine that has not bought it back.
+    </figcaption>
+  </figure>
+
+
+  <p>
+    <strong>The first result is the one this whole lesson was for.</strong> It never exceeds 1.
+    Not at any roughness, not at any view angle. Compare Lesson 6.2's table, where Blinn-Phong went
+    over at <em>every</em> shininess — 1.1386 at 32, 1.7333 at 2. The model can no longer emit more
+    light than arrives, and it cannot because <em>D</em> is a distribution and <em>G</em> is a
+    fraction, which are properties we can check rather than hope for.
+  </p>
+
+  <p>
+    <strong>The second result is a surprise, and it is large.</strong> Read the other end of the
+    table:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead>
+      <tr><th>roughness</th><th>R(v), eye at 0°</th><th>light lost</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>0.22</td><td>0.9976</td><td>0.2%</td></tr>
+      <tr><td>0.50</td><td>0.9158</td><td>8%</td></tr>
+      <tr><td>0.71</td><td>0.6838</td><td>32%</td></tr>
+      <tr><td>0.87</td><td>0.4587</td><td>54%</td></tr>
+      <tr><td>1.00</td><td>0.3069</td><td><strong>69%</strong></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    A fully rough surface returns <strong>30.7%</strong> of the light that hits it, with Fresnel
+    set to 1 — with, that is, a surface that absorbs nothing. Where did the other 69% go?
+  </p>
+
+  <div class="callout warn">
+    <span class="label">Single scattering forgets the second bounce</span>
+    <p><em>G</em> removes the light that hits a facet the eye cannot see. It does not then ask what
+       happened to that light — and what happened is that it hit <em>another facet</em> and
+       carried on. The model lets light bounce once and then loses interest in it.</p>
+    <p>On a smooth surface there is barely a second bounce to miss, which is why the error is 0.2%
+       at roughness 0.22. On a rough one, most of the light that leaves has bounced several times,
+       which is why it is 69% at roughness 1.0.</p>
+    <p>The visible symptom is specific and you will recognise it once named: <strong>rough metal
+       rendered this way is too dark</strong>, and it gets darker the rougher it is, in a way no
+       amount of turning the light up fixes because it is a fraction rather than an offset.</p>
+  </div>
+
+  <p>
+    This is not a bug in the implementation and it is not quadrature error. It is what
+    <em>single-scattering</em> microfacet theory <em>is</em>, and every engine that ships GGX
+    ships this deficit unless it also ships a multiple-scattering compensation term. §11 says what
+    those look like and why this course does not build one.
+  </p>
+
+  <p>
+    It is worth noticing what just happened, though: a model that is honest enough to be measured
+    told us the size of its own remaining error. Blinn-Phong could not have done that, because
+    there was no quantity to compare against.
+  </p>
+
+  <!-- =================================================================
+       9 — THE TEST FOUND A BUG IN float
+       ================================================================= -->
+  <h2 id="float"><span class="num">9</span>The Test Found a Bug in <code>float</code></h2>
+
+  <p>
+    §3 claimed that having a test whose expected answer is exactly <strong>1</strong> is worth more
+    than having a picture somebody likes. Here is that claim cashing out, on the first run.
+  </p>
+
+  <p>
+    The §A table, before any of the implementation below was written, looked like this — with
+    tolerances set from the double-precision probe, which had reported clean 1.0000000s:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">verify_63 §A — the first run</span></figcaption>
+<pre><code class="lang-bash">      roughness  Blinn          Beckmann       GGX
+      0.10       1.0000002      0.9999710      0.9998170
+      0.25       0.9999999      0.9999998      0.9999998
+      …
+  [FAIL] ALL THREE distributions integrate to 1 — worst error 1.83e-04 (GGX at roughness 0.10)</code></pre>
+  </figure>
+
+  <p>
+    The obvious response is to loosen the tolerance: 1.8e−4 is small, the picture would be fine,
+    and the number is smallest exactly where the surface is smooth and nobody is looking closely.
+    <strong>Do not do this.</strong> The value of a test with a known answer is entirely in
+    believing the known answer, and a tolerance widened to admit a failure is a test deleted
+    slowly.
+  </p>
+
+  <p>
+    The right first question is <em>which</em> error this is. There are only two candidates —
+    the quadrature, or the arithmetic — and they are trivially distinguishable:
+  </p>
+
+  <div class="callout note">
+    <span class="label">Quadrature error shrinks when the grid refines. Arithmetic error does not.</span>
+    <p>Refining the integration 5× moved the answer from 0.9998169 to 0.9998154 — nothing.
+       Meanwhile the identical formula evaluated in <code>double</code>, on the identical grid,
+       gave 1.0000000.</p>
+    <p>Two runs, and the diagnosis is complete: <strong>the error is in <code>float</code></strong>,
+       and it is in the formula rather than in the integrator.</p>
+  </div>
+
+  <p>
+    Look again at GGX's denominator as every reference prints it:
+  </p>
+
+  <div class="eq">
+    \[ d = \cos^2\theta_h \left(\alpha^2 - 1\right) + 1 \]
+  </div>
+
+  <p>
+    Near the peak, <em>cos²θ<sub>h</sub></em> is very close to 1 and <em>(α²−1)</em> is very close
+    to −1. So this computes the difference of two numbers of size 1 that very nearly agree — which
+    is <strong>catastrophic cancellation</strong>, the classic way to destroy precision. A
+    <code>float</code> holds about seven significant digits, so a quantity of size 1 carries an
+    absolute error around 1e−7. At α = 0.01 the true value of <em>d</em> at the peak is
+    <strong>1e−4</strong>. A thousandth of it is noise before we start. Then it is
+    <em>squared</em>, which doubles the relative error.
+  </p>
+
+  <p>
+    The fix is one line of algebra and no extra operations:
+  </p>
+
+  <div class="eq">
+    \[ d = \cos^2\theta_h \left(\alpha^2 - 1\right) + 1
+         = \left(1 - \cos^2\theta_h\right) + \alpha^2\cos^2\theta_h
+         = (1 - c)(1 + c) + \alpha^2 c^2 \]
+  </div>
+
+  <p class="eq-plain">
+    In prose: the same expression, rearranged so the subtraction is (1 − c)(1 + c) rather than a
+    near-cancelling sum.
+  </p>
+
+  <div class="callout cpp">
+    <span class="label">Why <code>(1 − c)</code> is the win — Sterbenz's lemma</span>
+    <p>For any two floating-point numbers <em>a</em> and <em>b</em> with
+       <em>b</em>/2 ≤ <em>a</em> ≤ 2<em>b</em>, the subtraction <em>a</em> − <em>b</em> is computed
+       <strong>exactly</strong>, with no rounding at all, in any IEEE format. It is one of the very
+       few operations that is free of error, and it is free precisely in the case that looks most
+       dangerous.</p>
+    <p>Here <em>a</em> = 1 and <em>b</em> = <em>c</em>, so the condition is <em>c</em> ≥ 0.5 — which
+       covers the entire peak region, exactly where the old form was worst. The near-cancellation
+       is not avoided; it is made <em>exact</em>.</p>
+    <p>The habit worth keeping: when a formula subtracts two nearly-equal quantities, look for an
+       algebraically identical form that subtracts them in one operation instead of accumulating
+       them through several.</p>
+  </div>
+
+  <div class="worked">
+    <span class="label">Worked example — what the rearrangement is worth</span>
+    <p>Both forms, integrated against the identity, in <code>float</code>:</p>
+    <p class="mono">α = 0.001 &nbsp; textbook 0.9891063 &nbsp; rearranged 1.0023035<br>
+                    α = 0.010 &nbsp; textbook 0.9998169 &nbsp; rearranged 1.0000004<br>
+                    α = 0.050 &nbsp; textbook 1.0000006 &nbsp; rearranged 1.0000000</p>
+    <p>At mirror-like roughness the textbook form <strong>loses 1.1% of the model's energy to
+       rounding alone</strong>. At α = 0.01 the rearrangement is a <strong>450× improvement</strong>
+       in the error. Above α ≈ 0.05 there is nothing in it, which is why this is invisible in
+       ordinary scenes and shows up on chrome and still water.</p>
+    <p><code>verify_63</code> §A asserts the comparison directly — computing the textbook form
+       inline and requiring ours to beat it by 4× — because the rearranged version looks like a
+       pointless shuffle, and the next person to tidy it back should be told by a failing test
+       rather than by a code review.</p>
+  </div>
+
+  <!-- =================================================================
+       10 — IMPLEMENTATION
+       ================================================================= -->
+  <h2 id="impl"><span class="num">10</span>Implementation</h2>
+
+  <p>
+    One new header, <code>engine/gfx/microfacet.hpp</code>, header-only like
+    <code>light.hpp</code> — so the public header count goes 56 → 57 and
+    <code>engine/CMakeLists.txt</code> does not move.
+  </p>
+
+  <h3>10.1 Roughness, α, and a remap that is a choice</h3>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/include/engine/gfx/microfacet.hpp — new</span></figcaption>
+<pre><code class="lang-cpp">[[nodiscard]] inline float alpha_from_roughness(float roughness)
+{
+    const float r = std::clamp(roughness, 0.0f, 1.0f);
+    return std::max(k_min_alpha, r * r);
+}</code></pre>
+  </figure>
+
+  <p>
+    <code>α = roughness²</code> is <strong>Disney's remap, and it is a convention rather than
+    physics.</strong> The distributions are written in α, which is the RMS slope — a real quantity
+    you could measure. But α is a terrible thing to put on a slider: almost all the visible change
+    happens in its bottom fifth, so four fifths of the travel does nothing. Squaring a [0,1]
+    parameter pushes resolution toward the smooth end where the eye is.
+  </p>
+
+  <p>
+    That is the same argument Lesson 6.1 made about sRGB spending codes where the eye is, arriving
+    in a completely different place — and it is worth flagging that a roughness value copied from
+    a renderer that squares differently <em>will not match</em>. This is a real interoperability
+    trap and it is entirely conventional.
+  </p>
+
+  <h3>10.2 The floor on α, which is a lie with a physical reading</h3>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/include/engine/gfx/microfacet.hpp — new</span></figcaption>
+<pre><code class="lang-cpp">inline constexpr float k_min_alpha = 1.0e-3f;</code></pre>
+  </figure>
+
+  <p>
+    A perfectly smooth surface is not a small number — it is a <strong>delta function</strong>.
+    Every facet faces exactly <strong>n</strong>, so <em>D</em> is infinite at
+    <strong>h</strong> = <strong>n</strong> and zero everywhere else. That is correct physics and
+    unrepresentable: the denominator goes to zero, the answer arrives as <code>inf</code>, and the
+    first multiplication by a zero turns it into <code>NaN</code>.
+  </p>
+
+  <p>
+    Clamping is standard, and the honest framing is that it is a lie which happens to be closer to
+    the truth than the alternative: no real surface is smooth at the scale of a light wavelength,
+    so a floor on roughness is more physical than zero is. At 1e−3 the peak of GGX is
+    <code>1/(πα²)</code> = 318,310 — large, and finite.
+  </p>
+
+  <h3>10.3 The three distributions behind one enum</h3>
+
+  <p>
+    <code>ndf_model</code> is <strong>pipeline state, not a material parameter</strong> — the same
+    call Lesson 3.7 made for <code>specular_model</code>, for the same reason. A real engine bakes
+    one choice into a shader; it is a runtime knob here so the three can be compared and the
+    differences <em>measured</em> rather than asserted, which is what §5 and §6 did with it.
+  </p>
+
+  <p>
+    Blinn stays in, and not out of sentiment: showing that <code>cos<sup>s</sup></code> satisfies
+    the same identity as the other two is the whole argument of §4, and an argument you can run is
+    worth more than one you can read.
+  </p>
+
+  <h3>10.4 Two geometry terms, because the choice was measurable</h3>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/include/engine/gfx/microfacet.hpp — new</span></figcaption>
+<pre><code class="lang-cpp">[[nodiscard]] inline float smith_g(float n_dot_l, float n_dot_v, float alpha)
+{
+    if (n_dot_l &lt;= 0.0f || n_dot_v &lt;= 0.0f) { return 0.0f; }
+    const float a = std::max(k_min_alpha, alpha);
+    const float a2 = a * a;
+    const float lv = n_dot_l * std::sqrt(a2 + (1.0f - a2) * n_dot_v * n_dot_v);
+    const float ll = n_dot_v * std::sqrt(a2 + (1.0f - a2) * n_dot_l * n_dot_l);
+    return 2.0f * n_dot_l * n_dot_v / (lv + ll);
+}</code></pre>
+  </figure>
+
+  <p>
+    The height-correlated form is the default and <code>smith_g_separable</code> is kept beside it,
+    named for its assumption. Keeping both is only worth the lines because §7 <em>measured</em> the
+    gap at 1.715× — without that number the second function would be ceremony, and with it the
+    default is a decision rather than a preference.
+  </p>
+
+  <h3>10.5 Nothing is wired in, and that is the design</h3>
+
+  <p>
+    <code>shade()</code> is untouched. <code>scene.frag.hlsl</code> is untouched. The only edit
+    outside the new header is a comment in <code>light.hpp</code> pointing at it and recording the
+    17× measurement next to the constant it is about.
+  </p>
+
+  <div class="callout note">
+    <span class="label">Why the parts ship before the assembly</span>
+    <p>A microfacet BRDF is <em>D</em>, <em>G</em> and <em>F</em> over a denominator, and Fresnel
+       is the term that couples the diffuse and specular lobes — which is the thing §1's 1.1386
+       actually needs. Shipping <em>D</em> and <em>G</em> live would leave the renderer running a
+       model that is neither the old one nor the new one for the length of a lesson: worse
+       pictures, and a golden image that has to be re-baselined twice.</p>
+    <p>So 6.3 builds the parts and tests each one against a property it must satisfy on its own.
+       6.4 assembles, derives the <em>4(n·l)(n·v)</em> denominator, adds Fresnel, and replaces
+       <code>shade()</code>'s specular half. <strong>The golden survives a fourteenth lesson here
+       and will certainly not survive 6.4</strong> — which is exactly the right place for it to
+       break, because that is the lesson that changes the picture on purpose.</p>
+  </div>
+
+  <!-- =================================================================
+       11 — WHAT THIS LESSON DOES NOT DO
+       ================================================================= -->
+  <h2 id="notdone"><span class="num">11</span>What This Lesson Does Not Do</h2>
+
+  <p>
+    <strong>It does not compensate for multiple scattering.</strong> §8 measured the deficit at
+    69% for a fully rough surface, and the standard fixes — Kulla–Conty's tabulated energy
+    compensation, or Turquin's cheaper analytic fit — both work by measuring <em>R</em>(v) offline
+    and adding back a lobe carrying the missing energy. Both are a lesson's worth of work and both
+    need the assembled BRDF from 6.4 to compensate. Named here so the darkness of rough metal is a
+    known limitation rather than a mystery.
+  </p>
+
+  <p>
+    <strong>It does not do anisotropy.</strong> Brushed metal, hair and vinyl have slope
+    distributions that are wider in one surface direction than the other, which needs two α values
+    and a tangent frame to orient them. The tangent frame arrives in Lesson 6.7 for normal mapping;
+    anisotropic GGX is a natural exercise once it exists.
+  </p>
+
+  <p>
+    <strong>It does not use the Smith height-correlated <em>visibility</em> form.</strong> Real
+    shaders fold the <code>4(n·l)(n·v)</code> denominator into <em>G</em> and evaluate
+    <em>V = G/(4(n·l)(n·v))</em> as one expression, which avoids a division by two numbers that
+    both go to zero at grazing angles. That is an assembly concern, so it is 6.4's.
+  </p>
+
+  <p>
+    <strong>It does not model the facets' arrangement.</strong> The distribution says how many
+    face each way and nothing about <em>where</em> they are, which is why this model produces a
+    smooth highlight and real snow, car paint and the sea produce glints. Glinty appearance models
+    are an active research area and well outside this course.
+  </p>
+
+  <!-- =================================================================
+       12 — LISTINGS
+       ================================================================= -->
+  <h2 id="listings"><span class="num">12</span>Complete Code Listings</h2>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead>
+      <tr><th>Path</th><th>State</th><th>Purpose</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>engine/include/engine/gfx/microfacet.hpp</code></td><td>new</td>
+          <td>the roughness remap, three NDFs, and two forms of the Smith geometry term</td></tr>
+      <tr><td><code>engine/include/engine/gfx/light.hpp</code></td><td>modified</td>
+          <td>a pointer to the new header, and the 17× measurement recorded beside the constant it
+              is about</td></tr>
+      <tr><td><code>scratch/verify_63.cpp</code></td><td>new</td>
+          <td>27 checks in seven sections, including 6.2's hemisphere integrator reused character
+              for character</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+    <figure class="listing">
+    <figcaption>
+      <span class="path">engine/include/engine/gfx/microfacet.hpp</span>
+      <span class="tag new">new</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// engine/include/engine/gfx/microfacet.hpp — what a surface actually is.
+//
+// Lesson 6.3. Everything in `light.hpp` describes a surface as a smooth plane with
+// a `shininess` exponent, and Lesson 6.2 measured what that costs: the same surface
+// reflects 0.1386 of the arriving light toward an eye 37 degrees off the normal and
+// 0.0259 toward one at 75, a swing of 5.36x that nobody asked for and no parameter
+// controls — and a white surface with a white highlight reflects 1.1386 of what
+// hits it, because the diffuse and specular lobes are added with no coupling.
+//
+// Those are symptoms of one cause: THE MODEL HAS NO STORY ABOUT WHAT A SURFACE IS.
+// `shininess` is a number that makes the highlight the right size. It is not a
+// measurement of anything, it is not comparable between Phong and Blinn (3.7 fitted
+// the ratio at 4.38x falling to 4.01x), and there is no experiment you could do on
+// a real material to find out what its shininess is.
+//
+// MICROFACET THEORY REPLACES THE EXPONENT WITH A STATISTICAL CLAIM. A surface is a
+// landscape of microscopic mirrors, far smaller than a pixel and far larger than a
+// wavelength. Each is a perfect mirror, so each reflects light toward the eye only
+// if it happens to face the halfway vector `h` (Lesson 3.7 already derived that
+// `h` is &quot;the normal this surface would need&quot;; that sentence is now literal). What
+// a rough surface looks like is therefore decided by ONE question:
+//
+//     what fraction of the microfacets face this way?
+//
+// That is a probability distribution over normals, and it is the NDF below. It is
+// a distribution rather than a fudge, which means it must integrate to one, which
+// means it can be CHECKED — verify_63 §A does exactly that for all three models.
+//
+// WHAT THIS HEADER IS NOT, YET. Nothing here is wired into `shade()`, and that is
+// deliberate rather than unfinished: a microfacet BRDF is D, G and F over a
+// denominator, and Fresnel is what couples the diffuse and specular lobes back
+// together (Lesson 6.4). Shipping two thirds of it live would leave the renderer
+// running a model that is neither the old one nor the new one for a lesson. So
+// 6.3 builds the parts and tests them; 6.4 assembles and replaces.
+
+#pragma once
+
+#include &lt;algorithm&gt;
+#include &lt;cmath&gt;
+#include &lt;numbers&gt;
+
+namespace engine {
+
+/// The smallest roughness the model is allowed to see.
+///
+/// **A perfectly smooth surface is a delta function**, not a small number: every
+/// microfacet faces exactly `n`, so `D` is infinite at `h == n` and zero
+/// everywhere else. That is the correct physics and it is unrepresentable in
+/// floating point — `ndf()` divides by a quantity that goes to zero, and the
+/// answer arrives as `inf` and then as `NaN` the moment it meets a zero.
+///
+/// Clamping is the standard answer, and it is worth being clear that it is a
+/// *lie with a physical reading*: no real surface is smooth at the scale of a
+/// light wavelength, so a floor on roughness is closer to the truth than zero is.
+/// The value is chosen so that `alpha*alpha` stays well clear of `float`&#x27;s
+/// denormals: at 1e-3 the peak of GGX is 1/(pi*alpha^2) = 318,310, which is large
+/// and finite.
+inline constexpr float k_min_alpha = 1.0e-3f;
+
+/// Which distribution of microfacet normals to use.
+///
+/// **This is pipeline state, not a material parameter** — the same call 3.7 made
+/// for `specular_model`, and for the same reason. A real engine bakes one choice
+/// into a shader; it is a runtime knob here so the three can be rendered side by
+/// side and the differences measured (Lesson 6.3 §5) rather than asserted.
+enum class ndf_model
+{
+    /// Blinn-Phong&#x27;s `cos^s` lobe — **which is a microfacet distribution**, and
+    /// always was. Lesson 3.7 introduced it as a shape that looked right and said
+    /// so; all it has ever been missing is its normalising constant. Kept because
+    /// that continuity is worth being able to see, and because it is the cheapest
+    /// of the three.
+    blinn,
+
+    /// Beckmann&#x27;s: a Gaussian on the microfacet *slopes*. The distribution that
+    /// physical-optics derivations arrive at, and the one against which &quot;does this
+    /// look like a real surface?&quot; was argued for thirty years.
+    beckmann,
+
+    /// GGX / Trowbridge-Reitz. Same peak as Beckmann for the same roughness, and a
+    /// **far heavier tail** — measured at 456x Beckmann&#x27;s value 45 degrees off the
+    /// peak (verify_63 §C). That tail is the whole reason it won: real surfaces
+    /// have a glow around the highlight that Beckmann cuts off abruptly.
+    ggx
+};
+
+/// Perceptual roughness in [0,1] to the `alpha` the distributions actually use.
+///
+/// **`alpha = roughness^2`, and this is a CHOICE, not a derivation.** The
+/// distributions are written in terms of `alpha`, which is the RMS slope of the
+/// microfacet field — a physical quantity. But `alpha` is a terrible thing to hand
+/// an artist: almost all the visible change happens in its bottom fifth, so a
+/// slider in `alpha` spends four fifths of its travel doing nothing. Squaring a
+/// [0,1] parameter pushes resolution toward the smooth end where the eye is, which
+/// is the same argument Lesson 6.1 made about sRGB spending codes where the eye is.
+///
+/// It is Disney&#x27;s remap, it is what UE4 and Filament ship, and it is worth knowing
+/// that it is a convention rather than physics: a roughness value copied from one
+/// renderer into another that squares it differently will not match.
+[[nodiscard]] inline float alpha_from_roughness(float roughness)
+{
+    const float r = std::clamp(roughness, 0.0f, 1.0f);
+    return std::max(k_min_alpha, r * r);
+}
+
+/// The inverse, for reading a stored `alpha` back into artist units.
+[[nodiscard]] inline float roughness_from_alpha(float alpha)
+{
+    return std::sqrt(std::max(0.0f, alpha));
+}
+
+/// The Blinn exponent whose distribution PEAKS at the same height as GGX&#x27;s.
+///
+/// **The word &quot;peaks&quot; is doing all the work here, and the folklore leaves it
+/// out.** Both distributions are largest at `h == n`; setting those two values
+/// equal gives `(s + 2) / 2pi = 1 / (pi * alpha^2)`, hence `s = 2/alpha^2 - 2`.
+/// That is the mapping everyone quotes.
+///
+/// It matches the peak and nothing else. Lesson 6.3 §6 instead *fits* the exponent
+/// by minimising the difference over the whole hemisphere, and gets consistently
+/// **about 0.80x** this value (0.806 at alpha 0.1, 0.758 at 0.5) — because a lobe
+/// fit trades peak height for the tail, and GGX has a tail Blinn cannot reproduce
+/// at any exponent. Both numbers are right; they are answers to different
+/// questions, and quoting one without saying which is how the folklore travels.
+[[nodiscard]] inline float blinn_exponent_from_alpha(float alpha)
+{
+    const float a = std::max(k_min_alpha, alpha);
+    return 2.0f / (a * a) - 2.0f;
+}
+
+/// The reverse: what roughness a Lesson 3.7 `shininess` was asking for.
+///
+/// Useful for exactly one thing, and it is the thing this lesson needs: reading
+/// the engine&#x27;s existing materials into the new vocabulary. The demo&#x27;s default
+/// shininess of 32 turns out to mean `alpha = 0.2425`, a perceptual roughness of
+/// **0.49** — almost exactly half way, which is a reasonable thing for a default
+/// to be and was never chosen on purpose.
+[[nodiscard]] inline float alpha_from_blinn_exponent(float shininess)
+{
+    return std::max(k_min_alpha, std::sqrt(2.0f / (std::max(0.0f, shininess) + 2.0f)));
+}
+
+/// **The normal distribution function**: the fraction of microfacets facing `h`.
+///
+/// Derived in Lesson 6.3 §4. `n_dot_h` is the cosine between the surface&#x27;s
+/// macroscopic normal and the halfway vector — so this asks &quot;how much of the
+/// surface is tilted to send this light at my eye?&quot;, which is the question Lesson
+/// 3.7&#x27;s halfway vector was already a way of asking.
+///
+/// **THE DEFINING PROPERTY IS THAT IT IS A DISTRIBUTION**, and the test is not
+/// that it integrates to 1 over the hemisphere but that it does so *weighted by
+/// `cos(theta_h)`*:
+///
+///     integral over hemisphere of D(h) * cos(theta_h) dw = 1
+///
+/// The cosine is there because a microfacet tilted away presents less of its own
+/// area to the macroscopic surface — the same projected-area factor as everywhere
+/// else in this module (Lesson 6.2 §3). Read the identity the other way and it
+/// says something nicer: **the microfacets&#x27; projected areas add up to exactly the
+/// area of the flat surface they stand on.** Nothing else would make sense.
+///
+/// All three models satisfy it exactly (verify_63 §A, to 1e-6 at 200k samples),
+/// and `blinn` satisfies it only *because* of the `(s + 2) / 2pi` this function
+/// applies. The engine&#x27;s own highlight, which has shipped since 3.7 with `1/pi`
+/// instead, is therefore off by a factor of `(s + 2) / 2` — **exactly 17x at the
+/// default shininess of 32**. See Lesson 6.3 §5; it is the finding.
+///
+/// Returns 0 for a halfway vector below the surface, which is not a degenerate
+/// case to guard against but a true statement: no microfacet faces that way.
+[[nodiscard]] inline float ndf(ndf_model model, float n_dot_h, float alpha)
+{
+    if (n_dot_h &lt;= 0.0f) { return 0.0f; }
+    const float a = std::max(k_min_alpha, alpha);
+    const float c2 = n_dot_h * n_dot_h;
+
+    switch (model)
+    {
+    case ndf_model::blinn:
+    {
+        const float s = blinn_exponent_from_alpha(a);
+        return ((s + 2.0f) / (2.0f * std::numbers::pi_v&lt;float&gt;)) * std::pow(n_dot_h, s);
+    }
+    case ndf_model::beckmann:
+    {
+        // exp(-tan^2(theta_h) / alpha^2) / (pi * alpha^2 * cos^4(theta_h)).
+        // tan^2 is written from the cosine rather than via std::tan, because the
+        // cosine is what we have and a round trip through an angle would cost an
+        // acos and lose bits for nothing. `sin2` is computed the stable way — see
+        // the note on GGX below, which is where it actually bites.
+        const float sin2 = (1.0f - n_dot_h) * (1.0f + n_dot_h);
+        return std::exp(-(sin2 / c2) / (a * a))
+             / (std::numbers::pi_v&lt;float&gt; * a * a * c2 * c2);
+    }
+    case ndf_model::ggx:
+        break;
+    }
+
+    // GGX. The denominator is squared, which is the entire difference from
+    // Beckmann: a rational function has a power-law tail where an exponential has
+    // none. That is why the highlight has a glow around it.
+    //
+    // THE ALGEBRA HERE IS NOT THE TEXTBOOK&#x27;S, AND THE DIFFERENCE IS MEASURABLE.
+    // Every reference writes the denominator as
+    //
+    //     d = cos^2(theta_h) * (alpha^2 - 1) + 1
+    //
+    // which is correct, and in `float` it is a catastrophic cancellation: near the
+    // peak `cos^2` is close to 1 and `alpha^2 - 1` is close to -1, so the result is
+    // the difference of two numbers of size 1 that very nearly agree. A `float`
+    // resolves that to about 1e-7 ABSOLUTE — and at alpha = 0.01 the true value of
+    // `d` at the peak is 1e-4, so a thousandth of it is noise. Then it is squared.
+    //
+    // The identical expression, rearranged, does not cancel:
+    //
+    //     d = (1 - cos^2) + alpha^2 * cos^2 = (1 - c)(1 + c) + alpha^2 * c^2
+    //
+    // `(1 - c)` is where the win is, and the reason is **Sterbenz&#x27;s lemma**: for
+    // c in [0.5, 1], `1.0f - c` is computed with NO ROUNDING AT ALL, exactly, in
+    // any IEEE format. The whole peak region is inside that range.
+    //
+    // MEASURED, by the §A normalisation test, which is what found this:
+    //
+    //     alpha    textbook form   this form     (double, for truth)
+    //     0.001    0.9891063       1.0023035     1.0000013
+    //     0.010    0.9998169       1.0000004     1.0000000
+    //     0.050    1.0000006       1.0000000     1.0000000
+    //
+    // At mirror-like roughness the textbook form loses **1.1% of the model&#x27;s
+    // energy** to rounding, and it does not improve with a finer integration grid,
+    // because it is not a quadrature error. This is exactly the sort of thing a
+    // test whose expected answer is a round number finds and a test that compares
+    // against &quot;what it printed last time&quot; cannot.
+    const float a2 = a * a;
+    const float d = (1.0f - n_dot_h) * (1.0f + n_dot_h) + a2 * c2;
+    return a2 / (std::numbers::pi_v&lt;float&gt; * d * d);
+}
+
+/// Smith&#x27;s masking function for **one** direction: the fraction of microfacets
+/// visible from `n_dot_x` rather than hidden behind their neighbours.
+///
+/// Derived in Lesson 6.3 §7. The exact GGX form (Walter 2007), not the Schlick
+/// approximation — the approximation belongs with the rest of 6.4&#x27;s arithmetic
+/// budget, and this lesson is about knowing what is being approximated.
+///
+/// It is 1 looking straight down and falls toward 0 at grazing incidence, and how
+/// fast it falls depends entirely on roughness: at `alpha = 0.05` it is still
+/// 0.9914 at 75 degrees, and at `alpha = 1.0` it is 0.4112 there. **That is the
+/// term Lesson 6.2 was missing when it measured a 5.36x view-angle swing it could
+/// not explain** — a rough surface really does hide part of itself from you, and
+/// a model with no G has no way to say so.
+[[nodiscard]] inline float smith_g1(float n_dot_x, float alpha)
+{
+    if (n_dot_x &lt;= 0.0f) { return 0.0f; }
+    const float a2 = std::max(k_min_alpha, alpha) * std::max(k_min_alpha, alpha);
+    return 2.0f * n_dot_x
+         / (n_dot_x + std::sqrt(a2 + (1.0f - a2) * n_dot_x * n_dot_x));
+}
+
+/// The separable Smith geometry term: mask the light, then mask the eye.
+///
+/// **The assumption is stated in the name.** Multiplying the two G1s assumes that
+/// whether a microfacet is lit and whether it is visible are independent events.
+/// They are not: both depend on the facet&#x27;s height in the same landscape, so a
+/// facet down in a valley tends to be hidden from *both* directions at once, and
+/// treating the two as independent counts that facet as hidden twice.
+///
+/// Kept, named, and measured rather than quietly replaced — see `smith_g`.
+[[nodiscard]] inline float smith_g_separable(float n_dot_l, float n_dot_v, float alpha)
+{
+    return smith_g1(n_dot_l, alpha) * smith_g1(n_dot_v, alpha);
+}
+
+/// **Height-correlated Smith** (Heitz 2014), and the default, because the
+/// correlation is not a small effect.
+///
+/// Same idea as the separable form with the independence assumption dropped: the
+/// two maskings are resolved together, over the shared height distribution.
+///
+/// Measured against the separable version (verify_63 §D): identical to four
+/// decimals on smooth surfaces and at steep angles, and **1.715x apart at
+/// `alpha = 0.8` with both directions 80 degrees off the normal** — 0.1255 against
+/// 0.2152. The separable form loses that light. Grazing angles on rough surfaces
+/// are exactly where sunset lighting, wet roads and worn metal live, so this is
+/// not a corner case, and &quot;either is fine&quot; would have been a comfortable thing to
+/// write and wrong.
+[[nodiscard]] inline float smith_g(float n_dot_l, float n_dot_v, float alpha)
+{
+    if (n_dot_l &lt;= 0.0f || n_dot_v &lt;= 0.0f) { return 0.0f; }
+    const float a = std::max(k_min_alpha, alpha);
+    const float a2 = a * a;
+    const float lv = n_dot_l * std::sqrt(a2 + (1.0f - a2) * n_dot_v * n_dot_v);
+    const float ll = n_dot_v * std::sqrt(a2 + (1.0f - a2) * n_dot_l * n_dot_l);
+    return 2.0f * n_dot_l * n_dot_v / (lv + ll);
+}
+
+} // namespace engine
+</code></pre>
+  </figure>
+
+
+    <figure class="listing">
+    <figcaption>
+      <span class="path">scratch/verify_63.cpp</span>
+      <span class="tag new">new</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// scratch/verify_63.cpp — Lesson 6.3&#x27;s harness: what a surface is.
+//
+//   §A  THE DEFINING PROPERTY — every NDF is a probability density
+//   §B  Blinn-Phong IS a microfacet distribution, and the engine&#x27;s constant is
+//       off by exactly (s + 2) / 2
+//   §C  the tail, which is the whole reason GGX won
+//   §D  the geometry term, and the independence assumption that is not free
+//   §E  the exponent map is a PEAK match — fitted against folklore
+//   §F  6.2&#x27;S ENERGY TEST, REUSED UNCHANGED, pointed at the new machinery
+//   §G  the golden
+//
+// §A IS THE ONE THAT MATTERS. A microfacet distribution is not a curve chosen to
+// look right — it is a statement about what fraction of a surface faces each way,
+// so the fractions must add to one. That makes it CHECKABLE, which `shininess`
+// never was, and it is the whole difference between a model and a fudge.
+//
+// §F REUSES LESSON 6.2&#x27;s HEMISPHERE INTEGRATOR CHARACTER FOR CHARACTER, and that
+// is deliberate. A test rewritten for each new BRDF is not a test of the new BRDF;
+// it is a test of the new test. The one below is 6.2&#x27;s, unedited, and every BRDF
+// for the rest of this course goes through it in the same shape.
+//
+// THIS HARNESS NEEDS NO GPU, like 6.2&#x27;s. Nothing here is wired into a shader yet.
+//
+// Build and run:  sh scratch/build_verify_63.sh
+
+#include &lt;engine/core/assert.hpp&gt;
+#include &lt;engine/gfx/colour.hpp&gt;
+#include &lt;engine/gfx/light.hpp&gt;
+#include &lt;engine/gfx/microfacet.hpp&gt;
+#include &lt;engine/math/vec3.hpp&gt;
+
+#include &quot;../demos/common/demo_scene.hpp&quot;
+
+#include &lt;SDL3/SDL.h&gt;
+
+#include &lt;algorithm&gt;
+#include &lt;cmath&gt;
+#include &lt;cstdarg&gt;
+#include &lt;cstdio&gt;
+#include &lt;numbers&gt;
+#include &lt;string&gt;
+
+namespace {
+
+int g_checks = 0;
+int g_failures = 0;
+
+void check(bool ok, const char* what)
+{
+    ++g_checks;
+    if (!ok) { ++g_failures; }
+    std::printf(&quot;  [%s] %s\n&quot;, ok ? &quot;PASS&quot; : &quot;FAIL&quot;, what);
+}
+
+void checkf(bool ok, const char* fmt, ...)
+{
+    char line[640];
+    va_list args;
+    va_start(args, fmt);
+    SDL_vsnprintf(line, sizeof(line), fmt, args);
+    va_end(args);
+    check(ok, line);
+}
+
+[[nodiscard]] std::string read_file(const char* path)
+{
+    std::size_t size = 0;
+    void* data = SDL_LoadFile(path, &amp;size);
+    if (data == nullptr) { return {}; }
+    std::string out(static_cast&lt;const char*&gt;(data), size);
+    SDL_free(data);
+    return out;
+}
+
+/// Integrate `f(l)` times the cosine over the upper hemisphere about +Y.
+///
+/// **This is Lesson 6.2 §C&#x27;s integrator, character for character.** It is not
+/// copied out of laziness: reusing the identical test across BRDFs is what makes
+/// the results comparable, and rewriting the instrument for each new subject is
+/// how two models come to be measured on two different scales without anyone
+/// noticing.
+template &lt;typename F&gt;
+double integrate_hemisphere(F&amp;&amp; f, int steps)
+{
+    const double d_theta = (std::numbers::pi / 2.0) / steps;
+    const double d_phi   = (2.0 * std::numbers::pi) / (2 * steps);
+    double total = 0.0;
+    for (int i = 0; i &lt; steps; ++i)
+    {
+        const double theta = (static_cast&lt;double&gt;(i) + 0.5) * d_theta;
+        const double s = std::sin(theta);
+        const double c = std::cos(theta);
+        for (int j = 0; j &lt; 2 * steps; ++j)
+        {
+            const double phi = (static_cast&lt;double&gt;(j) + 0.5) * d_phi;
+            const engine::vec3 l{static_cast&lt;float&gt;(s * std::cos(phi)),
+                                 static_cast&lt;float&gt;(c),
+                                 static_cast&lt;float&gt;(s * std::sin(phi))};
+            total += f(l) * c * s * d_theta * d_phi;
+        }
+    }
+    return total;
+}
+
+constexpr engine::vec3 k_up{0.0f, 1.0f, 0.0f};
+
+/// The NDF&#x27;s own normalisation integral. Azimuthally symmetric, so the phi
+/// integral is just a factor of 2*pi and one dimension is enough — which also
+/// buys the sample count to make the answer mean something.
+double integrate_ndf(engine::ndf_model model, float alpha, int steps)
+{
+    const double d_theta = (std::numbers::pi / 2.0) / steps;
+    double total = 0.0;
+    for (int i = 0; i &lt; steps; ++i)
+    {
+        const double theta = (static_cast&lt;double&gt;(i) + 0.5) * d_theta;
+        const double c = std::cos(theta);
+        total += static_cast&lt;double&gt;(engine::ndf(model, static_cast&lt;float&gt;(c), alpha))
+               * c * std::sin(theta) * d_theta;
+    }
+    return total * 2.0 * std::numbers::pi;
+}
+
+const char* name_of(engine::ndf_model m)
+{
+    switch (m)
+    {
+    case engine::ndf_model::blinn:    return &quot;Blinn&quot;;
+    case engine::ndf_model::beckmann: return &quot;Beckmann&quot;;
+    case engine::ndf_model::ggx:      break;
+    }
+    return &quot;GGX&quot;;
+}
+
+// ===========================================================================
+//  §A — THE DEFINING PROPERTY
+// ===========================================================================
+
+void section_a_distribution()
+{
+    std::printf(&quot;\n=== A. An NDF is a probability density ===\n&quot;);
+    std::printf(&quot;  integral of D(h) cos(theta_h) dw, which must be 1:\n&quot;);
+    std::printf(&quot;      %-10s %-14s %-14s %-14s\n&quot;, &quot;roughness&quot;, &quot;Blinn&quot;, &quot;Beckmann&quot;, &quot;GGX&quot;);
+
+    double worst = 0.0;
+    const char* worst_name = &quot;&quot;;
+    float worst_r = 0.0f;
+    for (float r : {0.10f, 0.25f, 0.40f, 0.60f, 0.80f, 1.00f})
+    {
+        const float a = engine::alpha_from_roughness(r);
+        double v[3];
+        for (int m = 0; m &lt; 3; ++m)
+        {
+            v[m] = integrate_ndf(static_cast&lt;engine::ndf_model&gt;(m), a, 400000);
+            const double err = std::fabs(v[m] - 1.0);
+            if (err &gt; worst)
+            {
+                worst = err;
+                worst_name = name_of(static_cast&lt;engine::ndf_model&gt;(m));
+                worst_r = r;
+            }
+        }
+        std::printf(&quot;      %-10.2f %-14.7f %-14.7f %-14.7f\n&quot;, static_cast&lt;double&gt;(r),
+                    v[0], v[1], v[2]);
+    }
+    checkf(worst &lt; 2.0e-5,
+           &quot;ALL THREE distributions integrate to 1 against cos(theta_h) — worst error &quot;
+           &quot;%.2e (%s at roughness %.2f). This is what makes an NDF a model rather than &quot;
+           &quot;a curve that looks right: the fractions of a surface facing each way must &quot;
+           &quot;add up to the whole surface&quot;,
+           worst, worst_name, static_cast&lt;double&gt;(worst_r));
+
+    // AND THE READING OF THAT IDENTITY THE OTHER WAY ROUND. The cos(theta_h) is
+    // the projected area of a microfacet on the plane it stands on, so the
+    // integral says the facets&#x27; projected areas total exactly the flat area.
+    // Nothing else could be true, and stating it that way is what makes the
+    // cosine stop looking like a convention.
+    check(std::fabs(integrate_ndf(engine::ndf_model::ggx,
+                                  engine::alpha_from_roughness(0.5f), 400000) - 1.0) &lt; 2e-5,
+          &quot;…and read the other way it says the microfacets&#x27; PROJECTED AREAS add up to &quot;
+          &quot;the area of the flat surface they stand on — which is the only thing that &quot;
+          &quot;could be true, and is why the cosine is in there&quot;);
+
+    // A DISTRIBUTION WITHOUT ITS CONSTANT IS NOT A DISTRIBUTION. The bare lobe,
+    // which is what the engine has shipped since 3.7, integrates to whatever it
+    // likes.
+    const float alpha32 = engine::alpha_from_blinn_exponent(32.0f);
+    const float s32 = engine::blinn_exponent_from_alpha(alpha32);
+    double bare = 0.0;
+    {
+        const int steps = 400000;
+        const double d_theta = (std::numbers::pi / 2.0) / steps;
+        for (int i = 0; i &lt; steps; ++i)
+        {
+            const double th = (static_cast&lt;double&gt;(i) + 0.5) * d_theta;
+            const double c = std::cos(th);
+            bare += std::pow(c, static_cast&lt;double&gt;(s32)) * c * std::sin(th) * d_theta;
+        }
+        bare *= 2.0 * std::numbers::pi;
+    }
+    checkf(std::fabs(bare - 2.0 * std::numbers::pi / (s32 + 2.0)) &lt; 1e-4,
+           &quot;the BARE cos^s lobe integrates to %.6f, not 1 — it is a shape, and &quot;
+           &quot;2*pi/(s+2) is exactly the constant it is missing&quot;, bare);
+
+    // ---- AND THE REASON ndf() DOES NOT USE THE TEXTBOOK ALGEBRA ------------
+    //
+    // This test is what found it. Every reference writes GGX&#x27;s denominator as
+    // `c2*(alpha^2 - 1) + 1`, which in `float` is the difference of two numbers
+    // near 1 that very nearly agree — resolvable to ~1e-7 ABSOLUTE, while the
+    // true value at the peak of a smooth lobe is 1e-4. Then it is squared.
+    //
+    // The check is written out here rather than left in a comment because the
+    // stable form looks like a pointless rearrangement, and the next person to
+    // &quot;tidy&quot; it back needs to be told by a failing test rather than by a diff.
+    {
+        const auto naive = [](float c, float a)
+        {
+            const float a2 = a * a;
+            const float d = c * c * (a2 - 1.0f) + 1.0f;
+            return a2 / (std::numbers::pi_v&lt;float&gt; * d * d);
+        };
+        const float a_mirror = 1.0e-3f;   // k_min_alpha: as smooth as we allow
+        const int steps = 400000;
+        const double d_theta = (std::numbers::pi / 2.0) / steps;
+        double naive_total = 0.0;
+        for (int i = 0; i &lt; steps; ++i)
+        {
+            const double th = (static_cast&lt;double&gt;(i) + 0.5) * d_theta;
+            const double c = std::cos(th);
+            naive_total += static_cast&lt;double&gt;(naive(static_cast&lt;float&gt;(c), a_mirror))
+                         * c * std::sin(th) * d_theta;
+        }
+        naive_total *= 2.0 * std::numbers::pi;
+        const double ours = integrate_ndf(engine::ndf_model::ggx, a_mirror, 400000);
+        checkf(std::fabs(ours - 1.0) &lt; std::fabs(naive_total - 1.0) / 4.0,
+               &quot;at mirror roughness the TEXTBOOK denominator integrates to %.7f — it &quot;
+               &quot;loses %.1f%% of the model&#x27;s energy to rounding — while ndf()&#x27;s &quot;
+               &quot;rearranged form gives %.7f. Identical algebra, and Sterbenz&#x27;s lemma &quot;
+               &quot;makes `1.0f - c` exact for c &gt;= 0.5. Refining the grid does not help, &quot;
+               &quot;because this is not a quadrature error&quot;,
+               naive_total, std::fabs(naive_total - 1.0) * 100.0, ours);
+    }
+}
+
+// ===========================================================================
+//  §B — BLINN-PHONG WAS A MICROFACET MODEL ALL ALONG
+// ===========================================================================
+
+void section_b_blinn()
+{
+    std::printf(&quot;\n=== B. Blinn-Phong is an NDF missing its constant ===\n&quot;);
+
+    // The engine multiplies the lobe by 1/pi (Lesson 6.2&#x27;s decision, taken so the
+    // two lobes shared the light&#x27;s units). The normalised distribution multiplies
+    // it by (s+2)/2pi. The ratio is therefore (s+2)/2 exactly, with no pi in it.
+    std::printf(&quot;      %-12s %-16s %-16s %-10s\n&quot;, &quot;shininess&quot;, &quot;engine (1/pi)&quot;,
+                &quot;normalised&quot;, &quot;ratio&quot;);
+    double worst = 0.0;
+    for (float s : {4.0f, 8.0f, 32.0f, 128.0f, 512.0f})
+    {
+        const float engine_k = engine::k_inv_pi;
+        const float norm_k = (s + 2.0f) / (2.0f * std::numbers::pi_v&lt;float&gt;);
+        const double ratio = static_cast&lt;double&gt;(norm_k / engine_k);
+        worst = std::max(worst, std::fabs(ratio - static_cast&lt;double&gt;(s + 2.0f) / 2.0));
+        std::printf(&quot;      %-12.0f %-16.6f %-16.6f %-10.2f\n&quot;, static_cast&lt;double&gt;(s),
+                    static_cast&lt;double&gt;(engine_k), static_cast&lt;double&gt;(norm_k), ratio);
+    }
+    checkf(worst &lt; 1e-4,
+           &quot;the ratio is EXACTLY (s+2)/2 — no pi in it, because both constants carry &quot;
+           &quot;one and it cancels (worst deviation %.2e)&quot;, worst);
+    check(std::fabs((32.0f + 2.0f) / 2.0f - 17.0f) &lt; 1e-6f,
+          &quot;so at the demo&#x27;s default shininess of 32 the engine&#x27;s highlight is 17x &quot;
+          &quot;DIMMER than a normalised distribution — which is why this engine&#x27;s &quot;
+          &quot;materials have always wanted a specular colour larger than a real one&quot;);
+
+    // AND THE TRANSLATION BACK. Reading the existing materials into the new
+    // vocabulary is the practical value of the mapping.
+    const float a32 = engine::alpha_from_blinn_exponent(32.0f);
+    checkf(std::fabs(a32 - 0.2425f) &lt; 1e-3f,
+           &quot;shininess 32 means alpha = %.4f, a perceptual roughness of %.4f — almost &quot;
+           &quot;exactly half way, which is a reasonable default and was never chosen&quot;,
+           static_cast&lt;double&gt;(a32),
+           static_cast&lt;double&gt;(engine::roughness_from_alpha(a32)));
+
+    // The two mappings must be inverses, or a material round-tripped through the
+    // new vocabulary comes back a different material.
+    double worst_trip = 0.0;
+    for (float s = 1.0f; s &lt;= 1024.0f; s *= 1.6f)
+    {
+        const float back = engine::blinn_exponent_from_alpha(
+            engine::alpha_from_blinn_exponent(s));
+        worst_trip = std::max(worst_trip,
+                              std::fabs(static_cast&lt;double&gt;(back - s)) / static_cast&lt;double&gt;(s));
+    }
+    checkf(worst_trip &lt; 1e-5,
+           &quot;shininess -&gt; alpha -&gt; shininess round-trips to %.2e relative over 15 &quot;
+           &quot;exponents, so a material converted to the new vocabulary and back is the &quot;
+           &quot;same material&quot;, worst_trip);
+}
+
+// ===========================================================================
+//  §C — THE TAIL
+// ===========================================================================
+
+void section_c_tail()
+{
+    std::printf(&quot;\n=== C. The tail, which is why GGX won ===\n&quot;);
+
+    const float a = 0.3f;
+    const float peak_b = engine::ndf(engine::ndf_model::beckmann, 1.0f, a);
+    const float peak_g = engine::ndf(engine::ndf_model::ggx, 1.0f, a);
+    checkf(std::fabs(peak_b - peak_g) &lt; 1e-3f * peak_b,
+           &quot;at alpha %.2f Beckmann and GGX have the SAME PEAK, %.4f — so any &quot;
+           &quot;difference between them is entirely a difference of SHAPE, not of &quot;
+           &quot;brightness&quot;, static_cast&lt;double&gt;(a), static_cast&lt;double&gt;(peak_g));
+
+    std::printf(&quot;      %-10s %-14s %-14s %-12s\n&quot;, &quot;theta_h&quot;, &quot;Beckmann&quot;, &quot;GGX&quot;, &quot;GGX/Beck&quot;);
+    double ratio_45 = 0.0;
+    double shoulder_min = 1e9;
+    for (float deg : {5.0f, 10.0f, 20.0f, 30.0f, 45.0f, 60.0f, 75.0f})
+    {
+        const float c = std::cos(deg * std::numbers::pi_v&lt;float&gt; / 180.0f);
+        const double b = static_cast&lt;double&gt;(engine::ndf(engine::ndf_model::beckmann, c, a));
+        const double g = static_cast&lt;double&gt;(engine::ndf(engine::ndf_model::ggx, c, a));
+        const double r = (b &gt; 0.0) ? g / b : 1e300;
+        if (deg == 45.0f) { ratio_45 = r; }
+        if (deg &lt;= 20.0f) { shoulder_min = std::min(shoulder_min, r); }
+        std::printf(&quot;      %-10.0f %-14.6g %-14.6g %-12.4g\n&quot;,
+                    static_cast&lt;double&gt;(deg), b, g, r);
+    }
+    checkf(shoulder_min &lt; 0.85,
+           &quot;near the peak GGX is LOWER than Beckmann (down to %.2f of it at 20 &quot;
+           &quot;degrees) — the tail is not free, and this is where it is paid for&quot;,
+           shoulder_min);
+    checkf(ratio_45 &gt; 100.0,
+           &quot;…and 45 degrees off the peak GGX is %.0fx Beckmann, because a rational &quot;
+           &quot;function has a power-law tail and an exponential has none. That glow &quot;
+           &quot;around a highlight is the single reason GGX replaced Beckmann &quot;
+           &quot;everywhere&quot;, ratio_45);
+
+    const float c60 = std::cos(60.0f * std::numbers::pi_v&lt;float&gt; / 180.0f);
+    checkf(engine::ndf(engine::ndf_model::beckmann, c60, a) &lt; 1e-9f,
+           &quot;at 60 degrees Beckmann is %.3g — numerically zero, a hard edge where a &quot;
+           &quot;real surface has a soft one&quot;,
+           static_cast&lt;double&gt;(engine::ndf(engine::ndf_model::beckmann, c60, a)));
+}
+
+// ===========================================================================
+//  §D — THE GEOMETRY TERM
+// ===========================================================================
+
+void section_d_geometry()
+{
+    std::printf(&quot;\n=== D. Shadowing and masking ===\n&quot;);
+
+    checkf(std::fabs(engine::smith_g1(1.0f, 0.5f) - 1.0f) &lt; 1e-6f,
+           &quot;looking straight down the normal, nothing is hidden: G1 = %.6f&quot;,
+           static_cast&lt;double&gt;(engine::smith_g1(1.0f, 0.5f)));
+    check(engine::smith_g1(0.0f, 0.5f) == 0.0f,
+          &quot;…and exactly 0 exactly edge-on, which is the limit rather than a guard&quot;);
+
+    std::printf(&quot;      %-10s&quot;, &quot;theta&quot;);
+    for (float r : {0.22f, 0.45f, 0.71f, 1.00f})
+    {
+        std::printf(&quot; a=%-10.2f&quot;, static_cast&lt;double&gt;(engine::alpha_from_roughness(r)));
+    }
+    std::printf(&quot;\n&quot;);
+    bool monotone = true;
+    for (float deg : {0.0f, 30.0f, 60.0f, 75.0f, 85.0f})
+    {
+        std::printf(&quot;      %-10.0f&quot;, static_cast&lt;double&gt;(deg));
+        float prev = 2.0f;
+        for (float r : {0.22f, 0.45f, 0.71f, 1.00f})
+        {
+            const float g1 = engine::smith_g1(
+                std::cos(deg * std::numbers::pi_v&lt;float&gt; / 180.0f),
+                engine::alpha_from_roughness(r));
+            monotone = monotone &amp;&amp; (g1 &lt;= prev + 1e-6f);
+            prev = g1;
+            std::printf(&quot; %-12.6f&quot;, static_cast&lt;double&gt;(g1));
+        }
+        std::printf(&quot;\n&quot;);
+    }
+    check(monotone, &quot;G1 falls as roughness rises, at every angle — a rougher surface &quot;
+                    &quot;hides more of itself, which is the whole content of the term&quot;);
+
+    const float a_smooth = engine::alpha_from_roughness(0.22f);
+    const float a_rough = engine::alpha_from_roughness(1.0f);
+    const float c75 = std::cos(75.0f * std::numbers::pi_v&lt;float&gt; / 180.0f);
+    checkf(engine::smith_g1(c75, a_smooth) / engine::smith_g1(c75, a_rough) &gt; 2.0f,
+           &quot;at 75 degrees a near-smooth surface still shows %.4f of itself and a fully &quot;
+           &quot;rough one only %.4f — THIS IS THE TERM LESSON 6.2 WAS MISSING when it &quot;
+           &quot;measured a 5.36x view-angle swing it could not explain&quot;,
+           static_cast&lt;double&gt;(engine::smith_g1(c75, a_smooth)),
+           static_cast&lt;double&gt;(engine::smith_g1(c75, a_rough)));
+
+    // THE INDEPENDENCE ASSUMPTION, PRICED. Multiplying two G1s assumes being lit
+    // and being visible are independent events. They share a height field, so
+    // they are not.
+    std::printf(&quot;\n      separable vs height-correlated Smith:\n&quot;);
+    std::printf(&quot;      %-10s %-10s %-10s %-14s %-14s %-8s\n&quot;,
+                &quot;alpha&quot;, &quot;theta_l&quot;, &quot;theta_v&quot;, &quot;separable&quot;, &quot;correlated&quot;, &quot;ratio&quot;);
+    double worst_ratio = 1.0;
+    for (float a : {0.1f, 0.4f, 0.8f})
+    {
+        for (float d : {20.0f, 60.0f, 80.0f})
+        {
+            const float c = std::cos(d * std::numbers::pi_v&lt;float&gt; / 180.0f);
+            const float sep = engine::smith_g_separable(c, c, a);
+            const float cor = engine::smith_g(c, c, a);
+            worst_ratio = std::max(worst_ratio, static_cast&lt;double&gt;(cor / sep));
+            std::printf(&quot;      %-10.1f %-10.0f %-10.0f %-14.6f %-14.6f %-8.3f\n&quot;,
+                        static_cast&lt;double&gt;(a), static_cast&lt;double&gt;(d),
+                        static_cast&lt;double&gt;(d), static_cast&lt;double&gt;(sep),
+                        static_cast&lt;double&gt;(cor), static_cast&lt;double&gt;(cor / sep));
+        }
+    }
+    checkf(worst_ratio &gt; 1.6,
+           &quot;the two forms agree to four decimals on smooth surfaces and disagree by &quot;
+           &quot;%.3fx at alpha 0.8 with both directions at 80 degrees. Grazing angles on &quot;
+           &quot;rough surfaces are sunsets, wet roads and worn metal, so \&quot;either is &quot;
+           &quot;fine\&quot; would have been comfortable and wrong&quot;, worst_ratio);
+    check(engine::smith_g(0.5f, 0.5f, 0.4f) &lt;= 1.0f
+              &amp;&amp; engine::smith_g_separable(0.5f, 0.5f, 0.4f) &lt;= 1.0f,
+          &quot;both forms stay within [0,1]: G is a fraction of the surface, and a &quot;
+          &quot;fraction above 1 would be facets that are not there&quot;);
+}
+
+// ===========================================================================
+//  §E — THE EXPONENT MAP IS A PEAK MATCH
+// ===========================================================================
+
+void section_e_fit()
+{
+    std::printf(&quot;\n=== E. \&quot;s = 2/alpha^2 - 2\&quot; matches the PEAK, and only the peak ===\n&quot;);
+
+    // The mapping is derived by equating the two distributions AT h == n. Check
+    // that it does what it claims before criticising it for what it does not.
+    double worst_peak = 0.0;
+    for (float a : {0.1f, 0.3f, 0.6f})
+    {
+        const float pb = engine::ndf(engine::ndf_model::blinn, 1.0f, a);
+        const float pg = engine::ndf(engine::ndf_model::ggx, 1.0f, a);
+        worst_peak = std::max(worst_peak,
+                              std::fabs(static_cast&lt;double&gt;(pb - pg) / static_cast&lt;double&gt;(pg)));
+    }
+    checkf(worst_peak &lt; 1e-4,
+           &quot;Blinn and GGX peak at the SAME height for the same alpha (worst relative &quot;
+           &quot;difference %.2e) — the mapping does exactly what it was derived to do&quot;,
+           worst_peak);
+
+    // Now fit the whole lobe instead, and see where the exponent actually lands.
+    std::printf(&quot;      %-10s %-14s %-14s %-10s\n&quot;, &quot;alpha&quot;, &quot;peak-match s&quot;, &quot;fitted s&quot;,
+                &quot;fitted/peak&quot;);
+    double worst_frac = 1.0;
+    for (float a : {0.1f, 0.2f, 0.3f, 0.5f})
+    {
+        double best_s = 1.0, best_err = 1e300;
+        for (double ls = 0.0; ls &lt; 8.0; ls += 0.004)
+        {
+            const double s = std::exp(ls);
+            const float alpha_for_s = engine::alpha_from_blinn_exponent(static_cast&lt;float&gt;(s));
+            double err = 0.0;
+            const int n = 1200;
+            for (int i = 0; i &lt; n; ++i)
+            {
+                const double th = (static_cast&lt;double&gt;(i) + 0.5) * (std::numbers::pi / 2.0) / n;
+                const double c = std::cos(th);
+                const double diff =
+                    static_cast&lt;double&gt;(engine::ndf(engine::ndf_model::blinn,
+                                                    static_cast&lt;float&gt;(c), alpha_for_s))
+                    - static_cast&lt;double&gt;(engine::ndf(engine::ndf_model::ggx,
+                                                      static_cast&lt;float&gt;(c), a));
+                err += diff * diff * c * std::sin(th);
+            }
+            if (err &lt; best_err) { best_err = err; best_s = s; }
+        }
+        const double peak_s = static_cast&lt;double&gt;(engine::blinn_exponent_from_alpha(a));
+        worst_frac = std::min(worst_frac, best_s / peak_s);
+        std::printf(&quot;      %-10.2f %-14.1f %-14.1f %-10.3f\n&quot;, static_cast&lt;double&gt;(a),
+                    peak_s, best_s, best_s / peak_s);
+    }
+    checkf(worst_frac &lt; 0.85,
+           &quot;fitting the whole LOBE instead gives consistently about 0.80x the &quot;
+           &quot;peak-match exponent (worst %.3f) — a lobe fit trades peak height for the &quot;
+           &quot;tail, and GGX has a tail Blinn cannot reproduce at ANY exponent. Both &quot;
+           &quot;numbers are right; they answer different questions, and quoting one &quot;
+           &quot;without saying which is how folklore travels&quot;, worst_frac);
+}
+
+// ===========================================================================
+//  §F — 6.2&#x27;s ENERGY TEST, REUSED UNCHANGED
+// ===========================================================================
+
+void section_f_energy()
+{
+    std::printf(&quot;\n=== F. Lesson 6.2&#x27;s energy test, pointed at the new machinery ===\n&quot;);
+
+    // First: the integrator still says what it said. If this line ever moves, the
+    // instrument changed and none of the comparisons below mean anything.
+    const double lambert = integrate_hemisphere(
+        [](engine::vec3) { return static_cast&lt;double&gt;(engine::lambert_brdf({1, 1, 1}).r); },
+        512);
+    checkf(std::fabs(lambert - 1.0) &lt; 2e-5,
+           &quot;the integrator is unchanged: a white Lambert BRDF still reads %.7f&quot;, lambert);
+
+    // Now the specular microfacet BRDF, D*G/(4 nl nv), with F = 1 — so nothing is
+    // absorbed at the interface and any shortfall is light the MODEL loses.
+    std::printf(&quot;      R(v) for D*G/(4 nl nv) with F = 1:\n&quot;);
+    std::printf(&quot;      %-12s %-14s %-14s\n&quot;, &quot;roughness&quot;, &quot;v at 0 deg&quot;, &quot;v at 75 deg&quot;);
+    double smooth_r = 0.0, rough_r = 1.0;
+    for (float r : {0.22f, 0.50f, 0.71f, 0.87f, 1.00f})
+    {
+        const float alpha = engine::alpha_from_roughness(r);
+        double vals[2];
+        int k = 0;
+        for (float deg : {0.0f, 75.0f})
+        {
+            const float th = deg * std::numbers::pi_v&lt;float&gt; / 180.0f;
+            const engine::vec3 v{std::sin(th), std::cos(th), 0.0f};
+            const float n_dot_v = std::cos(th);
+            vals[k++] = integrate_hemisphere(
+                [&amp;](engine::vec3 l) -&gt; double
+                {
+                    const float n_dot_l = dot(k_up, l);
+                    if (n_dot_l &lt;= 0.0f) { return 0.0; }
+                    const engine::vec3 h = engine::halfway(l, v);
+                    const float n_dot_h = dot(k_up, h);
+                    if (n_dot_h &lt;= 0.0f) { return 0.0; }
+                    return static_cast&lt;double&gt;(
+                               engine::ndf(engine::ndf_model::ggx, n_dot_h, alpha)
+                               * engine::smith_g(n_dot_l, n_dot_v, alpha))
+                         / (4.0 * static_cast&lt;double&gt;(n_dot_l)
+                              * static_cast&lt;double&gt;(n_dot_v));
+                },
+                512);
+        }
+        if (r == 0.22f) { smooth_r = vals[0]; }
+        if (r == 1.00f) { rough_r = vals[0]; }
+        std::printf(&quot;      %-12.2f %-14.4f %-14.4f\n&quot;, static_cast&lt;double&gt;(r),
+                    vals[0], vals[1]);
+    }
+
+    checkf(smooth_r &lt; 1.0 &amp;&amp; rough_r &lt; 1.0,
+           &quot;it NEVER exceeds 1 — unlike Blinn-Phong, this model cannot emit more &quot;
+           &quot;light than arrives, at any roughness or view angle&quot;);
+    checkf(smooth_r &gt; 0.95,
+           &quot;a near-smooth surface returns %.4f of what arrives, so almost nothing is &quot;
+           &quot;lost where the model is nearly exact&quot;, smooth_r);
+    checkf(rough_r &lt; 0.45,
+           &quot;…but a fully rough one returns only %.4f. THAT IS NOT A BUG AND IT IS NOT &quot;
+           &quot;ROUNDING: this is single-scattering microfacet theory, which lets a facet &quot;
+           &quot;bounce light once and then forgets it. The missing %.0f%% is light that &quot;
+           &quot;hit a second facet on its way out. Multiple-scattering compensation is &quot;
+           &quot;the standard fix and it is named in §9 rather than built&quot;,
+           rough_r, (1.0 - rough_r) * 100.0);
+}
+
+// ===========================================================================
+//  §G — THE GOLDEN
+// ===========================================================================
+
+void section_g_golden()
+{
+    std::printf(&quot;\n=== G. The golden ===\n&quot;);
+
+    const char* path = &quot;build/demos/verify_63.ppm&quot;;
+    check(demo::write_reference_shot(path) == 0, &quot;write_reference_shot() succeeded&quot;);
+
+    const std::string ours = read_file(path);
+    const std::string golden = read_file(&quot;scratch/shot_52.ppm&quot;);
+    checkf(!ours.empty() &amp;&amp; ours.size() == golden.size(), &quot;same size: %zu bytes&quot;,
+           ours.size());
+    check(ours == golden,
+          &quot;BYTE-IDENTICAL to the golden written in Lesson 5.1 — FOURTEEN lessons, and &quot;
+          &quot;this one is cheap: 6.3 added a header and wired none of it in. The golden &quot;
+          &quot;will not survive 6.4, which replaces shade()&#x27;s specular half outright&quot;);
+}
+
+}   // namespace
+
+int main(int argc, char* argv[])
+{
+    bool debug = false;
+    for (int i = 1; i &lt; argc; ++i)
+    {
+        if (SDL_strcmp(argv[i], &quot;--debug&quot;) == 0) { debug = true; }
+    }
+    SDL_SetLogPriorities(debug ? SDL_LOG_PRIORITY_DEBUG : SDL_LOG_PRIORITY_INFO);
+
+    std::printf(&quot;verify_63 — microfacets: distributions, masking, and what they cost\n&quot;);
+
+    section_a_distribution();
+    section_b_blinn();
+    section_c_tail();
+    section_d_geometry();
+    section_e_fit();
+    section_f_energy();
+    section_g_golden();
+
+    std::printf(&quot;\n%d checks, %d failure%s\n&quot;, g_checks, g_failures,
+                g_failures == 1 ? &quot;&quot; : &quot;s&quot;);
+    return g_failures == 0 ? 0 : 1;
+}
+</code></pre>
+  </figure>
+
+
+  <!-- =================================================================
+       13 — BUILD & RUN
+       ================================================================= -->
+  <h2 id="build"><span class="num">13</span>Build &amp; Run</h2>
+
+  <figure class="listing">
+    <figcaption><span class="path">Linux / macOS</span></figcaption>
+    <pre><code class="lang-bash">cmake -S . -B build
+cmake --build build -j8
+
+sh scratch/build_verify_63.sh
+ENGINE_CFLAGS="-O2 -DNDEBUG" sh scratch/build_verify_63.sh</code></pre>
+  </figure>
+
+  <figure class="listing">
+    <figcaption><span class="path">Windows (MSVC)</span></figcaption>
+    <pre><code class="lang-bash">cmake -S . -B build
+cmake --build build --config Debug</code></pre>
+  </figure>
+
+  <h3>13.1 What you should see</h3>
+
+  <p>
+    The scene, unchanged — nothing is wired in. What is new is the harness, and these are the
+    lines that carry the lesson:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">sh scratch/build_verify_63.sh</span></figcaption>
+<pre><code class="lang-bash">  [PASS] ALL THREE distributions integrate to 1 against cos(theta_h) — worst error
+         3.74e-07 (GGX at roughness 0.10)
+  [PASS] at mirror roughness the TEXTBOOK denominator integrates to 0.9891063 — it
+         loses 1.1% of the model's energy to rounding — while ndf()'s rearranged
+         form gives 1.0023035
+  [PASS] so at the demo's default shininess of 32 the engine's highlight is 17x
+         DIMMER than a normalised distribution
+  [PASS] …and 45 degrees off the peak GGX is 456x Beckmann
+  [PASS] the two forms agree to four decimals on smooth surfaces and disagree by
+         1.715x at alpha 0.8 with both directions at 80 degrees
+  [PASS] …but a fully rough one returns only 0.3069. THAT IS NOT A BUG
+
+27 checks, 0 failures</code></pre>
+  </figure>
+
+  <p>
+    <code>verify_63</code> takes a few seconds in a debug build. §A integrates at 400,000 samples
+    and §E fits an exponent on a scan — both deliberate, because §A's whole claim is that the
+    answer is 1 to five decimals and a cheap grid cannot say that.
+  </p>
+
+  <!-- =================================================================
+       14 — PITFALLS
+       ================================================================= -->
+  <h2 id="pitfalls"><span class="num">14</span>Common Pitfalls &amp; Debugging</h2>
+
+  <div class="callout pitfall">
+    <span class="label">The highlight vanishes as the surface gets smooth</span>
+    <p><strong>Symptom:</strong> lowering roughness makes the highlight tighter and then it blinks
+       out entirely, or the whole surface goes black or white.</p>
+    <p><strong>Cause:</strong> α reached zero. <em>D</em> divides by α², so you get
+       <code>inf</code>, and the first multiplication by a zero elsewhere turns it into
+       <code>NaN</code> — which then propagates through every blend it touches.</p>
+    <p><strong>Fix:</strong> the <code>k_min_alpha</code> floor. And when hunting it, remember that
+       <code>NaN</code> compares false to everything, so <code>if (x &gt; 0)</code> does
+       <em>not</em> catch it — Lesson 3.10 hit the same shape of bug and the rule there was to
+       write the test as <code>!(x &lt;= 0)</code>.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">Your NDF integrates to 2, or 0.5, or 6.28</span>
+    <p><strong>Symptom:</strong> the normalisation test fails by a clean-looking factor.</p>
+    <p><strong>Cause and fix:</strong> the factor names it, exactly as in Lesson 6.2.
+       <strong>2.0</strong> means the <code>cos θ<sub>h</sub></code> weight is missing.
+       <strong>0.5</strong> means the <code>sin θ</code> in <code>dω</code> is.
+       <strong>2π</strong> means you integrated θ and forgot φ.</p>
+    <p>Establish the integrator first, on something with a known answer: integrate the constant 1
+       and check you get 2π, then cos θ and check you get π. Two lines, and they separate the
+       instrument from the subject.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">A failure that will not shrink</span>
+    <p><strong>Symptom:</strong> a numerical test is off by a small amount and refining the grid
+       does not help.</p>
+    <p><strong>Cause:</strong> it is not a quadrature error. Quadrature error shrinks with the
+       grid, by definition; anything that does not is arithmetic.</p>
+    <p><strong>Fix:</strong> run the identical formula in <code>double</code> on the identical
+       grid. If <code>double</code> is clean, the bug is in <code>float</code> and it is almost
+       always cancellation — look for a subtraction of two nearly-equal quantities and rearrange
+       it. This is §9's entire method and it took two runs.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">Materials imported from another engine look wrong at the same numbers</span>
+    <p><strong>Symptom:</strong> roughness 0.4 in one renderer does not look like roughness 0.4 in
+       yours.</p>
+    <p><strong>Cause:</strong> the roughness→α remap. Squaring is a convention, not physics, and
+       not everyone squares. Some tools author α directly; some square twice.</p>
+    <p><strong>Fix:</strong> convert at the import edge and write down which convention you store —
+       exactly the two-conversions-at-the-edges discipline Lesson 6.1 arrived at for colour, and
+       for the same reason.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">Rough metal is too dark and turning the light up does not fix it</span>
+    <p><strong>Symptom:</strong> rough metallic surfaces look dull and lifeless; raising the light
+       blows out the smooth parts of the scene before the rough parts look right.</p>
+    <p><strong>Cause:</strong> not a bug — §8's single-scattering deficit, which is 69% at full
+       roughness. It is a <em>fraction</em> of the arriving light, so a brighter light scales the
+       problem rather than fixing it.</p>
+    <p><strong>Fix:</strong> multiple-scattering compensation (§11), or accept it and know what you
+       are accepting. Recognising the shape of the error — proportional, worse with roughness,
+       worst on metal — is most of the value here.</p>
+  </div>
+
+  <!-- =================================================================
+       15 — EXERCISES
+       ================================================================= -->
+  <h2 id="exercises"><span class="num">15</span>Exercises</h2>
+
+  <ol class="exercises">
+    <li>
+      <p><strong>15.1 — Normalise the old model, and predict the picture first.</strong> Change
+         <code>specular_brdf</code> in <code>light.hpp</code> to use <code>(s+2)/2π</code> instead
+         of <code>1/π</code>, and <em>before</em> rebuilding, write down what you expect to see and
+         what you would have to do to the demo's materials to compensate.</p>
+      <details><summary>Hint</summary>
+         <p>17× at shininess 32, and §8's energy test now applies to the result. What does 17×
+            a specular of 0.30 do to Lesson 6.2's 1.1386?</p>
+      </details>
+      <details><summary>Solution sketch</summary>
+         <p>The highlights blow out completely — and the honest reading is not "the constant is
+            wrong" but that the <em>material</em> was authored against the old constant, so it is
+            now a material with a specular reflectance of 5.1, which is not a surface. Divide the
+            demo's specular colours by 17 and the picture comes back nearly unchanged, which is the
+            proof that the parameter had absorbed the error. Then run 6.2's energy test: a white
+            albedo with the corrected specular is still over 1, because normalising
+            <em>D</em> does not supply the coupling. That is 6.4's job, and this exercise is the
+            cleanest way to feel why a normalising constant was never going to be enough.</p>
+      </details>
+    </li>
+
+    <li>
+      <p><strong>15.2 — Break the stable denominator on purpose.</strong> Replace
+         <code>ndf()</code>'s GGX denominator with the textbook <code>c2 * (a2 - 1) + 1</code>,
+         watch §A fail, and then find the roughness at which the failure disappears.</p>
+      <details><summary>Hint</summary>
+         <p>Somewhere between α = 0.02 and α = 0.05. The relevant comparison is the true value of
+            <code>d</code> at the peak — which is α² — against a <code>float</code>'s absolute
+            resolution near 1, which is about 6e−8.</p>
+      </details>
+      <details><summary>Solution sketch</summary>
+         <p>It becomes invisible once α² is comfortably above float's ~1e−7 resolution at 1, so
+            around α ≈ 0.05, which is roughness 0.22. Above that the cancellation still happens and
+            simply does not matter. The transferable point is that the bug is <em>bounded by the
+            data</em>: it lives entirely in the smooth end, which is why it survives in production
+            renderers and shows up on chrome and still water rather than everywhere.</p>
+      </details>
+    </li>
+
+    <li>
+      <p><strong>15.3 — Test your own distribution.</strong> Implement the original Phong lobe as
+         an NDF — <code>cos<sup>s</sup></code> about the <em>mirror</em> direction rather than the
+         halfway vector — and put it through §A's identity.</p>
+      <details><summary>Hint</summary>
+         <p>The identity is an integral over microfacet <em>normals</em>. What is the mirror
+            direction the normal of?</p>
+      </details>
+      <details><summary>Solution sketch</summary>
+         <p>It is not an NDF at all, and the exercise is worth doing to find out <em>why</em> rather
+            than to get a number. A distribution of microfacet normals is a function of
+            <strong>h</strong>, and Phong's lobe is a function of the angle between the mirror
+            direction and the eye — a quantity that depends on where you are standing, so it cannot
+            be a property of the surface. That is a much sharper statement of Phong's defect than
+            Lesson 3.7 could make, and it explains 3.7's measured hard cut-off: the model was never
+            describing a surface, so there was nothing to stop it describing an impossible one.</p>
+      </details>
+    </li>
+
+    <li>
+      <p><strong>15.4 — Anisotropy.</strong> Extend GGX to two roughness values, α<sub>x</sub> and
+         α<sub>y</sub>, along two tangent directions, and check that the anisotropic form still
+         integrates to 1.</p>
+      <details><summary>Hint</summary>
+         <p>The isotropic denominator is a function of <code>cos²θ<sub>h</sub></code> and
+            <code>sin²θ<sub>h</sub></code>. Anisotropy splits the sine term into its two tangent
+            components, each divided by its own α. You will need <strong>h</strong> in tangent
+            space, which the engine does not have until Lesson 6.7 — so build the test on a
+            synthetic frame.</p>
+      </details>
+      <details><summary>Solution sketch</summary>
+         <p>The normalisation becomes <code>1/(π α_x α_y …)</code> and the identity still holds,
+            which is the point of checking: an anisotropic distribution is still a distribution.
+            Setting α<sub>x</sub> = α<sub>y</sub> must reproduce the isotropic form exactly —
+            assert that, because it is the cheapest possible regression test and it catches most
+            of the ways this goes wrong.</p>
+      </details>
+    </li>
+
+    <li>
+      <p><strong>15.5 — Measure the deficit properly, and make a table.</strong> §8 sampled
+         <em>R</em>(v) at two view angles and five roughnesses. Build the full 2-D table that a
+         multiple-scattering compensation term needs — <em>R</em> as a function of roughness and
+         <code>n·v</code> — and look at its shape.</p>
+      <details><summary>Hint</summary>
+         <p>32×32 is plenty. Watch the cost: each cell is its own hemisphere integral, so this is
+            a few million evaluations and belongs in a one-off program rather than in
+            <code>verify_63</code>.</p>
+      </details>
+      <details><summary>Solution sketch</summary>
+         <p>The surface is smooth and monotone in roughness, and — the thing worth noticing — it is
+            <em>not</em> monotone in view angle at high roughness: §8 already shows 0.3069 at 0° but
+            0.5906 at 75°. That is why compensation terms are tabulated in two dimensions rather
+            than fitted to roughness alone. Having built the table you have most of Kulla–Conty;
+            the remaining step is adding back a lobe carrying <code>1 − R</code>, which needs
+            6.4's assembled BRDF to attach to.</p>
+      </details>
+    </li>
+  </ol>
+
+  <!-- =================================================================
+       16 — RECAP & NEXT
+       ================================================================= -->
+  <h2 id="recap"><span class="num">16</span>Recap &amp; Next</h2>
+
+  <p>
+    The engine now has a story about what a surface is, and it is a story that can be checked. A
+    surface is a landscape of perfect mirrors; the shape of a highlight is a histogram of their
+    slopes; and that histogram is a <em>distribution</em>, so it must satisfy
+  </p>
+
+  <div class="eq">
+    \[ \int_{\Omega} D(\mathbf{h}) \cos\theta_h \, d\omega = 1 \]
+  </div>
+
+  <p>
+    which is the first equation in this shading arc with a right-hand side you can hold a model to.
+  </p>
+
+  <p>
+    What the engine gained: <code>gfx/microfacet.hpp</code>, with three distributions, two forms of
+    the Smith geometry term, and the roughness remap — 56 → 57 public headers, nothing wired in.
+    What it learned about itself: <strong>Blinn-Phong was a microfacet distribution all along,
+    missing only its constant</strong>, and the constant this engine ships is wrong by exactly
+    <code>(s+2)/2</code> — <strong>17×</strong> at the default material, silently absorbed by every
+    specular colour an artist ever tuned.
+  </p>
+
+  <p>
+    And three numbers worth carrying forward. GGX beats Beckmann by <strong>456×</strong> in the
+    tail at 45°, which is the entire reason it won. The height-correlated Smith term differs from
+    the separable one by <strong>1.715×</strong> at grazing on rough surfaces, which is why "either
+    is fine" is not true. And single-scattering microfacet theory <strong>loses 69%</strong> of the
+    light at full roughness, which is why rough metal renders dark in every engine that has not
+    bought it back.
+  </p>
+
+  <p>
+    The test also found a bug that has nothing to do with microfacets: the textbook GGX denominator
+    loses <strong>1.1%</strong> of the model's energy to catastrophic cancellation in
+    <code>float</code>, and one line of algebra plus Sterbenz's lemma removes it. That is what a
+    test whose expected answer is a round number is <em>for</em>.
+  </p>
+
+  <p>
+    <strong>Next, Lesson 6.4: Cook–Torrance, derived.</strong> The parts are built and each is
+    tested against a property it must satisfy alone. 6.4 assembles them — which means deriving the
+    <em>4(n·l)(n·v)</em> denominator rather than quoting it, and adding the term this lesson
+    deliberately left out. <strong>Fresnel is the coupling.</strong> It says what fraction of the
+    arriving light bounces off the interface, and only the remainder — <em>1 − F</em> — is left to
+    go into the surface and scatter back out diffusely. The two lobes stop being independent, and
+    §1's 1.1386 stops being possible. That is the centrepiece of the module, and everything in this
+    lesson is the apparatus it needs to make its argument in numbers rather than adjectives.
+  </p>
+
+  <!-- =================================================================
+       17 — FURTHER READING
+       ================================================================= -->
+  <h2 id="reading"><span class="num">17</span>Further Reading</h2>
+
+  <ul class="reading">
+    <li><strong>Walter, Marschner, Li &amp; Torrance, "Microfacet Models for Refraction through
+        Rough Surfaces" (EGSR 2007).</strong> The paper that introduced GGX to graphics and derived
+        the Smith masking function for it. Appendix A is the source of the exact
+        <em>G</em><sub>1</sub> this lesson implements. Readable, and short.</li>
+    <li><strong>Heitz, "Understanding the Masking-Shadowing Function in Microfacet-Based BRDFs"
+        (JCGT 2014).</strong> The definitive treatment of §7, including the height-correlated form
+        and a careful account of what the separable one assumes. Also the clearest available
+        explanation of why <em>D</em> must be normalised the way it is.</li>
+    <li><strong>Cook &amp; Torrance, "A Reflectance Model for Computer Graphics" (SIGGRAPH
+        1981).</strong> The original, and Lesson 6.4's subject. Worth reading now for how much of
+        the framework was already complete forty years ago.</li>
+    <li><strong>Trowbridge &amp; Reitz (1975).</strong> The distribution, thirty-two years before
+        graphics noticed it — derived by fitting measured surfaces rather than from optics, which
+        is why it has the better tail.</li>
+    <li><strong>Filament's documentation, §4.4 "Standard model"</strong>
+        (google.github.io/filament). The most careful published account of the implementation
+        choices — including the roughness remap and the visibility form 6.4 will use.</li>
+    <li><strong>Kulla &amp; Conty, "Revisiting Physically Based Shading at Imageworks" (SIGGRAPH
+        2017).</strong> Where §8's 69% deficit gets bought back, and the reference for the
+        compensation term §11 declines to build.</li>
+    <li><strong>Goldberg, "What Every Computer Scientist Should Know About Floating-Point
+        Arithmetic" (1991).</strong> For §9. Sterbenz's lemma and catastrophic cancellation are in
+        §2; it is thirty years old and has not dated at all.</li>
+  </ul>
+
+  <nav class="lesson-nav" aria-label="Lesson navigation (bottom)">
+    <a class="prev-l" href="06-02-what-a-brdf-is.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">6.2 — Radiometry-Lite: What a BRDF Is</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="../index.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">6.4 — Cook–Torrance PBR, Derived</span>
+    </a>
+  </nav>
+
+</div>
+
+<!-- SHARED-SCRIPT:BEGIN -->
+<!-- The shared page script (theme toggle, TOC scrollspy, syntax highlighter),
+     linked rather than inlined. Single source of truth: docs/shared/course.js.
+     A plain classic script at end of body, so it runs exactly where the inline
+     copy used to: after the DOM is parsed, before KaTeX's deferred render. -->
+<script src="../shared/course.js"></script>
+<script defer
+        src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"
+        integrity="sha384-7zkQWkzuo3B5mTepMUcHkMB5jZaolc2xDwL6VFqjFALcbeS9Ggm/Yr2r3Dy4lfFg"
+        crossorigin="anonymous"></script>
+<script defer
+        src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+        integrity="sha384-43gviWU0YVjaDtb/GhzOouOXtZMP/7XUzwPTstBeZFe/+rCMvRwr4yROQP43s0Xk"
+        crossorigin="anonymous"
+        onload="renderMathInElement(document.body, {
+          delimiters: [
+            {left: '\\[', right: '\\]', display: true},
+            {left: '\\(', right: '\\)', display: false}
+          ],
+          throwOnError: false
+        });"></script>
+<!-- SHARED-SCRIPT:END -->
+</body>
+</html>

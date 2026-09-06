@@ -7,7 +7,7 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-09-06 (after Lesson 6.2 — 58 of 95 lessons)
+updated: 2026-09-06 (after Lesson 6.3 — 59 of 95 lessons)
 
 conventions:
   ecs-storage: THE ECS IS A SPARSE SET, DECIDED IN 5.7 BY MEASUREMENT, NOT TASTE.
@@ -2984,6 +2984,47 @@ curriculum: 95 lessons, ~438 h, 9 modules   (5.10 split into 5.10 + 5.11 in 5.10
         NOT DONE, NAMED: no specular normalisation, no reciprocity (Blinn's term
         happens to be reciprocal, Phong's is not), no real photometric unit, no
         transmission (BTDF / subsurface).
+  microfacets: LESSON 6.3 REPLACED shininess WITH A STATISTICAL CLAIM, and the
+        claim is testable, which is the whole difference.
+        A SURFACE IS A LANDSCAPE OF PERFECT MIRRORS, far smaller than a pixel and
+        far larger than a wavelength. A facet reflects l to v only if its own
+        normal IS h — so 3.7's halfway vector stops being a way of putting it. The
+        highlight's shape is a HISTOGRAM OF SLOPES and roughness is its width.
+        THE NDF IDENTITY IS THE CONVENTION EVERY LATER DISTRIBUTION MUST MEET:
+            integral over hemisphere of D(h) * cos(theta_h) dw = 1
+        Read backwards: the facets' PROJECTED AREAS total the flat area they stand
+        on. verify_63 §A is the test, and it is reused unchanged for every new D.
+        THE DIAGNOSTIC TABLE, for when it fails: 2.0 means the cos(theta_h) weight
+        is missing; 0.5 means the sin(theta) in dw is; 2*pi means phi was forgotten.
+        alpha = roughness^2 IS A CONVENTION (Disney's remap), not physics — an
+        imported roughness from a renderer that squares differently WILL NOT MATCH.
+        Convert at the import edge and write down which you store: 6.1's
+        two-conversions-at-the-edges discipline, applied to a second quantity.
+        BLINN-PHONG IS AN NDF MISSING ITS CONSTANT. (s+2)/2pi normalises it; the
+        engine ships 1/pi, off by (s+2)/2 = 17x at shininess 32. NOT FIXED IN 6.3:
+        the constant is wrong but the MATERIALS were authored against it, so
+        specular::colour absorbed it, and correcting one without the other blows
+        the highlights out. 6.4 replaces both at once.
+        s = 2/alpha^2 - 2 MATCHES THE PEAK AND ONLY THE PEAK (to one float ULP). A
+        lobe fit lands 0.80x lower. Both are right; quote the criterion.
+        G IS A CONSEQUENCE, NOT A CORRECTION — once you have said "landscape" you
+        have said "some of it is hidden". Height-correlated Smith is the DEFAULT
+        because the separable form's independence assumption is false by 1.715x at
+        alpha 0.8 and 80 degrees, MEASURED. "Either is fine" was not true.
+        SINGLE SCATTERING LOSES 69% AT FULL ROUGHNESS (0.3069 with F=1), because a
+        facet bounces light once and the model forgets it. Rough metal renders
+        dark, proportionally, so turning the light up cannot fix it. Named, not
+        built — Kulla-Conty is the standard compensation and needs 6.4's assembled
+        BRDF to attach to.
+        NUMERICAL: THE TEXTBOOK GGX DENOMINATOR IS WRONG IN float. Written
+        c2*(a2-1)+1 it is a catastrophic cancellation and loses 1.1% of the model's
+        energy at mirror roughness. ndf() computes (1-c)*(1+c) + a2*c2 instead —
+        identical algebra, and Sterbenz's lemma makes 1.0f - c EXACT for c >= 0.5,
+        which is the whole peak region. 450x better at alpha 0.01. verify_63 §A
+        asserts the comparison so the "tidy" refactor back fails loudly.
+        THE DIAGNOSTIC THAT FOUND IT, and it generalises: QUADRATURE ERROR SHRINKS
+        WITH THE GRID, ARITHMETIC ERROR DOES NOT. Two runs — refine the grid, then
+        run the same formula in double on the same grid — locate any such bug.
 
 completed:
   - 0.1  What a Game Engine Actually Is
@@ -3054,8 +3095,29 @@ completed:
   ===> MODULE 5 COMPLETE <===
   - 6.1  Linear and sRGB: The Gamma Lesson
   - 6.2  Radiometry-Lite: What a BRDF Is
+  - 6.3  Microfacet Theory
 
 capabilities:
+  - 6.3 THE ENGINE HAS A STORY ABOUT WHAT A SURFACE IS, AND IT CAN BE CHECKED.
+    ONE NEW HEADER, HEADER-ONLY: 56 -> 57 public headers, 32 sources unchanged, no
+    CMake change. NOTHING IS WIRED IN — shade() and scene.frag.hlsl are untouched,
+    and the only edit outside the new file is a pointer comment in light.hpp.
+    microfacet.hpp  k_min_alpha (1e-3), ndf_model{blinn,beckmann,ggx},
+                alpha_from_roughness (= r*r, Disney's remap, a CONVENTION),
+                roughness_from_alpha, blinn_exponent_from_alpha (a PEAK match) and
+                its inverse, ndf(), smith_g1(), smith_g_separable(), smith_g()
+                (height-correlated, the default).
+    THE DEFINING IDENTITY, and the first equation in the shading arc with a
+    right-hand side a model can be held to:
+        integral over hemisphere of D(h) * cos(theta_h) dw = 1
+    Read backwards it says the microfacets' PROJECTED AREAS add up to the flat area
+    they stand on, which is why the cosine is in it and is not a convention.
+    MEASURED: worst error 3.74e-07 over three models and six roughnesses at 400k
+    samples. Blinn-Phong SATISFIES IT given (s+2)/2pi — it was a microfacet
+    distribution all along — and the engine ships 1/pi, wrong by exactly (s+2)/2,
+    = 17x at the default shininess of 32. GGX vs Beckmann: same peak, 456x the tail
+    at 45 degrees. Height-correlated vs separable Smith: 1.715x at grazing on rough.
+    Single scattering with F=1 returns 0.3069 at full roughness — LOSES 69%.
   - 6.2 THE SHADING EQUATION HAS UNITS, AND THEY ARE SEPARABLE.
     NO NEW HEADERS, NO NEW SOURCES — 56 public headers and 32 sources, unchanged
     for a SECOND lesson. 6.2 renamed things; it did not add a subsystem.
@@ -5137,7 +5199,9 @@ files:
             depth_buffer.hpp, framebuffer.hpp, gpu_buffer.hpp, gpu_debug.hpp,
             gpu_device.hpp, gpu_mesh.hpp, gpu_pipeline.hpp, gpu_present.hpp,
             gpu_scene.hpp, gpu_shader.hpp, gpu_texture.hpp, gpu_uniform.hpp,
-            image.hpp, light.hpp, mesh.hpp, obj.hpp, projector.hpp, raster.hpp,
+            image.hpp, light.hpp, mesh.hpp,
+            microfacet.hpp                                                   [6.3]
+            obj.hpp, projector.hpp, raster.hpp,
             scene.hpp, soft_renderer.hpp, texture.hpp, viewport.hpp
   engine/include/engine/math/: mat2.hpp, mat3.hpp, mat4.hpp, transform.hpp,
             vec2.hpp, vec3.hpp, vec4.hpp
@@ -5200,7 +5264,8 @@ files:
                  05-10-input-mapping.html,
                  05-11-imgui-debug-draw.html,
                  06-01-linear-and-srgb.html,
-                 06-02-what-a-brdf-is.html
+                 06-02-what-a-brdf-is.html,
+                 06-03-microfacet-theory.html
   docs/shared/: course.css, course.js      (THE stylesheet + page script; one copy each)
   docs/_template/: lesson-template.html, README.md, apply-shared.py, check-page.js
   scratch/ (5.7, not shipped with the engine): ecs_probe.hpp, bench_57.cpp,
@@ -5261,10 +5326,26 @@ files:
            and write a second one when it tells you something you did not expect.)
            figview/ — one throwaway HTML page per figure, because scrolling a
            220 KB page to look at figure 5 lands unpredictably (5.11's note).
-           (build_62.py PINS NOTHING YET and lists light.hpp and scene.frag.hlsl
-            WHOLE. Those are the two files the ENTIRE REST OF MODULE 6 edits — 6.3
-            adds a microfacet distribution, 6.4 replaces specular_brdf outright,
-            6.5 pulls the material parameters out. Pin before touching either.)
+           PINNED BY 6.3, before a line of it was written. All four listings frozen:
+           l62_light.hpp, l62_scene.frag.hlsl, l62_gpu_uniform.hpp and
+           l62_verify_62.cpp. The three TRACKED files were verified against commit
+           3507837 with `git show ... | diff - <pin>`; verify_62.cpp is GITIGNORED,
+           so its pin is only a working-tree copy taken before the first edit —
+           weaker provenance, worth knowing, and the reason to take it early.
+           Rebuilding then gave a diff of exactly the two nav lines meant to move.
+  scratch/ (6.3, not shipped with the engine): verify_63.cpp, build_verify_63.sh,
+           figs_63.py, build_63.py, l63_body_{a,b,c}.html, l63_fig{1..6}.svg,
+           probe_63.cpp and probe_63b.cpp (THROWAWAYS, kept. The first asked six
+           questions; the second existed because the first's answers raised two
+           DESIGN questions the lesson could not settle by taste — is the
+           height-correlated Smith form worth shipping beside the separable one
+           (yes: 1.715x), and what does the specular BRDF's own energy budget look
+           like (0.3069 at full roughness). Same habit as 6.2: write another probe
+           the moment one tells you something you did not expect.)
+           figview/ — one throwaway page per figure; g1..g6.html this lesson.
+           (build_63.py PINS NOTHING YET and lists microfacet.hpp WHOLE. LESSON 6.4
+            IS THE ONE THAT ASSEMBLES IT — Fresnel, and very likely a combined
+            visibility form. Pin before writing a line of 6.4.)
   scratch/ (5.11, not shipped with the engine): verify_511.cpp,
            build_verify_511.sh, figs_511.py, build_511.py,
            l511_body_{a,b,c}.html, l511_fig{1..7}.svg
@@ -5285,64 +5366,59 @@ files:
   (retired: src/ — the whole directory. hello.cpp.)
 
 
-next: 6.3 — Microfacet Theory
-      (planned filename: docs/lessons/06-03-microfacet-theory.html — 6.2's TWO next
-      links point at the index and BOTH need repointing; scratch/l62_body_a.html
-      holds the top one and build_62.py's TAIL holds the bottom one. AND:
-      build_62.py PINS NOTHING while listing light.hpp and scene.frag.hlsl WHOLE.
-      6.3 edits BOTH — it is a lighting lesson and they are the two lighting files
-      — so before touching either:
-        git show <6.2 commit>:<path> > scratch/l62_<name>
-      verified with `git show ... | diff - <snapshot>`, then re-run build_62.py and
-      `git diff` the page. 6.2 did this to build_61.py on time and the diff came
-      out to exactly the lines that were meant to move; that is the standard.
-      6.2 GAVE THE EQUATION UNITS; 6.3 ASKS WHAT A SURFACE IS. The apparatus is now
-      in place — a BRDF is a ratio in sr^-1, and R(v) = integral of f_r cos dw is a
-      NUMBER that says whether a model is plausible. 6.3 is the lesson that number
-      was built for.
-      1 THE DOOR IN IS 1.1386, measured in 6.2 §6 and asserted in verify_62 §D: a
-        white surface with a white highlight reflects more light than arrives,
-        because diffuse and specular are ADDED with no coupling. Do not open 6.3 on
-        "here is a better distribution function". Open it on the number, and on the
-        question the number forces: if that light bounced off the surface, how can
-        it also have gone into it?
-      2 A SURFACE AS A LANDSCAPE OF TINY MIRRORS, and the payoff is that ROUGHNESS
-        STOPS BEING A SLIDER. shininess (light.hpp, since 3.7) is an exponent with
-        no physical reading, not comparable between Phong and Blinn (3.7 measured
-        the 4x rule), and 6.2 has now measured that its reflectance swings 5.36x
-        with view angle for no reason anyone asked for. Roughness is a statement
-        about the DISTRIBUTION OF MICROFACET SLOPES, which is a thing that can be
-        measured off a real surface.
-      3 THE NDF FIRST, ALONE. D(h) is the fraction of microfacets whose normal is
-        h — a probability density on the sphere, so it INTEGRATES TO 1 against
-        cos(theta_h), which is a checkable claim and belongs in verify_63 as the
-        first thing written. Beckmann then GGX, and GGX's tail is the whole reason
-        it won: derive it, do not assert it. Blinn-Phong's lobe should be shown to
-        BE a (badly normalised) NDF, so 3.7 is retrospectively promoted rather than
-        thrown away — that is the spiral, and 6.2 already set it up by calling the
-        halfway vector "the normal this surface would need".
-      4 THE GEOMETRY TERM IS A CONSEQUENCE, NOT A FUDGE: microfacets shadow and
-        mask each other, and at grazing angles that is most of the effect. Its
-        absence is why an un-normalised lobe misbehaves at grazing angles, which
-        6.2 measured as the 0.1386-vs-0.0259 swing without being able to explain it.
-      5 DECISION TO MAKE EARLY: does 6.3 ship code, or is it derivation + verify
-        only, with 6.4 assembling? The curriculum splits microfacet theory (6.3)
-        from Cook-Torrance assembled (6.4), which suggests 6.3 ships D and G as
-        FUNCTIONS with their own tests and 6.4 wires them into shade(). That keeps
-        each lesson's verify honest and avoids a half-BRDF being live in the
-        renderer for one lesson. Prefer it unless 6.3 comes out thin.
-      THE TEST TO BEAT: golden byte-identical for a FOURTEENTH lesson is likely IF
-      6.3 ships D and G as unwired functions (nothing in shade() moves). It is
-      certainly over in 6.4. Either way, verify_63 must cover: D integrates to 1
-      against cos(theta_h) for every roughness tested; D is normalised for both
-      Beckmann and GGX; the Blinn exponent that best matches a given GGX roughness,
-      fitted rather than guessed; G's range and its limits at normal and grazing
-      incidence; and 6.2's hemisphere integrator reused UNCHANGED, because a test
-      that gets rewritten for each new BRDF is not a test of the new BRDF.
-      Plus verify_45..62 green.
-      CARRY FORWARD FROM 6.2: the units are settled and must stay settled. Every
-      new term is either a BRDF (sr^-1, goes inside the f_r sum) or a factor of the
-      light (dimensionless or W/m^2, goes outside it). If a term will not sort into
-      one of those two, that is the signal to stop and work out what it actually is
-      — it is how the pi got lost in the first place.
+next: 6.4 — Cook–Torrance PBR, Derived
+      (planned filename: docs/lessons/06-04-cook-torrance.html — 6.3's TWO next
+      links point at the index and BOTH need repointing; scratch/l63_body_a.html
+      holds the top one and build_63.py's TAIL the bottom. AND build_63.py PINS
+      NOTHING while listing microfacet.hpp WHOLE — the file 6.4 is ABOUT. Pin
+      first, and take verify_63.cpp's pin early since it is gitignored:
+        git show <6.3 commit>:engine/include/engine/gfx/microfacet.hpp \
+            > scratch/l63_microfacet.hpp
+        cp scratch/verify_63.cpp scratch/l63_verify_63.cpp
+      Then re-run build_63.py and `git diff` the page. Two lessons running, the
+      diff has come out to exactly the nav lines that were meant to move; that is
+      the standard, not a lucky streak.
+      THE CENTREPIECE OF THE MODULE, and the parts are already built and tested.
+      6.4 ASSEMBLES AND REPLACES, which is why it is the lesson the golden breaks.
+      1 THE DOOR IS STILL 1.1386 — 6.2's number, restated in 6.3 §1 and left
+        standing on purpose. 6.3 could not fix it: normalising D does not couple
+        the lobes. FRESNEL IS THE COUPLING and that sentence is the lesson.
+        F says what fraction bounces off the interface; only 1 - F is left to go
+        in and scatter back out. The two terms stop being independent, and a white
+        surface with a white highlight stops being able to exceed 1.
+      2 DERIVE THE 4(n·l)(n·v) DENOMINATOR, do not quote it. It is a Jacobian from
+        changing variables between the light direction and the halfway vector —
+        dw_h/dw_l = 1/(4 (v·h)) — and it is the single most-quoted, least-derived
+        line in real-time graphics. 6.3 deliberately deferred it and said so.
+      3 FRESNEL: derive the shape from the physics (reflectance rises to 1 at
+        grazing, ALWAYS, for every material), then Schlick's approximation FITTED
+        against the exact equations rather than asserted — the same treatment 6.3
+        gave the s = 2/alpha^2 - 2 mapping, and the same finding is likely: it is
+        a fit to something specific and the error is worth stating.
+        F0 IS THE MATERIAL PARAMETER THAT REPLACES specular::colour, and metals
+        differ from dielectrics only in that F0 is coloured and there is no
+        diffuse lobe at all. That is the "metallic" workflow, arriving as a
+        consequence rather than as a checkbox.
+      4 THE MATERIALS MUST BE RE-AUTHORED IN THE SAME COMMIT AS THE CONSTANT.
+        6.3 measured that the engine's specular colours absorbed a 17x error;
+        fixing the constant alone blows every highlight out (Exercise 15.1 walks a
+        student into exactly this). So 6.4 changes shade(), scene.frag.hlsl AND
+        the demo materials together, and says so.
+      THE TEST TO BEAT: THE GOLDEN BREAKS HERE, deliberately and for the first time
+      in fifteen lessons. RE-BASELINE PROPERLY: show the diff, state the
+      per-channel magnitude, record the old hash (905BF27E) beside the new, and say
+      what changed and why the OLD picture was not merely worse but differently
+      parameterised. Do not renormalise to preserve it.
+      verify_64 must cover: the Jacobian, derived and checked numerically against a
+      direct change of variables; Schlick against the exact Fresnel equations, with
+      the worst error stated; F0 round-tripping from an index of refraction;
+      ENERGY — 6.2's integrator again, unchanged, now over the FULL BRDF with the
+      coupling in, which must not exceed 1 for any albedo/roughness/view triple;
+      and the white-furnace test from 6.2 Exercise 13.5 extended to the specular.
+      Plus verify_45..63 green.
+      CARRY FORWARD: 6.3's rule that a term is either a BRDF (sr^-1, inside f_r) or
+      a factor of the light (outside it) still sorts every new quantity. And the
+      numerical habit — quadrature error shrinks with the grid, arithmetic error
+      does not — found a 1.1% energy loss in a formula every reference prints. Run
+      it on the Fresnel and Jacobian arithmetic too.
 ```

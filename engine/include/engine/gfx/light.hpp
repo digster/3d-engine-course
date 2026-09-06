@@ -449,6 +449,15 @@ struct specular
 /// (Without the `1 / pi` the lobe alone is worse still: `verify_62` §D finds it
 /// exceeds unity for every shininess below about 12, peaking at 2.67 at shininess
 /// 1. A "rough plastic" would then be a light source.)
+///
+/// **LESSON 6.3 EXPLAINS THE LOBE AND MEASURES THIS CONSTANT.** `cos^shininess` is
+/// not an arbitrary shape: it is a microfacet distribution, and `gfx/microfacet.hpp`
+/// gives it its proper normalisation, `(s + 2) / 2pi`. Against that, the `1 / pi`
+/// here is off by a factor of `(s + 2) / 2` — **exactly 17x at the default
+/// shininess of 32**, which is why this engine's materials have always needed a
+/// `specular` colour larger than physical plausibility would suggest. Nothing is
+/// changed here yet; Lesson 6.4 replaces this function's specular half outright,
+/// with Fresnel supplying the coupling whose absence is measured above.
 [[nodiscard]] inline linear_rgb specular_brdf(specular surface, float lobe)
 {
     return {surface.colour.r * lobe * k_inv_pi,

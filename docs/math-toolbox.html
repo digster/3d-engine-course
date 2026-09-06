@@ -95,6 +95,7 @@
       <li><a href="#intersection">Geometry and intersection</a></li>
       <li><a href="#meshes">Measuring a mesh</a></li>
       <li><a href="#radiometry">Radiometry and BRDFs</a></li>
+      <li><a href="#microfacets">Microfacets</a></li>
       <li><a href="#performance">Reasoning about cost</a></li>
       <li><a href="#pipelining">Two processors, overlapped</a></li>
       <li><a href="#coming">Coming as the course proceeds</a></li>
@@ -1978,6 +1979,130 @@
     </p>
   </div>
 
+  <h2 id="microfacets"><span class="num">7c</span>Microfacets</h2>
+
+  <p>
+    &sect;7b gave the shading equation units; these give it a surface. All three arrived in Lesson
+    6.3, and the first one is the reason the other two can be trusted &mdash; it is the only
+    identity in this section with a right-hand side you can hold a model to.
+  </p>
+
+  <div class="tool">
+    <h3>The NDF identity <span class="from">Lesson 6.3</span></h3>
+    <div class="eq">
+      <span>\[ \int_{\Omega} D(\mathbf{h}) \cos\theta_h \, d\omega = 1 \]</span>
+      <span class="eq-plain">the integral of D(h) times cos&nbsp;&theta;&#8341; over the
+        hemisphere is exactly 1</span>
+    </div>
+    <p>
+      A microfacet distribution reports what fraction of a surface faces each way, so the fractions
+      must add up to the whole surface. <strong>Read it backwards for the better statement:</strong>
+      the microfacets&rsquo; <em>projected areas</em> add up to the area of the flat surface they
+      stand on. Nothing else could be true, which is why the cosine is in there and is not a
+      convention &mdash; it is the same projected-area factor as &sect;7b and &sect;7.
+    </p>
+    <p>
+      This is what separates a distribution from a shape. <code>shininess</code> could not be
+      wrong; <em>D</em> can be, in a way a machine detects. The identity is also what makes the
+      three constants below <em>derivable</em> rather than quoted.
+    </p>
+    <div class="worked">
+      <span class="label">Worked</span>
+      <p>
+        Blinn-Phong&rsquo;s bare <code>cos&#8345;</code> lobe, at <em>s</em> = 32. Substituting
+        <em>u</em> = cos&nbsp;&theta; turns the polar integral into
+        <code>&int;&#8320;&sup1; u&sup3;&sup3; du = 1/34</code>, so the whole thing is
+        <code>2&pi;/34 = 0.1848</code> &mdash; not 1. Generally <code>2&pi;/(s+2)</code>, so the
+        constant it lacks is <strong>(s+2)/2&pi;</strong>.
+      </p>
+      <p>
+        Which prices a real renderer: this engine multiplies by <code>1/&pi;</code>, so it is off
+        by <code>(s+2)/2</code> &mdash; exactly <strong>17&times;</strong> at shininess 32, with
+        no &pi; in the answer because both constants carry one.
+      </p>
+    </div>
+  </div>
+
+  <div class="tool">
+    <h3>Beckmann and GGX <span class="from">Lesson 6.3</span></h3>
+    <div class="eq">
+      <span>\[ D_{\text{Beckmann}} = \frac{e^{-\tan^2\theta_h / \alpha^2}}
+                                          {\pi \alpha^2 \cos^4\theta_h}
+             \qquad
+             D_{\text{GGX}} = \frac{\alpha^2}
+                                   {\pi\left(\cos^2\theta_h(\alpha^2-1)+1\right)^2} \]</span>
+      <span class="eq-plain">Beckmann is a Gaussian on the microfacet slopes; GGX replaces the
+        exponential with a squared rational denominator</span>
+    </div>
+    <p>
+      Both integrate to 1 and both peak at the same height for the same &alpha; (3.5368 at
+      &alpha; = 0.3), so <strong>every difference between them is shape.</strong> GGX is
+      <em>lower</em> near the peak &mdash; 0.71&times; at 20&deg; &mdash; and <strong>456&times;
+      higher at 45&deg;</strong>, because a rational function has a power-law tail and an
+      exponential has none. Beckmann is numerically zero (1.9&times;10&#8315;&sup1;&sup3;) by
+      60&deg;: a hard edge where a real surface glows.
+    </p>
+    <p>
+      <strong>&alpha; = roughness&sup2; is a convention, not physics</strong> (Disney&rsquo;s
+      remap), chosen because almost all the visible change lives in &alpha;&rsquo;s bottom fifth
+      &mdash; the same argument &sect;6.1 made about sRGB spending codes where the eye is. A
+      roughness copied from a renderer that squares differently will not match.
+    </p>
+    <div class="worked">
+      <span class="label">Worked &mdash; and a warning about the mapping everyone quotes</span>
+      <p>
+        Equating the two <em>peaks</em> gives <code>(s+2)/2&pi; = 1/(&pi;&alpha;&sup2;)</code>,
+        hence the familiar <code>s = 2/&alpha;&sup2; &minus; 2</code>. It does exactly that, to one
+        float ULP. But fitting the whole <em>lobe</em> instead lands consistently
+        <strong>0.80&times;</strong> lower (0.806 at &alpha; = 0.1, 0.759 at 0.5), because a lobe
+        fit trades peak height for a tail Blinn cannot reproduce at any exponent.
+      </p>
+      <p>
+        Both are right; they answer different questions. <strong>When you meet a conversion
+        formula, derive it far enough to see what it optimised.</strong>
+      </p>
+    </div>
+  </div>
+
+  <div class="tool">
+    <h3>Smith masking, and the energy it does not return <span class="from">Lesson 6.3</span></h3>
+    <div class="eq">
+      <span>\[ G_1(\mathbf{x}) = \frac{2\,(\mathbf{n}\cdot\mathbf{x})}
+        {(\mathbf{n}\cdot\mathbf{x}) + \sqrt{\alpha^2 + (1-\alpha^2)(\mathbf{n}\cdot\mathbf{x})^2}} \]</span>
+      <span class="eq-plain">the fraction of microfacets visible from a direction: 1 along the
+        normal, falling toward 0 at grazing incidence</span>
+    </div>
+    <p>
+      Shadowing (the light cannot reach a facet) and masking (the eye cannot see it) are the same
+      effect from the two ends of the path, and both are <strong>consequences</strong> of the
+      landscape picture rather than corrections bolted onto it &mdash; once you have said
+      &ldquo;landscape&rdquo; you have said &ldquo;some of it is hidden&rdquo;. At 75&deg; a
+      near-smooth surface still shows <strong>0.9920</strong> of itself and a fully rough one
+      <strong>0.4112</strong>.
+    </p>
+    <p>
+      Multiplying two <em>G</em>&#8321;s assumes being lit and being visible are independent. They
+      share a height field, so they are not: the height-correlated form differs from the separable
+      one by <strong>1.715&times;</strong> at &alpha; = 0.8 with both directions at 80&deg;.
+    </p>
+    <div class="worked">
+      <span class="label">Worked &mdash; what single scattering loses</span>
+      <p>
+        Put the specular BRDF through &sect;7b&rsquo;s energy test with <em>F</em> = 1, so nothing
+        is absorbed:
+      </p>
+      <p class="mono">roughness 0.22 &rarr; 0.9976 &nbsp;&middot;&nbsp; 0.50 &rarr; 0.9158
+        &nbsp;&middot;&nbsp; 1.00 &rarr; <strong>0.3069</strong></p>
+      <p>
+        It never exceeds 1 &mdash; unlike Blinn-Phong, which was over at every shininess. But a
+        fully rough surface <strong>loses 69%</strong>, because single-scattering theory lets a
+        facet bounce light once and then forgets it. That light hit a second facet on the way out.
+        It is why rough metal renders dark, and buying it back is Kulla&ndash;Conty&rsquo;s
+        multiple-scattering compensation.
+      </p>
+    </div>
+  </div>
+
   <h2 id="performance"><span class="num">8</span>Reasoning about cost</h2>
 
   <p>
@@ -2185,8 +2310,9 @@
     into every shading constant</strong> · <strong>the BRDF as a ratio in inverse
     steradians</strong> · <strong>the Lambert BRDF derived from energy conservation</strong> ·
     <strong>directional-hemispherical reflectance as an energy test</strong> (§7b above, all
-    five from 6.2) · the rendering equation, honestly scoped · microfacet distributions
-    (GGX) · the geometry and Fresnel terms · Schlick's approximation · <strong>the sRGB
+    five from 6.2) · <strong>the NDF normalisation identity</strong> · <strong>Beckmann and GGX</strong> ·
+    <strong>the roughness remap</strong> · <strong>Smith masking</strong> (§7c, all from 6.3) · the rendering
+    equation, honestly scoped · the Fresnel term · Schlick's approximation · <strong>the sRGB
     transfer function</strong> · the TBN basis · tonemapping curves · spherical harmonics
     for irradiance.
   </div>

@@ -338,6 +338,52 @@ Named as owed: specular normalisation (6.3–6.4), reciprocity, real photometric
 transmission — a BRDF describes only light leaving the side it arrived on, which is why this
 renderer cannot make a convincing wax candle.
 
+**Surfaces, as of Lesson 6.3 — `shininess` is retired in favour of a testable claim.** 6.2 gave
+the equation units; 6.3 gives it a *surface*. `gfx/microfacet.hpp` (new, header-only, 56 → 57
+public headers) models a surface as a landscape of microscopic perfect mirrors: a facet reflects
+**l** to **v** only if its own normal is **h**, so the highlight's shape is a histogram of surface
+slopes and **roughness is that histogram's width** — a quantity an instrument can measure, which
+`shininess` never was.
+
+The header supplies `ndf_model{blinn, beckmann, ggx}` behind one `ndf()` entry point (pipeline
+state, not a material parameter — the same call 3.7 made for `specular_model`), the roughness
+remap, and two forms of the Smith geometry term. **Nothing is wired in.** `shade()` and
+`scene.frag.hlsl` are untouched; 6.4 assembles, because Fresnel is what couples the two lobes and
+shipping *D* and *G* live would leave the renderer running a model that is neither the old one nor
+the new one.
+
+**The governing identity is the architectural fact**, because it is what makes every later
+distribution checkable rather than merely plausible:
+
+```
+∫ D(h) · cos θₕ · dω  =  1
+```
+
+Read backwards: the microfacets' projected areas add up to the flat area they stand on. `verify_63`
+§A is the test, and it is reused unchanged for every distribution added from here — a test
+rewritten per subject is a test of the test.
+
+What that test established about the engine as it stood: **Blinn-Phong satisfies the identity given
+`(s+2)/2π`** — it was a microfacet distribution all along — and the engine ships `1/π`, wrong by
+`(s+2)/2`, **17× at the default shininess of 32**. It is *not* fixed in 6.3, deliberately: the
+materials were authored against the wrong constant, so `specular::colour` absorbed it, and
+correcting one without the other blows every highlight out. 6.4 changes both in one commit.
+
+Two conventions arrive with it. **`α = roughness²` is Disney's remap, not physics** — an imported
+roughness from a tool that squares differently will not match, so convert at the import edge and
+record which convention is stored, exactly the discipline 6.1 arrived at for colour. And
+**height-correlated Smith is the default**, not by preference: the separable form's independence
+assumption is false by a measured 1.715× at α = 0.8 and 80°.
+
+Two limits are named rather than left to be discovered. Single-scattering theory **loses 69% of
+the light at full roughness** (R(v) = 0.3069 with F = 1), because a facet bounces light once and
+the model forgets it — which is why rough metal renders dark, proportionally, so a brighter light
+cannot fix it. And the **textbook GGX denominator is numerically wrong in `float`**: written
+`c²(α²−1)+1` it is a catastrophic cancellation costing 1.1% of the model's energy at mirror
+roughness, so `ndf()` computes the algebraically identical `(1−c)(1+c) + α²c²`, where Sterbenz's
+lemma makes `1.0f - c` exact for `c ≥ 0.5`. `verify_63` §A asserts the comparison, so a later
+"tidy" back to the textbook form fails loudly.
+
 We convert **per operation**, which is both slower and lossier than a real pipeline — each round
 trip requantises to 256 steps. A properly linear renderer decodes once on the way in and encodes
 once on the way out, which needs a float or half-float framebuffer, headroom above 1.0, and a
@@ -2101,6 +2147,9 @@ Full detail with diagrams in [`docs/conventions.html`](docs/conventions.html); t
 | Shading equation | `L_o = (f_d + f_s)·E_perp·cos θ + albedo·L_ambient` — BRDFs in **sr⁻¹**, light in **irradiance** (6.2) |
 | Light units | `directional_light::irradiance`, E⊥ on a surface square-on to the beam; `k_reference_irradiance` = π is the engine's exposure (6.2) |
 | Energy test | `R(v) = ∫ f_r cos θ dω ≤ 1`, integrated numerically; every BRDF is run through it (6.2) |
+| Surface model | Microfacet: `D` must satisfy `∫ D(h) cos θₕ dω = 1`, checked for every distribution (6.3) |
+| Roughness | `α = roughness²` — Disney's remap, a **convention**; convert at the import edge (6.3) |
+| Geometry term | Height-correlated Smith, not separable — the independence assumption is off by 1.715× at grazing (6.3) |
 | Angles | Radians. Always. |
 | Performance units | **ns per covered pixel** and **ns per triangle** — never ms/frame |
 | Timing statistic | **median** for a frame, **minimum** for a kernel, never the mean |

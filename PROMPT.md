@@ -2423,3 +2423,58 @@ prereq links by resolving every href on the page against the filesystem, which `
 does not cover.
 
 `next:` is 6.3 — Microfacet Theory, and the door into it is 1.1386.
+
+---
+
+## 2026-09-06 (b) — `next` (Lesson 6.3: Microfacet Theory)
+
+Delivered **Lesson 6.3 — Microfacet Theory** (59 of 95 published). The lesson opens on 6.2's
+1.1386 rather than on a distribution formula, because the question that number forces is the whole
+subject: *if that light bounced off the surface, how can it also have gone into it?*
+
+`shininess` is retired, and the case against it is that it is not comparable between models (3.7
+fitted 4.38×), not measurable on any real material, and not transferable between renderers. In its
+place, one sentence taken literally — a surface is a landscape of microscopic **perfect** mirrors
+— which turns shading into a counting problem and makes the highlight a **histogram of surface
+slopes**.
+
+The payoff is that a histogram is a distribution, so it must satisfy `∫ D(h) cos θₕ dω = 1` —
+**the first equation in this shading arc with a right-hand side a model can be held to.** Read
+backwards it says the facets' projected areas total the flat area they stand on, so the cosine is
+not a convention.
+
+That test then found everything else:
+
+- **Blinn-Phong was a microfacet distribution all along**, missing only `(s+2)/2π`. The engine
+  ships `1/π`, wrong by `(s+2)/2` = **17× at the default shininess** — and nothing ever looked
+  wrong, because `specular::colour` absorbed it. Deliberately *not* fixed here: the materials were
+  authored against the wrong constant, so 6.4 changes both at once.
+- **GGX vs Beckmann**: same peak, **456× the tail at 45°**, Beckmann numerically zero by 60°.
+- **The folklore mapping `s = 2/α² − 2` matches only the peak** (to one ULP); a lobe fit lands
+  0.80× lower. Both right, different questions.
+- **Height-correlated vs separable Smith: 1.715×** at grazing on rough surfaces. "Either is fine"
+  was measured and found untrue.
+- **Single scattering loses 69%** at full roughness (R(v) = 0.3069 with F = 1) — why rough metal
+  renders dark, and it is a fraction so a brighter light cannot fix it.
+
+**And the test found a bug that has nothing to do with microfacets.** The first §A run failed at
+1.83e−04 on the smoothest surface. Rather than widening the tolerance: refine the grid (no change)
+and run the same formula in `double` (clean) — so the error is in `float`, in the formula. The
+textbook GGX denominator `c²(α²−1)+1` is a catastrophic cancellation **losing 1.1% of the model's
+energy at mirror roughness**; `(1−c)(1+c) + α²c²` is identical algebra and Sterbenz's lemma makes
+`1.0f - c` exact for `c ≥ 0.5`. A **450×** improvement, and §A now asserts the comparison inline so
+a tidy-up back fails loudly.
+
+**27 checks / 0 failures** in debug and release; `verify_45`…`62` green; golden **byte-identical
+for the fourteenth lesson**, because nothing is wired in — which is the design, not luck. 6.4
+assembles and is where it breaks.
+
+Also: pinned `build_62.py`'s four listings before touching anything (second lesson running that the
+rebuild diff came out to exactly the nav lines meant to move); added **§7c "Microfacets"** to the
+Math Toolbox; 56 → **57** public headers, header-only so no CMake change.
+
+Two figure lessons worth keeping: a first draft counted 32 of 74 facets as aligned, which
+contradicts the model the figure is drawing and no geometry check can see; and the masking figure's
+light arrows pointed the wrong way until they were made to terminate on the facet they strike.
+
+`next:` is 6.4 — Cook–Torrance, derived. The golden breaks there, deliberately.

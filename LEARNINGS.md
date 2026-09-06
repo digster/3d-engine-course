@@ -5967,3 +5967,181 @@ exceed unity where the engine actually runs. `probe_62b.cpp` existed only becaus
 found the failure that does survive. The habit is not "write a probe"; it is **write another one
 the moment a probe disagrees with you**, because the paragraph you were about to write is now
 wrong and you do not yet know what replaces it.
+
+---
+
+## Microfacet facts (Lesson 6.3)
+
+### A distribution must integrate to 1 — and that is the only reason any of this is checkable
+
+```
+∫ D(h) · cos θₕ · dω  =  1
+```
+
+Read it backwards for the statement worth keeping: **the microfacets' projected areas add up to
+the area of the flat surface they stand on.** Nothing else could be true, so the `cos θₕ` is not a
+convention — it is the same projected-area factor as everywhere else in Module 6.
+
+`shininess` could not be wrong; *D* can be, in a way a machine detects. Every distribution added
+from here goes through the same test, unchanged. The diagnostic table, when it fails:
+
+| Your NDF integral returns | What is missing |
+|---|---|
+| 2.0 | the `cos θₕ` weight |
+| 0.5 | the `sin θ` in `dω = sin θ dθ dφ` |
+| 2π | the φ integral |
+
+Establish the integrator first on something with a known answer — integrate 1 and check for 2π,
+then cos θ and check for π. Two lines, and they separate the instrument from the subject.
+
+### Blinn-Phong was always a microfacet distribution; it lacked only its constant
+
+The bare `cos^s` lobe integrates to `2π/(s+2)` — 0.1848 at *s* = 32. Give it `(s+2)/2π` and it
+satisfies the identity exactly, at every exponent. Lesson 3.7 called it "the first, crudest
+microfacet model" and was being literal.
+
+This engine multiplies by `1/π`, so it is off by `(s+2)/2` — **exactly 17× at the default
+shininess of 32**, and the ratio has no π in it because both constants carry one.
+
+**And nothing ever looked wrong, which is the transferable part.** `specular::colour` absorbed it:
+an artist turns the specular up until the highlight looks right and lands on seventeen times a
+plausible reflectance. **An error a parameter can absorb is invisible until someone tries to
+author against physical values** — which is exactly what Lesson 6.2 did, and why it found 1.1386.
+
+Corollary for the fix: do **not** correct the constant alone. The materials were authored against
+the wrong one. Change both in the same commit or every highlight blows out.
+
+### GGX beats Beckmann on the tail, and only on the tail
+
+Same peak for the same α (3.5368 at α = 0.3), so every difference is shape. GGX is *lower* near
+the peak — 0.71× at 20° — and **456× higher at 45°**. It must trade: both integrate to 1.
+
+The mechanism is in the formulas. Beckmann's exponential dies faster than any power and is
+numerically zero (1.9e−13) by 60°, a hard edge where a real surface glows; GGX's rational
+denominator has a power-law tail that never quite stops.
+
+### "Matches" needs a criterion — the folklore mapping matches only the peak
+
+`s = 2/α² − 2` comes from equating the two distributions **at h = n**, and it does that to one
+float ULP. Fit the whole *lobe* instead and the exponent lands consistently **0.80×** lower (0.806
+at α = 0.1, 0.759 at 0.5), because a lobe fit trades peak height for a tail Blinn cannot reproduce
+at any exponent.
+
+Both numbers are right. **When you meet a conversion formula, derive it far enough to see what it
+optimised** — two minutes of algebra showed a widely-quoted mapping answers a narrower question
+than the one people use it for.
+
+### The textbook GGX denominator is wrong in `float`, and the normalisation test is what finds it
+
+Written as every reference prints it:
+
+```
+d = cos²θₕ · (α² − 1) + 1
+```
+
+this is the difference of two numbers of size 1 that nearly agree — catastrophic cancellation. A
+`float` resolves that to ~1e−7 absolute, while the true value of `d` at the peak is α². At
+α = 0.01 that is 1e−4, so a thousandth of it is noise before the term is *squared*.
+
+The identical expression, rearranged, does not cancel:
+
+```
+d = (1 − c)(1 + c) + α²c²
+```
+
+**Sterbenz's lemma** is why: for `c ≥ 0.5`, `1.0f - c` is computed *exactly*, with no rounding, in
+any IEEE format — and `c ≥ 0.5` covers the whole peak region. Measured, integrated against the
+identity:
+
+| α | textbook | rearranged | double (truth) |
+|---|---|---|---|
+| 0.001 | 0.9891063 | 1.0023035 | 1.0000013 |
+| 0.010 | 0.9998169 | 1.0000004 | 1.0000000 |
+| 0.050 | 1.0000006 | 1.0000000 | 1.0000000 |
+
+**The textbook form loses 1.1% of the model's energy to rounding at mirror roughness.** The bug is
+bounded by the data — it lives entirely below α ≈ 0.05 — which is why it survives in production
+and shows up on chrome and still water rather than everywhere.
+
+`verify_63` §A asserts the comparison inline, computing the textbook form and requiring ours to
+beat it by 4×, because the rearrangement looks like a pointless shuffle and the next person to
+tidy it back should be told by a failing test.
+
+### Quadrature error shrinks when the grid refines. Arithmetic error does not.
+
+This is the whole diagnostic, and it took two runs. Refining 5× moved 0.9998169 to 0.9998154 —
+nothing. The identical formula in `double` on the identical grid gave 1.0000000. Diagnosis
+complete: the error is in `float`, and in the formula rather than the integrator.
+
+**Do not widen the tolerance.** The value of a test with a known answer is entirely in believing
+the known answer; a tolerance widened to admit a failure is a test deleted slowly. 1.8e−4 looked
+small and was a real 1.1% energy loss hiding at the smooth end.
+
+### Shadowing and masking are a consequence, not a correction
+
+Once you have said "landscape", you have said "some of it is hidden". Smith's *G* derives from the
+same slope distribution that produced *D*, which is what makes it a consequence rather than a
+second model.
+
+It is also **the term Lesson 6.2 was missing** when it measured a 5.36× view-angle swing it could
+not explain: at 75° a near-smooth surface still shows 0.9920 of itself and a fully rough one
+0.4112. The effect was always real; it lacked a reason.
+
+**The separable form's independence assumption is false, and measurably so.** Multiplying two
+`G₁`s assumes being lit and being visible are unrelated events; they share a height field.
+Height-correlated against separable: identical to four decimals on smooth surfaces, and **1.715×
+apart at α = 0.8 with both directions at 80°**. Grazing angles on rough surfaces are sunsets, wet
+roads and worn metal — "either is fine" would have been comfortable and wrong.
+
+### Single-scattering microfacet theory loses 69% at full roughness
+
+With *F* = 1 — a surface that absorbs nothing — R(v) for `D·G/(4 n·l n·v)` runs 0.9976 at
+roughness 0.22 down to **0.3069 at 1.00**. It never *exceeds* 1, which is what the machinery
+bought; but *G* removes the light that hits a hidden facet and never asks where it went. It hit
+another facet and carried on.
+
+The symptom is specific: **rough metal renders too dark, and it is a fraction rather than an
+offset**, so raising the light scales the problem instead of fixing it. Kulla–Conty's
+multiple-scattering compensation is the standard fix and needs an assembled BRDF to attach to.
+
+### `α = roughness²` is a convention and a real interoperability trap
+
+Disney's remap, shipped by UE4 and Filament, chosen because almost all the visible change lives in
+α's bottom fifth — the same argument 6.1 made about sRGB spending codes where the eye is. Not
+physics. A roughness copied from a tool that squares differently will not match, so convert at the
+import edge and write down which convention you store.
+
+---
+
+## Course-infrastructure facts (docs/, Lesson 6.3)
+
+### A figure whose numbers contradict its own caption
+
+The first draft of the microfacet landscape counted **32 of 74** facets as facing **h** — 43% of
+the surface, which says "most of it reflects at you" and is the opposite of the model being drawn.
+The threshold was a guess. Tightening it to a ~4° cone gave 4 of 48, which is what a glossy surface
+actually looks like.
+
+**No geometry check catches this**: nothing overlaps, nothing spills, and the picture is perfectly
+well-formed. The only test is reading the caption against the drawing.
+
+### Draw the negative case too
+
+The same figure only became legible when the *non*-participating facets got their normals drawn
+faintly. A picture of the four that count is a picture of four sticks; a picture of four heavy
+normals among forty-four faint ones is the model. **The contrast is the message, so the thing that
+does not qualify has to be visible.**
+
+### An arrow that ends in mid-air reads as a drawing error
+
+Lesson 6.3's masking figure first drew its light rays as a floating row above the surface, pointing
+the wrong way because the direction vector's sign was never checked against the screen's y-down
+convention. Terminating each ray *on the facet it strikes* fixed both problems at once — and the
+sign error was invisible until the arrows had somewhere to land.
+
+### Pick plot limits from the data, not from the first curve you tried
+
+The NDF figure clipped its sharpest curve at a hand-chosen ceiling, which renders as a flat top
+and reads as a bug. With cosine weighting the peak is `1/(πα²)`, so the ceiling is computable —
+and once it was, the honest picture (peaks differing 16×, areas all exactly 1) turned out to be a
+better illustration than the clipped one.
