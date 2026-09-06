@@ -96,6 +96,7 @@
       <li><a href="#meshes">Measuring a mesh</a></li>
       <li><a href="#radiometry">Radiometry and BRDFs</a></li>
       <li><a href="#microfacets">Microfacets</a></li>
+      <li><a href="#fresnel">Fresnel, and the assembled BRDF</a></li>
       <li><a href="#performance">Reasoning about cost</a></li>
       <li><a href="#pipelining">Two processors, overlapped</a></li>
       <li><a href="#coming">Coming as the course proceeds</a></li>
@@ -2103,6 +2104,156 @@
     </div>
   </div>
 
+  <h2 id="fresnel"><span class="num">7d</span>Fresnel, and the assembled BRDF</h2>
+
+  <p>
+    &sect;7c gave the surface a shape; these give it a <em>material</em>, and then put the pieces
+    together. All four arrived in Lesson 6.4, and the first is the one to carry around: it is the
+    only term in the model that talks about the light which does <em>not</em> reflect.
+  </p>
+
+  <div class="tool">
+    <h3>F0 from an index of refraction <span class="from">Lesson 6.4</span></h3>
+    <div class="eq">
+      <span>\[ F_0 = \left(\frac{n_1 - n_2}{n_1 + n_2}\right)^{\!2} \;\xrightarrow{\;n_1=1\;}\; \left(\frac{1-n}{1+n}\right)^{\!2} \]</span>
+      <span class="eq-plain">F0 = ((1 &minus; n) / (1 + n))&sup2; for light arriving from air</span>
+    </div>
+    <p>
+      The Fresnel equations at normal incidence, where the two polarisations collapse onto one
+      expression. It is <strong>squared</strong> because the equations give an <em>amplitude</em>
+      ratio and reflectance is a ratio of powers &mdash; the commonest place to lose a factor of
+      two in this subject.
+    </p>
+    <p>
+      Every ordinary dielectric lives between <strong>0.02 and 0.08</strong>: water 0.0204, skin
+      0.0278, glass and most plastics 0.0400, and only gemstones climb (diamond 0.1724). That
+      small box is what makes a single default defensible.
+    </p>
+    <div class="worked">
+      <span class="label">Worked &mdash; and then used backwards, as an audit</span>
+      <p>
+        Glass, <em>n</em> = 1.5: <code>((1 &minus; 1.5)/(1 + 1.5))&sup2; = (&minus;0.2)&sup2; =
+        <strong>0.04</strong></code>. That is where every renderer&rsquo;s hard-coded 0.04 comes
+        from &mdash; it is window glass.
+      </p>
+      <p>
+        Inverted, <code>n = (1 + &radic;F&#8320;)/(1 &minus; &radic;F&#8320;)</code> turns any
+        authored reflectance into a claim about the world, which can then be checked. This
+        engine&rsquo;s own shipped <code>specular::colour</code> of 0.85 implies
+        <strong>n = 24.6</strong>, where diamond is 2.42 and the highest known solid is about 4.
+        <strong>A parameter that round-trips into a physical quantity can be audited; one that
+        cannot, cannot.</strong>
+      </p>
+    </div>
+  </div>
+
+  <div class="tool">
+    <h3>Schlick&rsquo;s approximation <span class="from">Lesson 6.4</span></h3>
+    <div class="eq">
+      <span>\[ F(\cos\theta) = F_0 + (1 - F_0)(1 - \cos\theta)^5 \]</span>
+      <span class="eq-plain">F = F0 + (1 &minus; F0)(1 &minus; cos&nbsp;&theta;)&#8309;</span>
+    </div>
+    <p>
+      <strong>Both ends are exact by construction</strong>, and only the middle is fitted. At
+      <code>cos&nbsp;&theta; = 1</code> it returns F0; at <code>cos&nbsp;&theta; = 0</code> it
+      returns exactly 1 &mdash; which is not an approximation but the physics, because every
+      interface reflects everything at grazing incidence. That is the window at night.
+    </p>
+    <p>
+      <code>cos&nbsp;&theta;</code> here is <strong>v&middot;h</strong>, not n&middot;v: the
+      microfacet is the mirror, so it is the facet&rsquo;s own normal the light bounces off.
+    </p>
+    <div class="worked">
+      <span class="label">Worked &mdash; how good the fit is not</span>
+      <p>
+        Glass at 60&deg;: <code>0.04 + 0.96 &times; (1 &minus; 0.5)&#8309; = 0.04 + 0.96 &times;
+        0.03125 = <strong>0.0700</strong></code>. The exact equations give <strong>0.0892</strong>
+        &mdash; Schlick is <strong>21% low</strong>.
+      </p>
+      <p class="mono">worst absolute 0.0357 (at 85&deg;) &nbsp;&middot;&nbsp; worst relative
+        <strong>23.2% (at 55&deg;)</strong></p>
+      <p>
+        The relative error sits in the <em>middle</em> of the range, where surfaces are usually
+        seen &mdash; which is not what &ldquo;very accurate&rdquo; normally means. The honest
+        defence is that 23% of 0.04 is <strong>0.019 of a reflectance</strong>, which is invisible.
+        It gets worse as F0 rises: the absolute error doubles for diamond.
+      </p>
+    </div>
+  </div>
+
+  <div class="tool">
+    <h3>The half-vector Jacobian <span class="from">Lesson 6.4</span></h3>
+    <div class="eq">
+      <span>\[ \frac{d\omega_{\text{out}}}{d\omega_h} = \frac{2\sin 2\theta_h}{\sin\theta_h} = 4\cos\theta_h = 4\,(\mathbf{v}\!\cdot\!\mathbf{h}) \]</span>
+      <span class="eq-plain">the map from facet normals to light directions stretches solid angle
+        by 4(v&middot;h)</span>
+    </div>
+    <p>
+      <strong>This is where the 4 in the Cook&ndash;Torrance denominator comes from</strong>, and
+      it is two factors of two. Put spherical coordinates on the <em>fixed</em> direction: a facet
+      tilted by &theta;&#8341; turns the reflected ray by <strong>2&theta;&#8341;</strong>, so
+      <code>d&theta;_out = 2 d&theta;&#8341;</code> gives one, and
+      <code>sin 2&theta; = 2 sin&thinsp;&theta; cos&thinsp;&theta;</code> gives the other &mdash;
+      handing over the <code>cos&nbsp;&theta;&#8341; = v&middot;h</code> as change.
+    </p>
+    <p>
+      It is needed because <em>D</em> is a density over <strong>facet normals</strong> and a BRDF
+      is a density over <strong>light directions</strong>. Converting between them is a change of
+      variables, and this is its Jacobian.
+    </p>
+    <div class="worked">
+      <span class="label">Worked</span>
+      <p>
+        At &theta;&#8341; = 18&deg; the ray comes off at exactly 36&deg;, and
+        <code>4 cos 18&deg; = 3.804226</code> &mdash; which is also
+        <code>2 sin 36&deg; / sin 18&deg; = 3.804226</code>, to every digit a
+        <code>double</code> has.
+      </p>
+    </div>
+  </div>
+
+  <div class="tool">
+    <h3>The Cook&ndash;Torrance BRDF <span class="from">Lesson 6.4</span></h3>
+    <div class="eq">
+      <span>\[ f_r = \frac{D\,G\,F}{4(\mathbf{n}\!\cdot\!\mathbf{l})(\mathbf{n}\!\cdot\!\mathbf{v})} + \bigl(1-F(\mathbf{n}\!\cdot\!\mathbf{l})\bigr)\bigl(1-F(\mathbf{n}\!\cdot\!\mathbf{v})\bigr)\frac{\text{albedo}}{\pi} \]</span>
+      <span class="eq-plain">what bounced off the microfacets, plus what got past the interface,
+        scattered, and got back out</span>
+    </div>
+    <p>
+      Four factors in that denominator, four different reasons, none of them a convention. The
+      <strong>4</strong> is the Jacobian above. The <strong>(v&middot;h)</strong> it introduces
+      <em>cancels</em>, against the facets&rsquo; projected area toward the light &mdash; which is
+      (l&middot;h), and equal to it because <strong>h bisects l and v</strong>. That cancellation
+      is exactly why the finished formula looks unmotivated. The <strong>(n&middot;v)</strong>
+      converts flux to radiance, which is per unit <em>projected</em> area; the
+      <strong>(n&middot;l)</strong> is the BRDF&rsquo;s own definition as a quantity per unit
+      irradiance.
+    </p>
+    <p>
+      The second term is <strong>the coupling</strong>, and it is the whole reason the two lobes
+      stop summing to more than they were given: <em>F is what bounces off, so 1 &minus; F is what
+      goes in</em> &mdash; and light crosses the interface <strong>twice</strong>, once at the
+      light&rsquo;s angle and once at the eye&rsquo;s.
+    </p>
+    <div class="worked">
+      <span class="label">Worked &mdash; and which couplings fail</span>
+      <p>
+        Put the whole thing through &sect;7b&rsquo;s energy test, over a full sweep of roughness
+        against view angle:
+      </p>
+      <p class="mono">no coupling &rarr; 1.4300 &nbsp;&middot;&nbsp; 1 &minus; F(v&middot;h) &rarr;
+        <strong>1.3395</strong> &nbsp;&middot;&nbsp; two-crossing &rarr; <strong>0.9255</strong></p>
+      <p>
+        The middle one is what most engines ship, including the glTF reference BRDF. It is exact
+        at normal incidence and still emits light at grazing, because it accounts for the light
+        that got <strong>in</strong> and says nothing about the light that fails to get
+        <strong>out</strong>. Bolting an exit factor onto it fixes the energy and
+        <strong>fails reciprocity</strong> &mdash; f(l,v) &ne; f(v,l) &mdash; which is what
+        selects the symmetric two-crossing form.
+      </p>
+    </div>
+  </div>
+
   <h2 id="performance"><span class="num">8</span>Reasoning about cost</h2>
 
   <p>
@@ -2311,7 +2462,7 @@
     steradians</strong> · <strong>the Lambert BRDF derived from energy conservation</strong> ·
     <strong>directional-hemispherical reflectance as an energy test</strong> (§7b above, all
     five from 6.2) · <strong>the NDF normalisation identity</strong> · <strong>Beckmann and GGX</strong> ·
-    <strong>the roughness remap</strong> · <strong>Smith masking</strong> (§7c, all from 6.3) · the rendering
+    <strong>the roughness remap</strong> · <strong>Smith masking</strong> (§7c, all from 6.3) · <strong>F0 from an index of refraction</strong> · <strong>Schlick</strong> · <strong>the half-vector Jacobian</strong> · <strong>the Cook–Torrance BRDF</strong> (§7d, all from 6.4) · the rendering
     equation, honestly scoped · the Fresnel term · Schlick's approximation · <strong>the sRGB
     transfer function</strong> · the TBN basis · tonemapping curves · spherical harmonics
     for irradiance.

@@ -2478,3 +2478,11 @@ contradicts the model the figure is drawing and no geometry check can see; and t
 light arrows pointed the wrong way until they were made to terminate on the facet they strike.
 
 `next:` is 6.4 — Cook–Torrance, derived. The golden breaks there, deliberately.
+
+---
+
+## Session — 2026-09-06 (c) — Lesson 6.4
+
+> Based on the STATE and the project's claude instructions, work on the next.
+
+(Resolved to Lesson 6.4 — Cook–Torrance PBR, Derived, per `STATE.md`'s `next:` block.)

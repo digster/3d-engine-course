@@ -522,7 +522,7 @@ int unload_model(scene_assets& assets, model_state& m);
 /// no other reason. A `const&` to a pool it never reads would be worse.
 int build_scene(engine::scene_object (&out)[k_max_objects], scene_kind kind, spin mode, float t,
                 const scene_assets& assets, const floor_geometry& floor,
-                const model_state& model, float shininess);
+                const model_state& model, float roughness);
 
 /// Draw the world through the camera: a ground grid on y = 0 and a marked origin.
 ///

@@ -334,7 +334,7 @@ surface with a white highlight reflects **1.1386** of what arrives. `specular_br
 is therefore documented as *not* a normalisation. Lesson 6.4's Fresnel term is the fix, and it is a
 mechanism rather than a constant.
 
-Named as owed: specular normalisation (6.3–6.4), reciprocity, real photometric units (6.10), and
+Named as owed: real photometric units (6.10) and
 transmission — a BRDF describes only light leaving the side it arrived on, which is why this
 renderer cannot make a convincing wax candle.
 
@@ -367,13 +367,49 @@ What that test established about the engine as it stood: **Blinn-Phong satisfies
 `(s+2)/2π`** — it was a microfacet distribution all along — and the engine ships `1/π`, wrong by
 `(s+2)/2`, **17× at the default shininess of 32**. It is *not* fixed in 6.3, deliberately: the
 materials were authored against the wrong constant, so `specular::colour` absorbed it, and
-correcting one without the other blows every highlight out. 6.4 changes both in one commit.
+correcting one without the other blows every highlight out. **6.4 changed both in one commit — by
+deleting the struct**, so that every one of the forty-four call sites had to be revisited rather
+than silently recompiled.
 
 Two conventions arrive with it. **`α = roughness²` is Disney's remap, not physics** — an imported
 roughness from a tool that squares differently will not match, so convert at the import edge and
 record which convention is stored, exactly the discipline 6.1 arrived at for colour. And
 **height-correlated Smith is the default**, not by preference: the separable form's independence
 assumption is false by a measured 1.715× at α = 0.8 and 80°.
+
+**The BRDF, as of Lesson 6.4 — assembled, coupled, and measured.** 6.3 built `D` and `G` and wired
+neither in, because a microfacet BRDF is `D G F` over a denominator and **Fresnel is the piece that
+couples the two lobes back together**. 6.4 added `F` and assembled:
+
+```
+f_r = D·G·F / (4 (n·l)(n·v))  +  (1 − F(n·l))(1 − F(n·v)) · albedo/π
+```
+
+`gfx/microfacet.hpp` grew Schlick's Fresnel, `f0_from_ior` / `ior_from_f0`, `microsurface`
+(roughness, metallic, F0 — **replacing the deleted `specular`**), `f0_of`, `diffuse_albedo_of`, and
+`cook_torrance_specular`. `light.hpp` gained `cook_torrance_brdf` and a fourth `specular_model`
+which is now the default; `scene.frag.hlsl` gained the same equation in HLSL, in the same commit —
+**the first time in the course the two implementations had to move together** rather than one
+following the other. `verify_48` §F is what made that survivable: 4096 fragments through both
+paths, agreeing to **2.384 × 10⁻⁷**. A shader that drifts from the CPU does not fail loudly; it
+renders something plausible.
+
+The denominator is *derived* here rather than quoted, because it is the single most-repeated
+unexplained line in real-time graphics. Spherical coordinates on the fixed direction give
+`θ_out = 2θ_h`, hence `dω_out/dω_h = 2 sin2θ / sinθ = 4 cos θ = 4(v·h)` — and the `(v·h)` then
+cancels against the facets' projected area toward the light, which is `(l·h)` and equal to it
+because **h** bisects. That cancellation is exactly why the shipped formula looks arbitrary.
+
+**The diffuse coupling is a measured decision, not a default.** The form nearly every engine ships,
+`1 − F(v·h)`, is exact at normal incidence and reaches **1.3395** at grazing — it accounts for the
+light that got *in* and says nothing about the light that fails to get *out*. Adding an exit factor
+fixes the energy and **fails reciprocity**, which disqualifies it as a BRDF at all; the symmetric
+two-crossing form is what remains, worst **0.9255**. `diffuse_coupling::half_vector` is kept, named
+and measured, the same way 6.3 kept `smith_g_separable` — and 6.6's glTF loading may need it.
+
+Its honest cost is ~8.5% less diffuse light at normal incidence than the half-vector form. That
+light is the portion reflecting back *inside* at the exit boundary, which this model forgets —
+the same class of loss as 6.3's missing 69%, and both want the same fix.
 
 Two limits are named rather than left to be discovered. Single-scattering theory **loses 69% of
 the light at full roughness** (R(v) = 0.3069 with F = 1), because a facet bounces light once and
@@ -2150,6 +2186,10 @@ Full detail with diagrams in [`docs/conventions.html`](docs/conventions.html); t
 | Surface model | Microfacet: `D` must satisfy `∫ D(h) cos θₕ dω = 1`, checked for every distribution (6.3) |
 | Roughness | `α = roughness²` — Disney's remap, a **convention**; convert at the import edge (6.3) |
 | Geometry term | Height-correlated Smith, not separable — the independence assumption is off by 1.715× at grazing (6.3) |
+| Fresnel | Schlick at **v·h** (the microfacet is the mirror, not the surface); `F0 = ((1−n)/(1+n))²`, so glass's 0.04 is derived, not typed (6.4) |
+| Metals | `F0 = lerp(0.04, albedo, metallic)`, `diffuse = albedo × (1 − metallic)` — a consequence of a conductor having no diffuse lobe, not a workflow choice (6.4) |
+| Diffuse coupling | `(1 − F(n·l))(1 − F(n·v))` — **two interface crossings**. Reciprocal, and worst R(v) = 0.9255. The common `1 − F(v·h)` reaches 1.3395 (6.4) |
+| Specular denominator | `4(n·l)(n·v)`: the 4 is the half-vector Jacobian, the (v·h) cancels against projected area, (n·v) is radiance's, (n·l) is the BRDF's (6.4) |
 | Angles | Radians. Always. |
 | Performance units | **ns per covered pixel** and **ns per triangle** — never ms/frame |
 | Timing statistic | **median** for a frame, **minimum** for a kernel, never the mean |

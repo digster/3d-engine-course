@@ -26,14 +26,23 @@
 // a distribution rather than a fudge, which means it must integrate to one, which
 // means it can be CHECKED — verify_63 §A does exactly that for all three models.
 //
-// WHAT THIS HEADER IS NOT, YET. Nothing here is wired into `shade()`, and that is
-// deliberate rather than unfinished: a microfacet BRDF is D, G and F over a
-// denominator, and Fresnel is what couples the diffuse and specular lobes back
-// together (Lesson 6.4). Shipping two thirds of it live would leave the renderer
-// running a model that is neither the old one nor the new one for a lesson. So
-// 6.3 builds the parts and tests them; 6.4 assembles and replaces.
+// WHAT THIS HEADER WAS NOT, AND NOW IS. Lesson 6.3 built D and G and wired
+// neither in, because a microfacet BRDF is D, G and F over a denominator and
+// Fresnel is the piece that couples the diffuse and specular lobes back together.
+// Shipping two thirds of it live would have left the renderer running a model
+// that was neither the old one nor the new one for a lesson.
+//
+// LESSON 6.4 ADDED F AND ASSEMBLED, and the second half of this file is that
+// work: Schlick's Fresnel and the constant it needs, the 4(n.l)(n.v) denominator
+// DERIVED from a change of variables rather than quoted, `microsurface` (the
+// parameters that replace `shininess` and `specular::colour`), and the two lobes
+// composed into one BRDF that cannot emit more light than arrives. `shade()` and
+// `scene.frag.hlsl` both call into it, and the reference render moved for the
+// first time in fifteen lessons.
 
 #pragma once
+
+#include <engine/gfx/colour.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -291,6 +300,340 @@ enum class ndf_model
     const float lv = n_dot_l * std::sqrt(a2 + (1.0f - a2) * n_dot_v * n_dot_v);
     const float ll = n_dot_v * std::sqrt(a2 + (1.0f - a2) * n_dot_l * n_dot_l);
     return 2.0f * n_dot_l * n_dot_v / (lv + ll);
+}
+
+
+// ===========================================================================
+//  LESSON 6.4 — FRESNEL, AND THE ASSEMBLY
+// ===========================================================================
+//
+// Everything above describes the surface. Nothing above says how much light it
+// actually reflects, and that is the missing third: `D` says which facets face
+// the right way, `G` says which of those you can see, and **`F` says what
+// fraction of the light that reaches a facet bounces off it instead of going
+// in.** That last sentence is why Fresnel is not one more multiplier. It is the
+// only term in the model that talks about the light that DOESN'T reflect, and
+// the diffuse lobe is made of exactly that light.
+//
+// Lesson 6.2 measured a white surface with a white highlight reflecting 1.1386
+// of what hit it, and named the cause: the two lobes were added with no coupling,
+// so the same photon was counted once as having bounced off the surface and once
+// as having gone into it. Normalising D (Lesson 6.3) does not touch that, and
+// 6.3 said so and left the number standing. `F` is the coupling.
+
+/// The reflectance of a smooth interface at NORMAL incidence, for the ordinary
+/// dielectrics — plastic, glass, skin, wood, water, most of the world.
+///
+/// **This is not a tuning constant, it is a measurement**, and one line of
+/// algebra away from the index of refraction. `f0_from_ior(1.5)` is exactly
+/// 0.04, and 1.5 is roughly every common dielectric: glass is 1.5, most plastics
+/// 1.46-1.55, skin 1.4, water 1.33. The whole visible range of dielectric F0 is
+/// **0.02 to 0.08**, which is a remarkably small box, and it is the reason a
+/// single default is defensible where `specular::colour` never was.
+///
+/// Compare what it replaces. This engine shipped `specular::colour` values of
+/// 0.85, 0.60, 0.55 and 0.30 — between seven and twenty-one times a physically
+/// possible dielectric reflectance. They were not wrong, exactly; they were
+/// absorbing the 17x normalisation error Lesson 6.3 measured, plus an exposure,
+/// plus taste. An error a PARAMETER can absorb is invisible, and this is the
+/// constant that makes it visible.
+inline constexpr float k_dielectric_f0 = 0.04f;
+
+/// Normal-incidence reflectance from an index of refraction, for light arriving
+/// from air.
+///
+/// Derived in Lesson 6.4 §5.1 from the Fresnel equations at `theta = 0`, where
+/// the s- and p-polarised forms collapse to the same expression:
+///
+///     F0 = ((n1 - n2) / (n1 + n2))^2,  with n1 = 1 for air
+///
+/// It is squared because the Fresnel equations give an *amplitude* ratio and
+/// reflectance is a ratio of POWERS. That squaring is the single most common
+/// place to lose a factor of two in this subject.
+[[nodiscard]] inline float f0_from_ior(float ior)
+{
+    const float n = std::max(1.0f, ior);
+    const float r = (1.0f - n) / (1.0f + n);
+    return r * r;
+}
+
+/// The inverse: what index of refraction an authored F0 is claiming.
+///
+/// Worth having for exactly one reason, and it is a debugging reason: an F0 of
+/// 0.85 comes back as an IOR of **25.3**, and there is no such material. A
+/// number that round-trips into an absurdity is a number somebody guessed.
+[[nodiscard]] inline float ior_from_f0(float f0)
+{
+    const float r = std::sqrt(std::clamp(f0, 0.0f, 0.9999f));
+    return (1.0f + r) / (1.0f - r);
+}
+
+/// **Schlick's approximation to the Fresnel equations.**
+///
+/// The exact equations need the transmitted angle (so Snell's law, so a square
+/// root), separate s- and p-polarised terms, and an average of the two — about
+/// twenty operations, per light, per pixel. Schlick 1994 replaces all of it with
+///
+///     F(cos) = F0 + (1 - F0) * (1 - cos)^5
+///
+/// and the shape is right for a reason that is worth seeing rather than
+/// accepting: **every interface reflects everything at grazing incidence.** Look
+/// along a table top, a puddle, a sheet of paper — all of them turn into mirrors.
+/// So F must rise to exactly 1 at `cos = 0` no matter what F0 is, and the
+/// expression above does that by construction: at `cos = 0` it is `F0 + 1 - F0`.
+/// It is also exactly F0 at `cos = 1` by construction. Schlick's contribution is
+/// the *fifth power* in between, and that is the part that is fitted.
+///
+/// **HOW GOOD IS THE FIT? Measured against the exact equations rather than
+/// asserted** (verify_64 §C), and the answer is less flattering than the folklore:
+///
+///   - worst ABSOLUTE error 0.0357 for glass (ior 1.5), out at 85 degrees;
+///   - worst RELATIVE error **23.2%**, and it sits at 55 degrees, in the middle
+///     of the range where surfaces are usually seen. At 60 degrees the exact
+///     answer is 0.0892 and Schlick says 0.0700.
+///
+/// A 23% error in a term that is itself 0.04 is a 0.019 error in reflectance,
+/// which is invisible — and that is the honest defence of Schlick, not that the
+/// fit is tight. It is cheap, it is exact at both ends, and it is wrong in the
+/// middle by an amount that does not matter *at dielectric F0*. It matters more
+/// as F0 rises: at ior 2.4 (diamond) the worst absolute error doubles to 0.074.
+///
+/// `cos_theta` is the cosine between the view direction and the MICROFACET
+/// normal — that is, `v.h`, not `n.v`. The facet is the mirror; its own normal
+/// is the one the light is bouncing off. Lesson 6.4 §5.3 is about how easy that
+/// is to get wrong and what it looks like when you do.
+[[nodiscard]] inline float fresnel_schlick(float cos_theta, float f0)
+{
+    const float m = 1.0f - std::clamp(cos_theta, 0.0f, 1.0f);
+    const float m2 = m * m;
+    return f0 + (1.0f - f0) * (m2 * m2 * m);   // (1-cos)^5, four multiplies
+}
+
+/// The same, per channel — which is what makes a metal a metal.
+///
+/// **A metal's F0 is COLOURED, and that is very nearly the whole of what
+/// separates it from a dielectric.** Gold reflects about (1.00, 0.71, 0.29) at
+/// normal incidence, copper (0.95, 0.64, 0.54), silver (0.97, 0.96, 0.92) — so a
+/// gold surface tints the light it mirrors, where a plastic one does not. A
+/// dielectric's F0 is grey because its index of refraction barely varies across
+/// the visible spectrum; a metal's does not have that courtesy.
+[[nodiscard]] inline linear_rgb fresnel_schlick(float cos_theta, linear_rgb f0)
+{
+    const float m = 1.0f - std::clamp(cos_theta, 0.0f, 1.0f);
+    const float m2 = m * m;
+    const float w = m2 * m2 * m;
+    return {f0.r + (1.0f - f0.r) * w,
+            f0.g + (1.0f - f0.g) * w,
+            f0.b + (1.0f - f0.b) * w};
+}
+
+/// How the diffuse lobe is told about the light the specular lobe already took.
+///
+/// **This is a real choice with a measured answer, kept as an enum for the same
+/// reason `smith_g_separable` was kept in Lesson 6.3: the difference is large
+/// enough that picking one is a decision rather than a default.**
+enum class diffuse_coupling
+{
+    /// `(1 - F(n.l)) * (1 - F(n.v))` — **the default, and the one the physics
+    /// actually says.** Light crosses the interface TWICE: once going in, at the
+    /// light's angle, and once coming out, at the eye's. Each crossing reflects
+    /// its own Fresnel fraction and only the remainder gets through.
+    ///
+    /// Reciprocal (it is symmetric in `l` and `v`, which a BRDF must be), and
+    /// measured never to exceed 1: worst hemispherical reflectance **0.9255**
+    /// over a full sweep of roughness and view angle (verify_64 §E).
+    two_crossing,
+
+    /// `1 - F(v.h)` — what most real-time renderers ship, including the glTF 2.0
+    /// reference BRDF. (⚠ VERIFY against Khronos glTF 2.0 specification,
+    /// Appendix B "BRDF Implementation", before relying on this for asset
+    /// interchange in Lesson 6.6.)
+    ///
+    /// **It is exact at normal incidence and over-unity at grazing**, and Lesson
+    /// 6.4 §7 diagnoses exactly why: `1 - F(v.h)` is the fraction of light that
+    /// got IN. It says nothing about the light that fails to get OUT. A diffuse
+    /// ray leaving toward an eye 75 degrees off the normal meets the interface at
+    /// 75 degrees, where a quarter of it reflects back inside — and this form
+    /// lets all of it out.
+    ///
+    /// Measured (verify_64 §E): white furnace reads **0.9999** at normal
+    /// incidence, which is better than `two_crossing` manages, and **1.2002** for
+    /// a smooth surface at 75 degrees, which is a surface emitting a fifth more
+    /// light than reaches it. Worst over the sweep: 1.3395.
+    ///
+    /// Kept, named and measured rather than quietly dropped, because it is what
+    /// the student will find in every engine they read next.
+    half_vector
+};
+
+/// The fraction of arriving light that is available to the diffuse lobe.
+///
+/// Derived in Lesson 6.4 §6. The sentence the whole lesson turns on is short:
+/// **F is what bounces off, so 1 - F is what goes in**, and only what goes in
+/// can scatter around under the surface and come back out as diffuse. Before
+/// this function the two lobes were independent and their sum was unbounded;
+/// after it, every photon is spent once.
+///
+/// `f0` is the coloured F0 (see `f0_of`), because a metal's coupling is coloured
+/// too — though a metal has no diffuse lobe to couple, so in practice this
+/// matters only for the partly-metallic values in between.
+[[nodiscard]] inline linear_rgb diffuse_transmission(diffuse_coupling coupling,
+                                                     linear_rgb f0,
+                                                     float n_dot_l, float n_dot_v,
+                                                     float v_dot_h)
+{
+    if (coupling == diffuse_coupling::half_vector)
+    {
+        const linear_rgb f = fresnel_schlick(v_dot_h, f0);
+        return {1.0f - f.r, 1.0f - f.g, 1.0f - f.b};
+    }
+
+    // TWO CROSSINGS: in at the light's angle, out at the eye's.
+    const linear_rgb fi = fresnel_schlick(n_dot_l, f0);
+    const linear_rgb fo = fresnel_schlick(n_dot_v, f0);
+    return {(1.0f - fi.r) * (1.0f - fo.r),
+            (1.0f - fi.g) * (1.0f - fo.g),
+            (1.0f - fi.b) * (1.0f - fo.b)};
+}
+
+/// **What a surface is, in four numbers** — the struct that replaces `specular`.
+///
+/// The rename is the point, exactly as it was when Lesson 6.2 turned
+/// `intensity` into `irradiance`. `specular::colour = 0.85f` and `f0 = 0.04f`
+/// are both plausible-looking floats, so keeping the old name would let every
+/// material in the engine keep compiling while meaning something twenty-one
+/// times different. A rename is the only tool that reaches every call site, and
+/// the name it reaches them with should say what changed: this struct no longer
+/// describes the highlight, it describes THE SURFACE — including, through
+/// `metallic`, whether there is a diffuse lobe at all.
+///
+/// It lives in this header rather than `light.hpp` because these are the
+/// parameters of the microfacet model, and this file is the model.
+///
+/// **It is still not a `material`.** A material is also the albedo, the
+/// textures, the cull and blend modes, and eventually the shader; Lesson 6.5
+/// builds that, with the arguments for its shape. This is the reflectance half,
+/// and it is the half that had to change now because the constants moved.
+struct microsurface
+{
+    /// Perceptual roughness in [0,1]; `alpha_from_roughness` squares it.
+    ///
+    /// **The parameter that replaces `shininess`, and the difference is that
+    /// this one measures something.** 0 is a mirror, 1 is chalk. Lesson 6.3's
+    /// `alpha_from_blinn_exponent` translates the old values: the engine's
+    /// default shininess of 32 was asking for roughness 0.49.
+    float roughness = 0.5f;
+
+    /// 0 = dielectric, 1 = metal. Nothing in between is a real material.
+    ///
+    /// **This is a switch wearing a float's clothes, and that is deliberate** —
+    /// not because half-metals exist, but because a *texture* that says "this
+    /// pixel is the painted part and that one is the bare metal" has to filter
+    /// across the boundary, and a filtered switch is a float. Lesson 6.6's glTF
+    /// materials store exactly this.
+    ///
+    /// It does two things at once, and both are consequences rather than rules:
+    /// a metal's F0 becomes its albedo (`f0_of`), and a metal loses its diffuse
+    /// lobe entirely (`diffuse_albedo_of`). Both follow from one fact — metals
+    /// conduct, so light that crosses the interface is absorbed within a few
+    /// atoms instead of scattering back out.
+    float metallic = 0.0f;
+
+    /// Normal-incidence reflectance for the DIELECTRIC case, in [0.02, 0.08].
+    ///
+    /// Defaults to `k_dielectric_f0`, which covers most of the world. Raise it
+    /// for gemstones, lower it for water. Ignored entirely when `metallic` is 1,
+    /// because a metal's F0 comes from its albedo instead.
+    float f0 = k_dielectric_f0;
+};
+
+/// The coloured normal-incidence reflectance this surface actually has.
+///
+/// **The metallic workflow in one line**, and it arrives as a consequence rather
+/// than a checkbox: a dielectric reflects a grey 4% and scatters the rest
+/// coloured, so its F0 is grey and its albedo is the colour you see. A metal
+/// absorbs everything that gets in, so the only light leaving it is the mirrored
+/// part — which means the colour has to live in F0 instead. Gold's albedo IS its
+/// F0, (1.00, 0.71, 0.29).
+///
+/// So one `albedo` field serves both, and `metallic` chooses which question it
+/// is answering. That is why every modern pipeline authors base colour +
+/// metallic + roughness: it is not a compression, it is the physics.
+[[nodiscard]] inline linear_rgb f0_of(microsurface surface, linear_rgb albedo)
+{
+    const float m = std::clamp(surface.metallic, 0.0f, 1.0f);
+    const float d = surface.f0;
+    return {d + (albedo.r - d) * m,
+            d + (albedo.g - d) * m,
+            d + (albedo.b - d) * m};
+}
+
+/// The albedo the DIFFUSE lobe gets, which is nothing at all for a metal.
+///
+/// See `microsurface::metallic`: light that crosses into a conductor is absorbed
+/// within a few atomic layers, so there is no subsurface scattering to come back
+/// out. A metal is a mirror and nothing else, which is why a rough metal looks
+/// dark rather than pale — and why Lesson 6.3's missing 69% at full roughness
+/// is a visible problem for metals specifically and barely matters for plastic.
+[[nodiscard]] inline linear_rgb diffuse_albedo_of(microsurface surface, linear_rgb albedo)
+{
+    const float k = 1.0f - std::clamp(surface.metallic, 0.0f, 1.0f);
+    return {albedo.r * k, albedo.g * k, albedo.b * k};
+}
+
+/// **The Cook-Torrance specular BRDF**: `D * G * F / (4 (n.l)(n.v))`.
+///
+/// Every part of that expression is derived in Lesson 6.4 §4, including the
+/// denominator, which is the single most quoted and least explained line in
+/// real-time graphics. In brief, because it is short enough to state here:
+///
+///   - **the 4 is a Jacobian.** The distribution `D` is a density over
+///     MICROFACET NORMALS, and the BRDF is a density over LIGHT DIRECTIONS.
+///     Converting between them needs the stretch factor of the map `l -> h`.
+///     Put spherical coordinates on the fixed direction: a facet tilted by
+///     `theta_h` swings the reflected ray by `2 theta_h`, so
+///     `dw_out = sin(2 theta_h) * 2 dtheta_h dphi` against
+///     `dw_h = sin(theta_h) dtheta_h dphi`, and the ratio is
+///     `2 sin(2 theta_h)/sin(theta_h) = 4 cos(theta_h) = 4 (v.h)`.
+///     The double-angle identity supplies both the 4 and the cosine.
+///     Measured against a finite-difference change of variables in verify_64 §B.
+///
+///   - **the (v.h) that Jacobian leaves behind cancels**, against the projected
+///     area of the facets toward the light — which is also `(l.h)`, and
+///     `l.h == v.h` because `h` bisects them. That cancellation is why the
+///     denominator has no `(v.h)` in it, and its absence is what makes the
+///     formula look unmotivated.
+///
+///   - **the (n.v) converts flux to radiance** (radiance is per unit PROJECTED
+///     area) and **the (n.l) is the BRDF's own definition** (a BRDF is per unit
+///     irradiance, and irradiance already carries a cosine).
+///
+/// The dots are passed in rather than the vectors, so this function is pure
+/// arithmetic that a test can drive directly — and so the shader can compute
+/// them once and share them with the diffuse half.
+///
+/// Returns black rather than a NaN when either cosine is non-positive: light
+/// below the horizon and a surface facing away are both real cases, not
+/// degeneracies to guard against.
+[[nodiscard]] inline linear_rgb cook_torrance_specular(microsurface surface,
+                                                       linear_rgb f0,
+                                                       float n_dot_l, float n_dot_v,
+                                                       float n_dot_h, float v_dot_h,
+                                                       ndf_model model = ndf_model::ggx)
+{
+    if (n_dot_l <= 0.0f || n_dot_v <= 0.0f) { return {}; }
+
+    const float alpha = alpha_from_roughness(surface.roughness);
+    const float d = ndf(model, n_dot_h, alpha);
+    const float g = smith_g(n_dot_l, n_dot_v, alpha);
+    const linear_rgb f = fresnel_schlick(v_dot_h, f0);
+
+    // The whole denominator, computed once. `n_dot_l` and `n_dot_v` are both
+    // strictly positive here, so this cannot divide by zero — but they can be
+    // small, and `smith_g` goes to zero faster than they do, which is what keeps
+    // the quotient finite at grazing angles rather than exploding.
+    const float k = d * g / (4.0f * n_dot_l * n_dot_v);
+    return {f.r * k, f.g * k, f.b * k};
 }
 
 } // namespace engine

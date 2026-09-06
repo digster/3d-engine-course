@@ -136,7 +136,7 @@ struct scene_object
     ///
     /// Defaults to a black highlight, which is exactly Lesson 3.6's shading — so
     /// every object that says nothing about shininess looks precisely as it did.
-    specular surface{};
+    microsurface surface{};
 };
 
 }   // namespace engine

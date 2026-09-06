@@ -7,7 +7,7 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-09-06 (after Lesson 6.3 — 59 of 95 lessons)
+updated: 2026-09-06 (after Lesson 6.4 — 60 of 95 lessons)
 
 conventions:
   ecs-storage: THE ECS IS A SPARSE SET, DECIDED IN 5.7 BY MEASUREMENT, NOT TASTE.
@@ -2938,6 +2938,16 @@ curriculum: 95 lessons, ~438 h, 9 modules   (5.10 split into 5.10 + 5.11 in 5.10
         not reach a branch cannot pin it; READ YOUR INSTRUMENT'S OWN COUNTERS AND
         ASK WHAT THEY MISSED. Frame 6 stands the camera on the floor: 32 in, 8
         straddling, 36 out.
+        LESSON 6.4 ADDED AN EIGHTH FRAME, and the reason is the SAME MISTAKE
+        CAUGHT TWICE. 6.4 replaced the whole shading model and the shot moved by
+        0.60%, because shading::textured is UNLIT and frame 1 is in shadow — three
+        of seven frames reached the shading equation at all. The rule generalises
+        past clipping: A CHARACTERIZATION TEST THAT DOES NOT REACH A BRANCH CANNOT
+        PIN IT, so read what its counters DO NOT say. And the timing rule that is
+        the transferable half: THE MOMENT TO EXTEND A CHARACTERIZATION TEST IS THE
+        MOMENT IT BREAKS FOR ANOTHER REASON — it is free at a re-baseline and costs
+        a re-baseline at every other lesson. New golden E917C06C, 8 frames,
+        1,382,416 bytes.
         MOVE WITHOUT CHANGING, THEN CHANGE WITHOUT MOVING, verifying separately.
         Both passes byte-identical; verify_50 (which LINKS) also byte-identical.
   radiometry: LESSON 6.2 GAVE THE SHADING EQUATION UNITS, AND THE UNITS ARE THE
@@ -3004,7 +3014,12 @@ curriculum: 95 lessons, ~438 h, 9 modules   (5.10 split into 5.10 + 5.11 in 5.10
         engine ships 1/pi, off by (s+2)/2 = 17x at shininess 32. NOT FIXED IN 6.3:
         the constant is wrong but the MATERIALS were authored against it, so
         specular::colour absorbed it, and correcting one without the other blows
-        the highlights out. 6.4 replaces both at once.
+        the highlights out. 6.4 replaces both at once. DONE — and 6.4 DELETED the
+        struct rather than fixing the constant, so every call site had to be
+        revisited. The legacy 1/pi is still deliberately wrong and still reachable
+        via specular_model::{phong,blinn}, which now read the SAME microsurface
+        through 6.3's own mapping — the demonstration that the old parameters were
+        the new ones badly spelled.
         s = 2/alpha^2 - 2 MATCHES THE PEAK AND ONLY THE PEAK (to one float ULP). A
         lobe fit lands 0.80x lower. Both are right; quote the criterion.
         G IS A CONSEQUENCE, NOT A CORRECTION — once you have said "landscape" you
@@ -3025,6 +3040,68 @@ curriculum: 95 lessons, ~438 h, 9 modules   (5.10 split into 5.10 + 5.11 in 5.10
         THE DIAGNOSTIC THAT FOUND IT, and it generalises: QUADRATURE ERROR SHRINKS
         WITH THE GRID, ARITHMETIC ERROR DOES NOT. Two runs — refine the grid, then
         run the same formula in double on the same grid — locate any such bug.
+
+  fresnel-and-assembly: LESSON 6.4 ADDED THE THIRD TERM AND ASSEMBLED THE BRDF.
+        The convention every later reflectance term is stated in:
+            f_r = D G F / (4 (n.l)(n.v))  +  kd * albedo/pi
+        THE COUPLING IS THE LESSON, and it is one sentence: F IS WHAT BOUNCES OFF,
+        SO 1-F IS WHAT GOES IN — and only what goes in can scatter back out. Before
+        it the two lobes were independent and their sum was unbounded (6.2's
+        1.1386). The fault was never a constant; IT WAS THE PLUS SIGN.
+        THE DENOMINATOR IS DERIVED, NOT QUOTED, and 6.3 deferred it on purpose.
+        Spherical coordinates on the FIXED direction: a facet tilted by theta_h
+        turns the ray by 2*theta_h, so dw_out/dw_h = 2 sin(2t)/sin(t) = 4 cos(t)
+        = 4(v.h). Two factors of two — one from dtheta_out = 2 dtheta_h, one from
+        the double-angle identity, which hands over the cosine as change. Measured
+        against finite differences on the sphere: worst 1.42e-03 (verify_64 §B).
+        THE (v.h) CANCELS against the facets' projected area toward the light,
+        which is (l.h) and equal to it BECAUSE h BISECTS. That cancellation is
+        exactly why the finished formula looks unmotivated — the term that would
+        explain the 4 is not in it. (n.v) is radiance's per-PROJECTED-area
+        definition; (n.l) is the BRDF's own definition per unit irradiance.
+        F0 = ((1-n)/(1+n))^2, SQUARED because Fresnel gives an AMPLITUDE ratio and
+        reflectance is a ratio of powers. Glass at n=1.5 gives exactly 0.04, which
+        is where every renderer's hard-coded constant comes from. Dielectrics live
+        in [0.02, 0.08]; only gemstones climb (diamond 0.1724).
+        RUN IT BACKWARDS AND IT IS AN AUDIT. ior_from_f0(0.85) = 24.6, where
+        diamond is 2.42 — so the engine's shipped specular colours were never
+        materials. A PARAMETER THAT ROUND-TRIPS INTO A PHYSICAL QUANTITY CAN BE
+        AUDITED; ONE THAT CANNOT, CANNOT. Second time in three lessons this found
+        something (6.3's 17x was the first).
+        SCHLICK IS EXACT AT BOTH ENDS BY CONSTRUCTION and fitted in between. Worst
+        ABSOLUTE error 0.0357 (glass, 85 deg); worst RELATIVE error 23.2% AT 55
+        DEGREES, in the middle of the range where surfaces are seen. At 60 deg the
+        exact answer is 0.0892 and Schlick says 0.0700 — 21% low. Ships anyway, and
+        the defence is NOT that the fit is tight: 23% of 0.04 is 0.019 of a
+        reflectance, which is invisible. The absolute error DOUBLES for diamond, so
+        the defence weakens as F0 rises. cos_theta here is v.h, NOT n.v — the
+        MICROFACET is the mirror, so it is the facet's own normal light bounces off.
+        METALS: F0 = lerp(0.04, albedo, metallic), diffuse = albedo*(1-metallic).
+        A CONSEQUENCE, not a checkbox: a conductor absorbs what crosses its
+        interface within a few atomic layers, so there is no diffuse lobe and the
+        colour has nowhere to live but F0. One albedo field serves both materials
+        and `metallic` says which question it is answering. metallic is a FLOAT
+        because a texture that says "painted here, bare metal there" must filter,
+        and a filtered switch is a float.
+        THE COUPLING CHOICE IS MEASURED, NOT ASSUMED, and this is 6.4's finding:
+            no coupling            worst R(v) = 1.4300
+            1 - F(v.h)   [glTF]    worst R(v) = 1.3395   <- STILL EMITS LIGHT
+            (1-F(n.l))(1-F(n.v))   worst R(v) = 0.9255   <- ships, the default
+        1-F(v.h) is what nearly every engine ships and is EXACT at normal incidence
+        (furnace 0.9999). It accounts for the light that got IN and says nothing
+        about the light that fails to get OUT: a diffuse ray leaving toward a
+        grazing eye meets the interface at a grazing angle, where a quarter of it
+        reflects back inside. Bolting on an exit factor FIXES THE ENERGY (0.9628)
+        AND FAILS RECIPROCITY (0.2623 vs 0.2932) — which is what selects the
+        symmetric two-crossing form. RECIPROCITY IS NOT DECORATION; IT IS WHAT A
+        BRDF IS, and it is the test that ruled out the obvious repair.
+        THE HONEST COST: two-crossing is ~8.5% DARKER at normal incidence than the
+        half-vector form. That light is the portion reflecting back INSIDE at the
+        exit boundary, which the model forgets — same class as 6.3's missing 69%.
+        Both want Kulla-Conty multiple-scattering compensation, still not built.
+        half_vector IS KEPT, named and measured, exactly as 6.3 kept
+        smith_g_separable — and 6.6 (glTF) may need it for spec compliance.
+        ⚠ VERIFY the glTF Appendix B claim against the Khronos spec before 6.6.
 
 completed:
   - 0.1  What a Game Engine Actually Is
@@ -3096,8 +3173,57 @@ completed:
   - 6.1  Linear and sRGB: The Gamma Lesson
   - 6.2  Radiometry-Lite: What a BRDF Is
   - 6.3  Microfacet Theory
+  - 6.4  Cook–Torrance PBR, Derived
 
 capabilities:
+  - 6.4 THE ENGINE HAS A PHYSICALLY-BASED BRDF, LIVE IN BOTH RENDERERS.
+    NO NEW FILES: 57 public headers and 32 sources, unchanged, no CMake change —
+    and the widest diff since the 5.1 refactor. `engine::specular` was DELETED.
+    microfacet.hpp  + k_dielectric_f0 (0.04), f0_from_ior(), ior_from_f0(),
+                fresnel_schlick() (scalar and linear_rgb), diffuse_coupling
+                {two_crossing, half_vector}, diffuse_transmission(),
+                struct microsurface {roughness, metallic, f0}, f0_of(),
+                diffuse_albedo_of(), cook_torrance_specular().
+    light.hpp   specular_model gains cook_torrance AND IT IS THE DEFAULT; struct
+                specular REMOVED; specular_brdf() now takes a linear_rgb
+                reflectance; cook_torrance_brdf() added; legacy_shininess_of()
+                lets phong/blinn run off a microsurface; shade() and
+                shade_encoded() take a microsurface and an ndf_model.
+    gpu_uniform.hpp  material_uniforms {albedo, roughness, metallic, f0, textured,
+                pad0} — STILL EXACTLY 32 BYTES, two registers, so not one line of
+                binding code moved. Every offset static_assert'd, which is what
+                made a change this size safe in one commit.
+    scene.frag.hlsl  ndf_ggx(), smith_g(), fresnel_schlick() and the two-lobe
+                assembly, carrying 6.3's rearranged GGX denominator because A GPU
+                IS NO LESS IEEE-754 THAN A CPU.
+    THE FIRST TIME shade() AND THE SHADER HAD TO MOVE IN THE SAME COMMIT. Until
+    now one always followed the other by a lesson. verify_48 §F is what made it
+    survivable — a fourth row, Cook-Torrance, agreeing to 2.384e-07 (mean 7.8e-08)
+    over 4096 fragments. A DRIFTING SHADER DOES NOT FAIL LOUDLY; IT RENDERS
+    SOMETHING PLAUSIBLE.
+    MATERIALS RE-AUTHORED IN THE SAME COMMIT, because the constant and the
+    parameters were wrong in compensating directions (6.3's 17x against an 0.85
+    that should have been 0.04). shininess 32 -> roughness 0.49; 48 -> 0.45;
+    64 -> 0.42; 80 -> 0.40; 96 -> 0.38; 24 -> 0.53. THE TEAL SLAB AND THE SWARM'S
+    SUN BECAME metallic = 1 — both had been faking a metal since 3.7 by typing a
+    tinted highlight colour beside a matching tint, two numbers kept in step by
+    hand. They can no longer disagree with themselves.
+    THE SANDBOX: [E] cycles ROUGHNESS, not shininess — {0.05, 0.12, 0.22, 0.35,
+    0.49, 0.65, 0.82, 1.00}, spaced so the steps LOOK even, which is what alpha =
+    r^2 buys. [H] cycles none / Phong / Blinn / COOK-TORRANCE.
+    THE GOLDEN BROKE, ON PURPOSE, AFTER FOURTEEN LESSONS: 905BF27E -> E917C06C,
+    7 frames -> 8, 1,209,616 -> 1,382,416 bytes. Of the shared frames 2,400 of
+    403,200 pixels moved (0.60%), ALL DARKER, none brighter — worst per-channel
+    R 38, G 93, B 78. "All darker" is the check that matters: an energy-conserving
+    model replacing one that emitted light cannot brighten anything.
+    AND 0.60% WAS THE INSTRUMENT'S FAULT. Only frames 0, 2, 3 moved. Frames 4, 5
+    and 6 bind a texture, and shading::textured is UNLIT BY CONSTRUCTION; frame 1's
+    planks face away from the light and encode to albedo*ambient exactly, a term
+    6.4 does not touch. THREE OF SEVEN FRAMES EXERCISED THE SHADING EQUATION, and
+    the torus — chosen in 3.8 BECAUSE it shows highlights — was drawn unlit.
+    So frame 7 was added: the model scene with shading::lit and the texture bound
+    as the ALBEDO (per-pixel normals + sampled albedo + the new BRDF), hashing
+    3F9DD2CF against frame 5's 81727C17. See characterization-test.
   - 6.3 THE ENGINE HAS A STORY ABOUT WHAT A SURFACE IS, AND IT CAN BE CHECKED.
     ONE NEW HEADER, HEADER-ONLY: 56 -> 57 public headers, 32 sources unchanged, no
     CMake change. NOTHING IS WIRED IN — shade() and scene.frag.hlsl are untouched,
@@ -5200,7 +5326,7 @@ files:
             gpu_device.hpp, gpu_mesh.hpp, gpu_pipeline.hpp, gpu_present.hpp,
             gpu_scene.hpp, gpu_shader.hpp, gpu_texture.hpp, gpu_uniform.hpp,
             image.hpp, light.hpp, mesh.hpp,
-            microfacet.hpp                                                   [6.3]
+            microfacet.hpp                                              [6.3, 6.4]
             obj.hpp, projector.hpp, raster.hpp,
             scene.hpp, soft_renderer.hpp, texture.hpp, viewport.hpp
   engine/include/engine/math/: mat2.hpp, mat3.hpp, mat4.hpp, transform.hpp,
@@ -5343,9 +5469,34 @@ files:
            like (0.3069 at full roughness). Same habit as 6.2: write another probe
            the moment one tells you something you did not expect.)
            figview/ — one throwaway page per figure; g1..g6.html this lesson.
-           (build_63.py PINS NOTHING YET and lists microfacet.hpp WHOLE. LESSON 6.4
-            IS THE ONE THAT ASSEMBLES IT — Fresnel, and very likely a combined
-            visibility form. Pin before writing a line of 6.4.)
+           PINNED BY 6.4, before a line of it was written: l63_microfacet.hpp
+           (verified against commit 8735ba5 with `git show ... | diff - <pin>`) and
+           l63_verify_63.cpp, a working-tree copy taken FIRST because it is
+           gitignored and that provenance cannot be recovered later. Rebuilding gave a diff of exactly the two nav
+           lines meant to move — THIRD LESSON RUNNING, so it is the standard now.
+  scratch/ (6.4, not shipped with the engine): verify_64.cpp, build_verify_64.sh,
+           figs_64.py, build_64.py, l64_body_{a,b,c}.html, l64_fig{1..6}.svg,
+           l64_golden_905BF27E.ppm (THE RETIRED GOLDEN, kept as history — the
+           picture the engine made for fourteen lessons), worked_64.cpp (a
+           throwaway that checks every worked example the page prints against the
+           engine itself; CLAUDE.md §10 requires the arithmetic verified, and
+           doing it by hand twice is not verification),
+           probe_64.cpp, probe_64b.cpp and probe_64c.cpp (THROWAWAYS, kept, and the
+           chain is the point. 64 measured the Jacobian, Schlick and the energy,
+           and OVERTURNED THE PLAN: I expected Fresnel coupling to close the energy
+           door outright, and it leaves 1.2031 at grazing. 64b asked whether that
+           was the instrument (refine the grid: it CONVERGES, so no) and where it
+           sat (the specular takes 0.40, the diffuse gives up 0.05). 64c tested the
+           resulting DIAGNOSIS — that the missing factor is the light which fails
+           to get OUT — by predicting an exit factor would kill it. It did, and
+           then failed reciprocity, which is what chose the shipped form. THREE
+           PROBES, EACH BECAUSE THE LAST ONE DISAGREED WITH ME.)
+           check-pages.mjs is shared, not per-lesson; shot_figs.mjs likewise.
+           (build_64.py PINS NOTHING YET and lists microfacet.hpp and light.hpp
+            WHOLE. LESSON 6.5 IS THE MATERIAL SYSTEM and will edit BOTH — the first
+            holds `microsurface`, the second holds shade(). Pin before writing a
+            line of 6.5, and take verify_64.cpp's copy early: scratch/
+            l64_verify_64.cpp is ALREADY TAKEN, as of this lesson.)
   scratch/ (5.11, not shipped with the engine): verify_511.cpp,
            build_verify_511.sh, figs_511.py, build_511.py,
            l511_body_{a,b,c}.html, l511_fig{1..7}.svg
@@ -5362,63 +5513,59 @@ files:
             first three — so it will need pins, and the warning in it says so.)
   memory/: 2026-07-16.md … 2026-08-25.md, 2026-08-25-b.md, 2026-08-25-c.md,
            2026-08-26.md, 2026-08-26-b.md, 2026-08-29.md, 2026-09-02.md, 2026-09-02-b.md,
-           2026-09-02-c.md, 2026-09-04.md
+           2026-09-02-c.md, 2026-09-04.md, 2026-09-05.md, 2026-09-06.md
+           (ONE FILE PER DATE. 6.2, 6.3 and 6.4 all landed on 2026-09-06 and all
+            three are sections of that one file — never a -b suffix for a same-day
+            session.)
   (retired: src/ — the whole directory. hello.cpp.)
 
 
-next: 6.4 — Cook–Torrance PBR, Derived
-      (planned filename: docs/lessons/06-04-cook-torrance.html — 6.3's TWO next
-      links point at the index and BOTH need repointing; scratch/l63_body_a.html
-      holds the top one and build_63.py's TAIL the bottom. AND build_63.py PINS
-      NOTHING while listing microfacet.hpp WHOLE — the file 6.4 is ABOUT. Pin
-      first, and take verify_63.cpp's pin early since it is gitignored:
-        git show <6.3 commit>:engine/include/engine/gfx/microfacet.hpp \
-            > scratch/l63_microfacet.hpp
-        cp scratch/verify_63.cpp scratch/l63_verify_63.cpp
-      Then re-run build_63.py and `git diff` the page. Two lessons running, the
-      diff has come out to exactly the nav lines that were meant to move; that is
-      the standard, not a lucky streak.
-      THE CENTREPIECE OF THE MODULE, and the parts are already built and tested.
-      6.4 ASSEMBLES AND REPLACES, which is why it is the lesson the golden breaks.
-      1 THE DOOR IS STILL 1.1386 — 6.2's number, restated in 6.3 §1 and left
-        standing on purpose. 6.3 could not fix it: normalising D does not couple
-        the lobes. FRESNEL IS THE COUPLING and that sentence is the lesson.
-        F says what fraction bounces off the interface; only 1 - F is left to go
-        in and scatter back out. The two terms stop being independent, and a white
-        surface with a white highlight stops being able to exceed 1.
-      2 DERIVE THE 4(n·l)(n·v) DENOMINATOR, do not quote it. It is a Jacobian from
-        changing variables between the light direction and the halfway vector —
-        dw_h/dw_l = 1/(4 (v·h)) — and it is the single most-quoted, least-derived
-        line in real-time graphics. 6.3 deliberately deferred it and said so.
-      3 FRESNEL: derive the shape from the physics (reflectance rises to 1 at
-        grazing, ALWAYS, for every material), then Schlick's approximation FITTED
-        against the exact equations rather than asserted — the same treatment 6.3
-        gave the s = 2/alpha^2 - 2 mapping, and the same finding is likely: it is
-        a fit to something specific and the error is worth stating.
-        F0 IS THE MATERIAL PARAMETER THAT REPLACES specular::colour, and metals
-        differ from dielectrics only in that F0 is coloured and there is no
-        diffuse lobe at all. That is the "metallic" workflow, arriving as a
-        consequence rather than as a checkbox.
-      4 THE MATERIALS MUST BE RE-AUTHORED IN THE SAME COMMIT AS THE CONSTANT.
-        6.3 measured that the engine's specular colours absorbed a 17x error;
-        fixing the constant alone blows every highlight out (Exercise 15.1 walks a
-        student into exactly this). So 6.4 changes shade(), scene.frag.hlsl AND
-        the demo materials together, and says so.
-      THE TEST TO BEAT: THE GOLDEN BREAKS HERE, deliberately and for the first time
-      in fifteen lessons. RE-BASELINE PROPERLY: show the diff, state the
-      per-channel magnitude, record the old hash (905BF27E) beside the new, and say
-      what changed and why the OLD picture was not merely worse but differently
-      parameterised. Do not renormalise to preserve it.
-      verify_64 must cover: the Jacobian, derived and checked numerically against a
-      direct change of variables; Schlick against the exact Fresnel equations, with
-      the worst error stated; F0 round-tripping from an index of refraction;
-      ENERGY — 6.2's integrator again, unchanged, now over the FULL BRDF with the
-      coupling in, which must not exceed 1 for any albedo/roughness/view triple;
-      and the white-furnace test from 6.2 Exercise 13.5 extended to the specular.
-      Plus verify_45..63 green.
-      CARRY FORWARD: 6.3's rule that a term is either a BRDF (sr^-1, inside f_r) or
-      a factor of the light (outside it) still sorts every new quantity. And the
-      numerical habit — quadrature error shrinks with the grid, arithmetic error
-      does not — found a 1.1% energy loss in a formula every reference prints. Run
-      it on the Fresnel and Jacobian arithmetic too.
+next: 6.5 — A Material System
+      (planned filename: docs/lessons/06-05-material-system.html — 6.4's TWO next
+      links point at the index and BOTH need repointing; scratch/l64_body_a.html
+      holds the top one and build_64.py's TAIL the bottom. AND build_64.py PINS
+      NOTHING while listing microfacet.hpp and light.hpp WHOLE — the two files 6.5
+      is most certain to edit. Pin first:
+        git show <6.4 commit>:engine/include/engine/gfx/microfacet.hpp \
+            > scratch/l64_microfacet.hpp
+        git show <6.4 commit>:engine/include/engine/gfx/light.hpp \
+            > scratch/l64_light.hpp
+        git show <6.4 commit>:shaders/scene.frag.hlsl > scratch/l64_scene.frag.hlsl
+      (scratch/l64_verify_64.cpp is ALREADY TAKEN — 6.4 took it during 6.4, since
+      it is gitignored.) Then re-run build_64.py and `git diff` the page. THREE
+      lessons running the diff has been exactly the nav lines meant to move; that
+      is the standard, not a streak.
+      THE LESSON IS ALREADY HALF-ARGUED, BY THIS COMMIT'S OWN DIFF. 6.4 changed a
+      surface description and had to edit forty-four call sites across the engine,
+      four demos and six harnesses. Lesson 3.7 wrote "this struct is not called
+      `material` because it is not one yet" and named what was missing: the albedo,
+      the textures, the cull and blend modes, the shader. OPEN ON THAT DIFF. The
+      pull is the design telling you what it wants to be, and 3.7, 3.4 and 3.8 each
+      said so in turn.
+      1 THE SPLIT THAT MATTERS IS NOT struct-vs-struct, IT IS WHICH HALF CAN BE A
+        NUMBER IN A BUFFER. `microsurface` + albedo + textures are per-DRAW data;
+        cull mode, blend mode and the shader are PIPELINE STATE and cannot be
+        (4.8's three-pipelines-and-a-sort is the receipt). A material that pretends
+        otherwise produces the pipeline explosion 4.8 already measured.
+      2 THE ALBEDO IS ALREADY TWO THINGS AND THE CODE ADMITS IT: `tint` (a Uint32
+        an artist types) and `albedo_map` (a texture that REPLACES it, 3.9's rule,
+        not multiplies). ecs_swarm's `material` component holds a tint and a
+        surface and says in its own comment that they "have always described the
+        same thing and never been the same thing". That is the seam.
+      3 HANDLES, NOT POINTERS — 5.4 built generational indices and 5.5 the asset
+        store, and a material is the first thing that wants to REFERENCE assets
+        rather than own them. This is where that machinery pays off.
+      4 6.4 LEFT A REAL DECISION ON THE TABLE: `diffuse_coupling` and `ndf_model`
+        are PIPELINE state by 6.3's argument, but a glTF asset (6.6) arrives
+        specifying the half-vector form. Decide where that lives before 6.6 forces
+        it, and ⚠ VERIFY the glTF Appendix B BRDF against the Khronos spec.
+      THE TEST TO BEAT: the golden was just re-baselined to E917C06C over EIGHT
+      frames, and 6.5 is a REFACTOR — so it should be byte-identical again, and
+      that is the claim to make. Move without changing, then change without moving
+      (5.1's rule), verifying separately. verify_65 must cover the material's
+      round trip through the GPU uniform, and verify_45..64 green.
+      CARRY FORWARD: 6.3's sorting rule (a term is either a BRDF, sr^-1, inside
+      f_r, or a factor of the light, outside it) and 6.4's audit habit — a
+      parameter that round-trips into a physical quantity can be checked, and one
+      that cannot, cannot. Run it on whatever 6.5 invents.
 ```

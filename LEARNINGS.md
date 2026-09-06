@@ -6145,3 +6145,115 @@ The NDF figure clipped its sharpest curve at a hand-chosen ceiling, which render
 and reads as a bug. With cosine weighting the peak is `1/(πα²)`, so the ceiling is computable —
 and once it was, the honest picture (peaks differing 16×, areas all exactly 1) turned out to be a
 better illustration than the clipped one.
+
+---
+
+## Lesson 6.4 — Cook–Torrance, assembled
+
+### Write a second probe the moment the first disagrees with you — then a third
+
+Three probes, and each existed because the previous one overturned something. `probe_64` was
+supposed to confirm that Fresnel coupling closes the energy door; it left **1.2031** at grazing.
+`probe_64b` asked whether that was the instrument (refine the grid — it *converges*, so no) and
+where it sat (specular takes 0.40, diffuse gives up 0.05). `probe_64c` tested the resulting
+*diagnosis* — that the missing factor is the light which fails to get **out** — by predicting an
+exit factor would remove it. It did.
+
+The chain is the technique. **A probe that confirms your plan has told you nothing you did not
+already believe; a probe that contradicts it has told you where the lesson actually is.**
+
+### A fix that passes the test it was written for can fail a test you forgot
+
+The exit-factor repair killed the over-unity exactly as predicted — and it is **not reciprocal**
+(0.262327 one way, 0.293236 the other), which means it is not a BRDF. The prediction was right and
+the patch was still wrong.
+
+Keep the *defining properties* of the thing you are building in a list, and check a candidate
+against all of them, not only against the symptom that prompted it. For a BRDF that list is:
+non-negative, reciprocal, and energy-conserving. The repair scored two out of three.
+
+### An error a parameter can absorb is invisible — so give every parameter an inverse
+
+Lesson 6.3 found a 17× normalisation error hiding inside `specular::colour`. 6.4 found the other
+half of the same story by writing `ior_from_f0` — three lines whose only purpose is to run a
+material backwards and ask what it claims about the world. The demo's authored 0.85 comes back as
+an **index of refraction of 24.6**, where diamond is 2.42.
+
+**A parameter that round-trips into a physical quantity can be audited automatically; one that
+cannot, cannot.** That is a design argument for physical parameterisations that has nothing to do
+with realism — it is about testability.
+
+### When the meaning of a value changes, delete the type
+
+`specular::colour = 0.85f` and `f0 = 0.04f` are both perfectly good floats. There is no diagnostic
+anywhere in C++ for "same type, new meaning", so a struct that kept its name would have let all
+forty-four call sites keep compiling while rendering twenty-one times too bright.
+
+Deleting `specular` outright turned every one of them into a compile error. That is the third time
+this course has made the trade (3.7's `to_eye` with no default, 6.2's `intensity` → `irradiance`),
+and it is worth stating as a rule: **a rename or a deletion is the only refactoring tool that
+reaches every caller.** Doc comments do not.
+
+### Corrections that compensate must land in one commit
+
+The specular constant was 17× too small and the authored specular colours were ~21× too large.
+Either fix alone makes the picture *worse* than leaving both wrong — highlights blow out, or
+everything goes black. There was no tidy sequence of small commits here, and pretending otherwise
+would have meant shipping a broken intermediate state.
+
+**When two errors are compensating, the unit of work is both of them.** Say so in the commit
+message, because a reviewer looking at half of it will be right to object.
+
+### The moment to extend a characterization test is the moment it breaks
+
+Replacing the entire shading model moved **0.60%** of the reference render. Not because the change
+was small — because `shading::textured` is unlit by construction and one scene faces away from the
+light, so **three of seven frames exercised the shading equation at all**, and the torus chosen in
+3.8 *because* it shows highlights was drawn unlit.
+
+This is Lesson 5.1's finding a second time (there it was the near-plane clipper: *a
+characterization test that does not reach a branch cannot pin it*). The new half is about timing:
+an eighth frame costs **nothing** at a lesson that re-baselines the golden anyway, and costs a
+whole re-baseline at every other lesson. So the moment a golden breaks for a good reason is the
+cheapest moment it will ever be to improve it.
+
+### Re-baseline honestly: record the direction, not just the hash
+
+`905BF27E → E917C06C` says nothing. What made the new baseline believable was the *direction*:
+2,400 pixels changed and **every one got darker**, none brighter — which is exactly what an
+energy-conserving model replacing one that emitted light must do. A single brighter pixel would
+have been a question to answer before shipping.
+
+Record: old hash beside new, the per-channel magnitude, and a claim about the sign that the data
+can contradict.
+
+### HLSL cbuffer members share one global namespace
+
+Adding `pad0` to a second cbuffer is a *redefinition*, not a local name — and the error, "nameless
+block contains a member that already has a name at global scope", does not obviously say so. Name
+padding per buffer.
+
+### A truncated bar axis lies about the data it is there to report
+
+The energy figure first drew its bars from 0.6, which made 0.71 and 1.24 look like a five-fold
+difference in a chart whose entire subject is *magnitudes*. Zero-based, with the unity line drawn
+in, is both honest and still perfectly legible — the 1.0 crossing is what the eye needs, not the
+bar heights.
+
+### Put the label where the geometry cannot reach, and compute where that is
+
+Three separate label placements failed `check-page.js` in this lesson, and the instructive one was
+the arc label: I placed "2θ" at its arc's *midpoint*, which by construction **is** the h ray. The
+obvious choice was the one guaranteed to collide.
+
+Two habits came out of it. Give a label an explicit angle rather than deriving it from the shape it
+annotates. And when a figure needs four labels and four strokes in one quadrant, the fix is usually
+to draw fewer things — the second ray pair in the Jacobian figure was cut, and the figure got
+better.
+
+### Geometry checks cannot see clutter
+
+`check-page.js` passed a version of Figure 1 that a reader would have struggled with: two panels,
+each with three rays crossing, labels technically clear of every stroke. The rewrite abandoned the
+ray diagram entirely for a **budget bar**, because the claim being made was an accounting claim.
+Look at the rendered figure and ask what it is *for*; no geometric check will ask that for you.

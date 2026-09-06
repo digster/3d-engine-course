@@ -860,6 +860,7 @@ enum class hidden_surface
     case engine::specular_model::none:  return "none (3.6, diffuse only)";
     case engine::specular_model::phong: return "PHONG   dot(R,v)^p";
     case engine::specular_model::blinn: return "BLINN   dot(n,h)^p";
+    case engine::specular_model::cook_torrance: return "COOK-TORRANCE  D G F / 4(n.l)(n.v)";
     }
     return "?";
 }
@@ -870,7 +871,8 @@ enum class hidden_surface
     {
     case engine::specular_model::none:  return engine::specular_model::phong;
     case engine::specular_model::phong: return engine::specular_model::blinn;
-    case engine::specular_model::blinn: return engine::specular_model::none;
+    case engine::specular_model::blinn: return engine::specular_model::cook_torrance;
+    case engine::specular_model::cook_torrance: return engine::specular_model::none;
     }
     return engine::specular_model::none;
 }
@@ -886,11 +888,17 @@ enum class hidden_surface
 /// them at the SAME exponent mostly measures that one lobe is wider than the other,
 /// which is not interesting; comparing them at the same visual tightness measures
 /// the thing that actually differs — the SHAPE of the tail, and the cut-off.
-[[nodiscard]] float matched_shininess(engine::specular_model from, float shininess)
+[[nodiscard]] float matched_roughness(engine::specular_model from, float roughness)
 {
-    if (from == engine::specular_model::phong) { return shininess * 4.0f; }   // -> blinn
-    if (from == engine::specular_model::blinn) { return shininess * 0.25f; }  // -> phong
-    return shininess;
+    // Lesson 3.7's 4x rule, restated in Lesson 6.4's parameter. The rule was
+    // always about the EXPONENT, so the honest way to apply it now is to convert
+    // out to an exponent, scale, and convert back — rather than inventing a
+    // factor for roughness, which is not linearly related to it.
+    const float s = engine::blinn_exponent_from_alpha(engine::alpha_from_roughness(roughness));
+    float target = s;
+    if (from == engine::specular_model::phong) { target = s * 4.0f; }    // -> blinn
+    if (from == engine::specular_model::blinn) { target = s * 0.25f; }   // -> phong
+    return engine::roughness_from_alpha(engine::alpha_from_blinn_exponent(target));
 }
 
 /// The length of the model's x axis after `m`, in world units.
@@ -2855,7 +2863,7 @@ struct scene_controls
     static constexpr float k_light_elevation = 0.70f;   ///< the software demo's value
 
     demo::scene_kind scene = demo::scene_kind::solids;              ///< [C]
-    engine::specular_model spec = engine::specular_model::blinn;   ///< [H]
+    engine::specular_model spec = engine::specular_model::cook_torrance;   ///< [H]
     int shininess_step = 4;                             ///< [E]
 
     bool correct_normals = true;    ///< [J] — inverse transpose, or the naive matrix
@@ -2884,10 +2892,18 @@ struct scene_controls
     }
 };
 
-/// The nine shininess values [E] cycles — the software demo's array, unchanged, so
-/// a highlight can be compared between the two renderers at the same exponent.
-constexpr float k_gpu_shininess[] = {2.0f, 4.0f, 8.0f, 16.0f, 32.0f, 64.0f, 128.0f, 256.0f};
-constexpr int k_gpu_shininess_count = static_cast<int>(std::size(k_gpu_shininess));
+/// The eight roughness values [E] cycles — the software demo's array, unchanged,
+/// so a highlight can be compared between the two renderers at the same surface.
+///
+/// **LESSON 6.4 REPLACED THE LADDER, AND THE REPLACEMENT IS THE LESSON.** It used
+/// to be `{2, 4, 8, ..., 256}` — powers of two, because an exponent has no natural
+/// scale and doubling was as good a guess as any. Roughness has a scale: it runs
+/// 0 to 1, 0 is a mirror and 1 is chalk, and the values below are spaced so the
+/// steps LOOK evenly spaced, which is exactly what Lesson 6.3's `alpha = r^2`
+/// remap exists to buy. Index 4 is 0.49, which is where shininess 32 landed.
+constexpr float k_gpu_roughness[] = {0.05f, 0.12f, 0.22f, 0.35f,
+                                     0.49f, 0.65f, 0.82f, 1.00f};
+constexpr int k_gpu_roughness_count = static_cast<int>(std::size(k_gpu_roughness));
 
 /// Turn one of Module 3's `scene_object`s into something the GPU renderer can draw.
 ///
@@ -2924,10 +2940,11 @@ constexpr int k_gpu_shininess_count = static_cast<int>(std::size(k_gpu_shininess
     // quantity of light, and Lesson 1.6's rule has not softened.
     const engine::linear_rgb albedo = engine::to_linear(obj.tint);
     item.material.albedo = engine::vec3{albedo.r, albedo.g, albedo.b};
-    item.material.specular = engine::vec3{obj.surface.colour.r,
-                                          obj.surface.colour.g,
-                                          obj.surface.colour.b};
-    item.material.shininess = obj.surface.shininess;
+    // LESSON 6.4: four floats of surface description, and every one of them means
+    // something you could measure. `specular` and `shininess` are gone.
+    item.material.roughness = obj.surface.roughness;
+    item.material.metallic  = obj.surface.metallic;
+    item.material.f0        = obj.surface.f0;
     item.material.textured = (texture != nullptr) ? 1.0f : 0.0f;
     item.texture = texture;
 
@@ -3217,9 +3234,9 @@ int run_gpu_scene(SDL_Window* window, bool trace_and_exit)
         }
         if (in.key_pressed(SDL_SCANCODE_E))
         {
-            ctl.shininess_step = (ctl.shininess_step + 1) % k_gpu_shininess_count;
-            SDL_Log("[E] shininess: %.0f",
-                    static_cast<double>(k_gpu_shininess[ctl.shininess_step]));
+            ctl.shininess_step = (ctl.shininess_step + 1) % k_gpu_roughness_count;
+            SDL_Log("[E] roughness: %.2f",
+                    static_cast<double>(k_gpu_roughness[ctl.shininess_step]));
         }
         if (in.key_pressed(SDL_SCANCODE_M))
         {
@@ -3247,7 +3264,7 @@ int run_gpu_scene(SDL_Window* window, bool trace_and_exit)
         engine::scene_object objects[demo::k_max_objects];
         const int object_count = demo::build_scene(objects, ctl.scene, demo::spin::about_y, t,
                                              assets, floor, model,
-                                             k_gpu_shininess[ctl.shininess_step]);
+                                             k_gpu_roughness[ctl.shininess_step]);
 
         const engine::vec3 eye = ctl.camera.eye();
         const engine::mat4 view_from_world = ctl.camera.view();
@@ -3507,8 +3524,15 @@ int run_gpu_scene(SDL_Window* window, bool trace_and_exit)
                 light.ambient = engine::vec3{lights.ambient.r, lights.ambient.g,
                                              lights.ambient.b};
                 light.eye_world = eye;
-                light.spec_model = (ctl.spec == engine::specular_model::none) ? 0.0f
-                    : ((ctl.spec == engine::specular_model::phong) ? 1.0f : 2.0f);
+                // Lesson 6.4 added a fourth code. The mapping is spelled out
+                // rather than cast from the enum, because an enum's underlying
+                // value is a C++ detail and the shader's contract is a NUMBER —
+                // reordering the enum must not silently re-map the shader.
+                light.spec_model =
+                      (ctl.spec == engine::specular_model::none)  ? 0.0f
+                    : (ctl.spec == engine::specular_model::phong) ? 1.0f
+                    : (ctl.spec == engine::specular_model::blinn) ? 2.0f
+                    : 3.0f;
 
                 // LESSON 6.1. Asked, never assumed — and asked of the device
                 // rather than of a constant, because the answer is a property of
@@ -3839,7 +3863,7 @@ int main(int argc, char* argv[])
     engine::lighting lights;
 
     // ---- Lesson 3.7 --------------------------------------------------------
-    engine::specular_model spec_model = engine::specular_model::blinn;   ///< [H]
+    engine::specular_model spec_model = engine::specular_model::cook_torrance;   ///< [H]
     int shininess_step = 4;                        ///< [E] indexes k_shininess below
     int model_wrong = 0;                           ///< px Phong and Blinn disagree about
     int spec_peak = 0;                             ///< brightest pixel in the viewport, 0..255
@@ -3848,8 +3872,11 @@ int main(int argc, char* argv[])
     /// parameter behaves: each step roughly halves the width of the highlight, so a
     /// linear slider would spend most of its travel on differences you cannot see.
     /// 2 is a damp, broad sheen; 32 a polished plastic; 256 close to a mirror.
-    constexpr float k_shininess[] = {2.0f, 4.0f, 8.0f, 16.0f, 32.0f, 64.0f, 128.0f, 256.0f};
-    constexpr int k_shininess_count = static_cast<int>(std::size(k_shininess));
+    // Lesson 6.4: roughness, not an exponent. See `k_gpu_roughness` for why the
+    // spacing changed as well as the numbers.
+    constexpr float k_roughness[] = {0.05f, 0.12f, 0.22f, 0.35f,
+                                     0.49f, 0.65f, 0.82f, 1.00f};
+    constexpr int k_roughness_count = static_cast<int>(std::size(k_roughness));
 
     // ---- Lesson 3.9 --------------------------------------------------------
     demo::albedo_source albedo = demo::albedo_source::checker;   ///< [M] — which image, or the rule
@@ -3928,7 +3955,7 @@ int main(int argc, char* argv[])
     SDL_Log("  [J] normal matrix: inverse-transpose (correct) vs the naive model matrix");
     SDL_Log("  [A]/[D] swing the light. With [H] off the camera does NOT change the shading -");
     SDL_Log("          Lambert is view-independent. Turn [H] on and orbiting moves the highlight.");
-    SDL_Log("  [H] specular: none / Phong / Blinn-Phong   [E] shininess exponent");
+    SDL_Log("  [H] specular: none / Phong / Blinn / Cook-Torrance   [E] roughness");
     SDL_Log("  [M] albedo: procedural rule / checker / uv grid / fine checker (on floor + model)");
     SDL_Log("  [S] filter: bilinear / nearest   [R] address: repeat / mirrored / clamp");
     SDL_Log("  [1] texel origin: centre (correct) vs corner - half a texel, invisible under [S] nearest");
@@ -4021,7 +4048,7 @@ int main(int argc, char* argv[])
             if (in.key_pressed(SDL_SCANCODE_H)) { spec_model = next_specular(spec_model); }
             if (in.key_pressed(SDL_SCANCODE_E))
             {
-                shininess_step = (shininess_step + 1) % k_shininess_count;
+                shininess_step = (shininess_step + 1) % k_roughness_count;
             }
             if (in.key_pressed(SDL_SCANCODE_L))
             {
@@ -4200,7 +4227,7 @@ int main(int argc, char* argv[])
                 demo::build_floor(assets, floor, floor_cells);
                 scene_count = demo::build_scene(scene, scene_mode, cube_mode, cube_t,
                                                 assets, floor, model,
-                                          k_shininess[shininess_step]);
+                                          k_roughness[shininess_step]);
             }
             if (selected >= scene_count) { selected = 0; }
 
@@ -4545,8 +4572,8 @@ int main(int argc, char* argv[])
                     for (int i = 0; i < scene_count; ++i)
                     {
                         other_scene[i] = scene[i];
-                        other_scene[i].surface.shininess =
-                            matched_shininess(spec_model, scene[i].surface.shininess);
+                        other_scene[i].surface.roughness =
+                            matched_roughness(spec_model, scene[i].surface.roughness);
                     }
 
                     engine::render_options other_model = opts;
@@ -5266,7 +5293,7 @@ int main(int argc, char* argv[])
                         SDL_RenderDebugTextFormat(renderer, 6.0f, 306.0f,
                             "[H] %-22s [E] p=%-5.0f vs other %d px   peak %d",
                             name_of(spec_model),
-                            static_cast<double>(k_shininess[shininess_step]),
+                            static_cast<double>(k_roughness[shininess_step]),
                             model_wrong, spec_peak);
                     }
                 }

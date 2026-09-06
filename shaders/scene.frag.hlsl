@@ -13,8 +13,18 @@
 //     halfway(l, v) = normalised(l + v)        normalize(l + v)
 //     pow(min(1, alignment), shininess)        pow(min(1, alignment), shininess)
 //     lambert_brdf(albedo) = albedo * inv_pi   base * k_inv_pi
-//     specular_brdf(surface, lobe)             specular * lobe * k_inv_pi
-//     (f_d + f_s) * E + albedo * ambient       the return statement
+//     ndf(ggx, n_dot_h, alpha)                 ndf_ggx()
+//     smith_g(n_dot_l, n_dot_v, alpha)         smith_g()
+//     fresnel_schlick(v_dot_h, f0)             fresnel_schlick()
+//     cook_torrance_brdf(...)                  cook_torrance_brdf()
+//     f_r * E + albedo * ambient               the return statement
+//
+// LESSON 6.4 REPLACED THE SURFACE HALF ON BOTH SIDES IN ONE COMMIT, which is the
+// first time in the course that the two implementations had to move together
+// rather than one following the other. The discipline that made it survivable is
+// verify_48 §F, which renders the same scene through both and compares pixels:
+// a shader that drifts from `light.hpp` does not fail loudly, it renders
+// something plausible, and the only thing that catches it is a diff.
 //
 // LESSON 6.2 UPDATED THREE OF THOSE ROWS AND THE PICTURE DID NOT MOVE, which is
 // the strongest evidence available that the two implementations really are one
@@ -67,16 +77,21 @@ cbuffer Light : register(b0, space3)
                           //      Was `pad2`; HLSL's packing had already reserved
                           //      the slot, so the flag cost nothing.
     float3 eye_world;   // 48 — a highlight is view-dependent (Lesson 3.7)
-    float  spec_model;  // 60 — 0 = none, 1 = Phong, 2 = Blinn
+    float  spec_model;  // 60 — 0 = none, 1 = Phong, 2 = Blinn,
+                        //      3 = Cook-Torrance (Lesson 6.4, the default)
 };
 
 // ---- Per DRAW --------------------------------------------------------------
 cbuffer Material : register(b1, space3)
 {
     float3 albedo;      //  0 — LINEAR; the CPU decoded the demo's Uint32 tint once
-    float  shininess;   // 12 — the exponent; not comparable between the two models
-    float3 specular;    // 16 — the highlight's reflectance ratio; black = matte
-    float  textured;    // 28 — 0 = use `albedo`, 1 = sample `albedo_map`
+    float  roughness;   // 12 — Lesson 6.3: perceptual, [0,1]; alpha is its square
+    float  metallic;    // 16 — Lesson 6.4: 0 = dielectric, 1 = conductor
+    float  f0;          // 20 — dielectric normal-incidence reflectance, ~0.04
+    float  textured;    // 24 — 0 = use `albedo`, 1 = sample `albedo_map`
+    float  pad_m;       // 28 — NOT `pad0`: HLSL cbuffer members share one global
+                        //      namespace across every buffer in the shader, so a
+                        //      second `pad0` is a redefinition, not a local name.
 };
 
 // ---- Lesson 6.2 -------------------------------------------------------------
@@ -88,6 +103,13 @@ cbuffer Material : register(b1, space3)
 // number on the CPU side; two spellings of a constant that disagree in the last
 // bit is the sort of thing that costs an afternoon in a pixel diff.
 static const float k_inv_pi = 0.318309886183790671538f;
+static const float k_pi     = 3.14159265358979323846f;
+
+// Lesson 6.3's floor on roughness. A perfectly smooth surface is a DELTA
+// FUNCTION, not a small number: D goes to infinity at h == n and to zero
+// everywhere else, which arrives here as `inf` and then `NaN`. `engine::k_min_alpha`
+// is the same constant on the CPU side.
+static const float k_min_alpha = 1.0e-3f;
 
 struct Input
 {
@@ -95,6 +117,58 @@ struct Input
     float3 normal : TEXCOORD1;
     float2 uv     : TEXCOORD2;
 };
+
+// ---- Lesson 6.3: the microfacet model, in HLSL ------------------------------
+//
+// Three functions, each the counterpart of one in engine/gfx/microfacet.hpp, and
+// each carrying the same numerical care. That care is not decoration: §A of
+// verify_63 found that the TEXTBOOK form of the GGX denominator loses 1.1% of the
+// model's energy to catastrophic cancellation in `float`, and a GPU is no less
+// IEEE-754 than a CPU.
+
+/// GGX / Trowbridge-Reitz, the distribution of microfacet normals.
+float ndf_ggx(float n_dot_h, float alpha)
+{
+    if (n_dot_h <= 0.0f) { return 0.0f; }
+    const float a2 = alpha * alpha;
+
+    // NOT `n_dot_h*n_dot_h * (a2 - 1) + 1`, which every reference prints. Near the
+    // peak that is the difference of two nearly-equal numbers of size 1, and a
+    // `float` resolves it to ~1e-7 ABSOLUTE where the true value can be 1e-4. The
+    // identical algebra below does not cancel, because Sterbenz's lemma makes
+    // `1 - c` EXACT for c in [0.5, 1] — which is the whole peak region.
+    const float d = (1.0f - n_dot_h) * (1.0f + n_dot_h) + a2 * n_dot_h * n_dot_h;
+    return a2 / (k_pi * d * d);
+}
+
+/// Height-correlated Smith masking-shadowing (Heitz 2014).
+///
+/// Measured against the separable form (multiply the two G1s) in verify_63 §D:
+/// 1.715x apart at alpha 0.8 with both directions 80 degrees off the normal.
+/// Grazing angles on rough surfaces are where sunset lighting and wet roads live,
+/// so "either is fine" would have been comfortable and wrong.
+float smith_g(float n_dot_l, float n_dot_v, float alpha)
+{
+    if (n_dot_l <= 0.0f || n_dot_v <= 0.0f) { return 0.0f; }
+    const float a2 = alpha * alpha;
+    const float lv = n_dot_l * sqrt(a2 + (1.0f - a2) * n_dot_v * n_dot_v);
+    const float ll = n_dot_v * sqrt(a2 + (1.0f - a2) * n_dot_l * n_dot_l);
+    return 2.0f * n_dot_l * n_dot_v / (lv + ll);
+}
+
+/// Schlick's approximation to the Fresnel equations — Lesson 6.4.
+///
+/// Exact at both ends by construction (F0 at normal incidence, 1 at grazing) and
+/// fitted in between. verify_64 §C measures the fit against the exact equations:
+/// worst absolute error 0.0357 for glass, worst RELATIVE error 23.2% around 55
+/// degrees. A 23% error in a term that is itself 0.04 is invisible, and that —
+/// not a tight fit — is the honest defence of Schlick.
+float3 fresnel_schlick(float cos_theta, float3 f0)
+{
+    const float m = 1.0f - saturate(cos_theta);
+    const float m2 = m * m;
+    return f0 + (1.0f - f0) * (m2 * m2 * m);
+}
 
 float4 main(Input input) : SV_Target0
 {
@@ -109,38 +183,6 @@ float4 main(Input input) : SV_Target0
     // and explains at length why a negative answer must not be let through.
     const float n_dot_l = saturate(dot(n, l));
 
-    // ---- The highlight (Lesson 3.7) ----------------------------------------
-    //
-    // Guarded exactly as `shade()` guards it, and for the same reason: a matte
-    // surface — which is most of them, and every surface in Lesson 3.6's scene —
-    // must pay nothing for this lesson existing. On a GPU "pay nothing" is worth
-    // less than it sounds, because a warp executes both sides of a branch when
-    // its lanes disagree; §5.3 measures what this one actually costs.
-    float lobe = 0.0f;
-    const bool shiny = (specular.r + specular.g + specular.b) > 0.0f;
-
-    if (n_dot_l > 0.0f && spec_model > 0.5f && shiny)
-    {
-        // `to_eye`, from the world position the vertex stage went to the trouble
-        // of forwarding. This is the line that varying exists for.
-        const float3 v = normalize(eye_world - input.world);
-
-        // Phong asks how nearly the eye lies along the MIRRORED RAY; Blinn asks
-        // how nearly the surface already faces the HALFWAY VECTOR. Lesson 3.7
-        // §3.5 measured what separates them: `dot(R, v)` is non-positive for
-        // 50.4% of light/eye pairs above a surface and `dot(n, h)` for none of
-        // them, which is the hard edge Phong has and Blinn does not.
-        const float alignment = (spec_model < 1.5f)
-            ? dot(n * (2.0f * dot(n, l)) - l, v)     // mirror_direction(n, l) . v
-            : dot(n, normalize(l + v));              // n . halfway(l, v)
-
-        // The clamp before `pow` is not defensive tidying. Two unit vectors' dot
-        // product is a cosine and cannot exceed 1, but it can ROUND above it, and
-        // `pow` amplifies the excess rather than absorbing it — light.hpp
-        // measured an un-clamped peak of 1.00001. `min` here is `std::min` there.
-        lobe = (alignment <= 0.0f) ? 0.0f : pow(min(1.0f, alignment), shininess);
-    }
-
     // ---- Where the surface's own colour comes from --------------------------
     //
     // Lesson 3.9's sentence, unchanged: the texture REPLACES the tint, it does
@@ -149,40 +191,112 @@ float4 main(Input input) : SV_Target0
     // sampler, before the filter — the ordering Lesson 3.9 measured the cost of
     // getting wrong (0.2139 where 0.5 is correct).
     //
-    // `lerp` rather than `if`, because the two sides cost one instruction each
-    // and a branch on a uniform value is not free enough to be worth the words.
+    // MOVED ABOVE THE SHADING IN LESSON 6.4, because the albedo is now an INPUT
+    // to the specular half as well: `f0_of` reads it for a metal. Until this
+    // lesson the two halves were independent enough that the order did not
+    // matter, and that independence is exactly what Fresnel removed.
     const float3 sampled = albedo_map.Sample(albedo_sampler, input.uv).rgb;
     const float3 base = lerp(albedo, sampled, textured);
 
-    // ---- The shading equation, which is `shade()`'s return statement --------
+    // ---- What the light delivers (Lesson 6.2) -------------------------------
     //
-    // LESSON 6.2, and the three factors are three separate physical claims:
-    //
-    //     L_o  =  (f_d + f_s) * E_perp * cos(theta)  +  albedo * L_ambient
-    //
-    // `e` is WHAT THE LIGHT DELIVERS: irradiance measured square-on to the beam,
-    // projected onto this surface by the cosine. No albedo appears in it, because
-    // how much light arrives cannot depend on the colour of what it lands on.
-    //
-    // BOTH TERMS CARRY n_dot_l, and light.hpp explains why at length: the cosine
-    // law is about how much light ARRIVES per unit of surface, and says nothing
-    // about what the surface then does with it. Classic Phong shading as
-    // published left it off the specular, and the artifact is a highlight glowing
-    // past the terminator on geometry the light cannot reach. Stated this way the
-    // rule needs no defending: the cosine is on the LIGHT's side of the product,
-    // so of course it multiplies everything the surface does.
+    // Irradiance measured square-on to the beam, projected onto this surface by
+    // the cosine. No albedo appears in it, because how much light arrives cannot
+    // depend on the colour of what it lands on. Untouched by Lesson 6.4 — the
+    // light's half of the equation and the surface's half really are separable.
     const float3 e = key * n_dot_l;
 
-    // `f_d` and `f_s` are WHAT THE SURFACE DOES, both per steradian, added
-    // because a real surface scatters some light and mirrors some at once. The
-    // 1/pi on the specular is not a normalisation — light.hpp measures exactly
-    // how un-normalised it remains, and Lesson 6.4 fixes it with Fresnel.
-    const float3 f_d = base * k_inv_pi;
-    const float3 f_s = specular * lobe * k_inv_pi;
+    // ---- What the surface does ----------------------------------------------
+    //
+    // `to_eye`, from the world position the vertex stage went to the trouble of
+    // forwarding. This is the line that varying exists for.
+    const float3 v = normalize(eye_world - input.world);
+
+    // THE METALLIC WORKFLOW, and it is two lines because it is two consequences
+    // of one fact. A conductor absorbs whatever crosses its interface within a
+    // few atoms, so (a) there is no diffuse lobe at all, and (b) the only light
+    // leaving is the mirrored part — which means the colour has to live in F0.
+    // A dielectric reflects a grey 4% and scatters the rest coloured. One albedo
+    // field serves both, and `metallic` says which question it is answering.
+    const float3 spec_f0 = lerp(float3(f0, f0, f0), base, metallic);
+    const float3 diffuse_albedo = base * (1.0f - metallic);
+
+    float3 f_r = float3(0.0f, 0.0f, 0.0f);
+
+    if (spec_model > 2.5f)
+    {
+        // ---- COOK-TORRANCE (Lesson 6.4) -------------------------------------
+        const float  n_dot_v = max(0.0f, dot(n, v));
+        const float3 h = normalize(l + v);
+        const float  n_dot_h = max(0.0f, dot(n, h));
+        const float  v_dot_h = max(0.0f, dot(v, h));
+
+        const float alpha = max(k_min_alpha, saturate(roughness) * saturate(roughness));
+
+        // THE SPECULAR HALF: D * G * F over the derived denominator. The 4 is a
+        // Jacobian (the map from light directions to microfacet normals stretches
+        // solid angle by 4(v.h)); the (n.v) converts flux to radiance; the (n.l)
+        // is the BRDF's own definition. Lesson 6.4 §4 derives all three.
+        float3 f_s = float3(0.0f, 0.0f, 0.0f);
+        if (n_dot_l > 0.0f && n_dot_v > 0.0f)
+        {
+            const float  d = ndf_ggx(n_dot_h, alpha);
+            const float  g = smith_g(n_dot_l, n_dot_v, alpha);
+            const float3 f = fresnel_schlick(v_dot_h, spec_f0);
+            f_s = f * (d * g / (4.0f * n_dot_l * n_dot_v));
+        }
+
+        // THE DIFFUSE HALF, AND THE COUPLING IS THE WHOLE LESSON. F is what
+        // bounces off the interface, so 1 - F is what goes in — and light crosses
+        // the interface TWICE, once at the light's angle and once at the eye's.
+        // Before this line the two lobes were independent and their sum was
+        // unbounded (Lesson 6.2 measured 1.1386 for white on white).
+        const float3 kd = (1.0f - fresnel_schlick(n_dot_l, spec_f0))
+                        * (1.0f - fresnel_schlick(n_dot_v, spec_f0));
+        f_r = f_s + kd * diffuse_albedo * k_inv_pi;
+    }
+    else
+    {
+        // ---- THE LEGACY LOBES (Lessons 3.6 and 3.7) -------------------------
+        //
+        // Kept selectable so the old model and the new one can be seen side by
+        // side, and reading the SAME material through Lesson 6.3's mapping — the
+        // demonstration that the old parameters were the new ones badly spelled.
+        // `2/alpha^2 - 2` is `blinn_exponent_from_alpha` on the CPU side.
+        const float alpha = max(k_min_alpha, saturate(roughness) * saturate(roughness));
+        const float shininess = 2.0f / (alpha * alpha) - 2.0f;
+
+        float lobe = 0.0f;
+        if (n_dot_l > 0.0f && spec_model > 0.5f)
+        {
+            // Phong asks how nearly the eye lies along the MIRRORED RAY; Blinn
+            // asks how nearly the surface already faces the HALFWAY VECTOR.
+            // Lesson 3.7 §3.5 measured what separates them: `dot(R, v)` is
+            // non-positive for 50.4% of light/eye pairs above a surface and
+            // `dot(n, h)` for none, which is the hard edge Phong has.
+            const float alignment = (spec_model < 1.5f)
+                ? dot(n * (2.0f * dot(n, l)) - l, v)     // mirror_direction(n, l) . v
+                : dot(n, normalize(l + v));              // n . halfway(l, v)
+
+            // The clamp before `pow` is not defensive tidying. Two unit vectors'
+            // dot product is a cosine and cannot exceed 1, but it can ROUND above
+            // it, and `pow` amplifies the excess rather than absorbing it —
+            // light.hpp measured an un-clamped peak of 1.00001.
+            lobe = (alignment <= 0.0f) ? 0.0f : pow(min(1.0f, alignment), shininess);
+        }
+
+        // The 1/pi on the legacy specular is NOT a normalisation — Lesson 6.3
+        // measured it as short by (s+2)/2, which is 17x at shininess 32. It is
+        // left wrong on purpose; the fix is the branch above, not a constant.
+        f_r = base * k_inv_pi + spec_f0 * lobe * k_inv_pi;
+    }
 
     // The ambient term stands outside the product because its own pi already
-    // cancelled against the hemisphere it was integrated over (light.hpp).
-    const float3 lit = (f_d + f_s) * e + base * ambient;
+    // cancelled against the hemisphere it was integrated over (light.hpp). It
+    // still has no specular counterpart, so a mirror in a bright uniform room
+    // renders black except where the key light reaches it — that missing term is
+    // Lesson 6.12's image-based lighting.
+    const float3 lit = f_r * e + base * ambient;
 
     // ---- The last place light exists — Lesson 6.1 ---------------------------
     //

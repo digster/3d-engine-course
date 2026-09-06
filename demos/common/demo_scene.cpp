@@ -251,7 +251,7 @@ int unload_model(scene_assets& assets, model_state& m)
 
 int build_scene(engine::scene_object (&out)[k_max_objects], scene_kind kind, spin mode, float t,
                 const scene_assets& assets, const floor_geometry& floor,
-                const model_state& model, float shininess)
+                const model_state& model, float roughness)
 {
     const engine::mat3 spinning = build_spin(mode, t);
 
@@ -294,7 +294,14 @@ int build_scene(engine::scene_object (&out)[k_max_objects], scene_kind kind, spi
         // highlight to look like a highlight at all — 1,225 vertices against the
         // icosahedron's 12. [L] to the coarser models and watch it fall apart, which
         // is Lesson 3.8's argument arriving as a picture rather than a claim.
-        out[0].surface = {{0.85f, 0.85f, 0.85f}, shininess};
+        // LESSON 6.4 RE-AUTHORED THIS, and the old line is worth keeping in view:
+        //     out[0].surface = {{0.85f, 0.85f, 0.85f}, shininess};
+        // A specular reflectance of 0.85 is not a material. Run it back through
+        // `ior_from_f0` and it claims an index of refraction of 25.3, where glass
+        // is 1.5 and diamond is 2.4. It was that large because it was absorbing
+        // the 17x normalisation error Lesson 6.3 measured. The physical number is
+        // 0.04, it is the default, and it does not need writing down.
+        out[0].surface = {.roughness = roughness};
 
         // The 3.4 debt, paid. `closed` used to be a promise typed next to the
         // geometry; here it is the validator's answer. Note that it takes BOTH
@@ -321,7 +328,7 @@ int build_scene(engine::scene_object (&out)[k_max_objects], scene_kind kind, spi
         // highlight is the colour of the LAMP; only the light that gets *inside*
         // picks up the pigment, and that is the diffuse term. Module 6 gives this a
         // name and a number (F0 ~ 0.04 for most dielectrics).
-        out[0].surface        = {{0.85f, 0.85f, 0.85f}, shininess};
+        out[0].surface        = {.roughness = roughness};   // dielectric: F0 = 0.04
 
         out[1].xform.scale    = {1.8f, 0.35f, 0.9f};
         out[1].xform.position = {-1.6f, 0.5f, 0.4f};
@@ -335,7 +342,15 @@ int build_scene(engine::scene_object (&out)[k_max_objects], scene_kind kind, spi
         // pigmented interior — a metal is reflection all the way down. Gold is
         // yellow in its highlight, copper orange. Compare the two objects under a
         // white light and the difference is unmistakable.
-        out[1].surface        = {{0.30f, 0.72f, 0.66f}, shininess};
+        //
+        // LESSON 6.4 MADE IT ACTUALLY BE ONE. Until now the metal was faked by
+        // hand-typing a teal highlight colour beside a teal tint — two numbers
+        // that had to be kept in step by whoever remembered. `metallic = 1` says
+        // it once: `f0_of` takes the F0 from the albedo, `diffuse_albedo_of`
+        // removes the diffuse lobe entirely, and the object cannot fall out of
+        // agreement with itself. That is the metallic workflow, and it arrives
+        // as a CONSEQUENCE of where Fresnel put the colour.
+        out[1].surface        = {.roughness = roughness, .metallic = 1.0f};
 
         out[2].xform.scale    = {1.2f, 0.25f, 1.2f};
         out[2].xform.position = {1.4f, 0.125f, 0.9f};
@@ -514,7 +529,12 @@ int write_reference_shot(const char* path)
     // Every one of these is a constant BECAUSE it is an input. Anything read from
     // the clock, the keyboard or the window would make two runs incomparable.
     constexpr float k_shot_t = 1.234f;
-    constexpr float k_shot_shininess = 32.0f;   // k_shininess[4]
+    // LESSON 6.4: shininess 32 read across into the new vocabulary. Lesson 6.3's
+    // `alpha_from_blinn_exponent(32)` is 0.2425, whose perceptual roughness is
+    // 0.4925 — so 0.49 is not a new choice, it is the old default translated. The
+    // golden moves for the first time in fifteen lessons anyway, because the
+    // CONSTANTS moved; see Lesson 6.4 §9.
+    constexpr float k_shot_roughness = 0.49f;
     constexpr int k_shot_floor_cells = 4;
     constexpr float k_shot_light_elev = 0.70f;
     constexpr float k_shot_light_azim = 0.85f;
@@ -571,7 +591,32 @@ int write_reference_shot(const char* path)
         // triangle crosses the near plane, so Lesson 3.3's clipper — code this
         // refactor is about to move — is never called. A characterization test
         // that does not reach a branch cannot pin it.
-        scene_kind::floor};
+        scene_kind::floor,
+
+        // …and the model an EIGHTH time, LIT PER PIXEL — added in Lesson 6.4, for
+        // exactly the reason frame 6 was added in Lesson 5.1, which is worth
+        // reading twice because it is the same mistake caught twice.
+        //
+        // 6.4 replaced the entire shading model and this shot moved by 2,400
+        // pixels out of 403,200. That is not because the change was small; it is
+        // because THE INSTRUMENT BARELY POINTS AT THE THING THAT CHANGED. Frames
+        // 4, 5 and 6 bind a texture, and `shading::textured` is UNLIT by
+        // construction (raster.hpp says so) — the sampled colour goes straight to
+        // the pixel. Frame 1's three planks face away from the light entirely and
+        // encode to `albedo * ambient` exactly, a term 6.4 does not touch. So of
+        // seven frames, THREE exercised the shading equation at all, and the
+        // torus — the one mesh in the demo dense enough to show a highlight,
+        // chosen for that reason in Lesson 3.8 — was drawn unlit.
+        //
+        // `shading::lit` with the texture bound as the ALBEDO is the combination
+        // that runs the whole path: per-pixel normals (3.8), a sampled albedo
+        // (3.9), and the Cook-Torrance BRDF (6.4) evaluated per fragment.
+        //
+        // AND THE MOMENT TO ADD IT IS NOW, which is the transferable part: this
+        // lesson re-baselines the golden anyway, so extending the test costs
+        // nothing here and costs a re-baseline at every other lesson. A
+        // characterization test is cheapest to improve exactly when it breaks.
+        scene_kind::model};
     constexpr int k_shot_frames = static_cast<int>(std::size(k_shot_scenes));
 
     /// The camera for frame 6: down at ankle height and a metre from the target,
@@ -594,9 +639,10 @@ int write_reference_shot(const char* path)
 
         engine::scene_object scene[k_max_objects];
         const int count = build_scene(scene, kind, spin::about_z, k_shot_t,
-                                      assets, floor, model, k_shot_shininess);
+                                      assets, floor, model, k_shot_roughness);
 
-        const bool close_up = (f == k_shot_frames - 1);
+        const bool lit_pass = (f == k_shot_frames - 1);   ///< frame 7, Lesson 6.4
+        const bool close_up = (f == k_shot_frames - 2);
         const engine::mat4 view = close_up ? close_cam.view() : view_from_world;
         const engine::vec3 eye = close_up ? close_cam.eye() : eye_world;
 
@@ -621,13 +667,22 @@ int write_reference_shot(const char* path)
         const engine::texture* albedo_image = textures.pick(albedo_source::uv_grid);
         const engine::fill_style style{
             .interp = engine::interpolation::perspective,
-            .shade = bind_texture ? engine::shading::textured
+            .shade = lit_pass    ? engine::shading::lit
+                   : bind_texture ? engine::shading::textured
                                   : engine::shading::vertex_colour,
             .space = engine::blend_space::linear,
             .cull = engine::cull_mode::none,
-            .lights = nullptr,
-            .surface = {},
-            .model = engine::specular_model::blinn,
+            // `lit` REQUIRES this to be non-null — raster.hpp falls back to
+            // vertex colours when it is null rather than dereferencing nothing,
+            // which would make frame 7 silently retest frame 5.
+            .lights = lit_pass ? &lights : nullptr,
+            // One surface for the whole draw, because `fill_style` carries one.
+            // Roughness 0.30 is smoother than the scene default, so the highlight
+            // is small enough to have a SHAPE — a broad one covers the mesh and
+            // pins nothing about where D peaks.
+            .surface = lit_pass ? engine::microsurface{.roughness = 0.30f}
+                                : engine::microsurface{},
+            .model = engine::specular_model::cook_torrance,
             .eye = eye,
             .albedo = {bind_texture ? albedo_image : nullptr, samp},
             .encode = engine::encode_mode::fast,

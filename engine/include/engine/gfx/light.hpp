@@ -50,6 +50,7 @@
 #pragma once
 
 #include <engine/gfx/colour.hpp>
+#include <engine/gfx/microfacet.hpp>
 #include <engine/math/vec3.hpp>
 
 #include <algorithm>
@@ -297,38 +298,48 @@ struct lighting
 /// runtime knob here for exactly one reason — so the two can be rendered side by side
 /// and the difference measured (Lesson 3.7 §3.4). That difference is real, it is not
 /// only speed, and it is the honest reason Blinn's version won.
+///
+/// **LESSON 6.4 ADDED A FOURTH AND MADE IT THE DEFAULT.** The first three are kept
+/// rather than deleted, and the reason is the same one that kept `ndf_model::blinn`
+/// in Lesson 6.3: an argument you can *run* beats one you can read. Being able to
+/// flip a scene between Blinn-Phong and Cook-Torrance, with the same material and
+/// the same light, is how the difference stops being a claim.
 enum class specular_model
 {
     none,    ///< no highlight at all — Lesson 3.6's picture, bit for bit
     phong,   ///< the original: how closely the eye lines up with the mirror ray
-    blinn    ///< Blinn's: how closely the surface lines up with the halfway vector
+    blinn,   ///< Blinn's: how closely the surface lines up with the halfway vector
+
+    /// **The microfacet BRDF** — `D * G * F / (4 (n.l)(n.v))`, Lesson 6.4.
+    ///
+    /// The default from 6.4 onward, and the first specular model in this engine
+    /// that cannot invent light. The distribution `D` is chosen separately by
+    /// `ndf_model`, because "which statistical model of the surface" and "is
+    /// there a highlight at all" are genuinely different questions.
+    cook_torrance
 };
 
-/// How shiny a surface is, and what colour its highlight comes out.
-///
-/// **These two travel together, always, and they belong to the SURFACE** — not to the
-/// light, not to the rasterizer, and not to the fill style. That is a material, and
-/// this struct is the first two fields of one. It is not called `material` because it
-/// is not one yet: a material is also the albedo, the cull mode, the blend mode, the
-/// textures and eventually the shader itself, and inventing four fifths of that here
-/// would be guessing. Module 6 builds it properly, with the arguments for its shape.
-/// Watch this struct pull the others in; that pull is the design telling you what it
-/// wants to be.
-///
-/// `colour` is a **reflectance ratio in linear light**, like `albedo` — the fraction
-/// of arriving light the surface mirrors rather than scatters. Black means "no
-/// highlight", which is why it is the default: a caller who has nothing to say about
-/// shininess gets Lesson 3.6's shading unchanged.
-///
-/// `shininess` is the exponent, and it is **not comparable between the two models**:
-/// Blinn's must be roughly four times Phong's for the same visual tightness, for the
-/// reason derived in §3.4. Larger means a tighter, glossier highlight — 4 is a damp
-/// plastic, 32 a polished one, 256 approaching a mirror. It must be positive.
-struct specular
-{
-    linear_rgb colour{0.0f, 0.0f, 0.0f};   ///< reflectance ratio; black = matte
-    float shininess = 32.0f;
-};
+// ---- Lesson 6.4: the material parameters moved, and the struct went with them
+//
+// `specular` — `{linear_rgb colour, float shininess}` — is GONE, and its removal
+// is the loudest thing in this lesson's diff. It is replaced by
+// `engine::microsurface` in `gfx/microfacet.hpp`: roughness, metallic, F0.
+//
+// THE DELETION IS THE MIGRATION TOOL, and that is deliberate. Every material in
+// this engine was authored against a specular constant that Lesson 6.3 measured
+// as 17x too large, so those numbers are not merely stale — `colour = 0.85f` and
+// `f0 = 0.04f` are both perfectly good floats, and a struct that kept its name
+// while changing its meaning would have let all forty-four call sites keep
+// compiling while rendering twenty-one times too bright. The same bargain Lesson
+// 6.2 struck when it renamed `intensity` to `irradiance`, for the same reason:
+// when the MEANING changes, only the type system reaches every caller.
+//
+// Reading the old values across (Lesson 6.4 §8):
+//
+//     shininess 32  ->  roughness 0.49   (alpha_from_blinn_exponent, Lesson 6.3)
+//     colour 0.85   ->  f0 0.04          (an F0 of 0.85 is an IOR of 25.3, and
+//                                         there is no such material)
+
 
 /// Phong's term: how nearly the eye lies along the mirrored ray, raised to a power.
 ///
@@ -384,8 +395,28 @@ struct specular
     case specular_model::phong: return phong_term(normal_unit, to_light_unit, to_eye_unit, shininess);
     case specular_model::blinn: return blinn_term(normal_unit, to_light_unit, to_eye_unit, shininess);
     case specular_model::none:  break;
+
+    // Cook-Torrance is COLOURED (Fresnel is per channel, and for a metal that is
+    // the entire point), so it cannot be expressed as the scalar lobe this
+    // function returns. `shade()` dispatches it separately, to
+    // `cook_torrance_specular`. Returning 0 here is not a stub: it is the true
+    // answer to "what scalar lobe does Cook-Torrance have", which is none.
+    case specular_model::cook_torrance: break;
     }
     return 0.0f;
+}
+
+/// The `shininess` a `microsurface` is asking for, when a LEGACY model runs.
+///
+/// Lesson 6.4 kept `phong` and `blinn` selectable but deleted the parameters they
+/// used to read, so the old lobes now run off the new surface description through
+/// Lesson 6.3's own mapping. That is worth more than a compatibility shim: it is
+/// the demonstration that **the old parameters were the new ones badly spelled.**
+/// Roughness 0.49 comes back out as shininess 32, which is exactly where it came
+/// from, and the round trip is checked in verify_64 §G.
+[[nodiscard]] inline float legacy_shininess_of(microsurface surface)
+{
+    return blinn_exponent_from_alpha(alpha_from_roughness(surface.roughness));
 }
 
 // ---- Lesson 6.2: the same shading, stated as BRDFs ---------------------------
@@ -423,46 +454,81 @@ struct specular
     return {albedo.r * k_inv_pi, albedo.g * k_inv_pi, albedo.b * k_inv_pi};
 }
 
-/// The Blinn-Phong highlight as a BRDF — on the same scale, and **not normalised**.
+/// The LEGACY Blinn-Phong highlight as a BRDF — kept, and kept honest.
 ///
 /// `lobe` is whatever `specular_term()` returned: a bare `cos^shininess`, with no
-/// claim to be anything but a shape. Dividing it by pi puts it in the same units as
-/// `lambert_brdf` so that one irradiance can multiply both, and that is *all* the
-/// division does. It is deliberately not called a normalisation, because it does
-/// not normalise anything:
+/// claim to be anything but a shape. Dividing by pi puts it on the same scale as
+/// `lambert_brdf` so one irradiance can multiply both, and that is all it does.
 ///
-///   - The lobe's hemispherical reflectance depends on where the eye is. Measured
-///     in `verify_62` §D at shininess 32: **0.1386 with the eye 37 degrees off the
-///     normal, 0.0259 at 75 degrees.** The same surface reflects five times as
-///     much light one way as the other, and nothing in the model asked for that.
-///   - Diffuse and specular are simply added, with no coupling at all. So a white
-///     surface with any highlight whatever reflects **more light than arrives** —
-///     1.1386 at shininess 32, 1.7333 at shininess 2.
+/// **Lesson 6.3 measured exactly how wrong this constant is.** `cos^s` is a
+/// microfacet distribution whose correct normalisation is `(s + 2) / 2pi`, so the
+/// `1/pi` here is short by a factor of `(s + 2) / 2` — **17x at shininess 32**,
+/// 257x at 512. The error was invisible for three modules because
+/// `specular::colour` absorbed it, and it only surfaced when Lesson 6.2 tried to
+/// author against physical values.
 ///
-/// That second failure is the one Cook-Torrance fixes in Lesson 6.4, and it fixes
-/// it with a mechanism, not a constant: Fresnel says what fraction of the arriving
-/// light bounces off the surface, and only the remainder is available to scatter
-/// diffusely. The diffuse and specular terms stop being independent. This lesson's
-/// job is to make that failure *a number you have measured*, so that 6.4 arrives as
-/// an answer rather than a formula.
+/// **Lesson 6.4 did NOT fix this function; it replaced what calls it.** The
+/// constant is left wrong on purpose, because correcting it here in isolation
+/// would blow every legacy highlight out by seventeen times — which is exactly
+/// what Exercise 6.3.15.1 walks you into. The fix is not a better constant, it is
+/// `cook_torrance_brdf` below, and it arrives with the materials re-authored in
+/// the same commit.
 ///
-/// (Without the `1 / pi` the lobe alone is worse still: `verify_62` §D finds it
-/// exceeds unity for every shininess below about 12, peaking at 2.67 at shininess
-/// 1. A "rough plastic" would then be a light source.)
-///
-/// **LESSON 6.3 EXPLAINS THE LOBE AND MEASURES THIS CONSTANT.** `cos^shininess` is
-/// not an arbitrary shape: it is a microfacet distribution, and `gfx/microfacet.hpp`
-/// gives it its proper normalisation, `(s + 2) / 2pi`. Against that, the `1 / pi`
-/// here is off by a factor of `(s + 2) / 2` — **exactly 17x at the default
-/// shininess of 32**, which is why this engine's materials have always needed a
-/// `specular` colour larger than physical plausibility would suggest. Nothing is
-/// changed here yet; Lesson 6.4 replaces this function's specular half outright,
-/// with Fresnel supplying the coupling whose absence is measured above.
-[[nodiscard]] inline linear_rgb specular_brdf(specular surface, float lobe)
+/// `reflectance` is what `specular::colour` used to supply and now comes from
+/// `f0_of()`. Note what that substitution does to the picture: the demo's 0.85
+/// becomes 0.04, and 17x too large a constant meets 21x too large a parameter.
+[[nodiscard]] inline linear_rgb specular_brdf(linear_rgb reflectance, float lobe)
 {
-    return {surface.colour.r * lobe * k_inv_pi,
-            surface.colour.g * lobe * k_inv_pi,
-            surface.colour.b * lobe * k_inv_pi};
+    return {reflectance.r * lobe * k_inv_pi,
+            reflectance.g * lobe * k_inv_pi,
+            reflectance.b * lobe * k_inv_pi};
+}
+
+/// **The whole Cook-Torrance BRDF: both lobes, coupled.**
+///
+/// This is Lesson 6.4's deliverable, and the one line worth carrying away is not
+/// a formula but a sentence about photons:
+///
+///     F is the fraction that bounces OFF the interface,
+///     so 1 - F is all that is left to go IN and scatter back out.
+///
+/// Before this function the two lobes were independent, which is why Lesson 6.2
+/// could measure a white surface with a white highlight returning **1.1386** of
+/// the light that hit it. They are not independent now. Every photon is spent
+/// once, and `verify_64` §E integrates the result to prove it: worst
+/// hemispherical reflectance **0.9255** over a full sweep of roughness and view
+/// angle, where the uncoupled model reached 1.4300.
+///
+/// `n_dot_v` is passed in rather than recomputed because the caller already has
+/// it and because it appears in three places — the denominator, the geometry
+/// term, and the exit half of the coupling. The other dots likewise.
+///
+/// Returns the two lobes SUMMED, because they are added into the same product in
+/// the shading equation and separating them here would only invite a caller to
+/// forget one. `verify_64` reaches the halves through the functions they are
+/// built from.
+[[nodiscard]] inline linear_rgb cook_torrance_brdf(
+    linear_rgb albedo, microsurface surface,
+    float n_dot_l, float n_dot_v, float n_dot_h, float v_dot_h,
+    ndf_model model = ndf_model::ggx,
+    diffuse_coupling coupling = diffuse_coupling::two_crossing)
+{
+    const linear_rgb f0 = f0_of(surface, albedo);
+
+    // THE SPECULAR HALF: D * G * F over the derived denominator.
+    const linear_rgb f_s = cook_torrance_specular(surface, f0, n_dot_l, n_dot_v,
+                                                  n_dot_h, v_dot_h, model);
+
+    // THE DIFFUSE HALF, and the coupling is the whole lesson. `kd` is the light
+    // that got past the interface; `diffuse_albedo_of` is zero for a metal,
+    // because a conductor absorbs what gets in rather than scattering it back.
+    const linear_rgb kd = diffuse_transmission(coupling, f0, n_dot_l, n_dot_v, v_dot_h);
+    const linear_rgb d_albedo = diffuse_albedo_of(surface, albedo);
+    const linear_rgb f_d = lambert_brdf(d_albedo);
+
+    return {f_s.r + kd.r * f_d.r,
+            f_s.g + kd.g * f_d.g,
+            f_s.b + kd.b * f_d.b};
 }
 
 /// The light leaving a surface of colour `albedo`, facing `normal`, seen from
@@ -525,42 +591,74 @@ struct specular
 /// measurements, and the second one is why the reference render is byte-identical
 /// for a thirteenth lesson.
 [[nodiscard]] inline linear_rgb shade(linear_rgb albedo, vec3 normal, vec3 to_eye,
-                                      const lighting& lights, specular surface = {},
-                                      specular_model model = specular_model::blinn)
+                                      const lighting& lights, microsurface surface = {},
+                                      specular_model model = specular_model::cook_torrance,
+                                      ndf_model distribution = ndf_model::ggx)
 {
     const vec3 n = normalised_or(normal, vec3{0.0f, 0.0f, 0.0f});
     const vec3 l = lights.key.to_light();
+    const vec3 v = normalised_or(to_eye, vec3{0.0f, 0.0f, 0.0f});
     const float n_dot_l = lambert(n, l);
-
-    // The mirrored part's SHAPE — a bare cos^shininess, not yet a BRDF. Skipped
-    // entirely for a black highlight, which is both the common case and the
-    // default, so 3.6's scenes pay nothing for 3.7 existing.
-    float lobe = 0.0f;
-    if (n_dot_l > 0.0f && model != specular_model::none
-        && (surface.colour.r > 0.0f || surface.colour.g > 0.0f || surface.colour.b > 0.0f))
-    {
-        lobe = specular_term(model, n, l, normalised_or(to_eye, vec3{0.0f, 0.0f, 0.0f}),
-                             surface.shininess);
-    }
 
     // WHAT THE LIGHT DELIVERS, per channel: irradiance measured square-on to the
     // beam, projected onto this surface by the cosine. This is `E_perp * cos(theta)`
     // and nothing else — no albedo in it, because how much light arrives cannot
-    // depend on the colour of what it lands on.
+    // depend on the colour of what it lands on. Unchanged since Lesson 6.2, and it
+    // is worth noticing that this lesson did not have to touch it: the light's half
+    // of the equation and the surface's half really are separable.
     const float er = lights.key.colour.r * lights.key.irradiance * n_dot_l;
     const float eg = lights.key.colour.g * lights.key.irradiance * n_dot_l;
     const float eb = lights.key.colour.b * lights.key.irradiance * n_dot_l;
 
-    // WHAT THE SURFACE DOES: two lobes, both per steradian, added because a real
-    // surface scatters some light and mirrors some and does both at once.
-    const linear_rgb f_d = lambert_brdf(albedo);
-    const linear_rgb f_s = specular_brdf(surface, lobe);
+    // WHAT THE SURFACE DOES. Both branches return a full BRDF in sr^-1, so the
+    // product below is the same shape either way — which is the point of having
+    // given the equation units in Lesson 6.2.
+    linear_rgb f_r{};
+
+    if (model == specular_model::cook_torrance)
+    {
+        // The four cosines the microfacet model runs on, computed once. `h` is
+        // Lesson 3.7's halfway vector, and Lesson 6.3 turned it from a way of
+        // putting things into the mechanism: it is the normal a microfacet must
+        // have to send this light at this eye.
+        const float n_dot_v = std::max(0.0f, dot(n, v));
+        const vec3 h = halfway(l, v);
+        const float n_dot_h = std::max(0.0f, dot(n, h));
+        const float v_dot_h = std::max(0.0f, dot(v, h));
+
+        f_r = cook_torrance_brdf(albedo, surface, n_dot_l, n_dot_v, n_dot_h,
+                                 v_dot_h, distribution);
+    }
+    else
+    {
+        // THE LEGACY PATH, kept selectable so the two can be seen side by side.
+        // It reads the SAME `microsurface` through Lesson 6.3's mappings, which
+        // is the demonstration that the old parameters were the new ones badly
+        // spelled — and it keeps one material struct in the engine rather than
+        // two.
+        float lobe = 0.0f;
+        if (n_dot_l > 0.0f && model != specular_model::none)
+        {
+            lobe = specular_term(model, n, l, v, legacy_shininess_of(surface));
+        }
+
+        const linear_rgb f_d = lambert_brdf(albedo);
+        const linear_rgb f_s = specular_brdf(f0_of(surface, albedo), lobe);
+        f_r = {f_d.r + f_s.r, f_d.g + f_s.g, f_d.b + f_s.b};
+    }
 
     // L_o = f_r * E + the ambient term, whose pi cancelled against the hemisphere
     // it was integrated over — which is why `albedo` multiplies it bare.
-    return {(f_d.r + f_s.r) * er + albedo.r * lights.ambient.r,
-            (f_d.g + f_s.g) * eg + albedo.g * lights.ambient.g,
-            (f_d.b + f_s.b) * eb + albedo.b * lights.ambient.b};
+    //
+    // THE AMBIENT TERM IS STILL WRONG IN THE SAME WAY IT ALWAYS WAS, and Lesson
+    // 6.4 deliberately did not touch it: it has no specular counterpart, so a
+    // mirror in a bright uniform room still renders black except where the key
+    // light hits it. That missing term is the specular half of image-based
+    // lighting, and it is Lesson 6.12's subject. Naming it here is cheaper than
+    // discovering it there.
+    return {f_r.r * er + albedo.r * lights.ambient.r,
+            f_r.g * eg + albedo.g * lights.ambient.g,
+            f_r.b * eb + albedo.b * lights.ambient.b};
 }
 
 /// The same, taking and returning an encoded colour — the form the demo wants.
@@ -572,10 +670,12 @@ struct specular
 /// a bright highlight arrives at the screen as a flat white blob with its shape
 /// clipped off, which is exactly the information tonemapping exists to keep.
 [[nodiscard]] inline Uint32 shade_encoded(Uint32 albedo_encoded, vec3 normal, vec3 to_eye,
-                                          const lighting& lights, specular surface = {},
-                                          specular_model model = specular_model::blinn)
+                                          const lighting& lights, microsurface surface = {},
+                                          specular_model model = specular_model::cook_torrance,
+                                          ndf_model distribution = ndf_model::ggx)
 {
-    return to_encoded(shade(to_linear(albedo_encoded), normal, to_eye, lights, surface, model));
+    return to_encoded(shade(to_linear(albedo_encoded), normal, to_eye, lights, surface,
+                            model, distribution));
 }
 
 } // namespace engine

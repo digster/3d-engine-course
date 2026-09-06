@@ -7,7 +7,7 @@ There is no engine to download here and no framework doing the interesting parts
 write the math library, the rasterizer, the ECS, the renderer, the physics, and the editor. By
 the end you have a real engine and a game built on its public API.
 
-**Status:** curriculum and conventions published; lessons in progress — **Modules 0–5 are complete** and Module 6 is under way (59 of 95 lessons). The CPU software rasterizer is finished end to end, the same scene is drawn on a real GPU through SDL_GPU, and the tree is now a static library with a public API, a platform/application layer, its own logging, handle-based resource storage, an asset system that can load, share and free, a reusable A/B timing harness that has decided three architecture questions with numbers instead of folklore, and **a working from-scratch ECS** — a generational entity id honoured by every pool, sparse-set component storage, queries that lead with the smallest pool, a **transform hierarchy** whose resolve cost is flat in depth with a camera that is an ordinary entity, (5.10) an **input layer that knows what the player meant** rather than which key they hit, (5.11) **a debug-draw system and a tooling UI** — a queue of world-space geometry with lifetimes that anything in the engine can fill, and Dear ImGui behind a 182-line facade — and, opening Module 6, (6.1) **a colour pipeline that is correct at both ends**, which found and fixed a four-module-old bug that had every GPU-rendered pixel too dark, (6.2) **a shading equation with units** — a BRDF measured in inverse steradians, a light measured in irradiance, and a hemisphere integrator that turns "is this model physically plausible?" into a number — and (6.3) **a story about what a surface is**: three microfacet distributions and a masking term, each held to an identity that has a right-hand side. Start at
+**Status:** curriculum and conventions published; lessons in progress — **Modules 0–5 are complete** and Module 6 is under way (60 of 95 lessons). The CPU software rasterizer is finished end to end, the same scene is drawn on a real GPU through SDL_GPU, and the tree is now a static library with a public API, a platform/application layer, its own logging, handle-based resource storage, an asset system that can load, share and free, a reusable A/B timing harness that has decided three architecture questions with numbers instead of folklore, and **a working from-scratch ECS** — a generational entity id honoured by every pool, sparse-set component storage, queries that lead with the smallest pool, a **transform hierarchy** whose resolve cost is flat in depth with a camera that is an ordinary entity, (5.10) an **input layer that knows what the player meant** rather than which key they hit, (5.11) **a debug-draw system and a tooling UI** — a queue of world-space geometry with lifetimes that anything in the engine can fill, and Dear ImGui behind a 182-line facade — and, opening Module 6, (6.1) **a colour pipeline that is correct at both ends**, which found and fixed a four-module-old bug that had every GPU-rendered pixel too dark, (6.2) **a shading equation with units** — a BRDF measured in inverse steradians, a light measured in irradiance, and a hemisphere integrator that turns "is this model physically plausible?" into a number — (6.3) **a story about what a surface is**: three microfacet distributions and a masking term, each held to an identity that has a right-hand side, and (6.4) **a physically-based BRDF, live in both renderers** — Cook–Torrance with its `4(n·l)(n·v)` denominator *derived* rather than quoted, Fresnel built from the physics with `F0` read off an index of refraction, the metallic workflow arriving as a consequence, and energy conservation measured at a worst hemispherical reflectance of 0.9255 where the model it replaced reached 1.4300. Start at
 [`docs/index.html`](docs/index.html).
 
 ---
@@ -492,6 +492,51 @@ energy at mirror roughness**. One line of algebra removes it — `(1−c)(1+c) +
 arithmetic, and Sterbenz's lemma makes `1.0f - c` exact for `c ≥ 0.5`. A 450× improvement,
 diagnosed in two runs by a rule worth keeping: **quadrature error shrinks when the grid refines;
 arithmetic error does not.**
+
+**Lesson 6.4** assembles, and it opens on 6.2's **1.1386** for the third lesson running — because
+6.3 normalised the distribution and the number did not move, deliberately. **The fault is the plus
+sign.** Diffuse and specular were *added*, so the same photon left the surface twice: once as
+having bounced off it, once as having gone into it. Fresnel is the coupling, and the whole lesson
+is one sentence — *F is what bounces off, so 1 − F is what goes in* — with the window at night as
+its proof.
+
+Then the line every renderer quotes and almost none derives. Put spherical coordinates on the
+*fixed* direction and the `4(n·l)(n·v)` denominator falls out in four lines: a facet tilted by θ
+turns the reflected ray by **2θ**, so `dω_out/dω_h = 2 sin2θ / sinθ = 4 cos θ = 4(v·h)`. Two
+factors of two, one of them handing over the cosine as change. Measured against finite differences
+on the sphere at **1.42 × 10⁻³** worst. And the reason the finished formula looks unmotivated
+becomes visible: the `(v·h)` that would explain the 4 **cancelled**, against the facets' projected
+area, because **h** bisects.
+
+Fresnel gets the same treatment — the shape from physics first (every interface reflects
+*everything* at grazing, which is why a window becomes a mirror when you look along it), then
+`F0 = ((1−n)/(1+n))²`, so the 0.04 every renderer hard-codes turns out to be **window glass**.
+Run backwards it becomes an **audit**, and the engine fails it: the demo's authored
+`specular::colour` of 0.85 implies an index of refraction of **24.6**, where diamond is 2.42. It
+was never a material — it was 6.3's 17× error wearing a parameter's clothes. Schlick is then
+*measured* rather than praised: worst absolute error 0.0357, but worst **relative** error
+**23.2%, at 55°** — in the middle of the range where surfaces are actually seen. It ships anyway,
+on honest grounds: 23% of 0.04 is 0.019 of a reflectance, which is invisible.
+
+The **metallic workflow arrives as a consequence** rather than a checkbox — a conductor absorbs
+whatever crosses its interface, so it has no diffuse lobe and its colour has nowhere to live but
+F0 — and the demo's teal slab, faked since 3.7 by hand-typing a matching highlight colour beside
+its tint, becomes `metallic = 1` and can no longer disagree with itself.
+
+Then the finding. The coupling **nearly every engine ships**, `1 − F(v·h)` including the glTF
+reference BRDF, is exact at normal incidence and still reaches **1.3395** at grazing: it accounts
+for the light that got *in* and says nothing about the light that fails to get *out*. The obvious
+repair fixes the energy and **fails reciprocity** — 0.2623 one way against 0.2932 the other — and
+a BRDF that is not symmetric in **l** and **v** is not a BRDF. That is what selects the
+two-crossing form the engine ships, worst **0.9255**, never above 1.
+
+And the reference render **breaks**, on purpose, after fourteen lessons: `905BF27E` → `E917C06C`,
+2,400 pixels moved, **all darker** — which is the check that matters, since an energy-conserving
+model replacing one that emitted light cannot brighten anything. But only three of seven frames
+moved at all, and that was the *instrument's* fault: `shading::textured` is unlit, so the torus
+chosen in 3.8 *because* it shows highlights was drawn unlit in the reference shot. So an eighth
+frame is added — because **the moment to extend a characterization test is the moment it breaks
+for another reason.** It is free at a re-baseline and costs a re-baseline at every other lesson.
 
 **An edge is a change in the *action*, not in a signal.** Bind `jump` to both a key and a mouse
 button, press one while the other is held, and there is still exactly one press edge. Derive

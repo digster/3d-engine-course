@@ -265,28 +265,43 @@ static_assert(offsetof(scene_light_uniforms, spec_model) == packed_offset(60, 1)
 /// Bound at **fragment slot 1** — `register(b1, space3)`.
 ///
 /// This struct is the material that Lessons 3.4, 3.7 and 3.8 each said was the
-/// missing idea, and it is worth seeing how small the first honest version is:
-/// an albedo, a highlight colour, an exponent, and a flag saying where the albedo
-/// comes from. What it is NOT is the cull mode or the fill mode — those are
+/// missing idea. What it is NOT is the cull mode or the fill mode — those are
 /// pipeline state, they cannot be a number in a buffer, and that is exactly why
-/// this lesson ends up with three pipelines and a sort. Module 6 builds the
+/// Lesson 4.8 ends up with three pipelines and a sort. Lesson 6.5 builds the
 /// material that owns both halves.
 ///
 /// **`albedo` is LINEAR**, decoded from the demo's `Uint32` tint before the push.
 /// It multiplies a quantity of light two lines later, and Lesson 1.6's rule has
 /// not softened.
+///
+/// **LESSON 6.4 REPLACED THE SURFACE HALF AND THE STRUCT DID NOT CHANGE SIZE.**
+/// It went from `{albedo, shininess, specular, textured}` to
+/// `{albedo, roughness, metallic, f0, textured}` — four floats of description
+/// where there were four before, still exactly two 16-byte registers, so not one
+/// line of the binding code moved. That is a coincidence worth noticing rather
+/// than relying on: the packing rules (Lesson 4.5) put a `vec3` and a following
+/// `float` in one register, and the second register happens to hold four scalars
+/// as comfortably as it held a `vec3` and a scalar.
+///
+/// The `static_assert`s below are the reason a change this large was safe to make
+/// in one commit. A uniform layout that disagrees with its shader does not fail
+/// loudly; it renders something *plausible* with the fields shifted, which is the
+/// worst kind of bug there is. Every offset is pinned.
 struct material_uniforms
 {
     vec3  albedo;      ///<  0 — the surface's own colour, linear, in [0,1]
-    float shininess;   ///< 12 — the specular exponent (3.7); not comparable across models
-    vec3  specular;    ///< 16 — the highlight's reflectance; black = matte
-    float textured;    ///< 28 — 0 = use `albedo`, 1 = sample the bound texture
+    float roughness;   ///< 12 — perceptual, [0,1]; `alpha` is its square (6.3)
+    float metallic;    ///< 16 — 0 = dielectric, 1 = conductor (6.4)
+    float f0;          ///< 20 — dielectric normal-incidence reflectance, ~0.04
+    float textured;    ///< 24 — 0 = use `albedo`, 1 = sample the bound texture
+    float pad0;        ///< 28 — the register's last slot; keeps the size at 32
 };
 
 static_assert(sizeof(material_uniforms) == 32, "two registers, exactly filled");
 static_assert(offsetof(material_uniforms, albedo) == packed_offset(0, 3), "");
-static_assert(offsetof(material_uniforms, shininess) == packed_offset(12, 1), "");
-static_assert(offsetof(material_uniforms, specular) == packed_offset(16, 3), "");
-static_assert(offsetof(material_uniforms, textured) == packed_offset(28, 1), "");
+static_assert(offsetof(material_uniforms, roughness) == packed_offset(12, 1), "");
+static_assert(offsetof(material_uniforms, metallic) == packed_offset(16, 1), "");
+static_assert(offsetof(material_uniforms, f0) == packed_offset(20, 1), "");
+static_assert(offsetof(material_uniforms, textured) == packed_offset(24, 1), "");
 
 } // namespace engine

@@ -132,7 +132,7 @@ struct geometry
 struct material
 {
     Uint32 tint = 0xFFFFFFFFu;
-    engine::specular surface{};
+    engine::microsurface surface{};
 };
 
 /// A circular path — now around the entity's PARENT rather than around the world.
@@ -968,8 +968,8 @@ private:
                       .scale = {0.9f, 0.9f, 0.9f}});
         world_.add<geometry>(sun_, geometry{.mesh = torus_, .closed = true});
         world_.add<material>(sun_, material{.tint = 0xFFE8B84Cu,
-                                            .surface = {.colour = {0.7f, 0.65f, 0.5f},
-                                                        .shininess = 64.0f}});
+                                            .surface = {.roughness = 0.42f,
+                                                        .metallic = 1.0f}});
         world_.add<spin>(sun_, spin{.rate = 0.6f, .wobble = 0.35f});
 
         // ---- the ring: children of the sun -------------------------------
@@ -991,8 +991,7 @@ private:
             world_.add<geometry>(e, geometry{.mesh = (i % 2 == 0) ? cube_ : ico_,
                                              .closed = true});
             world_.add<material>(e, material{.tint = tint_for(i),
-                                             .surface = {.colour = {0.45f, 0.45f, 0.5f},
-                                                         .shininess = 24.0f}});
+                                             .surface = {.roughness = 0.53f}});
             if (i % 3 == 0)
             {
                 world_.add<spin>(e, spin{.rate = rng.range(1.2f, 3.0f),
@@ -1029,8 +1028,7 @@ private:
                     world_.add<geometry>(moon, geometry{.mesh = ico_, .closed = true});
                     world_.add<material>(moon,
                                          material{.tint = 0xFFF2F4F8u,
-                                                  .surface = {.colour = {0.85f, 0.85f, 0.9f},
-                                                              .shininess = 80.0f}});
+                                                  .surface = {.roughness = 0.40f}});
                     engine::ecs::set_parent(world_, moon, e);
                     moons_.push_back(moon);
                 }
@@ -1114,8 +1112,7 @@ private:
                                        .tilt = rng_.range(-1.4f, 1.4f)});
             world_.add<geometry>(e, geometry{.mesh = ico_, .closed = true});
             world_.add<material>(e, material{.tint = 0xFF7FE0FFu,
-                                             .surface = {.colour = {0.9f, 0.9f, 0.9f},
-                                                         .shininess = 96.0f}});
+                                             .surface = {.roughness = 0.38f}});
             world_.add<lifetime>(e, lifetime{.remaining = rng_.range(0.8f, 2.4f)});
             engine::ecs::set_parent(world_, e, sun_);
         }
@@ -1212,8 +1209,7 @@ private:
             if (materials_hidden_)
             {
                 world_.add<material>(e, material{.tint = tint_for(static_cast<int>(i)),
-                                                 .surface = {.colour = {0.45f, 0.45f, 0.5f},
-                                                             .shininess = 24.0f}});
+                                                 .surface = {.roughness = 0.53f}});
             }
             else
             {

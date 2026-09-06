@@ -14,7 +14,7 @@
 #include <engine/gfx/colour.hpp>   // linear_rgb: the space vertex colours are combined in
 
 // Lesson 3.8. A real include, not a forward declaration, and the difference is the
-// point: `fill_style` holds a `specular` BY VALUE and `shading::lit` calls
+// point: `fill_style` holds a `microsurface` BY VALUE and `shading::lit` calls
 // `shade()`, so the rasterizer needs the layout and the definitions, not just the
 // names. That is the dependency this lesson adds and Module 4's programmable
 // fragment stage removes. (`vec3` comes along with it.)
@@ -572,13 +572,14 @@ struct fill_style
     /// made in 3.1: what a reference cannot express here is optionality.
     const lighting* lights = nullptr;
 
-    /// The surface's highlight colour and shininess (Lesson 3.7). Ignored unless
+    /// The surface's reflectance parameters (Lesson 6.4: roughness, metallic, F0
+    /// — replacing 3.7's highlight colour and shininess). Ignored unless
     /// `shade == shading::lit`.
-    specular surface{};
+    microsurface surface{};
 
     /// Which specular approximation to evaluate — pipeline state proper, and in a
     /// real engine a compile-time shader choice rather than a runtime branch.
-    specular_model model = specular_model::blinn;
+    specular_model model = specular_model::cook_torrance;
 
     /// The eye's world position, for the view-dependent term.
     ///

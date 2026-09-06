@@ -86,7 +86,7 @@ struct raster_triangle
     /// engine reaches Module 4, this field stops being possible. That is the same
     /// pressure 3.4 found with cull modes and 3.7 found with `specular`, arriving
     /// for the third time and from a new direction.
-    specular surface{};
+    microsurface surface{};
 };
 
 /// Per-face brightness, so adjacent faces of a solid can be told apart.
@@ -377,7 +377,7 @@ struct render_options
     cull_choice cull = cull_choice::none;                ///< 3.4
     normal_source normals = normal_source::vertex;       ///< 3.6
     shade_eval shading = shade_eval::gouraud;            ///< 3.6 / 3.8
-    specular_model specular = specular_model::blinn;     ///< 3.7
+    specular_model specular = specular_model::cook_torrance;   ///< 3.7, 6.4
     bool correct_normal_matrix = true;                   ///< 3.6 — inverse transpose
 };
 
