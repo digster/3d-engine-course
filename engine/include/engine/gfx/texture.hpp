@@ -28,6 +28,7 @@
 #include <engine/core/handle.hpp>   // 6.5: a texture is referenced, not pointed at
 #include <engine/core/pool.hpp>
 #include <engine/gfx/colour.hpp>   // linear_rgb: what a sample IS, once decoded
+#include <engine/gfx/image.hpp>    // 6.6: image_data, the thing a file decodes to
 #include <engine/math/vec2.hpp>
 
 #include <SDL3/SDL.h>
@@ -293,13 +294,48 @@ using texture_handle = handle<texture>;
 
 /// Storage for the textures a scene samples.
 ///
-/// **Deliberately NOT in `asset_store`.** The asset store is about *files* — a
-/// search path, a name, a cache, a load count (5.5) — and every texture in this
-/// engine so far is generated in memory rather than loaded. Lesson 6.6 is where
-/// textures start arriving from disk, and that is the lesson that gets to decide
-/// whether they become assets. Inventing the answer now would be guessing, which
-/// is the same call Lesson 3.7 made about the material itself.
+/// **Lesson 6.5 kept this out of `asset_store` and Lesson 6.6 put it in.** The
+/// reasoning 6.5 gave was that the store is about *files* — a search path, a
+/// name, a cache, a load count (5.5) — and every texture in the engine at that
+/// point was generated in memory. glTF is what expired that: a material now
+/// arrives naming an image on disk, two materials routinely name the same one,
+/// and "load it once and hand out the same reference" is precisely the store's
+/// job description.
+///
+/// The pool itself did not move or change. What the store adds around it is the
+/// three things 5.5 named: a name -> handle map, an unload, and — because a
+/// texture is MADE FROM an image rather than loaded directly — a derivation
+/// edge, so that unloading the image unloads the textures built from it. See
+/// `asset_store::load_texture`.
 using texture_pool = pool<texture>;
+
+// ---- Lesson 6.6: the bridge that had never been built -----------------------
+
+/// Turn decoded file pixels into something `sample` can read.
+///
+/// **This function should have existed since Lesson 5.3 and did not**, and the
+/// reason it did not is worth more than the twelve lines it takes. The engine
+/// has been able to decode a PNG since 5.3 (`load_image` -> `image_data`) and to
+/// sample a texture since 3.9 (`texture` -> `sample`), and nothing ever joined
+/// them — because every CPU texture was *generated* (`make_checker`,
+/// `make_uv_grid`) and every *loaded* image went straight to the GPU as bytes
+/// (`gpu_texture::create_sampled`). Two complete halves with no middle, and no
+/// test could see the gap because no code path crossed it.
+///
+/// glTF is what forces the join: a material names an image file, and the
+/// software renderer has to be able to sample it. Lesson 6.6 §5.
+///
+/// **It is a channel shuffle, not a memcpy**, and that is the part to get right.
+/// `image_data::pixels` is R, G, B, A in that byte order, as stb hands it over.
+/// `texture` stores `Uint32` in ARGB8888 — the framebuffer's own format (1.5) —
+/// which on a little-endian machine is the bytes B, G, R, A. Copying the buffer
+/// wholesale therefore swaps red and blue, which is the single most recognisable
+/// wrong-looking texture there is and the reason `pack_argb` exists rather than
+/// a cast.
+///
+/// An invalid image gives an empty texture, which `sample` already answers with
+/// debug magenta — a visible failure rather than a silent black one.
+[[nodiscard]] texture to_texture(const image_data& src);
 
 // ---- Generated test images ---------------------------------------------------
 //

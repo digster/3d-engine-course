@@ -6375,3 +6375,159 @@ No geometric check sees that: the SVG is fine, the labels are clear, the links r
 by **looking at the rendered figure**, which check-page.js's own header says is the thing it cannot
 do for you. `scratch/check-tags.py` now balances the container tags, which is the cheap half — but
 the expensive half stays: *look at the picture*.
+
+---
+
+## Lesson 6.6 — glTF 2.0 loading
+
+### The write-it-or-take-it test is not "is it hard?" — it is "is the hard part the subject?"
+
+This course has hand-rolled the maths library, the rasterizer, the OBJ parser and the ECS, and taken
+`stb_image`, Dear ImGui and now `cgltf`. Difficulty does not separate those lists: the rasterizer
+was harder than a PNG decoder.
+
+What separates them is whether the difficult core belongs to the discipline you came to learn. For
+OBJ the hard part was unifying `v/vt/vn` triples into vertices, which **is** the index problem. For
+glTF the hard part is that an accessor may be any of five component types, normalized or not,
+tightly packed or interleaved at a stride, dense or sparse — roughly forty legal encodings of the
+same eight positions, every one of which some exporter emits, and **not one of them about
+graphics**. `cgltf_accessor_read_float` collapses the whole matrix in one call.
+
+Stated as a question you can ask of a library you have never seen: *if I write this myself, what
+will I have learned when it works?*
+
+### Two conventions agreeing is worth asserting, not just noting
+
+Three of the four convention checks between glTF and this engine came out "do nothing" — handedness,
+winding, and texture origin. The temptation is to write a sentence in the lesson and move on.
+
+Assert them instead. `verify_66` §B checks that vertex 6 of the loaded cube is exactly
+`(+0.5, +0.5, +0.5)` and that all eight positions match `k_cube_vertices` **bit-exactly** — no
+tolerance, because every coordinate in the file is exactly representable, so a difference would be a
+real one. The reason it is worth a test rather than a sentence: **a cube survives the wrong answer
+looking like a cube.** Negate z and it is still a cube, wound inside out. Nobody reviewing a
+screenshot catches that.
+
+### The convention that agrees can be more dangerous than the one that differs
+
+glTF and this engine both put texture coordinate `(0,0)` at the *upper* left. OBJ puts it at the
+lower left, which is why `mesh_import::flip_uv_v` defaults to `true` — correct for every mesh this
+engine had ever loaded.
+
+Apply that default to a glTF and every asset arrives upside down, for everyone who left it alone.
+**The flip belongs to the FORMAT, not to the caller's preference**, so `asset_store::load_model`
+takes no import settings at all and its header says why in as many words. A parameter that is right
+for one format and silently wrong for the next is worse than no parameter.
+
+And the one that *does* differ turned out not to need code at all: glTF says an asset's front faces
++Z and our camera looks down −Z, which is an **authoring fact**, fixed with a yaw. Negating
+coordinates in the loader would also mirror the geometry and reverse every triangle — two wrongs,
+the second hiding the first.
+
+### An unverified claim in a comment survives exactly as long as nobody needs it
+
+Lesson 6.4 wrote that `1 − F(v·h)` is "what the glTF 2.0 reference BRDF uses" and marked it
+`⚠ VERIFY`. Two lessons passed. Checking it took twenty minutes and found the claim **true in
+substance and imprecise in a way that changed the design**: the spec writes
+`mix(diffuse, specular, F)`, so the same Fresnel that scales the diffuse down scales the specular
+*up*, and our specular already carried it. Reading "glTF uses `1 − F(v·h)`" as a statement about the
+diffuse alone misses half the sentence.
+
+The habit worth keeping is not "always verify immediately" — 6.4 was right to defer, and said so
+with a marker and a lesson number. It is that **the marker has to name the lesson that discharges
+it**, or it becomes furniture.
+
+### Reduce two models to named terms, then price the survivor at BOTH ends
+
+Comparing BRDFs by rendering them is useless: two that differ by 4% look identical and two that
+differ by 5× look like a lighting change. Write both as a product of named terms, line them up, and
+find the terms that are not the same expression. Against Khronos Appendix B, six terms line up and
+**five are identical**.
+
+Then price the survivor at both ends of its range, because one number is not a measurement. Our
+diffuse coupling against the spec's is **1.036×** at normal incidence and **5.62×** at 88°.
+Reporting only the first says "the models agree"; reporting only the second says "they are
+unrelated". Together they say **where to look** — the difference lives at silhouettes and vanishes
+in the middle of every surface, which is exactly why it went unnoticed for two lessons.
+
+### Two things that look like different models can be the same expression
+
+The glTF spec blends two complete BRDFs by `metallic`; this engine blends the F0 and evaluates one.
+They commute **exactly**, because Schlick is affine in F0: `F(f0) = f0(1 − w) + w` is a straight
+line, so lerping the inputs and lerping the outputs agree. Measured at 1.19 × 10⁻⁷ over 4,851
+points — float rounding and nothing else.
+
+Worth looking for whenever two implementations of "the same thing" appear to disagree structurally.
+**Check whether the operation you are interpolating through is linear** before concluding one of
+them is an approximation of the other.
+
+### A gap between two working halves is invisible to every test, because no path crosses it
+
+The engine has been able to decode a PNG since Lesson 5.3 and to sample a texture since Lesson 3.9,
+and **nothing has ever joined them**. Every CPU texture was generated (`make_checker`,
+`make_uv_grid`) and every loaded image went straight to the GPU as bytes. Two complete, tested,
+well-documented halves with no middle.
+
+No test could have caught it: there was no wrong behaviour, only absent behaviour, and coverage
+measures the code that exists. It surfaced the moment a glTF material named an image file and the
+software renderer had to sample it — twelve lines, `to_texture`.
+
+The generalisation: **look for pairs of subsystems that ought to compose and have never been asked
+to.** They are where the next feature will discover a hole.
+
+### A conformance gap belongs at the point that knows both halves
+
+glTF multiplies a base colour factor by its texture; this engine's albedo image replaces the tint.
+They agree exactly when the factor is white, so the gap is only the *combination*.
+
+The parser sees the factor and the URI but not whether the image resolved. The renderer sees a bound
+texture but has long since lost the factor. Only `load_model` holds both, so that is where the
+warning lives — and it is a **counter** as well as a log line, because a log line scrolls past and a
+number can be asserted. `verify_66` asserts `factor_texture_conflicts == 0` on an asset built so it
+should be zero, which tests the *detector* as much as the asset.
+
+### Report a format limit; never truncate to meet it
+
+`mesh_data::indices` is `uint16_t`, so a primitive can name 65,536 vertices. Real glTF assets exceed
+that routinely. The lazy version is `static_cast<uint16_t>(index)` and let it wrap — and that
+version **renders**, as a spray of triangles connecting the wrong corners, looking like a corrupt
+file rather than a loader limit, with nothing anywhere saying what happened.
+
+Widening the index type costs bytes on every mesh in the engine; splitting the primitive costs code.
+Both are real answers and neither is a thing to guess at inside a loader. What the loader owes the
+caller is `skipped_too_large = 1, max 197,346` — a number they can act on.
+
+### An assertion in a test can be wrong about the code's *correct* behaviour
+
+`verify_66` §A asserted the loaded cube had 8 vertices, matching `cube_mesh()`. It got 36, and the
+loader was right: the test asset shipped no normals, so flat normals were generated, and flat
+shading forces one vertex per face-corner. Lesson 3.5's index problem, arriving in a second format.
+
+The fix was not to relax the assertion — that is a test deleted slowly (6.3's rule). It was to make
+the **assets say which case they test**: `cube.gltf` now ships smooth normals so its round trip stays
+index-for-index *and* proves the loader honours authored normals, and `shapes.glb` ships none so the
+generation path and its 4.5× vertex-count cost have an asset of their own. One failing check turned
+one test into two better ones.
+
+### A physically correct render can be a bad picture, and saying so is the lesson
+
+`shapes.glb`'s metals render nearly black, or clipped to white. That is not a bug: a conductor has no
+diffuse lobe, so a metal with nothing to reflect but one directional light has exactly two states.
+Measured, the bright one is **64× displayable white** at roughness 0.25.
+
+The temptation is to fudge the asset until the screenshot looks good. The better move is to keep the
+values defensible, *measure* the clipping, and let the number be the argument for the two lessons
+that fix it — image-based lighting gives the metal something to reflect, and a tonemapper gives the
+highlight somewhere to go. A demo whose flaw has a lesson number attached is teaching.
+
+### Check forward lesson references against the index, not against memory
+
+Lesson 6.4 shipped three stale "Lesson 6.7" references for glTF, which is 6.6. Lesson 6.6 then wrote
+"6.9's image-based lighting" and "6.11's frustum culling" — both wrong, because IBL is **6.12** and
+frustum culling is **6.13**, and it also got the next lesson's *title* wrong ("TBN Basis" against the
+index's "TBN Derivation").
+
+Twice in three lessons, from the same cause: writing a forward reference from memory of the plan
+rather than from `docs/index.html`, which is the plan. **The index is the authority.** Grep the
+lesson body for `6\.[0-9]` before building the page; it takes ten seconds and it has now caught six
+errors.

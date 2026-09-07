@@ -7,7 +7,7 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-09-06 (after Lesson 6.5 — 61 of 95 lessons)
+updated: 2026-09-07 (after Lesson 6.6 — 62 of 95 lessons)
 
 conventions:
   ecs-storage: THE ECS IS A SPARSE SET, DECIDED IN 5.7 BY MEASUREMENT, NOT TASTE.
@@ -3103,6 +3103,109 @@ curriculum: 95 lessons, ~438 h, 9 modules   (5.10 split into 5.10 + 5.11 in 5.10
         smith_g_separable — and 6.6 (glTF) may need it for spec compliance.
         ⚠ VERIFY the glTF Appendix B claim against the Khronos spec before 6.6.
 
+  interchange: LESSON 6.6 IMPORTS glTF 2.0, AND THE HEADLINE IS HOW LITTLE THERE
+        WAS TO DO. The audit belongs on the Conventions page (§7k) because the NEXT
+        format will need it too; a convention mismatch does not throw, it produces
+        a PLAUSIBLE PICTURE, and a plausible picture survives review.
+        FOUR CONVENTIONS, THREE AGREE:
+          handedness   glTF right-handed +Y up == ours (§2). No basis change.
+          winding      counter-clockwise front == ours (§7). No index reversal.
+          uv origin    glTF (0,0) UPPER left == ours (3.9). NO FLIP — and THIS IS
+                       THE TRAP, because OBJ's is the LOWER left, so
+                       mesh_import::flip_uv_v defaults to TRUE and is correct for
+                       every mesh this engine has loaded and WRONG for every one it
+                       loads next. THE FLIP BELONGS TO THE FORMAT, NOT THE CALLER,
+                       which is why load_model takes no import settings at all.
+          asset facing glTF front faces +Z, our camera looks down -Z. DIFFERS AND
+                       IS NOT A CONVERSION: an authoring fact, fixed with a yaw.
+                       Negating coordinates would also MIRROR, reversing winding —
+                       two wrongs, the second hiding the first.
+        gltf.cpp CONTAINS ZERO CONVERSION CODE and verify_66 §B asserts it
+        BIT-EXACTLY (vertex 6 is (+0.5,+0.5,+0.5); all 8 match k_cube_vertices to
+        the last bit, no tolerance, because every coordinate is exactly
+        representable). Also column-major matrices: cgltf_node_transform_world's
+        16 floats ARE mat4's storage, so it is a copy and not a transpose.
+        WRITE IT OR TAKE IT — the test is NOT "is it hard?" (the rasterizer was
+        hard and we wrote it) but WHETHER THE HARD PART IS THE SUBJECT. For OBJ the
+        hard part was unifying v/vt/vn triples, which IS the index problem; for
+        glTF it is a strided, typed, optionally-sparse view into somebody else's
+        bytes — 5 component types x normalized x interleaving x sparse ~= 40 legal
+        encodings of the same 8 positions, and not one is about graphics.
+        cgltf over tinygltf: one C header, no deps, and tinygltf would pull a
+        SECOND copy of stb_image at a different pin.
+        THE PARSER RETURNS DESCRIPTIONS, NOT HANDLES. gltf_material_desc holds a
+        std::string base_colour_uri and an int material index. Handing parse_gltf
+        an asset_store& would be fewer types and would cost three things: the
+        parser could not be tested without a filesystem (3.5's parse_obj/load_obj
+        split, and §8 used it to test a dozen malformed inputs from string
+        literals); Module 8's offline cooker could not use it, since a handle is
+        meaningless outside its pool and cannot be serialised; and "is this the
+        same image?" would have a second answer that eventually disagrees.
+        BASE COLOUR: THE FACTOR IS LINEAR, THE TEXTURE IS sRGB. The single most
+        mishandled number in a glTF importer. gltf_material_desc::base_colour is a
+        linear_rgb with NO to_linear anywhere near it; material::tint IS encoded
+        (6.5's input-edge rule), so the one conversion in the importer runs
+        linear -> encoded, in load_model. Get it backwards and gold's 0.71 becomes
+        0.4624 and every asset is darkened by the gamma curve — verify_66 §D
+        asserts the 0.71 and PRINTS the 0.4624 beside it.
+        NO REMAP ON THE SURFACE. metallicFactor and roughnessFactor go straight
+        into microsurface, because glTF's alpha = roughness^2 IS 6.3's
+        alpha_from_roughness and its dielectric IOR of 1.5 IS k_dielectric_f0 =
+        0.04. Gold's baseColorFactor (1.00,0.71,0.29) comes out of f0_of verbatim
+        while diffuse_albedo_of returns exactly black. THAT is what it feels like
+        when the parameters were derived rather than tuned.
+        THE ⚠ VERIFY FROM 6.4 IS DISCHARGED. Khronos Appendix B gives
+        dielectric_brdf = mix(diffuse, specular, F), so the claim was TRUE IN
+        SUBSTANCE and IMPRECISE: the SAME F scales the specular UP and
+        cook_torrance_specular already carries it. Six terms compared, FIVE
+        IDENTICAL. The metallic blend is not even a difference — the spec lerps two
+        whole BRDFs, we lerp the F0, and those commute EXACTLY because Schlick is
+        AFFINE in f0: F(f0) = f0(1-w) + w. Measured 1.19e-07 over 4,851 points.
+        Only the diffuse coupling differs: 1 - F(v.h) against
+        (1-F(n.l))(1-F(n.v)). Priced at BOTH ends, because one number tells you
+        nothing: 1.036x at normal incidence (invisible), 5.62x at 88 degrees
+        (unmissable) — which is exactly why it hid for two lessons.
+        AND THE SPEC ANSWERS ITS OWN QUESTION. §3.9.6: BRDF implementations MAY
+        vary. Appendix B: a physically accurate BRDF MUST be positive, reciprocal
+        and energy conserving. two_crossing is 0.9255 and the spec's own sample
+        form is 1.3395, so WE SHIP OURS AND ARE CONFORMANT. half_vector stays
+        selectable and measured (6.3's two-G-forms precedent). AND NOTE WHY IT
+        CANNOT BE A MATERIAL FIELD: a coupling is a SHADER BRANCH, which is
+        pipeline state by 6.5's own rule.
+        THE ONE CONFORMANCE GAP, REPORTED NOT HIDDEN. glTF §5.19.4: a base colour
+        factor is a linear MULTIPLIER on its texture. Ours REPLACES (3.9's rule,
+        because both are the albedo and a surface has one). They agree exactly when
+        the factor is white, which is the common case; the gap is only the
+        COMBINATION. Counted as model_load::factor_texture_conflicts and logged at
+        THE ONLY POINT THAT KNOWS BOTH HALVES — the parser sees the factor and the
+        URI but not whether the image resolved, the renderer sees a bound texture
+        but has lost the factor. A count as well as a log line, because a log line
+        scrolls past and a number can be asserted.
+        NAMED AND NOT FIXED: metallicRoughnessTexture and normalTexture are
+        COUNTED (wants_*) and not loaded, for one concrete reason — they are LINEAR
+        DATA IN AN IMAGE and `texture` stores sRGB-encoded texels because sample()
+        decodes on read. A roughness map through an sRGB decode is wrong by the
+        gamma curve everywhere except 0 and 1. That is 6.7's problem, because
+        normal maps need the same thing. The FACTORS import completely.
+        THE uint16 CEILING IS REPORTED, NEVER TRUNCATED. k_max_primitive_vertices
+        = 65536. A narrowing cast RENDERS — a spray of triangles between the wrong
+        corners — with nothing saying so. skipped_too_large +
+        max_primitive_vertices is what a caller can act on. Widening costs bytes on
+        every mesh; splitting costs code; both are exercises, neither is a thing to
+        guess at inside a loader.
+        A DERIVED ASSET IS A DEPENDENCY EDGE, NOT A REFCOUNT. A texture is MADE
+        FROM an image, so load_texture goes through load_image (one decode however
+        many materials name it) and derive_texture records the edge. NOBODY OUTSIDE
+        THE STORE CAN HOLD ONE, which is what makes the cascade safe where
+        refcounting would cost every property 5.4 bought. unload_image releases 2.
+        THE CASCADE MUST ERASE THE NAME ENTRY TOO, or find_texture keeps handing
+        out a recycled slot — which does NOT crash (5.4's generation catches it),
+        so the symptom is an object silently losing its texture N frames later.
+        DERIVED NAMES ARE WHAT MAKE THE MODEL CACHE WORK without a second map:
+        "shapes.glb#2" for primitive 2, "shapes.glb:gold" for a material
+        (namespaced — two models may both call one "Metal"), and "uv_grid.png"
+        BARE for the image, because that one is a real file shared across models.
+
   material: LESSON 6.5 GAVE THE SURFACE ONE HOME, and the rule that decides
         membership is the HARDWARE'S, not taste:
             CAN THIS BE A NUMBER IN A BUFFER?
@@ -3216,8 +3319,59 @@ completed:
   - 6.3  Microfacet Theory
   - 6.4  Cook–Torrance PBR, Derived
   - 6.5  A Material System
+  - 6.6  glTF 2.0 Loading
 
 capabilities:
+  - 6.6 THE ENGINE READS glTF 2.0, AND THE GOLDEN STILL DID NOT MOVE.
+    ONE NEW HEADER + ONE NEW SOURCE: 59 -> 60 public headers, 32 -> 33 sources,
+    and the first CMake dependency change since 5.11. Golden byte-identical at
+    E917C06C for the FIFTEENTH lesson — adding a format adds a PATH.
+    gltf.hpp    NEW. gltf_status (9 values), gltf_material_desc (name,
+                base_colour LINEAR, alpha, microsurface, base_colour_uri, sampler,
+                wants_metallic_roughness_texture, wants_normal_texture,
+                double_sided), gltf_primitive (mesh_data + mat4 world_from_local +
+                int material + node_name), gltf_scene_data, gltf_report (18
+                fields incl. three skip counters), k_max_primitive_vertices,
+                parse_gltf(span,base_dir,out) / load_gltf(path,out),
+                gltf_default_material().
+    gltf.cpp    NEW, and the ONLY translation unit that has ever seen cgltf.
+                CGLTF_IMPLEMENTATION defined here and nowhere else. Compiled
+                clean at -Wall -Wextra on the first try, which stb did not.
+    texture.hpp/.cpp + to_texture(const image_data&) — TWELVE LINES THAT SHOULD
+                HAVE EXISTED SINCE 5.3. The engine could decode a PNG (5.3) and
+                could sample a texture (3.9) and NOTHING JOINED THEM, because
+                every CPU texture was generated and every loaded image went
+                straight to the GPU. Two complete halves, no middle, and no test
+                could see the gap because no path crossed it. It is a CHANNEL
+                SHUFFLE (RGBA bytes -> ARGB8888 words), written through pack_argb
+                so the memcpy version is not expressible.
+    asset_store + load_texture / insert_texture / find_texture / unload_texture;
+                insert_material / find_material / unload_material; load_model;
+                derived_count(image_handle); textures()/materials(),
+                texture_at()/material_at(); texture_pool + material_pool as
+                members; texture_by_key_ + material_by_key_; texture_derivations_
+                (a SECOND edge list, not a tagged one — an untagged
+                {uint32,uint32} would resolve a texture's bits against the mesh
+                pool, which is 5.4's aliasing failure in a new costume);
+                counters_.models_loaded (separate from files_read, because one
+                model file reads MANY files and a counter measuring two things
+                measures neither).
+    microfacet.hpp  the ⚠ VERIFY from 6.4 DISCHARGED with the citation. No code.
+    demos/gltf_view NEW. The asset system's acceptance test, as hello_cube was
+                the library boundary's. Links engine::engine directly, not
+                demo_common. --model, --shot, --pose.
+    assets/     cube.gltf + cube.bin (text + EXTERNAL buffer + EXTERNAL image URI)
+                and shapes.glb (BINARY container, 4 primitives, 3-deep node tree,
+                3 materials + the spec's default). GENERATED by
+                scratch/make_gltf_assets.py, so the course still ships no
+                third-party geometry (3.5's rule) — and the cube's positions are
+                transcribed from k_cube_vertices, which is what makes verify_66
+                §A a real round trip rather than a tautology.
+    CMakeLists  cgltf v1.15 via FetchContent, pinned to a TAG (stb had to be a
+                commit; cgltf has releases). PRIVATE include dir on the engine
+                target, exactly as stb: no demo can include <cgltf.h>, so
+                swapping to tinygltf is a one-file change.
+
   - 6.5 THE ENGINE HAS A MATERIAL, AND THE GOLDEN DID NOT MOVE.
     TWO NEW HEADERS, header-only: 57 -> 59 public headers, 32 sources, no CMake
     change. A REFACTOR, so the whole claim is byte-identical output.
@@ -5403,6 +5557,7 @@ files:
             gpu_device.hpp, gpu_mesh.hpp, gpu_pipeline.hpp, gpu_present.hpp,
             gpu_scene.hpp, gpu_shader.hpp, gpu_texture.hpp, gpu_uniform.hpp,
             cull.hpp                                                         [6.5]
+            gltf.hpp                                                         [6.6]
             image.hpp, light.hpp,
             material.hpp                                                     [6.5]
             mesh.hpp,
@@ -5423,7 +5578,9 @@ files:
             depth_buffer.cpp,
             framebuffer.cpp, gpu_buffer.cpp, gpu_debug.cpp, gpu_device.cpp,
             gpu_mesh.cpp, gpu_pipeline.cpp, gpu_present.cpp, gpu_scene.cpp,
-            gpu_shader.cpp, gpu_texture.cpp, image.cpp, mesh.cpp, obj.cpp,
+            gpu_shader.cpp, gpu_texture.cpp,
+            gltf.cpp                    [6.6 — THE ONLY TU THAT SEES cgltf]
+            image.cpp, mesh.cpp, obj.cpp,
             raster.cpp, soft_renderer.cpp, texture.cpp
   engine/src/platform/: platform.cpp, app.cpp
   engine/src/ui/: debug_ui.cpp   [5.11 — THE ONLY engine TU that includes <imgui.h>]
@@ -5433,7 +5590,14 @@ files:
   demos/hello_cube/: main.cpp
   demos/pong/: main.cpp
   demos/ecs_swarm/: main.cpp                                              [5.8]
-  assets/: cube.obj, twisted.obj, quirks.obj, torus.obj, uv_grid.png
+  demos/gltf_view/: main.cpp                                              [6.6]
+  assets/: cube.obj, twisted.obj, quirks.obj, torus.obj, uv_grid.png,
+           cube.gltf, cube.bin, shapes.glb                              [6.6]
+           (GENERATED by scratch/make_gltf_assets.py — the course ships no
+            third-party geometry, 3.5's rule, and the cube's positions are
+            transcribed from k_cube_vertices so verify_66 §A is a real
+            round trip. `.bin` is excepted in .gitignore for the same
+            reason `.obj` is: the failure would be silent.)
   docs/: index.html, conventions.html, math-toolbox.html, cpp-style.html
   docs/lessons/: 00-01-what-is-an-engine.html, 00-02-how-this-course-works.html,
                  00-03-toolchain.html, 00-04-cmake-from-zero.html,
@@ -5471,7 +5635,10 @@ files:
                  05-11-imgui-debug-draw.html,
                  06-01-linear-and-srgb.html,
                  06-02-what-a-brdf-is.html,
-                 06-03-microfacet-theory.html
+                 06-03-microfacet-theory.html,
+                 06-04-cook-torrance.html,
+                 06-05-material-system.html,
+                 06-06-gltf.html
   docs/shared/: course.css, course.js      (THE stylesheet + page script; one copy each)
   docs/_template/: lesson-template.html, README.md, apply-shared.py, check-page.js
   scratch/ (5.7, not shipped with the engine): ecs_probe.hpp, bench_57.cpp,
@@ -5582,6 +5749,31 @@ files:
            is wider than pinning — ANY GENERATED ARTIFACT NEEDS A
            REGENERATE-AND-DIFF AFTER THE LAST EDIT TO ITS INPUTS, not only when you
            remember to pin.
+  scratch/ (6.6, not shipped with the engine): verify_66.cpp, build_verify_66.sh,
+           figs_66.py, build_66.py, l66_body_{a,b,c}.html, l66_fig{1..6}.svg,
+           make_gltf_assets.py (NOT a throwaway — it is how assets/cube.gltf and
+           assets/shapes.glb are produced, and re-running it must reproduce them
+           byte-for-byte; it is gitignored with the rest of scratch/, which is a
+           debt worth naming, because the assets it generates ARE committed).
+           NO PROBE THIS LESSON, the second after 6.5. The measurements that
+           mattered (the f0-lerp identity, the coupling ratio, the metal peak
+           radiance) all had answers derivable on paper first, so they went
+           straight into verify_66 §E as assertions rather than into a probe as
+           questions. That is the right shape when you can predict the answer —
+           6.2's rule was to write a probe the moment the first one disagrees with
+           you, and none did.
+           PINNED BY 6.6, before a line of it was written: l65_material.hpp and
+           l65_scene.hpp, both verified against commit ebb3199 with
+           `git show ... | diff - <pin>`; l65_verify_65.cpp taken as a working-tree
+           copy since it is gitignored. THE REBUILD DIFF WAS EXACTLY THE TWO NAV
+           LINES, fifth lesson running.
+           (build_66.py PINS NOTHING YET and lists gltf.hpp, gltf.cpp,
+            asset_store.hpp and asset_store.cpp WHOLE. LESSON 6.7 IS NORMAL
+            MAPPING and needs the thing 6.6 deferred — a texture that knows whether
+            it holds colour or linear data — so it will edit ALL FOUR: the
+            wants_normal_texture flag becomes a real load, and load_texture grows a
+            colour-space argument. Pin before writing a line of 6.7, and take
+            verify_66.cpp AND make_gltf_assets.py early since both are gitignored.)
   scratch/ (6.5, not shipped with the engine): verify_65.cpp, build_verify_65.sh,
            figs_65.py, build_65.py, l65_body_{a,b,c}.html, l65_fig{1..5}.svg,
            check-tags.py (SHARED, and new: see below),
@@ -5613,60 +5805,74 @@ files:
             first three — so it will need pins, and the warning in it says so.)
   memory/: 2026-07-16.md … 2026-08-25.md, 2026-08-25-b.md, 2026-08-25-c.md,
            2026-08-26.md, 2026-08-26-b.md, 2026-08-29.md, 2026-09-02.md, 2026-09-02-b.md,
-           2026-09-02-c.md, 2026-09-04.md, 2026-09-05.md, 2026-09-06.md
+           2026-09-02-c.md, 2026-09-04.md, 2026-09-05.md, 2026-09-06.md, 2026-09-07.md
            (ONE FILE PER DATE. 6.2, 6.3 and 6.4 all landed on 2026-09-06 and all
             three are sections of that one file — never a -b suffix for a same-day
             session.)
   (retired: src/ — the whole directory. hello.cpp.)
 
 
-next: 6.6 — glTF 2.0 Loading
-      (planned filename: docs/lessons/06-06-gltf.html — 6.5's TWO next links point
-      at the index and BOTH need repointing; scratch/l65_body_a.html holds the top
-      one and build_65.py's TAIL the bottom. AND build_65.py PINS NOTHING while
-      listing material.hpp and scene.hpp WHOLE. Pin first:
-        git show <6.5 commit>:engine/include/engine/gfx/material.hpp \
-            > scratch/l65_material.hpp
-        git show <6.5 commit>:engine/include/engine/gfx/scene.hpp \
-            > scratch/l65_scene.hpp
-        cp scratch/verify_65.cpp scratch/l65_verify_65.cpp   # gitignored, take early
-      Then re-run build_65.py and `git diff` the page. FOUR lessons running the
+next: 6.7 — Normal Mapping and the TBN Derivation
+      (planned filename: docs/lessons/06-07-normal-mapping.html — 6.6's TWO next
+      links point at the index and BOTH need repointing; scratch/l66_body_a.html
+      holds the top one and build_66.py's TAIL the bottom. AND build_66.py PINS
+      NOTHING while listing gltf.hpp, gltf.cpp, asset_store.hpp and
+      asset_store.cpp WHOLE — all four of which 6.7 edits. Pin first:
+        git show <6.6 commit>:engine/include/engine/gfx/gltf.hpp \
+            > scratch/l66_gltf.hpp
+        git show <6.6 commit>:engine/src/gfx/gltf.cpp > scratch/l66_gltf.cpp
+        git show <6.6 commit>:engine/include/engine/asset/asset_store.hpp \
+            > scratch/l66_asset_store.hpp
+        git show <6.6 commit>:engine/src/asset/asset_store.cpp \
+            > scratch/l66_asset_store.cpp
+        cp scratch/verify_66.cpp scratch/l66_verify_66.cpp        # gitignored
+        cp scratch/make_gltf_assets.py scratch/l66_make_gltf_assets.py
+      Then re-run build_66.py and `git diff` the page. FIVE lessons running the
       diff has been exactly the nav lines meant to move.
-      6.5 DEFERRED THREE THINGS AND 6.6 FORCES ALL THREE, which is why it is next:
-      1 TEXTURES START ARRIVING FROM FILES. 6.5 put texture_pool in texture.hpp
-        and NOT in asset_store, on the grounds that the store is about files and
-        every texture so far is generated. That grounds expires here. Decide
-        whether textures become assets (name, cache, search path, load counters)
-        or stay a plain pool the scene owns — and 5.5's asset_store already has
-        the shape to copy, including derive_mesh for the image->texture step.
-      2 A MATERIAL FROM A FILE NEEDS AN IDENTITY. glTF defines materials, named,
-        shared between primitives. material_pool exists; what it lacks is a
-        name->handle map and a story for reload. That is asset_store's job again,
-        and the same decision as (1) — make it once.
-      3 THE COUPLING QUESTION, DEFERRED SINCE 6.4. glTF's reference BRDF uses
-        1 - F(v.h), which verify_64 measured at worst R(v) = 1.3395; this engine
-        ships the two-crossing form at 0.9255 and keeps the other as
-        diffuse_coupling::half_vector precisely for this moment. ⚠ VERIFY the
-        Khronos glTF 2.0 spec, Appendix B "BRDF Implementation" — the claim has
-        been carried as ⚠ VERIFY since 6.4 and 6.6 is where it must be settled.
-        The honest options are (a) load glTF materials and shade them with OUR
-        coupling, documenting the divergence, or (b) let a material carry its
-        coupling, which makes it PIPELINE STATE by 6.5's own rule and therefore
-        does NOT belong on `material`. That tension is the lesson's design
-        section, and 6.5's rule is what makes it a real question.
-      ALSO: cgltf or tinygltf per CLAUDE.md §4 — the approved library, introduced
-      with the "why we don't hand-roll this" justification, and only AFTER the
-      hand-rolled OBJ loader (3.5), which is the comparison that makes the point.
-      glTF is right-handed Y-up, so ZERO axis conversion — say so and show it,
-      because it is the reward for 2.x's convention discipline.
-      THE TEST TO BEAT: the golden should stay E917C06C. Loading a new format adds
-      a path; it must not move the existing picture. verify_66 wants a round trip
-      (parse -> mesh_data/material -> compare against the same asset hand-built),
-      and verify_45..65 green.
-      CARRY FORWARD: 6.5's membership rule (can this be a number in a buffer?)
-      sorts every new material field glTF offers — and it offers many. 6.4's audit
-      habit still applies: glTF's metallic-roughness values are physical, so
-      ior_from_f0 should report sane numbers on anything imported. And 6.5's
-      finding about demos inventing types is worth re-running after 6.6.
 
+      6.6 DEFERRED ONE THING AND 6.7 IS THE LESSON THAT CANNOT AVOID IT:
+      A TEXTURE HAS NO COLOUR SPACE. `texture` stores sRGB-encoded texels because
+      `sample()` decodes on read (3.9), which is right for a base colour map and
+      WRONG for every other kind. A normal map read through an sRGB decode is
+      wrong by the gamma curve everywhere except 0 and 1 — and it looks ALMOST
+      RIGHT, which is the worst way to be wrong. 6.6 counted the gap rather than
+      closing it (gltf_material_desc::wants_normal_texture and
+      wants_metallic_roughness_texture are both live and both measured at 0 on
+      the shipped assets). Closing it means deciding WHERE the space lives:
+        (a) on the `texture` — it is a property of the stored data, and it makes
+            `sample()` correct without the caller knowing. But it is then a field
+            on a type that 6.5 argued should be pure data.
+        (b) on the `sampler` — which is what HARDWARE does: an
+            SDL_GPU_TEXTUREFORMAT_..._SRGB texture is decoded IN THE SAMPLER,
+            before filtering, for free. texture.hpp already says so in as many
+            words. But 3.9's own header insists the FORMAT decides, not the
+            sampler, so this contradicts a comment that has stood for a module.
+        (c) a second sample function, and let the caller pick. Cheapest, and the
+            one that will eventually be called wrong.
+      DECIDE IT ONCE. Both 6.7 (normal maps) and the deferred metallic-roughness
+      map read through it, so a per-call answer is two answers.
+      ALSO: the TBN derivation itself, per CLAUDE.md §5 — "tangent space derived
+      in full, not asserted", and the index promises "why your normal maps look
+      lavender, and what that says about the encoding". The lavender IS the
+      colour-space question wearing a different hat: (0.5, 0.5, 1.0) is the
+      encoding of a flat normal, and whether that is 0.5 in LINEAR or 0.5 in sRGB
+      is precisely what (a)/(b)/(c) decides.
+      THE TEST TO BEAT: the golden should stay E917C06C — normal mapping adds a
+      path and must not move the existing picture, exactly as 6.6 did not. It is
+      also the SIXTEENTH lesson at that hash, and worth saying out loud that a
+      characterization test only earns its keep if you notice when it should have
+      broken. verify_67 wants the TBN orthonormality asserted, the handedness
+      (the w in glTF's TANGENT is +/-1 and encodes a mirrored uv chart), and a
+      round trip: perturb by a flat normal map and get the geometric normal back
+      to float precision.
+      CARRY FORWARD: 6.6's audit habit — check the new format's conventions
+      against ours BEFORE writing conversion code, and check forward lesson
+      numbers against docs/index.html rather than memory (6.4 shipped three stale
+      ones; 6.6 caught three of its own the same way, including IBL, which is
+      6.12 and not 6.9). And 6.5's membership rule still sorts every field:
+      a normal map is a texture handle on the material (a number in a buffer);
+      whether tangents are generated or loaded is an IMPORT decision, which
+      belongs in mesh_import beside flip_uv_v — and note that 6.6 refused
+      mesh_import for glTF on the grounds that the flip belongs to the FORMAT,
+      so adding a tangent knob there needs that argument re-run.
 ```

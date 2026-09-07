@@ -37,6 +37,13 @@ third_party/*/
 *.obj
 !assets/*.obj
 !assets/**/*.obj
+# The same hazard, one lesson later and not yet realised: Lesson 6.6 ships
+# `assets/cube.bin`, the external buffer a `.gltf` names, and `.bin` is exactly
+# the kind of extension somebody adds a blanket rule for. Excepted up front,
+# because the failure is silent — the repository builds fine for you and the
+# model loads for nobody else, with `missing_buffer` as the only clue.
+!assets/*.bin
+!assets/**/*.bin
 *.a
 *.lib
 *.so

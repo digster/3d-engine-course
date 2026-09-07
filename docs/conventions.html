@@ -85,6 +85,7 @@
       <li><a href="#vertex-layout">Vertex layouts &mdash; the contract nothing checks</a></li>
       <li><a href="#uniform-data">Uniform data &mdash; the push, and the packing rule</a></li>
       <li><a href="#depth-and-textures">Depth and textures &mdash; formats, precision, samplers</a></li>
+      <li><a href="#interop">Interop &mdash; glTF, and what agrees with what</a></li>
       <li><a href="#units">Units and angles</a></li>
       <li><a href="#simulation">The simulation contract</a></li>
       <li><a href="#colour">Colour and diagram conventions</a></li>
@@ -2051,6 +2052,79 @@
                 Lesson 3.9's import-time uv flip stands.</td></tr>
       </tbody>
     </table>
+  </div>
+
+  <h2 id="interop"><span class="num">7k</span>Interop &mdash; glTF, and what agrees with what</h2>
+
+  <p>
+    Added in Lesson 6.6, and it belongs on this page rather than in that lesson because it is the
+    <strong>audit every new format needs</strong> and the next one will need it too. A convention
+    mismatch does not throw; it produces a picture that is plausible, and a plausible picture
+    survives review. So the check is done against the specification, in writing, <em>before</em>
+    any conversion code exists.
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <caption class="visually-hidden">Convention comparison between glTF 2.0 and this
+        course</caption>
+      <thead>
+        <tr><th>Convention</th><th>glTF 2.0 says</th><th>This course says</th><th>Verdict</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Handedness</td><td>right-handed, +Y up (&sect;3.5)</td>
+            <td>right-handed, Y-up, &minus;Z forward (&sect;2)</td>
+            <td><strong>agrees</strong> &mdash; no basis change</td></tr>
+        <tr><td>Triangle winding</td><td>counter-clockwise is front-facing</td>
+            <td>counter-clockwise is front-facing (&sect;7)</td>
+            <td><strong>agrees</strong> &mdash; no index reversal</td></tr>
+        <tr><td>Texture origin</td><td>(0,&nbsp;0) is the <em>upper</em> left (&sect;3.9.3)</td>
+            <td>(0,&nbsp;0) is the upper left (Lesson 3.9)</td>
+            <td><strong>agrees</strong> &mdash; and OBJ does <em>not</em></td></tr>
+        <tr><td>Matrix storage</td><td>column-major, 16 floats</td>
+            <td>column-major (&sect;4)</td>
+            <td><strong>agrees</strong> &mdash; a copy, not a transpose</td></tr>
+        <tr><td>Distance unit</td><td>metres</td><td>metres (&sect;8)</td>
+            <td><strong>agrees</strong></td></tr>
+        <tr><td>Asset facing</td><td>an asset&rsquo;s front faces <strong>+Z</strong></td>
+            <td>the camera looks down <strong>&minus;Z</strong></td>
+            <td><em>differs, and is not a conversion</em></td></tr>
+        <tr><td>Base colour <strong>factor</strong></td><td><strong>linear</strong></td>
+            <td><code>material::tint</code> is sRGB-encoded (6.5)</td>
+            <td>convert at <code>load_model</code>, linear &rarr; encoded</td></tr>
+        <tr><td>Base colour <strong>texture</strong></td><td>sRGB-encoded</td>
+            <td>texels are sRGB-encoded (3.9)</td>
+            <td><strong>agrees</strong></td></tr>
+        <tr><td>Index width</td><td>uint8, uint16 or uint32</td>
+            <td><code>uint16</code> only (2.12)</td>
+            <td>reported as <code>too_many_vertices</code>, never truncated</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout warn">
+    <span class="label">The two rows that are not &ldquo;agrees&rdquo;, and what to do about each</span>
+    <p><strong>Asset facing is an authoring fact, not a coordinate change.</strong> A glTF model
+       dropped into the world unrotated presents its back. Fix it with a yaw on the object.
+       Negating coordinates in the loader would also <em>mirror</em> the geometry, which reverses
+       every triangle &mdash; two wrongs, and the second hides the first.</p>
+    <p><strong>The uv origin agrees, and that is the trap.</strong> OBJ puts (0,&nbsp;0) at the
+       <em>lower</em> left, so <code>mesh_import::flip_uv_v</code> defaults to <code>true</code>.
+       Apply that default to a glTF and every asset arrives upside down.
+       <strong>The flip belongs to the FORMAT, not to the caller</strong>, which is why
+       <code>asset_store::load_model</code> accepts no import settings at all.</p>
+  </div>
+
+  <div class="callout ok">
+    <span class="label">The BRDF is not a convention, and the specification says so</span>
+    <p>glTF &sect;3.9.6: implementations of the BRDF <strong>MAY</strong> vary; Appendix B: a
+       physically accurate one <strong>MUST</strong> be positive, reciprocal and energy
+       conserving. The conformance surface is the material <em>parameters</em>, not the shading.</p>
+    <p>So this engine imports glTF materials exactly &mdash; roughness, metallic and F0 need no
+       conversion at all, because both models derive from the same microfacet theory &mdash; and
+       shades them with <code>diffuse_coupling::two_crossing</code>, which differs from the
+       specification&rsquo;s sample form in exactly one factor and is the one that meets the MUST
+       (0.9255 against 1.3395). Lesson 6.6 &sect;6; the method is in the Math Toolbox &sect;7e.</p>
   </div>
 
   <h2 id="units"><span class="num">8</span>Units and angles</h2>

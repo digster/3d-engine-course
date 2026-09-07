@@ -2494,3 +2494,11 @@ light arrows pointed the wrong way until they were made to terminate on the face
 > next
 
 (Resolved to Lesson 6.5 — A Material System, per `STATE.md`'s `next:` block.)
+
+---
+
+## Session — 2026-09-07 — Lesson 6.6
+
+> Based on the STATE and the project's claude instructions, work on the next.
+
+(Resolved to Lesson 6.6 — glTF 2.0 Loading, per `STATE.md`'s `next:` block.)

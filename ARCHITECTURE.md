@@ -443,9 +443,12 @@ moved the pool, the handle did not care) and can be *asked* whether it still res
 pointer cannot — a stale one degrades to "no image" rather than to freed memory. Resolving inside
 the loop would put a bounds check and a generation compare on every pixel, which is what 5.4 priced.
 
-`texture_pool` deliberately does **not** live in `asset_store`: that store is about files, and every
-texture so far is generated in memory. Lesson 6.6 is where textures arrive from disk and gets to
-decide.
+`texture_pool` deliberately did **not** live in `asset_store` when 6.5 wrote this: that store is
+about files, and every texture at the time was generated in memory. **Lesson 6.6 answered the
+deferred question with "yes"** — a glTF material arrives naming an image on disk, two materials in
+one file routinely name the same one, and "load it once and hand out the same reference" is the
+store's job description. The pool itself did not change; what grew around it is in §"Assets, and
+the second format" below.
 
 **Derived, not stored.** `material::textured()` reads `albedo_map.valid()`. The previous arrangement
 — a `textured` float in the uniform block beside a separately-chosen texture pointer — could express
@@ -857,6 +860,7 @@ chore. What follows is on disk.
 │   │   │   ├── search_path.hpp # ordered roots; the ONLY caller of
 │   │   │   │                   #   SDL_GetBasePath() in the engine
 │   │   │   └── asset_store.hpp # load / find / insert / derive / unload
+│   │   │                       #   + textures, materials and load_model      [6.6]
 │   │   ├── core/           # clock, fixed_step, input, profile,
 │   │   │   │               #   log.hpp + assert.hpp                          [5.3]
 │   │   │   ├── actions.hpp # actions, bindings, and the input_snapshot     [5.10]
@@ -905,11 +909,15 @@ chore. What follows is on disk.
 │   │       │                     #   NOTHING THAT CAN DRAW — that list is the
 │   │       │                     #   interface, and it is what lets a physics
 │   │       │                     #   system queue without compiling a renderer
-│   │       └── debug_draw.hpp    # line3, draw_mesh, draw_axes3, show_depth,
-│   │                             #   count_differences — grouped by PURPOSE.
-│   │                             #   + draw_debug_lines(): the SOFTWARE BACKEND
-│   │                             #   for the queue above, four lines long   [5.11]
-│   └── src/                # ---- PRIVATE. 32 sources; no demo can name this path ----
+│   │       ├── debug_draw.hpp    # line3, draw_mesh, draw_axes3, show_depth,
+│   │       │                     #   count_differences — grouped by PURPOSE.
+│   │       │                     #   + draw_debug_lines(): the SOFTWARE BACKEND
+│   │       │                     #   for the queue above, four lines long   [5.11]
+│   │       └── gltf.hpp          # gltf_status/report, gltf_material_desc,    [6.6]
+│   │                             #   gltf_primitive, gltf_scene_data,
+│   │                             #   parse_gltf / load_gltf. DESCRIPTIONS, not
+│   │                             #   handles — see §"Assets, and the second format"
+│   └── src/                # ---- PRIVATE. 33 sources; no demo can name this path ----
 │       ├── core/           # actions [5.10], clock, fixed_step, input, log, profile
 │       ├── platform/       # platform.cpp, app.cpp                            [5.2]
 │       ├── ui/             # debug_ui.cpp — THE ONLY engine TU that          [5.11]
@@ -917,7 +925,9 @@ chore. What follows is on disk.
 │       │                   #   made a PUBLIC dependency acceptable
 │       └── gfx/            # …+ soft_renderer.cpp, debug_draw.cpp,
 │                           #   debug_lines.cpp [5.11]; image.cpp is the
-│                           #   ONE unit that contains stb_image + save_ppm
+│                           #   ONE unit that contains stb_image + save_ppm,
+│                           #   and gltf.cpp [6.6] is the ONE unit that
+│                           #   contains cgltf. Same containment, same reason
 ├── demos/                  # executables; link engine, include ONLY public headers
 │   ├── CMakeLists.txt
 │   ├── common/             # demo_common: CONTENT, shared so nothing is transcribed
@@ -1512,6 +1522,52 @@ Built roughly in dependency order — each module's milestone is the next module
   the uv flip is two meshes with two vertex arrays — so the key is name + settings, with the rule
   that *the default configuration serialises to nothing* so that generated and loaded content
   share one key space. **The store is not a singleton**: `demos/sandbox` holds three.
+
+- **Assets, and the second format** (Module 6, Lesson 6.6). glTF is the first format the engine
+  reads that describes a **scene** rather than a shape, and that difference reaches the API:
+  `load_model` returns *vectors* — meshes, placements, materials, and the material each mesh
+  wants — because a glTF mesh is a list of primitives and each primitive has its own material.
+  Flattening them would produce geometry that is correct and unpaintable.
+
+  **The parser returns descriptions, not handles**, and that layering is the load-bearing
+  decision. `gltf_material_desc` holds a `std::string base_colour_uri` and an `int` material
+  index; it knows nothing about pools, caches, handles or search paths. Handing `parse_gltf` an
+  `asset_store&` would be fewer types and would cost three things: the parser could no longer be
+  tested without a filesystem (Lesson 3.5 split `parse_obj` from `load_obj` for exactly this and
+  used the split to test a dozen malformed inputs from string literals); Module 8's offline asset
+  cooker could not use it, because a handle is meaningless outside the pool that issued it and
+  therefore cannot be serialised; and "is this the same image we already loaded?" would acquire a
+  second answer, in a second place, that will eventually disagree with the first.
+
+  **A texture is a derived asset, and that is a dependency edge rather than a reference count.**
+  `load_texture` goes through `load_image`, so one decode serves however many materials name the
+  file, and `derive_texture` records the image → texture edge; unloading the image releases both.
+  The distinction that makes this safe where refcounting was refused: **nobody outside the store
+  can hold a derivation edge.** The store made the texture, nobody asked for it by a name of its
+  own, and the rule is enforced by a private member rather than by a contract. Note the second
+  edge list — `mesh_derivations_` and `texture_derivations_` are separate rather than one untagged
+  `{uint32, uint32}` list, because an untagged one would compile and would happily resolve a
+  texture's handle bits against the mesh pool: Lesson 5.4's aliasing failure in a new costume.
+
+  **Materials are named assets with no file**, and there is deliberately no `load_material`. The
+  names are derived and deterministic — `"shapes.glb#2"` for a primitive, `"shapes.glb:gold"` for
+  a material (namespaced, because two models may both call one "Metal"), and `"uv_grid.png"`
+  *bare* for the image, because that one is a real file shared across models. That determinism is
+  what makes the model cache work without a second map.
+
+  **`mesh_import` is refused for glTF, on purpose.** `flip_uv_v` defaults to `true` because OBJ
+  puts (0,0) at the lower left; glTF puts it at the upper left, the same as this engine. **The
+  flip belongs to the format, not to the caller**, so `load_model` takes no import settings at
+  all — honouring the flag there would turn every glTF asset upside down for everyone who left
+  the default alone.
+
+  **The one conformance gap is counted, not hidden.** glTF multiplies a base colour factor by its
+  base colour texture; this engine's albedo image *replaces* the tint (Lesson 3.9's rule, because
+  both are the albedo and a surface has one). They agree exactly when the factor is white, which
+  is the common case, so the gap is only the *combination* — and it is reported as
+  `model_load::factor_texture_conflicts` plus a warning, logged at the only point that knows both
+  halves. The parser sees the factor and the URI but not whether the image resolved; the renderer
+  sees a bound texture but has long since lost the factor.
 
 - **ECS, not a scene tree** (Module 5). Data-oriented storage chosen after demonstrating —
   with cache-line reasoning and measurements — why OOP scene graphs creak at scale. Archetype
@@ -2231,6 +2287,11 @@ Full detail with diagrams in [`docs/conventions.html`](docs/conventions.html); t
 | Fresnel | Schlick at **v·h** (the microfacet is the mirror, not the surface); `F0 = ((1−n)/(1+n))²`, so glass's 0.04 is derived, not typed (6.4) |
 | Metals | `F0 = lerp(0.04, albedo, metallic)`, `diffuse = albedo × (1 − metallic)` — a consequence of a conductor having no diffuse lobe, not a workflow choice (6.4) |
 | Diffuse coupling | `(1 − F(n·l))(1 − F(n·v))` — **two interface crossings**. Reciprocal, and worst R(v) = 0.9255. The common `1 − F(v·h)` reaches 1.3395 (6.4) |
+| Conformance to a published BRDF | The spec's **parameters** are the conformance surface, not its shading. glTF §3.9.6 permits BRDF variation; Appendix B requires a physically accurate one be energy conserving — which selects our coupling over the spec's own sample form (6.6) |
+| Comparing two BRDFs | Reduce both to named terms and find the ones that are not the same expression; then price the survivor at **both** ends of its range. Five of six terms are identical to glTF's, and the survivor is 1.036× at normal incidence and 5.62× at 88° (6.6) |
+| Importing a new format | Audit the conventions against ours **before** writing conversion code, and write the audit down (Conventions §7k). A mismatch does not throw — it produces a plausible picture, and a plausible picture survives review (6.6) |
+| Loader layering | Parsers return **descriptions** (URIs, indices); the asset store returns **handles**. A parser that needs a pool cannot be tested from a string literal nor run offline in Module 8 (6.6) |
+| A format limit | **Report it, never truncate.** A narrowed index renders — as a spray of triangles between the wrong corners — with nothing anywhere saying so. `skipped_too_large` + `max_primitive_vertices` is what a caller can act on (6.6) |
 | Specular denominator | `4(n·l)(n·v)`: the 4 is the half-vector Jacobian, the (v·h) cancels against projected area, (n·v) is radiance's, (n·l) is the BRDF's (6.4) |
 | Angles | Radians. Always. |
 | Performance units | **ns per covered pixel** and **ns per triangle** — never ms/frame |

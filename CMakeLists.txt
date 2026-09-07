@@ -154,6 +154,47 @@ target_link_libraries(imgui PUBLIC SDL3::SDL3)
 # flags, for the reason cmake/EngineHelpers.cmake gives: warnings we cannot act
 # on train us to ignore the ones we can.
 
+# cgltf — Lesson 6.6. The third approved third-party library, and the one whose
+# "why we don't hand-roll this" argument is the least obvious of the three,
+# because on the face of it glTF is JSON and we have already written a parser.
+#
+# WHY WE DO NOT HAND-ROLL THIS. Lesson 3.5 wrote an OBJ loader in three hundred
+# lines, and it was the right call: OBJ is a line-oriented text format with six
+# keywords that matter, and writing it taught the index problem, fan
+# triangulation and vertex unification — all of which are ENGINE subjects.
+#
+# glTF is a different kind of thing, and the difference is not "harder". It is
+# that glTF is a CONTAINER: JSON describing accessors, which describe strides
+# into buffer views, which describe windows into buffers, which may be external
+# files, base64 data URIs, or a binary chunk glued to the JSON in a .glb. An
+# accessor may be any of five component types, normalized or not, interleaved
+# with its neighbours or not, sparse (a base array plus a patch list) or not.
+# That is a combinatorial matrix with roughly a hundred cells, every one of them
+# legal, and none of them about graphics. `cgltf_accessor_read_float` is the
+# function that collapses the matrix — and writing our own would teach byte
+# offsets, not rendering.
+#
+# The test this course applies is never "is it hard?" but WHETHER THE HARD PART
+# IS THE SUBJECT. For stb_image the hard part was DEFLATE; for ImGui it was text
+# layout and input routing; here it is a strided, typed, optionally-sparse view
+# of somebody else's bytes. In all three cases the answer is no.
+#
+# WHY cgltf RATHER THAN tinygltf. Both are approved (CLAUDE.md §4). cgltf is one
+# C header with no dependencies; tinygltf is C++ and pulls in a JSON library and
+# stb (which we already have, at a different pin — two copies of stb_image in one
+# binary is a diagnosable problem we would rather not have). cgltf also matches
+# the shape we already use: header-only, PRIVATE to one translation unit, wrapped
+# behind our own types so the dependency stops at the library boundary.
+#
+# Pinned to a TAG, because cgltf has releases — unlike stb, which forced a commit.
+FetchContent_Declare(
+    cgltf
+    GIT_REPOSITORY https://github.com/jkuhlmann/cgltf.git
+    GIT_TAG        v1.15   # pinned — never a branch name
+    GIT_SHALLOW    TRUE
+)
+FetchContent_MakeAvailable(cgltf)
+
 # ---- Shared build rules ----------------------------------------------------
 # Two modules, both of ours. EngineHelpers defines the three functions every
 # target calls; Shaders defines the HLSL toolchain and probes it once, here, at

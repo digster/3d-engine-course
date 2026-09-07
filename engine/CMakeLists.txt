@@ -56,6 +56,10 @@ add_library(engine STATIC
     src/gfx/gpu_scene.cpp
     src/gfx/gpu_shader.cpp
     src/gfx/gpu_texture.cpp
+    # Lesson 6.6. The second asset format, and it gets its own translation
+    # unit for the same reason obj.cpp has one: it is the ONLY file allowed
+    # to see cgltf, so the dependency has exactly one place to leak from.
+    src/gfx/gltf.cpp
     src/gfx/image.cpp
     src/gfx/mesh.cpp
     src/gfx/obj.cpp
@@ -123,6 +127,13 @@ target_link_libraries(engine PUBLIC SDL3::SDL3)
 # neither see stb nor accidentally start depending on it. That is what a good
 # wrapper buys, and this line is the proof it worked.
 target_include_directories(engine PRIVATE ${stb_SOURCE_DIR})
+
+# cgltf, PRIVATE for the identical reason and with the identical receipt: exactly
+# one translation unit (src/gfx/gltf.cpp) includes <cgltf.h>, and `gltf.hpp`
+# exposes our own `gltf_scene_data` instead. A demo can neither see cgltf nor
+# start depending on it — which is what makes "swap the glTF library" a
+# one-file change rather than a project-wide one.
+target_include_directories(engine PRIVATE ${cgltf_SOURCE_DIR})
 
 # Dear ImGui, PUBLIC — the opposite call from stb above, argued at length in
 # engine/include/engine/ui/debug_ui.hpp. The short version: with stb we wrapped a

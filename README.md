@@ -7,7 +7,7 @@ There is no engine to download here and no framework doing the interesting parts
 write the math library, the rasterizer, the ECS, the renderer, the physics, and the editor. By
 the end you have a real engine and a game built on its public API.
 
-**Status:** curriculum and conventions published; lessons in progress — **Modules 0–5 are complete** and Module 6 is under way (61 of 95 lessons). The CPU software rasterizer is finished end to end, the same scene is drawn on a real GPU through SDL_GPU, and the tree is now a static library with a public API, a platform/application layer, its own logging, handle-based resource storage, an asset system that can load, share and free, a reusable A/B timing harness that has decided three architecture questions with numbers instead of folklore, and **a working from-scratch ECS** — a generational entity id honoured by every pool, sparse-set component storage, queries that lead with the smallest pool, a **transform hierarchy** whose resolve cost is flat in depth with a camera that is an ordinary entity, (5.10) an **input layer that knows what the player meant** rather than which key they hit, (5.11) **a debug-draw system and a tooling UI** — a queue of world-space geometry with lifetimes that anything in the engine can fill, and Dear ImGui behind a 182-line facade — and, opening Module 6, (6.1) **a colour pipeline that is correct at both ends**, which found and fixed a four-module-old bug that had every GPU-rendered pixel too dark, (6.2) **a shading equation with units** — a BRDF measured in inverse steradians, a light measured in irradiance, and a hemisphere integrator that turns "is this model physically plausible?" into a number — (6.3) **a story about what a surface is**: three microfacet distributions and a masking term, each held to an identity that has a right-hand side, and (6.4) **a physically-based BRDF, live in both renderers** — Cook–Torrance with its `4(n·l)(n·v)` denominator *derived* rather than quoted, Fresnel built from the physics with `F0` read off an index of refraction, the metallic workflow arriving as a consequence, and energy conservation measured at a worst hemispherical reflectance of 0.9255 where the model it replaced reached 1.4300, and (6.5) **a material system** &mdash; one home for what a surface is, referencing its textures by handle rather than by pointer, with the rule that decides membership set by the hardware rather than by taste. Start at
+**Status:** curriculum and conventions published; lessons in progress — **Modules 0–5 are complete** and Module 6 is under way (62 of 95 lessons). The CPU software rasterizer is finished end to end, the same scene is drawn on a real GPU through SDL_GPU, and the tree is now a static library with a public API, a platform/application layer, its own logging, handle-based resource storage, an asset system that can load, share and free, a reusable A/B timing harness that has decided three architecture questions with numbers instead of folklore, and **a working from-scratch ECS** — a generational entity id honoured by every pool, sparse-set component storage, queries that lead with the smallest pool, a **transform hierarchy** whose resolve cost is flat in depth with a camera that is an ordinary entity, (5.10) an **input layer that knows what the player meant** rather than which key they hit, (5.11) **a debug-draw system and a tooling UI** — a queue of world-space geometry with lifetimes that anything in the engine can fill, and Dear ImGui behind a 182-line facade — and, opening Module 6, (6.1) **a colour pipeline that is correct at both ends**, which found and fixed a four-module-old bug that had every GPU-rendered pixel too dark, (6.2) **a shading equation with units** — a BRDF measured in inverse steradians, a light measured in irradiance, and a hemisphere integrator that turns "is this model physically plausible?" into a number — (6.3) **a story about what a surface is**: three microfacet distributions and a masking term, each held to an identity that has a right-hand side, and (6.4) **a physically-based BRDF, live in both renderers** — Cook–Torrance with its `4(n·l)(n·v)` denominator *derived* rather than quoted, Fresnel built from the physics with `F0` read off an index of refraction, the metallic workflow arriving as a consequence, and energy conservation measured at a worst hemispherical reflectance of 0.9255 where the model it replaced reached 1.4300, (6.5) **a material system** &mdash; one home for what a surface is, referencing its textures by handle rather than by pointer, with the rule that decides membership set by the hardware rather than by taste &mdash; and (6.6) **a glTF 2.0 loader**, text and binary, with node hierarchies, multi-primitive meshes and the full metallic-roughness material model arriving through the asset store with *no conversion at all*, because three of the four convention checks against this engine come out as "do nothing". Start at
 [`docs/index.html`](docs/index.html).
 
 ---
@@ -114,18 +114,41 @@ description:
 | `sandbox --gpu` | an alias for `--probe`, kept because six lessons tell you to type it |
 | `sandbox --shot FILE` | seven pinned frames to a PPM, **no window and no display** — Lesson 5.1's characterization test, made genuinely headless in 5.2 |
 
-There are two more executables, and they are the point of Module 5 rather than demos of anything:
+There are three more executables, and each is an acceptance test for a boundary rather than a
+demo of anything:
 
 ```sh
 ./build/demos/hello_cube                  # a lit cube, spinning
 ./build/demos/hello_cube --shot cube.ppm  # one frame, no window, no display
 
 ./build/demos/pong                        # Lesson 1.8's game, at last a program
+
+./build/demos/gltf_view                   # shapes.glb, orbiting
+./build/demos/gltf_view --model cube.gltf # the textured cube — start here
+./build/demos/gltf_view --pose 1.7 --shot out.ppm
 ```
 
 `hello_cube` is the standing acceptance test for the public API: every symbol in it comes from a
 header under `<engine/…>`, so **if a picture cannot be made from outside the library, the library
 does not have an API.**
+
+`gltf_view` is **Lesson 6.6's** acceptance test for the *asset system*, and it is `hello_cube`'s
+successor in one specific sense: that program proved a picture could be made from outside the
+library, and this one proves a file can be *loaded* from outside it — one call to
+`asset_store::load_model` and a loop turning handles into `scene_object`s, with no path assembly,
+no parser, no cache and no lifetime rule anywhere in it.
+
+Start with `--model cube.gltf`, because one image asserts three things: the uv grid's arrow points
+**up** (so `v` was not flipped — a checkerboard could not have told you), there is an image at all
+(so the `.gltf`'s `"uri"` resolved against the store's own search path and survived the RGBA→ARGB
+channel shuffle), and the highlight has the file's shape (`roughnessFactor: 0.4`, untouched).
+Nothing in the demo types a colour.
+
+Then `shapes.glb`, where the metals are nearly black except where they clip to white — which is
+not a bug and not the importer. A conductor has no diffuse lobe, so a metal with nothing to reflect
+but one directional light has exactly two states, and the bright one is **64× displayable white**
+at roughness 0.25. That number is the quantitative case for image-based lighting (6.12) and a
+tonemapper (6.10); `--pose` exists so you can sweep past the highlight and watch.
 
 `pong` is **Lesson 5.2's** acceptance test for the *application* layer. Until that lesson it was a
 branch of `sandbox`'s five-way <kbd>Tab</kbd> switch, for one reason: a demo needs a loop to exist
@@ -582,6 +605,56 @@ strengthen it.**
 Everything here is a refactor, so there is exactly one claim: the reference render is
 **byte-identical** at `E917C06C`, verified after each of the three stages separately — *move
 without changing, then change without moving*.
+
+**Lesson 6.6** does the opposite of Lesson 3.5 and takes a library, and the whole interest is
+*why the two answers differ*. The usual test — "is it hard?" — is useless here, because the
+rasterizer was hard and we wrote it. The test this course has actually been using is **whether the
+hard part is the subject**: for OBJ it was unifying `v/vt/vn` triples, which *is* the index
+problem; for glTF it is that an accessor may be any of five component types, normalized or not,
+tight or interleaved at a stride, dense or sparse — roughly **forty legal encodings of the same
+eight positions**, every one of which some exporter emits, and not one of them about graphics.
+
+But the deeper difference is structural. **OBJ is a bag of triangles; glTF is a scene.** A mesh is
+a *list* of primitives and each one has its own material, so a car body and its windscreen must be
+two draws — flatten them and you get geometry that is correct and unpaintable.
+
+Then the part that makes this lesson worth its position in the module: **the import is a copy.**
+`metallicFactor` and `roughnessFactor` go straight into Lesson 6.4's `microsurface` with *no
+conversion*, because glTF's alpha remap is roughness² and so is ours, and its dielectric IOR is
+1.5 and so is ours. Gold's `baseColorFactor` of (1.00, 0.71, 0.29) comes out of `f0_of` verbatim
+while `diffuse_albedo_of` returns exactly black — the metallic workflow 6.4 *derived*, meeting the
+format that assumes it.
+
+Same story on conventions: handedness, winding and texture origin **all agree**, so `gltf.cpp`
+contains **zero conversion code** — no basis change, no index reversal, no `1 − v`. That is Module
+2 having argued the choice rather than picking one; FBX is Z-up and Unity and Unreal are
+left-handed, and any of those costs a *mirroring* basis change, which reverses winding, which then
+needs a second correction. The trap runs the other way round: `flip_uv_v` defaults to `true` and is
+correct for every mesh this engine has ever loaded and **wrong for every one it loads next**.
+
+The lesson also settles a debt. Lesson 6.4 shipped a ⚠ VERIFY claiming the glTF reference BRDF
+uses `1 − F(v·h)`; compared term by term against Khronos Appendix B, **five of six terms are
+identical**, and the metallic blend is not even a difference — the spec lerps two whole BRDFs and
+this engine lerps the F0, and those commute *exactly* because Schlick is affine in F0 (measured at
+1.19 × 10⁻⁷ over 4,851 points). Only the diffuse coupling differs, one Fresnel crossing against
+two, and the consequence is **1.036× at normal incidence and 5.62× at 88°** — which is precisely
+why it hid for two lessons. The specification then answers its own question: BRDF implementations
+**may** vary, and a physically accurate one **must** be energy conserving, which ours is at 0.9255
+and the spec's own sample form is not at 1.3395.
+
+On the architecture side, textures and materials become *assets*. A texture is **derived** from its
+image, so unloading the image takes it — and the cascade has to erase the *name entry* too, or
+`find_texture` keeps handing out a recycled slot, which does not crash and therefore takes an
+arbitrary number of frames to notice. `to_texture` turns out to be a bridge that **should have
+existed since Lesson 5.3 and did not**: the engine could decode a PNG and could sample a texture,
+and nothing joined them, because every CPU texture was generated and every loaded image went
+straight to the GPU. Two complete halves with no middle, and no test could see the gap because no
+code path crossed it.
+
+The one conformance gap is *reported rather than hidden*: glTF multiplies a base colour factor by
+its texture and this engine's image replaces the tint, so a coloured factor **plus** a texture is
+counted and logged at the only point that knows both halves. 58 checks, and the reference render
+**byte-identical** for the fifteenth lesson — a whole second asset format, and not one pixel moved.
 
 **An edge is a change in the *action*, not in a signal.** Bind `jump` to both a key and a mouse
 button, press one while the other is held, and there is still exactly one press edge. Derive

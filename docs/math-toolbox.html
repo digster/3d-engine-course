@@ -97,6 +97,7 @@
       <li><a href="#radiometry">Radiometry and BRDFs</a></li>
       <li><a href="#microfacets">Microfacets</a></li>
       <li><a href="#fresnel">Fresnel, and the assembled BRDF</a></li>
+      <li><a href="#interchange">Reading somebody else&rsquo;s material model</a></li>
       <li><a href="#performance">Reasoning about cost</a></li>
       <li><a href="#pipelining">Two processors, overlapped</a></li>
       <li><a href="#coming">Coming as the course proceeds</a></li>
@@ -2250,6 +2251,98 @@
         <strong>out</strong>. Bolting an exit factor onto it fixes the energy and
         <strong>fails reciprocity</strong> &mdash; f(l,v) &ne; f(v,l) &mdash; which is what
         selects the symmetric two-crossing form.
+      </p>
+    </div>
+  </div>
+
+  <h2 id="interchange"><span class="num">7e</span>Reading somebody else&rsquo;s material model</h2>
+
+  <p>
+    Two tools from Lesson 6.6, and neither is a formula you will need to evaluate &mdash; they are
+    both <em>arguments</em> you will need when a published model has to be mapped onto yours.
+    Between them they are what turned &ldquo;is our BRDF the same as glTF&rsquo;s?&rdquo; from an
+    opinion into two measured numbers.
+  </p>
+
+  <div class="tool">
+    <h3>Schlick is affine in F0, so lerping commutes <span class="from">Lesson 6.6</span></h3>
+    <div class="eq">
+      <span>\[ F(f_0) = f_0 + (1 - f_0)\,w = f_0\,(1 - w) + w, \qquad w = (1 - |v \cdot h|)^5 \]</span>
+      <span class="eq-plain">F(f0) = f0(1 &minus; w) + w, which is a straight line in f0</span>
+    </div>
+    <p>
+      Written that way, Schlick&rsquo;s approximation is a <strong>straight line in
+      <em>f</em><sub>0</sub></strong> with slope (1 &minus; <em>w</em>) and intercept <em>w</em>.
+      Linear interpolation therefore passes straight through it: lerping the inputs and lerping
+      the outputs give the same answer.
+    </p>
+    <p>
+      That is not a curiosity. It is what makes two apparently different metallic workflows
+      <em>identical</em>. The glTF specification blends two complete BRDFs by
+      <code>metallic</code>; this engine blends the F0 and evaluates one BRDF. Both are right,
+      and they agree exactly.
+    </p>
+    <div class="worked">
+      <span class="label">Worked &mdash; the two routes, and then measured</span>
+      <p>
+        Write <em>m</em> for metallic and <em>c</em> for the base colour. The spec&rsquo;s
+        specular coefficient is (1&minus;<em>m</em>)&thinsp;F(0.04) + <em>m</em>&thinsp;F(<em>c</em>).
+        Expand each Fresnel with the line above:
+      </p>
+      <p>
+        (1&minus;<em>m</em>)[0.04(1&minus;<em>w</em>) + <em>w</em>] +
+        <em>m</em>[<em>c</em>(1&minus;<em>w</em>) + <em>w</em>]
+        = [(1&minus;<em>m</em>)0.04 + <em>mc</em>](1&minus;<em>w</em>) + <em>w</em>
+        = F((1&minus;<em>m</em>)0.04 + <em>mc</em>)
+      </p>
+      <p>
+        And (1&minus;<em>m</em>)0.04 + <em>mc</em> is exactly what <code>f0_of</code> computes.
+        <code>verify_66</code> &sect;E evaluates both routes over 21 &times; 11 &times; 21 =
+        <strong>4,851 points</strong>: worst difference <strong>1.19&thinsp;&times;&thinsp;10<sup>&minus;7</sup></strong>,
+        which is float rounding and nothing else.
+      </p>
+    </div>
+  </div>
+
+  <div class="tool">
+    <h3>Comparing two BRDFs: reduce to the terms that differ <span class="from">Lesson 6.6</span></h3>
+    <p>
+      The method, which generalises to any published model. Do <strong>not</strong> compare
+      renders &mdash; two BRDFs that differ by 4% look identical and two that differ by a factor
+      of five look like a lighting change. Instead write both models as a product of named terms,
+      line them up, and find the terms that are not the same expression.
+    </p>
+    <p>
+      Against Khronos glTF 2.0 Appendix B, six terms line up and <strong>five are identical</strong>:
+      GGX with &alpha; = roughness&sup2;, height-correlated Smith, Schlick&rsquo;s Fresnel, a
+      dielectric F0 of 0.04 from an IOR of 1.5, and the metallic blend (by the tool above). Only
+      the diffuse coupling differs:
+    </p>
+    <div class="eq">
+      <span>\[ k_d^{\text{glTF}} = 1 - F(v \cdot h) \qquad\text{against}\qquad k_d^{\text{ours}} = \big(1 - F(n \cdot l)\big)\big(1 - F(n \cdot v)\big) \]</span>
+      <span class="eq-plain">one Fresnel crossing at the half vector, against two &mdash; in at the light&rsquo;s angle, out at the eye&rsquo;s</span>
+    </div>
+    <p>
+      Then <em>price</em> the surviving difference at both ends of its range, because a single
+      worst case tells you nothing about whether it matters. Ratio of the two, on a dielectric:
+      <strong>1.036&times;</strong> at normal incidence, <strong>5.62&times;</strong> at a view
+      angle of 88&deg;.
+    </p>
+    <div class="worked">
+      <span class="label">Why both numbers are needed</span>
+      <p>
+        1.036&times; is one crossing of a 4% interface, and it is invisible. 5.62&times; is not.
+        Reporting only the first says &ldquo;the models agree&rdquo;; reporting only the second
+        says &ldquo;the models are unrelated&rdquo;. <strong>Together they say where to look</strong>
+        &mdash; the difference lives at silhouettes and vanishes in the middle of every surface,
+        which is exactly why this one went unnoticed for two lessons.
+      </p>
+      <p>
+        And the tie-break is not aesthetic: hemispherical reflectance is <strong>1.3395</strong>
+        for the one-crossing form and <strong>0.9255</strong> for two (&sect;7d), and the
+        specification&rsquo;s own text requires a physically accurate BRDF to be energy
+        conserving while explicitly permitting implementations to vary. The measurement selects
+        the answer.
       </p>
     </div>
   </div>

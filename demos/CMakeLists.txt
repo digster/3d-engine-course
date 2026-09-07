@@ -77,6 +77,21 @@ target_link_libraries(hello_cube PRIVATE engine::engine)
 engine_set_warnings(hello_cube)
 engine_use_assets(hello_cube)
 
+# ---- gltf_view: Lesson 6.6's acceptance test for the ASSET SYSTEM ---------
+#
+# `hello_cube` proved a program outside the library could draw. This one proves
+# a program outside the library can LOAD — one call to `asset_store::load_model`
+# and a loop that turns handles into `scene_object`s, with no path assembly, no
+# parser, no cache and no lifetime rule anywhere in it.
+#
+# It links `engine::engine` directly rather than `demo_common`, on purpose: it
+# shares no content with the other demos, and a demo that reaches for the shared
+# scene when it does not need one is how demo_common stops being optional.
+add_executable(gltf_view gltf_view/main.cpp)
+target_link_libraries(gltf_view PRIVATE engine::engine)
+engine_set_warnings(gltf_view)
+engine_use_assets(gltf_view)
+
 # ---- ecs_swarm: Lesson 5.8's world, built out of components ---------------
 #
 # The acceptance test for the ECS, and the answer to "what is this FOR" at a

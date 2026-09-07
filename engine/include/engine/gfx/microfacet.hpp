@@ -445,9 +445,35 @@ enum class diffuse_coupling
     two_crossing,
 
     /// `1 - F(v.h)` — what most real-time renderers ship, including the glTF 2.0
-    /// reference BRDF. (⚠ VERIFY against Khronos glTF 2.0 specification,
-    /// Appendix B "BRDF Implementation", before relying on this for asset
-    /// interchange in Lesson 6.6.)
+    /// reference BRDF.
+    ///
+    /// **VERIFIED IN LESSON 6.6** against Khronos glTF 2.0, Appendix B "BRDF
+    /// Implementation", which gives the dielectric as
+    ///
+    ///     dielectric_brdf = mix(diffuse_brdf, specular_brdf,
+    ///                           0.04 + 0.96 * (1 - |V.H|)^5)
+    ///
+    /// The claim was true in substance and imprecise in a way worth recording:
+    /// `mix(a, b, F)` is `(1-F)a + Fb`, so the SAME Fresnel that scales the
+    /// diffuse down scales the specular UP — and `cook_torrance_specular`
+    /// already carries that factor. The divergence between this engine and the
+    /// spec is therefore exactly ONE factor, on the diffuse lobe alone, and
+    /// nothing else in the model differs: same GGX, same height-correlated
+    /// Smith, same `alpha = roughness^2`, same 0.04 from an IOR of 1.5.
+    ///
+    /// **And the metallic blend is not even a divergence.** The spec lerps two
+    /// whole BRDFs by `metallic`; `f0_of` lerps the F0 and evaluates one. Those
+    /// commute EXACTLY, because Schlick is affine in f0 — `F(f0) = f0(1-w) + w`
+    /// — which `verify_66` §E measures at 1.19e-07 worst over 4,851 points.
+    ///
+    /// The spec permits the remaining difference outright (§3.9.6:
+    /// "Implementations of the bidirectional reflectance distribution function
+    /// (BRDF) itself **MAY** vary based on device performance and resource
+    /// constraints") and requires of a physically accurate one that it be
+    /// "positive, reciprocal, and energy conserving" — which is the requirement
+    /// `two_crossing` meets at 0.9255 and this form fails at 1.3395. So the
+    /// engine loads glTF materials and shades them with `two_crossing`, and is
+    /// conformant in doing so.
     ///
     /// **It is exact at normal incidence and over-unity at grazing**, and Lesson
     /// 6.4 §7 diagnoses exactly why: `1 - F(v.h)` is the fraction of light that

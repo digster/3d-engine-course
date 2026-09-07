@@ -190,6 +190,270 @@ image_load asset_store::load_image(std::string_view name)
     return out;
 }
 
+// ---- Lesson 6.6: a whole model, which is the door glTF comes through ---------
+
+namespace {
+
+/// Is a base colour factor white to within a float's worth of authoring noise?
+///
+/// The test that decides whether this importer can represent a material exactly.
+/// glTF §5.19.4: "If both factors and textures are present, the factor value
+/// acts as a linear multiplier for the corresponding texture values." Our
+/// `material` (3.9's rule) says a bound albedo image REPLACES the tint rather
+/// than multiplying it — and the two rules agree exactly, and only, when the
+/// factor is white.
+///
+/// A tolerance rather than an equality, because an exporter that round-trips 1.0
+/// through a JSON decimal can hand back 0.99999994.
+[[nodiscard]] bool is_white(linear_rgb c)
+{
+    constexpr float eps = 1.0f / 512.0f;
+    return c.r > 1.0f - eps && c.g > 1.0f - eps && c.b > 1.0f - eps;
+}
+
+}   // namespace
+
+model_load asset_store::load_model(std::string_view name)
+{
+    model_load out;
+    const std::string key(name);
+
+    // ---- The cache, and what it is keyed on --------------------------------
+    //
+    // A model is not stored as one asset — it becomes n meshes and m materials,
+    // each under its own derived name — so there is no `model_by_key_` map and
+    // there should not be. The cache test is instead whether THE FIRST PRIMITIVE
+    // is resident, which works because the names are deterministic and because
+    // a partial model is not a state this function can leave behind: it inserts
+    // everything or it fails before inserting anything.
+    if (find_mesh(key + "#0").valid())
+    {
+        out.cached = true;
+        ++counters_.cache_hits;
+        for (int i = 0; ; ++i)
+        {
+            const mesh_handle h = find_mesh(key + "#" + std::to_string(i));
+            if (!h.valid()) { break; }
+            out.meshes.push_back(h);
+        }
+        out.report.status = gltf_status::ok;
+        out.report.primitives = static_cast<int>(out.meshes.size());
+        return out;
+    }
+
+    const resolved_path found = paths_.resolve(name);
+    if (!found.ok())
+    {
+        ++counters_.loads_failed;
+        out.report.status = gltf_status::cannot_open;
+        ENGINE_LOG_ERROR(log_asset, "asset_store: model '%.*s' is in none of the %zu root(s)",
+                         static_cast<int>(name.size()), name.data(), paths_.roots().size());
+        return out;
+    }
+
+    gltf_scene_data scene;
+    out.report = load_gltf(found.path.c_str(), scene);
+    ++counters_.files_read;
+    counters_.bytes_read += found.bytes;
+
+    if (!out.report.ok())
+    {
+        ++counters_.loads_failed;
+        return out;
+    }
+
+    // ---- Materials, and the two decisions this lesson had to make ----------
+    out.materials.reserve(scene.materials.size());
+    for (const gltf_material_desc& desc : scene.materials)
+    {
+        material m;
+
+        // 1. THE SURFACE, COPIED WITHOUT CONVERSION. roughness, metallic and an
+        //    F0 of 0.04 are what glTF stores and what `microsurface` means, and
+        //    the agreement is not luck — both derive from the same microfacet
+        //    model with the same Disney alpha remap (6.3) and the same IOR of
+        //    1.5 (6.4). An engine with a hand-tuned gloss parameter would need a
+        //    fitted curve here, and the fit would be a guess.
+        m.surface = desc.surface;
+
+        // 2. THE BASE COLOUR, RE-ENCODED ON PURPOSE. `desc.base_colour` is
+        //    linear (the factor always is); `material::tint` is sRGB-encoded,
+        //    because 6.5 decided a tint is authored data and decodes at the
+        //    input edge. So this is the one conversion in the importer, and it
+        //    runs in the direction nobody expects: linear -> encoded.
+        m.tint = to_encoded(desc.base_colour);
+
+        // 3. THE IMAGE, if the material named one and the search path can find
+        //    it. A miss is counted, logged once by `load_image`, and NOT fatal:
+        //    the material keeps its base colour and the model draws.
+        if (!desc.base_colour_uri.empty())
+        {
+            const texture_load tex = load_texture(desc.base_colour_uri);
+            if (tex.ok())
+            {
+                m.albedo_map = tex.handle;
+                m.samp = desc.samp;
+
+                // THE ONE CONFORMANCE GAP, MEASURED RATHER THAN HIDDEN. With an
+                // image bound, `material::textured()` is true and the fill takes
+                // its albedo from the image alone — so a non-white factor is
+                // silently dropped. Reported here, at the only point that knows
+                // both halves. Making them multiply is a one-line change in
+                // raster.cpp and a matching one in scene.frag.hlsl; it is
+                // Exercise 2, and it is deliberately not made here because it
+                // would move a picture this lesson is claiming does not move.
+                if (!is_white(desc.base_colour))
+                {
+                    ++out.factor_texture_conflicts;
+                    ENGINE_LOG_WARN(log_asset,
+                        "glTF material '%s': baseColorFactor (%.3f %.3f %.3f) is not "
+                        "white and a baseColorTexture is bound. The spec multiplies "
+                        "them; this engine's albedo image REPLACES the tint (3.9), so "
+                        "the factor is dropped.",
+                        desc.name.c_str(), static_cast<double>(desc.base_colour.r),
+                        static_cast<double>(desc.base_colour.g),
+                        static_cast<double>(desc.base_colour.b));
+                }
+            }
+            else
+            {
+                ++out.textures_missing;
+            }
+        }
+
+        // Namespaced by the file it came from: two models may both call a
+        // material "Metal" and they are not the same material.
+        out.materials.push_back(insert_material(key + ":" + desc.name, m));
+    }
+
+    // The default, materialised only if something needs it — so a well-formed
+    // file does not pay for a material it never references.
+    material_handle fallback;
+
+    // ---- Geometry ----------------------------------------------------------
+    out.meshes.reserve(scene.primitives.size());
+    for (std::size_t i = 0; i < scene.primitives.size(); ++i)
+    {
+        gltf_primitive& prim = scene.primitives[i];
+
+        const mesh_handle h = insert_mesh(key + "#" + std::to_string(i),
+                                          std::move(prim.geometry));
+        if (!h.valid()) { continue; }
+
+        out.meshes.push_back(h);
+        out.placements.push_back(prim.world_from_local);
+
+        if (prim.material >= 0
+            && static_cast<std::size_t>(prim.material) < out.materials.size())
+        {
+            out.mesh_material.push_back(out.materials[static_cast<std::size_t>(prim.material)]);
+        }
+        else
+        {
+            if (!fallback.valid())
+            {
+                const gltf_material_desc def = gltf_default_material();
+                material m;
+                m.tint = to_encoded(def.base_colour);
+                m.surface = def.surface;
+                fallback = insert_material(key + ":" + def.name, m);
+                out.materials.push_back(fallback);
+            }
+            out.mesh_material.push_back(fallback);
+        }
+    }
+
+    ++counters_.models_loaded;
+
+    ENGINE_LOG_INFO(log_asset, "loaded model  %-24s %d prim  %d vert  %d tri  "
+                               "%zu mat  %s  root %d",
+                    key.c_str(), out.report.primitives, out.report.vertices,
+                    out.report.triangles, out.materials.size(),
+                    out.report.binary ? "glb" : "gltf", found.root_index);
+    return out;
+}
+
+// ---- Lesson 6.6: textures, which are DERIVED assets --------------------------
+//
+// Note the shape of this function against `load_image` above, because the
+// difference is the whole reason 6.5 was right to wait. `load_image` is a cache
+// over a FILE. This is a cache over a TRANSFORMATION of a file — and the extra
+// machinery it needs is exactly one thing: a dependency edge, so that unloading
+// the image cannot leave a texture behind pointing at nothing.
+
+texture_load asset_store::load_texture(std::string_view name)
+{
+    const std::string key(name);
+
+    if (const auto it = texture_by_key_.find(key); it != texture_by_key_.end())
+    {
+        if (textures_.contains(it->second))
+        {
+            ++counters_.cache_hits;
+            texture_load hit;
+            hit.handle = it->second;
+            hit.source = find_image(name);
+            hit.cached = true;
+            hit.report.status = image_status::ok;
+            if (const texture* t = textures_.get(hit.handle))
+            {
+                hit.report.width = t->width();
+                hit.report.height = t->height();
+            }
+            return hit;
+        }
+        texture_by_key_.erase(it);
+    }
+
+    // THE SOURCE FIRST, through the door that already exists. Everything about
+    // resolving a name, reading bytes, decoding them and counting the read is
+    // `load_image`'s job and it is not repeated here — which is what makes
+    // "the same image loaded twice is decoded once" true for textures too,
+    // without this function knowing anything about it.
+    texture_load out;
+    const image_load img = load_image(name);
+    out.report = img.report;
+    out.source = img.handle;
+
+    if (!img.ok()) { return out; }
+
+    const image_data* pixels = images_.get(img.handle);
+    if (pixels == nullptr) { return out; }
+
+    out.handle = derive_texture(img.handle, key, to_texture(*pixels));
+    if (!out.handle.valid())
+    {
+        ++counters_.loads_failed;
+        return out;
+    }
+
+    ENGINE_LOG_INFO(log_asset, "made texture  %-24s %4dx%-4d from image [handle %u:%u]",
+                    key.c_str(), out.report.width, out.report.height,
+                    out.handle.index(), out.handle.generation());
+    return out;
+}
+
+texture_handle asset_store::derive_texture(image_handle source,
+                                           std::string_view key,
+                                           texture data)
+{
+    if (!images_.contains(source))
+    {
+        ENGINE_LOG_WARN(log_asset, "asset_store: refusing to derive a texture from a "
+                                   "stale image [handle %u:%u]",
+                        source.index(), source.generation());
+        return {};
+    }
+
+    const texture_handle h = textures_.insert(std::move(data));
+    if (!h.valid()) { return {}; }
+
+    texture_derivations_.push_back({source.bits, h.bits});
+    texture_by_key_[std::string(key)] = h;
+    ++counters_.derived;
+    return h;
+}
+
 mesh_handle asset_store::find_mesh(std::string_view name, const mesh_import& settings) const
 {
     const auto it = mesh_by_key_.find(asset_key(name, settings));
@@ -201,6 +465,20 @@ image_handle asset_store::find_image(std::string_view name) const
 {
     const auto it = image_by_key_.find(std::string(name));
     if (it == image_by_key_.end() || !images_.contains(it->second)) { return {}; }
+    return it->second;
+}
+
+texture_handle asset_store::find_texture(std::string_view name) const
+{
+    const auto it = texture_by_key_.find(std::string(name));
+    if (it == texture_by_key_.end() || !textures_.contains(it->second)) { return {}; }
+    return it->second;
+}
+
+material_handle asset_store::find_material(std::string_view name) const
+{
+    const auto it = material_by_key_.find(std::string(name));
+    if (it == material_by_key_.end() || !materials_.contains(it->second)) { return {}; }
     return it->second;
 }
 
@@ -247,6 +525,44 @@ image_handle asset_store::insert_image(std::string_view name, image_data data)
     return h;
 }
 
+texture_handle asset_store::insert_texture(std::string_view name, texture data)
+{
+    const std::string key(name);
+    if (const auto it = texture_by_key_.find(key); it != texture_by_key_.end())
+    {
+        release_texture(it->second);
+        texture_by_key_.erase(it);
+    }
+
+    const texture_handle h = textures_.insert(std::move(data));
+    if (!h.valid()) { return {}; }
+
+    // NO DERIVATION EDGE, and that is the difference between this and
+    // `load_texture`. A generated texture has no source image, so nothing will
+    // ever cascade onto it and it is freed by name alone. The edge list stays a
+    // record of real dependencies rather than a list of everything.
+    texture_by_key_[key] = h;
+    ++counters_.inserted;
+    return h;
+}
+
+material_handle asset_store::insert_material(std::string_view name, material data)
+{
+    const std::string key(name);
+    if (const auto it = material_by_key_.find(key); it != material_by_key_.end())
+    {
+        if (materials_.remove(it->second)) { ++counters_.unloaded; }
+        material_by_key_.erase(it);
+    }
+
+    const material_handle h = materials_.insert(data);
+    if (!h.valid()) { return {}; }
+
+    material_by_key_[key] = h;
+    ++counters_.inserted;
+    return h;
+}
+
 // ---- Derived assets --------------------------------------------------------
 
 mesh_handle asset_store::derive_mesh(mesh_handle source, mesh_data data)
@@ -282,6 +598,19 @@ int asset_store::derived_count(mesh_handle source) const
             total += derived_count(mesh_handle{d.derived});
         }
     }
+    return total;
+}
+
+int asset_store::derived_count(image_handle source) const
+{
+    int total = 0;
+    for (const derivation& d : texture_derivations_)
+    {
+        if (d.source == source.bits) { ++total; }
+    }
+    // Not recursive, unlike the mesh version, because nothing is derived FROM a
+    // texture — yet. Mipmaps (Module 6) will be, and this is the function that
+    // grows a recursive call when they are.
     return total;
 }
 
@@ -337,14 +666,73 @@ int asset_store::unload_image(image_handle h)
     {
         if (it->second == h) { image_by_key_.erase(it); break; }
     }
-    if (!images_.remove(h)) { return 0; }
+
+    // LESSON 6.6: THE CASCADE, which is the reason `derive_texture` exists at
+    // all. Collect the children before removing anything, for the same
+    // iterator-invalidation reason `release_mesh` gives — and note that the
+    // texture's NAME entry has to go too, or `find_texture` would keep handing
+    // out a handle to a slot the pool has already recycled. That is the failure
+    // 5.4 was written to make impossible, so it does not crash; it returns null
+    // and increments a counter. Correct, and still a bug worth not having.
+    std::vector<texture_handle> children;
+    for (const derivation& d : texture_derivations_)
+    {
+        if (d.source == h.bits) { children.push_back(texture_handle{d.derived}); }
+    }
+
+    int released = 0;
+    for (const texture_handle child : children) { released += unload_texture(child); }
+
+    std::erase_if(texture_derivations_, [h](const derivation& d) {
+        return d.source == h.bits;
+    });
+
+    if (!images_.remove(h)) { return released; }
+    ++counters_.unloaded;
+    return released + 1;
+}
+
+int asset_store::release_texture(texture_handle h)
+{
+    if (!textures_.contains(h)) { return 0; }
+
+    std::erase_if(texture_derivations_, [h](const derivation& d) {
+        return d.derived == h.bits;
+    });
+
+    if (!textures_.remove(h)) { return 0; }
+    ++counters_.unloaded;
+    return 1;
+}
+
+int asset_store::unload_texture(texture_handle h)
+{
+    if (!textures_.contains(h)) { return 0; }
+
+    for (auto it = texture_by_key_.begin(); it != texture_by_key_.end(); ++it)
+    {
+        if (it->second == h) { texture_by_key_.erase(it); break; }
+    }
+    return release_texture(h);
+}
+
+int asset_store::unload_material(material_handle h)
+{
+    if (!materials_.contains(h)) { return 0; }
+
+    for (auto it = material_by_key_.begin(); it != material_by_key_.end(); ++it)
+    {
+        if (it->second == h) { material_by_key_.erase(it); break; }
+    }
+    if (!materials_.remove(h)) { return 0; }
     ++counters_.unloaded;
     return 1;
 }
 
 int asset_store::unload_all()
 {
-    const int total = static_cast<int>(meshes_.size() + images_.size());
+    const int total = static_cast<int>(meshes_.size() + images_.size()
+                                       + textures_.size() + materials_.size());
 
     // `pool::clear()` bumps every live slot's generation, so every outstanding
     // handle goes stale rather than being left pointing at a slot that will be
@@ -352,9 +740,14 @@ int asset_store::unload_all()
     // generations instead of resetting them.
     meshes_.clear();
     images_.clear();
+    textures_.clear();
+    materials_.clear();
     mesh_by_key_.clear();
     image_by_key_.clear();
+    texture_by_key_.clear();
+    material_by_key_.clear();
     mesh_derivations_.clear();
+    texture_derivations_.clear();
 
     counters_.unloaded += total;
     return total;
@@ -382,7 +775,8 @@ std::string_view asset_store::name_of(image_handle h) const
 
 int asset_store::live_count() const
 {
-    return static_cast<int>(meshes_.size() + images_.size());
+    return static_cast<int>(meshes_.size() + images_.size()
+                            + textures_.size() + materials_.size());
 }
 
 }   // namespace engine

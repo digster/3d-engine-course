@@ -293,4 +293,41 @@ texture make_uv_grid(int size)
     return t;
 }
 
+// ---- Lesson 6.6: decoded file pixels -> a samplable texture ------------------
+
+texture to_texture(const image_data& src)
+{
+    if (!src.valid()) { return {}; }
+
+    texture out(src.width, src.height);
+
+    // Row-major, top row first, in BOTH representations — so the loop is a
+    // straight walk with no vertical flip. `image_data` stores what the file
+    // contained (5.3) and `texture` puts row 0 at the top (3.9), and those are
+    // the same convention. The v flip that OBJ needs lives in the GEOMETRY
+    // import, which is the only place it can be decided from: it is the format
+    // of the MESH that disagrees about which way v points, not the image.
+    for (int y = 0; y < src.height; ++y)
+    {
+        for (int x = 0; x < src.width; ++x)
+        {
+            const std::size_t at =
+                (static_cast<std::size_t>(y) * static_cast<std::size_t>(src.width)
+                 + static_cast<std::size_t>(x)) * 4u;
+
+            // THE SHUFFLE. Four bytes in R, G, B, A order become one Uint32 in
+            // ARGB8888 order. Written through `pack_argb` rather than as shifts
+            // so the packing rule keeps exactly one definition in the engine
+            // (1.6) — and so a wholesale memcpy, which would swap red and blue
+            // on every little-endian machine, is not even expressible here.
+            out.set_texel(x, y, pack_argb(src.pixels[at + 0],
+                                          src.pixels[at + 1],
+                                          src.pixels[at + 2],
+                                          src.pixels[at + 3]));
+        }
+    }
+
+    return out;
+}
+
 } // namespace engine
