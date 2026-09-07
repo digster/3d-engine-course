@@ -127,12 +127,35 @@ struct geometry
     bool closed = true;
 };
 
-/// What an entity looks like: `scene_object`'s `tint` and `surface`, which have
-/// always described the same thing and never been the same thing.
+/// What an entity looks like.
+///
+/// **THIS STRUCT USED TO DECLARE ITS OWN FIELDS**, and its comment said why:
+/// "`scene_object`'s `tint` and `surface`, which have always described the same
+/// thing and never been the same thing." A demo — restricted to the engine's
+/// public API — had invented an engine type because the engine did not offer
+/// one. Lesson 6.5 offers one, so the fields are gone and only the component
+/// wrapper remains.
+///
+/// It stays a distinct type rather than becoming `engine::material` outright
+/// because an ECS component is an *identity*, not just a payload: `view<geometry,
+/// material>` names this component, and two components that happened to share a
+/// layout would be indistinguishable to the registry. Lesson 5.7 made the same
+/// call about `placement`.
 struct material
 {
-    Uint32 tint = 0xFFFFFFFFu;
-    engine::microsurface surface{};
+    /// **A HANDLE, not a material** — Lesson 6.5's second half.
+    ///
+    /// The first half moved the fields into `engine::material`; this moves the
+    /// *storage* out of the component. Ninety-six ring drones cycle through six
+    /// tints, so there are six materials here and ninety-six references to them.
+    /// Copying the material into every entity stored the same thirty-six bytes
+    /// sixteen times over — and, worse, made "change the drones' roughness" a
+    /// loop instead of an assignment.
+    ///
+    /// This is the case the pool exists for, and the rule it demonstrates is
+    /// about SHARING rather than size: a `scene_object` still holds its material
+    /// by value, because it has exactly one.
+    engine::material_handle mat{};
 };
 
 /// A circular path — now around the entity's PARENT rather than around the world.
@@ -271,20 +294,27 @@ void camera_orbit_system(engine::ecs::registry& world)
 /// the field is named `rotation` and typed `mat3`, which is precisely why it is a
 /// bridge and not a design. Module 6 gives the renderer a matrix directly and
 /// this function loses its last four lines.
-void render_system(engine::ecs::registry& world, std::vector<engine::scene_object>& out)
+void render_system(engine::ecs::registry& world, const engine::material_pool& materials,
+                   std::vector<engine::scene_object>& out)
 {
     out.clear();
     world.view<engine::ecs::world_transform, geometry, material>().each(
-        [&out](const engine::ecs::world_transform& w, const geometry& g, const material& m) {
+        [&out, &materials](const engine::ecs::world_transform& w, const geometry& g,
+                           const material& m) {
+            // The resolve, once per entity per frame — the same place
+            // `bind_albedo` sits, and for the same reason. A stale handle
+            // resolves to null and the object draws with the default material
+            // rather than reading freed memory, which is the whole point of
+            // asking a pool instead of dereferencing a pointer.
+            const engine::material* found = materials.get(m.mat);
             out.push_back(engine::scene_object{
                 .xform = {.position = engine::translation_of(w.matrix),
                           .rotation = engine::linear_of(w.matrix),
                           .scale = {1.0f, 1.0f, 1.0f}},
                 .geometry = g.mesh,
                 .name = "entity",
-                .tint = m.tint,
-                .closed = g.closed,
-                .surface = m.surface});
+                .mat = (found != nullptr) ? *found : engine::material{},
+                .closed = g.closed});
         });
 }
 
@@ -539,7 +569,7 @@ public:
     {
         (void)alpha;
 
-        render_system(world_, objects_);
+        render_system(world_, materials_, objects_);
 
         // QUEUE, ONCE PER FRAME, AFTER THE RESOLVE. The only ordering this has
         // is "after `world_transform` is current", which the fixed steps have
@@ -960,6 +990,24 @@ private:
         lcg rng{0x5EEDu};
 
         // ---- the sun: the root of everything -----------------------------
+        // ---- the scene's materials, built once ---------------------------
+        //
+        // LESSON 6.5. Nine materials for the whole scene, and the ring's six are
+        // what ninety-six drones point at. Building them here, before any entity
+        // exists, is not tidiness: it is what makes the entities' materials a
+        // REFERENCE rather than a copy, and it is why changing the drones' finish
+        // is now one assignment instead of a loop over the registry.
+        ring_palette_.clear();
+        for (int i = 0; i < 6; ++i)
+        {
+            ring_palette_.push_back(materials_.insert(
+                engine::material{.tint = tint_for(i), .surface = {.roughness = 0.53f}}));
+        }
+        moon_material_ = materials_.insert(
+            engine::material{.tint = 0xFFF2F4F8u, .surface = {.roughness = 0.40f}});
+        spark_material_ = materials_.insert(
+            engine::material{.tint = 0xFF7FE0FFu, .surface = {.roughness = 0.38f}});
+
         sun_ = world_.create();
         engine::ecs::add_hierarchy_components(
             world_, sun_,
@@ -967,9 +1015,10 @@ private:
                       .rotation = engine::mat3::identity(),
                       .scale = {0.9f, 0.9f, 0.9f}});
         world_.add<geometry>(sun_, geometry{.mesh = torus_, .closed = true});
-        world_.add<material>(sun_, material{.tint = 0xFFE8B84Cu,
-                                            .surface = {.roughness = 0.42f,
-                                                        .metallic = 1.0f}});
+        sun_material_ = materials_.insert(
+            engine::material{.tint = 0xFFE8B84Cu,
+                             .surface = {.roughness = 0.42f, .metallic = 1.0f}});
+        world_.add<material>(sun_, material{.mat = sun_material_});
         world_.add<spin>(sun_, spin{.rate = 0.6f, .wobble = 0.35f});
 
         // ---- the ring: children of the sun -------------------------------
@@ -990,8 +1039,10 @@ private:
                                        .tilt = rng.range(-0.55f, 0.55f)});
             world_.add<geometry>(e, geometry{.mesh = (i % 2 == 0) ? cube_ : ico_,
                                              .closed = true});
-            world_.add<material>(e, material{.tint = tint_for(i),
-                                             .surface = {.roughness = 0.53f}});
+            // SIX MATERIALS, NINETY-SIX ENTITIES. The palette is built before
+            // the loop; the loop only references it.
+            world_.add<material>(e, material{.mat = ring_palette_[
+                static_cast<std::size_t>(i) % ring_palette_.size()]});
             if (i % 3 == 0)
             {
                 world_.add<spin>(e, spin{.rate = rng.range(1.2f, 3.0f),
@@ -1026,9 +1077,7 @@ private:
                                                   .phase = rng.range(0.0f, 6.2831853f),
                                                   .tilt = rng.range(-1.3f, 1.3f)});
                     world_.add<geometry>(moon, geometry{.mesh = ico_, .closed = true});
-                    world_.add<material>(moon,
-                                         material{.tint = 0xFFF2F4F8u,
-                                                  .surface = {.roughness = 0.40f}});
+                    world_.add<material>(moon, material{.mat = moon_material_});
                     engine::ecs::set_parent(world_, moon, e);
                     moons_.push_back(moon);
                 }
@@ -1111,8 +1160,7 @@ private:
                                        .phase = rng_.range(0.0f, 6.2831853f),
                                        .tilt = rng_.range(-1.4f, 1.4f)});
             world_.add<geometry>(e, geometry{.mesh = ico_, .closed = true});
-            world_.add<material>(e, material{.tint = 0xFF7FE0FFu,
-                                             .surface = {.roughness = 0.38f}});
+            world_.add<material>(e, material{.mat = spark_material_});
             world_.add<lifetime>(e, lifetime{.remaining = rng_.range(0.8f, 2.4f)});
             engine::ecs::set_parent(world_, e, sun_);
         }
@@ -1208,8 +1256,8 @@ private:
 
             if (materials_hidden_)
             {
-                world_.add<material>(e, material{.tint = tint_for(static_cast<int>(i)),
-                                                 .surface = {.roughness = 0.53f}});
+                world_.add<material>(e, material{.mat = ring_palette_[
+                    i % ring_palette_.size()]});
             }
             else
             {
@@ -1275,6 +1323,19 @@ private:
 
     engine::ecs::registry world_;
     engine::ecs::hierarchy tree_;
+
+    /// **Every material in the scene, once each** — Lesson 6.5.
+    ///
+    /// Six for the ring, one each for the sun, the moons and the sparks. The
+    /// entities hold handles into this; nothing holds a copy.
+    engine::material_pool materials_;
+
+    /// The ring's six, built once and handed out by `tint_for`'s old index.
+    std::vector<engine::material_handle> ring_palette_;
+
+    engine::material_handle sun_material_;
+    engine::material_handle moon_material_;
+    engine::material_handle spark_material_;
 
     entity sun_;
     entity camera_entity_;

@@ -142,13 +142,13 @@ void collect_triangles(std::vector<raster_triangle>& out, projection_scratch& sc
             if (per_vertex_light && nsrc == normal_source::vertex)
             {
                 vertex_colour.push_back(
-                    shade_encoded(objects[i].tint, world_normal.back(),
+                    shade_encoded(objects[i].mat.tint, world_normal.back(),
                                           eye_world - world_pos.back(), lights,
-                                          objects[i].surface, spec_model));
+                                          objects[i].mat.surface, spec_model));
             }
             else
             {
-                vertex_colour.push_back(objects[i].tint);
+                vertex_colour.push_back(objects[i].mat.tint);
             }
 
             // How far the naive transform would have tilted this normal. Measured
@@ -228,7 +228,7 @@ void collect_triangles(std::vector<raster_triangle>& out, projection_scratch& sc
             case shade_eval::palette:
                 // Lesson 3.1's ramp: no normal, no light, indexed by triangle
                 // number. Kept so the comparison is one keypress away.
-                colour_a = colour_b = colour_c = face_shade(objects[i].tint, f);
+                colour_a = colour_b = colour_c = face_shade(objects[i].mat.tint, f);
                 break;
 
             case shade_eval::flat:
@@ -248,8 +248,8 @@ void collect_triangles(std::vector<raster_triangle>& out, projection_scratch& sc
                                          ? face_world
                                          : na + nb + nc;
                 colour_a = colour_b = colour_c =
-                    shade_encoded(objects[i].tint, n_mid, eye_world - centroid,
-                                          lights, objects[i].surface, spec_model);
+                    shade_encoded(objects[i].mat.tint, n_mid, eye_world - centroid,
+                                          lights, objects[i].mat.surface, spec_model);
                 break;
             }
 
@@ -266,9 +266,9 @@ void collect_triangles(std::vector<raster_triangle>& out, projection_scratch& sc
                     {
                         return vertex_colour[vi];
                     }
-                    return shade_encoded(objects[i].tint, n,
+                    return shade_encoded(objects[i].mat.tint, n,
                                                  eye_world - world_pos[vi], lights,
-                                                 objects[i].surface, spec_model);
+                                                 objects[i].mat.surface, spec_model);
                 };
                 colour_a = pick(a, na);
                 colour_b = pick(b, nb);
@@ -282,7 +282,7 @@ void collect_triangles(std::vector<raster_triangle>& out, projection_scratch& sc
                 // interpolated normal and position. This is the only branch that
                 // sends the equation's INPUTS down the pipeline instead of its
                 // output — which is the whole of Lesson 3.8 in one case label.
-                colour_a = colour_b = colour_c = objects[i].tint;
+                colour_a = colour_b = colour_c = objects[i].mat.tint;
                 break;
             }
 
@@ -375,7 +375,7 @@ void collect_triangles(std::vector<raster_triangle>& out, projection_scratch& sc
                 // The material travels with the geometry, because per-pixel
                 // shading reads it inside the fill. See `raster_triangle::surface`
                 // for why that is a cheat a GPU could not make.
-                tri.surface = objects[i].surface;
+                tri.surface = objects[i].mat.surface;
                 // Every piece of a clipped triangle lies in the SAME plane, so they
                 // share one face normal and one answer from the wrong test.
                 tri.front_by_forward = front_by_forward;

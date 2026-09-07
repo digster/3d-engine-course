@@ -7,7 +7,7 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-09-06 (after Lesson 6.4 — 60 of 95 lessons)
+updated: 2026-09-06 (after Lesson 6.5 — 61 of 95 lessons)
 
 conventions:
   ecs-storage: THE ECS IS A SPARSE SET, DECIDED IN 5.7 BY MEASUREMENT, NOT TASTE.
@@ -3103,6 +3103,47 @@ curriculum: 95 lessons, ~438 h, 9 modules   (5.10 split into 5.10 + 5.11 in 5.10
         smith_g_separable — and 6.6 (glTF) may need it for spec compliance.
         ⚠ VERIFY the glTF Appendix B claim against the Khronos spec before 6.6.
 
+  material: LESSON 6.5 GAVE THE SURFACE ONE HOME, and the rule that decides
+        membership is the HARDWARE'S, not taste:
+            CAN THIS BE A NUMBER IN A BUFFER?
+        Yes -> per-draw data, pushed as a uniform; two objects differing only in
+        it draw back to back. No -> PIPELINE STATE, baked into a pipeline object;
+        two objects differing in it need two pipelines and a sort (4.8's receipt:
+        three pipelines and pipeline_binds vs ideal_pipeline_binds).
+        engine::material = {tint, albedo_map, samp, surface}. cull_mode,
+        surface_style and specular_model STAY OUT. verify_65 §A asserts the rule
+        as is_trivially_copyable — the machine's way of saying "can be a uniform".
+        HANDLE TO STORE, POINTER TO USE, RESOLVE ONCE PER DRAW. bind_albedo() is
+        the named step. A handle names a SLOT not an address (measured: 64
+        insertions moved the pool 0x928c03500 -> 0x928c16000, handle unaffected);
+        a STALE one resolves to "no image" rather than freed memory, which is the
+        case a pointer cannot express. Resolving per PIXEL is what 5.4 priced and
+        is exactly where it is unaffordable.
+        DERIVE, DO NOT STORE. material::textured() reads albedo_map.valid(). The
+        old pair — a `textured` float beside a separately-chosen pointer — could
+        say "textured but no image" (debug magenta) or "image but not textured"
+        (silently flat). A BUG YOU CANNOT EXPRESS BEATS ONE YOU DETECT. uniforms_of()
+        is the single packing site; it derives the flag and decodes the tint.
+        THE POOL RULE IS ABOUT SHARING, NOT SIZE. scene_object holds its material
+        BY VALUE (it has one); ecs_swarm's 96 drones share 6 materials by handle —
+        3456 B -> 600 B, 5.8x, and more importantly one write instead of a loop.
+        "Handles for big things" gets this backwards: a material is small and the
+        handle is still right.
+        COST, MEASURED: scene_object 96 -> 112 bytes, and verify_56 caught it. The
+        16-byte `sampler` is the whole growth — four enums stored per object,
+        identical everywhere. Interning it is named as a debt (Exercise 15.4).
+        A FACT IS NOT A DECISION. `closed` is a property of the MESH (validate()
+        counts it from the edges, as mesh_report::closed()); the cull decision is
+        the caller's, because a closed mesh may still be drawn two-sided. cull_of()
+        is the one place the rule lives. 3.4's comment predicting `closed` would
+        move onto the material was WRONG TWICE — a material is not pipeline state,
+        and `closed` is not cull mode. A COMMENT PREDICTING A FUTURE DESIGN CANNOT
+        BE TESTED, which is why it repeated for three modules.
+        WHEN A DEMO INVENTS ONE OF YOUR TYPES, THE TYPE IS MISSING. ecs_swarm —
+        restricted to the public API since 5.1 — declared `struct material` itself
+        in 5.7, with a comment naming the reason. A consumer that cannot reach
+        inside the library is a direct measurement of what the API lacks.
+
 completed:
   - 0.1  What a Game Engine Actually Is
   - 0.2  How This Course Works
@@ -3174,8 +3215,44 @@ completed:
   - 6.2  Radiometry-Lite: What a BRDF Is
   - 6.3  Microfacet Theory
   - 6.4  Cook–Torrance PBR, Derived
+  - 6.5  A Material System
 
 capabilities:
+  - 6.5 THE ENGINE HAS A MATERIAL, AND THE GOLDEN DID NOT MOVE.
+    TWO NEW HEADERS, header-only: 57 -> 59 public headers, 32 sources, no CMake
+    change. A REFACTOR, so the whole claim is byte-identical output.
+    material.hpp  NEW. struct material {Uint32 tint, texture_handle albedo_map,
+                sampler samp, microsurface surface} + textured() (DERIVED),
+                material_handle, material_pool, bind_albedo(), cull_of().
+    cull.hpp    NEW. cull_mode, moved out of raster.hpp because two components
+                now share it (5.1's projector.hpp rule, second application).
+    texture.hpp + texture_handle, texture_pool. NOT in asset_store: that is about
+                FILES, and 6.6 is the lesson that gets to decide.
+    scene.hpp   scene_object {tint, surface} -> {material mat}; `closed` STAYS,
+                with its 3.4 comment corrected.
+    gpu_uniform.hpp + uniforms_of() — the one place a material becomes GPU
+                numbers, replacing hand-assembly at three sites.
+    raster.hpp  cull_mode removed; includes cull.hpp.
+    ecs_swarm   ITS OWN `struct material` DELETED — the demo invented the engine's
+                type in 5.7 and now stops needing to. Component holds a
+                material_handle; nine materials built up front, 96 drones sharing
+                six of them.
+    demo_scene  texture_set became a texture_pool; the reference shot builds a
+                material and resolves it, so the handle path is ON the covered
+                path rather than beside it (6.4's eighth-frame discipline).
+    VERIFIED IN THREE STAGES, SEPARATELY (5.1's rule), golden E917C06C at each:
+      (1) the move — tint/surface into mat, nothing else
+      (2) texture handles — texture_set to a pool, the shot resolving
+      (3) the GPU packing + the swarm's handle component
+    The swarm's own shot was captured before and after FROM CLEAN BUILDS on both
+    sides and is byte-identical too.
+    TRAP, and it cost ten minutes: capturing the "before" meant git stash +
+    incremental rebuild, and scene_object had CHANGED SIZE — so some TUs had the
+    old layout and some the new. The symptom was not a crash: it was a shot with
+    the wrong scenes (frame 1 rendering `solids` instead of `cycle`, in=20 where
+    44 was right, one frame's name printing `?`). PLAUSIBLE GARBAGE. AFTER A
+    LAYOUT CHANGE, AN INCREMENTAL BUILD IS NOT EVIDENCE — same failure class as a
+    uniform block disagreeing with its shader, on the CPU side.
   - 6.4 THE ENGINE HAS A PHYSICALLY-BASED BRDF, LIVE IN BOTH RENDERERS.
     NO NEW FILES: 57 public headers and 32 sources, unchanged, no CMake change —
     and the widest diff since the 5.1 refactor. `engine::specular` was DELETED.
@@ -5325,7 +5402,10 @@ files:
             depth_buffer.hpp, framebuffer.hpp, gpu_buffer.hpp, gpu_debug.hpp,
             gpu_device.hpp, gpu_mesh.hpp, gpu_pipeline.hpp, gpu_present.hpp,
             gpu_scene.hpp, gpu_shader.hpp, gpu_texture.hpp, gpu_uniform.hpp,
-            image.hpp, light.hpp, mesh.hpp,
+            cull.hpp                                                         [6.5]
+            image.hpp, light.hpp,
+            material.hpp                                                     [6.5]
+            mesh.hpp,
             microfacet.hpp                                              [6.3, 6.4]
             obj.hpp, projector.hpp, raster.hpp,
             scene.hpp, soft_renderer.hpp, texture.hpp, viewport.hpp
@@ -5492,11 +5572,31 @@ files:
            then failed reciprocity, which is what chose the shipped form. THREE
            PROBES, EACH BECAUSE THE LAST ONE DISAGREED WITH ME.)
            check-pages.mjs is shared, not per-lesson; shot_figs.mjs likewise.
-           (build_64.py PINS NOTHING YET and lists microfacet.hpp and light.hpp
-            WHOLE. LESSON 6.5 IS THE MATERIAL SYSTEM and will edit BOTH — the first
-            holds `microsurface`, the second holds shade(). Pin before writing a
-            line of 6.5, and take verify_64.cpp's copy early: scratch/
-            l64_verify_64.cpp is ALREADY TAKEN, as of this lesson.)
+           PINNED BY 6.5, before a line of it was written: l64_microfacet.hpp,
+           l64_light.hpp and l64_scene.frag.hlsl, all verified against commit
+           e394559 with `git show ... | diff - <pin>`; l64_verify_64.cpp was taken
+           during 6.4 itself, since it is gitignored.
+           AND THE REBUILD CAUGHT SOMETHING THE RULE WAS NOT AIMED AT: three stale
+           "Lesson 6.7" references (glTF is 6.6) that had been fixed in the SOURCES
+           after the last build and never rebuilt into the page. The generalisation
+           is wider than pinning — ANY GENERATED ARTIFACT NEEDS A
+           REGENERATE-AND-DIFF AFTER THE LAST EDIT TO ITS INPUTS, not only when you
+           remember to pin.
+  scratch/ (6.5, not shipped with the engine): verify_65.cpp, build_verify_65.sh,
+           figs_65.py, build_65.py, l65_body_{a,b,c}.html, l65_fig{1..5}.svg,
+           check-tags.py (SHARED, and new: see below),
+           shot_65_*.ppm and swarm_65_*.ppm (the three-stage and clean-build
+           comparisons; throwaways, kept as the evidence for the refactor claim).
+           NO PROBE THIS LESSON — the first since 6.1. A refactor's question is
+           "did the output move?", which the golden answers directly; there was no
+           measurement whose answer could surprise. The one number that DID need
+           taking was the header compile times, and taking it overturned the
+           argument it was meant to support (see conventions:material).
+           (build_65.py PINS NOTHING YET and lists material.hpp and scene.hpp
+            WHOLE. LESSON 6.6 LOADS glTF and will most likely grow material.hpp —
+            a material from a file needs a name, a cache and an identity that
+            survives a reload. Pin before writing a line of 6.6, and take
+            verify_65.cpp's copy EARLY since it is gitignored.)
   scratch/ (5.11, not shipped with the engine): verify_511.cpp,
            build_verify_511.sh, figs_511.py, build_511.py,
            l511_body_{a,b,c}.html, l511_fig{1..7}.svg
@@ -5520,52 +5620,53 @@ files:
   (retired: src/ — the whole directory. hello.cpp.)
 
 
-next: 6.5 — A Material System
-      (planned filename: docs/lessons/06-05-material-system.html — 6.4's TWO next
-      links point at the index and BOTH need repointing; scratch/l64_body_a.html
-      holds the top one and build_64.py's TAIL the bottom. AND build_64.py PINS
-      NOTHING while listing microfacet.hpp and light.hpp WHOLE — the two files 6.5
-      is most certain to edit. Pin first:
-        git show <6.4 commit>:engine/include/engine/gfx/microfacet.hpp \
-            > scratch/l64_microfacet.hpp
-        git show <6.4 commit>:engine/include/engine/gfx/light.hpp \
-            > scratch/l64_light.hpp
-        git show <6.4 commit>:shaders/scene.frag.hlsl > scratch/l64_scene.frag.hlsl
-      (scratch/l64_verify_64.cpp is ALREADY TAKEN — 6.4 took it during 6.4, since
-      it is gitignored.) Then re-run build_64.py and `git diff` the page. THREE
-      lessons running the diff has been exactly the nav lines meant to move; that
-      is the standard, not a streak.
-      THE LESSON IS ALREADY HALF-ARGUED, BY THIS COMMIT'S OWN DIFF. 6.4 changed a
-      surface description and had to edit forty-four call sites across the engine,
-      four demos and six harnesses. Lesson 3.7 wrote "this struct is not called
-      `material` because it is not one yet" and named what was missing: the albedo,
-      the textures, the cull and blend modes, the shader. OPEN ON THAT DIFF. The
-      pull is the design telling you what it wants to be, and 3.7, 3.4 and 3.8 each
-      said so in turn.
-      1 THE SPLIT THAT MATTERS IS NOT struct-vs-struct, IT IS WHICH HALF CAN BE A
-        NUMBER IN A BUFFER. `microsurface` + albedo + textures are per-DRAW data;
-        cull mode, blend mode and the shader are PIPELINE STATE and cannot be
-        (4.8's three-pipelines-and-a-sort is the receipt). A material that pretends
-        otherwise produces the pipeline explosion 4.8 already measured.
-      2 THE ALBEDO IS ALREADY TWO THINGS AND THE CODE ADMITS IT: `tint` (a Uint32
-        an artist types) and `albedo_map` (a texture that REPLACES it, 3.9's rule,
-        not multiplies). ecs_swarm's `material` component holds a tint and a
-        surface and says in its own comment that they "have always described the
-        same thing and never been the same thing". That is the seam.
-      3 HANDLES, NOT POINTERS — 5.4 built generational indices and 5.5 the asset
-        store, and a material is the first thing that wants to REFERENCE assets
-        rather than own them. This is where that machinery pays off.
-      4 6.4 LEFT A REAL DECISION ON THE TABLE: `diffuse_coupling` and `ndf_model`
-        are PIPELINE state by 6.3's argument, but a glTF asset (6.6) arrives
-        specifying the half-vector form. Decide where that lives before 6.6 forces
-        it, and ⚠ VERIFY the glTF Appendix B BRDF against the Khronos spec.
-      THE TEST TO BEAT: the golden was just re-baselined to E917C06C over EIGHT
-      frames, and 6.5 is a REFACTOR — so it should be byte-identical again, and
-      that is the claim to make. Move without changing, then change without moving
-      (5.1's rule), verifying separately. verify_65 must cover the material's
-      round trip through the GPU uniform, and verify_45..64 green.
-      CARRY FORWARD: 6.3's sorting rule (a term is either a BRDF, sr^-1, inside
-      f_r, or a factor of the light, outside it) and 6.4's audit habit — a
-      parameter that round-trips into a physical quantity can be checked, and one
-      that cannot, cannot. Run it on whatever 6.5 invents.
+next: 6.6 — glTF 2.0 Loading
+      (planned filename: docs/lessons/06-06-gltf.html — 6.5's TWO next links point
+      at the index and BOTH need repointing; scratch/l65_body_a.html holds the top
+      one and build_65.py's TAIL the bottom. AND build_65.py PINS NOTHING while
+      listing material.hpp and scene.hpp WHOLE. Pin first:
+        git show <6.5 commit>:engine/include/engine/gfx/material.hpp \
+            > scratch/l65_material.hpp
+        git show <6.5 commit>:engine/include/engine/gfx/scene.hpp \
+            > scratch/l65_scene.hpp
+        cp scratch/verify_65.cpp scratch/l65_verify_65.cpp   # gitignored, take early
+      Then re-run build_65.py and `git diff` the page. FOUR lessons running the
+      diff has been exactly the nav lines meant to move.
+      6.5 DEFERRED THREE THINGS AND 6.6 FORCES ALL THREE, which is why it is next:
+      1 TEXTURES START ARRIVING FROM FILES. 6.5 put texture_pool in texture.hpp
+        and NOT in asset_store, on the grounds that the store is about files and
+        every texture so far is generated. That grounds expires here. Decide
+        whether textures become assets (name, cache, search path, load counters)
+        or stay a plain pool the scene owns — and 5.5's asset_store already has
+        the shape to copy, including derive_mesh for the image->texture step.
+      2 A MATERIAL FROM A FILE NEEDS AN IDENTITY. glTF defines materials, named,
+        shared between primitives. material_pool exists; what it lacks is a
+        name->handle map and a story for reload. That is asset_store's job again,
+        and the same decision as (1) — make it once.
+      3 THE COUPLING QUESTION, DEFERRED SINCE 6.4. glTF's reference BRDF uses
+        1 - F(v.h), which verify_64 measured at worst R(v) = 1.3395; this engine
+        ships the two-crossing form at 0.9255 and keeps the other as
+        diffuse_coupling::half_vector precisely for this moment. ⚠ VERIFY the
+        Khronos glTF 2.0 spec, Appendix B "BRDF Implementation" — the claim has
+        been carried as ⚠ VERIFY since 6.4 and 6.6 is where it must be settled.
+        The honest options are (a) load glTF materials and shade them with OUR
+        coupling, documenting the divergence, or (b) let a material carry its
+        coupling, which makes it PIPELINE STATE by 6.5's own rule and therefore
+        does NOT belong on `material`. That tension is the lesson's design
+        section, and 6.5's rule is what makes it a real question.
+      ALSO: cgltf or tinygltf per CLAUDE.md §4 — the approved library, introduced
+      with the "why we don't hand-roll this" justification, and only AFTER the
+      hand-rolled OBJ loader (3.5), which is the comparison that makes the point.
+      glTF is right-handed Y-up, so ZERO axis conversion — say so and show it,
+      because it is the reward for 2.x's convention discipline.
+      THE TEST TO BEAT: the golden should stay E917C06C. Loading a new format adds
+      a path; it must not move the existing picture. verify_66 wants a round trip
+      (parse -> mesh_data/material -> compare against the same asset hand-built),
+      and verify_45..65 green.
+      CARRY FORWARD: 6.5's membership rule (can this be a number in a buffer?)
+      sorts every new material field glTF offers — and it offers many. 6.4's audit
+      habit still applies: glTF's metallic-roughness values are physical, so
+      ior_from_f0 should report sane numbers on anything imported. And 6.5's
+      finding about demos inventing types is worth re-running after 6.6.
+
 ```

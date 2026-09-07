@@ -426,6 +426,45 @@ once on the way out, which needs a float or half-float framebuffer, headroom abo
 tonemapping step. That is Module 6's HDR work, and 1.6 states the debt explicitly rather than
 implying the problem is solved.
 
+**The material, as of Lesson 6.5 — one home, and a rule for what belongs in it.** `gfx/material.hpp`
+holds `material`: a tint, a `texture_handle` for the albedo map, a sampler and 6.4's `microsurface`.
+The membership rule is the hardware's rather than an aesthetic one — **can this be a number in a
+buffer?** Everything in `material` can, so it is per-draw data and two objects differing only in it
+draw back to back. Cull mode, fill mode, the choice of BRDF and the shader cannot; they are baked
+into a pipeline object, and two objects differing in them need two pipelines and a sort. That is
+Lesson 4.8's measured result (three pipelines, `pipeline_binds` against `ideal_pipeline_binds`)
+promoted from an observation to the line that defines a type. `verify_65` asserts it as
+`is_trivially_copyable`.
+
+**Handles store, pointers are used, and the resolve is a named per-draw step.** `material` refers to
+its texture by `texture_handle` into a `texture_pool`; `bind_albedo(m, pool)` produces the
+`texture_binding` the fill loop reads. A handle survives a reallocation (measured: 64 insertions
+moved the pool, the handle did not care) and can be *asked* whether it still resolves, which a
+pointer cannot — a stale one degrades to "no image" rather than to freed memory. Resolving inside
+the loop would put a bounds check and a generation compare on every pixel, which is what 5.4 priced.
+
+`texture_pool` deliberately does **not** live in `asset_store`: that store is about files, and every
+texture so far is generated in memory. Lesson 6.6 is where textures arrive from disk and gets to
+decide.
+
+**Derived, not stored.** `material::textured()` reads `albedo_map.valid()`. The previous arrangement
+— a `textured` float in the uniform block beside a separately-chosen texture pointer — could express
+"textured but no image" (debug magenta) and "image but not textured" (silently flat), neither of
+which fails where the mistake is. `uniforms_of()` is now the single site that packs a material for
+the GPU, and it computes the flag.
+
+**A pool is for sharing, not for size.** `scene_object` holds its material by value; `ecs_swarm`'s
+ninety-six drones share six materials by handle (3,456 bytes to 600, and one write where there was a
+loop). The cost is named: `scene_object` grew 96 → 112 bytes, all of it the 16-byte `sampler`, which
+a later lesson should intern the same way this one interned the texture.
+
+**A fact about the geometry is not a decision about the draw.** `closed` stayed on `scene_object`
+rather than moving onto the material, correcting a comment that had predicted otherwise since 3.4:
+`validate()` reports whether a mesh is closed (`mesh_report::closed()`), the caller supplies the
+intent, and `cull_of()` is the single place the rule — culling is valid only on closed geometry —
+is written down.
+
+
 **Maths, as of Lesson 1.7.** `src/math/vec2.hpp` is **header-only**, and that is a deliberate
 exception to the `.hpp`/`.cpp` split every other subsystem follows. These functions are two or three
 lines and are called thousands of times per frame; a definition in another translation unit
@@ -2183,6 +2222,9 @@ Full detail with diagrams in [`docs/conventions.html`](docs/conventions.html); t
 | Shading equation | `L_o = (f_d + f_s)·E_perp·cos θ + albedo·L_ambient` — BRDFs in **sr⁻¹**, light in **irradiance** (6.2) |
 | Light units | `directional_light::irradiance`, E⊥ on a surface square-on to the beam; `k_reference_irradiance` = π is the engine's exposure (6.2) |
 | Energy test | `R(v) = ∫ f_r cos θ dω ≤ 1`, integrated numerically; every BRDF is run through it (6.2) |
+| Material membership | **Can it be a number in a buffer?** Yes → `material` (per-draw uniform). No → pipeline state, and two objects differing in it cost a pipeline bind (6.5) |
+| Asset references | Handle to store, pointer to use, `bind_albedo` to resolve — once per draw, never per pixel (6.5) |
+| Derived state | `material::textured()` is computed from the handle; storing it as a second field is a bug the type can no longer express (6.5) |
 | Surface model | Microfacet: `D` must satisfy `∫ D(h) cos θₕ dω = 1`, checked for every distribution (6.3) |
 | Roughness | `α = roughness²` — Disney's remap, a **convention**; convert at the import edge (6.3) |
 | Geometry term | Height-correlated Smith, not separable — the independence assumption is off by 1.715× at grazing (6.3) |

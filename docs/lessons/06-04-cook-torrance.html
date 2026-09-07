@@ -45,7 +45,7 @@
       <span class="dir">Index</span>
       <span class="ttl">All lessons</span>
     </a>
-    <a class="next-l" href="../index.html">
+    <a class="next-l" href="06-05-material-system.html">
       <span class="dir">Next →</span>
       <span class="ttl">6.5 — A Material System</span>
     </a>
@@ -1057,7 +1057,7 @@
     reusing the Fresnel already computed for the specular. It is one line, it costs nothing extra,
     and the glTF 2.0 reference BRDF is defined this way.
     <span class="verify">⚠ VERIFY: check Khronos glTF 2.0 specification, Appendix B, "BRDF
-    Implementation", before relying on this for asset interchange in Lesson 6.7.</span>
+    Implementation", before relying on this for asset interchange in Lesson 6.6.</span>
     So let us measure it, using Lesson 6.2's hemispherical-reflectance integrator, unchanged for
     the third lesson running.
   </p>
@@ -2154,7 +2154,7 @@ enum class diffuse_coupling
     /// `1 - F(v.h)` — what most real-time renderers ship, including the glTF 2.0
     /// reference BRDF. (⚠ VERIFY against Khronos glTF 2.0 specification,
     /// Appendix B &quot;BRDF Implementation&quot;, before relying on this for asset
-    /// interchange in Lesson 6.7.)
+    /// interchange in Lesson 6.6.)
     ///
     /// **It is exact at normal incidence and over-unity at grazing**, and Lesson
     /// 6.4 §7 diagnoses exactly why: `1 - F(v.h)` is the fraction of light that
@@ -2236,7 +2236,7 @@ struct microsurface
     /// **This is a switch wearing a float&#x27;s clothes, and that is deliberate** —
     /// not because half-metals exist, but because a *texture* that says &quot;this
     /// pixel is the painted part and that one is the bare metal&quot; has to filter
-    /// across the boundary, and a filtered switch is a float. Lesson 6.7&#x27;s glTF
+    /// across the boundary, and a filtered switch is a float. Lesson 6.6&#x27;s glTF
     /// materials store exactly this.
     ///
     /// It does two things at once, and both are consequences rather than rules:
@@ -4355,7 +4355,7 @@ cmake --build build --config Debug</code></pre>
       <span class="dir">Index</span>
       <span class="ttl">All lessons</span>
     </a>
-    <a class="next-l" href="../index.html">
+    <a class="next-l" href="06-05-material-system.html">
       <span class="dir">Next →</span>
       <span class="ttl">6.5 — A Material System</span>
     </a>

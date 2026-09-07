@@ -6257,3 +6257,121 @@ better.
 each with three rays crossing, labels technically clear of every stroke. The rewrite abandoned the
 ray diagram entirely for a **budget bar**, because the claim being made was an accounting claim.
 Look at the rendered figure and ask what it is *for*; no geometric check will ask that for you.
+
+---
+
+## Lesson 6.5 — A material system
+
+### A demo that has to invent one of your types is measuring a hole in your API
+
+`ecs_swarm` declared `struct material { Uint32 tint; microsurface surface; }` in Lesson 5.7, with a
+comment naming exactly why. It is restricted to the engine's public headers, so it could not reach
+inside to work around the gap — which is what makes it evidence rather than an opinion.
+
+**When a consumer that cannot see your internals builds one of your types, the type is missing.**
+Not "would be nice"; missing. Two engine structs had been *saying* the same thing in comments for
+three modules and nobody acted; the demo's forty lines of workaround were the thing that finally
+counted as proof.
+
+### The membership rule for a container type should come from the machine, not from taste
+
+"What belongs in a material?" has no good answer in English — everything surface-shaped sounds
+right. It has a sharp answer in hardware: **can this be a number in a buffer?** Per-draw data can be
+a uniform; pipeline state cannot, and two objects differing in it need two pipelines and a sort.
+
+The test is even mechanically checkable — `static_assert(std::is_trivially_copyable_v<material>)` is
+the compiler agreeing that the type can be pushed. **When you can find a rule the machine already
+enforces, use that one**; it survives arguments that a style guide does not.
+
+### Store a handle, use a pointer, and name the step between
+
+Both of these are true and they pull in opposite directions: a stored reference must survive a
+reallocation and be checkable, and an inner loop cannot afford a lookup per pixel. The resolution is
+not to pick one — it is a named function that runs **once per draw**.
+
+The measurement that makes it concrete: 64 insertions moved a pool from `0x928c03500` to
+`0x928c16000`. Every pointer taken before that is now wrong, and nothing about it says so. The
+handle names a slot and does not care.
+
+And the case a pointer cannot express at all: a **stale** handle — well-formed, naming something
+gone — resolves to "no image" and the surface falls back to its tint. Undefined behaviour became a
+defined fallback, which is worth more than the four bytes it saved.
+
+### An argument that is only true of *your* caller is not an argument about the type
+
+The comment defending the old raw pointer said: *"`textures` lives for the whole program, so there
+is nothing here that can dangle."* That was **true**. It was also a claim about one demo's lifetime
+discipline, unavailable to anyone storing a material in a file, a component, or a scene.
+
+When you find yourself justifying a type's design with facts about its current callers, you have
+found a constraint that will break the first time the type is used somewhere else.
+
+### Derive it, and the bug becomes unrepresentable
+
+A `textured` flag stored beside a separately-chosen texture pointer can say "textured but no image"
+(debug magenta) and "image but not textured" (silently flat). Neither fails where the mistake is.
+Computing the flag from the handle removes both states from the program's vocabulary.
+
+**A bug you cannot express beats a bug you detect.** — and note the trap on the way: replacing the
+hand-assembly with the derived version compiled cleanly and would have silently lost every GPU
+texture, because the *other* opinion (a keypress and a scene test) had never been written onto the
+material. Deriving a value only helps if the field you derive from is the one that knows.
+
+### A pool is for sharing, not for size
+
+Ninety-six drones over six tints: 3,456 bytes of copies against 600 of handles. But the byte count
+is the weaker half. With copies, "make the drones rougher" is a loop over the registry that has to
+find every entity carrying that appearance; with handles it is one write.
+
+The folk rule — "use handles for big things" — gets this case backwards. A material is small and the
+handle is still right, because ninety-six things point at six. Meanwhile `scene_object` holds its
+material *by value*, because it has exactly one. **Ask whether anything shares it, not how big it
+is.**
+
+### A comment predicting a future design cannot be tested
+
+`scene_object::closed` carried a comment from 3.4 saying it would move onto the material in Module
+6, "because cull mode is pipeline state and pipeline state is what a material *is*". It repeated
+through three modules and was wrong twice over — a material is explicitly *not* pipeline state, and
+`closed` is not cull mode anyway but a fact about the mesh.
+
+This is not an argument against writing such comments; 3.7's identical prediction about the material
+was exactly right and is why the lesson happened. It is an argument for **re-reading them when you
+arrive, as claims to check rather than instructions to follow.**
+
+### The measurement you take to strengthen an argument can be the only false part of it
+
+Splitting `cull_mode` into its own header is justified by one rule: a type two components share gets
+a header. That was enough. I reached for a second, quantitative justification anyway — compile time,
+citing 5.1's measured 0.97 s for `raster.hpp`.
+
+Re-measured on the machine actually building: `raster.hpp` 0.258 s, and `material.hpp` **already**
+0.261 s via `texture.hpp`. The marginal saving is zero. Worse, 5.1's own note says in capitals
+**"THE RATIO IS WHAT TRAVELS, NOT THE SECONDS"** — I read past the caveat to the number I wanted.
+
+Two rules out of one mistake. **A recorded caveat does not protect you if the figure beside it is
+more useful.** And: when a design rule stands on its own, adding a number to it is not free — it is
+a new claim, with its own chance of being wrong.
+
+### After a struct's layout changes, an incremental build is not evidence
+
+Capturing a "before" render meant `git stash`, rebuild, shoot. The rebuild was incremental and
+`scene_object` had changed size, so some translation units had the old layout and some the new.
+
+The symptom was not a crash. It was a reference shot with the *wrong scenes in it* — frame 1
+rendering `solids` instead of `cycle`, a triangle count of 20 where 44 was right, one frame's name
+printing as `?`. **Plausible garbage**, and it took a minute to tell apart from a real regression.
+`cmake --build build --target clean` fixed it. This is the same failure class as a uniform block
+disagreeing with its shader, arriving on the CPU side.
+
+### Two unclosed `<figure>` tags, and every automated check passed
+
+`check-page.js` verifies highlighter round-trips, KaTeX, SVG geometry, shared assets, badge classes
+and listing folds — and passed a page whose figures were nested inside an unclosed
+`figure.listing`, silently inheriting `display: flex` on their captions. Two captions rendered as
+forty-pixel columns of single stacked characters.
+
+No geometric check sees that: the SVG is fine, the labels are clear, the links resolve. It was found
+by **looking at the rendered figure**, which check-page.js's own header says is the thing it cannot
+do for you. `scratch/check-tags.py` now balances the container tags, which is the cheap half — but
+the expensive half stays: *look at the picture*.

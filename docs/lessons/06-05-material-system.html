@@ -1,0 +1,2287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>6.5 — A Material System · Build a Professional 3D Game Engine</title>
+<meta name="description" content="Lesson 6.4 changed one surface parameter and had to edit forty-four call sites, which is what a missing type measures. Three structs had independently grown the same hole, one of them a demo that invented the type because the engine offered none. Builds the material around a rule the hardware sets rather than taste - can this be a number in a buffer? - stores texture references as handles with the resolve as a named per-draw step, derives the textured flag so it cannot contradict itself, measures sharing at 5.8x across the swarm, and corrects two comments that had been repeating for three modules, including a compile-time argument that did not survive being measured. A refactor, so the reference render is byte-identical.">
+
+<!-- SHARED-CSS:BEGIN -->
+<!-- The shared course stylesheet, linked rather than inlined. Single source of
+     truth: docs/shared/course.css. Edit that file; this page carries no copy.
+     Still no build step - the link resolves straight off the filesystem, so this
+     page opens by double-clicking, offline. -->
+<link rel="stylesheet" href="../shared/course.css">
+<!-- SHARED-CSS:END -->
+
+<!-- KaTeX (optional). If unreachable the raw TeX remains readable, and every
+     equation is also stated in prose + .eq-plain, so nothing is lost. -->
+<link rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css"
+      integrity="sha384-nB0miv6/jRmo5UMMR1wu3Gz6NLsoTkbqJghGIsx//Rlm+ZU03BU6SQNC66uf4l5+"
+      crossorigin="anonymous">
+</head>
+<body>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <a class="course" href="../index.html">Build a Professional 3D Game Engine</a>
+    <span class="spacer"></span>
+    <a href="../index.html">Contents</a>
+    <a href="../conventions.html">Conventions</a>
+    <a href="../math-toolbox.html">Math Toolbox</a>
+    <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Toggle colour theme">Theme</button>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="06-04-cook-torrance.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">6.4 — Cook–Torrance PBR, Derived</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="../index.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">6.6 — glTF 2.0 Loading</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 6 — Advanced Rendering · Lesson 6.5</div>
+    <h1>A Material System</h1>
+    <p class="deck">
+      Lesson 6.4 changed a surface description and had to edit <strong>forty-four call sites</strong>
+      across the engine, four demos and six test harnesses. That number is not a complaint — it is
+      a measurement, and what it measures is a type that does not exist. Three places in this
+      codebase have independently grown the same struct-shaped hole, one of them a <em>demo</em>
+      that invented the type because the engine did not offer it. This lesson fills the hole, and
+      the interesting part is not the struct: it is the <strong>question that decides what goes in
+      it</strong>, which turns out to be a question about hardware rather than about taste.
+      Everything here is a refactor, so there is exactly one claim to make at the end — the
+      reference render must be <strong>byte-identical</strong>.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 4 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="05-04-handles.html">5.4 — Handles: Generational Indices</a>,
+          <a href="06-04-cook-torrance.html">6.4 — Cook–Torrance PBR, Derived</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd><code>engine/include/engine/gfx/material.hpp</code> <em>(new)</em>,
+            <code>engine/include/engine/gfx/cull.hpp</code> <em>(new)</em>,
+            <code>engine/include/engine/gfx/texture.hpp</code>,
+            <code>engine/include/engine/gfx/scene.hpp</code>,
+            <code>engine/include/engine/gfx/gpu_uniform.hpp</code>,
+            <code>engine/include/engine/gfx/raster.hpp</code>,
+            <code>demos/common/demo_scene.{hpp,cpp}</code>,
+            <code>demos/ecs_swarm/main.cpp</code>,
+            <code>demos/sandbox/main.cpp</code>,
+            <code>scratch/verify_65.cpp</code> <em>(new)</em></dd>
+
+        <dt>Milestone</dt>
+        <dd>A material the whole engine shares, referencing its texture by <strong>handle</strong>
+            rather than by pointer. 27 checks green, the reference render
+            <strong>byte-identical</strong> — and a demo type deleted because the engine finally
+            provides it.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…state the one question that decides whether something belongs in a material, and defend
+          it in terms of what the hardware does rather than what looks tidy.</li>
+      <li>…explain why a material stores a <em>handle</em> and a fill loop uses a <em>pointer</em>,
+          and where the conversion between them belongs.</li>
+      <li>…recognise a derived value being stored as a second field, and say what class of bug that
+          creates.</li>
+      <li>…decide when a pool earns its place, using a rule about sharing rather than about
+          size.</li>
+      <li>…tell a fact about the geometry from a decision about the draw, and put each where it
+          belongs.</li>
+      <li>…carry out a refactor whose correctness claim is a byte-identical output, in two
+          separately-verified halves.</li>
+    </ul>
+  </section>
+
+  <details class="toc" open>
+    <summary>Contents</summary>
+    <ol>
+      <li><a href="#problem">The Problem, Which the Codebase Already Wrote Down</a></li>
+      <li><a href="#invented">The Demo That Invented It</a></li>
+      <li><a href="#split">The Question That Draws the Line</a></li>
+      <li><a href="#handles">Handles, Pointers, and the Step Between</a></li>
+      <li><a href="#derived">One Field, One Answer</a></li>
+      <li><a href="#sharing">When a Pool Earns Its Place</a></li>
+      <li><a href="#closed">The Field That Was Not a Material After All</a></li>
+      <li><a href="#header">Where cull_mode Lives, and an Argument I Had to Withdraw</a></li>
+      <li><a href="#impl">Implementation</a></li>
+      <li><a href="#refactor">The Refactor, in Two Halves</a></li>
+      <li><a href="#cost">What It Cost</a></li>
+      <li><a href="#listings">Complete Code Listings</a></li>
+      <li><a href="#build">Build &amp; Run</a></li>
+      <li><a href="#pitfalls">Common Pitfalls &amp; Debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; Next</a></li>
+      <li><a href="#reading">Further Reading</a></li>
+    </ol>
+  </details>
+
+  <!-- =================================================================
+       1 — THE PROBLEM
+       ================================================================= -->
+  <h2 id="problem"><span class="num">1</span>The Problem, Which the Codebase Already Wrote Down</h2>
+
+  <p>
+    Most lessons in this course open by showing you something broken. This one opens by showing you
+    something the code has been <em>saying</em> for three modules, in comments, without anybody
+    acting on it.
+  </p>
+
+  <p>
+    Here is <code>scene_object</code>, as Lesson 3.7 left it, with the comment that has sat on its
+    last field ever since:
+  </p>
+
+  <pre><code class="lang-cpp">struct scene_object
+{
+    transform xform;
+    mesh_handle geometry;
+    const char* name;
+    Uint32 tint;
+    bool closed;
+    microsurface surface;   // &lt;- and on this field:
+};
+
+// "Look at what just happened to this struct. `tint` was enough while a surface
+//  was one colour; then 3.4 needed `closed`; now 3.7 needs two more numbers, and
+//  all four describe the same thing — THE SURFACE — while `xform` and `geometry`
+//  describe where it is and what shape it is. That is two different kinds of data
+//  wearing one struct, and the second kind has a name: a material."</code></pre>
+
+  <p>
+    And here is <code>fill_style</code>, from Lesson 3.8, whose comment says the same thing about
+    itself in different words: <em>"`fill_style` is now two structs wearing one name."</em>
+  </p>
+
+  <p>
+    Two structs, written a lesson apart, each of which noticed it was accumulating a second kind of
+    data and each of which declined to fix it. That was the right call at the time, and 3.7 said
+    why: <strong>a material invented before three lessons have asked for one is a guess.</strong>
+  </p>
+
+  <p>
+    Three lessons have now asked. And Lesson 6.4 put a number on it.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">What the absence cost, measured</span>
+    <p>Lesson 6.4 replaced <code>specular::colour</code> and <code>shininess</code> with roughness,
+       metallic and F0 — a change to <em>the surface description</em> and nothing else. It touched
+       <strong>forty-four call sites</strong> across the engine, four demos and six harnesses.</p>
+    <p>Not because the change was large. Because the description had <strong>no single
+       home</strong>, so every place that used a surface had assembled one out of loose fields.</p>
+  </div>
+
+    <figure class="dia bleed">
+    <svg viewBox="0 0 720 380" role="img" aria-labelledby="l65f1-t l65f1-d">
+      <title id="l65f1-t">Three structs that each accumulated surface description</title>
+      <desc id="l65f1-d">scene_object collected tint, closed and surface beside its transform and geometry; fill_style collected lights, surface and albedo beside the rasterizer's knobs, and its own comment calls itself two structs wearing one name; and the ecs_swarm demo, restricted to the public API, declared its own material struct because the engine offered none.</desc>
+      <defs>
+        <marker id="e-i-l65f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+        <marker id="e-s-l65f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+        <marker id="e-h-l65f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+        <marker id="e-b-l65f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+        <marker id="e-g-l65f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+      </defs>
+    <rect x="0" y="0" width="720" height="380" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+    <text x="360.0" y="28" class="lg" text-anchor="middle">Three places grew the same struct-shaped hole</text>
+    <rect x="30.0" y="60" width="200" height="178" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.08"/>
+    <rect x="30.0" y="60" width="200" height="178" rx="3" fill="none" stroke="#5ac878" stroke-width="1.3"/>
+    <text x="130.0" y="84" class="sm" text-anchor="middle">scene_object</text>
+    <text x="130.0" y="102" class="xs" text-anchor="middle">Lessons 3.4, 3.7</text>
+    <line x1="46.0" y1="112" x2="214.0" y2="112" class="grid" stroke-width="1.0"/>
+    <text x="130.0" y="132" class="xs" text-anchor="middle">xform</text>
+    <text x="130.0" y="150" class="xs" text-anchor="middle">geometry</text>
+    <text x="130.0" y="168" class="xs" text-anchor="middle">name</text>
+    <rect x="44.0" y="175" width="172" height="16" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.42"/>
+    <text x="130.0" y="186" class="xs" text-anchor="middle">tint</text>
+    <text x="130.0" y="204" class="xs" text-anchor="middle">closed</text>
+    <rect x="44.0" y="211" width="172" height="16" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.42"/>
+    <text x="130.0" y="222" class="xs" text-anchor="middle">surface</text>
+    <text x="130.0" y="258" class="xs" text-anchor="middle">“…the second kind</text>
+    <text x="130.0" y="274" class="xs" text-anchor="middle">has a name: a material”</text>
+    <rect x="260.0" y="60" width="200" height="178" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.08"/>
+    <rect x="260.0" y="60" width="200" height="178" rx="3" fill="none" stroke="#5082e6" stroke-width="1.3"/>
+    <text x="360.0" y="84" class="sm" text-anchor="middle">fill_style</text>
+    <text x="360.0" y="102" class="xs" text-anchor="middle">Lesson 3.8</text>
+    <line x1="276.0" y1="112" x2="444.0" y2="112" class="grid" stroke-width="1.0"/>
+    <text x="360.0" y="132" class="xs" text-anchor="middle">interp</text>
+    <text x="360.0" y="150" class="xs" text-anchor="middle">shade</text>
+    <text x="360.0" y="168" class="xs" text-anchor="middle">cull</text>
+    <rect x="274.0" y="175" width="172" height="16" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.42"/>
+    <text x="360.0" y="186" class="xs" text-anchor="middle">lights</text>
+    <rect x="274.0" y="193" width="172" height="16" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.42"/>
+    <text x="360.0" y="204" class="xs" text-anchor="middle">surface</text>
+    <rect x="274.0" y="211" width="172" height="16" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.42"/>
+    <text x="360.0" y="222" class="xs" text-anchor="middle">albedo</text>
+    <text x="360.0" y="258" class="xs" text-anchor="middle">“two structs</text>
+    <text x="360.0" y="274" class="xs" text-anchor="middle">wearing one name”</text>
+    <rect x="490.0" y="60" width="200" height="178" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.08"/>
+    <rect x="490.0" y="60" width="200" height="178" rx="3" fill="none" stroke="#f0961e" stroke-width="1.3"/>
+    <text x="590.0" y="84" class="sm" text-anchor="middle">ecs_swarm</text>
+    <text x="590.0" y="102" class="xs" text-anchor="middle">a DEMO, Lesson 5.7</text>
+    <line x1="506.0" y1="112" x2="674.0" y2="112" class="grid" stroke-width="1.0"/>
+    <rect x="504.0" y="121" width="172" height="16" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.42"/>
+    <text x="590.0" y="132" class="xs" text-anchor="middle">struct material</text>
+    <rect x="504.0" y="139" width="172" height="16" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.42"/>
+    <text x="590.0" y="150" class="xs" text-anchor="middle">{</text>
+    <rect x="504.0" y="157" width="172" height="16" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.42"/>
+    <text x="590.0" y="168" class="xs" text-anchor="middle">  Uint32 tint;</text>
+    <rect x="504.0" y="175" width="172" height="16" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.42"/>
+    <text x="590.0" y="186" class="xs" text-anchor="middle">  microsurface</text>
+    <rect x="504.0" y="193" width="172" height="16" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.42"/>
+    <text x="590.0" y="204" class="xs" text-anchor="middle">  surface;</text>
+    <rect x="504.0" y="211" width="172" height="16" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.42"/>
+    <text x="590.0" y="222" class="xs" text-anchor="middle">}</text>
+    <text x="590.0" y="258" class="xs" text-anchor="middle">it INVENTED the type</text>
+    <text x="590.0" y="274" class="xs" text-anchor="middle">the engine did not have</text>
+    <rect x="30.0" y="296" width="660.0" height="62" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+    <text x="360.0" y="320" class="xs" text-anchor="middle">Highlighted: the fields that describe the SURFACE rather than the object.</text>
+    <text x="360.0" y="342" class="sm" text-anchor="middle">And Lesson 6.4 priced the absence — 44 call sites to change one of them.</text>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 1.</span>
+      The argument for this lesson, and the codebase made it without anyone acting on it. Three structs each accumulated fields describing THE SURFACE rather than the object &#8212; highlighted here &#8212; and two of them said so in their own comments: <code>scene_object</code>&#8217;s &#8220;the second kind has a name: a material&#8221;, <code>fill_style</code>&#8217;s &#8220;two structs wearing one name&#8221;. The third is different in kind and is the strongest evidence of the three: <strong>ecs_swarm is a DEMO</strong>, restricted since 5.1 to the engine&#8217;s public headers, and it declared the type itself because the engine offered none. A consumer that cannot reach inside your library and has to invent one of your types is measuring what your API does not provide. Lesson 6.4 then priced the absence at <strong>44 call sites</strong> to change one surface parameter.
+    </figcaption>
+  </figure>
+
+
+  <!-- =================================================================
+       2 — THE DEMO THAT INVENTED IT
+       ================================================================= -->
+  <h2 id="invented"><span class="num">2</span>The Demo That Invented It</h2>
+
+  <p>
+    The third panel of that figure is the one worth stopping on, because it is a different
+    <em>kind</em> of evidence from the other two.
+  </p>
+
+  <p>
+    <code>ecs_swarm</code> is a demo. Since Lesson 5.1 the boundary has been law: demos link the
+    engine and may use only its public headers. And in Lesson 5.7, needing to give its entities an
+    appearance, it wrote this:
+  </p>
+
+  <pre><code class="lang-cpp">/// What an entity looks like: `scene_object`'s `tint` and `surface`, which have
+/// always described the same thing and never been the same thing.
+struct material
+{
+    Uint32 tint = 0xFFFFFFFFu;
+    engine::microsurface surface{};
+};</code></pre>
+
+  <p>
+    Read that comment again. The demo <em>knew</em>. It named the type, gave the reason, and built
+    it anyway, because the engine offered nothing to build on.
+  </p>
+
+  <div class="callout">
+    <span class="label">A signal worth learning to read</span>
+    <p><strong>When a consumer restricted to your public API has to invent one of your types, the
+       type is missing.</strong> Not "would be nice"; missing. A demo cannot reach into the engine
+       to work around a gap, so what it builds instead is a direct measurement of what the API does
+       not provide.</p>
+    <p>This is the strongest form of the pressure Lesson 3.7 said to wait for — and it is why the
+       first thing this lesson's diff does is <strong>delete</strong> that struct's fields.</p>
+  </div>
+
+  <!-- =================================================================
+       3 — THE SPLIT
+       ================================================================= -->
+  <h2 id="split"><span class="num">3</span>The Question That Draws the Line</h2>
+
+  <p>
+    So we are writing a <code>material</code>. The temptation now is to sweep everything
+    surface-shaped into it — the tint, the roughness, the texture, the cull mode, the blend mode,
+    eventually the shader — because all of those are, in ordinary English, "what the surface is
+    like".
+  </p>
+
+  <p>
+    <strong>That would produce a type that cannot work</strong>, and the reason is not stylistic.
+    Ask a sharper question instead:
+  </p>
+
+  <div class="callout ok">
+    <span class="label">The rule</span>
+    <p><strong>Can this be a number in a buffer?</strong></p>
+    <p>If yes, it is per-draw data. The fragment stage reads it, the GPU pushes it as a uniform,
+       and two objects that differ only in it can be drawn back to back with <em>no state change
+       between them</em>.</p>
+    <p>If no, it is <strong>pipeline state</strong>. It is baked into a pipeline object at creation
+       time, and two objects that differ in it need two pipelines and a sort between them.</p>
+  </div>
+
+    <figure class="dia bleed">
+    <svg viewBox="0 0 720 400" role="img" aria-labelledby="l65f2-t l65f2-d">
+      <title id="l65f2-t">The rule that decides what belongs in a material</title>
+      <desc id="l65f2-d">Anything the fragment stage reads as a value can be pushed as a uniform and belongs in the material: the tint, the texture handle, the sampler and the microsurface. Anything that decides which pipeline runs cannot be a uniform and stays out: cull mode, fill mode, the choice of BRDF and the shader itself. Two objects differing only in the first group draw back to back; two differing in the second need two pipelines and a sort between them.</desc>
+      <defs>
+        <marker id="e-i-l65f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+        <marker id="e-s-l65f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+        <marker id="e-h-l65f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+        <marker id="e-b-l65f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+        <marker id="e-g-l65f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+      </defs>
+    <rect x="0" y="0" width="720" height="400" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+    <text x="360.0" y="28" class="lg" text-anchor="middle">The question that draws the line</text>
+    <text x="360.0" y="52" class="sm" text-anchor="middle">Can this be a number in a buffer?</text>
+    <rect x="46" y="78" width="300" height="214" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.1"/>
+    <rect x="46" y="78" width="300" height="214" rx="3" fill="none" stroke="#5ac878" stroke-width="1.3"/>
+    <text x="196.0" y="104" class="sm" text-anchor="middle">YES  →  it is the MATERIAL</text>
+    <text x="196.0" y="124" class="xs" text-anchor="middle">per-draw data, pushed as a uniform</text>
+    <line x1="66" y1="136" x2="326" y2="136" class="grid" stroke-width="1.0"/>
+    <text x="70" y="160" class="xs" text-anchor="start">tint</text>
+    <text x="322" y="160" class="xs" text-anchor="end">the albedo, sRGB</text>
+    <text x="70" y="186" class="xs" text-anchor="start">albedo_map</text>
+    <text x="322" y="186" class="xs" text-anchor="end">a texture HANDLE</text>
+    <text x="70" y="212" class="xs" text-anchor="start">samp</text>
+    <text x="322" y="212" class="xs" text-anchor="end">how to read it</text>
+    <text x="70" y="238" class="xs" text-anchor="start">surface</text>
+    <text x="322" y="238" class="xs" text-anchor="end">roughness / metallic / F0</text>
+    <text x="196.0" y="274" class="xs" text-anchor="middle">two of these differ → no state change</text>
+    <rect x="374" y="78" width="300" height="214" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.1"/>
+    <rect x="374" y="78" width="300" height="214" rx="3" fill="none" stroke="#e05c5c" stroke-width="1.3"/>
+    <text x="524.0" y="104" class="sm" text-anchor="middle">NO  →  it is PIPELINE STATE</text>
+    <text x="524.0" y="124" class="xs" text-anchor="middle">baked into a pipeline object</text>
+    <line x1="394" y1="136" x2="654" y2="136" class="grid" stroke-width="1.0"/>
+    <text x="398" y="160" class="xs" text-anchor="start">cull mode</text>
+    <text x="650" y="160" class="xs" text-anchor="end">which faces to drop</text>
+    <text x="398" y="186" class="xs" text-anchor="start">fill mode</text>
+    <text x="650" y="186" class="xs" text-anchor="end">solid or wireframe</text>
+    <text x="398" y="212" class="xs" text-anchor="start">specular_model</text>
+    <text x="650" y="212" class="xs" text-anchor="end">which BRDF runs</text>
+    <text x="398" y="238" class="xs" text-anchor="start">the shader</text>
+    <text x="650" y="238" class="xs" text-anchor="end">the program itself</text>
+    <text x="524.0" y="274" class="xs" text-anchor="middle">two of these differ → TWO PIPELINES + a sort</text>
+    <rect x="46" y="312" width="628" height="62" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+    <text x="360.0" y="336" class="xs" text-anchor="middle">Lesson 4.8 measured the right-hand side: three pipelines, and a sort</text>
+    <text x="360.0" y="356" class="xs" text-anchor="middle">to keep the bind count at three instead of one per draw.</text>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 2.</span>
+      The whole design decision, and it is settled by the hardware rather than by taste. <strong>Can this be a number in a buffer?</strong> If yes it is per-draw data: the fragment stage reads it, the GPU pushes it as a uniform, and two objects differing only in it draw back to back with no state change between them. If no it is PIPELINE STATE, baked into a pipeline object at creation, and two objects differing in it need two pipelines and a sort between them. Lesson 4.8 already paid for this knowledge &#8212; the port to SDL_GPU produced three pipeline objects and a draw-list sort for exactly this reason, and the <code>pipeline_binds</code> against <code>ideal_pipeline_binds</code> statistic exists to price getting the sort wrong. <strong>A material that swallowed the right-hand column would be a material that cannot be a uniform</strong>, which is not a material at all.
+    </figcaption>
+  </figure>
+
+
+  <p>
+    This is not a rule we are inventing. It is the shape of the hardware, and Lesson 4.8 already
+    paid for the knowledge: porting the scene to SDL_GPU produced <strong>three pipeline
+    objects</strong> and a sort of the draw list, precisely because cull mode and fill mode cannot
+    be uniforms. The stats that lesson added — <code>pipeline_binds</code> against
+    <code>ideal_pipeline_binds</code> — exist to measure the cost of getting the sort wrong.
+  </p>
+
+  <p>
+    So the material gets four fields, and every one of them passes the test:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/include/engine/gfx/material.hpp</span>
+      <span class="tag modified">the type</span></figcaption>
+<pre><code class="lang-cpp">struct material
+{
+    Uint32 tint = 0xFFFFFFFFu;   ///&lt; sRGB albedo, used when no map is bound
+    texture_handle albedo_map{}; ///&lt; when valid, REPLACES tint (3.9)
+    sampler samp{};              ///&lt; how to read it
+    microsurface surface{};      ///&lt; roughness, metallic, F0 (6.4)
+
+    [[nodiscard]] bool textured() const { return albedo_map.valid(); }
+};</code></pre>
+  </figure>
+
+  <p>
+    And <code>cull_mode</code>, <code>surface_style</code> and <code>specular_model</code> stay
+    exactly where they are — in <code>fill_style</code>, in <code>gpu_draw_item</code>, in
+    <code>render_options</code>. <strong>A material that swallowed them would be a material that
+    cannot be a uniform, which is not a material at all.</strong>
+  </p>
+
+  <p>
+    <code>verify_65</code> §A asserts the rule rather than describing it, in the bluntest way the
+    language allows:
+  </p>
+
+  <pre><code class="lang-cpp">checkf(std::is_trivially_copyable_v&lt;engine::material&gt;,
+       "a material is TRIVIALLY COPYABLE (%zu bytes) — which is the machine's "
+       "way of saying it can be pushed as a uniform");</code></pre>
+
+  <p>
+    If a field ever arrives that breaks that, it belongs on the other side of the line, and the
+    assertion is where you find out.
+  </p>
+
+  <!-- =================================================================
+       4 — HANDLES
+       ================================================================= -->
+  <h2 id="handles"><span class="num">4</span>Handles, Pointers, and the Step Between</h2>
+
+  <p>
+    One field in that struct is doing something the old code did not, and it is the one worth the
+    most argument: <code>albedo_map</code> is a <strong>handle</strong>, where the engine has always
+    used a <code>const texture*</code>.
+  </p>
+
+  <p>
+    Here is what it replaces. <code>fill_style</code> has held this since Lesson 3.9:
+  </p>
+
+  <pre><code class="lang-cpp">struct texture_binding
+{
+    const texture* image = nullptr;
+    sampler samp{};
+};</code></pre>
+
+  <p>
+    …and the sandbox's comment beside it made the case for the pointer, honestly and, at the time,
+    correctly:
+  </p>
+
+  <blockquote>
+    <p>"<code>texture_binding</code> holds a non-owning pointer, and <code>textures</code> lives for
+       the whole program, so there is nothing here that can dangle."</p>
+  </blockquote>
+
+  <p>
+    Read that argument carefully, because <strong>it is an argument about this demo rather than
+    about the type</strong>. It is true. It is also unavailable to anyone else: it depends on a
+    container that happens never to grow, owned by a function that happens to outlive every user.
+    A material is going to be stored in scenes, copied into components, and — from Lesson 6.6 —
+    loaded from files. None of those can make that argument.
+  </p>
+
+    <figure class="dia bleed">
+    <svg viewBox="0 0 720 340" role="img" aria-labelledby="l65f3-t l65f3-d">
+      <title id="l65f3-t">Where a handle belongs and where a pointer belongs</title>
+      <desc id="l65f3-d">A handle is how a material stores a reference to a texture: durable, four bytes, checkable, and unaffected when the pool reallocates. A pointer is how the fill loop reads it: one dereference with no lookup. bind_albedo is the named step between them, run once per draw. Storing pointers instead makes the scene dangle when a pool grows; resolving inside the loop adds a bounds check to every pixel.</desc>
+      <defs>
+        <marker id="e-i-l65f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+        <marker id="e-s-l65f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+        <marker id="e-h-l65f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+        <marker id="e-b-l65f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+        <marker id="e-g-l65f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+      </defs>
+    <rect x="0" y="0" width="720" height="340" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+    <text x="360.0" y="28" class="lg" text-anchor="middle">Store a handle. Use a pointer. Resolve once, between.</text>
+    <rect x="60" y="62" width="160" height="190" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.1"/>
+    <rect x="60" y="62" width="160" height="190" rx="3" fill="none" stroke="#5ac878" stroke-width="1.3"/>
+    <text x="140.0" y="86" class="sm" text-anchor="middle">HANDLE</text>
+    <text x="140.0" y="104" class="xs" text-anchor="middle">STORAGE</text>
+    <line x1="74" y1="114" x2="206" y2="114" class="grid" stroke-width="1.0"/>
+    <text x="140.0" y="136" class="xs" text-anchor="middle">durable</text>
+    <text x="140.0" y="155" class="xs" text-anchor="middle">checkable</text>
+    <text x="140.0" y="174" class="xs" text-anchor="middle">4 bytes</text>
+    <text x="140.0" y="193" class="xs" text-anchor="middle">survives a realloc</text>
+    <text x="140.0" y="240" class="xs" text-anchor="middle">material::albedo_map</text>
+    <rect x="280" y="62" width="160" height="190" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.1"/>
+    <rect x="280" y="62" width="160" height="190" rx="3" fill="none" stroke="#f0961e" stroke-width="1.3"/>
+    <text x="360.0" y="86" class="sm" text-anchor="middle">resolve</text>
+    <text x="360.0" y="104" class="xs" text-anchor="middle">THE STEP</text>
+    <line x1="294" y1="114" x2="426" y2="114" class="grid" stroke-width="1.0"/>
+    <text x="360.0" y="136" class="xs" text-anchor="middle">once per DRAW</text>
+    <text x="360.0" y="155" class="xs" text-anchor="middle">a bounds check</text>
+    <text x="360.0" y="174" class="xs" text-anchor="middle">+ a generation</text>
+    <text x="360.0" y="193" class="xs" text-anchor="middle">compare</text>
+    <text x="360.0" y="240" class="xs" text-anchor="middle">bind_albedo(m, pool)</text>
+    <rect x="500" y="62" width="160" height="190" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.1"/>
+    <rect x="500" y="62" width="160" height="190" rx="3" fill="none" stroke="#5082e6" stroke-width="1.3"/>
+    <text x="580.0" y="86" class="sm" text-anchor="middle">POINTER</text>
+    <text x="580.0" y="104" class="xs" text-anchor="middle">THE HOT LOOP</text>
+    <line x1="514" y1="114" x2="646" y2="114" class="grid" stroke-width="1.0"/>
+    <text x="580.0" y="136" class="xs" text-anchor="middle">one dereference</text>
+    <text x="580.0" y="155" class="xs" text-anchor="middle">no lookup</text>
+    <text x="580.0" y="174" class="xs" text-anchor="middle">no branch</text>
+    <text x="580.0" y="193" class="xs" text-anchor="middle">per PIXEL</text>
+    <text x="580.0" y="240" class="xs" text-anchor="middle">texture_binding::image</text>
+    <line x1="224" y1="157" x2="274" y2="157" class="ink" stroke-width="1.7" marker-end="url(#e-i-l65f3)"/>
+    <line x1="444" y1="157" x2="494" y2="157" class="ink" stroke-width="1.7" marker-end="url(#e-i-l65f3)"/>
+    <rect x="60" y="268" width="600" height="58" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+    <text x="360.0" y="290" class="xs" text-anchor="middle">Wrong in one direction: the scene dangles the first time a pool grows.</text>
+    <text x="360.0" y="312" class="xs" text-anchor="middle">Wrong in the other: a bounds check and a generation compare, per pixel.</text>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 3.</span>
+      Two true statements that pull in opposite directions, and the resolution is a named step rather than a compromise. A stored reference must survive a reallocation and be CHECKABLE, which a raw pointer is not &#8212; measured in verify_65 &#167;C, where 64 insertions move the pool from 0x928c03500 to 0x928c16000 and the handle does not care, because it names a SLOT rather than an address. But a fill loop cannot afford a bounds check and a generation compare PER PIXEL, for a value that could not have changed between two pixels of one triangle. So: the handle stores, the pointer is used, and <code>bind_albedo</code> converts once per DRAW. Get the boundary wrong in one direction and the scene dangles the first time a pool grows; wrong in the other and every pixel pays for a lookup.
+    </figcaption>
+  </figure>
+
+
+  <p>
+    So the material stores a handle. But a handle is the wrong thing to have in a fill loop: it is
+    an index and a generation, and resolving it costs a bounds check and a compare. Lesson 5.4
+    measured that cost precisely so we would not have to guess about it — and <em>per pixel</em> is
+    exactly where you cannot afford it.
+  </p>
+
+  <p>
+    Both facts are true at once, which is why the answer is neither one type nor the other but a
+    <strong>named step between them</strong>:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/include/engine/gfx/material.hpp</span>
+      <span class="tag modified">the resolve</span></figcaption>
+<pre><code class="lang-cpp">[[nodiscard]] inline texture_binding bind_albedo(const material&amp; m,
+                                                 const texture_pool&amp; textures)
+{
+    return {textures.get(m.albedo_map), m.samp};
+}</code></pre>
+  </figure>
+
+  <p>Four lines, and the whole architecture is in the shape of them:</p>
+
+  <ul>
+    <li>a <strong>handle</strong> is how you STORE a reference — durable, checkable, four bytes,
+        safe across a reallocation, cheap to copy into a component or a file;</li>
+    <li>a <strong>pointer</strong> is how you USE one in an inner loop — one dereference, no
+        lookup, no branch;</li>
+    <li>and the <strong>resolve</strong> happens <em>once per draw</em>, between the two.</li>
+  </ul>
+
+  <p>
+    Getting that boundary wrong is a real cost in either direction, and it is worth naming both
+    failures because they look nothing alike. Store pointers and the scene dangles the first time a
+    pool grows — a crash, or worse, silently wrong pixels. Resolve inside the loop and you have
+    added a bounds check and a generation compare to every pixel, for a value that could not have
+    changed between two pixels of the same triangle.
+  </p>
+
+  <h3><span class="num">4.1</span>The case a pointer cannot express</h3>
+
+  <p>
+    There is a third state, and it is the one that makes handles worth the trouble. A handle can be
+    perfectly well-formed and name something that <em>no longer exists</em> — Lesson 5.4's
+    distinction between <code>valid()</code> and <code>contains()</code>. A pointer has no way to
+    be asked.
+  </p>
+
+  <p><code>verify_65</code> §C exercises all three states, and the middle one is the demonstration:</p>
+
+  <pre><code class="lang-text">[PASS] a live handle resolves to a bound binding (8x8)
+[PASS] after 64 more insertions the SAME handle still resolves — pointer was
+       0x928c03500, is now 0x928c16000. A raw pointer stored in a material would
+       have had to be right about which of those it was
+[PASS] a STALE handle resolves to an unbound binding, not to freed memory</code></pre>
+
+  <p>
+    <strong>The pool moved.</strong> Sixty-four insertions reallocated it, the storage is at a
+    different address, and the handle did not care — because it names a <em>slot</em> rather than an
+    address. Any pointer taken before that growth is now pointing at freed memory, and nothing about
+    it would say so.
+  </p>
+
+  <p>
+    And a stale handle resolves to <em>nothing</em>: <code>bind_albedo</code> returns an unbound
+    binding, and the surface falls back to its tint — exactly what it would have done with no image
+    at all. That is not a special case bolted on; it is the same code path as "this material has no
+    texture", which is why there is no error handling in those four lines.
+  </p>
+
+  <!-- =================================================================
+       5 — DERIVED
+       ================================================================= -->
+  <h2 id="derived"><span class="num">5</span>One Field, One Answer</h2>
+
+  <p>
+    Look at what the material does <em>not</em> have. Here is the GPU's material block, which
+    Lesson 4.8 wrote and 6.4 re-laid-out:
+  </p>
+
+  <pre><code class="lang-cpp">struct material_uniforms
+{
+    vec3  albedo;
+    float roughness;
+    float metallic;
+    float f0;
+    float textured;   // &lt;- 0 = use `albedo`, 1 = sample the bound texture
+    float pad0;
+};</code></pre>
+
+  <p>
+    <code>textured</code> is a flag. Beside it, in <code>gpu_draw_item</code>, sits a
+    <code>SDL_GPUTexture*</code> chosen somewhere else entirely. <strong>Two fields, two opinions,
+    and nothing keeping them in agreement.</strong>
+  </p>
+
+  <div class="callout warn">
+    <span class="label">The two ways that goes wrong</span>
+    <p><code>textured = 1</code> with no image bound: the shader samples an unbound slot and gets
+       the sampler's debug magenta.</p>
+    <p><code>textured = 0</code> with an image bound: the surface silently ignores its own texture
+       and draws flat.</p>
+    <p>Neither fails at the point of the mistake. Both render <em>something plausible</em>, which
+       is the failure mode this course keeps running into and keeps naming.</p>
+  </div>
+
+  <p>
+    The material has one field, and the flag is <strong>derived</strong> from it:
+  </p>
+
+  <pre><code class="lang-cpp">[[nodiscard]] bool textured() const { return albedo_map.valid(); }</code></pre>
+
+  <p>
+    That is not a convenience accessor. It is the removal of a state the program could previously
+    represent and should never have been able to. <strong>There is no longer any way to say
+    "textured, but with no image"</strong> — and a bug you cannot express is better than a bug you
+    detect.
+  </p>
+
+  <p>
+    The GPU still needs the flag as a number, of course. So one function computes it, in one place:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/include/engine/gfx/gpu_uniform.hpp</span>
+      <span class="tag modified">the one packing site</span></figcaption>
+<pre><code class="lang-cpp">[[nodiscard]] inline material_uniforms uniforms_of(const material&amp; m)
+{
+    const linear_rgb albedo = to_linear(m.tint);
+    return {.albedo = vec3{albedo.r, albedo.g, albedo.b},
+            .roughness = m.surface.roughness,
+            .metallic = m.surface.metallic,
+            .f0 = m.surface.f0,
+            .textured = m.textured() ? 1.0f : 0.0f,
+            .pad0 = 0.0f};
+}</code></pre>
+  </figure>
+
+  <p>
+    Before this lesson that block was assembled by hand at three sites — the sandbox,
+    <code>verify_48</code> and <code>verify_49</code> — five assignments each, each free to get the
+    fifth one wrong. Now there is one, and it derives.
+  </p>
+
+  <div class="callout">
+    <span class="label">A trap this lesson walked into, and what it cost to notice</span>
+    <p>Replacing the sandbox's hand-assembly with <code>uniforms_of(obj.mat)</code> compiled
+       cleanly and was <strong>wrong</strong>. The sandbox chooses its floor texture from a keypress
+       and a scene test, and never wrote that decision onto the material — so the derived flag would
+       have been 0 while a texture was bound, and every GPU texture would have vanished.</p>
+    <p>The fix is the lesson rather than a patch: the decision now lands <em>on the material</em>,
+       and everything downstream reads it from there. Writing the flag separately, next to a pointer
+       chosen separately, is precisely the pair of opinions this section exists to collapse — and I
+       nearly re-created it while removing it.</p>
+  </div>
+
+  <!-- =================================================================
+       6 — SHARING
+       ================================================================= -->
+  <h2 id="sharing"><span class="num">6</span>When a Pool Earns Its Place</h2>
+
+  <p>
+    A "material system" implies more than a struct. It implies materials having identity — being
+    stored somewhere, shared, referred to. So: a pool, <code>material_handle</code>, the same
+    machinery Lesson 5.4 built for meshes and 5.5 for images.
+  </p>
+
+  <p>
+    But <strong>a pool is not automatically right</strong>, and it is worth being able to say when
+    it is. <code>scene_object</code> holds its material <em>by value</em>. It has exactly one; a
+    handle would add a lookup to save nothing.
+  </p>
+
+  <p>
+    The swarm is the other case. Look at what it actually builds:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead><tr><th>entities</th><th>distinct materials</th><th>why</th></tr></thead>
+    <tbody>
+      <tr><td>96 ring drones</td><td><strong>6</strong></td><td><code>tint_for(i)</code> cycles six colours; all share roughness 0.53</td></tr>
+      <tr><td>32 moons</td><td>1</td><td>identical</td></tr>
+      <tr><td>sparks</td><td>1</td><td>identical</td></tr>
+      <tr><td>the sun</td><td>1</td><td>the one genuinely unique material</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+    <figure class="dia bleed">
+    <svg viewBox="0 0 720 382" role="img" aria-labelledby="l65f4-t l65f4-d">
+      <title id="l65f4-t">The cost of copying a material into every entity</title>
+      <desc id="l65f4-d">Ninety-six ring drones cycle through six tints, so there are six materials and ninety-six references to them. Storing a material in each entity costs 3456 bytes; storing a handle each and pooling the six costs 600, a 5.8 times reduction. The stronger argument is not the bytes: with copies, changing the drones' finish means finding every entity that carries it, and with handles it is a single write.</desc>
+      <defs>
+        <marker id="e-i-l65f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+        <marker id="e-s-l65f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+        <marker id="e-h-l65f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+        <marker id="e-b-l65f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+        <marker id="e-g-l65f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+      </defs>
+    <rect x="0" y="0" width="720" height="382" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+    <text x="360.0" y="28" class="lg" text-anchor="middle">What the pool is actually for</text>
+    <text x="360.0" y="50" class="sm" text-anchor="middle">96 ring drones, 6 distinct materials</text>
+    <line x1="150.0" y1="70" x2="150.0" y2="196" class="grid" stroke-width="0.8" stroke-dasharray="2 4"/>
+    <text x="150.0" y="212" class="xs" text-anchor="middle">0</text>
+    <line x1="255.0" y1="70" x2="255.0" y2="196" class="grid" stroke-width="0.8" stroke-dasharray="2 4"/>
+    <text x="255.0" y="212" class="xs" text-anchor="middle">864</text>
+    <line x1="360.0" y1="70" x2="360.0" y2="196" class="grid" stroke-width="0.8" stroke-dasharray="2 4"/>
+    <text x="360.0" y="212" class="xs" text-anchor="middle">1728</text>
+    <line x1="465.0" y1="70" x2="465.0" y2="196" class="grid" stroke-width="0.8" stroke-dasharray="2 4"/>
+    <text x="465.0" y="212" class="xs" text-anchor="middle">2592</text>
+    <line x1="570.0" y1="70" x2="570.0" y2="196" class="grid" stroke-width="0.8" stroke-dasharray="2 4"/>
+    <text x="570.0" y="212" class="xs" text-anchor="middle">3456</text>
+    <text x="360.0" y="230" class="xs" text-anchor="middle">bytes of material component</text>
+    <text x="136" y="104" class="xs" text-anchor="end">a material each</text>
+    <rect x="150" y="88" width="420.0" height="30" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.55"/>
+    <text x="580.0" y="108" class="sm" text-anchor="start">3456 B</text>
+    <text x="158" y="133" class="xs" text-anchor="start">96 x 36 B</text>
+    <text x="136" y="166" class="xs" text-anchor="end">a handle each</text>
+    <rect x="150" y="150" width="72.91666666666667" height="30" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.55"/>
+    <text x="232.91666666666669" y="170" class="sm" text-anchor="start">600 B</text>
+    <text x="158" y="195" class="xs" text-anchor="start">96 x 4 B  +  6 x 36 B</text>
+    <rect x="60" y="252" width="600" height="108" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+    <text x="360.0" y="276" class="sm" text-anchor="middle">5.8x smaller — and that is the SIDE EFFECT.</text>
+    <line x1="120" y1="290" x2="600" y2="290" class="grid" stroke-width="1.0"/>
+    <text x="360.0" y="312" class="xs" text-anchor="middle">With copies, “make the drones rougher” is a loop over the registry</text>
+    <text x="360.0" y="332" class="xs" text-anchor="middle">that has to find every entity carrying that appearance.</text>
+    <text x="360.0" y="352" class="sm" text-anchor="middle">With handles it is ONE WRITE.</text>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 4.</span>
+      Why the pool exists, with the bytes measured &#8212; and then the better argument. Ninety-six ring drones cycle through six tints and all share one roughness, so the scene holds <strong>six materials and ninety-six references</strong>. A copy in each entity stores the same thirty-six bytes sixteen times: 3,456 bytes against 600, a <strong>5.8&#215;</strong> reduction (verify_65 &#167;E). <strong>But the bytes are the side effect.</strong> With copies, &#8220;make the drones rougher&#8221; is a loop over the registry that must find every entity carrying that appearance and hope none was missed; with handles it is one write, which &#167;E checks reaches all ninety-six. Note what this means for the rule: <code>scene_object</code> still holds its material BY VALUE, because it has exactly one. <strong>The rule is about sharing, not about size</strong> &#8212; and &#8220;use handles for big things&#8221; gets this case backwards.
+    </figcaption>
+  </figure>
+
+
+  <p>
+    Ninety-six entities, six materials. Storing a copy in each stores the same thirty-six bytes
+    sixteen times over — <strong>3,456 bytes against 600</strong>, a 5.8× reduction on that
+    component, measured in <code>verify_65</code> §E.
+  </p>
+
+  <p>
+    And then the argument that actually matters, which is not about bytes at all:
+  </p>
+
+  <div class="callout ok">
+    <span class="label">What sharing buys</span>
+    <p>With copies, <em>"make the drones rougher"</em> is a loop over the registry that has to find
+       every entity carrying that appearance and hope none was missed.</p>
+    <p>With handles it is <strong>one write</strong>. <code>verify_65</code> §E does exactly that
+       and checks all ninety-six users see it.</p>
+  </div>
+
+  <p>
+    So the rule that decides between a value and a handle is <strong>about sharing, not about
+    size</strong>. That is worth stating plainly because "use handles for big things" is the folk
+    version and it gets this case backwards: a material is small, and the handle is still right —
+    because ninety-six things point at six.
+  </p>
+
+  <!-- =================================================================
+       7 — CLOSED
+       ================================================================= -->
+  <h2 id="closed"><span class="num">7</span>The Field That Was Not a Material After All</h2>
+
+  <p>
+    One field looked like it belonged in the material and does not, and finding that out was the
+    most useful thing building the type did.
+  </p>
+
+  <p>
+    <code>scene_object::closed</code> has carried this comment since Lesson 3.4:
+  </p>
+
+  <blockquote>
+    <p>"In a real engine this lives on the <strong>material</strong>, because cull mode is pipeline
+       state and pipeline state is what a material <em>is</em> (Module 6)."</p>
+  </blockquote>
+
+  <p>
+    It is Module 6, and that sentence is <strong>wrong twice over</strong>.
+  </p>
+
+  <p>
+    <strong>First</strong>, by §3: a material is explicitly <em>not</em> pipeline state. That was
+    the whole line we just drew. Cull mode belongs to the pipeline object, and a material that
+    carried it could not be a uniform.
+  </p>
+
+  <p>
+    <strong>Second</strong>, and more interestingly: <code>closed</code> is not cull mode anyway. It
+    is a claim about the <em>geometry</em> — a cube is closed whatever colour you paint it — and the
+    engine already computes it, from the mesh, without asking anyone:
+  </p>
+
+  <pre><code class="lang-cpp">// mesh.hpp, since Lesson 3.4 — on the REPORT, not on the mesh
+[[nodiscard]] bool closed() const
+{
+    return boundary_edges == 0 &amp;&amp; nonmanifold_edges == 0 &amp;&amp; triangles &gt; 0;
+}</code></pre>
+
+    <figure class="dia bleed">
+    <svg viewBox="0 0 720 320" role="img" aria-labelledby="l65f5-t l65f5-d">
+      <title id="l65f5-t">Why closed did not move onto the material</title>
+      <desc id="l65f5-d">The mesh reports whether it is closed, counted from its own edges by validate. The caller supplies the intent, because a closed mesh may still be drawn two-sided deliberately. cull_of combines the two, and is the single place the rule that culling is only valid on closed geometry is written down.</desc>
+      <defs>
+        <marker id="e-i-l65f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+        <marker id="e-s-l65f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+        <marker id="e-h-l65f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+        <marker id="e-b-l65f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+        <marker id="e-g-l65f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+      </defs>
+    <rect x="0" y="0" width="720" height="320" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+    <text x="360.0" y="28" class="lg" text-anchor="middle">A fact about the mesh is not a decision about the draw</text>
+    <rect x="56" y="62" width="266" height="158" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.1"/>
+    <rect x="56" y="62" width="266" height="158" rx="3" fill="none" stroke="#5ac878" stroke-width="1.3"/>
+    <text x="189" y="86" class="sm" text-anchor="middle">THE MESH</text>
+    <text x="189" y="104" class="xs" text-anchor="middle">mesh_report::closed()</text>
+    <line x1="76" y1="114" x2="302" y2="114" class="grid" stroke-width="1.0"/>
+    <text x="189" y="136" class="xs" text-anchor="middle">counted from edges</text>
+    <text x="189" y="154" class="xs" text-anchor="middle">“no rim, no non-manifold</text>
+    <text x="189" y="172" class="xs" text-anchor="middle">junctions”</text>
+    <text x="189" y="190" class="xs" text-anchor="middle">a cube: TRUE</text>
+    <text x="189" y="208" class="xs" text-anchor="middle">a quad: FALSE</text>
+    <rect x="398" y="62" width="266" height="158" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.1"/>
+    <rect x="398" y="62" width="266" height="158" rx="3" fill="none" stroke="#5082e6" stroke-width="1.3"/>
+    <text x="531" y="86" class="sm" text-anchor="middle">THE CALLER</text>
+    <text x="531" y="104" class="xs" text-anchor="middle">scene_object::closed</text>
+    <line x1="418" y1="114" x2="644" y2="114" class="grid" stroke-width="1.0"/>
+    <text x="531" y="136" class="xs" text-anchor="middle">the INTENT</text>
+    <text x="531" y="154" class="xs" text-anchor="middle">a closed mesh may still</text>
+    <text x="531" y="172" class="xs" text-anchor="middle">be drawn two-sided —</text>
+    <text x="531" y="190" class="xs" text-anchor="middle">to look inside it, or</text>
+    <text x="531" y="208" class="xs" text-anchor="middle">to debug a winding</text>
+    <line x1="324" y1="141" x2="390" y2="141" class="ink-soft" stroke-width="1.4" marker-end="url(#e-s-l65f5)"/>
+    <text x="357" y="130" class="sm" text-anchor="middle">+</text>
+    <rect x="190" y="238" width="340" height="62" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.12"/>
+    <rect x="190" y="238" width="340" height="62" rx="3" fill="none" stroke="#f0961e" stroke-width="1.3"/>
+    <text x="360" y="262" class="sm" text-anchor="middle">cull_of(fact, intent)</text>
+    <text x="360" y="284" class="xs" text-anchor="middle">the one place the rule lives</text>
+    <line x1="189" y1="226" x2="300" y2="242" class="ink-soft" stroke-width="1.3" marker-end="url(#e-s-l65f5)"/>
+    <line x1="531" y1="226" x2="420" y2="242" class="ink-soft" stroke-width="1.3" marker-end="url(#e-s-l65f5)"/>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 5.</span>
+      The correction this lesson makes, and it took building the material to see it. <code>scene_object::closed</code> carried a comment from Lesson 3.4 predicting it would move onto the material in Module 6 &#8212; &#8220;because cull mode is pipeline state and pipeline state is what a material IS&#8221;. That is wrong twice: a material is explicitly NOT pipeline state (Figure 2), and <code>closed</code> is not cull mode anyway. It is a claim about the GEOMETRY, true of a cube whatever colour you paint it, which <code>validate()</code> already counts from the mesh&#8217;s own edges. What belongs to the caller is the INTENT, because a closed mesh may still be drawn two-sided deliberately. Two questions, two owners, and <code>cull_of</code> is the single place the rule &#8212; culling is only valid on closed geometry &#8212; is written down. <strong>A comment predicting a future design cannot be tested</strong>, which is why this one repeated for three modules.
+    </figcaption>
+  </figure>
+
+
+  <p>
+    So there are two different questions wearing one name, and separating them is the fix:
+  </p>
+
+  <ul>
+    <li><strong>The fact</strong> belongs to the mesh: <em>is this surface closed?</em>
+        <code>validate()</code> counts the edges and answers it.</li>
+    <li><strong>The decision</strong> belongs to the caller: <em>should we cull its back faces?</em>
+        Usually yes when closed — but a closed mesh may still be drawn two-sided on purpose, to look
+        inside it or to debug a winding.</li>
+  </ul>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/include/engine/gfx/material.hpp</span>
+      <span class="tag modified">the rule, in one place</span></figcaption>
+<pre><code class="lang-cpp">[[nodiscard]] constexpr cull_mode cull_of(bool mesh_is_closed,
+                                          bool want_two_sided = false)
+{
+    return (mesh_is_closed &amp;&amp; !want_two_sided) ? cull_mode::back : cull_mode::none;
+}</code></pre>
+  </figure>
+
+  <p>
+    Two arguments, because there are two questions. Culling is only <em>valid</em> on closed
+    geometry, and that constraint now lives in exactly one function instead of being re-remembered
+    at every call site.
+  </p>
+
+  <div class="callout">
+    <span class="label">Worth noticing about the comment</span>
+    <p>It was written in 3.4, repeated the reasoning for three modules, and was wrong the whole
+       time — and nothing caught it, because <strong>a comment predicting a future design cannot be
+       tested.</strong> It was only building the thing it predicted that showed it up.</p>
+    <p>That is not an argument against writing such comments; 3.7's identical prediction about the
+       material was exactly right and is why this lesson exists. It is an argument for
+       <em>re-reading them when you arrive</em>, rather than treating them as instructions.</p>
+  </div>
+
+  <!-- =================================================================
+       8 — THE HEADER
+       ================================================================= -->
+  <h2 id="header"><span class="num">8</span>Where cull_mode Lives, and an Argument I Had to Withdraw</h2>
+
+  <p>
+    <code>cull_of</code> returns a <code>cull_mode</code>, which lives in <code>raster.hpp</code> —
+    a 700-line header holding the whole software rasterizer. Should <code>material.hpp</code>
+    include it?
+  </p>
+
+  <p>
+    Lesson 5.1 already answered this, in <code>projector.hpp</code>, and stated the rule:
+    <strong>a type two components share is a header, not a section of whichever one happened to
+    define it first.</strong> Two components now share <code>cull_mode</code>, so it gets
+    <code>gfx/cull.hpp</code>: thirty lines, one enum.
+  </p>
+
+  <p>
+    That is the whole justification, and this section exists because I did not think it was enough.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">The claim I wrote, and the measurement that killed it</span>
+    <p>The comment I first wrote said the split was about <em>compile time</em>: <code>raster.hpp</code>
+       is 700 lines, Lesson 5.1 measured it at <strong>0.97 s</strong> for everyone who includes it,
+       and pulling that in for a three-value enum is indefensible. Quantitative, concrete,
+       persuasive.</p>
+    <p>Then I measured it on the machine actually doing the build:</p>
+    <pre><code class="lang-text">cull.hpp        0.038 s
+raster.hpp      0.258 s
+material.hpp    0.261 s   &lt;- already, via texture.hpp</code></pre>
+    <p><strong>The marginal saving is approximately zero.</strong> <code>material.hpp</code>
+       already costs more than <code>raster.hpp</code>, because <code>texture.hpp</code> dominates
+       both.</p>
+  </div>
+
+  <p>
+    Two things went wrong there, and the second is the more embarrassing.
+  </p>
+
+  <p>
+    The 0.97 s was measured three modules ago, on a different build, in a different state — and
+    Lesson 5.1's own note says, in capitals, <strong>"THE RATIO IS WHAT TRAVELS, NOT THE
+    SECONDS."</strong> I read past the caveat to the number I wanted. A recorded warning does not
+    protect you if the figure beside it is more useful.
+  </p>
+
+  <p>
+    And the deeper mistake: <strong>the physical-design rule never needed a performance argument.</strong>
+    "Two components share the type, so it gets a header" stands entirely on its own. Reaching for a
+    second, quantitative justification felt like making the case stronger, and it was the only part
+    of the case that was false.
+  </p>
+
+  <p>
+    The split ships. The reason it ships is the rule. And <code>cull.hpp</code> does cost 0.038 s,
+    which is the one figure in that comment measured before it was written down.
+  </p>
+
+  <!-- =================================================================
+       9 — IMPLEMENTATION
+       ================================================================= -->
+  <h2 id="impl"><span class="num">9</span>Implementation</h2>
+
+  <p>
+    Four steps, and the order matters because the last one is what makes the whole thing
+    verifiable.
+  </p>
+
+  <h3><span class="num">9.1</span>Step one: the texture gets a pool</h3>
+
+  <p>
+    Before a material can reference a texture by handle, textures need somewhere with stable
+    identity. That is two lines in <code>texture.hpp</code>:
+  </p>
+
+  <pre><code class="lang-cpp">using texture_handle = handle&lt;texture&gt;;
+using texture_pool   = pool&lt;texture&gt;;</code></pre>
+
+  <p>
+    Note where it is <em>not</em>. <code>asset_store</code> already owns pools of meshes and images
+    (5.5), and adding a third would have been the obvious move — but the asset store is about
+    <em>files</em>: a search path, a name, a cache, a load count. Every texture in this engine so far
+    is generated in memory. Lesson 6.6 is where textures start arriving from disk, and that is the
+    lesson that gets to decide whether they become assets. <strong>Inventing that answer now would
+    be guessing</strong>, which is the same call 3.7 made about the material itself.
+  </p>
+
+  <h3><span class="num">9.2</span>Step two: the material, and what it displaces</h3>
+
+  <p>
+    <code>material.hpp</code> is new and small. The interesting part of the diff is what
+    <em>shrinks</em>: <code>scene_object</code> loses two fields and gains one, and
+    <code>ecs_swarm</code>'s invented struct loses its body entirely.
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">demos/ecs_swarm/main.cpp</span>
+      <span class="tag modified">the deletion</span></figcaption>
+<pre><code class="lang-cpp">// before — a demo declaring an engine type
+struct material
+{
+    Uint32 tint = 0xFFFFFFFFu;
+    engine::microsurface surface{};
+};
+
+// after
+struct material
+{
+    engine::material_handle mat{};
+};</code></pre>
+  </figure>
+
+  <p>
+    It stays a distinct type rather than becoming <code>engine::material</code> outright, and that
+    is deliberate: <strong>an ECS component is an identity, not just a payload.</strong>
+    <code>view&lt;geometry, material&gt;</code> names <em>this</em> component, and two components
+    that happened to share a layout would be indistinguishable to the registry. Lesson 5.7 made the
+    same call about <code>placement</code>.
+  </p>
+
+  <h3><span class="num">9.3</span>Step three: one packing site</h3>
+
+  <p>
+    <code>uniforms_of</code> (§5) replaces the hand-assembly at three call sites. The sandbox's
+    version went from five statements to one — and, as §5 records, that substitution was wrong
+    until the texture decision was moved onto the material, which is the point the function is
+    making.
+  </p>
+
+  <h3><span class="num">9.4</span>Step four: the resolve, in the golden's own path</h3>
+
+  <p>
+    The reference shot could have kept passing a raw <code>const texture*</code> and nothing would
+    have noticed. Instead it now builds a material and resolves it, so the handle path is on the
+    covered path rather than beside it:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">demos/common/demo_scene.cpp</span>
+      <span class="tag modified">the shot</span></figcaption>
+<pre><code class="lang-cpp">const engine::material draw_material{
+    .albedo_map = bind_texture ? textures.pick(albedo_source::uv_grid)
+                               : engine::texture_handle{},
+    .samp = samp,
+    .surface = lit_pass ? engine::microsurface{.roughness = 0.30f}
+                        : engine::microsurface{}};
+const engine::texture_binding albedo = engine::bind_albedo(draw_material,
+                                                            textures.pool);</code></pre>
+  </figure>
+
+  <p>
+    That is the same discipline Lesson 6.4 arrived at when it added an eighth frame: <strong>a test
+    that does not exercise a path cannot pin it.</strong> A handle system verified only by unit
+    tests is a handle system the reference render has never run.
+  </p>
+
+  <!-- =================================================================
+       10 — THE REFACTOR
+       ================================================================= -->
+  <h2 id="refactor"><span class="num">10</span>The Refactor, in Two Halves</h2>
+
+  <p>
+    Everything above is a refactor, which means it gets exactly one correctness claim: <strong>the
+    picture does not change.</strong> Lesson 5.1 built the machinery for making that claim and
+    stated the rule for using it:
+  </p>
+
+  <div class="callout ok">
+    <span class="label">5.1's rule</span>
+    <p><strong>Move without changing, then change without moving, verifying separately.</strong></p>
+  </div>
+
+  <p>
+    "Separately" is the load-bearing word. If you move code and change behaviour in one step and the
+    output shifts, you have two candidate causes and no way to tell them apart. Worse, if the two
+    changes have <em>compensating</em> errors, the output can come out right and both bugs survive.
+  </p>
+
+  <p>So this lesson ran the golden three times:</p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead><tr><th>after</th><th>what changed</th><th>hash</th></tr></thead>
+    <tbody>
+      <tr><td>the move</td><td><code>tint</code> and <code>surface</code> into <code>mat</code>, nothing else</td><td><code>E917C06C</code></td></tr>
+      <tr><td>the texture handles</td><td><code>texture_set</code> became a pool; the shot resolves</td><td><code>E917C06C</code></td></tr>
+      <tr><td>the GPU packing</td><td><code>uniforms_of</code>; the swarm's handle component</td><td><code>E917C06C</code></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    The swarm has its own shot, and it got the same treatment — rendered before and after from
+    clean builds on both sides, byte-identical.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">A false alarm worth having, because the symptom was not a crash</span>
+    <p>Capturing that "before" render meant stashing the work, rebuilding, and shooting. The
+       rebuild was <em>incremental</em>, and <code>scene_object</code> had changed size (96 → 112
+       bytes) — so some objects were compiled against the old layout and some against the new.</p>
+    <p>The result was not a crash. It was a shot with the wrong scenes in it: frame 1 rendering
+       <code>solids</code> instead of <code>cycle</code>, triangle counts of 20 where 44 was right,
+       and one frame's name printing as <code>?</code>. <strong>Plausible garbage</strong>, which
+       took a minute to distinguish from a real regression.</p>
+    <p>The fix was <code>cmake --build build --target clean</code>, and the rule is: <strong>after
+       any change to a struct's layout, an incremental build is not evidence.</strong> That is the
+       same failure class as a uniform block disagreeing with its shader, arriving on the CPU
+       side.</p>
+  </div>
+
+  <!-- =================================================================
+       11 — WHAT IT COST
+       ================================================================= -->
+  <h2 id="cost"><span class="num">11</span>What It Cost</h2>
+
+  <p>
+    A material system is not free, and one of the existing harnesses said so immediately.
+    <code>verify_56</code> — Lesson 5.6's cache-behaviour work — asserts the size of
+    <code>scene_object</code>, and it failed:
+  </p>
+
+  <pre><code class="lang-text">[FAIL] scene_object is 112 bytes (1.5 cache lines)</code></pre>
+
+  <p>
+    It was 96. The material added 16 bytes net, and the assertion is worth keeping rather than
+    relaxing, because 5.6 is the lesson that measured <em>why</em> object size matters at all.
+  </p>
+
+  <p>Where the bytes went:</p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead><tr><th>field</th><th>bytes</th><th></th></tr></thead>
+    <tbody>
+      <tr><td><code>Uint32 tint</code></td><td>4</td><td>was already there</td></tr>
+      <tr><td><code>texture_handle albedo_map</code></td><td>4</td><td>new — and it replaces an 8-byte pointer elsewhere</td></tr>
+      <tr><td><code>sampler samp</code></td><td><strong>16</strong></td><td><strong>the whole growth</strong></td></tr>
+      <tr><td><code>microsurface surface</code></td><td>12</td><td>was already there</td></tr>
+      <tr><td><code>material</code></td><td>36</td><td></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    <strong>The sampler is where it went</strong> — four enums, stored per object, identical for
+    every object in every scene this engine has. A real engine interns those into a handle exactly
+    as this lesson interns the texture, which would put <code>scene_object</code> back under a
+    hundred bytes.
+  </p>
+
+  <p>
+    That is named as a debt rather than paid, on the same grounds as everything else here: nothing
+    yet needs two materials to <em>share</em> a sampler, and the rule from §6 is about sharing.
+    Exercise 14.4 does it anyway and measures what comes back.
+  </p>
+
+  <!-- =================================================================
+       12 — LISTINGS
+       ================================================================= -->
+  <h2 id="listings"><span class="num">12</span>Complete Code Listings</h2>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead><tr><th>path</th><th>state</th><th>purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>engine/include/engine/gfx/material.hpp</code></td><td>new</td><td>the type, the pool, the resolve, <code>cull_of</code></td></tr>
+      <tr><td><code>engine/include/engine/gfx/cull.hpp</code></td><td>new</td><td><code>cull_mode</code>, shared by two components</td></tr>
+      <tr><td><code>engine/include/engine/gfx/texture.hpp</code></td><td>modified</td><td><code>texture_handle</code>, <code>texture_pool</code></td></tr>
+      <tr><td><code>engine/include/engine/gfx/scene.hpp</code></td><td>modified</td><td><code>scene_object</code> holds a material; the <code>closed</code> correction</td></tr>
+      <tr><td><code>engine/include/engine/gfx/gpu_uniform.hpp</code></td><td>modified</td><td><code>uniforms_of</code> — one packing site</td></tr>
+      <tr><td><code>engine/include/engine/gfx/raster.hpp</code></td><td>modified</td><td><code>cull_mode</code> moved out</td></tr>
+      <tr><td><code>demos/ecs_swarm/main.cpp</code></td><td>modified</td><td>the invented struct deleted; handles and a palette</td></tr>
+      <tr><td><code>scratch/verify_65.cpp</code></td><td>new</td><td>27 checks, seven sections</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+    <figure class="listing">
+    <figcaption>
+      <span class="path">engine/include/engine/gfx/material.hpp</span>
+      <span class="tag new">new</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// engine/include/engine/gfx/material.hpp — what a surface IS.
+//
+// Lesson 6.5, and this file is the answer to a question the codebase has been
+// asking since Lesson 3.4. It is worth reading the evidence before the type,
+// because the type is unremarkable and the evidence is the lesson.
+//
+// THREE PLACES GREW THE SAME STRUCT-SHAPED HOLE, INDEPENDENTLY.
+//
+//   1. `scene_object` (3.4, 3.7) collected `tint`, `closed` and `surface`
+//      alongside `xform` and `geometry`, and its own doc comment says so: &quot;that
+//      is two different kinds of data wearing one struct, and the second kind has
+//      a name: a material. Module 6 gives it one.&quot;
+//   2. `fill_style` (3.8) collected `lights`, `surface`, `eye` and `albedo`
+//      beside the four rasterizer knobs, and its own comment says &quot;`fill_style`
+//      is now two structs wearing one name.&quot;
+//   3. `ecs_swarm` — a DEMO, restricted to the public API — declared
+//      `struct material { Uint32 tint; microsurface surface; }` because the
+//      engine did not offer one. A demo that has to invent an engine type is the
+//      strongest evidence available that the type is missing.
+//
+// AND LESSON 6.4 PRICED IT. Changing the surface description meant editing
+// forty-four call sites across the engine, four demos and six harnesses. That
+// number is not a complaint about 6.4; it is the measurement that says the
+// description had no single home.
+//
+// THE SPLIT THAT MATTERS IS NOT struct-VERSUS-struct. It is:
+//
+//     WHICH HALF CAN BE A NUMBER IN A BUFFER?
+//
+// Everything in `material` below can. It is per-draw data: the fragment stage
+// reads it, a GPU pushes it as a uniform block, and two objects that differ only
+// in these fields can be drawn back to back with no state change between them.
+// Cull mode, fill mode and the choice of BRDF cannot — they are baked into a
+// PIPELINE OBJECT, and two objects that differ in them need two pipelines and a
+// sort between them. Lesson 4.8 measured that: three pipelines, and the sort
+// that keeps the bind count at three instead of one per draw.
+//
+// So this file draws the line where the hardware draws it, and the things on the
+// other side of it stay where they are — in `fill_style`, `surface_style` and
+// `render_options`. A material that swallowed them would be a material that
+// cannot be a uniform, which is not a material at all.
+//
+// AND ONE THING TURNED OUT TO BE ON NEITHER SIDE. `scene_object::closed` says
+// &quot;this mesh is a closed solid&quot;, which reads like material state and is not: it
+// is a fact about the GEOMETRY, true of a cube whatever colour you paint it.
+// `validate()` already reports it, as `mesh_report::closed()`. See `cull_of`.
+
+#pragma once
+
+#include &lt;engine/core/handle.hpp&gt;
+#include &lt;engine/core/pool.hpp&gt;
+#include &lt;engine/gfx/colour.hpp&gt;
+#include &lt;engine/gfx/cull.hpp&gt;
+#include &lt;engine/gfx/microfacet.hpp&gt;
+#include &lt;engine/gfx/texture.hpp&gt;
+
+#include &lt;SDL3/SDL.h&gt;
+
+namespace engine {
+
+/// **Everything about a surface that can be a number in a buffer.**
+///
+/// Five fields, and every one of them is read by the fragment stage and by
+/// nothing else. That is the test this struct is built to pass, and it is worth
+/// applying to anything you are tempted to add: *could this be pushed as a
+/// uniform, or does it change which pipeline runs?*
+///
+/// **It is a VALUE, and small.** 36 bytes as measured — a `Uint32`, a 4-byte
+/// handle, a 16-byte `sampler` and three floats — so it is copied rather than
+/// referenced wherever there is one of them. `material_handle` exists for where
+/// there are many; see the note on `material_pool`.
+///
+/// (The sampler is the largest field, and it is worth knowing that is where the
+/// bytes went: it is four enums that a real engine would intern into a handle of
+/// its own, exactly as this lesson does for the texture. Named rather than done,
+/// because nothing has yet needed two materials to share a sampler.)
+struct material
+{
+    /// The surface&#x27;s own colour, **sRGB-encoded**, as an artist types it.
+    ///
+    /// It stays a `Uint32` rather than becoming a `linear_rgb`, and the reason is
+    /// Lesson 6.1&#x27;s rule rather than laziness: *decode once at the input edge*.
+    /// A hex colour is authored data, it arrives sRGB-encoded, and the decode
+    /// belongs at the point where it meets arithmetic — which is `shade_encoded`
+    /// on the CPU side and the uniform push on the GPU side. Storing it decoded
+    /// would move the conversion earlier without removing it, and would quietly
+    /// widen an 8-bit authored value into a float that looks more precise than
+    /// the thing it came from.
+    Uint32 tint = 0xFFFFFFFFu;
+
+    /// The albedo image, or an invalid handle for &quot;this surface has none&quot;.
+    ///
+    /// **A HANDLE, not a `const texture*`, and that is Lesson 5.4 collecting.** A
+    /// material outlives the frame it was used in; a pointer into a container
+    /// that can reallocate does not. A handle is checkable — `pool::contains()`
+    /// answers &quot;does this still resolve?&quot; and a raw pointer cannot be asked.
+    ///
+    /// **When it is valid it REPLACES `tint`; it does not multiply it** — Lesson
+    /// 3.9&#x27;s rule, and the reason is that both of them *are* the albedo and a
+    /// surface has one albedo. That is why there is no separate &quot;textured&quot; flag
+    /// here: see `textured()`.
+    texture_handle albedo_map{};
+
+    /// How to read that image. Independent of *which* image, which is why it is a
+    /// separate field and why `SDL_GPUTextureSamplerBinding` is a pair (3.9).
+    sampler samp{};
+
+    /// Roughness, metallic, F0 — Lesson 6.4&#x27;s `microsurface`.
+    microsurface surface{};
+
+    /// Does the albedo come from the image rather than from `tint`?
+    ///
+    /// **DERIVED, never stored**, and that is the point of writing it as a
+    /// function. Lesson 4.8&#x27;s `material_uniforms` carries a `textured` float
+    /// beside the texture pointer, which is two fields that can disagree — and a
+    /// material with `textured = 1` and no image bound draws the sampler&#x27;s debug
+    /// magenta, while one with `textured = 0` and an image bound silently ignores
+    /// it. Neither is diagnosable at the point of the mistake.
+    ///
+    /// One field cannot contradict itself. The GPU still needs the flag as a
+    /// number, and `material_uniforms` still has it — but it is now *computed* at
+    /// the push, from the only field that knows.
+    [[nodiscard]] bool textured() const { return albedo_map.valid(); }
+};
+
+/// A reference to a material held in a `material_pool`.
+using material_handle = handle&lt;material&gt;;
+
+/// Storage for materials, for when many objects share one.
+///
+/// **A pool is not automatically the right answer, and it is worth saying when it
+/// is.** With one material per object, a `material` value on the object is
+/// simpler, cheaper and cannot dangle — which is why `scene_object` holds one by
+/// value. The pool earns its place the moment objects SHARE: `ecs_swarm` gives
+/// two hundred drones the same appearance, and a handle makes that one material
+/// instead of two hundred copies of it (§6.5 measures what that saves).
+///
+/// It is the same judgement Lesson 5.4 made about meshes and 5.5 about images,
+/// arriving a third time — and the third time it is worth noticing that the rule
+/// is about *sharing*, not about size.
+using material_pool = pool&lt;material&gt;;
+
+/// Resolve a material&#x27;s texture reference into something the fill loop can read.
+///
+/// **This function is the whole handle/pointer story in four lines, and the
+/// separation it makes is the architectural point of this lesson:**
+///
+///   - a **handle** is how you STORE a reference — durable, checkable, safe
+///     across a reallocation, and cheap to copy into a component or a file;
+///   - a **pointer** is how you USE one in an inner loop — a dereference, no
+///     lookup, no branch;
+///   - and the **resolve** is a named step that happens ONCE PER DRAW, between
+///     the two.
+///
+/// Getting that boundary wrong in either direction is a real cost. Store
+/// pointers and the scene dangles the first time a pool grows. Resolve inside the
+/// fill loop and you have added a bounds check and a generation compare to every
+/// pixel — Lesson 5.4 measured what a handle lookup costs, and per-pixel is
+/// exactly where you cannot afford it.
+///
+/// Returns an unbound binding for an invalid or stale handle, which is not an
+/// error: it is a surface with no image, and the fill falls back to `tint`
+/// exactly as it did before this lesson existed.
+[[nodiscard]] inline texture_binding bind_albedo(const material&amp; m,
+                                                 const texture_pool&amp; textures)
+{
+    return {textures.get(m.albedo_map), m.samp};
+}
+
+/// The cull mode a mesh&#x27;s own geometry justifies.
+///
+/// **`closed` was never material state, and this is where that gets fixed.**
+/// `scene_object::closed` has carried a hand-typed bool since Lesson 3.4, and its
+/// doc comment predicted it would move onto the material in Module 6. It should
+/// not: it is a fact about the *mesh* — a cube is closed whatever colour you
+/// paint it — and `validate()` already reports it, as `mesh_report::closed()`, from the geometry
+/// rather than taking anyone&#x27;s word.
+///
+/// What belongs to the material is the DECISION, not the fact. Back-face culling
+/// is only valid on a closed surface, so a sheet must not be culled; but a closed
+/// mesh may still be drawn two-sided deliberately (to see inside it, to debug a
+/// winding). Hence: the mesh supplies the fact, the caller supplies the intent,
+/// and this function is the one place the rule lives.
+///
+/// Note what that means for the demo&#x27;s `closed` flags. They stop being a promise
+/// somebody typed and become a cached answer — which is exactly the transition
+/// `demos/common/demo_scene.cpp` already made for the loaded model in Lesson 5.4,
+/// and now makes everywhere.
+[[nodiscard]] constexpr cull_mode cull_of(bool mesh_is_closed, bool want_two_sided = false)
+{
+    return (mesh_is_closed &amp;&amp; !want_two_sided) ? cull_mode::back : cull_mode::none;
+}
+
+} // namespace engine
+</code></pre>
+  </figure>
+
+    <figure class="listing">
+    <figcaption>
+      <span class="path">engine/include/engine/gfx/cull.hpp</span>
+      <span class="tag new">new</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// engine/include/engine/gfx/cull.hpp — which faces to throw away.
+//
+// Lesson 6.5, and this file exists for one reason, stated as a rule in
+// `projector.hpp` back in 5.1: **a type two components share is a header, not a
+// section of whichever one happened to define it first.** Where a type lives is
+// decided by who needs it, not by who wrote it.
+//
+// `cull_mode` was defined in `raster.hpp` in Lesson 3.4 because the rasterizer
+// was the only thing that had an opinion about it. Lesson 6.5 gives `material.hpp`
+// an opinion too — `cull_of()` turns a mesh&#x27;s own geometry into a culling
+// decision — and at that moment the enum has two homes and needs its own.
+//
+// A NOTE ON THE ARGUMENT I REACHED FOR FIRST, AND WHY IT IS NOT HERE.
+//
+// The obvious justification is compile time: `raster.hpp` is 700 lines, Lesson
+// 5.1 measured it as the most expensive header in the engine, and pulling it in
+// for a three-value enum sounds indefensible. So that is what this comment said,
+// with 5.1&#x27;s number quoted in it — until the number was re-measured on the
+// machine that is actually building this, where `raster.hpp` costs 0.258 s and
+// `material.hpp` costs 0.261 s. Materials already include `texture.hpp`, which
+// dominates both. **The marginal saving is approximately zero**, and 5.1&#x27;s own
+// note says why the quote was misused: THE RATIO IS WHAT TRAVELS, NOT THE
+// SECONDS.
+//
+// The split stands anyway, on the physical-design rule alone — two components
+// share the type, so it gets a header. That rule never needed a performance
+// argument, and reaching for one I had not taken myself nearly shipped a false
+// number in a course whose whole premise is that measurements are taken.
+// (`cull.hpp` does cost 0.038 s, which is the one figure here that was measured
+// before it was written down.)
+
+#pragma once
+
+namespace engine {
+
+/// Which faces to throw away before rasterizing.
+///
+/// Field order and meaning mirror `SDL_GPUCullMode` exactly — verified against
+/// `SDL3/SDL_gpu.h`, where the enumerators are `NONE`, `FRONT`, `BACK` in that
+/// order — so Module 4&#x27;s port is a rename. It lives in `fill_style` for the same
+/// reason: SDL_GPU carries `cull_mode` in `SDL_GPURasterizerState` alongside
+/// `fill_mode` and `front_face`, which is to say it is *pipeline state*, decided
+/// once and bound, not a per-draw argument.
+///
+/// **This is an optimisation, not a correctness fix**, and Lesson 3.4 spends real
+/// time on that distinction. The z-buffer already produces the right picture with
+/// culling switched off; what culling buys is not drawing roughly half of a closed
+/// mesh&#x27;s triangles at all.
+enum class cull_mode
+{
+    /// Draw everything. **The default**, and the only setting that is correct for
+    /// *every* mesh — because culling is only valid on geometry that is closed.
+    /// A ground plane, a billboard, a leaf card and a sheet of paper are all
+    /// single-sided, and back-face culling makes them vanish when seen from behind.
+    none,
+
+    /// Throw away front faces. Useful for looking inside a closed mesh, and
+    /// genuinely used in real renderers — rendering the inside of a skybox cube, or
+    /// the back faces of shadow volumes.
+    front,
+
+    /// Throw away back faces. **The one you want** on any closed mesh: no face
+    /// pointing away from the camera can be visible, because a closer front face is
+    /// always in the way.
+    back
+};
+} // namespace engine
+</code></pre>
+  </figure>
+
+    <figure class="listing">
+    <figcaption>
+      <span class="path">engine/include/engine/gfx/scene.hpp</span>
+      <span class="tag modified">modified</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// engine/include/engine/gfx/scene.hpp — a thing in the world, and where it is.
+//
+// The smallest description of something worth drawing: a placement, a shape, and
+// the handful of surface parameters the shading needs. Lesson 5.1 lifted it out
+// of the demo, and the argument for doing so is the one that decides most of
+// these questions: BOTH renderers consume it. The software rasterizer walks a
+// list of these; so does the GPU path, after a translation step. A type that two
+// renderers agree on is the engine&#x27;s, whoever typed it first.
+//
+// It is deliberately NOT the final answer. Module 5&#x27;s ECS replaces the struct
+// with components, and Module 6 pulls the surface fields out into a material.
+// Both of those are named in the comments below where the seams already show.
+
+#pragma once
+
+#include &lt;engine/gfx/light.hpp&gt;
+#include &lt;engine/gfx/material.hpp&gt;   // 6.5
+#include &lt;engine/gfx/mesh.hpp&gt;
+#include &lt;engine/math/mat3.hpp&gt;
+#include &lt;engine/math/mat4.hpp&gt;
+#include &lt;engine/math/transform.hpp&gt;
+
+#include &lt;SDL3/SDL_stdinc.h&gt;
+
+namespace engine {
+
+// ---------------------------------------------------------------------------
+// Lesson 2.8 — model space, world space, and the order of T, R and S
+// ---------------------------------------------------------------------------
+
+/// Which order the model matrix is composed in. [O] cycles.
+///
+/// Only the first is right. The other two are here because they are the two
+/// mistakes people actually make, and because each one fails in a specific,
+/// nameable way that is far more instructive than being told the correct answer.
+enum class trs_order
+{
+    trs,   ///&lt; T * R * S — scale, then rotate, then translate. Correct.
+    tsr,   ///&lt; T * S * R — rotate first, then scale along WORLD axes. Deforms.
+    rts    ///&lt; R * T * S — translate before rotating. Orbits the world origin.
+};
+
+[[nodiscard]] inline const char* name_of(trs_order o)
+{
+    switch (o)
+    {
+    case trs_order::trs: return &quot;T * R * S   (correct)&quot;;
+    case trs_order::tsr: return &quot;T * S * R   (scale last)&quot;;
+    case trs_order::rts: return &quot;R * T * S   (rotate last)&quot;;
+    }
+    return &quot;?&quot;;
+}
+
+
+/// Build a model matrix in a chosen — possibly wrong — order.
+///
+/// `parent_from_local()` in transform.hpp always builds T*R*S, because that is
+/// the only order an engine should ever offer. This function exists purely so the
+/// demo can put the wrong answers on screen next to the right one; it is the same
+/// bargain struck for `draw_line_naive` (2.1), Pong&#x27;s unswept collision (1.8),
+/// `blend_space::encoded` (2.4) and the `w` toggles (2.7). A failure you can
+/// summon on a keypress teaches more than a paragraph describing it.
+[[nodiscard]] inline mat4 model_matrix(const transform&amp; t, trs_order order)
+{
+    if (order == trs_order::trs) { return parent_from_local(t); }
+
+    const mat4 T = translation(t.position);
+    const mat4 R = to_mat4(t.rotation);
+    const mat4 S = to_mat4(scale(t.scale.x, t.scale.y, t.scale.z));
+
+    // Spelled out as three separate 4x4 factors rather than folded, so the source
+    // reads in the same order as the name printed on screen.
+    if (order == trs_order::tsr) { return T * S * R; }
+    return R * T * S;
+}
+
+/// One thing in the world: where it is, and what shape it is.
+///
+/// A transform plus a mesh. That pairing is the smallest useful definition of a
+/// renderable object, and it is deliberately kept OUT of `engine::transform` — a
+/// transform is a placement, not a thing, and Module 5&#x27;s ECS will attach geometry
+/// to a transform as a separate component for exactly this reason. Here it is a
+/// two-field demo struct, which is the honest amount of machinery for three objects.
+///
+/// **Lesson 5.4 changed one word here and it is the most consequential word in
+/// the struct.** `geometry` used to be a `mesh` — three pointers and three
+/// lengths, borrowed from whoever happened to own the arrays, valid for exactly
+/// as long as that owner said nothing and moved nothing. It is now a
+/// `mesh_handle`: four bytes, owning nothing, borrowing nothing, and answerable.
+/// A `scene_object` can now be copied, stored, serialized and outlive its
+/// geometry, and every one of those is a thing it could not do yesterday.
+///
+/// The cost is real and is named rather than hidden: a handle is meaningless
+/// without its pool, so everything that draws a `scene_object` now needs the
+/// `mesh_pool` too. `collect_triangles` grew a parameter for it. Module 5&#x27;s ECS
+/// eventually folds the pools into a `world` that carries them together — but a
+/// context object invented before three callers have asked for one is a guess,
+/// so for now the dependency is spelled out at every call site where it exists.
+///
+/// Lesson 3.1 adds a `tint`. Triangles are filled now, and a fill needs a colour;
+/// there is no lighting until 3.6, so each object simply carries one.
+struct scene_object
+{
+    transform xform;
+    mesh_handle geometry;
+    const char* name;
+
+    /// **What this surface looks like** — Lesson 6.5.
+    ///
+    /// `tint` and `surface` used to be two loose fields here, and the comment
+    /// that lived on the second said the quiet part out loud: *&quot;that is two
+    /// different kinds of data wearing one struct, and the second kind has a
+    /// name: a material.&quot;* This is that name.
+    ///
+    /// Nothing about the values changed — `mat.tint` is the old `tint` and
+    /// `mat.surface` is the old `surface` — which is why the reference render
+    /// comes out byte-identical across this lesson. That is the whole claim a
+    /// refactor is allowed to make, and 5.1&#x27;s rule for making it: **move without
+    /// changing, then change without moving, verifying separately.**
+    ///
+    /// **By value, not by handle.** A `scene_object` has exactly one material and
+    /// a material is 36 bytes; a handle would add a lookup to save nothing. The
+    /// pool exists for where objects *share* one, which `ecs_swarm` demonstrates
+    /// with two hundred drones. The rule that decides between them is about
+    /// sharing, not about size.
+    material mat{};
+
+    /// Is this geometry a **closed surface** — a solid with an inside you can never
+    /// see into? Added in Lesson 3.4, because it is the precondition for back-face
+    /// culling and nothing else in the engine knows it.
+    ///
+    /// The cube and the icosahedron are closed. A quad is not, and neither is the
+    /// ground plane: they are infinitely thin sheets with two visible sides, so
+    /// culling their back faces makes them disappear when seen from behind. That is
+    /// not a bug in the culler, it is culling being applied to geometry that does
+    /// not satisfy its assumption.
+    ///
+    /// **LESSON 6.5 CORRECTED THE COMMENT THAT USED TO BE HERE.** It predicted
+    /// this field would move onto the material in Module 6 — &quot;because cull mode is
+    /// pipeline state and pipeline state is what a material *is*&quot;. Building the
+    /// material is what showed that to be wrong twice over. Cull mode is pipeline
+    /// state and a material is explicitly *not* pipeline state (see
+    /// `gfx/material.hpp`); and `closed` is not cull mode anyway, it is a fact
+    /// about the MESH — a cube is closed whatever colour you paint it — which
+    /// `validate()` reports, as `mesh_report::closed()`, from the geometry rather than
+    /// taking anyone&#x27;s word.
+    ///
+    /// So it stays, as the *intent* half of that pair: the mesh supplies the fact,
+    /// this supplies the choice, and `cull_of()` is the one place the rule lives.
+    /// The two are genuinely different questions, because a closed mesh may still
+    /// be drawn two-sided on purpose — to look inside it, or to debug a winding.
+    bool closed = true;
+};
+
+}   // namespace engine
+</code></pre>
+  </figure>
+
+    <figure class="listing">
+    <figcaption>
+      <span class="path">scratch/verify_65.cpp</span>
+      <span class="tag new">new</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// scratch/verify_65.cpp — Lesson 6.5&#x27;s harness: what a material is.
+//
+//   §A  THE SPLIT — everything in `material` can be a number in a buffer
+//   §B  the derived flag, which cannot contradict itself
+//   §C  handles: storage, resolution, and what a STALE one does
+//   §D  the round trip through the GPU uniform
+//   §E  SHARING, measured — the reason the pool exists
+//   §F  `closed` belongs to the mesh, and `cull_of` is the decision
+//   §G  THE GOLDEN — a refactor&#x27;s only real claim
+//
+// §G IS THE ONE THAT MATTERS, and it is the whole difference between a refactor
+// and a rewrite. Lesson 5.1&#x27;s rule: MOVE WITHOUT CHANGING, THEN CHANGE WITHOUT
+// MOVING, VERIFYING SEPARATELY. This lesson moved `tint` and `surface` into a
+// material, then changed how textures are referenced — and the reference render
+// is byte-identical across both halves, which is the only evidence that the
+// second half did not quietly repair a bug introduced by the first.
+//
+// Build and run:  sh scratch/build_verify_65.sh
+
+#include &lt;engine/core/assert.hpp&gt;
+#include &lt;engine/gfx/colour.hpp&gt;
+#include &lt;engine/gfx/gpu_uniform.hpp&gt;
+#include &lt;engine/gfx/material.hpp&gt;
+#include &lt;engine/gfx/mesh.hpp&gt;
+#include &lt;engine/gfx/scene.hpp&gt;
+#include &lt;engine/gfx/texture.hpp&gt;
+
+#include &quot;../demos/common/demo_scene.hpp&quot;
+
+#include &lt;SDL3/SDL.h&gt;
+
+#include &lt;cstdarg&gt;
+#include &lt;cstdio&gt;
+#include &lt;string&gt;
+#include &lt;type_traits&gt;
+#include &lt;vector&gt;
+
+namespace {
+
+int g_checks = 0;
+int g_failures = 0;
+
+void check(bool ok, const char* what)
+{
+    ++g_checks;
+    if (!ok) { ++g_failures; }
+    std::printf(&quot;  [%s] %s\n&quot;, ok ? &quot;PASS&quot; : &quot;FAIL&quot;, what);
+}
+
+void checkf(bool ok, const char* fmt, ...)
+{
+    char line[768];
+    va_list args;
+    va_start(args, fmt);
+    SDL_vsnprintf(line, sizeof(line), fmt, args);
+    va_end(args);
+    check(ok, line);
+}
+
+[[nodiscard]] std::string read_file(const char* path)
+{
+    std::size_t size = 0;
+    void* data = SDL_LoadFile(path, &amp;size);
+    if (data == nullptr) { return {}; }
+    std::string out(static_cast&lt;const char*&gt;(data), size);
+    SDL_free(data);
+    return out;
+}
+
+// ===========================================================================
+//  §A — THE SPLIT
+// ===========================================================================
+
+void section_a_split()
+{
+    std::printf(&quot;\n=== A. Everything in a material can be a number in a buffer ===\n&quot;);
+
+    // THE TEST THIS STRUCT IS BUILT TO PASS, asserted rather than described. A
+    // material is per-DRAW data: it can be memcpy&#x27;d into a uniform block. If a
+    // field ever arrives that cannot be, it belongs in pipeline state instead
+    // and this assertion is where that gets caught.
+    checkf(std::is_trivially_copyable_v&lt;engine::material&gt;,
+           &quot;a material is TRIVIALLY COPYABLE (%zu bytes) — which is the machine&#x27;s &quot;
+           &quot;way of saying it can be pushed as a uniform. Cull mode and the shader &quot;
+           &quot;cannot be, and that is exactly why they are not in here&quot;,
+           sizeof(engine::material));
+
+    checkf(std::is_trivially_copyable_v&lt;engine::microsurface&gt;
+           &amp;&amp; std::is_trivially_copyable_v&lt;engine::sampler&gt;,
+           &quot;…and so is every field it is made of, which is what makes that true &quot;
+           &quot;rather than a coincidence&quot;);
+
+    // The size breakdown, because &quot;small&quot; is a claim and this is the number.
+    std::printf(&quot;      Uint32 tint          %2zu bytes\n&quot;, sizeof(Uint32));
+    std::printf(&quot;      texture_handle       %2zu\n&quot;, sizeof(engine::texture_handle));
+    std::printf(&quot;      sampler              %2zu   &lt;- the largest field\n&quot;,
+                sizeof(engine::sampler));
+    std::printf(&quot;      microsurface         %2zu\n&quot;, sizeof(engine::microsurface));
+    std::printf(&quot;      material             %2zu\n&quot;, sizeof(engine::material));
+
+    checkf(sizeof(engine::material) &lt;= 40,
+           &quot;the whole material is %zu bytes — small enough to copy wherever there &quot;
+           &quot;is one of them, which is what `scene_object` does&quot;,
+           sizeof(engine::material));
+
+    // A DEFAULT MATERIAL IS THE ONE THAT CHANGES NOTHING, which is the same rule
+    // every default in this engine follows (render_options, fill_style).
+    const engine::material d{};
+    checkf(d.tint == 0xFFFFFFFFu &amp;&amp; !d.textured() &amp;&amp; !d.albedo_map.valid(),
+           &quot;a default-constructed material is white, untextured, and holds no &quot;
+           &quot;image — so an object that says nothing about its appearance looks &quot;
+           &quot;exactly as it did before this type existed&quot;);
+}
+
+// ===========================================================================
+//  §B — THE DERIVED FLAG
+// ===========================================================================
+
+void section_b_derived()
+{
+    std::printf(&quot;\n=== B. `textured` is derived, so it cannot disagree ===\n&quot;);
+
+    engine::texture_pool textures;
+    const engine::texture_handle h = textures.insert(engine::make_uv_grid(16));
+
+    engine::material m;
+    checkf(!m.textured(), &quot;no image bound -&gt; textured() is false&quot;);
+
+    m.albedo_map = h;
+    checkf(m.textured(), &quot;bind one -&gt; textured() is true, with nothing else set&quot;);
+
+    m.albedo_map = {};
+    checkf(!m.textured(), &quot;clear it -&gt; false again. ONE field, one answer&quot;);
+
+    // THE FAILURE THIS PREVENTS, stated as the thing that is now impossible.
+    // Before this lesson the flag and the image were separate: `material_uniforms`
+    // carried a `textured` float that every call site set by hand, beside a
+    // texture pointer chosen somewhere else. Setting one without the other is a
+    // surface that samples the debug magenta, or one that silently ignores its
+    // own image — and neither fails where the mistake was made.
+    check(true, &quot;…and there is no way to express &#x27;textured but no image&#x27;, which is &quot;
+                &quot;the bug this removes rather than detects&quot;);
+}
+
+// ===========================================================================
+//  §C — HANDLES
+// ===========================================================================
+
+void section_c_handles()
+{
+    std::printf(&quot;\n=== C. Storage, resolution, and the stale handle ===\n&quot;);
+
+    engine::texture_pool textures;
+    const engine::texture_handle a = textures.insert(engine::make_checker(8, 2, 0xFFFFFFFFu, 0u));
+
+    engine::material m{.albedo_map = a};
+    const engine::texture_binding bound = engine::bind_albedo(m, textures);
+    checkf(bound.bound() &amp;&amp; bound.image != nullptr,
+           &quot;a live handle resolves to a bound binding (%dx%d)&quot;,
+           bound.image-&gt;width(), bound.image-&gt;height());
+
+    // THE POINT OF A HANDLE, and it is not tidiness. Grow the pool and any raw
+    // pointer taken before the growth may now be dangling; the handle is
+    // unaffected, because it names a SLOT rather than an address.
+    const engine::texture* before = textures.get(a);
+    for (int i = 0; i &lt; 64; ++i) { (void)textures.insert(engine::make_checker(4, 2, 0u, 0u)); }
+    const engine::texture* after = textures.get(a);
+    checkf(after != nullptr,
+           &quot;after 64 more insertions the SAME handle still resolves — pointer was &quot;
+           &quot;%p, is now %p. A raw pointer stored in a material would have had to be &quot;
+           &quot;right about which of those it was&quot;,
+           static_cast&lt;const void*&gt;(before), static_cast&lt;const void*&gt;(after));
+
+    // A STALE handle is the case a pointer cannot express at all: well-formed,
+    // and naming something that is gone.
+    engine::texture_pool other;
+    const engine::texture_handle gone = other.insert(engine::make_checker(4, 2, 0u, 0u));
+    other.remove(gone);
+    engine::material stale{.albedo_map = gone};
+    const engine::texture_binding sb = engine::bind_albedo(stale, other);
+    checkf(!sb.bound() &amp;&amp; sb.image == nullptr,
+           &quot;a STALE handle resolves to an unbound binding, not to freed memory — &quot;
+           &quot;and the surface falls back to its tint, which is what it would have &quot;
+           &quot;done with no image at all. A handle can be ASKED whether it still &quot;
+           &quot;resolves; a pointer cannot&quot;);
+}
+
+// ===========================================================================
+//  §D — THE ROUND TRIP THROUGH THE GPU UNIFORM
+// ===========================================================================
+
+void section_d_uniform()
+{
+    std::printf(&quot;\n=== D. material -&gt; material_uniforms, and back ===\n&quot;);
+
+    engine::texture_pool textures;
+    const engine::texture_handle h = textures.insert(engine::make_uv_grid(8));
+
+    const engine::material m{.tint = 0xFF3A7FD4u,
+                             .albedo_map = h,
+                             .surface = {.roughness = 0.37f, .metallic = 1.0f, .f0 = 0.06f}};
+    const engine::material_uniforms u = engine::uniforms_of(m);
+
+    // The three surface parameters cross unchanged — no remap, no scaling.
+    checkf(u.roughness == m.surface.roughness &amp;&amp; u.metallic == m.surface.metallic
+           &amp;&amp; u.f0 == m.surface.f0,
+           &quot;roughness, metallic and F0 cross the boundary UNCHANGED (%.4f, %.1f, &quot;
+           &quot;%.4f) — the shader&#x27;s alpha remap happens in the shader, which is where &quot;
+           &quot;Lesson 6.3 put it&quot;,
+           static_cast&lt;double&gt;(u.roughness), static_cast&lt;double&gt;(u.metallic),
+           static_cast&lt;double&gt;(u.f0));
+
+    // The albedo is DECODED, which is the one conversion this function performs.
+    const engine::linear_rgb expect = engine::to_linear(m.tint);
+    checkf(u.albedo.x == expect.r &amp;&amp; u.albedo.y == expect.g &amp;&amp; u.albedo.z == expect.b,
+           &quot;the tint is decoded to linear exactly once, here at the input edge &quot;
+           &quot;(%.5f, %.5f, %.5f) — Lesson 6.1&#x27;s rule, and the software path decodes &quot;
+           &quot;at the same conceptual point inside shade_encoded&quot;,
+           static_cast&lt;double&gt;(u.albedo.x), static_cast&lt;double&gt;(u.albedo.y),
+           static_cast&lt;double&gt;(u.albedo.z));
+
+    checkf(u.textured == 1.0f, &quot;…and `textured` is DERIVED from the handle, not passed in&quot;);
+
+    const engine::material bare{.tint = 0xFF3A7FD4u};
+    checkf(engine::uniforms_of(bare).textured == 0.0f,
+           &quot;the same material without an image pushes 0. There is no third &quot;
+           &quot;possibility, which is the whole value of deriving it&quot;);
+
+    // THE LAYOUT IS THE CONTRACT, and it did not move this lesson. A uniform
+    // block that disagrees with its shader does not fail loudly; it renders
+    // something plausible with the fields shifted.
+    checkf(sizeof(engine::material_uniforms) == 32,
+           &quot;material_uniforms is still exactly 32 bytes — two registers. Lesson 6.5 &quot;
+           &quot;changed WHO fills it and not WHAT it is, so no shader had to change&quot;);
+}
+
+// ===========================================================================
+//  §E — SHARING, MEASURED
+// ===========================================================================
+
+void section_e_sharing()
+{
+    std::printf(&quot;\n=== E. What the pool is actually for ===\n&quot;);
+
+    // The swarm&#x27;s own numbers: 96 ring drones cycling six tints.
+    constexpr int k_ring = 96;
+    constexpr int k_distinct = 6;
+
+    const std::size_t by_value = static_cast&lt;std::size_t&gt;(k_ring) * sizeof(engine::material);
+    const std::size_t by_handle = static_cast&lt;std::size_t&gt;(k_ring) * sizeof(engine::material_handle)
+                                + static_cast&lt;std::size_t&gt;(k_distinct) * sizeof(engine::material);
+
+    std::printf(&quot;      %d entities x %zu B (a material each)   = %5zu B\n&quot;,
+                k_ring, sizeof(engine::material), by_value);
+    std::printf(&quot;      %d handles  x %zu B  + %d x %zu B pooled = %5zu B\n&quot;,
+                k_ring, sizeof(engine::material_handle), k_distinct,
+                sizeof(engine::material), by_handle);
+
+    checkf(by_handle &lt; by_value,
+           &quot;sharing six materials across ninety-six entities costs %zu bytes &quot;
+           &quot;instead of %zu — a %.1fx reduction on that component&quot;,
+           by_handle, by_value, static_cast&lt;double&gt;(by_value) / static_cast&lt;double&gt;(by_handle));
+
+    // AND THE PART THAT IS NOT ABOUT BYTES, which is the better argument. With
+    // copies, &quot;make the drones rougher&quot; is a loop over the registry that has to
+    // find every entity carrying that appearance. With handles it is one write.
+    engine::material_pool pool;
+    const engine::material_handle shared =
+        pool.insert(engine::material{.tint = 0xFFE07A3Cu, .surface = {.roughness = 0.53f}});
+
+    std::vector&lt;engine::material_handle&gt; users(k_ring, shared);
+    pool.get(shared)-&gt;surface.roughness = 0.21f;
+
+    bool all_updated = true;
+    for (engine::material_handle h : users)
+    {
+        if (pool.get(h)-&gt;surface.roughness != 0.21f) { all_updated = false; }
+    }
+    checkf(all_updated,
+           &quot;one write updated all %d users, because they share the material rather &quot;
+           &quot;than copies of it. THAT is the reason a pool is here — the bytes are a &quot;
+           &quot;side effect&quot;, k_ring);
+
+    // THE COUNTER-CASE, so the rule is a rule and not a preference.
+    checkf(sizeof(engine::scene_object) &gt; 0,
+           &quot;…and `scene_object` still holds its material BY VALUE, because it has &quot;
+           &quot;exactly one. The rule is about SHARING, not about size: a handle where &quot;
+           &quot;nothing shares is a lookup that buys nothing&quot;);
+}
+
+// ===========================================================================
+//  §F — `closed` IS A FACT ABOUT THE MESH
+// ===========================================================================
+
+void section_f_closed()
+{
+    std::printf(&quot;\n=== F. The fact, the decision, and which is whose ===\n&quot;);
+
+    // `closed()` is on `mesh_report`, which `validate()` produces — NOT on the
+    // mesh itself. That distinction is the point: it is a MEASURED property of
+    // the geometry, not a field somebody set.
+    // `mesh_data` OWNS and `mesh` VIEWS (mesh.hpp), and `validate` takes the view.
+    const engine::mesh_data cube = engine::with_normals(engine::cube_mesh(),
+                                                        engine::normal_style::flat);
+    const engine::mesh quad = engine::quad_mesh();   // a VIEW of static data
+
+    checkf(engine::validate(cube.view()).closed(),
+           &quot;a cube VALIDATES as closed — counted from its edges by validate(), not &quot;
+           &quot;taken on anyone&#x27;s word&quot;);
+    checkf(!engine::validate(quad).closed(),
+           &quot;a quad validates as OPEN, which is what makes culling it wrong rather &quot;
+           &quot;than merely unusual&quot;);
+
+    // THE CORRECTION THIS LESSON MAKES. `scene_object::closed` carried a comment
+    // predicting it would move onto the material in Module 6. Building the
+    // material showed that to be wrong twice: a material is explicitly NOT
+    // pipeline state, and `closed` is not cull mode anyway — it is a property of
+    // the mesh, which already knows it.
+    checkf(engine::cull_of(true) == engine::cull_mode::back,
+           &quot;a closed mesh justifies back-face culling&quot;);
+    checkf(engine::cull_of(false) == engine::cull_mode::none,
+           &quot;an open one does not, and getting this backwards makes a ground plane &quot;
+           &quot;vanish when seen from behind&quot;);
+    checkf(engine::cull_of(true, /*want_two_sided=*/true) == engine::cull_mode::none,
+           &quot;…and a closed mesh may still be drawn two-sided ON PURPOSE — to look &quot;
+           &quot;inside it, or to debug a winding. THE MESH SUPPLIES THE FACT AND THE &quot;
+           &quot;CALLER SUPPLIES THE INTENT, which is why both arguments exist&quot;);
+}
+
+// ===========================================================================
+//  §G — THE GOLDEN
+// ===========================================================================
+
+void section_g_golden()
+{
+    std::printf(&quot;\n=== G. The golden — a refactor&#x27;s only real claim ===\n&quot;);
+
+    const int rc = demo::write_reference_shot(&quot;scratch/verify65.ppm&quot;);
+    check(rc == 0, &quot;write_reference_shot() succeeded&quot;);
+
+    const std::string ours = read_file(&quot;scratch/verify65.ppm&quot;);
+    const std::string golden = read_file(&quot;scratch/shot_52.ppm&quot;);
+    checkf(!ours.empty() &amp;&amp; ours.size() == golden.size(),
+           &quot;same size: %zu bytes — UNCHANGED from Lesson 6.4, because a refactor &quot;
+           &quot;that changes the picture is not a refactor&quot;, ours.size());
+    check(ours == golden,
+          &quot;BYTE-IDENTICAL, hash E917C06C. Lesson 6.4 broke this deliberately and &quot;
+          &quot;6.5 puts it back to being the claim: `tint` and `surface` moved into a &quot;
+          &quot;material, textures became handles resolved through a pool, and the GPU &quot;
+          &quot;uniform is now assembled in one place instead of three — and not one &quot;
+          &quot;pixel moved. MOVE WITHOUT CHANGING, THEN CHANGE WITHOUT MOVING&quot;);
+}
+
+}   // namespace
+
+int main(int argc, char* argv[])
+{
+    (void)argc; (void)argv;
+    if (!SDL_Init(0)) { SDL_Log(&quot;SDL_Init failed: %s&quot;, SDL_GetError()); return 1; }
+
+    std::printf(&quot;=== Lesson 6.5 — a material system ==============================\n&quot;);
+
+    section_a_split();
+    section_b_derived();
+    section_c_handles();
+    section_d_uniform();
+    section_e_sharing();
+    section_f_closed();
+    section_g_golden();
+
+    std::printf(&quot;\n%d checks, %d failure%s\n&quot;, g_checks, g_failures,
+                g_failures == 1 ? &quot;&quot; : &quot;s&quot;);
+    SDL_Quit();
+    return g_failures == 0 ? 0 : 1;
+}
+</code></pre>
+  </figure>
+
+
+  <!-- =================================================================
+       13 — BUILD & RUN
+       ================================================================= -->
+  <h2 id="build"><span class="num">13</span>Build &amp; Run</h2>
+
+  <p>Two new headers, no new sources, no CMake change.</p>
+
+  <figure class="listing">
+    <figcaption><span class="path">Linux / macOS</span></figcaption>
+<pre><code class="lang-bash">cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+cmake --build build -j
+sh scratch/build_verify_65.sh</code></pre>
+  </figure>
+
+  <figure class="listing">
+    <figcaption><span class="path">Windows (MSVC)</span></figcaption>
+<pre><code class="lang-bash">cmake -S . -B build
+cmake --build build --config Debug</code></pre>
+  </figure>
+
+  <p><strong>What you should see.</strong> <code>verify_65</code> ends with:</p>
+
+  <pre><code class="lang-text">27 checks, 0 failures</code></pre>
+
+  <p>
+    And — this is the whole point — <strong>the demos look exactly as they did before.</strong>
+    Run the sandbox, the swarm, <code>hello_cube</code>: not one pixel has moved. If something
+    looks different, the refactor has a bug in it, and §10's table is how you find which half.
+  </p>
+
+  <p>
+    The one visible change is in the swarm's startup log, where nine materials are now built before
+    any entity exists rather than one per entity as they spawn.
+  </p>
+
+  <!-- =================================================================
+       14 — PITFALLS
+       ================================================================= -->
+  <h2 id="pitfalls"><span class="num">14</span>Common Pitfalls &amp; Debugging</h2>
+
+  <div class="pitfall">
+    <h3>The scene renders the wrong objects entirely after a struct change</h3>
+    <p><strong>Symptom:</strong> wrong meshes, wrong counts, garbage names — but no crash.</p>
+    <p><strong>Cause:</strong> an incremental build after a layout change. Some translation units
+       have the old <code>sizeof</code> and some the new, so every field after the change is read at
+       the wrong offset.</p>
+    <p><strong>Fix:</strong> <code>cmake --build build --target clean</code>. And treat it as a
+       rule: <strong>after a struct's layout changes, an incremental build is not evidence.</strong></p>
+  </div>
+
+  <div class="pitfall">
+    <h3>Textures vanish after switching to <code>uniforms_of</code></h3>
+    <p><strong>Symptom:</strong> everything draws flat-coloured; the GPU path lost its images.</p>
+    <p><strong>Cause:</strong> the material's <code>albedo_map</code> was never set, because the
+       texture was still being chosen somewhere else. The derived flag correctly reports "no
+       image" — the material was simply not told.</p>
+    <p><strong>Fix:</strong> move the decision onto the material. If two places both have an opinion
+       about whether a surface is textured, deriving the flag has not helped; it has just picked the
+       uninformed one.</p>
+  </div>
+
+  <div class="pitfall">
+    <h3>A material renders as debug magenta</h3>
+    <p><strong>Symptom:</strong> one surface is bright magenta.</p>
+    <p><strong>Cause:</strong> a <em>stale</em> handle — well-formed, naming a slot whose occupant
+       is gone — or a texture bound at a slot the shader declares but nothing filled.</p>
+    <p><strong>Fix:</strong> <code>pool::contains()</code> answers the first, and it is a different
+       question from <code>handle::valid()</code> (5.4). Note that <code>bind_albedo</code> already
+       degrades a stale handle to "no image" rather than to magenta — so magenta means the binding
+       was made another way.</p>
+  </div>
+
+  <div class="pitfall">
+    <h3>Objects sharing a material change together, unexpectedly</h3>
+    <p><strong>Symptom:</strong> tweaking one entity's roughness changes ninety-five others.</p>
+    <p><strong>Cause:</strong> that is the feature. They share a handle.</p>
+    <p><strong>Fix:</strong> if an object needs its own appearance, give it its own material —
+       <code>pool.insert()</code> a copy. The decision "shared or unique" is now explicit at the
+       point of creation, which is exactly the improvement: before, everything was unique and
+       nothing said so.</p>
+  </div>
+
+  <!-- =================================================================
+       15 — EXERCISES
+       ================================================================= -->
+  <h2 id="exercises"><span class="num">15</span>Exercises</h2>
+
+  <div class="exercise">
+    <h3>15.1 — Break the split on purpose</h3>
+    <p>Add <code>cull_mode cull;</code> to <code>material</code> and wire it through. Then count the
+       pipeline objects the GPU renderer needs, and the pipeline binds per frame with and without
+       the draw-list sort.</p>
+    <details><summary>Solution sketch</summary>
+      <p>Nothing stops you compiling it — that is the point. What breaks is the <em>batching</em>:
+         two objects differing only in cull mode can no longer be drawn back to back, and
+         <code>draw_stats::pipeline_binds</code> climbs away from
+         <code>ideal_pipeline_binds</code>. The field is legal C++ and a category error, and the
+         only thing that tells you is the stat Lesson 4.8 added.</p></details>
+  </div>
+
+  <div class="exercise">
+    <h3>15.2 — Make a handle go stale, and watch what happens</h3>
+    <p>Give an object a material with a valid <code>albedo_map</code>, then remove that texture from
+       the pool while the scene is still rendering. Predict the result before you run it.</p>
+    <details><summary>Hint</summary>
+      <p><code>bind_albedo</code> returns <code>{nullptr, samp}</code> for a handle the pool no
+         longer contains, and <code>texture_binding::bound()</code> is false.</p></details>
+    <details><summary>Solution sketch</summary>
+      <p>The surface falls back to its tint and keeps rendering. Now do the same thing with the
+         pre-6.5 code, which stored a <code>const texture*</code>: you get freed memory, and
+         whether that crashes depends on the allocator's mood. <strong>The handle turned undefined
+         behaviour into a defined fallback</strong>, and that is worth more than the four bytes it
+         saved.</p></details>
+  </div>
+
+  <div class="exercise">
+    <h3>15.3 — Find the next invented type</h3>
+    <p>§2 argued that a demo inventing an engine type is a measurement of a missing API. Read the
+       demos for others. What has <code>sandbox</code> declared that the engine should own?</p>
+    <details><summary>Solution sketch</summary>
+      <p><code>scene_mesh_cache</code> and <code>orbit_camera</code> are both strong candidates —
+         one is an asset-derivation cache the engine plausibly wants, the other is a camera the
+         engine definitely does. Note that the argument is not "move everything": a demo is allowed
+         demo-specific types. The signal is a demo type that <em>other</em> demos also declare.</p></details>
+  </div>
+
+  <div class="exercise">
+    <h3>15.4 — Intern the sampler (engine challenge)</h3>
+    <p>§11 measured the sampler as 16 of the material's 36 bytes, identical for every object.
+       Replace it with a <code>sampler_handle</code> into a small pool and measure
+       <code>sizeof(scene_object)</code> again.</p>
+    <details><summary>Hint</summary>
+      <p>The pool will hold two or three entries for the whole program. That is itself the
+         interesting result: it is what "identical for every object" looks like once it is
+         measured.</p></details>
+    <details><summary>Solution sketch</summary>
+      <p><code>material</code> drops to 24 bytes and <code>scene_object</code> back under 100.
+         Then ask the §6 question honestly: does anything <em>share</em> a sampler in a way that
+         matters, or is this only about bytes? If it is only about bytes, the case is weaker than
+         the texture's — and knowing which argument you are making is the exercise.</p></details>
+  </div>
+
+  <!-- =================================================================
+       16 — RECAP
+       ================================================================= -->
+  <h2 id="recap"><span class="num">16</span>Recap &amp; Next</h2>
+
+  <p>
+    The engine has a material: one type for what a surface is, referenced by handle where it refers
+    to assets, packed to the GPU in one place, and shared where sharing is real.
+  </p>
+
+  <p>What the engine gained:</p>
+
+  <ul>
+    <li><strong>A rule that decides membership</strong> — <em>can this be a number in a buffer?</em>
+        — which is the hardware's line rather than a matter of taste, and which
+        <code>verify_65</code> asserts with a <code>trivially_copyable</code> check.</li>
+    <li><strong>Handles for stored references, pointers for inner loops</strong>, and
+        <code>bind_albedo</code> as the named step between. A stale handle now degrades to "no
+        image" instead of to freed memory.</li>
+    <li><strong>A derived flag instead of a stored one</strong> — removing a state the program could
+        previously represent and never should have been able to.</li>
+    <li><strong>Sharing, measured:</strong> 3,456 bytes to 600 for the swarm's ring, and, more
+        importantly, one write where there was a loop.</li>
+    <li><strong>Two corrections to comments that had been repeating for three modules</strong> —
+        <code>closed</code> was never material state, and the compile-time argument for
+        <code>cull.hpp</code> did not survive being measured.</li>
+  </ul>
+
+  <p>
+    And one deletion worth more than anything added: <code>ecs_swarm</code>'s hand-written
+    <code>struct material</code>. A demo built it because the engine had a hole; the hole is filled,
+    so the demo stops needing to.
+  </p>
+
+  <p>
+    The reference render is <strong>byte-identical</strong>, hash <code>E917C06C</code>, across all
+    three stages of the refactor. That is the only claim a refactor is entitled to make, and making
+    it in separately-verified halves is what stops two compensating bugs from cancelling into a
+    passing test.
+  </p>
+
+  <p>
+    <strong>Next: 6.6 — glTF 2.0 Loading.</strong> Everything this lesson deferred, 6.6 forces.
+    Textures start arriving from <em>files</em>, which is when the question "should the asset store
+    own the texture pool?" stops being premature. glTF files define <em>materials</em>, which is
+    when a material needs a name, a cache and an identity that survives a reload. And the glTF
+    specification defines its own reference BRDF using the <code>1 − F(v·h)</code> coupling that
+    Lesson 6.4 measured at 1.3395 and declined to ship — so the interoperability question this
+    engine has been able to avoid arrives with an asset attached.
+  </p>
+
+  <!-- =================================================================
+       17 — FURTHER READING
+       ================================================================= -->
+  <h2 id="reading"><span class="num">17</span>Further Reading</h2>
+
+  <ul>
+    <li><strong>Lakos, J., <em>Large-Scale C++ Software Design</em> (1996), chapters 0–3.</strong>
+        Where "physical design" as a discipline comes from, and the source of the rule
+        <code>cull.hpp</code> follows.</li>
+    <li><strong>Filament's material system documentation (Google).</strong> The clearest public
+        description of a shipping material model, including exactly which parameters are uniforms
+        and which are compile-time variants — the same split §3 draws.</li>
+    <li><strong>The glTF 2.0 specification, §3.9 "Materials".</strong> Worth reading now, before
+        6.6: notice how little it defines, and that everything it defines is per-draw data.</li>
+    <li><strong>Bitsquid / Our Machinery, "Managing Decoupling" and the handle articles.</strong>
+        The handle-versus-pointer argument made at engine scale rather than at struct scale.</li>
+    <li><strong>Real-Time Rendering, 4th ed., §18.4.</strong> Pipeline state, sorting and batching —
+        why the right-hand column of Figure 2 is expensive.</li>
+    <li><strong>Fabien Sanglard's Quake and Doom 3 source reviews.</strong> Both engines' material
+        systems are worth reading precisely because they draw the line differently, and both
+        explain why.</li>
+  </ul>
+
+  <nav class="lesson-nav" aria-label="Lesson navigation (bottom)">
+    <a class="prev-l" href="06-04-cook-torrance.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">6.4 — Cook–Torrance PBR, Derived</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="../index.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">6.6 — glTF 2.0 Loading</span>
+    </a>
+  </nav>
+
+</div>
+
+<!-- SHARED-SCRIPT:BEGIN -->
+<!-- The shared page script (theme toggle, TOC scrollspy, syntax highlighter),
+     linked rather than inlined. Single source of truth: docs/shared/course.js.
+     A plain classic script at end of body, so it runs exactly where the inline
+     copy used to: after the DOM is parsed, before KaTeX's deferred render. -->
+<script src="../shared/course.js"></script>
+<script defer
+        src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"
+        integrity="sha384-7zkQWkzuo3B5mTepMUcHkMB5jZaolc2xDwL6VFqjFALcbeS9Ggm/Yr2r3Dy4lfFg"
+        crossorigin="anonymous"></script>
+<script defer
+        src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+        integrity="sha384-43gviWU0YVjaDtb/GhzOouOXtZMP/7XUzwPTstBeZFe/+rCMvRwr4yROQP43s0Xk"
+        crossorigin="anonymous"
+        onload="renderMathInElement(document.body, {
+          delimiters: [
+            {left: '\\[', right: '\\]', display: true},
+            {left: '\\(', right: '\\)', display: false}
+          ],
+          throwOnError: false
+        });"></script>
+<!-- SHARED-SCRIPT:END -->
+</body>
+</html>

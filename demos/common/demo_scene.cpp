@@ -272,7 +272,7 @@ int build_scene(engine::scene_object (&out)[k_max_objects], scene_kind kind, spi
         out[0].xform = engine::transform{};
         out[0].geometry = floor.geometry;
         out[0].name = "ground plane (checkered)";
-        out[0].tint = k_amber;   // unused: the floor is shaded from its uvs
+        out[0].mat.tint = k_amber;   // unused: the floor is shaded from its uvs
         out[0].closed = false;   // a sheet, not a solid — 3.4 must not cull it
         return 1;
     }
@@ -289,19 +289,19 @@ int build_scene(engine::scene_object (&out)[k_max_objects], scene_kind kind, spi
         out[0].xform.rotation = spinning * engine::rotation_x(0.35f);
         out[0].geometry = model.geometry;
         out[0].name = name_of(model.choice);
-        out[0].tint = k_amber;
+        out[0].mat.tint = k_amber;
         // The torus is the one mesh in the demo dense enough for a per-vertex
         // highlight to look like a highlight at all — 1,225 vertices against the
         // icosahedron's 12. [L] to the coarser models and watch it fall apart, which
         // is Lesson 3.8's argument arriving as a picture rather than a claim.
         // LESSON 6.4 RE-AUTHORED THIS, and the old line is worth keeping in view:
-        //     out[0].surface = {{0.85f, 0.85f, 0.85f}, shininess};
+        //     out[0].mat.surface = {{0.85f, 0.85f, 0.85f}, shininess};
         // A specular reflectance of 0.85 is not a material. Run it back through
         // `ior_from_f0` and it claims an index of refraction of 25.3, where glass
         // is 1.5 and diamond is 2.4. It was that large because it was absorbing
         // the 17x normalisation error Lesson 6.3 measured. The physical number is
         // 0.04, it is the default, and it does not need writing down.
-        out[0].surface = {.roughness = roughness};
+        out[0].mat.surface = {.roughness = roughness};
 
         // The 3.4 debt, paid. `closed` used to be a promise typed next to the
         // geometry; here it is the validator's answer. Note that it takes BOTH
@@ -320,7 +320,7 @@ int build_scene(engine::scene_object (&out)[k_max_objects], scene_kind kind, spi
         out[0].xform.rotation = spinning * engine::rotation_x(0.5f);
         out[0].geometry       = assets.icosahedron;
         out[0].name           = "icosahedron (uniform, spinning)";
-        out[0].tint           = k_amber;
+        out[0].mat.tint           = k_amber;
         out[0].closed         = true;
         // A WHITE highlight on an amber body — which is what a plastic looks like,
         // and not a stylistic choice. A dielectric (plastic, paint, glass, skin)
@@ -328,14 +328,14 @@ int build_scene(engine::scene_object (&out)[k_max_objects], scene_kind kind, spi
         // highlight is the colour of the LAMP; only the light that gets *inside*
         // picks up the pigment, and that is the diffuse term. Module 6 gives this a
         // name and a number (F0 ~ 0.04 for most dielectrics).
-        out[0].surface        = {.roughness = roughness};   // dielectric: F0 = 0.04
+        out[0].mat.surface        = {.roughness = roughness};   // dielectric: F0 = 0.04
 
         out[1].xform.scale    = {1.8f, 0.35f, 0.9f};
         out[1].xform.position = {-1.6f, 0.5f, 0.4f};
         out[1].xform.rotation = spinning;
         out[1].geometry       = assets.cube;
         out[1].name           = "slab   (non-uniform, spinning)";
-        out[1].tint           = k_teal;
+        out[1].mat.tint           = k_teal;
         out[1].closed         = true;
         // A TINTED highlight, and the contrast with the icosahedron is the point: a
         // METAL colours what it reflects, because it has no clear layer over a
@@ -350,19 +350,19 @@ int build_scene(engine::scene_object (&out)[k_max_objects], scene_kind kind, spi
         // removes the diffuse lobe entirely, and the object cannot fall out of
         // agreement with itself. That is the metallic workflow, and it arrives
         // as a CONSEQUENCE of where Fresnel put the colour.
-        out[1].surface        = {.roughness = roughness, .metallic = 1.0f};
+        out[1].mat.surface        = {.roughness = roughness, .metallic = 1.0f};
 
         out[2].xform.scale    = {1.2f, 0.25f, 1.2f};
         out[2].xform.position = {1.4f, 0.125f, 0.9f};
         out[2].xform.rotation = engine::mat3::identity();
         out[2].geometry       = assets.cube;
         out[2].name           = "plinth (non-uniform, still)";
-        out[2].tint           = k_violet;
+        out[2].mat.tint           = k_violet;
         out[2].closed         = true;
         // THE CONTROL. No highlight at all, so [H] and [E] must not change one pixel
         // of it. Two of three objects were controls for the composition order in 2.8
         // and for the normal matrix in 3.6; the habit is worth keeping.
-        out[2].surface        = {};
+        out[2].mat.surface        = {};
         return 3;
     }
 
@@ -397,19 +397,19 @@ int build_scene(engine::scene_object (&out)[k_max_objects], scene_kind kind, spi
         out[0].xform = make_plank(c1, c2, k_width, k_tilt, k_overhang);
         out[0].geometry = assets.quad;
         out[0].name = "plank A (C1->C2)";
-        out[0].tint = k_amber;
+        out[0].mat.tint = k_amber;
         out[0].closed = false;
 
         out[1].xform = make_plank(c2, c3, k_width, k_tilt, k_overhang);
         out[1].geometry = assets.quad;
         out[1].name = "plank B (C2->C3)";
-        out[1].tint = k_teal;
+        out[1].mat.tint = k_teal;
         out[1].closed = false;
 
         out[2].xform = make_plank(c3, c1, k_width, k_tilt, k_overhang);
         out[2].geometry = assets.quad;
         out[2].name = "plank C (C3->C1)";
-        out[2].tint = k_violet;
+        out[2].mat.tint = k_violet;
         out[2].closed = false;
 
         // Lift the weave so its centre sits exactly on the camera's target. With
@@ -435,7 +435,7 @@ int build_scene(engine::scene_object (&out)[k_max_objects], scene_kind kind, spi
         out[0].xform.rotation = engine::rotation_y(+0.7f);
         out[0].geometry       = assets.quad;
         out[0].name           = "quad A (nearer centre)";
-        out[0].tint           = k_amber;
+        out[0].mat.tint           = k_amber;
         out[0].closed         = false;
 
         out[1].xform.scale    = {2.6f, 2.0f, 1.0f};
@@ -443,7 +443,7 @@ int build_scene(engine::scene_object (&out)[k_max_objects], scene_kind kind, spi
         out[1].xform.rotation = engine::rotation_y(-0.7f);
         out[1].geometry       = assets.quad;
         out[1].name           = "quad B (further centre)";
-        out[1].tint           = k_teal;
+        out[1].mat.tint           = k_teal;
         out[1].closed         = false;
         return 2;
     }
@@ -461,7 +461,7 @@ int build_scene(engine::scene_object (&out)[k_max_objects], scene_kind kind, spi
     out[0].xform.rotation = engine::rotation_y(0.9f);
     out[0].geometry       = assets.quad;
     out[0].name           = "panel A (behind)";
-    out[0].tint           = k_amber;
+    out[0].mat.tint           = k_amber;
     out[0].closed         = false;
 
     out[1].xform.scale    = {3.0f, 2.4f, 1.0f};
@@ -469,7 +469,7 @@ int build_scene(engine::scene_object (&out)[k_max_objects], scene_kind kind, spi
     out[1].xform.rotation = engine::rotation_y(0.9f);
     out[1].geometry       = assets.quad;
     out[1].name           = "panel B (1 mm in front)";
-    out[1].tint           = k_teal;
+    out[1].mat.tint           = k_teal;
     out[1].closed         = false;
     return 2;
 }
@@ -664,7 +664,20 @@ int write_reference_shot(const char* path)
         // its vertex colours. One texture rather than none, so the sampler is on
         // the covered path.
         const bool bind_texture = (kind == scene_kind::floor) || (kind == scene_kind::model);
-        const engine::texture* albedo_image = textures.pick(albedo_source::uv_grid);
+
+        // LESSON 6.5: the material holds a HANDLE, and the resolve to a pointer
+        // happens here — once per draw, outside the fill loop. That ordering is
+        // the whole architectural point of `bind_albedo`: a handle is how you
+        // store a reference, a pointer is how you use one per pixel, and the
+        // resolve is a named step between them.
+        const engine::material draw_material{
+            .albedo_map = bind_texture ? textures.pick(albedo_source::uv_grid)
+                                       : engine::texture_handle{},
+            .samp = samp,
+            .surface = lit_pass ? engine::microsurface{.roughness = 0.30f}
+                                : engine::microsurface{}};
+        const engine::texture_binding albedo = engine::bind_albedo(draw_material,
+                                                                   textures.pool);
         const engine::fill_style style{
             .interp = engine::interpolation::perspective,
             .shade = lit_pass    ? engine::shading::lit
@@ -680,11 +693,10 @@ int write_reference_shot(const char* path)
             // Roughness 0.30 is smoother than the scene default, so the highlight
             // is small enough to have a SHAPE — a broad one covers the mesh and
             // pins nothing about where D peaks.
-            .surface = lit_pass ? engine::microsurface{.roughness = 0.30f}
-                                : engine::microsurface{},
+            .surface = draw_material.surface,
             .model = engine::specular_model::cook_torrance,
             .eye = eye,
-            .albedo = {bind_texture ? albedo_image : nullptr, samp},
+            .albedo = albedo,
             .encode = engine::encode_mode::fast,
             .traverse = engine::traversal::scanline};
 

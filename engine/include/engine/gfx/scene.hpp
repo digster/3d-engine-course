@@ -14,6 +14,7 @@
 #pragma once
 
 #include <engine/gfx/light.hpp>
+#include <engine/gfx/material.hpp>   // 6.5
 #include <engine/gfx/mesh.hpp>
 #include <engine/math/mat3.hpp>
 #include <engine/math/mat4.hpp>
@@ -103,7 +104,26 @@ struct scene_object
     transform xform;
     mesh_handle geometry;
     const char* name;
-    Uint32 tint = 0xFFFFFFFFu;
+
+    /// **What this surface looks like** — Lesson 6.5.
+    ///
+    /// `tint` and `surface` used to be two loose fields here, and the comment
+    /// that lived on the second said the quiet part out loud: *"that is two
+    /// different kinds of data wearing one struct, and the second kind has a
+    /// name: a material."* This is that name.
+    ///
+    /// Nothing about the values changed — `mat.tint` is the old `tint` and
+    /// `mat.surface` is the old `surface` — which is why the reference render
+    /// comes out byte-identical across this lesson. That is the whole claim a
+    /// refactor is allowed to make, and 5.1's rule for making it: **move without
+    /// changing, then change without moving, verifying separately.**
+    ///
+    /// **By value, not by handle.** A `scene_object` has exactly one material and
+    /// a material is 36 bytes; a handle would add a lookup to save nothing. The
+    /// pool exists for where objects *share* one, which `ecs_swarm` demonstrates
+    /// with two hundred drones. The rule that decides between them is about
+    /// sharing, not about size.
+    material mat{};
 
     /// Is this geometry a **closed surface** — a solid with an inside you can never
     /// see into? Added in Lesson 3.4, because it is the precondition for back-face
@@ -115,28 +135,21 @@ struct scene_object
     /// not a bug in the culler, it is culling being applied to geometry that does
     /// not satisfy its assumption.
     ///
-    /// In a real engine this lives on the **material**, because cull mode is
-    /// pipeline state and pipeline state is what a material *is* (Module 6). Here it
-    /// is a bool on the object and the demo only warns, because the whole scene is
-    /// drawn in one batch with one style — which is itself the honest lesson: two
-    /// cull modes means two batches.
+    /// **LESSON 6.5 CORRECTED THE COMMENT THAT USED TO BE HERE.** It predicted
+    /// this field would move onto the material in Module 6 — "because cull mode is
+    /// pipeline state and pipeline state is what a material *is*". Building the
+    /// material is what showed that to be wrong twice over. Cull mode is pipeline
+    /// state and a material is explicitly *not* pipeline state (see
+    /// `gfx/material.hpp`); and `closed` is not cull mode anyway, it is a fact
+    /// about the MESH — a cube is closed whatever colour you paint it — which
+    /// `validate()` reports, as `mesh_report::closed()`, from the geometry rather than
+    /// taking anyone's word.
+    ///
+    /// So it stays, as the *intent* half of that pair: the mesh supplies the fact,
+    /// this supplies the choice, and `cull_of()` is the one place the rule lives.
+    /// The two are genuinely different questions, because a closed mesh may still
+    /// be drawn two-sided on purpose — to look inside it, or to debug a winding.
     bool closed = true;
-
-    /// How shiny this object is, and what colour its highlight comes out —
-    /// Lesson 3.7.
-    ///
-    /// **Look at what just happened to this struct.** `tint` was enough while a
-    /// surface was one colour; then 3.4 needed `closed`; now 3.7 needs two more
-    /// numbers, and all four describe the same thing — *the surface* — while
-    /// `xform` and `geometry` describe where it is and what shape it is. That is
-    /// two different kinds of data wearing one struct, and the second kind has a
-    /// name: a material. Module 6 gives it one. It is being left visible here
-    /// rather than fixed early, because a material invented before three lessons
-    /// have asked for one is a guess.
-    ///
-    /// Defaults to a black highlight, which is exactly Lesson 3.6's shading — so
-    /// every object that says nothing about shininess looks precisely as it did.
-    microsurface surface{};
 };
 
 }   // namespace engine

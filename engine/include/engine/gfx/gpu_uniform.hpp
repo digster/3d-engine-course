@@ -47,6 +47,7 @@
 
 #pragma once
 
+#include <engine/gfx/material.hpp>   // 6.5: uniforms_of
 #include <engine/math/mat4.hpp>
 #include <engine/math/vec2.hpp>
 #include <engine/math/vec3.hpp>
@@ -303,5 +304,35 @@ static_assert(offsetof(material_uniforms, roughness) == packed_offset(12, 1), ""
 static_assert(offsetof(material_uniforms, metallic) == packed_offset(16, 1), "");
 static_assert(offsetof(material_uniforms, f0) == packed_offset(20, 1), "");
 static_assert(offsetof(material_uniforms, textured) == packed_offset(24, 1), "");
+
+/// Pack a `material` into the block the fragment shader reads — Lesson 6.5.
+///
+/// **The one place the CPU-side material becomes GPU-side numbers**, and having
+/// exactly one of them is the point. Before this lesson every call site assembled
+/// the block by hand: five assignments, repeated in the sandbox, in `verify_48`
+/// and in `verify_49`, each free to get the fifth one wrong.
+///
+/// That fifth one is `textured`, and it is the reason this function exists rather
+/// than being a constructor. It is **derived**, from the only field that knows —
+/// so a material with an albedo map always pushes 1, and one without always
+/// pushes 0, and the two can no longer disagree. A hand-assembled block with
+/// `textured = 1` and no texture bound draws the sampler's debug magenta; with
+/// `textured = 0` and a texture bound it silently ignores the image. Neither
+/// fails at the point of the mistake.
+///
+/// `albedo` is decoded here, which is Lesson 6.1's rule about edges: the material
+/// stores the artist's sRGB `Uint32`, and this is the input edge where it meets
+/// arithmetic. The software path decodes at the same conceptual point, inside
+/// `shade_encoded`.
+[[nodiscard]] inline material_uniforms uniforms_of(const material& m)
+{
+    const linear_rgb albedo = to_linear(m.tint);
+    return {.albedo = vec3{albedo.r, albedo.g, albedo.b},
+            .roughness = m.surface.roughness,
+            .metallic = m.surface.metallic,
+            .f0 = m.surface.f0,
+            .textured = m.textured() ? 1.0f : 0.0f,
+            .pad0 = 0.0f};
+}
 
 } // namespace engine

@@ -12,6 +12,7 @@
 #pragma once
 
 #include <engine/gfx/colour.hpp>   // linear_rgb: the space vertex colours are combined in
+#include <engine/gfx/cull.hpp>     // 6.5: cull_mode moved out; see that file
 
 // Lesson 3.8. A real include, not a forward declaration, and the difference is the
 // point: `fill_style` holds a `microsurface` BY VALUE and `shading::lit` calls
@@ -311,37 +312,6 @@ struct vertex
     return edge_function(a.x, a.y, b.x, b.y, c.x, c.y) < 0;
 }
 
-/// Which faces to throw away before rasterizing.
-///
-/// Field order and meaning mirror `SDL_GPUCullMode` exactly — verified against
-/// `SDL3/SDL_gpu.h`, where the enumerators are `NONE`, `FRONT`, `BACK` in that
-/// order — so Module 4's port is a rename. It lives in `fill_style` for the same
-/// reason: SDL_GPU carries `cull_mode` in `SDL_GPURasterizerState` alongside
-/// `fill_mode` and `front_face`, which is to say it is *pipeline state*, decided
-/// once and bound, not a per-draw argument.
-///
-/// **This is an optimisation, not a correctness fix**, and Lesson 3.4 spends real
-/// time on that distinction. The z-buffer already produces the right picture with
-/// culling switched off; what culling buys is not drawing roughly half of a closed
-/// mesh's triangles at all.
-enum class cull_mode
-{
-    /// Draw everything. **The default**, and the only setting that is correct for
-    /// *every* mesh — because culling is only valid on geometry that is closed.
-    /// A ground plane, a billboard, a leaf card and a sheet of paper are all
-    /// single-sided, and back-face culling makes them vanish when seen from behind.
-    none,
-
-    /// Throw away front faces. Useful for looking inside a closed mesh, and
-    /// genuinely used in real renderers — rendering the inside of a skybox cube, or
-    /// the back faces of shadow volumes.
-    front,
-
-    /// Throw away back faces. **The one you want** on any closed mesh: no face
-    /// pointing away from the camera can be visible, because a closer front face is
-    /// always in the way.
-    back
-};
 
 /// **How the rasterizer walks a triangle** — Lesson 4.1.
 ///

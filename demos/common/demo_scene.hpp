@@ -601,32 +601,46 @@ enum class albedo_source
 /// early with a guess.
 struct texture_set
 {
-    engine::texture checker;
-    engine::texture uv_grid;
-    engine::texture fine;
+    /// **A POOL, as of Lesson 6.5, rather than three named members.**
+    ///
+    /// The members worked perfectly while there were three of them and every
+    /// consumer wanted a `const texture*`. A material cannot hold a pointer —
+    /// it outlives the frame, and a pointer into a container that can grow does
+    /// not — so the textures need somewhere with stable, checkable identity.
+    /// That is `texture_pool`, and it is the same move Lesson 5.5 made for
+    /// images one layer up.
+    engine::texture_pool pool;
+
+    engine::texture_handle checker;
+    engine::texture_handle uv_grid;
+    engine::texture_handle fine;
 
     void build()
     {
         // 64x64: big enough that magnification is visible on a 320x180 framebuffer
         // and small enough that a whole image fits comfortably in L1, which is what
         // keeps the per-pixel fetch honest rather than a cache-miss benchmark.
-        checker = engine::make_checker(64, 8, 0xFFE8E2D6u, 0xFF3A4058u);
-        uv_grid = engine::make_uv_grid(64);
-        fine = engine::make_checker(64, 32, 0xFFE8E2D6u, 0xFF3A4058u);
+        checker = pool.insert(engine::make_checker(64, 8, 0xFFE8E2D6u, 0xFF3A4058u));
+        uv_grid = pool.insert(engine::make_uv_grid(64));
+        fine    = pool.insert(engine::make_checker(64, 32, 0xFFE8E2D6u, 0xFF3A4058u));
     }
 
-    /// The image for a choice, or `nullptr` for `rule` — which is not an error, it
-    /// is the mode that has no image by definition.
-    [[nodiscard]] const engine::texture* pick(albedo_source a) const
+    /// The texture for a choice, or an invalid handle for `rule` — which is not an
+    /// error, it is the mode that has no image by definition.
+    ///
+    /// Returns a HANDLE now. Callers that need a pointer resolve it, once, through
+    /// `engine::bind_albedo` or `pool.get()` — see the note on `bind_albedo` about
+    /// why the resolve is a named step and not something the fill loop does.
+    [[nodiscard]] engine::texture_handle pick(albedo_source a) const
     {
         switch (a)
         {
-        case albedo_source::rule:    return nullptr;
-        case albedo_source::checker: return &checker;
-        case albedo_source::uv_grid: return &uv_grid;
-        case albedo_source::fine:    return &fine;
+        case albedo_source::rule:    return {};
+        case albedo_source::checker: return checker;
+        case albedo_source::uv_grid: return uv_grid;
+        case albedo_source::fine:    return fine;
         }
-        return nullptr;
+        return {};
     }
 };
 

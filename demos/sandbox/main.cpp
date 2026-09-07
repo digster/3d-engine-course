@@ -2935,17 +2935,14 @@ constexpr int k_gpu_roughness_count = static_cast<int>(std::size(k_gpu_roughness
     // ---- The material -------------------------------------------------------
     //
     // DECODED TO LINEAR HERE, once per object per frame, rather than per pixel in
-    // the shader. `obj.tint` is an sRGB-encoded `Uint32` because that is what a
+    // the shader. `obj.mat.tint` is an sRGB-encoded `Uint32` because that is what a
     // framebuffer holds and what a person types; it is about to multiply a
     // quantity of light, and Lesson 1.6's rule has not softened.
-    const engine::linear_rgb albedo = engine::to_linear(obj.tint);
-    item.material.albedo = engine::vec3{albedo.r, albedo.g, albedo.b};
-    // LESSON 6.4: four floats of surface description, and every one of them means
-    // something you could measure. `specular` and `shininess` are gone.
-    item.material.roughness = obj.surface.roughness;
-    item.material.metallic  = obj.surface.metallic;
-    item.material.f0        = obj.surface.f0;
-    item.material.textured = (texture != nullptr) ? 1.0f : 0.0f;
+    // LESSON 6.5: five hand-written assignments became one call. `uniforms_of`
+    // is the single place a material becomes GPU numbers, and it DERIVES the
+    // `textured` flag from the albedo handle rather than from a second opinion
+    // about whether a texture is bound.
+    item.material = engine::uniforms_of(obj.mat);
     item.texture = texture;
 
     // ---- The pipeline this object needs -------------------------------------
@@ -3046,7 +3043,14 @@ int run_gpu_scene(SDL_Window* window, bool trace_and_exit)
     // sampler as a `texture` and uploaded to the device as a `gpu_texture`. The
     // two paths therefore read the same texels, which is the other half of what
     // makes the comparison honest (the first half was sharing the geometry).
-    engine::texture cpu_checker = engine::make_checker(64, 8, 0xFFE8E2D6u, 0xFF3A4058u);
+    //
+    // LESSON 6.5: it goes into a POOL, so a material can refer to it. The
+    // software path still wants a pointer for its fill loop and gets one by
+    // resolving the handle — once, here, not per pixel.
+    engine::texture_pool floor_textures;
+    const engine::texture_handle gpu_checker_source =
+        floor_textures.insert(engine::make_checker(64, 8, 0xFFE8E2D6u, 0xFF3A4058u));
+    const engine::texture& cpu_checker = *floor_textures.get(gpu_checker_source);
 
     engine::image_data checker_image;
     checker_image.width = 64;
@@ -3301,11 +3305,22 @@ int run_gpu_scene(SDL_Window* window, bool trace_and_exit)
             if (mesh == nullptr) { continue; }
 
             const bool is_floor = (ctl.scene == demo::scene_kind::floor);
-            SDL_GPUTexture* tex = (is_floor && ctl.floor_textured && texture_ok)
-                ? gpu_checker.handle() : nullptr;
+            const bool textured = (is_floor && ctl.floor_textured && texture_ok);
+            SDL_GPUTexture* tex = textured ? gpu_checker.handle() : nullptr;
+
+            // LESSON 6.5: THE MATERIAL SAYS WHETHER THERE IS AN ALBEDO MAP, and
+            // everything downstream derives from that one field. This decision is
+            // still made here rather than in `build_scene`, because it is a
+            // keypress ([T]) rather than a property of the scene — but it is
+            // recorded ON THE MATERIAL, so `uniforms_of` cannot disagree with the
+            // texture actually bound. Writing the flag separately, next to a
+            // pointer that is chosen separately, is precisely the pair of opinions
+            // this lesson exists to collapse.
+            engine::scene_object obj = objects[i];
+            obj.mat.albedo_map = textured ? gpu_checker_source : engine::texture_handle{};
 
             entries[item_count] = mesh;
-            items[item_count] = make_draw_item(objects[i], *mesh, ctl, tex);
+            items[item_count] = make_draw_item(obj, *mesh, ctl, tex);
             ++item_count;
         }
 
@@ -4360,11 +4375,16 @@ int main(int argc, char* argv[])
 
                 // ---- Lesson 3.9: what supplies this draw's albedo? ---------
                 //
-                // `nullptr` under `albedo_source::rule`, which is what makes the
-                // rule and the lookup a single keypress apart. `texture_binding`
-                // holds a non-owning pointer, and `textures` lives for the whole
-                // program, so there is nothing here that can dangle.
-                const engine::texture* image = textures.pick(albedo);
+                // An invalid handle under `albedo_source::rule`, which is what
+                // makes the rule and the lookup a single keypress apart.
+                //
+                // LESSON 6.5 CHANGED WHAT `pick` RETURNS, and the old comment
+                // here is worth keeping in view: it argued the raw pointer was
+                // safe because "`textures` lives for the whole program, so there
+                // is nothing here that can dangle". That was true, and it was an
+                // argument about THIS demo rather than about the type. A handle
+                // needs no such argument.
+                const engine::texture* image = textures.pool.get(textures.pick(albedo));
 
                 // Which surfaces read a texture at all. The FLOOR always: it is the
                 // one mesh in the demo with uvs authored for tiling, and it has been
@@ -4572,8 +4592,8 @@ int main(int argc, char* argv[])
                     for (int i = 0; i < scene_count; ++i)
                     {
                         other_scene[i] = scene[i];
-                        other_scene[i].surface.roughness =
-                            matched_roughness(spec_model, scene[i].surface.roughness);
+                        other_scene[i].mat.surface.roughness =
+                            matched_roughness(spec_model, scene[i].mat.surface.roughness);
                     }
 
                     engine::render_options other_model = opts;
@@ -5367,7 +5387,7 @@ int main(int argc, char* argv[])
             // sky commentary follows: stacking every explanation at once is how a
             // HUD becomes wallpaper nobody reads.
             {
-                const engine::texture* hud_image = textures.pick(albedo);
+                const engine::texture* hud_image = textures.pool.get(textures.pick(albedo));
                 const bool hud_uv = (scene_mode == demo::scene_kind::floor
                                   || scene_mode == demo::scene_kind::model);
 

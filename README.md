@@ -7,7 +7,7 @@ There is no engine to download here and no framework doing the interesting parts
 write the math library, the rasterizer, the ECS, the renderer, the physics, and the editor. By
 the end you have a real engine and a game built on its public API.
 
-**Status:** curriculum and conventions published; lessons in progress — **Modules 0–5 are complete** and Module 6 is under way (60 of 95 lessons). The CPU software rasterizer is finished end to end, the same scene is drawn on a real GPU through SDL_GPU, and the tree is now a static library with a public API, a platform/application layer, its own logging, handle-based resource storage, an asset system that can load, share and free, a reusable A/B timing harness that has decided three architecture questions with numbers instead of folklore, and **a working from-scratch ECS** — a generational entity id honoured by every pool, sparse-set component storage, queries that lead with the smallest pool, a **transform hierarchy** whose resolve cost is flat in depth with a camera that is an ordinary entity, (5.10) an **input layer that knows what the player meant** rather than which key they hit, (5.11) **a debug-draw system and a tooling UI** — a queue of world-space geometry with lifetimes that anything in the engine can fill, and Dear ImGui behind a 182-line facade — and, opening Module 6, (6.1) **a colour pipeline that is correct at both ends**, which found and fixed a four-module-old bug that had every GPU-rendered pixel too dark, (6.2) **a shading equation with units** — a BRDF measured in inverse steradians, a light measured in irradiance, and a hemisphere integrator that turns "is this model physically plausible?" into a number — (6.3) **a story about what a surface is**: three microfacet distributions and a masking term, each held to an identity that has a right-hand side, and (6.4) **a physically-based BRDF, live in both renderers** — Cook–Torrance with its `4(n·l)(n·v)` denominator *derived* rather than quoted, Fresnel built from the physics with `F0` read off an index of refraction, the metallic workflow arriving as a consequence, and energy conservation measured at a worst hemispherical reflectance of 0.9255 where the model it replaced reached 1.4300. Start at
+**Status:** curriculum and conventions published; lessons in progress — **Modules 0–5 are complete** and Module 6 is under way (61 of 95 lessons). The CPU software rasterizer is finished end to end, the same scene is drawn on a real GPU through SDL_GPU, and the tree is now a static library with a public API, a platform/application layer, its own logging, handle-based resource storage, an asset system that can load, share and free, a reusable A/B timing harness that has decided three architecture questions with numbers instead of folklore, and **a working from-scratch ECS** — a generational entity id honoured by every pool, sparse-set component storage, queries that lead with the smallest pool, a **transform hierarchy** whose resolve cost is flat in depth with a camera that is an ordinary entity, (5.10) an **input layer that knows what the player meant** rather than which key they hit, (5.11) **a debug-draw system and a tooling UI** — a queue of world-space geometry with lifetimes that anything in the engine can fill, and Dear ImGui behind a 182-line facade — and, opening Module 6, (6.1) **a colour pipeline that is correct at both ends**, which found and fixed a four-module-old bug that had every GPU-rendered pixel too dark, (6.2) **a shading equation with units** — a BRDF measured in inverse steradians, a light measured in irradiance, and a hemisphere integrator that turns "is this model physically plausible?" into a number — (6.3) **a story about what a surface is**: three microfacet distributions and a masking term, each held to an identity that has a right-hand side, and (6.4) **a physically-based BRDF, live in both renderers** — Cook–Torrance with its `4(n·l)(n·v)` denominator *derived* rather than quoted, Fresnel built from the physics with `F0` read off an index of refraction, the metallic workflow arriving as a consequence, and energy conservation measured at a worst hemispherical reflectance of 0.9255 where the model it replaced reached 1.4300, and (6.5) **a material system** &mdash; one home for what a surface is, referencing its textures by handle rather than by pointer, with the rule that decides membership set by the hardware rather than by taste. Start at
 [`docs/index.html`](docs/index.html).
 
 ---
@@ -537,6 +537,51 @@ moved at all, and that was the *instrument's* fault: `shading::textured` is unli
 chosen in 3.8 *because* it shows highlights was drawn unlit in the reference shot. So an eighth
 frame is added — because **the moment to extend a characterization test is the moment it breaks
 for another reason.** It is free at a re-baseline and costs a re-baseline at every other lesson.
+
+**Lesson 6.5** starts from a number rather than a bug. 6.4 changed *one* surface parameter and had
+to edit **forty-four call sites** across the engine, four demos and six harnesses — and that is not
+a complaint about 6.4, it is what a missing type measures.
+
+Three structs had independently grown the same hole, and two of them said so in their own comments.
+The third is the one that settles it: **`ecs_swarm` is a demo**, restricted since Lesson 5.1 to the
+engine's public headers, and in 5.7 it declared `struct material` itself because the engine offered
+none. **When a consumer that cannot reach inside your library has to invent one of your types, the
+type is missing** — not "would be nice"; missing.
+
+The interesting part is not the struct. It is the question that decides what goes in it, and the
+hardware settles it rather than taste: **can this be a number in a buffer?** If yes it is per-draw
+data, pushed as a uniform, and two objects differing only in it draw back to back. If no it is
+*pipeline state*, baked into a pipeline object, and two objects differing in it need two pipelines
+and a sort between them — which is exactly what Lesson 4.8 already paid for. So `cull_mode` stays
+out, and `verify_65` asserts the rule the bluntest way the language allows: `is_trivially_copyable`.
+
+The texture reference becomes a **handle**, and the comment defending the old pointer is worth
+reading — *"`textures` lives for the whole program, so there is nothing here that can dangle"* was
+true, and was an argument about that demo rather than about the type. Sixty-four insertions later
+the pool has moved from `0x928c03500` to `0x928c16000` and the handle does not care, because it
+names a slot rather than an address; a *stale* one resolves to "no image" instead of freed memory,
+which is the case a pointer cannot express at all. `bind_albedo` is the named step between them:
+**a handle is how you store a reference, a pointer is how you use one, and the conversion happens
+once per draw** — because per pixel is precisely where a bounds check is unaffordable.
+
+Sharing is measured, not asserted: ninety-six ring drones over six tints is **3,456 bytes against
+600**. And the better argument is not the bytes — with copies, "make the drones rougher" is a loop
+over the registry; with handles it is one write. Note the rule that falls out, because the folk
+version gets it backwards: `scene_object` still holds its material *by value*, because it has one.
+**The rule is about sharing, not about size.**
+
+Then two comments that had been repeating for three modules turn out to be wrong. `closed` was
+never material state — a material is explicitly *not* pipeline state, and `closed` is not cull mode
+anyway but a fact about the *mesh*, which `validate()` already counts from its own edges. And the
+compile-time argument for splitting out `cull.hpp` **did not survive being measured**: 5.1's quoted
+0.97 s came back as 0.258 s, against `material.hpp`'s own 0.261 s, so the marginal saving is zero —
+and 5.1's note had said, in capitals, that the ratio travels and the seconds do not. The split ships
+on the physical-design rule alone. **The only false part of the case was the part added to
+strengthen it.**
+
+Everything here is a refactor, so there is exactly one claim: the reference render is
+**byte-identical** at `E917C06C`, verified after each of the three stages separately — *move
+without changing, then change without moving*.
 
 **An edge is a change in the *action*, not in a signal.** Bind `jump` to both a key and a mouse
 button, press one while the other is held, and there is still exactly one press edge. Derive

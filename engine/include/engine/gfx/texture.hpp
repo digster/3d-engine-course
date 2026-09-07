@@ -25,6 +25,8 @@
 
 #pragma once
 
+#include <engine/core/handle.hpp>   // 6.5: a texture is referenced, not pointed at
+#include <engine/core/pool.hpp>
 #include <engine/gfx/colour.hpp>   // linear_rgb: what a sample IS, once decoded
 #include <engine/math/vec2.hpp>
 
@@ -276,6 +278,28 @@ struct texture_binding
     /// colours.
     [[nodiscard]] bool bound() const { return image != nullptr && !image->empty(); }
 };
+
+// ---- Lesson 6.5: storing textures, as opposed to pointing at them -----------
+
+/// A reference to a texture held in a `texture_pool`.
+///
+/// **The same argument `image_handle` made in Lesson 5.5, arriving one layer
+/// further down.** `image_data` is what was *loaded*; `texture` is what was
+/// *derived* from it and is ready to sample. Both want stable, checkable
+/// references, and for the same reason: a raw `const texture*` stored in a
+/// material outlives nothing in particular, and the day the pool reallocates is
+/// the day every material in the scene points at freed memory.
+using texture_handle = handle<texture>;
+
+/// Storage for the textures a scene samples.
+///
+/// **Deliberately NOT in `asset_store`.** The asset store is about *files* — a
+/// search path, a name, a cache, a load count (5.5) — and every texture in this
+/// engine so far is generated in memory rather than loaded. Lesson 6.6 is where
+/// textures start arriving from disk, and that is the lesson that gets to decide
+/// whether they become assets. Inventing the answer now would be guessing, which
+/// is the same call Lesson 3.7 made about the material itself.
+using texture_pool = pool<texture>;
 
 // ---- Generated test images ---------------------------------------------------
 //

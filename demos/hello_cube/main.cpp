@@ -93,14 +93,14 @@ public:
         object_.geometry = assets_.insert_mesh(
             "cube", engine::with_normals(engine::cube_mesh(), engine::normal_style::flat));
         object_.name = "cube";
-        object_.tint = 0xFFE0A83Cu;             // amber; not an axis colour
+        object_.mat.tint = 0xFFE0A83Cu;             // amber; not an axis colour
         // LESSON 6.4. Was `{.colour = {0.6f, 0.6f, 0.6f}, .shininess = 48.0f}`.
         // Shininess 48 is roughness 0.45 (Lesson 6.3's mapping); the 0.6 specular
         // colour is gone entirely, because a painted wooden cube is a DIELECTRIC
         // and every dielectric reflects the same 4% at normal incidence. That is
         // the default, so the material is now one number — which is what it means
         // for a parameter to be physical rather than tuned.
-        object_.surface = {.roughness = 0.45f};
+        object_.mat.surface = {.roughness = 0.45f};
         object_.xform.position = {0.0f, 0.0f, 0.0f};
         object_.xform.scale = {1.0f, 1.0f, 1.0f};
 
