@@ -86,6 +86,7 @@
       <li><a href="#uniform-data">Uniform data &mdash; the push, and the packing rule</a></li>
       <li><a href="#depth-and-textures">Depth and textures &mdash; formats, precision, samplers</a></li>
       <li><a href="#interop">Interop &mdash; glTF, and what agrees with what</a></li>
+      <li><a href="#normal-maps">Normal maps &mdash; the four conventions</a></li>
       <li><a href="#units">Units and angles</a></li>
       <li><a href="#simulation">The simulation contract</a></li>
       <li><a href="#colour">Colour and diagram conventions</a></li>
@@ -2125,6 +2126,79 @@
        shades them with <code>diffuse_coupling::two_crossing</code>, which differs from the
        specification&rsquo;s sample form in exactly one factor and is the one that meets the MUST
        (0.9255 against 1.3395). Lesson 6.6 &sect;6; the method is in the Math Toolbox &sect;7e.</p>
+  </div>
+
+  <h2 id="normal-maps"><span class="num">7l</span>Normal maps &mdash; the four conventions</h2>
+
+  <p>
+    Added in Lesson 6.7. A normal map is four conventions stacked on one image, and three of the
+    four have a plausible-looking wrong answer &mdash; which is why they belong on this page rather
+    than in a comment.
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <caption class="visually-hidden">The four conventions a normal map depends on, this
+        course&rsquo;s answer for each, and the symptom of getting it wrong</caption>
+      <thead>
+        <tr><th>Convention</th><th>This course</th><th>Symptom when wrong</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Colour space</strong></td>
+          <td><code>texel_space::linear</code> &mdash; the byte is a number, <code>value/255</code>,
+              no curve. On the GPU, <code>create_sampled(&hellip;, srgb = false)</code>.</td>
+          <td>Every surface tilted <strong>38.8&deg;</strong>, in one direction. Reads as a map
+              authored too strong.</td>
+        </tr>
+        <tr>
+          <td><strong>Encoding</strong></td>
+          <td><code>stored = (c + 1) / 2</code>, so flat is (128, 128, 255) &mdash; the lavender.</td>
+          <td>Skip the <code>&times;2&minus;1</code> and every normal points into the +octant;
+              lighting collapses to one direction.</td>
+        </tr>
+        <tr>
+          <td><strong>Green&rsquo;s sense</strong></td>
+          <td>+<em>v</em>, which is <strong>down</strong> the image &mdash; because our texture
+              origin is the upper left (&sect;7k) and the bitangent is the direction of increasing
+              <em>v</em>. glTF agrees.</td>
+          <td><strong>Bumps read as dents.</strong> An asset problem rather than a code one, and the
+              fix is to negate <em>y</em> after the decode.</td>
+        </tr>
+        <tr>
+          <td><strong>Handedness</strong></td>
+          <td>Carried per vertex as <code>tangent.w</code> = &plusmn;1;
+              <em>B</em> = <em>w</em>&thinsp;(<em>N</em> &times; <em>T</em>). glTF&rsquo;s
+              <code>TANGENT</code> is a <code>vec4</code> for the same reason.</td>
+          <td>One half of every symmetric model lit as the <em>mirror image</em> of the other.
+              Reads as a modelling error.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout warn">
+    <span class="label">The third row is the one that is not ours to fix</span>
+    <p>&ldquo;OpenGL-style&rdquo; and &ldquo;DirectX-style&rdquo; normal maps differ in exactly the
+       green channel&rsquo;s sense, and the difference exists because the two ecosystems disagree
+       about where a texture&rsquo;s origin is. glTF pins the origin at the upper left and defines
+       the tangent basis to match, so a glTF asset is self-consistent &mdash; and this engine
+       inherits that.</p>
+    <p>What you will still meet is a map <em>baked</em> for the other convention and dropped into a
+       glTF. There is no way to detect it from the image, which is why the symptom &mdash; every
+       bump reading as a dent &mdash; is worth being able to recognise on sight.</p>
+  </div>
+
+  <div class="callout">
+    <span class="label">And one fact that is not a convention at all</span>
+    <p><strong>&ldquo;No change&rdquo; is not exactly representable.</strong> 0.5 has no 8-bit code;
+       the nearest is 128, and <code>128/255&times;2&minus;1</code> is <code>1/255</code>. So the
+       flattest normal map that can be <em>stored</em> tilts its surface by <strong>0.318&deg;</strong>
+       &mdash; every flat normal map, not just badly authored ones.</p>
+    <p>It matters when writing tests: an exact round trip through a flat map is not achievable, and
+       the correct assertion is that the error <em>equals</em> the quantisation floor
+       (5.546&thinsp;&times;&thinsp;10<sup>&minus;3</sup>) rather than that it is below some chosen
+       number. Math Toolbox &sect;7f derives the general bound.</p>
   </div>
 
   <h2 id="units"><span class="num">8</span>Units and angles</h2>

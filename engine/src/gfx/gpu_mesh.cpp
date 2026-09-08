@@ -25,14 +25,25 @@ gpu_vertex_pnu make_vertex(const mesh& m, std::size_t i)
     const vec3 p = m.vertices[i];
     const vec3 n = m.normal_at(i);
     const vec2 t = m.uv_at(i);
+    const vec4 tan = m.tangent_at(i);   // 6.7
 
     const float len = std::sqrt(n.x * n.x + n.y * n.y + n.z * n.z);
     const float inv = (len > 1e-12f) ? 1.0f / len : 0.0f;
 
+    // Same treatment for the tangent, and for the same reason: the loader stores
+    // what the file said, the consumer normalises. A zero tangent (a mesh that
+    // carries none) stays zero, which the fragment reads as "no frame".
+    //
+    // `tw` is NOT normalised — it is a sign, and `mesh::tangent_at` returns +1
+    // for absent so the frame is degenerate rather than inverted.
+    const float tlen = std::sqrt(tan.x * tan.x + tan.y * tan.y + tan.z * tan.z);
+    const float tinv = (tlen > 1e-12f) ? 1.0f / tlen : 0.0f;
+
     return gpu_vertex_pnu{
         p.x, p.y, p.z,
         n.x * inv, n.y * inv, n.z * inv,
-        t.x, t.y
+        t.x, t.y,
+        tan.x * tinv, tan.y * tinv, tan.z * tinv, tan.w
     };
 }
 
@@ -208,7 +219,7 @@ void gpu_mesh::draw(SDL_GPURenderPass* pass, Uint32 instances) const
     }
 }
 
-pipeline_desc& gpu_mesh::describe(pipeline_desc& desc, Uint32 slot)
+pipeline_desc& gpu_mesh::describe(pipeline_desc& desc, Uint32 slot, bool with_tangent)
 {
     // sizeof for the pitch, offsetof for every offset. Not one literal in this
     // function, which is the only defence C++ can offer against a layout that
@@ -219,7 +230,23 @@ pipeline_desc& gpu_mesh::describe(pipeline_desc& desc, Uint32 slot)
         .attribute(1, slot, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,
                    static_cast<Uint32>(offsetof(gpu_vertex_pnu, nx)))
         .attribute(2, slot, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2,
-                   static_cast<Uint32>(offsetof(gpu_vertex_pnu, u)));
+                   static_cast<Uint32>(offsetof(gpu_vertex_pnu, u)))
+        ;
+
+    // Lesson 6.7, and OPTIONAL — see the header. FLOAT4, and `offsetof` rather
+    // than the 32 that happens to be right today, which is exactly the rule 4.4
+    // stated and exactly the literal that would have gone wrong when this field
+    // was inserted.
+    //
+    // The vertex BUFFER still carries the tangent either way; the pitch above is
+    // `sizeof(gpu_vertex_pnu)` regardless. What this flag decides is whether the
+    // fetch unit is told to read it — so a pipeline that opts out pays the memory
+    // and not the bandwidth, which is the honest description of the trade.
+    if (with_tangent)
+    {
+        desc.attribute(3, slot, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4,
+                       static_cast<Uint32>(offsetof(gpu_vertex_pnu, tx)));
+    }
     return desc;
 }
 

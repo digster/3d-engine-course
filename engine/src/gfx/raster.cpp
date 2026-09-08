@@ -498,6 +498,19 @@ void fill_triangle(framebuffer& fb, depth_buffer* depth,
     // fragment's point of view those are the same situation.
     const bool textured = style.albedo.bound();
 
+    // LESSON 6.7. Three conditions, all constant for the whole triangle, so the
+    // branch below costs nothing per pixel — only the work behind it does.
+    //
+    // The third one is the interesting one: geometry with no tangents cannot be
+    // normal mapped, because tangent space IS the uv parameterisation and a mesh
+    // without one has no frame to map into. The zero `xyz` that `tangent_at`
+    // returns for a mesh with no tangents is what makes this checkable here
+    // rather than needing a flag alongside — the same trick `normal_at` has used
+    // since 3.6.
+    const bool normal_mapped = style.normal_map.bound()
+                               && (v0.tangent.x != 0.0f || v0.tangent.y != 0.0f
+                                   || v0.tangent.z != 0.0f);
+
     // Under `lit` the corner colours are an ALBEDO that is about to be multiplied
     // by a quantity of light, so they must be decoded whatever `blend_space` says.
     // `blend_space::encoded` is a statement about how to *blend two colours*, and
@@ -553,6 +566,15 @@ void fill_triangle(framebuffer& fb, depth_buffer* depth,
     // work below is what is guarded.
     const vec3 pn0 = v0.normal * iw0, pn1 = v1.normal * iw1, pn2 = v2.normal * iw2;
     const vec3 pw0 = v0.world * iw0, pw1 = v1.world * iw1, pw2 = v2.world * iw2;
+
+    // Lesson 6.7's third varying, pre-divided by exactly the same rule — the
+    // derivation in §3.2 never said what `a` was, and it does not start caring
+    // now. Only the `xyz` goes through the correction: `w` is a SIGN, constant
+    // across a uv chart, and dividing a sign by `w` and multiplying it back is a
+    // pair of operations whose only possible effect is float error.
+    const vec3 pt0{v0.tangent.x * iw0, v0.tangent.y * iw0, v0.tangent.z * iw0};
+    const vec3 pt1{v1.tangent.x * iw1, v1.tangent.y * iw1, v1.tangent.z * iw1};
+    const vec3 pt2{v2.tangent.x * iw2, v2.tangent.y * iw2, v2.tangent.z * iw2};
 
 
     // ---- The fragment, as a function (Lesson 4.1) --------------------------
@@ -682,13 +704,77 @@ void fill_triangle(framebuffer& fb, depth_buffer* depth,
                           (f0 * p0.b + f1 * p1.b + f2 * p2.b) * w_recip};
             }
 
+            // ---- LESSON 6.7: THE NORMAL, PERTURBED --------------
+            //
+            // Everything above computed the normal the GEOMETRY has.
+            // This replaces it with the normal the SURFACE has, read
+            // out of an image — and the whole of the work is building
+            // the frame that makes the image's numbers mean something.
+            vec3 shading_normal = n;
+            if (normal_mapped)
+            {
+                const float uu = (f0 * pu0 + f1 * pu1 + f2 * pu2) * w_recip;
+                const float vv = (f0 * pv0 + f1 * pv1 + f2 * pv2) * w_recip;
+
+                // THE MAP IS DATA, NOT COLOUR. `sample` returns
+                // `texel/255` here rather than decoding through the
+                // sRGB curve, because the texture was built with
+                // `texel_space::linear` (6.7 §3). Through the wrong
+                // space the flat value 0.5 comes back as 0.2140 and
+                // every surface tilts toward its own steepest reading.
+                const linear_rgb t = sample(*style.normal_map.image,
+                                            style.normal_map.samp, uu, vv);
+
+                // [0,1] -> [-1,1]. A direction has negative components
+                // and a byte does not, so the encoding is an offset —
+                // which is exactly why an unperturbed normal map is
+                // LAVENDER: (0, 0, 1) stores as (0.5, 0.5, 1.0), and a
+                // pale blue-violet is what "no change" looks like.
+                const vec3 tn{t.r * 2.0f - 1.0f,
+                              t.g * 2.0f - 1.0f,
+                              t.b * 2.0f - 1.0f};
+
+                // THE FRAME, REBUILT PER FRAGMENT. Both the normal and
+                // the tangent were interpolated, so neither is unit
+                // length and they are no longer perpendicular to each
+                // other — interpolation does not preserve either
+                // property. Gram-Schmidt fixes the second and
+                // normalising fixes the first, in that order, and the
+                // NORMAL is what we refuse to move: it is what the
+                // shading is about, and the tangent only has to span
+                // the plane.
+                const vec3 nn = normalised_or(n, vec3{0.0f, 0.0f, 1.0f});
+                const vec3 ti{(f0 * pt0.x + f1 * pt1.x + f2 * pt2.x) * w_recip,
+                              (f0 * pt0.y + f1 * pt1.y + f2 * pt2.y) * w_recip,
+                              (f0 * pt0.z + f1 * pt1.z + f2 * pt2.z) * w_recip};
+                const vec3 tt = normalised_or(ti - nn * dot(nn, ti),
+                                              vec3{1.0f, 0.0f, 0.0f});
+
+                // The bitangent is COMPUTED, not stored — and the sign
+                // is why the tangent is a vec4. A mirrored uv chart
+                // needs the other one, and every symmetric model has a
+                // mirrored chart.
+                const float handed = (f0 * v0.tangent.w + f1 * v1.tangent.w
+                                      + f2 * v2.tangent.w) >= 0.0f ? 1.0f : -1.0f;
+                const vec3 bb = cross(nn, tt) * handed;
+
+                // TANGENT SPACE -> WORLD, which is a matrix multiply
+                // written as its own definition: a matrix IS where the
+                // basis vectors land (Lesson 2.5), and these three ARE
+                // the basis vectors. `tn.z` weights the normal, which
+                // is why a flat map — z = 1, x = y = 0 — returns `nn`
+                // exactly and changes nothing. verify_67 §D asserts
+                // that round trip.
+                shading_normal = tt * tn.x + bb * tn.y + nn * tn.z;
+            }
+
             // `shade` normalises `n` itself — a decision made in 3.6
             // ("a caller who forgets gets a brightness scaled by the
             // normal's length, which looks like a lighting bug and is
             // not one"), and this is the call site that cashes it in.
             // The interpolated normal is genuinely short here, worst in
             // the middle of the triangle; §3.5 measures by how much.
-            return to_encoded(shade(albedo, n, style.eye - p,
+            return to_encoded(shade(albedo, shading_normal, style.eye - p,
                                       *style.lights, style.surface,
                                       style.model),
                                 style.encode);

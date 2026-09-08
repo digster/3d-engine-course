@@ -103,16 +103,19 @@ void collect_triangles(std::vector<raster_triangle>& out, projection_scratch& sc
         std::vector<vec3>& world_normal = scratch.world_normal;
         std::vector<Uint32>& vertex_colour = scratch.vertex_colour;
         std::vector<vec3>& world_pos = scratch.world_pos;
+        std::vector<vec4>& world_tangent = scratch.world_tangent;   // 6.7
         view_pos.clear();
         clip_pos.clear();
         world_normal.clear();
         vertex_colour.clear();
         world_pos.clear();
+        world_tangent.clear();
         view_pos.reserve(vertex_count);
         clip_pos.reserve(vertex_count);
         world_normal.reserve(vertex_count);
         vertex_colour.reserve(vertex_count);
         world_pos.reserve(vertex_count);
+        world_tangent.reserve(vertex_count);
 
         // Shade at the vertices only when the evaluation point IS the vertex.
         // Under `flat` the answer is computed once per triangle below, and under
@@ -138,6 +141,33 @@ void collect_triangles(std::vector<raster_triangle>& out, projection_scratch& sc
             // face normal without a second flag travelling alongside.
             const vec3 n_model = geometry.normal_at(v);
             world_normal.push_back(to_world_normal * n_model);
+
+            // LESSON 6.7, AND THE ONE LINE OF THIS FUNCTION MOST WORTH READING
+            // TWICE: A TANGENT IS TRANSFORMED BY THE MODEL MATRIX, NOT BY THE
+            // NORMAL MATRIX.
+            //
+            // The distinction is the same one Lesson 3.6 derived and it lands on
+            // the other side. A NORMAL is defined by being perpendicular to the
+            // surface, and perpendicularity is not preserved by a non-uniform
+            // scale — hence the inverse transpose. A TANGENT lies *in* the
+            // surface: it is the direction the surface goes as `u` increases, so
+            // it is a DIFFERENCE OF POSITIONS, and a difference of positions
+            // transforms exactly the way positions do.
+            //
+            // Use `to_world_normal` here and every non-uniformly scaled object
+            // has its normal map skewed — and, exactly as with the normal matrix
+            // itself, every uniformly scaled object looks perfect, which is why
+            // the mistake survives. `linear_of` is the model matrix's 3x3, which
+            // is what a direction wants: no translation, w = 0 (Lesson 2.7).
+            //
+            // The handedness rides through untouched. It is a sign, not a
+            // direction, and a matrix has no opinion about it — although a
+            // MIRRORING model matrix does flip the frame it describes, which is
+            // Exercise 5.
+            const vec4 t_model = geometry.tangent_at(v);
+            const vec3 t_world = linear_of(world_from_model)
+                                 * vec3{t_model.x, t_model.y, t_model.z};
+            world_tangent.push_back(vec4{t_world.x, t_world.y, t_world.z, t_model.w});
 
             if (per_vertex_light && nsrc == normal_source::vertex)
             {
@@ -173,9 +203,20 @@ void collect_triangles(std::vector<raster_triangle>& out, projection_scratch& sc
             // WORLD space and the divide does not touch them — only the position
             // is projected. A varying is data the fragment wants; the pipeline
             // carries it and does not interpret it.
-            return vertex{to_pixel(s.xy.x), to_pixel(s.xy.y),
-                                  s.depth, s.inv_w, cv.uv.x, cv.uv.y, cv.colour,
-                                  cv.normal, cv.world};
+            // DESIGNATED INITIALISERS AS OF LESSON 6.7, and the reason is that
+            // this lesson broke the positional form. `vertex` grew a `tangent`
+            // between `normal` and `world`, and the positional list above
+            // silently fed a `vec3` where a `vec4` was expected — which at least
+            // failed to compile. The version of that mistake that COMPILES is the
+            // one worth designing against: two same-typed fields swapping places.
+            // `mesh.hpp` made this exact argument in Lesson 3.5 and this file did
+            // not take it.
+            return vertex{.x = to_pixel(s.xy.x), .y = to_pixel(s.xy.y),
+                          .z = s.depth, .inv_w = s.inv_w,
+                          .u = cv.uv.x, .v = cv.uv.y,
+                          .colour = cv.colour,
+                          .normal = cv.normal, .tangent = cv.tangent,
+                          .world = cv.world};
         };
 
         const std::span<const std::uint16_t> idx = geometry.indices;
@@ -291,9 +332,12 @@ void collect_triangles(std::vector<raster_triangle>& out, projection_scratch& sc
             // interpolated normal and position at its new corners — the clipper
             // lerps every field with the one crossing parameter (3.3 §3.4).
             const clip_vertex src[3] = {
-                {clip_pos[a], geometry.uv_at(a), colour_a, na, world_pos[a]},
-                {clip_pos[b], geometry.uv_at(b), colour_b, nb, world_pos[b]},
-                {clip_pos[c], geometry.uv_at(c), colour_c, nc, world_pos[c]}};
+                {.position = clip_pos[a], .uv = geometry.uv_at(a), .colour = colour_a,
+                 .normal = na, .tangent = world_tangent[a], .world = world_pos[a]},
+                {.position = clip_pos[b], .uv = geometry.uv_at(b), .colour = colour_b,
+                 .normal = nb, .tangent = world_tangent[b], .world = world_pos[b]},
+                {.position = clip_pos[c], .uv = geometry.uv_at(c), .colour = colour_c,
+                 .normal = nc, .tangent = world_tangent[c], .world = world_pos[c]}};
 
             // How the triangle sits relative to the near plane — measured from the
             // geometry, not inferred from what the current mode does about it, so

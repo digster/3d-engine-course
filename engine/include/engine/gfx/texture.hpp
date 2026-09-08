@@ -117,6 +117,55 @@ enum class texel_origin
     corner
 };
 
+// ---- Lesson 6.7: what the numbers in a texture MEAN --------------------------
+
+/// Is this image **colour**, or is it **data**?
+///
+/// Lesson 6.7, and this is the field whose absence Lesson 6.6 had to name and
+/// walk away from. Every texture in this engine until now was an albedo — an
+/// authored colour, sRGB-encoded like every stored colour since Lesson 1.6 — so
+/// `sample` could decode unconditionally and be right every time. A normal map
+/// is not a colour. Its three channels are a **direction**, packed into bytes,
+/// and running them through the sRGB curve is arithmetic on numbers that were
+/// never a colour in the first place.
+///
+/// **THE GPU HAS HAD THIS SINCE LESSON 4.7 AND THE CPU HAS NEVER HAD IT.**
+/// `gpu_texture::create_sampled` takes an `srgb` flag and asks for an
+/// `SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM_SRGB` format when it is set. That is
+/// the same gap 6.6 found between `load_image` and `sample` — two halves of a
+/// thing, one of them complete, and no code path crossing between them until a
+/// format arrived that needed both.
+///
+/// **It belongs on the TEXTURE, not on the sampler, and the hardware settles
+/// it.** In SDL_GPU the decode is declared by the texture's FORMAT and performed
+/// by the sampler; the same image bound twice cannot be sRGB in one binding and
+/// linear in the other, because the format is a property of the memory. Lesson
+/// 3.9 built these types to mirror SDL_GPU's "so that when Module 4 replaces
+/// this file with a GPU sampler object, the change is a rename and not a
+/// re-education", and mirroring includes mirroring where a decision lives.
+enum class texel_space
+{
+    /// **Colour.** Authored, sRGB-encoded, decoded through the transfer function
+    /// on every read — which is what `sample` has always done and what makes an
+    /// albedo a reflectance that can multiply a quantity of light (1.6, 3.9).
+    ///
+    /// The default, because it is the only kind of texture that existed before
+    /// this lesson and because getting it wrong on a colour is the *visible*
+    /// mistake — a washed-out albedo announces itself.
+    srgb,
+
+    /// **Data.** A normal, a roughness, a metalness, a mask, an occlusion factor.
+    /// The byte is a number, `value / 255`, and no curve is applied.
+    ///
+    /// Getting THIS one wrong is the invisible mistake, which is why the two are
+    /// worth separating rather than documenting. A normal map read through an
+    /// sRGB decode is wrong by the gamma curve everywhere except 0 and 1 — the
+    /// flat value 0.5 comes back as **0.2140** — so every surface tilts toward
+    /// its own steepest reading and the result looks like a normal map that was
+    /// authored too strong. Lesson 6.7 §3 measures it.
+    linear
+};
+
 /// Everything about *how* to read a texture, gathered into one object.
 ///
 /// The shape is `SDL_GPUSamplerCreateInfo` with the fields we can honestly
@@ -185,7 +234,17 @@ public:
     /// A non-positive dimension gives an **empty** texture rather than a thrown
     /// exception or an undefined one — the engine core has no exceptions (§4 of the
     /// course conventions) and `sample` has a defined answer for an empty image.
-    texture(int w, int h, Uint32 fill = 0xFF000000u);
+    ///
+    /// **`space` defaults to `srgb`** (Lesson 6.7), which keeps every texture
+    /// written before that lesson meaning exactly what it meant. A default that
+    /// changed the answer would have made the whole lesson a re-baseline.
+    texture(int w, int h, Uint32 fill = 0xFF000000u, texel_space space = texel_space::srgb);
+
+    /// Colour or data? See `texel_space`. Set at construction and never after:
+    /// an image does not stop being a normal map halfway through a frame, and
+    /// making it settable would put the decision back at the call site, which is
+    /// exactly where this lesson took it from.
+    [[nodiscard]] texel_space space() const { return space_; }
 
     [[nodiscard]] int width() const { return width_; }
     [[nodiscard]] int height() const { return height_; }
@@ -211,6 +270,7 @@ private:
     std::vector<Uint32> texels_;
     int width_ = 0;
     int height_ = 0;
+    texel_space space_ = texel_space::srgb;   ///< 6.7
 };
 
 // ---- Addressing --------------------------------------------------------------
@@ -335,7 +395,14 @@ using texture_pool = pool<texture>;
 ///
 /// An invalid image gives an empty texture, which `sample` already answers with
 /// debug magenta — a visible failure rather than a silent black one.
-[[nodiscard]] texture to_texture(const image_data& src);
+///
+/// **`space` is not optional in spirit even though it has a default** (Lesson
+/// 6.7). An importer that does not say what an image holds is guessing, and the
+/// guess is right for albedos and silently wrong for everything else — which is
+/// why `asset_store::load_texture` takes the space as a parameter and glTF
+/// supplies it from which slot the texture was bound to.
+[[nodiscard]] texture to_texture(const image_data& src,
+                                 texel_space space = texel_space::srgb);
 
 // ---- Generated test images ---------------------------------------------------
 //
@@ -364,5 +431,44 @@ using texture_pool = pool<texture>;
 /// Quadrant colours, which §5.4 asserts by sampling:
 ///   top-left RED, top-right GREEN, bottom-left BLUE, bottom-right AMBER.
 [[nodiscard]] texture make_uv_grid(int size);
+
+/// An **egg-carton normal map**: a grid of `cells` x `cells` smooth bumps.
+///
+/// Lesson 6.7's test image, and it is generated rather than painted for the
+/// reason Lesson 3.9 generated its checkerboard and 6.6 generated its glTF —
+/// the course ships no third-party assets, and every number a lesson quotes has
+/// to be reproducible from the repository alone.
+///
+/// **The height field is analytic**, which is what makes it a test rather than a
+/// picture:
+///
+///     k = 2*pi*cells,   h(u, v) = (strength/k) * cos(k*u) * cos(k*v)
+///
+/// so the surface normal at any point is the normalised
+/// `(-dh/du, -dh/dv, 1)`, and `verify_67` computes that by hand and compares.
+/// A painted map can only be checked by looking at it.
+///
+/// **`strength` is the maximum SLOPE, not the amplitude**, which is why the
+/// `1/k` is in there. `A cos(ku)cos(kv)` has a peak gradient of `A k`, so a
+/// fixed amplitude means the steepness changes when the cell count does — at six
+/// cells an amplitude of 1 is a surface tilted 88 degrees everywhere, and the
+/// picture is a dark mess that reads as a shading bug. Dividing it out makes
+/// **1.0 a maximum tilt of 45 degrees** at any cell count, which is a number
+/// somebody can author against.
+///
+/// **`strength = 0` gives the flat map** — every texel `(0.5, 0.5, 1.0)`, the
+/// lavender that means "no change" — which is the identity input for the round
+/// trip in §D: perturb by a flat map and the geometric normal must come back
+/// unchanged to float precision.
+///
+/// The result carries `texel_space::linear`, because it is a direction and not a
+/// colour. That is not a detail this function could sensibly leave to the
+/// caller: an image whose meaning is fixed by the function that made it should
+/// arrive knowing what it is.
+///
+/// **Green points along +v, which is DOWN the image** (Lesson 3.9's origin, and
+/// glTF's). A map baked for the opposite convention has its green channel
+/// inverted, and the symptom is that every bump reads as a dent — see §7.
+[[nodiscard]] texture make_normal_bumps(int size, int cells, float strength = 1.0f);
 
 } // namespace engine

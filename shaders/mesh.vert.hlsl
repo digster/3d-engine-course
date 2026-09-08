@@ -43,6 +43,18 @@ struct Input
     float2 uv        : TEXCOORD2;
 
     // ---- Per instance, from buffer slot 1 (gpu_instance, 28 bytes) ----------
+    // STILL 3, 4 AND 5, AND LESSON 6.7 IS WHY THAT IS A DECISION. That lesson
+    // added a tangent to `gpu_vertex_pnu`, so `gpu_mesh::describe` can emit four
+    // attributes instead of three — and locations are numbered ACROSS THE WHOLE
+    // PIPELINE, not per buffer, so a fourth mesh attribute would have pushed
+    // these to 4, 5 and 6.
+    //
+    // It does not, because **this shader does not consume a tangent** and
+    // `describe` takes a `with_tangent` flag. A vertex layout is per-PIPELINE
+    // state: a shader declares what it reads, and supplying an attribute nobody
+    // reads is a fetch paid for nothing. Lesson 4.5's `check_layout` is what
+    // turned the alternative — placement silently reading the tangent's bytes —
+    // into a failing assertion in verify_46 before a frame was drawn.
     float4 placement : TEXCOORD3;   // xyz = world offset, w = uniform scale
     float2 spin      : TEXCOORD4;   // (cos, sin) of a rotation about the x axis
     float4 tint      : TEXCOORD5;   // stored as four BYTES; arrives as four floats

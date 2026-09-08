@@ -28,6 +28,7 @@
 // lighting AND texturing — four responsibilities that a real pipeline separates
 // into "fixed function" and "the fragment shader". Module 4 does the separating.
 #include <engine/gfx/texture.hpp>
+#include <engine/math/vec4.hpp>   // 6.7: vertex::tangent carries its handedness
 
 #include <SDL3/SDL.h>
 
@@ -264,6 +265,27 @@ struct vertex
     /// Zero when the fill is not lighting anything, which costs three multiply-adds
     /// per pixel in `shading::lit` and nothing at all in the other modes.
     vec3 normal{};
+
+    /// The world-space **tangent** at this corner, with its handedness in `w` —
+    /// Lesson 6.7.
+    ///
+    /// The fourth varying, and the first one that is four floats. It is here for
+    /// one job: a normal map stores a direction in the surface's own frame, and
+    /// turning that into a world-space normal needs the frame, which needs a T
+    /// as well as an N.
+    ///
+    /// **`w` is NOT interpolated in any meaningful sense.** It is `+1` or `-1`
+    /// across a whole uv chart, so every corner of a triangle agrees and the
+    /// interpolation is the identity — right up until a triangle spans a
+    /// mirroring seam, where the corners disagree and the interpolated value
+    /// passes through zero. That triangle's frame collapses in the middle. It is
+    /// a real artefact with a real fix (an exporter splits the vertices at such a
+    /// seam, exactly as it does at a uv seam), and it is worth knowing rather
+    /// than guarding against here.
+    ///
+    /// Zero `xyz` when the geometry carries no tangents, which the fragment reads
+    /// as "no frame" and falls back to the geometric normal.
+    vec4 tangent{0.0f, 0.0f, 0.0f, 1.0f};
 
     /// The world-space position of this corner — Lesson 3.8.
     ///
@@ -572,6 +594,19 @@ struct fill_style
     /// in 3.8. A default that changes nothing is what lets a feature be added to a
     /// pipeline object without auditing its call sites.
     texture_binding albedo{};
+
+    /// The **normal map**, or an unbound binding for none — Lesson 6.7.
+    ///
+    /// A second binding beside the albedo, and the pair is what a GPU calls two
+    /// texture slots. Unbound is the default and means "shade with the geometric
+    /// normal", which is every fill written before this lesson — so nothing that
+    /// existed had to change and nothing that existed moved a pixel.
+    ///
+    /// **Only consulted under `shading::lit`**, because it is an input to the
+    /// shading equation and the other modes do not evaluate one. A normal map
+    /// bound to a `shading::textured` fill is silently ignored, which is the same
+    /// bargain `lights` already makes.
+    texture_binding normal_map{};
 
     /// Which sRGB encode the fragment's final write uses — Lesson 3.10.
     ///

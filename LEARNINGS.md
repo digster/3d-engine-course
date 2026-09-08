@@ -6531,3 +6531,120 @@ Twice in three lessons, from the same cause: writing a forward reference from me
 rather than from `docs/index.html`, which is the plan. **The index is the authority.** Grep the
 lesson body for `6\.[0-9]` before building the page; it takes ten seconds and it has now caught six
 errors.
+
+---
+
+## Lesson 6.7 — Normal mapping and the TBN derivation
+
+### Three of the hardest bugs here share one shape: they produce a plausible picture
+
+A normal map read as sRGB tilts every surface by 38.8°, which reads as "this map was authored too
+strong". A dropped handedness lights one half of a symmetric model as the mirror image of the other,
+which reads as a modelling error. A tangent transformed by the normal matrix skews the frame within
+the plane, which reads as an asset authored at the wrong angle.
+
+None of them looks like the thing it is, and each has a *plausible wrong fix* that makes the picture
+less wrong without making it right. **That is the argument for a type or an assertion rather than a
+comment**: a `vec4` that cannot lose its sign, an enum on the texture that no caller can forget, and
+a round trip whose floor is predicted from the encoding.
+
+### Look for pairs of subsystems that ought to compose and have never been asked to
+
+The GPU path has had a colour-space flag since Lesson 4.7 — `create_sampled(…, srgb)` picks
+`_UNORM_SRGB` or `_UNORM`. The software renderer had **no counterpart at all**: `sample` decoded
+unconditionally, and was right every time, because every texture it had ever been given was an
+albedo.
+
+Two halves of one idea, one complete and one absent, and no test could see it because there was no
+wrong behaviour — only absent behaviour, and coverage measures the code that exists. This is the
+second time in two lessons (6.6 found the same shape between `load_image` and `sample`), which makes
+it a habit worth having rather than a coincidence.
+
+### Derive a test's tolerance from the encoding; never choose it
+
+`verify_67` §D asserted an exact round trip through a flat normal map and measured 5.55e−03. The
+renderer was right and the assertion was wrong: **0.5 is not an 8-bit code**, so 128 decodes to
+1/255 rather than 0, and every flat normal map in existence tilts its surface by 0.318°.
+
+The wrong repair is to loosen the tolerance until it passes — 6.3's rule, a test deleted slowly. The
+right one is to *predict the floor from the encoding* and assert the measurement equals it, which is
+strictly stronger: it now also catches an implementation that is somehow **better** than the
+quantisation floor, which would mean the encoding is not what we think it is.
+
+§E made the same mistake in the other direction. Its first bound was `1/510` — which forgot that the
+`[-1,1]` decode **doubles** a half-code error — and produced a bound *below* the true floor. **A
+tolerance that is wrong rather than merely loose fails a correct implementation**, which is the more
+expensive of the two mistakes.
+
+### A parameter whose effect changes when you change an unrelated parameter accuses the wrong subsystem
+
+`make_normal_bumps` first took `strength` as the height field's amplitude. `A·cos(ku)·cos(kv)` has a
+peak gradient of `A·k`, and `k` grows with the cell count — so an amplitude of 1 at six cells is a
+slope of 37.7, a surface tilted 88° everywhere. Every normal points sideways, `n·l` collapses, and
+the render goes dark.
+
+The symptom pointed straight at the renderer. It took a minute to realise the *shading was correct*
+and the input was absurd. Dividing the amplitude by `k` makes `strength` mean the maximum **slope**,
+so 1.0 is a 45° tilt at any cell count.
+
+The general form: a parameter you cannot reason about in isolation produces failures that accuse
+whatever consumes it.
+
+### Assert the numbers you also put in a diagram
+
+`gpu_vertex_pnu` grew from 32 bytes to 48, and the build stopped at Lesson 4.5's
+`static_assert(sizeof(gpu_vertex_pnu) == 32)` before a pixel was drawn. That assertion exists
+because 4.5 drew a memory-layout figure, and the alternative to asserting the number is a lesson page
+that says 32 bytes forever while the code says 48.
+
+Two more caught the same growth: `verify_54`'s `sizeof(mesh)` and `verify_56`'s
+`sizeof(scene_object)`, the latter for the **second** lesson running. A struct quietly crossing a
+cache line is 5.6's whole subject, and it is only visible if somebody wrote the number down.
+
+### A shared vertex layout is an interface, and widening it renumbers every consumer
+
+Adding a fourth mesh attribute made `gpu_mesh::describe` emit location 3 — which Lesson 4.6's
+instancing pipeline already used for per-instance placement. Vertex attribute locations are numbered
+**across the whole pipeline**, not per buffer.
+
+4.5's `check_layout` caught it in `verify_46`: it compares declared attributes against the shader's
+*reflected* inputs and reports `extra` and `duplicate`. Without it the symptom would have been
+`placement` silently fetching a tangent's bytes — seven instances at nonsense positions, in a demo
+three modules old, with nothing pointing at the lesson that broke it.
+
+Two fixes were available and the smaller one was also the better design. Renumbering every consumer
+teaches "a layout is an interface" and is real churn; making the attribute **optional** teaches that
+**a vertex layout is per-pipeline state**, which is the more useful fact — a shader that never reads
+an attribute should not declare one, because it is a fetch paid for nothing.
+
+### Adding a field to a struct is a good reason to convert its initialisers
+
+Two positional aggregate initialisations in `soft_renderer.cpp` broke when `vertex` grew a
+`tangent` between `normal` and `world`. That was a *compile error* — a `vec3` where a `vec4` was
+expected — which is the good outcome.
+
+The version worth designing against is the one that **compiles**: two same-typed fields swapping
+places, silently. `mesh.hpp` made exactly this argument in Lesson 3.5 and this file never took it.
+The moment a struct grows is the moment to convert.
+
+### Gram-Schmidt twice is not redundancy
+
+The tangent frame is orthogonalised at the vertex *and* again at the fragment, and both are
+necessary. The vertex pass makes the frame orthonormal **at the vertices**; interpolation across the
+triangle destroys both orthogonality and unit length again, exactly as it does for the normal (3.8
+measured that). The per-vertex pass makes the *inputs* sane; the per-fragment pass makes the *frame*
+sane.
+
+Worth stating because "we already normalised that" is a very natural objection and it is wrong for a
+reason that is easy to say once and hard to reconstruct.
+
+### An asset's defect can be invisible until a feature makes it visible
+
+`assets/cube.gltf` carries one uv per box corner, which Lesson 6.6 chose deliberately so its
+round-trip test could compare index-for-index against `cube_mesh()`. The consequence — four of six
+faces have **zero uv area**, and therefore no tangent frame — was not detectable by anything until
+normal mapping arrived and made those faces band instead of dimple.
+
+Nothing was wrong with the asset, the test, or the loader. A property that had no observable
+consequence acquired one. Worth remembering when a new feature makes old content look broken: check
+whether the content was always like that.

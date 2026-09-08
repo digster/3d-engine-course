@@ -295,7 +295,23 @@ struct material_uniforms
     float metallic;    ///< 16 — 0 = dielectric, 1 = conductor (6.4)
     float f0;          ///< 20 — dielectric normal-incidence reflectance, ~0.04
     float textured;    ///< 24 — 0 = use `albedo`, 1 = sample the bound texture
-    float pad0;        ///< 28 — the register's last slot; keeps the size at 32
+
+    /// 28 — 0 = shade with the geometric normal, 1 = perturb it from
+    /// `normal_map`. **Lesson 6.7, and it costs zero bytes**: this slot was
+    /// `pad0`, added in 6.4 purely to keep the block at 32, and the block is
+    /// still exactly 32. No binding code moved and no shader's register
+    /// allocation changed.
+    ///
+    /// Like `textured`, it is DERIVED at the push from `material::normal_mapped()`
+    /// rather than stored on the material, so it cannot contradict the handle it
+    /// describes (6.5 §5).
+    ///
+    /// A float and not a bool for the reason 4.7 gave about `textured`: a
+    /// constant buffer has no 1-byte type, HLSL's `bool` is four bytes with
+    /// packing rules of its own, and the shader wants it as a `lerp` weight
+    /// anyway — which is a multiply instead of a branch, and every fragment in
+    /// the draw takes the same path regardless.
+    float normal_mapped;
 };
 
 static_assert(sizeof(material_uniforms) == 32, "two registers, exactly filled");
@@ -332,7 +348,8 @@ static_assert(offsetof(material_uniforms, textured) == packed_offset(24, 1), "")
             .metallic = m.surface.metallic,
             .f0 = m.surface.f0,
             .textured = m.textured() ? 1.0f : 0.0f,
-            .pad0 = 0.0f};
+            // 6.7: derived, like `textured`, from the only field that knows.
+            .normal_mapped = m.normal_mapped() ? 1.0f : 0.0f};
 }
 
 } // namespace engine

@@ -105,6 +105,14 @@ public:
             {
                 model_name_ = argv[++i];
             }
+            else if (SDL_strcmp(argv[i], "--bumps") == 0 && i + 1 < argc)
+            {
+                // Cells across the map; 0 turns normal mapping off entirely, so
+                // the two pictures can be put side by side. Lesson 6.7 — and the
+                // map is GENERATED rather than shipped, which is the same door
+                // `insert_mesh` has used for generated geometry since 5.5.
+                bump_cells_ = SDL_atoi(argv[++i]);
+            }
             else if (SDL_strcmp(argv[i], "--pose") == 0 && i + 1 < argc)
             {
                 // Where on the orbit a `--shot` is taken, in radians. It exists
@@ -134,6 +142,25 @@ public:
         // resolved, decoded, channel-shuffled and cached, and every material is
         // built and named. That list is the argument for an asset system: not one
         // step of it is about THIS program.
+        // ---- An OBJ is a mesh, not a model — Lesson 6.7 --------------------
+        //
+        // One branch, and it earns its place by making a point no glTF asset in
+        // this repository can: **OBJ has no tangent attribute at all**, so a
+        // model loaded this way gets its frame from `with_tangents` and nowhere
+        // else. `assets/torus.obj` also has a real uv chart on every triangle,
+        // which `assets/cube.gltf` does not — Lesson 6.6 gave that cube one uv
+        // per box corner so its round trip could be index-for-index, and the
+        // consequence is that four of its six faces have ZERO uv area and
+        // therefore no tangent frame at all. Normal mapping is what makes that
+        // visible; see §7 of the lesson.
+        const std::string requested(model_name_);
+        if (requested.size() > 4
+            && requested.compare(requested.size() - 4, 4, ".obj") == 0)
+        {
+            if (!load_obj_model(requested)) { return false; }
+            return finish_setup();
+        }
+
         const engine::model_load model = assets_.load_model(model_name_);
 
         if (!model.ok())
@@ -216,6 +243,61 @@ public:
             objects_.push_back(obj);
         }
 
+        return finish_setup();
+    }
+
+    /// Load an OBJ as one object and DERIVE its tangent frame.
+    [[nodiscard]] bool load_obj_model(const std::string& name)
+    {
+        const engine::mesh_load loaded = assets_.load_mesh(name);
+        if (!loaded.ok())
+        {
+            SDL_Log("gltf_view: could not load '%s' (%s)",
+                    name.c_str(), engine::name_of(loaded.report.status));
+            return false;
+        }
+
+        const engine::mesh_data* src = assets_.mesh_at(loaded.handle);
+        if (src == nullptr) { return false; }
+
+        // A DERIVED ASSET, through the door Lesson 5.5 built for exactly this
+        // shape: the tangent pass produces a mesh FROM a mesh, with no name of
+        // its own and no reason to exist beyond its source — so unloading the
+        // source takes it. `with_normals` was the first thing to have this
+        // shape and 5.5's header named the pattern then.
+        const engine::mesh_handle framed =
+            assets_.derive_mesh(loaded.handle, engine::with_tangents(src->view()));
+        if (!framed.valid()) { return false; }
+
+        const engine::mesh_data* g = assets_.mesh_at(framed);
+        if (g == nullptr) { return false; }
+
+        SDL_Log("gltf_view: %s -> %zu vertices, %zu triangles, %zu tangents "
+                "(OBJ carries none, so every one was DERIVED from the uv chart)",
+                name.c_str(), g->vertices.size(), g->triangle_count(),
+                g->tangents.size());
+
+        engine::scene_object obj;
+        obj.geometry = framed;
+        obj.name = "obj model";
+        obj.mat.tint = 0xFFE0A83Cu;
+        obj.mat.surface = {.roughness = 0.40f};
+        obj.closed = engine::validate(g->view()).closed();
+        objects_.push_back(obj);
+
+        for (const engine::vec3 v : g->vertices)
+        {
+            bounds_min_ = {SDL_min(bounds_min_.x, v.x), SDL_min(bounds_min_.y, v.y),
+                           SDL_min(bounds_min_.z, v.z)};
+            bounds_max_ = {SDL_max(bounds_max_.x, v.x), SDL_max(bounds_max_.y, v.y),
+                           SDL_max(bounds_max_.z, v.z)};
+        }
+        return true;
+    }
+
+    /// Framing, the generated normal map and the light — shared by both paths.
+    [[nodiscard]] bool finish_setup()
+    {
         centre_ = (bounds_min_ + bounds_max_) * 0.5f;
         const engine::vec3 extent = bounds_max_ - bounds_min_;
         const float radius = 0.5f * engine::length(extent);
@@ -230,6 +312,37 @@ public:
                 static_cast<double>(bounds_min_.z), static_cast<double>(bounds_max_.x),
                 static_cast<double>(bounds_max_.y), static_cast<double>(bounds_max_.z),
                 static_cast<double>(distance_));
+
+        // ---- LESSON 6.7: a normal map, generated and inserted -------------
+        //
+        // Through `insert_texture`, which is the same door a loaded one comes
+        // through — 5.5's rule that an asset system which can only LOAD is
+        // missing half its job, applied to the newest asset type. The texture
+        // arrives carrying `texel_space::linear` because `make_normal_bumps`
+        // set it: an image whose meaning is fixed by the function that made it
+        // should not leave the caller to declare what it is.
+        //
+        // ONLY MATERIALS ON GEOMETRY THAT HAS TANGENTS GET ONE. A normal map is
+        // a direction in the surface's own frame, and a mesh with no uvs has no
+        // frame — `shapes.glb` carries POSITION only, so it is correctly left
+        // flat and the log says so rather than the picture leaving you guessing.
+        if (bump_cells_ > 0)
+        {
+            const engine::texture_handle bumps = assets_.insert_texture(
+                "generated:bumps", engine::make_normal_bumps(256, bump_cells_, 1.0f));
+
+            int mapped = 0;
+            for (engine::scene_object& obj : objects_)
+            {
+                const engine::mesh_data* g = assets_.mesh_at(obj.geometry);
+                if (g == nullptr || g->tangents.empty()) { continue; }
+                obj.mat.normal_map = bumps;
+                ++mapped;
+            }
+            SDL_Log("  normal map    : %d cells, applied to %d of %zu object(s) "
+                    "(the rest carry no tangents, so they have no frame to map into)",
+                    bump_cells_, mapped, objects_.size());
+        }
 
         lights_.key.direction = engine::normalised(engine::vec3{-0.45f, -0.65f, -0.62f});
         lights_.key.colour = {1.0f, 0.97f, 0.90f};
@@ -274,6 +387,8 @@ public:
             // a generation compare per fragment.
             const engine::texture_binding albedo =
                 engine::bind_albedo(obj.mat, assets_.textures());
+            const engine::texture_binding normals =
+                engine::bind_normal_map(obj.mat, assets_.textures());
 
             const engine::fill_style style{
                 .interp = engine::interpolation::perspective,
@@ -285,6 +400,7 @@ public:
                 .model = engine::specular_model::cook_torrance,
                 .eye = eye,
                 .albedo = albedo,
+                .normal_map = normals,   // 6.7
                 .encode = engine::encode_mode::fast,
                 .traverse = engine::traversal::scanline};
 
@@ -313,6 +429,7 @@ private:
     const char* model_name_ = "shapes.glb";
     float t_ = 0.0f;
     float pose_ = 3.0f;   ///< the orbit angle a --shot freezes at
+    int bump_cells_ = 6;  ///< 6.7: cells across the generated normal map; 0 = off
 
     static constexpr float k_fov_y = 50.0f * 3.14159265f / 180.0f;
 

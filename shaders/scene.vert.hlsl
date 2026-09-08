@@ -67,6 +67,11 @@ struct Input
     float3 position : TEXCOORD0;
     float3 normal   : TEXCOORD1;
     float2 uv       : TEXCOORD2;
+
+    // Lesson 6.7. `engine::gpu_vertex_pnu` is 48 bytes as of that lesson, and
+    // the `static_assert` in gpu_mesh.hpp is what turned the change from a
+    // surprise into a compile error.
+    float4 tangent  : TEXCOORD3;
 };
 
 struct Output
@@ -81,6 +86,13 @@ struct Output
     float3 world    : TEXCOORD0;
     float3 normal   : TEXCOORD1;
     float2 uv       : TEXCOORD2;
+
+    // A FOURTH VARYING, and four more interpolated floats per fragment forever.
+    // The note above about minimising varyings applies with more force here:
+    // this one is carried by every draw, normal-mapped or not, because a varying
+    // list is part of the shader signature and cannot vary per material. §9.
+    float4 tangent  : TEXCOORD3;
+
     float4 position : SV_Position;
 };
 
@@ -116,6 +128,28 @@ Output main(Input input)
                   + normal_c2.xyz * input.normal.z;
 
     output.uv = input.uv;
+
+    // ---- The tangent, which IS carried by the model matrix ------------------
+    //
+    // LESSON 6.7, AND IT IS THE OPPOSITE OF THE LINE ABOVE. The normal needed
+    // the inverse transpose because it is defined by being PERPENDICULAR to the
+    // surface, and a non-uniform scale does not preserve perpendicularity. A
+    // tangent lies IN the surface — it is the direction the surface goes as `u`
+    // increases, which makes it a difference of positions, and a difference of
+    // positions transforms exactly the way positions do.
+    //
+    // So: `world_from_model`, not `normal_c0..c2`. Using the normal matrix here
+    // skews the frame on every non-uniformly scaled object and, exactly as with
+    // the normal matrix itself, leaves every uniformly scaled one looking
+    // perfect — which is why the mistake survives in real codebases.
+    //
+    // `float4(t, 0.0f)` is Lesson 2.7's fourth coordinate for a DIRECTION: the
+    // translation column is multiplied by zero and does not move it.
+    output.tangent.xyz = mul(world_from_model, float4(input.tangent.xyz, 0.0f)).xyz;
+
+    // The handedness rides through untouched. It is a sign, not a direction, and
+    // no matrix has an opinion about it.
+    output.tangent.w = input.tangent.w;
 
     // ---- World -> clip ------------------------------------------------------
     //

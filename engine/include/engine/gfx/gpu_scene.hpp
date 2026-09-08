@@ -129,6 +129,17 @@ struct gpu_draw_item
     /// the feature it is missing.
     SDL_GPUTexture* texture = nullptr;
 
+    /// The normal map, or `nullptr` for "this surface is as flat as its
+    /// triangles" — Lesson 6.7, and the renderer then binds its own 1x1 FLAT
+    /// NORMAL for the same reason it binds a white texel for the albedo: a
+    /// declared sampler slot with nothing bound draws nothing at all.
+    ///
+    /// Note that the two fallbacks are different constants and both are the
+    /// identity element of their own operation. White is the identity for a
+    /// multiply; (128, 128, 255) — the lavender — is the identity for a basis
+    /// change, because it decodes to (0, 0, 1) and `T*0 + B*0 + N*1` is `N`.
+    SDL_GPUTexture* normal_map = nullptr;
+
     surface_style style = surface_style::solid;
 };
 
@@ -240,6 +251,9 @@ public:
     /// The white 1x1 texture, for callers that want to bind it themselves.
     [[nodiscard]] SDL_GPUTexture* white() const { return white_.handle(); }
 
+    /// The flat 1x1 normal map, for callers that want to bind it themselves.
+    [[nodiscard]] SDL_GPUTexture* flat_normal() const { return flat_normal_.handle(); }
+
     /// How long `create` spent inside `SDL_CreateGPUGraphicsPipeline`, summed
     /// over the three. Lesson 4.4 measured that this number is dominated by the
     /// driver's on-disk pipeline cache and varies by two orders of magnitude
@@ -253,6 +267,7 @@ private:
     gpu_pipeline pipelines_[k_styles];
     gpu_texture depth_;
     gpu_texture white_;
+    gpu_texture flat_normal_;   ///< 6.7
     SDL_GPUTextureFormat depth_format_ = SDL_GPU_TEXTUREFORMAT_INVALID;
     Uint32 depth_w_ = 0;
     Uint32 depth_h_ = 0;

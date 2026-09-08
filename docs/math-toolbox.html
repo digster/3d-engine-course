@@ -98,6 +98,7 @@
       <li><a href="#microfacets">Microfacets</a></li>
       <li><a href="#fresnel">Fresnel, and the assembled BRDF</a></li>
       <li><a href="#interchange">Reading somebody else&rsquo;s material model</a></li>
+      <li><a href="#tangent">Tangent space</a></li>
       <li><a href="#performance">Reasoning about cost</a></li>
       <li><a href="#pipelining">Two processors, overlapped</a></li>
       <li><a href="#coming">Coming as the course proceeds</a></li>
@@ -2343,6 +2344,169 @@
         specification&rsquo;s own text requires a physically accurate BRDF to be energy
         conserving while explicitly permitting implementations to vary. The measurement selects
         the answer.
+      </p>
+    </div>
+  </div>
+
+  <h2 id="tangent"><span class="num">7f</span>Tangent space</h2>
+
+  <p>
+    Three tools from Lesson 6.7. The first is the one worth being able to re-derive rather than
+    look up &mdash; it is two equations, and every published version of it is those two equations
+    with the algebra already done.
+  </p>
+
+  <div class="tool">
+    <h3>The tangent frame from a triangle <span class="from">Lesson 6.7</span></h3>
+    <div class="eq">
+      <span>\[
+        \begin{aligned}
+        e_1 &= \Delta u_1\,T + \Delta v_1\,B \\
+        e_2 &= \Delta u_2\,T + \Delta v_2\,B
+        \end{aligned}
+        \qquad\Longrightarrow\qquad
+        \begin{aligned}
+        T &= \tfrac{1}{\det}\big(\Delta v_2\,e_1 - \Delta v_1\,e_2\big) \\
+        B &= \tfrac{1}{\det}\big(\Delta u_1\,e_2 - \Delta u_2\,e_1\big)
+        \end{aligned}
+      \]</span>
+      <span class="eq-plain">with det = du1&middot;dv2 &minus; du2&middot;dv1, and e1, e2 the
+        triangle&rsquo;s two edges from its first corner</span>
+    </div>
+    <p>
+      The set-up is the whole content and the inversion is mechanical. <strong>A triangle&rsquo;s
+      edge is one walk across the surface described twice</strong> &mdash; once in metres
+      (<em>e</em>) and once in texture units (Δ<em>u</em>, Δ<em>v</em>). If <em>T</em> is the world
+      direction you move when <em>u</em> increases by one, then those two descriptions must land in
+      the same place, and that is a linear equation. Two edges give two of them; two unknowns;
+      invert the 2&#215;2 of uv deltas.
+    </p>
+    <p>
+      <strong><em>det</em> is twice the signed area the triangle occupies in the uv chart</strong>
+      &mdash; the same signed-area quantity &sect;4 derived barycentric coordinates from, applied to
+      a different pair of axes. So <em>det</em> = 0 is not a degeneracy to guard against: it is an
+      untextured face or a collapsed unwrap, and there is genuinely no frame to compute.
+    </p>
+    <div class="worked">
+      <span class="label">Worked &mdash; and it is worth doing once with numbers</span>
+      <p>
+        <em>p</em><sub>0</sub> = (0,0,0), <em>p</em><sub>1</sub> = (2,0,0),
+        <em>p</em><sub>2</sub> = (0,0,&minus;2), flat in the xz plane so <em>N</em> = (0,1,0), with
+        texture coordinates (0,0), (1,0), (0,1).
+      </p>
+      <p>
+        <em>e</em><sub>1</sub> = (2,0,0), <em>e</em><sub>2</sub> = (0,0,&minus;2); the uv deltas are
+        (1,0) and (0,1), so the 2&#215;2 is the identity and <em>det</em> = 1.
+      </p>
+      <p>
+        <em>T</em> = 1&middot;(2,0,0) &minus; 0&middot;(0,0,&minus;2) = <strong>(2,0,0)</strong>
+        &rarr; (1,0,0). &nbsp;
+        <em>B</em> = 1&middot;(0,0,&minus;2) &minus; 0&middot;(2,0,0) =
+        <strong>(0,0,&minus;2)</strong> &rarr; (0,0,&minus;1).
+      </p>
+      <p>
+        Check it against the picture rather than the algebra: <em>u</em> runs along +x on this
+        triangle, and <em>T</em> points along +x. It does.
+      </p>
+    </div>
+    <p>
+      Per vertex, accumulate the <em>un-normalised</em> solutions over the faces that meet there
+      (which weights each by its own area, for free &mdash; &sect;7&rsquo;s argument about normals,
+      unchanged), then Gram-Schmidt against the normal:
+      <em>T&prime;</em> = normalise(<em>T</em> &minus; <em>N</em>(<em>N</em>&middot;<em>T</em>)).
+      <strong>The normal is the one held fixed</strong>, because it is what the lighting is about
+      and the tangent only has to span the plane.
+    </p>
+    <p>
+      The bitangent is then <em>w</em>&thinsp;(<em>N</em> &times; <em>T&prime;</em>), and
+      <em>w</em> = &plusmn;1 is recorded rather than derived, because a <strong>mirrored uv
+      chart</strong> &mdash; which every symmetric model has &mdash; gives a left-handed frame.
+      Storing the sign rather than the vector costs 12 bytes less per vertex and, more to the point,
+      <em>cannot disagree</em> with the <em>N</em> and <em>T</em> beside it after interpolation.
+    </p>
+  </div>
+
+  <div class="tool">
+    <h3>Which matrix carries which vector <span class="from">Lessons 3.6, 6.7</span></h3>
+    <div class="eq">
+      <span>\[
+        n_{\text{world}} = \big(M^{-1}\big)^{\!\top} n, \qquad\qquad
+        t_{\text{world}} = M\,t
+      \]</span>
+      <span class="eq-plain">a normal takes the inverse transpose; a tangent takes the model matrix</span>
+    </div>
+    <p>
+      The rule follows from what each vector <em>is</em>, and neither case needs to be memorised
+      once that is said:
+    </p>
+    <p>
+      A <strong>normal</strong> is defined by being <em>perpendicular to</em> the surface.
+      Perpendicularity is exactly the property a non-uniform scale destroys, and the inverse
+      transpose is the correction that restores it (&sect;4).
+    </p>
+    <p>
+      A <strong>tangent</strong> lies <em>in</em> the surface: it is the direction the surface goes
+      as <em>u</em> increases, which makes it a <strong>difference of positions</strong> &mdash; and
+      a difference of positions transforms precisely the way positions do.
+    </p>
+    <div class="worked">
+      <span class="label">Worked &mdash; and how to check which is right without trusting either</span>
+      <p>
+        Under a scale of (2,&nbsp;1,&nbsp;1), a tangent at 45&deg; &mdash; (1,1,0)/&radic;2 &mdash;
+        goes to <strong>(0.894, 0.447, 0)</strong> through the model matrix and
+        <strong>(0.447, 0.894, 0)</strong> through the inverse transpose. That is
+        <strong>36.9&deg;</strong> apart.
+      </p>
+      <p>
+        The tie-break is operational rather than argumentative: <em>transport two nearby points and
+        subtract</em>, which is what &ldquo;difference of positions&rdquo; means. The model matrix
+        matches to 0.0; the inverse transpose is off by 0.632.
+      </p>
+      <p>
+        And note the trap: <strong>both answers still lie in the surface</strong>, so the wrong one
+        is a <em>skew</em> rather than a break &mdash; and under a uniform scale the two agree to
+        8.4&thinsp;&times;&thinsp;10<sup>&minus;8</sup>. An engine that gets this wrong looks
+        perfect on every object nobody stretched.
+      </p>
+    </div>
+  </div>
+
+  <div class="tool">
+    <h3>Packing a direction into bytes <span class="from">Lesson 6.7</span></h3>
+    <div class="eq">
+      <span>\[ \text{stored} = \tfrac{c+1}{2}, \qquad c = 2\,\text{stored} - 1 \]</span>
+      <span class="eq-plain">an offset, because a direction has negative components and a byte does not</span>
+    </div>
+    <p>
+      Two consequences worth carrying, both of which explain something you have already seen.
+    </p>
+    <p>
+      <strong>Why every normal map is lavender.</strong> The direction (0,&nbsp;0,&nbsp;1) &mdash;
+      &ldquo;no change&rdquo; &mdash; stores as (0.5,&nbsp;0.5,&nbsp;1.0), or
+      (128,&nbsp;128,&nbsp;255) in bytes. The pale blue-violet is arithmetic, not a convention. It
+      also tells you how to read a map at a glance: reddish is tilted toward +<em>u</em>, greenish
+      toward +<em>v</em>, and the strength of the tint is the steepness.
+    </p>
+    <p>
+      <strong>Why &ldquo;no change&rdquo; is not representable.</strong> 0.5 is not an 8-bit code.
+      The nearest is 128, and 128/255&nbsp;&times;&nbsp;2&nbsp;&minus;&nbsp;1 is <strong>1/255</strong>
+      rather than zero &mdash; so the flattest map that can be stored still tilts its surface by
+      <strong>0.318&deg;</strong>. Every flat normal map, not just the badly authored ones. That is
+      why 16-bit normal maps exist.
+    </p>
+    <div class="worked">
+      <span class="label">The tolerance this implies, derived rather than chosen</span>
+      <p>
+        Rounding to the nearest of 256 codes is a half-code error. A half code in the stored [0,&nbsp;1]
+        range is 0.5/255, which the [&minus;1,&nbsp;1] decode <strong>doubles</strong> to 1/255 —
+        and three channels of that in the worst direction is <strong>&radic;3/255 =
+        6.79&thinsp;&times;&thinsp;10<sup>&minus;3</sup></strong>.
+      </p>
+      <p>
+        Which is the right bound for a test comparing a sampled normal against a closed form. Forget
+        the doubling and you get 1/510, a bound <em>below</em> the true floor &mdash; and a
+        tolerance that is wrong rather than merely loose fails a correct implementation, which is
+        the more expensive of the two mistakes.
       </p>
     </div>
   </div>

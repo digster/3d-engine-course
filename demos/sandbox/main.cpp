@@ -1492,6 +1492,14 @@ void place_instances(gpu_instance (&out)[k_max_instances], int count, float t)
 /// continue where the mesh's 0, 1 and 2 stopped, because **locations are numbered
 /// across the whole pipeline, not per buffer** — a shader has one input list, and
 /// which slot each entry is fetched from is exactly what these calls decide.
+///
+/// **Lesson 6.7 made that a decision rather than an accident.** `gpu_vertex_pnu`
+/// grew a tangent, so `describe` can now emit four attributes and push these to
+/// 4, 5 and 6. It does not, because this pipeline's shader (`mesh.vert.hlsl`)
+/// does not read a tangent and `describe` takes a `with_tangent` flag — a vertex
+/// layout is per-pipeline state, and fetching an attribute nobody reads is waste.
+/// 4.5's `check_layout` is what made the collision a failing assertion rather
+/// than `placement` silently reading the tangent's bytes.
 engine::pipeline_desc& describe_instances(engine::pipeline_desc& desc, Uint32 slot = 1)
 {
     // Location 3 is a FLOAT4 covering FOUR fields — `ox, oy, oz, scale` — because
@@ -2050,7 +2058,10 @@ int run_gpu_probe(SDL_Window* window)
         // 60 Hz frame and not something to pay on a keypress.
         {
             engine::pipeline_desc nd(gpu, shaders[4].handle(), shaders[5].handle());
-            engine::gpu_mesh::describe(nd, 0);
+            // `false`: mesh.vert.hlsl reads position, normal and uv and
+            // nothing else, so declaring the tangent would both waste a fetch
+            // and collide with `describe_instances`' location 3 (Lesson 6.7).
+            engine::gpu_mesh::describe(nd, 0, false);
             describe_instances(nd);
             if (depth_format != SDL_GPU_TEXTUREFORMAT_INVALID)
             {

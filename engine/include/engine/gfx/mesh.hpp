@@ -31,6 +31,7 @@
 #include <engine/core/pool.hpp>
 #include <engine/math/vec2.hpp>
 #include <engine/math/vec3.hpp>
+#include <engine/math/vec4.hpp>   // 6.7: a tangent carries its handedness
 
 #include <cstddef>
 #include <cstdint>
@@ -87,6 +88,28 @@ struct mesh
     /// not transform normals the way it transforms points) finally has to be faced.
     std::span<const vec3> normals;
 
+    /// Surface **tangents**, one per position — or empty. Lesson 6.7.
+    ///
+    /// A `vec4` and not a `vec3`, and the fourth component is not padding: it is
+    /// the **handedness** of the tangent frame, `+1` or `-1`, and the bitangent
+    /// is recovered as `w * cross(N, T)` rather than stored. That is glTF's
+    /// `TANGENT` attribute exactly (spec §3.7.2.1), and it is the right trade for
+    /// a reason worth stating: a bitangent is three floats that can be computed
+    /// from two vectors already present, so storing it costs 12 bytes a vertex to
+    /// save one cross product a fragment — and it can DISAGREE with them, which
+    /// three floats that are recomputed cannot.
+    ///
+    /// **The sign is load-bearing, not a nicety.** A uv chart that is mirrored —
+    /// which every symmetric model has, because an artist unwraps one half and
+    /// reflects it — produces a tangent frame of the opposite handedness on the
+    /// mirrored half. Get `w` wrong there and the lighting on one side of a face
+    /// is the mirror image of the other, which reads as a modelling error.
+    ///
+    /// In MODEL space, like the positions and normals, and **not necessarily
+    /// unit length or exactly perpendicular to the normal** after interpolation.
+    /// The fragment re-orthogonalises; see `with_tangents`.
+    std::span<const vec4> tangents;
+
     /// Number of triangles. Three indices each, so this is simply the count / 3.
     [[nodiscard]] constexpr std::size_t triangle_count() const { return indices.size() / 3; }
 
@@ -94,6 +117,17 @@ struct mesh
     [[nodiscard]] constexpr vec2 uv_at(std::size_t i) const
     {
         return i < uvs.size() ? uvs[i] : vec2{};
+    }
+
+    /// The tangent at vertex `i`, or `(0,0,0,1)` if this mesh carries none.
+    ///
+    /// The default's `w` is `+1` rather than `0`, because a zero handedness is
+    /// not a value the bitangent formula has an answer for — it would collapse
+    /// the frame rather than leaving it unspecified. The `xyz` being zero is what
+    /// says "absent", exactly as it does for `normal_at`.
+    [[nodiscard]] constexpr vec4 tangent_at(std::size_t i) const
+    {
+        return i < tangents.size() ? tangents[i] : vec4{0.0f, 0.0f, 0.0f, 1.0f};
     }
 
     /// The normal at vertex `i`, or `(0,0,0)` if this mesh carries none.
@@ -270,6 +304,15 @@ struct mesh_data
     std::vector<vec3> vertices;
     std::vector<vec2> uvs;
     std::vector<vec3> normals;
+
+    /// Lesson 6.7. Empty unless the file carried `TANGENT` or `with_tangents`
+    /// generated them — a fifth parallel array, and the point at which the
+    /// parallel-array trade `mesh` documents starts to be felt: five arrays is
+    /// five allocations and five cache streams, where an interleaved vertex is
+    /// one. Module 4's GPU path already interleaves; this side stays parallel
+    /// while its reader is a CPU loop that ignores whole attributes.
+    std::vector<vec4> tangents;
+
     std::vector<std::uint16_t> indices;
 
     /// A non-owning view of this data. **The view dies with the owner** — the usual
@@ -277,7 +320,7 @@ struct mesh_data
     /// this codebase. Returning a `mesh` from a function that built a `mesh_data`
     /// locally would compile and dangle; the loader therefore fills an out-parameter
     /// the caller owns, rather than returning geometry by value.
-    [[nodiscard]] mesh view() const { return {vertices, indices, uvs, normals}; }
+    [[nodiscard]] mesh view() const { return {vertices, indices, uvs, normals, tangents}; }
 
     /// Drop everything, keeping the allocated capacity for the next load.
     void clear()
@@ -285,6 +328,7 @@ struct mesh_data
         vertices.clear();
         uvs.clear();
         normals.clear();
+        tangents.clear();
         indices.clear();
     }
 
@@ -434,6 +478,38 @@ enum class normal_style
 /// A degenerate triangle contributes a zero cross product and therefore nothing,
 /// which is the right answer arriving for free rather than a case to handle.
 [[nodiscard]] mesh_data with_normals(const mesh& m, normal_style style);
+
+/// Return `m` with a per-vertex tangent frame, generating one if it has none.
+///
+/// **Lesson 6.7, and this is the function the lesson derives.** A normal map
+/// stores a direction *in the surface's own frame* — "tilted a bit toward +u" —
+/// and that sentence is meaningless until the surface has a +u direction in
+/// world space. `with_normals` gave every vertex an N; this gives it the other
+/// two axes, and the derivation is the whole of §4:
+///
+///   - a triangle's two edges span the surface locally: `e1 = p1 - p0`,
+///     `e2 = p2 - p0`;
+///   - the same two edges span the uv chart: `(du1, dv1)` and `(du2, dv2)`;
+///   - so **T and B are whatever vectors make those two statements agree**:
+///     `e1 = du1*T + dv1*B` and `e2 = du2*T + dv2*B`, two equations in two
+///     unknowns, solved by inverting a 2x2.
+///
+/// **Geometry that already has tangents is returned unchanged**, exactly as
+/// `with_normals` does with normals and for the same reason: a file's tangents
+/// are authorship. glTF's exporter computed them against the *same* uv chart the
+/// normal map was baked in, and regenerating them can disagree with the bake at
+/// the seams even when both are individually correct.
+///
+/// **A mesh with no uvs gets no tangents**, and that is not a failure — tangent
+/// space is *defined* by the uv parameterisation, so a mesh without one has no
+/// tangent frame to compute. The result comes back with an empty `tangents` and
+/// the fragment falls back to the geometric normal.
+///
+/// The vertex count and index buffer are **unchanged**: unlike flat normals,
+/// this splits nothing. A vertex already carries one uv, so it already has one
+/// tangent frame; wherever an artist needed two, the uv seam had already forced
+/// two vertices.
+[[nodiscard]] mesh_data with_tangents(const mesh& m);
 
 /// **The index-space ceiling.** `mesh::indices` is `std::uint16_t`, so a mesh can
 /// name at most 65,536 distinct vertices. That is not a limitation we invented: GPU

@@ -7,7 +7,7 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-09-07 (after Lesson 6.6 — 62 of 95 lessons)
+updated: 2026-09-08 (after Lesson 6.7 — 63 of 95 lessons)
 
 conventions:
   ecs-storage: THE ECS IS A SPARSE SET, DECIDED IN 5.7 BY MEASUREMENT, NOT TASTE.
@@ -3103,6 +3103,64 @@ curriculum: 95 lessons, ~438 h, 9 modules   (5.10 split into 5.10 + 5.11 in 5.10
         smith_g_separable — and 6.6 (glTF) may need it for spec compliance.
         ⚠ VERIFY the glTF Appendix B claim against the Khronos spec before 6.6.
 
+  tangent-space: LESSON 6.7. FOUR CONVENTIONS STACKED ON ONE IMAGE, and three of
+        the four have a plausible-looking wrong answer — which is why they are on
+        the Conventions page (§7l) and not in a comment.
+          colour space  texel_space::linear. The byte is value/255, no curve. Wrong
+                        -> EVERY surface tilted 38.8 deg, one direction. Reads as
+                        "this map was authored too strong", and the usual fix makes
+                        the picture less wrong without making it right.
+          encoding      stored = (c+1)/2, so flat is (128,128,255). THAT IS WHY
+                        EVERY NORMAL MAP IS LAVENDER — arithmetic, not a
+                        convention somebody chose.
+          green's sense +v, which is DOWN the image (our origin is upper-left,
+                        §7k; glTF agrees). Wrong -> BUMPS READ AS DENTS. An asset
+                        problem, undetectable from the image.
+          handedness    tangent.w = +/-1, B = w*cross(N,T). Wrong -> one half of
+                        every symmetric model lit as the MIRROR IMAGE of the other,
+                        because an artist unwraps one arm and reflects it.
+        THE DERIVATION IS TWO EQUATIONS, NOT A FORMULA. A triangle's edge is ONE
+        WALK described twice — in metres (e) and in texture units (du,dv) — so
+        e1 = du1*T + dv1*B and e2 = du2*T + dv2*B, two unknowns, invert the 2x2.
+        det is TWICE THE SIGNED UV AREA (2.4's quantity, different axes), so
+        det == 0 is a REAL CASE — an untextured face, a collapsed unwrap — and the
+        face contributes nothing rather than an infinity.
+        A TANGENT TAKES THE MODEL MATRIX; A NORMAL TAKES THE INVERSE TRANSPOSE.
+        3.6's distinction on its other side: a normal is defined by being
+        PERPENDICULAR (the property a non-uniform scale destroys), a tangent lies
+        IN the surface and is therefore A DIFFERENCE OF POSITIONS. Wrong -> 36.9
+        deg of SKEW on a (2,1,1) scale — and BOTH ANSWERS STAY IN THE PLANE, so it
+        reads as an asset authored at the wrong angle; under a UNIFORM scale they
+        agree to 8.4e-08, so it looks perfect on everything nobody stretched.
+        THE ROUND TRIP IS THE TEST: a flat map must return the geometric normal,
+        and a wrong colour space, decode range, orthonormality, handedness,
+        multiply order or missing Gram-Schmidt each break it. ONE ASSERTION, SIX
+        BUGS.
+        AND ITS FLOOR IS NOT ZERO. 0.5 IS NOT AN 8-BIT CODE: 128/255*2-1 = 1/255,
+        so the flattest STORABLE map tilts by 0.318 deg — every flat normal map in
+        existence. verify_67 §D asserts the measurement EQUALS the predicted floor
+        (5.5460e-03, to 7 digits), which is strictly stronger than the "< 1e-6" it
+        first asserted and which the renderer correctly failed.
+        THE ENCODING SETS THE TOLERANCE: a half-code error is 0.5/255 stored,
+        DOUBLED to 1/255 by the [-1,1] decode, so three channels is sqrt(3)/255 =
+        6.79e-03. The first draft forgot the doubling and produced a bound BELOW
+        the true floor — a tolerance that is WRONG rather than merely loose fails a
+        correct implementation, which is the more expensive mistake.
+        WHERE THE COLOUR SPACE LIVES IS SETTLED BY THE HARDWARE, not by taste. In
+        SDL_GPU the decode is declared by the texture's FORMAT (_UNORM vs
+        _UNORM_SRGB) and performed by the sampler, so one image cannot be sRGB in
+        one binding and linear in another. It goes on the TEXTURE. And note the
+        finding: THE GPU HAS HAD create_sampled(..., srgb) SINCE 4.7 AND THE
+        SOFTWARE RENDERER NEVER HAD THE CONCEPT — the same shape of gap 6.6 found
+        between load_image and sample.
+        A VERTEX LAYOUT IS PER-PIPELINE STATE. gpu_vertex_pnu went 32 -> 48 bytes
+        and `describe` gained `with_tangent`, because locations are numbered ACROSS
+        THE WHOLE PIPELINE and a fourth mesh attribute takes location 3 from 4.6's
+        instancing. A shader that reads no tangent should not declare one: it is a
+        fetch paid for nothing. The BUFFER carries it either way — the pitch is
+        sizeof(gpu_vertex_pnu) regardless — so opting out pays the memory and not
+        the bandwidth.
+
   interchange: LESSON 6.6 IMPORTS glTF 2.0, AND THE HEADLINE IS HOW LITTLE THERE
         WAS TO DO. The audit belongs on the Conventions page (§7k) because the NEXT
         format will need it too; a convention mismatch does not throw, it produces
@@ -3320,8 +3378,53 @@ completed:
   - 6.4  Cook–Torrance PBR, Derived
   - 6.5  A Material System
   - 6.6  glTF 2.0 Loading
+  - 6.7  Normal Mapping and the TBN Derivation
 
 capabilities:
+  - 6.7 PER-PIXEL NORMALS IN BOTH RENDERERS, AND THE GOLDEN STILL DID NOT MOVE.
+    NO NEW FILES — 60 public headers, 33 sources, unchanged. The widest diff since
+    6.4, and byte-identical at E917C06C for the SIXTEENTH lesson, because no
+    material in the reference scene has a normal map. A NEW CAPABILITY IS A PATH.
+    texture.hpp/.cpp  `texel_space{srgb, linear}` on the TEXTURE (not the
+                sampler), `texture::space()`, `to_texture(src, space)`,
+                `make_normal_bumps(size, cells, strength)` — an ANALYTIC height
+                field, so verify_67 §E compares against a closed form rather than
+                a picture. ONE BRANCH, in `fetch`, the one place every read
+                already goes through.
+    mesh.hpp/.cpp  `mesh::tangents` (span<const vec4>), `tangent_at`,
+                `mesh_data::tangents`, `with_tangents(m)` — the derivation. Plus a
+                file-local `any_perpendicular` for the degenerate fallback.
+    material.hpp  `normal_map` (a second texture_handle), `normal_mapped()`
+                (DERIVED), `bind_normal_map()`. ONE sampler for both maps, named
+                as a compromise: 6.5's interning debt is what fixes it properly.
+    raster.hpp/.cpp  `vertex::tangent` (vec4), `fill_style::normal_map`, and the
+                fragment — Gram-Schmidt, decode, basis change.
+    clip.hpp/.cpp  `clip_vertex::tangent` + one lerp line. INCLUDING `w`, and the
+                mirroring-seam degeneracy is named rather than clamped away.
+    soft_renderer  `projection_scratch::world_tangent`; the tangent transformed by
+                `linear_of(world_from_model)` and NOT the normal matrix; both
+                aggregate initialisations converted to DESIGNATED form, which is
+                what this lesson's own breakage argued for.
+    gpu_mesh    `gpu_vertex_pnu` 32 -> 48 bytes (the static_assert caught it), and
+                `describe(desc, slot, with_tangent = true)` — a vertex layout is
+                PER-PIPELINE state.
+    gpu_scene   `draw_item::normal_map`, a 1x1 flat-normal fallback (128,128,255)
+                created with srgb = FALSE, and both slots bound in ONE
+                SDL_BindGPUFragmentSamplers call.
+    gpu_uniform `material_uniforms::normal_mapped` — spent 6.4's `pad0`, so the
+                block is STILL exactly 32 bytes and no binding code moved.
+    gltf.hpp/.cpp  TANGENT read (VEC4, the w is handedness), `normal_uri`,
+                `normal_scale` (read, NOT applied — Exercise 3), `with_tangents`
+                generation after normal generation, `with_tangents`/
+                `generated_tangents` counters.
+    asset_store `load_texture(name, space)` and `find_texture(name, space)`;
+                `texture_key()` — the space is part of the asset's IDENTITY (5.5's
+                rule, second type), and THE DEFAULT SERIALISES TO NOTHING.
+                `model_load::normal_maps_loaded`.
+    shaders     scene.vert (tangent in/out, carried by `world_from_model`),
+                scene.frag (t1/s1, the TBN, `normal_mapped` lerp), mesh.vert
+                (unchanged at 3/4/5 BECAUSE `describe` can opt out).
+
   - 6.6 THE ENGINE READS glTF 2.0, AND THE GOLDEN STILL DID NOT MOVE.
     ONE NEW HEADER + ONE NEW SOURCE: 59 -> 60 public headers, 32 -> 33 sources,
     and the first CMake dependency change since 5.11. Golden byte-identical at
@@ -5638,7 +5741,8 @@ files:
                  06-03-microfacet-theory.html,
                  06-04-cook-torrance.html,
                  06-05-material-system.html,
-                 06-06-gltf.html
+                 06-06-gltf.html,
+                 06-07-normal-mapping.html
   docs/shared/: course.css, course.js      (THE stylesheet + page script; one copy each)
   docs/_template/: lesson-template.html, README.md, apply-shared.py, check-page.js
   scratch/ (5.7, not shipped with the engine): ecs_probe.hpp, bench_57.cpp,
@@ -5749,6 +5853,32 @@ files:
            is wider than pinning — ANY GENERATED ARTIFACT NEEDS A
            REGENERATE-AND-DIFF AFTER THE LAST EDIT TO ITS INPUTS, not only when you
            remember to pin.
+  scratch/ (6.7, not shipped with the engine): verify_67.cpp, build_verify_67.sh,
+           figs_67.py, build_67.py, l67_body_{a,b,c}.html, l67_fig{1..6}.svg.
+           NO PROBE, the third lesson running — every measurement had an answer
+           derivable on paper first, so they went into verify_67 as assertions
+           rather than into a probe as questions. NO NEW ASSET EITHER: the normal
+           map is GENERATED by make_normal_bumps and inserted through
+           insert_texture, which is 5.5's "an asset system that can only load is
+           missing half its job" applied to the newest asset type.
+           PINNED BY 6.7, before a line of it was written: l66_gltf.hpp,
+           l66_gltf.cpp, l66_asset_store.hpp and l66_asset_store.cpp, all verified
+           against commit 2c787a2 with `git show ... | diff - <pin>`;
+           l66_verify_66.cpp and l66_make_gltf_assets.py taken as working-tree
+           copies since both are gitignored. THE REBUILD DIFF WAS EXACTLY THE TWO
+           NAV LINES, sixth lesson running.
+           AND THE PINNING CAUGHT SOMETHING ELSE: build_66.py had inherited 6.5's
+           THREE PINS verbatim when it was copied from build_65.py, and they sat
+           inert for a whole lesson because none of those paths appeared in its
+           LISTING_META. Harmless — and it made the discipline LOOK satisfied.
+           WHEN COPYING build_NN.py, EMPTY LISTING_SOURCE AS WELL AS FIGURES.
+           (build_67.py PINS NOTHING YET and lists texture.hpp, mesh.cpp,
+            material.hpp, scene.frag.hlsl and verify_67.cpp WHOLE. LESSON 6.8 IS
+            SHADOW MAPPING: scene.frag.hlsl is certain (the depth comparison is a
+            fragment), material.hpp is likely (a shadow-casting flag is per-object
+            state and 6.5's rule has to sort it), and texture.hpp is plausible — a
+            depth map is neither colour nor ordinary data, so texel_space may need
+            a third value. Pin first, and take verify_67.cpp early.)
   scratch/ (6.6, not shipped with the engine): verify_66.cpp, build_verify_66.sh,
            figs_66.py, build_66.py, l66_body_{a,b,c}.html, l66_fig{1..6}.svg,
            make_gltf_assets.py (NOT a throwaway — it is how assets/cube.gltf and
@@ -5805,74 +5935,76 @@ files:
             first three — so it will need pins, and the warning in it says so.)
   memory/: 2026-07-16.md … 2026-08-25.md, 2026-08-25-b.md, 2026-08-25-c.md,
            2026-08-26.md, 2026-08-26-b.md, 2026-08-29.md, 2026-09-02.md, 2026-09-02-b.md,
-           2026-09-02-c.md, 2026-09-04.md, 2026-09-05.md, 2026-09-06.md, 2026-09-07.md
+           2026-09-02-c.md, 2026-09-04.md, 2026-09-05.md, 2026-09-06.md, 2026-09-07.md,
+           2026-09-08.md
            (ONE FILE PER DATE. 6.2, 6.3 and 6.4 all landed on 2026-09-06 and all
             three are sections of that one file — never a -b suffix for a same-day
             session.)
   (retired: src/ — the whole directory. hello.cpp.)
 
 
-next: 6.7 — Normal Mapping and the TBN Derivation
-      (planned filename: docs/lessons/06-07-normal-mapping.html — 6.6's TWO next
-      links point at the index and BOTH need repointing; scratch/l66_body_a.html
-      holds the top one and build_66.py's TAIL the bottom. AND build_66.py PINS
-      NOTHING while listing gltf.hpp, gltf.cpp, asset_store.hpp and
-      asset_store.cpp WHOLE — all four of which 6.7 edits. Pin first:
-        git show <6.6 commit>:engine/include/engine/gfx/gltf.hpp \
-            > scratch/l66_gltf.hpp
-        git show <6.6 commit>:engine/src/gfx/gltf.cpp > scratch/l66_gltf.cpp
-        git show <6.6 commit>:engine/include/engine/asset/asset_store.hpp \
-            > scratch/l66_asset_store.hpp
-        git show <6.6 commit>:engine/src/asset/asset_store.cpp \
-            > scratch/l66_asset_store.cpp
-        cp scratch/verify_66.cpp scratch/l66_verify_66.cpp        # gitignored
-        cp scratch/make_gltf_assets.py scratch/l66_make_gltf_assets.py
-      Then re-run build_66.py and `git diff` the page. FIVE lessons running the
-      diff has been exactly the nav lines meant to move.
+next: 6.8 — Shadow Mapping: Bias, Acne, and PCF
+      (planned filename: docs/lessons/06-08-shadow-mapping.html — 6.7's TWO next
+      links point at the index and BOTH need repointing; scratch/l67_body_a.html
+      holds the top one and build_67.py's TAIL the bottom. AND build_67.py PINS
+      NOTHING while listing texture.hpp, mesh.cpp, material.hpp,
+      scene.frag.hlsl and verify_67.cpp WHOLE. Pin first:
+        git show <6.7 commit>:engine/include/engine/gfx/texture.hpp \
+            > scratch/l67_texture.hpp
+        git show <6.7 commit>:engine/src/gfx/mesh.cpp > scratch/l67_mesh.cpp
+        git show <6.7 commit>:engine/include/engine/gfx/material.hpp \
+            > scratch/l67_material.hpp
+        git show <6.7 commit>:shaders/scene.frag.hlsl > scratch/l67_scene.frag.hlsl
+        cp scratch/verify_67.cpp scratch/l67_verify_67.cpp        # gitignored
+      Then re-run build_67.py and `git diff` the page. SIX lessons running the
+      diff has been exactly the nav lines meant to move. AND EMPTY LISTING_SOURCE
+      WHEN COPYING build_67.py — build_66.py carried 6.5's pins inert for a whole
+      lesson, which made the discipline look satisfied when it was not.
 
-      6.6 DEFERRED ONE THING AND 6.7 IS THE LESSON THAT CANNOT AVOID IT:
-      A TEXTURE HAS NO COLOUR SPACE. `texture` stores sRGB-encoded texels because
-      `sample()` decodes on read (3.9), which is right for a base colour map and
-      WRONG for every other kind. A normal map read through an sRGB decode is
-      wrong by the gamma curve everywhere except 0 and 1 — and it looks ALMOST
-      RIGHT, which is the worst way to be wrong. 6.6 counted the gap rather than
-      closing it (gltf_material_desc::wants_normal_texture and
-      wants_metallic_roughness_texture are both live and both measured at 0 on
-      the shipped assets). Closing it means deciding WHERE the space lives:
-        (a) on the `texture` — it is a property of the stored data, and it makes
-            `sample()` correct without the caller knowing. But it is then a field
-            on a type that 6.5 argued should be pure data.
-        (b) on the `sampler` — which is what HARDWARE does: an
-            SDL_GPU_TEXTUREFORMAT_..._SRGB texture is decoded IN THE SAMPLER,
-            before filtering, for free. texture.hpp already says so in as many
-            words. But 3.9's own header insists the FORMAT decides, not the
-            sampler, so this contradicts a comment that has stood for a module.
-        (c) a second sample function, and let the caller pick. Cheapest, and the
-            one that will eventually be called wrong.
-      DECIDE IT ONCE. Both 6.7 (normal maps) and the deferred metallic-roughness
-      map read through it, so a per-call answer is two answers.
-      ALSO: the TBN derivation itself, per CLAUDE.md §5 — "tangent space derived
-      in full, not asserted", and the index promises "why your normal maps look
-      lavender, and what that says about the encoding". The lavender IS the
-      colour-space question wearing a different hat: (0.5, 0.5, 1.0) is the
-      encoding of a flat normal, and whether that is 0.5 in LINEAR or 0.5 in sRGB
-      is precisely what (a)/(b)/(c) decides.
-      THE TEST TO BEAT: the golden should stay E917C06C — normal mapping adds a
-      path and must not move the existing picture, exactly as 6.6 did not. It is
-      also the SIXTEENTH lesson at that hash, and worth saying out loud that a
-      characterization test only earns its keep if you notice when it should have
-      broken. verify_67 wants the TBN orthonormality asserted, the handedness
-      (the w in glTF's TANGENT is +/-1 and encodes a mirrored uv chart), and a
-      round trip: perturb by a flat normal map and get the geometric normal back
-      to float precision.
-      CARRY FORWARD: 6.6's audit habit — check the new format's conventions
-      against ours BEFORE writing conversion code, and check forward lesson
-      numbers against docs/index.html rather than memory (6.4 shipped three stale
-      ones; 6.6 caught three of its own the same way, including IBL, which is
-      6.12 and not 6.9). And 6.5's membership rule still sorts every field:
-      a normal map is a texture handle on the material (a number in a buffer);
-      whether tangents are generated or loaded is an IMPORT decision, which
-      belongs in mesh_import beside flip_uv_v — and note that 6.6 refused
-      mesh_import for glTF on the grounds that the flip belongs to the FORMAT,
-      so adding a tangent knob there needs that argument re-run.
+      WHAT 6.8 IS ACTUALLY ABOUT, and it is not "render from the light":
+      THE COMPARISON IS BETWEEN TWO FLOATS COMPUTED DIFFERENTLY. The depth stored
+      in the shadow map was produced by rasterising a triangle from one viewpoint;
+      the depth being tested was produced by rasterising the same triangle from
+      another and then projected into light space. They disagree by an amount that
+      depends on slope, resolution and depth precision — and that disagreement IS
+      shadow acne. The lesson has to derive the bias from THAT rather than
+      introduce it as a fudge, which means:
+        - the projection's non-linear depth distribution (2.10 derived it; 4.9's
+          depth-range work measured it) is why the error is worse far away;
+        - the slope dependence is why a constant bias produces peter-panning at
+          grazing angles and acne at steep ones, and why slope-scaled bias is the
+          standard answer;
+        - and normal-offset bias is the OTHER answer, which moves the sample point
+          along the normal instead of the depth — and 6.7 has just given every
+          surface a normal that DISAGREES WITH ITS GEOMETRY, which is the first
+          time that distinction will matter.
+      SHOW THE ARTEFACT FIRST (§3.5 of CLAUDE.md). Acne is one of the most
+      photogenic failures in the course and the lesson should open on it.
+
+      WHAT THE ENGINE NEEDS THAT IT DOES NOT HAVE:
+        1 A DEPTH-ONLY PASS. `gpu_scene_renderer` has one depth target and one
+          colour pass; a shadow map is a second render pass with no colour
+          attachment. 4.8's three-pipelines-and-a-sort is the shape to copy.
+        2 A LIGHT-SPACE MATRIX. `directional_light` (6.2) has a direction and an
+          irradiance and no position — which is correct for a directional light and
+          means the ORTHOGRAPHIC frustum has to be fitted to the scene's bounds.
+          6.6's gltf_view already computes world-space bounds; that code wants to
+          be in the engine.
+        3 A DEPTH TEXTURE THAT CAN BE SAMPLED. `gpu_texture::create_depth` exists
+          and is an attachment, not a sampled texture. And on the CPU side,
+          `texel_space` may need a third value — a depth map is neither colour nor
+          ordinary [0,1] data.
+        4 A COMPARISON SAMPLER for PCF. SDL_GPUSamplerCreateInfo has
+          `enable_compare` and `compare_op`, which 3.9's `sampler` does not mirror
+          — ⚠ VERIFY the field names against SDL3/SDL_gpu.h before writing them.
+      THE TEST TO BEAT: the golden should stay E917C06C — SEVENTEENTH lesson.
+      Shadows are a new path and the reference scene has no shadow-casting light,
+      so the same argument 6.6 and 6.7 made applies. If it moves, something was
+      wired into the default path that should have been opt-in.
+      CARRY FORWARD: 6.7's habit of DERIVING the tolerance from the encoding
+      rather than choosing it — shadow-map comparison has exactly the same shape,
+      and "what depth precision does this format actually have" is a number, not a
+      feeling. And 6.7's three plausible-looking bugs are the pattern to watch for:
+      acne, peter-panning and light leaking are all pictures that look like
+      something other than what they are.
 ```

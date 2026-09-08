@@ -201,6 +201,13 @@ struct model_load
     /// combination is the one conformance gap this importer has.
     int factor_texture_conflicts = 0;
 
+    /// Materials that got a normal map — Lesson 6.7. Counted rather than
+    /// inferred, because "the model looks flat" has two causes that look
+    /// identical (the file declared no normal texture, or it declared one the
+    /// search path could not find) and this number tells them apart alongside
+    /// `textures_missing`.
+    int normal_maps_loaded = 0;
+
     [[nodiscard]] bool ok() const { return !meshes.empty(); }
 };
 
@@ -310,13 +317,29 @@ public:
     /// `derive_mesh` uses (5.5) and it exists for the same reason: nobody asked
     /// for the texture by a name of its own, so nothing outside can be holding a
     /// claim on it that the image does not already imply.
-    [[nodiscard]] texture_load load_texture(std::string_view name);
+    ///
+    /// **Lesson 6.7 added `space`, and it is part of the asset's IDENTITY** —
+    /// which is `mesh_import`'s rule (5.5) arriving for a second type. The same
+    /// PNG read as colour and read as data are two different textures with two
+    /// different texel meanings; they cannot share a cache entry, and a store
+    /// keyed on the filename alone would hand the second requester the first
+    /// one's decode and be quietly wrong.
+    ///
+    /// So the key is the name plus the space, with the same rule 5.5 used: **the
+    /// default adds nothing.** `"uv_grid.png"` stays `"uv_grid.png"` and only
+    /// the non-default earns a suffix (`"bumps.png|linear"`). The IMAGE behind
+    /// them is still loaded once, because `load_image` is keyed on the name
+    /// alone — one decode, two textures, which is exactly right: the bytes are
+    /// the same and only the reading differs.
+    [[nodiscard]] texture_load load_texture(std::string_view name,
+                                            texel_space space = texel_space::srgb);
 
     /// The handle for `name` if it is resident, or null. Never touches the disk.
     [[nodiscard]] mesh_handle find_mesh(std::string_view name,
                                         const mesh_import& settings = {}) const;
     [[nodiscard]] image_handle find_image(std::string_view name) const;
-    [[nodiscard]] texture_handle find_texture(std::string_view name) const;
+    [[nodiscard]] texture_handle find_texture(
+        std::string_view name, texel_space space = texel_space::srgb) const;
     [[nodiscard]] material_handle find_material(std::string_view name) const;
 
     // ---- Generated content -------------------------------------------------
@@ -447,6 +470,11 @@ private:
     [[nodiscard]] texture_handle derive_texture(image_handle source,
                                                 std::string_view key,
                                                 texture data);
+
+    /// The cache key for a texture: its name, plus its space when that is not
+    /// the default. See `load_texture` — and note the shape is deliberately
+    /// `asset_key`'s (5.5), because it is the same rule.
+    [[nodiscard]] static std::string texture_key(std::string_view name, texel_space space);
 
     search_path paths_;
 

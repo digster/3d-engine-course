@@ -51,6 +51,17 @@ clip_vertex lerp(const clip_vertex& a, const clip_vertex& b, float t)
     out.normal = a.normal + (b.normal - a.normal) * t;
     out.world = a.world + (b.world - a.world) * t;
 
+    // Lesson 6.7's tangent, lerped the same way — INCLUDING its `w`, which is
+    // the interesting case. Across an ordinary triangle both corners carry the
+    // same handedness and the lerp is the identity. Across one that spans a
+    // mirroring uv seam they carry +1 and -1, and the interpolated value passes
+    // through zero: the frame collapses in the middle of the triangle. That is a
+    // real artefact and it is not the clipper's to fix — an exporter splits the
+    // vertices at such a seam, exactly as it does at a uv seam. Clamping the sign
+    // here would hide it while leaving the tangent itself interpolated through
+    // the same degeneracy.
+    out.tangent = a.tangent + (b.tangent - a.tangent) * t;
+
     return out;
 }
 

@@ -185,8 +185,37 @@ struct gltf_material_desc
     /// the gamma curve everywhere except 0 and 1. Fixing that means giving a
     /// texture a colour space, which is Lesson 6.7's problem because normal maps
     /// need exactly the same thing.
-    bool wants_metallic_roughness_texture = false;
+    /// **Lesson 6.7 turned this one into a real load.** It was counted and not
+    /// read for exactly one reason — a normal map is linear data and `texture`
+    /// had no way to say so — and `texel_space` is what removed the obstacle.
+    /// The URI is below; this flag stays because it is still the honest answer
+    /// to "did the file ASK for one", which is a different question from
+    /// "did we get one" (that is `model_load::normal_maps_loaded`).
     bool wants_normal_texture = false;
+
+    /// The URI of `normalTexture`'s image, or empty. Lesson 6.7.
+    ///
+    /// Resolved by the asset store, like `base_colour_uri` — and **with
+    /// `texel_space::linear`**, which is the whole reason this could not be
+    /// loaded a lesson ago.
+    std::string normal_uri;
+
+    /// `normalTexture.scale`. glTF §5.28: the sampled X and Y are multiplied by
+    /// it before the normal is normalised, so `2.0` doubles the apparent
+    /// steepness and `0` flattens the surface entirely.
+    ///
+    /// Carried because the file said it; **applied** in the fragment would mean
+    /// a per-material float in the uniform block, and `material_uniforms` has
+    /// exactly one spare slot which this lesson spends on the normal-mapped
+    /// flag. Named as a gap rather than silently dropped — see Exercise 3.
+    float normal_scale = 1.0f;
+
+    /// Still counted and not read: a metallic-roughness texture is linear data
+    /// like a normal map, so `texel_space` unblocked it too — but reading it
+    /// means per-texel roughness and metallic, which is a change to the shading
+    /// equation's inputs rather than to its normal. The factors import
+    /// completely; only the per-texel variation is missing.
+    bool wants_metallic_roughness_texture = false;
 
     /// `doubleSided`. Feeds `cull_of`'s second argument — the INTENT half of
     /// Lesson 6.5's pair, which is exactly what this flag is: the mesh still
@@ -283,6 +312,8 @@ struct gltf_report
     int with_uvs = 0;           ///< primitives that carried TEXCOORD_0
     int with_normals = 0;       ///< …that carried NORMAL
     int generated_normals = 0;  ///< …that did not, and had them computed
+    int with_tangents = 0;      ///< …that carried TANGENT (6.7)
+    int generated_tangents = 0; ///< …that did not, and had a frame derived (6.7)
 
     // ---- What we did not build ---------------------------------------------
     int skipped_non_triangles = 0;  ///< point/line/strip/fan primitives dropped

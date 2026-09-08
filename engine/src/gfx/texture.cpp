@@ -5,14 +5,17 @@
 // subtle once the picture is right.
 
 #include <engine/gfx/texture.hpp>
+#include <engine/math/vec3.hpp>   // 6.7: make_normal_bumps works in 3-D
 
 #include <algorithm>
 #include <cmath>
 
 namespace engine {
 
-texture::texture(int w, int h, Uint32 fill)
+texture::texture(int w, int h, Uint32 fill, texel_space space)
 {
+    space_ = space;
+
     if (w <= 0 || h <= 0) { return; }   // stays empty; `sample` has an answer for that
 
     width_ = w;
@@ -103,7 +106,30 @@ namespace {
 {
     const int tx = wrap_texel(x, image.width(), samp.address_u);
     const int ty = wrap_texel(y, image.height(), samp.address_v);
-    return to_linear(image.texel(tx, ty));
+    const Uint32 texel = image.texel(tx, ty);
+
+    // LESSON 6.7: ONE BRANCH, IN THE ONE PLACE EVERY READ ALREADY GOES THROUGH.
+    // That is the whole cost of giving a texture a colour space, and it is why
+    // the decision belongs here rather than at the call site: there is exactly
+    // one `fetch`, so there is exactly one place the question can be asked, and
+    // no caller can forget to ask it.
+    //
+    // The branch is on a value that is constant for the whole draw, so it
+    // predicts perfectly; §6 measures the cost at the noise floor.
+    if (image.space() == texel_space::linear)
+    {
+        // A byte that is a NUMBER, not a colour. `value / 255`, no curve — which
+        // is the same arithmetic an `_UNORM` GPU format performs, as against an
+        // `_UNORM_SRGB` one. Alpha is dropped for the same reason it always is
+        // here: `linear_rgb` has three channels and nothing in this engine reads
+        // a texture's alpha yet.
+        constexpr float inv_255 = 1.0f / 255.0f;
+        return {static_cast<float>((texel >> 16) & 0xFFu) * inv_255,
+                static_cast<float>((texel >> 8) & 0xFFu) * inv_255,
+                static_cast<float>(texel & 0xFFu) * inv_255};
+    }
+
+    return to_linear(texel);
 }
 
 } // namespace
@@ -293,13 +319,88 @@ texture make_uv_grid(int size)
     return t;
 }
 
+// ---- Lesson 6.7: a normal map with an analytic answer ------------------------
+
+texture make_normal_bumps(int size, int cells, float strength)
+{
+    if (size <= 0 || cells <= 0) { return {}; }
+
+    // LINEAR, and set here rather than by the caller: an image whose meaning is
+    // fixed by the function that produced it should arrive knowing what it is.
+    texture t(size, size, 0xFF8080FFu, texel_space::linear);
+
+    const float k = 2.0f * 3.14159265358979f * static_cast<float>(cells);
+    const float inv = 1.0f / static_cast<float>(size);
+
+    // STRENGTH IS THE MAXIMUM SLOPE, NOT THE AMPLITUDE, and the difference is
+    // the whole usability of this function. `h = A cos(ku) cos(kv)` has a peak
+    // gradient of `A k`, and `k` grows with the cell count — so a fixed
+    // amplitude of 1 at six cells gives a slope of 37.7, which is a surface
+    // tilted 88 degrees everywhere. Every normal points sideways, `n.l` is
+    // almost zero, and the result is a dark mess that reads as a bug in the
+    // shading rather than as an absurd input. (It was, for one build.)
+    //
+    // Dividing the amplitude by `k` makes `strength` mean something you can
+    // reason about: **1.0 is a maximum tilt of 45 degrees**, 0.5 is 27, and the
+    // number means the same thing at any cell count. A parameter whose effect
+    // changes when you change an unrelated parameter is one nobody can author
+    // against.
+    const float amplitude = strength / k;
+
+    for (int y = 0; y < size; ++y)
+    {
+        for (int x = 0; x < size; ++x)
+        {
+            // TEXEL CENTRES, not corners — Lesson 3.9's half-texel, and the same
+            // rule applies to GENERATING an image as to sampling one. Sample the
+            // height field at `i/n` instead and the map is half a texel out of
+            // step with the sampler that reads it, which shows as a normal map
+            // whose bumps are subtly offset from where the shading expects them.
+            const float u = (static_cast<float>(x) + 0.5f) * inv;
+            const float v = (static_cast<float>(y) + 0.5f) * inv;
+
+            // h = strength * cos(k u) * cos(k v), so the two partials are
+            // straightforward — and the normal of a height field is
+            // (-dh/du, -dh/dv, 1), normalised. That form is worth recognising:
+            // the surface is the graph of h, its two tangent vectors are
+            // (1, 0, dh/du) and (0, 1, dh/dv), and their cross product is
+            // exactly that.
+            const float dhdu = -amplitude * k * std::sin(k * u) * std::cos(k * v);
+            const float dhdv = -amplitude * k * std::cos(k * u) * std::sin(k * v);
+
+            const vec3 n = normalised_or(vec3{-dhdu, -dhdv, 1.0f},
+                                         vec3{0.0f, 0.0f, 1.0f});
+
+            // [-1,1] -> [0,255]. The `+ 0.5f` before the cast is rounding, not a
+            // fudge: truncation would bias every channel downward by half a code,
+            // which on a flat map is the difference between 128 (the lavender
+            // that means "no change") and 127 (a surface tilted very slightly,
+            // everywhere, in one direction).
+            const auto enc = [](float c) {
+                const float f = (c * 0.5f + 0.5f) * 255.0f;
+                const float clamped = (f < 0.0f) ? 0.0f : (f > 255.0f ? 255.0f : f);
+                return static_cast<Uint8>(clamped + 0.5f);
+            };
+
+            t.set_texel(x, y, pack_argb(enc(n.x), enc(n.y), enc(n.z)));
+        }
+    }
+
+    return t;
+}
+
 // ---- Lesson 6.6: decoded file pixels -> a samplable texture ------------------
 
-texture to_texture(const image_data& src)
+texture to_texture(const image_data& src, texel_space space)
 {
     if (!src.valid()) { return {}; }
 
-    texture out(src.width, src.height);
+    // The space travels with the texture from here on. Note what is NOT done: the
+    // pixels are not converted. `image_data` holds whatever bytes the file held,
+    // and the space says how to READ them — converting on the way in would move
+    // the decode earlier without removing it and would lose precision doing it
+    // (Lesson 6.1's rule, and 6.5 made the same call for `material::tint`).
+    texture out(src.width, src.height, 0xFF000000u, space);
 
     // Row-major, top row first, in BOTH representations — so the loop is a
     // straight walk with no vertical flip. `image_data` stores what the file

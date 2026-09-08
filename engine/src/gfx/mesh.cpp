@@ -77,7 +77,153 @@ struct edge_use
     int backward = 0;
 };
 
+
+/// Any unit vector perpendicular to `n`. Lesson 6.7's fallback, not its subject.
+///
+/// The trick is to cross `n` with whichever cardinal axis it is LEAST aligned
+/// with, because crossing with a nearly-parallel axis gives a nearly-zero vector
+/// and normalising that amplifies float error into noise. Picking the smallest
+/// component of `n` picks the most perpendicular axis by construction.
+///
+/// It exists only so a vertex whose faces all had zero uv area gets a valid but
+/// meaningless frame instead of a NaN: a visibly wrong normal map is something
+/// you can see and fix, and a NaN is a black pixel that explains nothing.
+[[nodiscard]] vec3 any_perpendicular(vec3 n)
+{
+    const vec3 axis = (std::fabs(n.x) <= std::fabs(n.y) && std::fabs(n.x) <= std::fabs(n.z))
+                          ? vec3{1.0f, 0.0f, 0.0f}
+                      : (std::fabs(n.y) <= std::fabs(n.z)) ? vec3{0.0f, 1.0f, 0.0f}
+                                                           : vec3{0.0f, 0.0f, 1.0f};
+    return normalised_or(cross(n, axis), vec3{1.0f, 0.0f, 0.0f});
+}
+
 } // namespace
+
+// ---------------------------------------------------------------------------
+// Lesson 6.7 — the tangent frame
+// ---------------------------------------------------------------------------
+
+mesh_data with_tangents(const mesh& m)
+{
+    mesh_data out;
+    out.vertices.assign(m.vertices.begin(), m.vertices.end());
+    out.uvs.assign(m.uvs.begin(), m.uvs.end());
+    out.normals.assign(m.normals.begin(), m.normals.end());
+    out.indices.assign(m.indices.begin(), m.indices.end());
+
+    // AUTHORED TANGENTS WIN, for the reason `with_normals` gives about normals
+    // and one more that is specific to tangents: the exporter computed them
+    // against the very uv chart the normal map was baked in, and two individually
+    // correct computations can still disagree at a seam.
+    if (!m.tangents.empty())
+    {
+        out.tangents.assign(m.tangents.begin(), m.tangents.end());
+        return out;
+    }
+
+    // NO UVS, NO TANGENT FRAME, and this is a definition rather than a
+    // limitation: tangent space IS the uv parameterisation expressed in world
+    // units. A mesh without one has no +u direction for a normal map to tilt
+    // toward. Same for normals, which the frame is orthogonalised against.
+    if (m.uvs.size() != m.vertices.size() || m.normals.size() != m.vertices.size())
+    {
+        return out;
+    }
+
+    const std::size_t n = m.vertices.size();
+    const std::size_t tri_count = m.indices.size() / 3;
+
+    // Two accumulators, because a vertex shared by several faces gets the SUM of
+    // what each face wants — the same area-weighted averaging `with_normals`
+    // does, and free for the same reason: the un-normalised solution below scales
+    // with the triangle's own size.
+    std::vector<vec3> tan(n, vec3{});
+    std::vector<vec3> bitan(n, vec3{});
+
+    for (std::size_t t = 0; t < tri_count; ++t)
+    {
+        const std::uint16_t ia = m.indices[t * 3 + 0];
+        const std::uint16_t ib = m.indices[t * 3 + 1];
+        const std::uint16_t ic = m.indices[t * 3 + 2];
+        if (ia >= n || ib >= n || ic >= n) { continue; }
+
+        // The two edges, in space and in the uv chart. Both start at the same
+        // corner, so both describe the SAME two directions along the surface —
+        // once in metres and once in texture units. That correspondence is the
+        // entire content of the derivation.
+        const vec3 e1 = m.vertices[ib] - m.vertices[ia];
+        const vec3 e2 = m.vertices[ic] - m.vertices[ia];
+
+        const vec2 w1 = m.uvs[ib] - m.uvs[ia];
+        const vec2 w2 = m.uvs[ic] - m.uvs[ia];
+
+        // Solve
+        //     e1 = w1.x * T + w1.y * B
+        //     e2 = w2.x * T + w2.y * B
+        // for T and B, which is inverting the 2x2 of uv deltas. `det` is twice
+        // the SIGNED AREA the triangle occupies in the uv chart.
+        const float det = w1.x * w2.y - w2.x * w1.y;
+
+        // A ZERO DETERMINANT IS A REAL CASE, NOT A GUARD. It means the triangle
+        // has no area in uv space — three corners on one line of the chart, or
+        // all three at one point, which is what an untextured face or a
+        // collapsed unwrap looks like. There is no tangent frame to compute
+        // there, so the face contributes nothing and its vertices are left to
+        // whatever their other faces say. Dividing anyway would put an infinity
+        // into every vertex the face touches and spread it through the average.
+        if (det == 0.0f) { continue; }
+
+        const float r = 1.0f / det;
+
+        const vec3 tdir{(w2.y * e1.x - w1.y * e2.x) * r,
+                        (w2.y * e1.y - w1.y * e2.y) * r,
+                        (w2.y * e1.z - w1.y * e2.z) * r};
+        const vec3 bdir{(w1.x * e2.x - w2.x * e1.x) * r,
+                        (w1.x * e2.y - w2.x * e1.y) * r,
+                        (w1.x * e2.z - w2.x * e1.z) * r};
+
+        for (const std::uint16_t i : {ia, ib, ic})
+        {
+            tan[i] = tan[i] + tdir;
+            bitan[i] = bitan[i] + bdir;
+        }
+    }
+
+    out.tangents.resize(n);
+    for (std::size_t i = 0; i < n; ++i)
+    {
+        const vec3 nrm = m.normals[i];
+        const vec3 t = tan[i];
+
+        // GRAM-SCHMIDT. The accumulated tangent is the average of what several
+        // faces wanted and is not perpendicular to the averaged normal; subtract
+        // the component along N and what remains lies in the tangent plane. The
+        // NORMAL is the one we refuse to move, because it is what the lighting is
+        // actually about and the tangent only has to span the plane.
+        const vec3 ortho = t - nrm * dot(nrm, t);
+
+        // A degenerate result — every face around this vertex had no uv area, or
+        // the tangent came out parallel to the normal — gets an arbitrary but
+        // VALID frame rather than a NaN. The fragment will read a normal map
+        // through a meaningless orientation, which is visibly wrong; a NaN would
+        // be a black pixel that spreads through nothing and explains nothing.
+        const float len = length(ortho);
+        const vec3 unit = (len > 1.0e-8f) ? ortho * (1.0f / len)
+                                          : any_perpendicular(nrm);
+
+        // THE HANDEDNESS. `cross(N, T)` is one of the two bitangents the frame
+        // could have; `w` records which one this uv chart actually asked for, by
+        // testing it against the bitangent the solve produced. A mirrored chart —
+        // and every symmetric model has one, because an artist unwraps half and
+        // reflects it — comes out negative here, and getting it wrong flips the
+        // lighting on the mirrored half.
+        const float handed = (dot(cross(nrm, unit), bitan[i]) < 0.0f) ? -1.0f : 1.0f;
+
+        out.tangents[i] = vec4{unit.x, unit.y, unit.z, handed};
+    }
+
+    return out;
+}
 
 mesh_report validate(const mesh& m)
 {

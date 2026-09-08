@@ -155,6 +155,20 @@ namespace {
     desc.double_sided = m.double_sided != 0;
     desc.wants_normal_texture = m.normal_texture.texture != nullptr;
 
+    // LESSON 6.7. `cgltf_texture_view::scale` is documented in the header as
+    // "equivalent to strength for occlusion_texture" — one field serving two
+    // slots, which is a small piece of cgltf economy worth knowing about,
+    // because reading it off the wrong slot gives you an occlusion strength.
+    if (m.normal_texture.texture != nullptr)
+    {
+        desc.normal_scale = m.normal_texture.scale;
+        const cgltf_texture* nt = m.normal_texture.texture;
+        if (nt->image != nullptr && nt->image->uri != nullptr)
+        {
+            desc.normal_uri = nt->image->uri;
+        }
+    }
+
     // A material may legally have no `pbrMetallicRoughness` block — it might be
     // using an extension we do not implement. Its defaults then apply, which is
     // what `desc` already holds.
@@ -256,6 +270,7 @@ namespace {
     const cgltf_accessor* positions = nullptr;
     const cgltf_accessor* normals = nullptr;
     const cgltf_accessor* uvs = nullptr;
+    const cgltf_accessor* tangents = nullptr;   // 6.7
 
     for (std::size_t a = 0; a < prim.attributes_count; ++a)
     {
@@ -267,6 +282,16 @@ namespace {
         else if (attr.type == cgltf_attribute_type_normal && normals == nullptr)
         {
             normals = attr.data;
+        }
+        else if (attr.type == cgltf_attribute_type_tangent && tangents == nullptr)
+        {
+            // VEC4, not VEC3, and the fourth component is the handedness of the
+            // frame (glTF §3.7.2.1: "the w component ... is 1 or -1 and
+            // indicates the handedness of the tangent basis"). Reading it as a
+            // VEC3 loses the sign, and the symptom is that a symmetric model —
+            // whose uv chart is mirrored down the middle, as every symmetric
+            // model's is — lights one half as the mirror image of the other.
+            tangents = attr.data;
         }
         else if (attr.type == cgltf_attribute_type_texcoord && attr.index == 0)
         {
@@ -353,6 +378,28 @@ namespace {
         ++report.with_normals;
     }
 
+    // ---- Tangents ----------------------------------------------------------
+    //
+    // Read if present; GENERATED below if not, and only when the primitive has
+    // both uvs and normals — see `with_tangents`, which is where the derivation
+    // lives. Note the asymmetry with normals: a file's normals are common and a
+    // file's TANGENT is not, because most exporters emit it only when the
+    // material has a normal texture.
+    if (tangents != nullptr && tangents->count == positions->count
+        && read_floats(tangents, 4, scratch))
+    {
+        out.tangents.resize(static_cast<std::size_t>(vertex_count));
+        for (int i = 0; i < vertex_count; ++i)
+        {
+            out.tangents[static_cast<std::size_t>(i)] =
+                vec4{scratch[static_cast<std::size_t>(i) * 4 + 0],
+                     scratch[static_cast<std::size_t>(i) * 4 + 1],
+                     scratch[static_cast<std::size_t>(i) * 4 + 2],
+                     scratch[static_cast<std::size_t>(i) * 4 + 3]};
+        }
+        ++report.with_tangents;
+    }
+
     // ---- Indices -----------------------------------------------------------
     //
     // A primitive may have none, in which case the vertices are consumed in
@@ -391,6 +438,24 @@ namespace {
     {
         out = with_normals(out.view(), normal_style::flat);
         ++report.generated_normals;
+    }
+
+    // ---- Tangents we had to invent -----------------------------------------
+    //
+    // AFTER the normals, and the order is not arbitrary: `with_tangents`
+    // orthogonalises against the normal, so it needs one to exist — and if flat
+    // generation ran above it also split the vertices, so running the tangent
+    // pass first would compute a frame for an array that no longer exists.
+    //
+    // The spec says a client SHOULD generate tangents with MikkTSpace when a
+    // normal texture is present and TANGENT is not. We generate our own
+    // (`with_tangents`), which is the honest 90% and is named as such: MikkTSpace
+    // is a specific published algorithm whose whole point is that a baker and a
+    // renderer agree bit-for-bit, and ours will differ at seams. §8 says so.
+    if (out.tangents.empty() && !out.uvs.empty() && !out.normals.empty())
+    {
+        out = with_tangents(out.view());
+        if (!out.tangents.empty()) { ++report.generated_tangents; }
     }
 
     return true;

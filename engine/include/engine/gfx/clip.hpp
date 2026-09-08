@@ -91,6 +91,11 @@ struct clip_vertex
     /// away twice.
     vec3 normal{};
 
+    /// Lesson 6.7's varying. Carried through the clipper for the same reason the
+    /// normal is: a corner the clipper INVENTS needs one, and there is nowhere
+    /// else to get it from.
+    vec4 tangent{0.0f, 0.0f, 0.0f, 1.0f};
+
     /// The position of this corner in **world** space — Lesson 3.8.
     ///
     /// The specular term needs `eye - position` per fragment, and `position` above

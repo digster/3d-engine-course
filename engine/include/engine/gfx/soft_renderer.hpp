@@ -323,6 +323,10 @@ struct projection_scratch
     /// there, trading one matrix inverse per object against one multiply per vertex;
     /// Exercise 3.7.4 works it out.)
     std::vector<vec3> world_pos;
+
+    /// World-space tangents, one per vertex — Lesson 6.7. A `vec4`, because the
+    /// handedness travels with the direction (see `mesh::tangents`).
+    std::vector<vec4> world_tangent;
 };
 
 /// What the near plane did to this frame's geometry. Purely for the HUD.

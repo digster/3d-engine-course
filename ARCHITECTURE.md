@@ -450,6 +450,13 @@ one file routinely name the same one, and "load it once and hand out the same re
 store's job description. The pool itself did not change; what grew around it is in §"Assets, and
 the second format" below.
 
+**Two texture handles as of Lesson 6.7**, and the second one passes the membership test for exactly
+the same reason the first does: a `normal_map` is a number in a buffer, an index the fragment stage
+reads, not a decision about which pipeline runs. They share one `sampler`, which is a compromise
+named rather than hidden — glTF gives every texture its own, and the right fix is the one 6.5
+already recorded as a debt (intern the sampler into a handle, at which point a second one costs four
+bytes instead of sixteen).
+
 **Derived, not stored.** `material::textured()` reads `albedo_map.valid()`. The previous arrangement
 — a `textured` float in the uniform block beside a separately-chosen texture pointer — could express
 "textured but no image" (debug magenta) and "image but not textured" (silently flat), neither of
@@ -1569,6 +1576,45 @@ Built roughly in dependency order — each module's milestone is the next module
   halves. The parser sees the factor and the URI but not whether the image resolved; the renderer
   sees a bound texture but has long since lost the factor.
 
+- **Surface detail is a lie about the normal** (Module 6, Lesson 6.7). Shading has consulted the
+  geometry's normal since 3.6, so a surface can only look bumpy if it is bumpy — which prices
+  millimetre-scale detail on one prop at tens of millions of sub-pixel triangles. A normal map
+  replaces that with one texture fetch, at the cost of a **frame** to express the stored direction
+  in.
+
+  **The frame is derived, not asserted.** A triangle's edge is one walk across the surface described
+  twice — in metres and in texture units — so `e = Δu·T + Δv·B`, two edges give two equations, and
+  inverting the 2×2 of uv deltas solves them. The determinant is twice the signed area the triangle
+  occupies in the chart, which makes `det == 0` an ordinary case (an untextured face, a collapsed
+  unwrap) rather than a degeneracy to guard: the face contributes nothing instead of an infinity.
+
+  **The handedness is stored and the bitangent is not.** `mesh::tangents` is a span of `vec4`, with
+  `w = ±1`, and `B = w·cross(N, T)`. The saving is 12 bytes a vertex; the *reason* is that after
+  interpolation three separately-carried vectors are no longer mutually perpendicular, so a stored
+  bitangent can disagree with the N and T beside it and a recomputed one cannot. Same argument as
+  `material::textured()`. It matters because every symmetric model has a mirrored uv chart — an
+  artist unwraps one half and reflects it — and a dropped sign lights one side as the mirror image
+  of the other.
+
+  **A texture now knows what it holds.** `texel_space{srgb, linear}` lives on the `texture` rather
+  than on the sampler, because SDL_GPU declares the decode in the texture's *format* and performs it
+  in the sampler — so one image cannot be sRGB in one binding and linear in another. Lesson 3.9 built
+  these types to mirror SDL_GPU's; mirroring includes mirroring where a decision lives. The space is
+  part of the asset's **identity** (5.5's `mesh_import` rule, second type), so the same PNG read two
+  ways is two textures over one decode, keyed `name` and `name|linear`.
+
+  Note the shape of the gap this closed: **the GPU had `create_sampled(…, srgb)` from Lesson 4.7 and
+  the software renderer had no counterpart at all.** One half of an idea, complete; the other absent;
+  and no code path crossing between them until a feature needed both. That is the same shape 6.6
+  found between `load_image` and `sample`, and it is worth looking for deliberately.
+
+  **The vertex layout became per-pipeline state.** `gpu_vertex_pnu` went 32 bytes to 48, and since
+  attribute locations are numbered across the whole pipeline the new one collided with Lesson 4.6's
+  instancing at location 3. `gpu_mesh::describe` therefore takes `with_tangent`: a shader that never
+  reads a tangent should not declare the attribute, because it is a fetch paid for nothing and the
+  location is a resource other buffers want. The buffer carries the tangent either way, so opting out
+  pays the memory and not the bandwidth.
+
 - **ECS, not a scene tree** (Module 5). Data-oriented storage chosen after demonstrating —
   with cache-line reasoning and measurements — why OOP scene graphs creak at scale. Archetype
   vs sparse-set is a justified choice made in the lesson, not a coin flip.
@@ -2291,6 +2337,11 @@ Full detail with diagrams in [`docs/conventions.html`](docs/conventions.html); t
 | Comparing two BRDFs | Reduce both to named terms and find the ones that are not the same expression; then price the survivor at **both** ends of its range. Five of six terms are identical to glTF's, and the survivor is 1.036× at normal incidence and 5.62× at 88° (6.6) |
 | Importing a new format | Audit the conventions against ours **before** writing conversion code, and write the audit down (Conventions §7k). A mismatch does not throw — it produces a plausible picture, and a plausible picture survives review (6.6) |
 | Loader layering | Parsers return **descriptions** (URIs, indices); the asset store returns **handles**. A parser that needs a pool cannot be tested from a string literal nor run offline in Module 8 (6.6) |
+| A texture's colour space | On the **texture**, not the sampler — because that is where the hardware puts it: an `_SRGB` format decodes, a `_UNORM` one does not, and one image cannot be both at once (6.7) |
+| Tangent frames | Derived from the uv chart, orthogonalised against the normal (which is the one held fixed), handedness stored as `tangent.w` because a recomputed bitangent cannot disagree with the N and T beside it (6.7) |
+| Transforming a direction | A **normal** takes the inverse transpose, because it is defined by being *perpendicular*. A **tangent** takes the model matrix, because it lies *in* the surface and is a difference of positions (3.6, 6.7) |
+| Vertex layouts | **Per-pipeline state.** A shader that does not read an attribute should not declare one — locations are numbered across the whole pipeline, so a widened layout takes a location away from whatever was using it (6.7) |
+| Test tolerances | **Derive them from the encoding**, never choose them. A tolerance that is wrong rather than merely loose fails a correct implementation, which is the more expensive mistake (6.7) |
 | A format limit | **Report it, never truncate.** A narrowed index renders — as a spray of triangles between the wrong corners — with nothing anywhere saying so. `skipped_too_large` + `max_primitive_vertices` is what a caller can act on (6.6) |
 | Specular denominator | `4(n·l)(n·v)`: the 4 is the half-vector Jacobian, the (v·h) cancels against projected area, (n·v) is radiance's, (n·l) is the BRDF's (6.4) |
 | Angles | Radians. Always. |

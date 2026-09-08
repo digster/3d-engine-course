@@ -7,7 +7,7 @@ There is no engine to download here and no framework doing the interesting parts
 write the math library, the rasterizer, the ECS, the renderer, the physics, and the editor. By
 the end you have a real engine and a game built on its public API.
 
-**Status:** curriculum and conventions published; lessons in progress — **Modules 0–5 are complete** and Module 6 is under way (62 of 95 lessons). The CPU software rasterizer is finished end to end, the same scene is drawn on a real GPU through SDL_GPU, and the tree is now a static library with a public API, a platform/application layer, its own logging, handle-based resource storage, an asset system that can load, share and free, a reusable A/B timing harness that has decided three architecture questions with numbers instead of folklore, and **a working from-scratch ECS** — a generational entity id honoured by every pool, sparse-set component storage, queries that lead with the smallest pool, a **transform hierarchy** whose resolve cost is flat in depth with a camera that is an ordinary entity, (5.10) an **input layer that knows what the player meant** rather than which key they hit, (5.11) **a debug-draw system and a tooling UI** — a queue of world-space geometry with lifetimes that anything in the engine can fill, and Dear ImGui behind a 182-line facade — and, opening Module 6, (6.1) **a colour pipeline that is correct at both ends**, which found and fixed a four-module-old bug that had every GPU-rendered pixel too dark, (6.2) **a shading equation with units** — a BRDF measured in inverse steradians, a light measured in irradiance, and a hemisphere integrator that turns "is this model physically plausible?" into a number — (6.3) **a story about what a surface is**: three microfacet distributions and a masking term, each held to an identity that has a right-hand side, and (6.4) **a physically-based BRDF, live in both renderers** — Cook–Torrance with its `4(n·l)(n·v)` denominator *derived* rather than quoted, Fresnel built from the physics with `F0` read off an index of refraction, the metallic workflow arriving as a consequence, and energy conservation measured at a worst hemispherical reflectance of 0.9255 where the model it replaced reached 1.4300, (6.5) **a material system** &mdash; one home for what a surface is, referencing its textures by handle rather than by pointer, with the rule that decides membership set by the hardware rather than by taste &mdash; and (6.6) **a glTF 2.0 loader**, text and binary, with node hierarchies, multi-primitive meshes and the full metallic-roughness material model arriving through the asset store with *no conversion at all*, because three of the four convention checks against this engine come out as "do nothing". Start at
+**Status:** curriculum and conventions published; lessons in progress — **Modules 0–5 are complete** and Module 6 is under way (63 of 95 lessons). The CPU software rasterizer is finished end to end, the same scene is drawn on a real GPU through SDL_GPU, and the tree is now a static library with a public API, a platform/application layer, its own logging, handle-based resource storage, an asset system that can load, share and free, a reusable A/B timing harness that has decided three architecture questions with numbers instead of folklore, and **a working from-scratch ECS** — a generational entity id honoured by every pool, sparse-set component storage, queries that lead with the smallest pool, a **transform hierarchy** whose resolve cost is flat in depth with a camera that is an ordinary entity, (5.10) an **input layer that knows what the player meant** rather than which key they hit, (5.11) **a debug-draw system and a tooling UI** — a queue of world-space geometry with lifetimes that anything in the engine can fill, and Dear ImGui behind a 182-line facade — and, opening Module 6, (6.1) **a colour pipeline that is correct at both ends**, which found and fixed a four-module-old bug that had every GPU-rendered pixel too dark, (6.2) **a shading equation with units** — a BRDF measured in inverse steradians, a light measured in irradiance, and a hemisphere integrator that turns "is this model physically plausible?" into a number — (6.3) **a story about what a surface is**: three microfacet distributions and a masking term, each held to an identity that has a right-hand side, and (6.4) **a physically-based BRDF, live in both renderers** — Cook–Torrance with its `4(n·l)(n·v)` denominator *derived* rather than quoted, Fresnel built from the physics with `F0` read off an index of refraction, the metallic workflow arriving as a consequence, and energy conservation measured at a worst hemispherical reflectance of 0.9255 where the model it replaced reached 1.4300, (6.5) **a material system** &mdash; one home for what a surface is, referencing its textures by handle rather than by pointer, with the rule that decides membership set by the hardware rather than by taste &mdash; and (6.6) **a glTF 2.0 loader**, text and binary, with node hierarchies, multi-primitive meshes and the full metallic-roughness material model arriving through the asset store with *no conversion at all*, because three of the four convention checks against this engine come out as "do nothing" &mdash; and (6.7) **per-pixel normals in both renderers**, from a tangent frame derived out of the uv chart rather than copied, with a texture that finally knows whether it holds colour or data. Start at
 [`docs/index.html`](docs/index.html).
 
 ---
@@ -124,8 +124,12 @@ demo of anything:
 ./build/demos/pong                        # Lesson 1.8's game, at last a program
 
 ./build/demos/gltf_view                   # shapes.glb, orbiting
-./build/demos/gltf_view --model cube.gltf # the textured cube — start here
+./build/demos/gltf_view --model cube.gltf # the textured cube
 ./build/demos/gltf_view --pose 1.7 --shot out.ppm
+
+# Lesson 6.7 — the comparison that is the whole lesson
+./build/demos/gltf_view --model torus.obj --bumps 0   # flat
+./build/demos/gltf_view --model torus.obj             # normal-mapped
 ```
 
 `hello_cube` is the standing acceptance test for the public API: every symbol in it comes from a
@@ -655,6 +659,54 @@ The one conformance gap is *reported rather than hidden*: glTF multiplies a base
 its texture and this engine's image replaces the tint, so a coloured factor **plus** a texture is
 counted and logged at the only point that knows both halves. 58 checks, and the reference render
 **byte-identical** for the fifteenth lesson — a whole second asset format, and not one pixel moved.
+
+**Lesson 6.7** starts from a limit rather than a bug: every surface this engine has drawn is exactly
+as flat as its triangles. Shading has consulted the geometry's normal since 3.6, so a surface can
+only *look* bumpy if it *is* bumpy — and giving one torus millimetre-scale detail means
+millimetre-scale triangles, tens of millions of them for one prop, every one smaller than a pixel.
+So do not add the geometry. **Lie about the normal.**
+
+But a stored direction is meaningless without a frame, and finding that frame is the lesson. It
+arrives as *two equations rather than a formula to copy*: a triangle's two edges describe one walk
+across the surface in **metres**, the same two edges' uv deltas describe that identical walk in
+**texture units**, so *T* and *B* are simply whatever vectors make the two descriptions agree. Two
+unknowns; invert a 2×2. The determinant turns out to be twice the signed area the triangle occupies
+in the chart — the same signed-area quantity Lesson 2.4 derived barycentric coordinates from — which
+makes **zero a real case rather than a degeneracy**: an untextured face, a collapsed unwrap, and the
+face contributes nothing instead of an infinity.
+
+Then the question Lesson 6.6 had to defer, settled by one byte. **128 means 0.502 as data and 0.216
+as a colour**, and read the wrong way "no tilt" becomes a tilt of **38.8°** — in one direction, on
+every surface. It does not look like a bug; the usual diagnosis is "this map was authored too
+strong", and the usual fix makes the picture less wrong without making it right. The colour space
+goes on the *texture* because that is where the hardware puts it — and the finding is that **the GPU
+has had an `srgb` flag since Lesson 4.7 and the software renderer never had the concept at all**,
+which is the same shape of gap 6.6 found between `load_image` and `sample`.
+
+Two more decisions with the same character. A tangent is a **`vec4`**, because every symmetric model
+has a mirrored uv chart — an artist unwraps one arm and reflects it — so on that half the frame is
+left-handed; drop the sign and one side of the model is lit as the *mirror image* of the other. And
+a tangent is carried by the **model matrix, not the inverse transpose**, which is 3.6's distinction
+arriving on its other side: a normal is defined by being *perpendicular to* the surface, and a
+tangent lies *in* it, so it is a difference of positions and transforms the way positions do. Use the
+wrong one and the frame is skewed 36.9° — but both answers stay in the plane, so it reads as an asset
+authored at the wrong angle, and under a *uniform* scale the two agree to 8.4 × 10⁻⁸.
+
+Three of the hardest bugs available here share that shape: **they produce a picture that is
+plausible.** Which is why each is a type or an assertion rather than a comment — and why the round
+trip is the test that catches all of them at once. A flat map must return the geometric normal, and
+a wrong colour space, decode range, orthonormality, handedness, multiply order or missing
+Gram-Schmidt each break it. It asserted zero, measured **5.55 × 10⁻³**, and the renderer was right:
+**0.5 is not an 8-bit code**, so 128 decodes to 1/255 and *every flat normal map in existence* tilts
+its surface by 0.318°. Predicting that floor from the encoding is a strictly stronger test than the
+one that failed.
+
+Ported to both renderers in one commit. `gpu_vertex_pnu` went 32 bytes to 48 — caught by the
+`static_assert` Lesson 4.5 wrote — and the new attribute collided with 4.6's instancing at vertex
+location 3, caught by 4.5's `check_layout` before anything rendered. The fix is the better design
+rather than the smaller one: **a vertex layout is per-pipeline state**, so a shader that reads no
+tangent does not declare one. 33 checks; the reference render **byte-identical** for the sixteenth
+lesson.
 
 **An edge is a change in the *action*, not in a signal.** Bind `jump` to both a key and a mouse
 button, press one while the other is held, and there is still exactly one press edge. Derive

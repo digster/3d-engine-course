@@ -56,13 +56,37 @@ struct gpu_vertex_pnu
     float px, py, pz;   ///< position, MODEL space
     float nx, ny, nz;   ///< normal, MODEL space, unit length after `interleave`
     float u, v;         ///< texture coordinate, already flipped for SDL_GPU (3.9)
+
+    /// The tangent frame — Lesson 6.7. MODEL space, `tw` is the handedness.
+    ///
+    /// **The name stays `gpu_vertex_pnu` and that is now a small lie**, which is
+    /// worth leaving visible for one lesson rather than renaming quietly: the
+    /// struct is `pnut` and every mention of "32 bytes" in Lessons 4.5 through
+    /// 4.9 now reads 48. Renaming it is Exercise 4, and the interesting part of
+    /// that exercise is finding out how many places said 32.
+    ///
+    /// **Four floats and not three.** The handedness travels with the direction
+    /// for the same reason it does in `mesh::tangents`: a bitangent is
+    /// recomputable from N and T, and a stored one can disagree with them.
+    ///
+    /// 32 -> 48 bytes a vertex, which is a real 50% cost on every mesh in the
+    /// engine whether or not it is normal mapped — and it is the honest one,
+    /// because a vertex layout is pipeline state and cannot vary per draw
+    /// without a second pipeline. §9 of the lesson prices the alternatives.
+    float tx, ty, tz, tw;
 };
 
 // The layout always declares `sizeof(gpu_vertex_pnu)` as its pitch, so padding
 // could not break the rendering — it would only make the memory-layout figure in
 // Lesson 4.5 a lie. Assert anyway: a diagram that stops matching the code is a
 // worse bug than one that never did, because it is believed.
-static_assert(sizeof(gpu_vertex_pnu) == 32, "gpu_vertex_pnu is expected to be 32 bytes");
+//
+// LESSON 6.7 MOVED IT, 32 -> 48, AND THE ASSERT IS WHY THAT IS A SENTENCE RATHER
+// THAN A SURPRISE. Adding `tx..tw` failed the build at this line, before a
+// pixel was drawn — which is the entire value of asserting a number you also
+// wrote in a diagram. The alternative is a lesson page that says 32 bytes
+// forever while the code says 48, and nothing anywhere noticing.
+static_assert(sizeof(gpu_vertex_pnu) == 48, "gpu_vertex_pnu is expected to be 48 bytes");
 
 /// Whether the device-side copy keeps the index buffer or throws it away.
 ///
@@ -148,7 +172,22 @@ public:
     /// `offsetof`, never a literal — Lesson 4.4's rule, and the reason is that a
     /// literal 12 is correct right up until somebody inserts a field above it, at
     /// which point every vertex reads the wrong bytes and nothing reports an error.
-    static pipeline_desc& describe(pipeline_desc& desc, Uint32 slot = 0);
+    ///
+    /// **`with_tangent` (Lesson 6.7) is a per-PIPELINE decision, not a per-mesh
+    /// one.** `gpu_vertex_pnu` always carries a tangent, but a pipeline whose
+    /// shader never reads one should not declare the attribute: it is a fetch
+    /// paid for nothing, and — more sharply — locations are numbered across the
+    /// whole pipeline, so a fourth mesh attribute takes location 3 away from
+    /// whatever was using it. `demos/sandbox`'s instancing pipeline puts its
+    /// per-instance placement there and passes `false`.
+    ///
+    /// Lesson 4.5's `check_layout` is what makes this safe to get wrong once:
+    /// it compares the declared attributes against the shader's reflected inputs
+    /// and reports `extra` and `duplicate`, which is how the collision surfaced
+    /// (verify_46 §F) rather than becoming an instance offset that silently
+    /// fetched a tangent's bytes.
+    static pipeline_desc& describe(pipeline_desc& desc, Uint32 slot = 0,
+                                   bool with_tangent = true);
 
     [[nodiscard]] bool valid() const { return vertices_.valid(); }
     [[nodiscard]] index_mode mode() const { return mode_; }

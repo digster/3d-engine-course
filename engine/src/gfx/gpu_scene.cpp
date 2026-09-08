@@ -136,10 +136,28 @@ bool gpu_scene_renderer::create(const gpu_device& dev,
         destroy();
         return false;
     }
+    // ---- And one flat normal texel — Lesson 6.7 -----------------------------
+    //
+    // (128, 128, 255): the lavender. It decodes to (0.5, 0.5, 1.0), maps to the
+    // direction (0, 0, 1), and `T*0 + B*0 + N*1` is `N` — so binding it changes
+    // nothing, which is exactly what an identity element is for.
+    //
+    // **NOT sRGB**, and that one boolean is this lesson's entire subject on the
+    // GPU side. A normal map is data, so it wants an `_UNORM` format and a
+    // sampler that hands back `byte/255`. Pass `true` here and 128 decodes to
+    // 0.2140 rather than 0.5020, the flat direction becomes (-0.57, -0.57, 1)
+    // normalised, and every unmapped surface in the scene tilts.
+    image_data flat_texel;
+    flat_texel.width = 1;
+    flat_texel.height = 1;
+    flat_texel.source_channels = 4;
+    flat_texel.pixels = {128, 128, 255, 255};
+
     if (!white_.create_sampled(dev, cb, one_texel, true, "white 1x1")
+        || !flat_normal_.create_sampled(dev, cb, flat_texel, false, "flat normal 1x1")
         || !SDL_SubmitGPUCommandBuffer(cb))
     {
-        ENGINE_LOG_ERROR(engine::log_gpu, "gpu_scene: the fallback white texture was not created");
+        ENGINE_LOG_ERROR(engine::log_gpu, "gpu_scene: the fallback textures were not created");
         destroy();
         return false;
     }
@@ -151,6 +169,7 @@ void gpu_scene_renderer::destroy()
 {
     depth_.destroy();
     white_.destroy();
+    flat_normal_.destroy();
     for (gpu_pipeline& p : pipelines_) { p.destroy(); }
     depth_w_ = 0;
     depth_h_ = 0;
@@ -222,6 +241,7 @@ draw_stats gpu_scene_renderer::render(SDL_GPUCommandBuffer* cb, SDL_GPURenderPas
     const gpu_pipeline* bound_pipeline = nullptr;
     SDL_GPUTexture* bound_texture = nullptr;
 
+    SDL_GPUTexture* bound_normal = nullptr;   // 6.7
     bool style_present[k_styles] = {};
 
     for (int i = 0; i < count; ++i)
@@ -249,13 +269,27 @@ draw_stats gpu_scene_renderer::render(SDL_GPUCommandBuffer* cb, SDL_GPURenderPas
         }
 
         SDL_GPUTexture* tex = (item.texture != nullptr) ? item.texture : white_.handle();
-        if (tex != bound_texture)
+        SDL_GPUTexture* nrm = (item.normal_map != nullptr) ? item.normal_map
+                                                           : flat_normal_.handle();
+        if (tex != bound_texture || nrm != bound_normal)
         {
-            SDL_GPUTextureSamplerBinding bind{};
-            bind.texture = tex;
-            bind.sampler = sampler;
-            SDL_BindGPUFragmentSamplers(pass, 0, &bind, 1);
+            // BOTH SLOTS IN ONE CALL — Lesson 6.7. `SDL_BindGPUFragmentSamplers`
+            // takes an array and a count, so two bindings starting at slot 0 is
+            // one call rather than two, and the pair travels together for the
+            // same reason `SDL_GPUTextureSamplerBinding` is a pair at all.
+            //
+            // The change-detection is now on the PAIR, which is the honest
+            // version: rebinding because the albedo changed while the normal map
+            // did not still costs a bind, and counting it as one is what keeps
+            // `texture_binds` comparable with the number 4.8 measured.
+            SDL_GPUTextureSamplerBinding binds[2]{};
+            binds[0].texture = tex;
+            binds[0].sampler = sampler;
+            binds[1].texture = nrm;
+            binds[1].sampler = sampler;
+            SDL_BindGPUFragmentSamplers(pass, 0, binds, 2);
             bound_texture = tex;
+            bound_normal = nrm;
             ++stats.texture_binds;
             if (log != nullptr)
             {

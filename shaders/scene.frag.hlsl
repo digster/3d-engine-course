@@ -58,6 +58,28 @@
 Texture2D<float4> albedo_map     : register(t0, space2);
 SamplerState      albedo_sampler : register(s0, space2);
 
+// ---- The normal map — Lesson 6.7 -------------------------------------------
+//
+// A second slot, and the whole difference between the two is the FORMAT the
+// texture was created with. `gpu_texture::create_sampled` takes an `srgb` flag;
+// the albedo passes true and this one passes false, so the hardware decodes one
+// through the sRGB transfer function on read and hands the other back as
+// `byte/255`.
+//
+// **That flag has existed since Lesson 4.7 and the software renderer had no
+// counterpart until 6.7** — which is the same shape of gap 6.6 found between
+// `load_image` and `sample`: one half complete, the other absent, and no code
+// path crossing between them until a feature needed both. `engine::texel_space`
+// is the CPU side of this register declaration.
+//
+// The same binding rule as the albedo applies: a texture is bound at this slot
+// for EVERY draw, because binding nothing at a declared slot draws nothing at
+// all. The renderer binds a 1x1 flat-normal texture — (128, 128, 255), the
+// lavender that means "no change" — when an object has no map, which is the
+// identity element of this operation exactly as white is for the albedo.
+Texture2D<float4> normal_map     : register(t1, space2);
+SamplerState      normal_sampler : register(s1, space2);
+
 // ---- Per FRAME -------------------------------------------------------------
 cbuffer Light : register(b0, space3)
 {
@@ -89,9 +111,16 @@ cbuffer Material : register(b1, space3)
     float  metallic;    // 16 — Lesson 6.4: 0 = dielectric, 1 = conductor
     float  f0;          // 20 — dielectric normal-incidence reflectance, ~0.04
     float  textured;    // 24 — 0 = use `albedo`, 1 = sample `albedo_map`
-    float  pad_m;       // 28 — NOT `pad0`: HLSL cbuffer members share one global
-                        //      namespace across every buffer in the shader, so a
-                        //      second `pad0` is a redefinition, not a local name.
+
+    // 28 — Lesson 6.7, and it cost ZERO BYTES: this slot was the padding 6.4
+    // added to fill the second register, and the block is still exactly 32.
+    // No binding code moved and no register allocation changed.
+    //
+    // (It replaces `pad_m`, whose own name was a lesson: HLSL cbuffer members
+    // share ONE global namespace across every buffer in a shader, so a second
+    // `pad0` is a redefinition rather than a local name — 6.4 found that out
+    // the hard way.)
+    float  normal_mapped;
 };
 
 // ---- Lesson 6.2 -------------------------------------------------------------
@@ -113,9 +142,10 @@ static const float k_min_alpha = 1.0e-3f;
 
 struct Input
 {
-    float3 world  : TEXCOORD0;
-    float3 normal : TEXCOORD1;
-    float2 uv     : TEXCOORD2;
+    float3 world   : TEXCOORD0;
+    float3 normal  : TEXCOORD1;
+    float2 uv      : TEXCOORD2;
+    float4 tangent : TEXCOORD3;   // 6.7: xyz the tangent, w the handedness
 };
 
 // ---- Lesson 6.3: the microfacet model, in HLSL ------------------------------
@@ -175,7 +205,54 @@ float4 main(Input input) : SV_Target0
     // Lesson 3.8's finding, in silicon: the three corner normals are interpolated
     // LINEARLY, and a linear blend of unit vectors is shorter than one. Skip this
     // and every triangle darkens toward its middle.
-    const float3 n = normalize(input.normal);
+    const float3 geometric = normalize(input.normal);
+
+    // ---- LESSON 6.7: THE NORMAL, PERTURBED ----------------------------------
+    //
+    // Line for line the software renderer's `raster.cpp` fragment, which is the
+    // claim this port has to make: the same frame, the same decode, the same
+    // basis change. verify_67 §F measures the two against each other.
+    //
+    // GRAM-SCHMIDT FIRST. Both varyings were interpolated, so neither is unit
+    // length and they are no longer perpendicular — interpolation preserves
+    // neither property. The NORMAL is what we refuse to move; the tangent only
+    // has to span the plane.
+    const float3 t_raw = input.tangent.xyz;
+    const float3 t_ortho = t_raw - geometric * dot(geometric, t_raw);
+
+    // A degenerate frame (no tangents on the mesh, so `t_raw` is zero) would
+    // normalize to NaN and spread it through the whole shading equation. The
+    // guard costs one dot product per fragment and turns a black screen into a
+    // surface that is merely not normal mapped.
+    const float t_len2 = dot(t_ortho, t_ortho);
+    const float3 tangent = (t_len2 > 1.0e-12f) ? t_ortho * rsqrt(t_len2)
+                                               : float3(1.0f, 0.0f, 0.0f);
+
+    // The bitangent is COMPUTED and its sign comes from the vertex. A mirrored
+    // uv chart — which every symmetric model has — needs the other one.
+    const float3 bitangent = cross(geometric, tangent) * input.tangent.w;
+
+    // [0,1] -> [-1,1]. The map is a DIRECTION packed into bytes, so the encoding
+    // is an offset — which is why an unperturbed normal map is lavender:
+    // (0, 0, 1) stores as (0.5, 0.5, 1.0).
+    const float3 packed = normal_map.Sample(normal_sampler, input.uv).rgb;
+    const float3 tn = packed * 2.0f - 1.0f;
+
+    // TANGENT SPACE -> WORLD, written as a matrix multiply's own definition: a
+    // matrix IS where the basis vectors land (Lesson 2.5), and these three ARE
+    // the basis vectors. A flat map — z = 1, x = y = 0 — returns `geometric`
+    // exactly, which is the round trip verify_67 §D asserts.
+    const float3 mapped = normalize(tangent * tn.x
+                                    + bitangent * tn.y
+                                    + geometric * tn.z);
+
+    // `lerp` and not a branch, for the reason `textured` gives: every fragment
+    // in a draw takes the same path, so a branch buys nothing and a multiply
+    // costs nothing. `normalize` again because a lerp of two unit vectors is not
+    // one — the same fact Lesson 3.8 found about interpolated normals, arriving
+    // here for a different reason.
+    const float3 n = normalize(lerp(geometric, mapped, normal_mapped));
+
     const float3 l = normalize(to_light);
 
     // Lambert's cosine law (Lesson 3.6 §3.1). `saturate` is `max(0, min(1, x))`

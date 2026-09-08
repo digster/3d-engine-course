@@ -321,6 +321,35 @@ model_load asset_store::load_model(std::string_view name)
             }
         }
 
+        // ---- THE NORMAL MAP — Lesson 6.7 ------------------------------------
+        //
+        // The only difference from the albedo above is the second argument, and
+        // it is the whole reason this could not be written a lesson ago:
+        // `texel_space::linear`. A normal map's three channels are a direction
+        // packed into bytes, not a colour, so decoding them through the sRGB
+        // curve is arithmetic on numbers that were never a colour. Read that way
+        // the flat value 0.5 comes back as 0.2140 and every surface tilts.
+        //
+        // Note that the SPACE is supplied here rather than by the caller or by
+        // the parser, and this is the only place that could supply it: the
+        // parser knows the URI and not what it will be used for; the caller
+        // knows neither. The store knows, because it is resolving a
+        // `normalTexture` — the slot the file bound it to IS the declaration of
+        // what the bytes mean.
+        if (!desc.normal_uri.empty())
+        {
+            const texture_load nrm = load_texture(desc.normal_uri, texel_space::linear);
+            if (nrm.ok())
+            {
+                m.normal_map = nrm.handle;
+                ++out.normal_maps_loaded;
+            }
+            else
+            {
+                ++out.textures_missing;
+            }
+        }
+
         // Namespaced by the file it came from: two models may both call a
         // material "Metal" and they are not the same material.
         out.materials.push_back(insert_material(key + ":" + desc.name, m));
@@ -366,9 +395,10 @@ model_load asset_store::load_model(std::string_view name)
     ++counters_.models_loaded;
 
     ENGINE_LOG_INFO(log_asset, "loaded model  %-24s %d prim  %d vert  %d tri  "
-                               "%zu mat  %s  root %d",
+                               "%zu mat  %d normal map(s)  %s  root %d",
                     key.c_str(), out.report.primitives, out.report.vertices,
                     out.report.triangles, out.materials.size(),
+                    out.normal_maps_loaded,
                     out.report.binary ? "glb" : "gltf", found.root_index);
     return out;
 }
@@ -381,9 +411,21 @@ model_load asset_store::load_model(std::string_view name)
 // machinery it needs is exactly one thing: a dependency edge, so that unloading
 // the image cannot leave a texture behind pointing at nothing.
 
-texture_load asset_store::load_texture(std::string_view name)
+std::string asset_store::texture_key(std::string_view name, texel_space space)
 {
-    const std::string key(name);
+    // THE DEFAULT SERIALISES TO NOTHING, which is `asset_key`'s rule from 5.5 and
+    // it is load-bearing here for the same reason: a generated texture inserted
+    // under a bare name and a loaded one requested with the default space must
+    // land on the same key, or `insert_texture("checker", …)` and
+    // `find_texture("checker")` disagree about where the checker lives.
+    std::string key(name);
+    if (space == texel_space::linear) { key += "|linear"; }
+    return key;
+}
+
+texture_load asset_store::load_texture(std::string_view name, texel_space space)
+{
+    const std::string key = texture_key(name, space);
 
     if (const auto it = texture_by_key_.find(key); it != texture_by_key_.end())
     {
@@ -392,7 +434,7 @@ texture_load asset_store::load_texture(std::string_view name)
             ++counters_.cache_hits;
             texture_load hit;
             hit.handle = it->second;
-            hit.source = find_image(name);
+            hit.source = find_image(name);   // keyed on the NAME; one decode, n readings
             hit.cached = true;
             hit.report.status = image_status::ok;
             if (const texture* t = textures_.get(hit.handle))
@@ -420,15 +462,16 @@ texture_load asset_store::load_texture(std::string_view name)
     const image_data* pixels = images_.get(img.handle);
     if (pixels == nullptr) { return out; }
 
-    out.handle = derive_texture(img.handle, key, to_texture(*pixels));
+    out.handle = derive_texture(img.handle, key, to_texture(*pixels, space));
     if (!out.handle.valid())
     {
         ++counters_.loads_failed;
         return out;
     }
 
-    ENGINE_LOG_INFO(log_asset, "made texture  %-24s %4dx%-4d from image [handle %u:%u]",
+    ENGINE_LOG_INFO(log_asset, "made texture  %-24s %4dx%-4d %s  from image [handle %u:%u]",
                     key.c_str(), out.report.width, out.report.height,
+                    (space == texel_space::linear) ? "DATA " : "sRGB ",
                     out.handle.index(), out.handle.generation());
     return out;
 }
@@ -468,9 +511,9 @@ image_handle asset_store::find_image(std::string_view name) const
     return it->second;
 }
 
-texture_handle asset_store::find_texture(std::string_view name) const
+texture_handle asset_store::find_texture(std::string_view name, texel_space space) const
 {
-    const auto it = texture_by_key_.find(std::string(name));
+    const auto it = texture_by_key_.find(texture_key(name, space));
     if (it == texture_by_key_.end() || !textures_.contains(it->second)) { return {}; }
     return it->second;
 }

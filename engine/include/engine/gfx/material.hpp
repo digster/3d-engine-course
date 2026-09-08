@@ -101,8 +101,33 @@ struct material
     /// here: see `textured()`.
     texture_handle albedo_map{};
 
-    /// How to read that image. Independent of *which* image, which is why it is a
-    /// separate field and why `SDL_GPUTextureSamplerBinding` is a pair (3.9).
+    /// The **normal map**, or an invalid handle for "this surface is as flat as
+    /// its triangles". Lesson 6.7.
+    ///
+    /// A second texture handle, and it passes 6.5's membership test for exactly
+    /// the same reason the first one does: it is a number in a buffer — an index
+    /// the fragment stage reads, not a decision about which pipeline runs.
+    ///
+    /// **The image behind it must have `texel_space::linear`**, and that is not
+    /// a convention this field can enforce. A normal map is a direction packed
+    /// into bytes, not a colour, so reading it through the sRGB curve is
+    /// arithmetic on numbers that were never a colour — see `texel_space`.
+    /// `asset_store::load_texture` takes the space as a parameter and the glTF
+    /// importer supplies it from which slot the texture was bound to, so the
+    /// engine's own paths cannot get it wrong; a caller building a material by
+    /// hand can, which is why `verify_67` §C asserts it on every shipped path.
+    texture_handle normal_map{};
+
+    /// How to read those images. Independent of *which* image, which is why it is
+    /// a separate field and why `SDL_GPUTextureSamplerBinding` is a pair (3.9).
+    ///
+    /// **ONE sampler for both maps**, and that is a compromise named rather than
+    /// hidden. glTF gives every texture its own sampler, and a material whose
+    /// albedo tiles while its normal map clamps is legal and unrepresentable
+    /// here. In practice an exporter emits the same sampler for both, because
+    /// they are baked against the same uv chart; and the right fix is the one
+    /// 6.5 already named as a debt — intern the sampler into a handle of its own,
+    /// at which point a second one costs four bytes instead of sixteen.
     sampler samp{};
 
     /// Roughness, metallic, F0 — Lesson 6.4's `microsurface`.
@@ -121,6 +146,12 @@ struct material
     /// number, and `material_uniforms` still has it — but it is now *computed* at
     /// the push, from the only field that knows.
     [[nodiscard]] bool textured() const { return albedo_map.valid(); }
+
+    /// Does this surface perturb its normal per pixel? **Derived**, for the same
+    /// reason `textured()` is: one field cannot contradict itself, and a
+    /// `normal_mapped` bool beside a separately-chosen handle is two opinions
+    /// that can disagree (6.5 §5).
+    [[nodiscard]] bool normal_mapped() const { return normal_map.valid(); }
 };
 
 /// A reference to a material held in a `material_pool`.
@@ -165,6 +196,22 @@ using material_pool = pool<material>;
                                                  const texture_pool& textures)
 {
     return {textures.get(m.albedo_map), m.samp};
+}
+
+/// The same resolve, for the normal map — Lesson 6.7.
+///
+/// A second function rather than a second field on one binding, because the two
+/// images are independent: a surface may have an albedo and no normal map, a
+/// normal map and no albedo, both, or neither, and all four are ordinary. The
+/// fill loop reads whichever bindings are bound and falls back where they are
+/// not.
+///
+/// Note that it resolves against the same pool and with the same sampler, so the
+/// per-draw cost is one extra pointer lookup and nothing else.
+[[nodiscard]] inline texture_binding bind_normal_map(const material& m,
+                                                     const texture_pool& textures)
+{
+    return {textures.get(m.normal_map), m.samp};
 }
 
 /// The cull mode a mesh's own geometry justifies.
