@@ -7,7 +7,7 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-09-08 (after Lesson 6.7 — 63 of 95 lessons)
+updated: 2026-09-08 (after Lesson 6.8 — 64 of 95 lessons)
 
 conventions:
   ecs-storage: THE ECS IS A SPARSE SET, DECIDED IN 5.7 BY MEASUREMENT, NOT TASTE.
@@ -3379,8 +3379,85 @@ completed:
   - 6.5  A Material System
   - 6.6  glTF 2.0 Loading
   - 6.7  Normal Mapping and the TBN Derivation
+  - 6.8  Shadow Mapping: Bias, Acne, and PCF
 
 capabilities:
+  - 6.8 SHADOWS IN BOTH RENDERERS, FROM A BIAS THAT IS DERIVED RATHER THAN TUNED.
+    60 -> 63 public headers, 33 -> 35 sources, 14 -> 16 shaders. Golden
+    byte-identical at E917C06C for the SEVENTEENTH lesson, because the reference
+    scene binds no map and `shade()`'s new `visibility` defaults to 1.
+    THE LESSON'S CLAIM, and it is the one to remember: SHADOW ACNE IS NOT A
+    MYSTERY, IT IS A SAMPLING ERROR WITH A COMPUTABLE MAGNITUDE. The map stores
+    ONE depth per texel and the fragment is somewhere else inside it, so half of
+    every texel's footprint is downhill of its own sample — predicted 50%,
+    measured 50.1% on an unoccluded plane. The magnitude is
+    `reach * world_per_texel * tan(theta) / depth_range`, and the measured worst
+    error reaches 92% OF THAT BOUND. A bound reached is a derivation.
+    mat4.hpp  `orthographic(l, r, b, t, near, far)`, derived from an interval
+                remap. Its bottom row is (0,0,0,1), so W IS EXACTLY 1 — spent
+                three times: depth is affine so precision is uniform (perspective's
+                near/far ratio measured at >100x), the near plane may be NEGATIVE
+                so the light's eye sits at the scene centre, and a fragment's
+                light-space position is recoverable from 3.7's interpolated world
+                position for ZERO NEW VARYINGS.
+    gfx/bounds.hpp  NEW, header-only. `aabb` at its FOURTH call site (gltf_view,
+                mesh_report, the gltf importer, now the shadow fit).
+                INSIDE-OUT DEFAULT (+1e30 / -1e30) is the identity element for
+                `expand`, which removes the first-vertex branch from every caller.
+                `transformed(box, m)` is the box around the transformed BOX.
+                6.10's frustum culling is the next caller.
+    gfx/shadow.{hpp,cpp}  NEW. `light_camera` (view, clip_from_view,
+                clip_from_world, viewport, world_per_texel, depth_range),
+                `fit_directional`, `shadow_bias` (none / constant / slope_scaled /
+                normal_offset), `shadow_settings`, `shadow_stats`,
+                `slope_from_cosine`, `pcf_reach_texels`, `slope_scaled_bias`,
+                `quantisation_bias`, `shadow_map` (create / render / visibility /
+                bounds_of).
+                THE DEPTH PASS IS `collect_triangles` + `draw_triangles` WITH A
+                DIFFERENT CAMERA. Not one line of the rasterizer changed.
+    gfx/gpu_shadow.{hpp,cpp}  NEW. `gpu_shadow_map`: a depth-only pipeline
+                (num_color_targets = 0), a SAMPLED depth texture, a comparison
+                sampler, its own render pass, and `fill_uniforms` — ONE function
+                so the CPU and GPU cannot disagree about what a bias means.
+    light.hpp  `shade(..., float visibility = 1.0f)`. It multiplies E, beside the
+                cosine — a shadow is a fact about whether light ARRIVES — and
+                NEVER the ambient term, which is exactly what a shadowed surface
+                is left with.
+    raster.{hpp,cpp}  `fill_style::shadows` (nullable, non-owning) and
+                `fill_style::depth_only`. `shadow_map` is FORWARD-DECLARED in
+                raster.hpp because shadow.hpp includes it — a shadow pass is a
+                rasterizer pass.
+    gpu_texture.{hpp,cpp}  `create_depth(..., bool sampled)`,
+                `gpu_sampler::create_comparison`, `supported_shadow_format`
+                (asks for DEPTH_STENCIL_TARGET | SAMPLER in ONE query, because
+                that is the texture actually created).
+    gpu_scene.{hpp,cpp}  A THIRD sampler slot and a 1x1 sampled depth texture
+                cleared to 1.0 — the third identity-element fallback in this
+                class (white for a multiply, lavender for a basis change, 1.0 for
+                a depth comparison). It cannot be UPLOADED: the only way to write
+                a depth texture is a render pass that clears it and draws nothing.
+    gpu_uniform.hpp  `scene_light_uniforms` 64 -> 176 bytes (a float4x4 and
+                eleven floats). Acceptable because it is a PER-FRAME push;
+                6.7 made a point of a zero-byte flag on the PER-DRAW block, and
+                the two are billed at different rates.
+    shaders/  `shadow.vert.hlsl` (four lines, ONE attribute out of four) and
+                `shadow.frag.hlsl` (`void main() {}` — SDL does not document a
+                NULL fragment_shader; ⚠ VERIFY against SDL_gpu.h, and it is also
+                where an alpha-tested caster's `discard` would go).
+                `scene.frag.hlsl` gains `shadow_visibility` at t2/s2.
+    demos/  `gltf_view` gains a GROUND PLANE (a shadow needs a receiver, and acne
+                is a pattern ACROSS a lit surface) plus --shadow/--bias/--pcf/
+                --shadow-cull/--no-ground-cast; `sandbox` renders the GPU depth
+                pass and gains keys [1] [2] [3].
+    THE FINDING THIS LESSON MADE BY RENDERING: A 3x3 KERNEL REACHES 2.12 TEXEL
+    DIAGONALS, NOT 0.71. A bias sized for one tap leaves two thirds of the error
+    uncovered, and the acne returns AT THE MOMENT PCF IS SWITCHED ON, which makes
+    it look like a filtering bug. 79.6% acne on a controlled plane; 10,348 stray
+    pixels in a real render, against 78 one tap earlier.
+    AND THE PREDICTION THE PLAN GOT WRONG, corrected in the lesson rather than
+    quietly: the non-linear depth distribution is a PERSPECTIVE problem. An
+    orthographic light spreads depth evenly, so the quantisation term is a
+    CONSTANT across the whole map. It returns the day the light is a spot light.
   - 6.7 PER-PIXEL NORMALS IN BOTH RENDERERS, AND THE GOLDEN STILL DID NOT MOVE.
     NO NEW FILES — 60 public headers, 33 sources, unchanged. The widest diff since
     6.4, and byte-identical at E917C06C for the SIXTEENTH lesson, because no
@@ -5642,6 +5719,7 @@ files:
             depth_probe.vert.hlsl, depth_probe.frag.hlsl,
             texture_probe.frag.hlsl,
             scene.vert.hlsl, scene.frag.hlsl,
+            shadow.vert.hlsl, shadow.frag.hlsl                            [6.8]
             matrix_probe.frag.hlsl
   engine/: CMakeLists.txt
   engine/include/engine/: engine.hpp                      (the umbrella)
@@ -5655,10 +5733,13 @@ files:
              engine::ecs::pool<T> is a DIFFERENT container from core/pool.hpp's
              engine::pool<T>; see conventions:ecs-runtime.)
   engine/include/engine/gfx/: clip.hpp, colour.hpp, debug_draw.hpp,
+            bounds.hpp                                                       [6.8]
             debug_lines.hpp                                                 [5.11]
             depth_buffer.hpp, framebuffer.hpp, gpu_buffer.hpp, gpu_debug.hpp,
             gpu_device.hpp, gpu_mesh.hpp, gpu_pipeline.hpp, gpu_present.hpp,
-            gpu_scene.hpp, gpu_shader.hpp, gpu_texture.hpp, gpu_uniform.hpp,
+            gpu_scene.hpp, gpu_shader.hpp,
+            gpu_shadow.hpp                                                   [6.8]
+            gpu_texture.hpp, gpu_uniform.hpp,
             cull.hpp                                                         [6.5]
             gltf.hpp                                                         [6.6]
             image.hpp, light.hpp,
@@ -5666,7 +5747,9 @@ files:
             mesh.hpp,
             microfacet.hpp                                              [6.3, 6.4]
             obj.hpp, projector.hpp, raster.hpp,
-            scene.hpp, soft_renderer.hpp, texture.hpp, viewport.hpp
+            scene.hpp,
+            shadow.hpp                                                       [6.8]
+            soft_renderer.hpp, texture.hpp, viewport.hpp
   engine/include/engine/math/: mat2.hpp, mat3.hpp, mat4.hpp, transform.hpp,
             vec2.hpp, vec3.hpp, vec4.hpp
   engine/include/engine/platform/: platform.hpp, app.hpp,
@@ -5681,10 +5764,14 @@ files:
             depth_buffer.cpp,
             framebuffer.cpp, gpu_buffer.cpp, gpu_debug.cpp, gpu_device.cpp,
             gpu_mesh.cpp, gpu_pipeline.cpp, gpu_present.cpp, gpu_scene.cpp,
-            gpu_shader.cpp, gpu_texture.cpp,
+            gpu_shader.cpp,
+            gpu_shadow.cpp                                                   [6.8]
+            gpu_texture.cpp,
             gltf.cpp                    [6.6 — THE ONLY TU THAT SEES cgltf]
             image.cpp, mesh.cpp, obj.cpp,
-            raster.cpp, soft_renderer.cpp, texture.cpp
+            raster.cpp,
+            shadow.cpp                                                       [6.8]
+            soft_renderer.cpp, texture.cpp
   engine/src/platform/: platform.cpp, app.cpp
   engine/src/ui/: debug_ui.cpp   [5.11 — THE ONLY engine TU that includes <imgui.h>]
   demos/: CMakeLists.txt
@@ -5742,7 +5829,8 @@ files:
                  06-04-cook-torrance.html,
                  06-05-material-system.html,
                  06-06-gltf.html,
-                 06-07-normal-mapping.html
+                 06-07-normal-mapping.html,
+                 06-08-shadow-mapping.html
   docs/shared/: course.css, course.js      (THE stylesheet + page script; one copy each)
   docs/_template/: lesson-template.html, README.md, apply-shared.py, check-page.js
   scratch/ (5.7, not shipped with the engine): ecs_probe.hpp, bench_57.cpp,
@@ -5853,6 +5941,33 @@ files:
            is wider than pinning — ANY GENERATED ARTIFACT NEEDS A
            REGENERATE-AND-DIFF AFTER THE LAST EDIT TO ITS INPUTS, not only when you
            remember to pin.
+  scratch/ (6.8, not shipped with the engine): verify_68.cpp, build_verify_68.sh,
+           figs_68.py, build_68.py, l68_body_{a,b,c}.html, l68_fig{1..7}.svg.
+           SEVEN figures, not six, because §3.5 wants the ARTEFACT shown before
+           the derivation and acne deserves its own picture. Figure 4 is a mock
+           whose fringes are COMPUTED: acne on a ground plane is the level sets of
+           a projective coordinate, which is why it swirls rather than striping,
+           and drawing them from that formula is the difference between a diagram
+           and a doodle.
+           NO PROBE, the fourth lesson running. verify_68 needs a headless
+           gpu_device (SDL_Init(VIDEO) first — without it the device silently does
+           not come back and §G skips rather than fails, which is the most
+           misleading kind of silence a harness can produce).
+           PINNED BY 6.8, before a line of it was written: l67_texture.hpp,
+           l67_mesh.cpp, l67_material.hpp and l67_scene.frag.hlsl against commit
+           b5cbda8, plus l67_verify_67.cpp as a working-tree copy. THE REBUILD
+           DIFF WAS EXACTLY THE TWO NAV LINES, seventh lesson running.
+           AND ONE OF THE PREDICTIONS WAS WRONG, which is worth recording:
+           material.hpp did NOT need a shadow-casting flag (whether an object
+           casts is a property of the DRAW LIST, not of the surface — the demo
+           expresses it with a subspan), and texel_space did NOT need a third
+           value (a CPU shadow map is a depth_buffer of floats, not a texture of
+           Uint32, so the question never arises). Only scene.frag.hlsl was
+           certain, and it was.
+           (build_68.py PINS NOTHING YET and lists EIGHT files whole. 6.9 is
+            cascades and will edit shadow.{hpp,cpp}, gpu_shadow.{hpp,cpp},
+            scene.frag.hlsl and probably bounds.hpp. Pin first, and take
+            verify_68.cpp early.)
   scratch/ (6.7, not shipped with the engine): verify_67.cpp, build_verify_67.sh,
            figs_67.py, build_67.py, l67_body_{a,b,c}.html, l67_fig{1..6}.svg.
            NO PROBE, the third lesson running — every measurement had an answer
@@ -5939,72 +6054,81 @@ files:
            2026-09-08.md
            (ONE FILE PER DATE. 6.2, 6.3 and 6.4 all landed on 2026-09-06 and all
             three are sections of that one file — never a -b suffix for a same-day
-            session.)
+            session. 6.7 and 6.8 both landed on 2026-09-08 and share that file the
+            same way.)
   (retired: src/ — the whole directory. hello.cpp.)
 
 
-next: 6.8 — Shadow Mapping: Bias, Acne, and PCF
-      (planned filename: docs/lessons/06-08-shadow-mapping.html — 6.7's TWO next
-      links point at the index and BOTH need repointing; scratch/l67_body_a.html
-      holds the top one and build_67.py's TAIL the bottom. AND build_67.py PINS
-      NOTHING while listing texture.hpp, mesh.cpp, material.hpp,
-      scene.frag.hlsl and verify_67.cpp WHOLE. Pin first:
-        git show <6.7 commit>:engine/include/engine/gfx/texture.hpp \
-            > scratch/l67_texture.hpp
-        git show <6.7 commit>:engine/src/gfx/mesh.cpp > scratch/l67_mesh.cpp
-        git show <6.7 commit>:engine/include/engine/gfx/material.hpp \
-            > scratch/l67_material.hpp
-        git show <6.7 commit>:shaders/scene.frag.hlsl > scratch/l67_scene.frag.hlsl
-        cp scratch/verify_67.cpp scratch/l67_verify_67.cpp        # gitignored
-      Then re-run build_67.py and `git diff` the page. SIX lessons running the
+next: 6.9 — Cascaded Shadow Maps
+      (planned filename: docs/lessons/06-09-cascaded-shadows.html — 6.8's TWO next
+      links point at the index and BOTH need repointing; scratch/l68_body_a.html
+      holds the top one and build_68.py's TAIL the bottom. AND build_68.py PINS
+      NOTHING while listing EIGHT files whole: bounds.hpp, shadow.{hpp,cpp},
+      gpu_shadow.{hpp,cpp}, shadow.vert.hlsl, scene.frag.hlsl and verify_68.cpp.
+      Every one of those except the vertex shader is a file 6.9 will edit. Pin
+      first:
+        for f in engine/include/engine/gfx/bounds.hpp \
+                 engine/include/engine/gfx/shadow.hpp \
+                 engine/src/gfx/shadow.cpp \
+                 engine/include/engine/gfx/gpu_shadow.hpp \
+                 engine/src/gfx/gpu_shadow.cpp \
+                 shaders/shadow.vert.hlsl shaders/scene.frag.hlsl; do
+          git show <6.8 commit>:$f > scratch/l68_$(basename $f)
+        done
+        cp scratch/verify_68.cpp scratch/l68_verify_68.cpp        # gitignored
+      Then re-run build_68.py and `git diff` the page. SEVEN lessons running the
       diff has been exactly the nav lines meant to move. AND EMPTY LISTING_SOURCE
-      WHEN COPYING build_67.py — build_66.py carried 6.5's pins inert for a whole
+      WHEN COPYING build_68.py — build_66.py carried 6.5's pins inert for a whole
       lesson, which made the discipline look satisfied when it was not.
 
-      WHAT 6.8 IS ACTUALLY ABOUT, and it is not "render from the light":
-      THE COMPARISON IS BETWEEN TWO FLOATS COMPUTED DIFFERENTLY. The depth stored
-      in the shadow map was produced by rasterising a triangle from one viewpoint;
-      the depth being tested was produced by rasterising the same triangle from
-      another and then projected into light space. They disagree by an amount that
-      depends on slope, resolution and depth precision — and that disagreement IS
-      shadow acne. The lesson has to derive the bias from THAT rather than
-      introduce it as a fudge, which means:
-        - the projection's non-linear depth distribution (2.10 derived it; 4.9's
-          depth-range work measured it) is why the error is worse far away;
-        - the slope dependence is why a constant bias produces peter-panning at
-          grazing angles and acne at steep ones, and why slope-scaled bias is the
-          standard answer;
-        - and normal-offset bias is the OTHER answer, which moves the sample point
-          along the normal instead of the depth — and 6.7 has just given every
-          surface a normal that DISAGREES WITH ITS GEOMETRY, which is the first
-          time that distinction will matter.
-      SHOW THE ARTEFACT FIRST (§3.5 of CLAUDE.md). Acne is one of the most
-      photogenic failures in the course and the lesson should open on it.
-
+      WHAT 6.9 IS ACTUALLY ABOUT, and 6.8 already set up its opening argument:
+      `gltf_view --shadow 128` is what ONE map over a whole scene looks like
+      everywhere. The near field of an outdoor scene gets a handful of texels
+      because the box has to contain the far field too, and the fix is to split
+      the CAMERA's frustum by distance and give each slice its own map.
+      WHAT THAT BRINGS BACK, all of it deliberately deferred by 6.8:
+        1 A BOX THAT MOVES WITH THE CAMERA, and therefore TEXEL SNAPPING.
+          6.8's fit depends on the SCENE's bounds, so the light's box does not
+          move when the camera does and the shimmer snapping exists to cure
+          cannot occur — shadow.hpp says so in as many words. A camera-fitted
+          box moves every frame, its texel grid slides under the geometry, and
+          every shadow edge crawls. Snap the light-space centre to a whole
+          number of texels. verify_68 §C's Weyl-sequence finding is the same
+          aliasing seen from the measurement side; that connection is worth
+          making explicitly.
+        2 A PER-CASCADE `world_per_texel`, AND THEREFORE A PER-CASCADE BIAS.
+          Every formula in 6.8 §4 is a multiple of it, so a shared bias is
+          wrong in three cascades out of four. `shadow_settings` is currently
+          one struct for one map.
+        3 THE SEAM, which is a NEW ARTEFACT WITH A NEW NAME. Two cascades
+          disagree along their boundary because they have different texel
+          grids and different biases; blending a band either side is the usual
+          answer and costs a second lookup.
       WHAT THE ENGINE NEEDS THAT IT DOES NOT HAVE:
-        1 A DEPTH-ONLY PASS. `gpu_scene_renderer` has one depth target and one
-          colour pass; a shadow map is a second render pass with no colour
-          attachment. 4.8's three-pipelines-and-a-sort is the shape to copy.
-        2 A LIGHT-SPACE MATRIX. `directional_light` (6.2) has a direction and an
-          irradiance and no position — which is correct for a directional light and
-          means the ORTHOGRAPHIC frustum has to be fitted to the scene's bounds.
-          6.6's gltf_view already computes world-space bounds; that code wants to
-          be in the engine.
-        3 A DEPTH TEXTURE THAT CAN BE SAMPLED. `gpu_texture::create_depth` exists
-          and is an attachment, not a sampled texture. And on the CPU side,
-          `texel_space` may need a third value — a depth map is neither colour nor
-          ordinary [0,1] data.
-        4 A COMPARISON SAMPLER for PCF. SDL_GPUSamplerCreateInfo has
-          `enable_compare` and `compare_op`, which 3.9's `sampler` does not mirror
-          — ⚠ VERIFY the field names against SDL3/SDL_gpu.h before writing them.
-      THE TEST TO BEAT: the golden should stay E917C06C — SEVENTEENTH lesson.
-      Shadows are a new path and the reference scene has no shadow-casting light,
-      so the same argument 6.6 and 6.7 made applies. If it moves, something was
-      wired into the default path that should have been opt-in.
-      CARRY FORWARD: 6.7's habit of DERIVING the tolerance from the encoding
-      rather than choosing it — shadow-map comparison has exactly the same shape,
-      and "what depth precision does this format actually have" is a number, not a
-      feeling. And 6.7's three plausible-looking bugs are the pattern to watch for:
-      acne, peter-panning and light leaking are all pictures that look like
-      something other than what they are.
+        1 THE CAMERA FRUSTUM'S CORNERS IN WORLD SPACE — the eight points of a
+          sub-frustum between two split distances. That is an inverse
+          projection, and `mat4` has no `inverse()` at all: 2.9's
+          `rigid_inverse` handles a view matrix and nothing handles a
+          projection. Either invert it analytically (a perspective matrix's
+          inverse is closed-form and short) or build the corners directly from
+          fovy, aspect and the two distances, which is what most engines do
+          and is fewer lines.
+        2 A TEXTURE ARRAY, or N textures. `gpu_texture` hard-codes
+          `layer_count_or_depth = 1`, and SDL_GPU's Texture2DArray needs a
+          `SDL_GPUTextureType` change plus a layer index in
+          `SDL_GPUDepthStencilTargetInfo`. ⚠ VERIFY the field name against
+          SDL3/SDL_gpu.h before writing it.
+        3 A SPLIT SCHEME. The practical answer is a blend of uniform and
+          logarithmic (Zhang et al.'s "practical split scheme"), which is one
+          line and DERIVABLE — the log term is what equalises texel density in
+          screen space, and 4.7's depth-precision work is the same 1/d
+          argument arriving again.
+      THE TEST TO BEAT: the golden should stay E917C06C — EIGHTEENTH lesson.
+      Cascades are a change to an opt-in path, so the same argument applies.
+      CARRY FORWARD: 6.8's habit of DERIVING the bias from the sampling geometry
+      rather than choosing it — a cascade changes `world_per_texel` and nothing
+      else in the derivation, which is the test of whether 6.8's formula was
+      really a formula. And 6.8's §9 finding: A MEASUREMENT CAN ALIAS AGAINST
+      THE THING IT MEASURES. A regular grid over a regular grid reported 3.3%
+      where the truth was 50%.
 ```

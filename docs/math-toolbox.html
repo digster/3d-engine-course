@@ -99,6 +99,7 @@
       <li><a href="#fresnel">Fresnel, and the assembled BRDF</a></li>
       <li><a href="#interchange">Reading somebody else&rsquo;s material model</a></li>
       <li><a href="#tangent">Tangent space</a></li>
+      <li><a href="#shadows">Shadows, and the size of a sampling error</a></li>
       <li><a href="#performance">Reasoning about cost</a></li>
       <li><a href="#pipelining">Two processors, overlapped</a></li>
       <li><a href="#coming">Coming as the course proceeds</a></li>
@@ -2509,6 +2510,101 @@
         the more expensive of the two mistakes.
       </p>
     </div>
+  </div>
+
+  <h2 id="shadows"><span class="num">7g</span>Shadows, and the size of a sampling error</h2>
+
+  <p>
+    Four tools from Lesson 6.8. The first is a projection; the other three are all the same idea in
+    different clothes &mdash; <em>how far apart are the two points whose values I am comparing, and
+    what does that distance cost me?</em>
+  </p>
+
+  <div class="tool">
+    <h3>Orthographic projection <span class="from">Lesson 6.8</span></h3>
+    <div class="eq">
+      <span>\[
+        P_{ortho} =
+        \begin{bmatrix}
+          \frac{2}{r-l} &amp; 0 &amp; 0 &amp; -\frac{r+l}{r-l} \\
+          0 &amp; \frac{2}{t-b} &amp; 0 &amp; -\frac{t+b}{t-b} \\
+          0 &amp; 0 &amp; \frac{-1}{f-n} &amp; \frac{-n}{f-n} \\
+          0 &amp; 0 &amp; 0 &amp; 1
+        \end{bmatrix}
+      \]</span>
+    </div>
+    <p>
+      Each row is an <strong>interval remap</strong> and nothing more: subtract the start, divide by
+      the width, scale to the new width, add the new start. There is no <em>w</em> trick because
+      there is no divide &mdash; the bottom row is <code>(0, 0, 0, 1)</code>, against
+      <code>perspective</code>&rsquo;s <code>(0, 0, &minus;1, 0)</code>.
+    </p>
+    <p>
+      <strong>Three consequences worth memorising with the matrix.</strong> Device depth is
+      <em>affine</em> in view depth, so precision is uniform where <code>perspective</code> crowds
+      it against the near plane (a ratio measured at over 100&times;). The near plane may be
+      <em>negative</em>, which lets a light&rsquo;s eye sit inside the scene it is lighting.
+      And because <em>w</em> is exactly 1, the whole map is affine in the world position &mdash; so
+      it may be evaluated at an interpolated point rather than interpolated from the corners, which
+      is worth four varyings.
+    </p>
+  </div>
+
+  <div class="tool">
+    <h3>Slope from a cosine <span class="from">Lesson 6.8</span></h3>
+    <div class="eq">
+      <span>\[ \tan\theta = \frac{\sqrt{1 - c^2}}{c}, \qquad c = n \cdot l \]</span>
+    </div>
+    <p>
+      Every shading equation already has <code>n&nbsp;&middot;&nbsp;l</code>, so a surface&rsquo;s
+      steepness relative to the light is free. It diverges as <em>c</em> &rarr; 0 and that is not a
+      numerical accident &mdash; at exactly grazing incidence the quantity it feeds is genuinely
+      infinite, and a clamp is where you stop pretending rather than a guard.
+    </p>
+    <p>
+      <strong>The general shape:</strong> a cosine tells you how much of something arrives; its
+      tangent tells you how fast something varies <em>across</em> the surface. They are different
+      questions and the same dot product answers both.
+    </p>
+  </div>
+
+  <div class="tool">
+    <h3>The cost of comparing two samples <span class="from">Lesson 6.8</span></h3>
+    <div class="eq">
+      <span>\[ \varepsilon = \text{reach} \cdot \Delta x \cdot
+              \frac{\tan\theta}{\text{range}} \]</span>
+    </div>
+    <p>
+      Read it as a sentence and it applies far past shadows: <em>how far apart the two samples can
+      be</em> (reach, in samples) times <em>how big a sample is</em> (&Delta;x, in world units)
+      times <em>how fast the quantity varies</em> (the gradient) &mdash; divided by whatever
+      converts the answer into the units the comparison happens in.
+    </p>
+    <p>
+      For a shadow map that is a bias: measured worst error 1.931&thinsp;&times;&thinsp;10<sup>&minus;3</sup>
+      against a bound of 2.101&thinsp;&times;&thinsp;10<sup>&minus;3</sup>, <strong>92% of it</strong>.
+      A bound reached is a derivation; a bound reached at 20% is describing something other than what
+      happens.
+    </p>
+  </div>
+
+  <div class="tool">
+    <h3>The reach of a filter kernel <span class="from">Lesson 6.8</span></h3>
+    <div class="eq">
+      <span>\[ \text{reach}_r = (r + \tfrac{1}{2})\sqrt{2}
+              \qquad\Rightarrow\qquad 0.707,\; 2.121,\; 3.536, \ldots \]</span>
+    </div>
+    <p>
+      A single lookup reaches half a texel diagonal &mdash; the fragment is somewhere inside its own
+      texel. A radius-<em>r</em> kernel reaches <em>r</em>&nbsp;+&nbsp;&frac12; texels on each axis,
+      so a 3&times;3 reaches <strong>three times as far</strong> as one tap.
+    </p>
+    <p>
+      <strong>Anything derived from a single sample&rsquo;s footprint has to be re-derived when the
+      footprint widens.</strong> Lesson 6.8 found this by rendering: a correct bias stopped being
+      correct at the moment PCF was switched on, and the artefact arrived looking like a filtering
+      bug rather than a bias one (79.6% of a plane, against 0.0% one tap earlier).
+    </p>
   </div>
 
   <h2 id="performance"><span class="num">8</span>Reasoning about cost</h2>

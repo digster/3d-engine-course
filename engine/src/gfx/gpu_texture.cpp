@@ -40,6 +40,30 @@ SDL_GPUTextureFormat supported_depth_format(const gpu_device& dev,
     return SDL_GPU_TEXTUREFORMAT_INVALID;
 }
 
+SDL_GPUTextureFormat supported_shadow_format(const gpu_device& dev,
+                                             const SDL_GPUTextureFormat* candidates, int count)
+{
+    if (!dev.valid() || candidates == nullptr) { return SDL_GPU_TEXTUREFORMAT_INVALID; }
+
+    for (int i = 0; i < count; ++i)
+    {
+        // BOTH USAGES IN ONE QUERY, because that is the texture we are actually
+        // going to ask for. Querying them separately and taking the intersection
+        // would be asking two questions neither of which is ours: a device may
+        // support a format as an attachment and as a texture and still refuse
+        // the combination, and the combination is the whole point of a shadow
+        // map.
+        if (SDL_GPUTextureSupportsFormat(dev.handle(), candidates[i],
+                                         SDL_GPU_TEXTURETYPE_2D,
+                                         SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET
+                                         | SDL_GPU_TEXTUREUSAGE_SAMPLER))
+        {
+            return candidates[i];
+        }
+    }
+    return SDL_GPU_TEXTUREFORMAT_INVALID;
+}
+
 // ===========================================================================
 // gpu_texture
 // ===========================================================================
@@ -175,7 +199,8 @@ bool gpu_texture::create_sampled(const gpu_device& dev, SDL_GPUCommandBuffer* cb
 }
 
 bool gpu_texture::create_depth(const gpu_device& dev, SDL_GPUTextureFormat format,
-                               Uint32 width, Uint32 height, const char* name)
+                               Uint32 width, Uint32 height, const char* name,
+                               bool sampled)
 {
     destroy();
 
@@ -193,11 +218,13 @@ bool gpu_texture::create_depth(const gpu_device& dev, SDL_GPUTextureFormat forma
     SDL_GPUTextureCreateInfo ti{};
     ti.type = SDL_GPU_TEXTURETYPE_2D;
     ti.format = format_;
-    // DEPTH_STENCIL_TARGET and nothing else. Adding SAMPLER here would let a
-    // later pass read the depth buffer — which Module 6's shadow maps need and
-    // this lesson does not, and asking for a usage you do not need can force the
-    // driver into a slower layout.
-    ti.usage = SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET;
+    // DEPTH_STENCIL_TARGET, and SAMPLER as well when the caller asks — Lesson
+    // 6.8. That second flag is the difference between a depth buffer and a
+    // SHADOW MAP: one is consumed by the pass that writes it, the other is read
+    // back by a pass that comes after. The flag is not free (gpu_texture.hpp
+    // says why), which is exactly why it is a parameter and not a default.
+    ti.usage = SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET
+             | (sampled ? SDL_GPU_TEXTUREUSAGE_SAMPLER : 0u);
     ti.width = width_;
     ti.height = height_;
     ti.layer_count_or_depth = 1;
@@ -305,8 +332,10 @@ bool gpu_sampler::create(const gpu_device& dev, filter min_mag, address_mode wra
 
     // enable_compare is for SHADOW sampling — the sampler performs the depth
     // comparison itself and returns a filtered 0..1 occlusion instead of a depth.
-    // That is Module 6's percentage-closer filtering, and it is worth knowing it
-    // lives here rather than in the shader.
+    // That is Lesson 6.8's percentage-closer filtering, and `create_comparison`
+    // below is where it is switched on. An ordinary sampler must leave it off:
+    // a comparison sampler bound to a colour texture is a validation error on
+    // every backend.
     si.enable_compare = false;
     si.compare_op = SDL_GPU_COMPAREOP_NEVER;
 
@@ -319,6 +348,57 @@ bool gpu_sampler::create(const gpu_device& dev, filter min_mag, address_mode wra
     }
 
     (void)name;   // SDL exposes no sampler-naming call; RenderDoc infers it
+    return true;
+}
+
+bool gpu_sampler::create_comparison(const gpu_device& dev, const char* name)
+{
+    destroy();
+
+    if (!dev.valid()) { return false; }
+    device_ = dev.handle();
+
+    SDL_GPUSamplerCreateInfo si{};
+
+    // LINEAR, and it is the entire reason this object exists. The filter runs
+    // on the COMPARISON RESULTS, not on the depths — four booleans blended into
+    // a 0..1 coverage — which is hardware 2x2 PCF for the price of one fetch.
+    si.min_filter = SDL_GPU_FILTER_LINEAR;
+    si.mag_filter = SDL_GPU_FILTER_LINEAR;
+    si.mipmap_mode = SDL_GPU_SAMPLERMIPMAPMODE_NEAREST;
+
+    // CLAMP, never repeat. A lookup that falls outside the light's box must read
+    // the edge and not wrap round to the opposite side of the scene, which would
+    // paint a shadow of one corner onto the other. Clamping gives the edge texel;
+    // §5.4 explains why the shader ALSO range-checks rather than relying on it.
+    si.address_mode_u = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+    si.address_mode_v = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+    si.address_mode_w = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+
+    si.mip_lod_bias = 0.0f;
+    si.min_lod = 0.0f;
+    si.max_lod = 0.0f;
+    si.enable_anisotropy = false;
+    si.max_anisotropy = 1.0f;
+
+    // THE TWO FIELDS. `LESS_OR_EQUAL` because our device depth runs 0 at the near
+    // plane and 1 at the far one (conventions §4), so "the fragment is at or in
+    // front of what the light recorded" means lit. Flip the depth convention and
+    // this must flip with it — which is why it is written here beside the reason
+    // rather than chosen once and forgotten.
+    si.enable_compare = true;
+    si.compare_op = SDL_GPU_COMPAREOP_LESS_OR_EQUAL;
+
+    sampler_ = SDL_CreateGPUSampler(device_, &si);
+    if (sampler_ == nullptr)
+    {
+        ENGINE_LOG_ERROR(engine::log_gpu, "SDL_CreateGPUSampler(comparison) failed: %s",
+                         SDL_GetError());
+        destroy();
+        return false;
+    }
+
+    (void)name;
     return true;
 }
 

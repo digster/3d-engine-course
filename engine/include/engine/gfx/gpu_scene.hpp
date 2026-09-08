@@ -241,12 +241,31 @@ public:
     ///        drift from the code it describes is worse than none, because it
     ///        is believed. `verify_49` §D checks the log against `draw_stats`,
     ///        which is a second reading of the same events.
+    /// @param shadow the shadow map to bind at fragment slot 2, or `nullptr` for
+    ///        "this scene has none" — in which case the renderer binds its own
+    ///        **1x1 depth texture cleared to the far plane**, Lesson 6.8.
+    ///
+    ///        That fallback is the third of its kind in this class and the
+    ///        pattern is now explicit: hand the shader the IDENTITY ELEMENT of
+    ///        the feature it is missing. White is the identity for a multiply,
+    ///        lavender for a basis change (6.7), and **`1.0` is the identity for
+    ///        a depth comparison** — a map that says the nearest surface along
+    ///        every ray is the far plane says nothing occludes anything. A
+    ///        declared sampler slot with nothing bound draws nothing at all, and
+    ///        silently, which has now cost this project three debugging sessions.
+    /// @param shadow_sampler the COMPARISON sampler that goes with it, or
+    ///        `nullptr` to use the renderer's own. It is a separate parameter
+    ///        from `sampler` because it is a different kind of object —
+    ///        `enable_compare` is on — and binding an ordinary sampler here is a
+    ///        validation error rather than a wrong picture.
     draw_stats render(SDL_GPUCommandBuffer* cb, SDL_GPURenderPass* pass,
                       const gpu_draw_item* items, int count,
                       const camera_uniforms& camera,
                       const scene_light_uniforms& light,
                       SDL_GPUSampler* sampler,
-                      frame_log* log = nullptr) const;
+                      frame_log* log = nullptr,
+                      SDL_GPUTexture* shadow = nullptr,
+                      SDL_GPUSampler* shadow_sampler = nullptr) const;
 
     /// The white 1x1 texture, for callers that want to bind it themselves.
     [[nodiscard]] SDL_GPUTexture* white() const { return white_.handle(); }
@@ -268,6 +287,16 @@ private:
     gpu_texture depth_;
     gpu_texture white_;
     gpu_texture flat_normal_;   ///< 6.7
+
+    /// 6.8. A 1x1 sampled depth texture holding 1.0 — "nothing occludes". Its
+    /// contents come from a render pass that clears it and draws nothing, which
+    /// is the only way to write a depth texture at all: `SDL_UploadToGPUTexture`
+    /// cannot target one.
+    gpu_texture far_depth_;
+
+    /// 6.8. The comparison sampler for the fallback, and for callers that have a
+    /// map but no sampler of their own.
+    gpu_sampler shadow_sampler_;
     SDL_GPUTextureFormat depth_format_ = SDL_GPU_TEXTUREFORMAT_INVALID;
     Uint32 depth_w_ = 0;
     Uint32 depth_h_ = 0;

@@ -37,7 +37,14 @@
 // them needs the layout of either. raster.cpp includes the real headers because
 // it actually writes pixels and depths. The habit is from Lesson 1.8 §4.1 — in a
 // header, include what you use and forward declare what you merely mention.
-namespace engine { class framebuffer; }
+namespace engine {
+
+/// Lesson 6.8. FORWARD-DECLARED, not included, and that is a physical-design
+/// decision rather than a compile-time one. `shadow.hpp` includes this header —
+/// a shadow pass is a rasterizer pass — so including it back would be a cycle.
+/// A pointer to an incomplete type is all `fill_style` needs, and `raster.cpp`
+/// is the one place that has to see the definition.
+class shadow_map; class framebuffer; }
 namespace engine { class depth_buffer; }
 
 namespace engine {
@@ -626,6 +633,41 @@ struct fill_style
     /// what a CPU rasterizer should do; `quad` imitates the hardware and is here
     /// to be measured, not to be used.
     traversal traverse = traversal::scanline;
+
+    /// The shadow map to test against, or `nullptr` for "this light is not
+    /// occluded by anything" — Lesson 6.8.
+    ///
+    /// A **non-owning, nullable pointer**, for the third time in this struct and
+    /// for the same reason `lights` and `depth` are: what a reference cannot
+    /// express is optionality, and most fills in this engine — the HUD, the 2-D
+    /// demos, the debug lines — have no shadows and should not have to say so.
+    ///
+    /// **Only consulted under `shading::lit`**, because it multiplies a term that
+    /// only that path computes. Bound to a `shading::textured` fill it is
+    /// silently ignored, exactly as `lights` already is.
+    const shadow_map* shadows = nullptr;
+
+    /// **Test and write depth; compute and store no colour** — Lesson 6.8.
+    ///
+    /// The CPU's version of a graphics pipeline with `num_color_targets = 0`, and
+    /// it is what a shadow pass wants: the map records where surfaces ARE, and a
+    /// surface's colour cannot change where it is. Everything above this line
+    /// that produces a colour — the interpolation, the texture fetch, the whole
+    /// shading equation — is skipped, so the saving is the fragment, not the
+    /// store.
+    ///
+    /// **It is not the whole saving, and the gap is worth seeing.** The colour
+    /// target still has to EXIST, because `fill_triangle` clips its bounding box
+    /// against the framebuffer's dimensions and there is nowhere else for a pass
+    /// to learn how big it is. A GPU render pass carries its own dimensions, so
+    /// there the attachment is genuinely absent — and on tiled hardware that
+    /// absence is the entire tile write, which is the largest single number in a
+    /// mobile frame budget.
+    ///
+    /// Ignored when there is no depth attachment, where it would mean "do
+    /// nothing at all"; a fill with neither target is a no-op the caller should
+    /// not have issued.
+    bool depth_only = false;
 };
 
 /// Fill a triangle whose corners carry their own attributes — the shaded fill.

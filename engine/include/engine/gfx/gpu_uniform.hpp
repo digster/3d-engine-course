@@ -252,9 +252,46 @@ struct scene_light_uniforms
     float encode_output;
     vec3  eye_world;   ///< 48 — where the camera is; a highlight needs it
     float spec_model;  ///< 60 — 0 = none, 1 = Phong, 2 = Blinn (3.7's enum)
+
+    // ---- Lesson 6.8: the shadow map, and everything the lookup needs -------
+    //
+    // THE BLOCK TRIPLES IN SIZE HERE, 64 bytes to 176, and it is worth saying why
+    // that is acceptable when 6.7 made a point of the flag that cost nothing.
+    // This is a PER-FRAME push: one 176-byte copy for the whole frame, against
+    // 6.7's per-DRAW `material_uniforms` where every byte is multiplied by the
+    // draw count. The two blocks are charged at completely different rates, and
+    // the design pressure on them is different in exactly that proportion.
+
+    /// World -> the light's clip space. The same matrix `light_camera` holds, and
+    /// the reason it goes to the FRAGMENT stage rather than the vertex stage is
+    /// §5.3: an orthographic projection leaves `w = 1`, so the light-space
+    /// position is AFFINE in the world position — and the fragment already has an
+    /// interpolated world position, put there in 3.7 for the specular term.
+    /// Recovering it here costs one matrix multiply per fragment and **zero new
+    /// varyings**, where the textbook arrangement costs four interpolated floats
+    /// on every draw whether it is shadowed or not.
+    mat4 light_clip_from_world;   ///< 64
+
+    float shadow_strength;    ///< 128 — 0 disables the lookup entirely
+    float shadow_texel;       ///< 132 — world units per shadow texel
+    float shadow_depth_range; ///< 136 — far - near, in world units
+    float shadow_bias;        ///< 140 — the constant term, in device depth
+    float shadow_slope_scale; ///< 144 — a multiplier on the derived slope term
+    float shadow_max_slope;   ///< 148 — the clamp on tan(theta)
+    float shadow_reach;       ///< 152 — `pcf_reach_texels(radius)`
+    float shadow_pcf;         ///< 156 — the kernel radius, as a float
+    float shadow_mode;        ///< 160 — 0 none, 1 constant, 2 slope, 3 normal
+    float shadow_normal_scale;///< 164 — texels of normal offset at grazing
+    float shadow_texel_uv;    ///< 168 — 1/resolution: one texel, in uv
+    float pad2;               ///< 172 — fills the eleventh register
 };
 
-static_assert(sizeof(scene_light_uniforms) == 64, "four registers, exactly filled");
+static_assert(sizeof(scene_light_uniforms) == 176, "eleven registers, exactly filled");
+static_assert(offsetof(scene_light_uniforms, light_clip_from_world) == 64,
+              "a float4x4 must start on a register boundary");
+static_assert(offsetof(scene_light_uniforms, shadow_strength) == packed_offset(128, 1), "");
+static_assert(offsetof(scene_light_uniforms, shadow_mode) == packed_offset(160, 1), "");
+static_assert(offsetof(scene_light_uniforms, shadow_texel_uv) == packed_offset(168, 1), "");
 static_assert(offsetof(scene_light_uniforms, to_light) == packed_offset(0, 3), "");
 static_assert(offsetof(scene_light_uniforms, key) == packed_offset(16, 3), "");
 static_assert(offsetof(scene_light_uniforms, ambient) == packed_offset(32, 3), "");

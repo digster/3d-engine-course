@@ -320,6 +320,73 @@ struct mat4
             {0.0f,       0.0f, B,     0.0f}};
 }
 
+/// An **orthographic** projection: the box `[l, r] x [b, t] x [-near, -far]` in
+/// view space, mapped onto the same clip cube `perspective` targets.
+///
+/// Lesson 6.8, and it arrives because a **directional light has no position**. A
+/// shadow map is a depth buffer rendered from the light, and the sun's rays are
+/// parallel — there is no eye for them to converge on, so there is no `fovy` to
+/// ask for and no `1/(-z)` to divide by. What replaces the pyramid is a **box**,
+/// and a box maps onto the clip cube by scale-and-offset alone.
+///
+/// **THE DERIVATION IS ONE LINE PER AXIS, and it is remapping an interval.** For
+/// x we need `l -> -1` and `r -> +1`. Any map taking one interval to another
+/// affinely is "subtract the start, divide by the width, scale to the new width,
+/// add the new start":
+///
+///     x_ndc = 2 * (x - l) / (r - l) - 1
+///           = (2 / (r - l)) * x  -  (r + l) / (r - l)
+///
+/// which is a multiply and an add, so it fits in a matrix row with no `w` trick
+/// at all. y is identical. z is the one that carries our conventions: the near
+/// plane sits at `z = -near` and must land at **0**, the far plane at `z = -far`
+/// and must land at **1** (conventions §4 — SDL_GPU's depth range, not OpenGL's):
+///
+///     z_ndc = (-z - near) / (far - near)
+///           = (-1 / (far - near)) * z  -  near / (far - near)
+///
+/// The bottom row stays `(0, 0, 0, 1)`, so **`w` comes out 1** and the divide
+/// that follows is the identity. That single fact is worth more than the matrix:
+/// it means everything downstream of an orthographic projection is **affine in
+/// the world position**, which is why §5 can recover a fragment's light-space
+/// coordinate from its interpolated world position for free, and why §4's depth
+/// precision is *uniform* here where `perspective` crowds it all against the near
+/// plane.
+///
+/// **Worked example** (Lesson 6.8 §3.4). A 10-unit-wide box, `l = -5, r = 5,
+/// b = -5, t = 5, near = 1, far = 21`. Then `2/(r-l) = 0.2`, `(r+l)/(r-l) = 0`,
+/// and the depth row is `-1/20` with offset `-1/20`. The view-space point
+/// `(2.5, 0, -6)` maps to `x_ndc = 0.5`, `z_ndc = (6 - 1)/20 = 0.25` — a quarter
+/// of the way through the box, which is exactly where 6 is between 1 and 21.
+/// Push the same point through `perspective` and the depth comes out 0.792.
+///
+/// @param l,r  left and right edges of the box, in view space.
+/// @param b,t  bottom and top edges.
+/// @param near_z distance to the near plane, along -z. May be negative: an
+///        orthographic box has no divide, so nothing forbids the near plane
+///        being *behind* the eye, and a light fitted to a scene routinely wants
+///        that. `perspective` cannot say the same.
+/// @param far_z distance to the far plane. Must differ from `near_z`.
+[[nodiscard]] inline mat4 orthographic(float l, float r, float b, float t,
+                                       float near_z, float far_z)
+{
+    const float rl = r - l;
+    const float tb = t - b;
+    const float fn = far_z - near_z;
+
+    // Written as rows this is
+    //   | 2/(r-l)     0        0      -(r+l)/(r-l) |
+    //   |    0     2/(t-b)     0      -(t+b)/(t-b) |
+    //   |    0        0    -1/(f-n)     -n/(f-n)   |
+    //   |    0        0        0             1     |
+    // and the bottom row is the whole difference from `perspective`: no -1, so
+    // no `w`, so no divide.
+    return {{2.0f / rl, 0.0f,      0.0f,        0.0f},
+            {0.0f,      2.0f / tb, 0.0f,        0.0f},
+            {0.0f,      0.0f,      -1.0f / fn,  0.0f},
+            {-(r + l) / rl, -(t + b) / tb, -near_z / fn, 1.0f}};
+}
+
 // ---- The linear part, and the matrix that transforms normals -----------------
 
 /// The upper-left 3x3: everything the transform does that is **not** translation.

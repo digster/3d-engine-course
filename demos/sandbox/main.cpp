@@ -52,6 +52,7 @@
 #include <engine/gfx/gpu_pipeline.hpp>    // Lesson 4.4: every piece of render state, in one object
 #include <engine/gfx/gpu_present.hpp>     // Lesson 4.2: a framebuffer, carried by the GPU
 #include <engine/gfx/gpu_scene.hpp>       // Lesson 4.8: a scene, rather than a thing
+#include <engine/gfx/gpu_shadow.hpp>      // Lesson 6.8: a second pass, from the light
 #include <engine/gfx/gpu_shader.hpp>      // Lesson 4.3: HLSL, compiled and on the device
 #include <engine/gfx/gpu_texture.hpp>     // Lesson 4.7: an image on the device, and the depth target
 #include <engine/gfx/gpu_uniform.hpp>     // Lesson 4.6: data that is the same for every vertex
@@ -2867,6 +2868,14 @@ private:
 };
 
 /// Every knob the ported demo has, in one place.
+/// Lesson 6.8. The map's side, in texels.
+///
+/// **A POWER OF TWO AND NOT AN ACCIDENT.** Everything in §4 is proportional to
+/// `world_per_texel`, so halving this doubles the bias the same geometry needs
+/// and quadruples the blockiness of the shadow's edge. 1024 over this scene's
+/// box works out at about a centimetre per texel, which §7 measures.
+constexpr int k_shadow_resolution = 1024;
+
 struct scene_controls
 {
     demo::orbit_camera camera;
@@ -2884,6 +2893,12 @@ struct scene_controls
     bool floor_textured = true;     ///< [M]
     bool sort_by_pipeline = false;  ///< [O] — what a sorted draw list is worth
     int cull_override = 0;          ///< [U] — 0 auto, 1 none, 2 back
+
+    // ---- Lesson 6.8 -------------------------------------------------------
+    bool shadows = true;                                    ///< [1]
+    engine::shadow_bias shadow_bias_mode
+        = engine::shadow_bias::slope_scaled;                ///< [2] cycles
+    int shadow_pcf = 1;                                     ///< [3] cycles 0..3
 
     /// 0 = GPU only, 1 = split (software left, GPU right), 2 = software only.
     int view_mode = 1;              ///< [V]
@@ -3047,6 +3062,37 @@ int run_gpu_scene(SDL_Window* window, bool trace_and_exit)
             engine::depth_bits(depth_format));
     SDL_Log("  pipelines       : 3 (solid, two-sided, wireframe) in %.3f ms total",
             renderer.create_ms());
+
+    // ---- LESSON 6.8: the shadow map ----------------------------------------
+    //
+    // ASKED, NEVER ASSUMED — and this is a DIFFERENT question from the depth
+    // format above, which is why there are two calls rather than one with a
+    // flag. SDL guarantees `D16_UNORM` as a depth ATTACHMENT and guarantees
+    // nothing at all about sampling a depth format, so a machine can legally
+    // support a depth buffer and refuse a shadow map. `INVALID` here is a
+    // capability report, not an error: the demo runs, `shadow.valid()` is false,
+    // and `gpu_scene_renderer` binds its 1x1 "nothing occludes" texture.
+    const SDL_GPUTextureFormat shadow_format =
+        engine::supported_shadow_format(gpu, depth_wanted, SDL_arraysize(depth_wanted));
+
+    engine::gpu_shader shadow_vs;
+    engine::gpu_shader shadow_fs;
+    engine::gpu_shadow_map shadow;
+    engine::shadow_settings shadow_set;
+
+    if (shadow_format != SDL_GPU_TEXTUREFORMAT_INVALID
+        && shadow_vs.load(gpu, "shadow.vert", engine::shader_stage::vertex)
+        && shadow_fs.load(gpu, "shadow.frag", engine::shader_stage::fragment))
+    {
+        if (!shadow.create(gpu, shadow_vs.handle(), shadow_fs.handle(),
+                           k_shadow_resolution, shadow_format))
+        {
+            SDL_Log("  shadow map      : FAILED — the scene draws without one");
+        }
+    }
+    SDL_Log("  shadow map      : %s",
+            shadow.valid() ? "1024x1024 D32/D24/D16, sampled + comparison sampler"
+                           : "unavailable on this device");
 
     // ---- The floor's texture, on both sides ---------------------------------
     //
@@ -3273,6 +3319,36 @@ int run_gpu_scene(SDL_Window* window, bool trace_and_exit)
         {
             want_frame_log = true;
             SDL_Log("[P] recording the next frame...");
+        }
+
+        // ---- Lesson 6.8. Three keys, and two of them exist to show FAILURES.
+        //
+        // 3.5's rule: a failure you can summon on a keypress teaches more than a
+        // paragraph describing it, and acne and peter-panning are two of the most
+        // photogenic failures in the whole course.
+        if (in.key_pressed(SDL_SCANCODE_1))
+        {
+            ctl.shadows = !ctl.shadows;
+            SDL_Log("[1] shadows: %s", ctl.shadows ? "ON" : "off");
+        }
+        if (in.key_pressed(SDL_SCANCODE_2))
+        {
+            ctl.shadow_bias_mode =
+                  (ctl.shadow_bias_mode == engine::shadow_bias::none)
+                      ? engine::shadow_bias::constant
+                : (ctl.shadow_bias_mode == engine::shadow_bias::constant)
+                      ? engine::shadow_bias::slope_scaled
+                : (ctl.shadow_bias_mode == engine::shadow_bias::slope_scaled)
+                      ? engine::shadow_bias::normal_offset
+                      : engine::shadow_bias::none;
+            SDL_Log("[2] shadow bias: %s", engine::name_of(ctl.shadow_bias_mode));
+        }
+        if (in.key_pressed(SDL_SCANCODE_3))
+        {
+            ctl.shadow_pcf = (ctl.shadow_pcf + 1) & 3;
+            SDL_Log("[3] PCF: %dx%d (%d taps)", 2 * ctl.shadow_pcf + 1,
+                    2 * ctl.shadow_pcf + 1,
+                    (2 * ctl.shadow_pcf + 1) * (2 * ctl.shadow_pcf + 1));
         }
 
         // ---- The scene, built by Module 3's own code -----------------------
@@ -3504,6 +3580,35 @@ int run_gpu_scene(SDL_Window* window, bool trace_and_exit)
                             0, static_cast<Uint32>(cpu_rect.w) * cpu_rect.h * 4u);
             }
 
+            // ---- LESSON 6.8: THE DEPTH PASS, BEFORE ANYTHING IS DRAWN ------
+            //
+            // A SECOND RENDER PASS, on the same command buffer, into a different
+            // attachment. It has to come first — the scene pass READS what this
+            // one writes — and it needs no barrier from us, because a render pass
+            // is the unit SDL_GPU synchronises on: everything the pass wrote is
+            // visible to everything after `SDL_EndGPURenderPass`.
+            //
+            // Note that it is OUTSIDE the `draw_gpu` test above and inside this
+            // `if`: the map is rendered whenever there are shadows to cast, even
+            // in the software-only view, because [V] chooses which PICTURE to
+            // show and not which scene exists.
+            engine::light_camera light_cam;
+            const bool cast = shadow.valid() && ctl.shadows && item_count > 0;
+            if (cast)
+            {
+                // THE FIT USES THE SAME FUNCTION THE CPU PATH USES. `bounds_of`
+                // walks the scene's world-space vertices and `fit_directional`
+                // squares a box around them — neither knows a GPU exists, which
+                // is what stops the two renderers putting a shadow in two places.
+                const engine::aabb scene_box = engine::shadow_map::bounds_of(
+                    std::span<const engine::scene_object>(objects,
+                        static_cast<std::size_t>(object_count)),
+                    assets.store.meshes());
+                light_cam = engine::fit_directional(lights.key, scene_box,
+                                                    shadow.resolution());
+                shadow.render(cb, items, item_count, light_cam, &flog);
+            }
+
             if (draw_gpu && item_count > 0)
             {
                 SDL_GPUColorTargetInfo over{};
@@ -3568,10 +3673,25 @@ int run_gpu_scene(SDL_Window* window, bool trace_and_exit)
                 // other.
                 light.encode_output = gpu.report().output_encodes_in_hardware ? 0.0f : 1.0f;
 
+                // LESSON 6.8. One call fills eleven floats and a matrix, and the
+                // reason it is a function rather than eleven assignments here is
+                // that the CPU renderer reads the same `shadow_settings` — two
+                // transcriptions of one bias policy is how a shadow ends up
+                // behaving differently on the two paths for a reason nobody can
+                // find. `shadow_strength = 0` is the whole of "off": the lookup
+                // short-circuits and the picture is bit-for-bit 6.7's.
+                shadow_set.bias = ctl.shadow_bias_mode;
+                shadow_set.pcf_radius = ctl.shadow_pcf;
+                shadow_set.strength = cast ? 1.0f : 0.0f;
+                engine::gpu_shadow_map::fill_uniforms(light, light_cam, shadow_set,
+                                                      shadow.resolution());
+
                 stats = renderer.render(cb, pass, items, item_count, camera, light,
                                         ctl.smooth_texture ? sampler_linear.handle()
                                                            : sampler_nearest.handle(),
-                                        &flog);
+                                        &flog,
+                                        cast ? shadow.texture() : nullptr,
+                                        cast ? shadow.sampler() : nullptr);
 
                 flog.record(engine::gpu_event_kind::pass_end, nullptr);
                 SDL_EndGPURenderPass(pass);

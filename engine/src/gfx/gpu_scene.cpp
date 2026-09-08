@@ -153,11 +153,65 @@ bool gpu_scene_renderer::create(const gpu_device& dev,
     flat_texel.source_channels = 4;
     flat_texel.pixels = {128, 128, 255, 255};
 
+    // ---- And one texel of "nothing occludes" — Lesson 6.8 ------------------
+    //
+    // THE THIRD IDENTITY ELEMENT, and the first one that cannot be uploaded.
+    // `SDL_UploadToGPUTexture` cannot target a depth texture at all, so the only
+    // way to put a value in one is to have a render pass clear it — a pass that
+    // begins, clears to 1.0, and ends without drawing anything. That is a legal
+    // and completely ordinary thing to do, and it is the shape every "clear a
+    // render target" helper in every engine eventually takes.
+    //
+    // 1.0 is the far plane, so this map reports that the nearest surface along
+    // every one of the light's rays is as far away as the box goes: nothing is
+    // in front of anything, everything is lit. Bind it and the shadow term is
+    // exactly 1.
+    static constexpr SDL_GPUTextureFormat k_shadow_candidates[] = {
+        SDL_GPU_TEXTUREFORMAT_D32_FLOAT,
+        SDL_GPU_TEXTUREFORMAT_D24_UNORM,
+        SDL_GPU_TEXTUREFORMAT_D16_UNORM,
+    };
+    const SDL_GPUTextureFormat shadow_fmt =
+        supported_shadow_format(dev, k_shadow_candidates, 3);
+
     if (!white_.create_sampled(dev, cb, one_texel, true, "white 1x1")
-        || !flat_normal_.create_sampled(dev, cb, flat_texel, false, "flat normal 1x1")
-        || !SDL_SubmitGPUCommandBuffer(cb))
+        || !flat_normal_.create_sampled(dev, cb, flat_texel, false, "flat normal 1x1"))
     {
         ENGINE_LOG_ERROR(engine::log_gpu, "gpu_scene: the fallback textures were not created");
+        SDL_SubmitGPUCommandBuffer(cb);
+        destroy();
+        return false;
+    }
+
+    // A device that supports no sampled depth format at all gets no shadows,
+    // which is a capability report rather than an error — the same shape
+    // `ensure_depth` already has for a device with no depth format.
+    if (shadow_fmt != SDL_GPU_TEXTUREFORMAT_INVALID
+        && far_depth_.create_depth(dev, shadow_fmt, 1, 1, "far 1x1 (no shadow)", true)
+        && shadow_sampler_.create_comparison(dev, "shadow comparison (fallback)"))
+    {
+        SDL_GPUDepthStencilTargetInfo dsi{};
+        dsi.texture = far_depth_.handle();
+        dsi.clear_depth = 1.0f;
+        dsi.load_op = SDL_GPU_LOADOP_CLEAR;
+        dsi.store_op = SDL_GPU_STOREOP_STORE;
+        dsi.stencil_load_op = SDL_GPU_LOADOP_DONT_CARE;
+        dsi.stencil_store_op = SDL_GPU_STOREOP_DONT_CARE;
+
+        SDL_GPURenderPass* clear_pass = SDL_BeginGPURenderPass(cb, nullptr, 0, &dsi);
+        if (clear_pass != nullptr) { SDL_EndGPURenderPass(clear_pass); }
+    }
+    else
+    {
+        ENGINE_LOG_INFO(engine::log_gpu,
+                        "gpu_scene: no sampled depth format — this device gets no shadows");
+        far_depth_.destroy();
+        shadow_sampler_.destroy();
+    }
+
+    if (!SDL_SubmitGPUCommandBuffer(cb))
+    {
+        ENGINE_LOG_ERROR(engine::log_gpu, "gpu_scene: the fallback upload was not submitted");
         destroy();
         return false;
     }
@@ -170,6 +224,8 @@ void gpu_scene_renderer::destroy()
     depth_.destroy();
     white_.destroy();
     flat_normal_.destroy();
+    far_depth_.destroy();
+    shadow_sampler_.destroy();
     for (gpu_pipeline& p : pipelines_) { p.destroy(); }
     depth_w_ = 0;
     depth_h_ = 0;
@@ -214,7 +270,9 @@ draw_stats gpu_scene_renderer::render(SDL_GPUCommandBuffer* cb, SDL_GPURenderPas
                                       const gpu_draw_item* items, int count,
                                       const camera_uniforms& camera,
                                       const scene_light_uniforms& light,
-                                      SDL_GPUSampler* sampler, frame_log* log) const
+                                      SDL_GPUSampler* sampler, frame_log* log,
+                                      SDL_GPUTexture* shadow,
+                                      SDL_GPUSampler* shadow_sampler) const
 {
     draw_stats stats;
     if (cb == nullptr || pass == nullptr || items == nullptr || count <= 0) { return stats; }
@@ -243,6 +301,16 @@ draw_stats gpu_scene_renderer::render(SDL_GPUCommandBuffer* cb, SDL_GPURenderPas
 
     SDL_GPUTexture* bound_normal = nullptr;   // 6.7
     bool style_present[k_styles] = {};
+
+    // ---- The shadow map, resolved once for the whole frame — Lesson 6.8 -----
+    //
+    // It does not change between draws, so it is not part of the per-item
+    // change detection below; it rides along in the same three-binding call
+    // because `SDL_BindGPUFragmentSamplers` takes an array and re-binding two
+    // slots costs the same as re-binding three.
+    SDL_GPUTexture* const shadow_tex = (shadow != nullptr) ? shadow : far_depth_.handle();
+    SDL_GPUSampler* const shadow_samp =
+        (shadow_sampler != nullptr) ? shadow_sampler : shadow_sampler_.handle();
 
     for (int i = 0; i < count; ++i)
     {
@@ -282,12 +350,21 @@ draw_stats gpu_scene_renderer::render(SDL_GPUCommandBuffer* cb, SDL_GPURenderPas
             // version: rebinding because the albedo changed while the normal map
             // did not still costs a bind, and counting it as one is what keeps
             // `texture_binds` comparable with the number 4.8 measured.
-            SDL_GPUTextureSamplerBinding binds[2]{};
+            // THREE SLOTS NOW, and the third is a different KIND of binding: a
+            // depth texture read through a COMPARISON sampler (6.8). It never
+            // changes within a frame, so binding it here rather than once at the
+            // top is redundant work — but a partial `SDL_BindGPUFragmentSamplers`
+            // does not merge with an earlier one, it REPLACES the range it names,
+            // so slot 2 would be unbound the moment slot 0 changed. One call for
+            // the whole set is the only spelling that is correct.
+            SDL_GPUTextureSamplerBinding binds[3]{};
             binds[0].texture = tex;
             binds[0].sampler = sampler;
             binds[1].texture = nrm;
             binds[1].sampler = sampler;
-            SDL_BindGPUFragmentSamplers(pass, 0, binds, 2);
+            binds[2].texture = shadow_tex;
+            binds[2].sampler = shadow_samp;
+            SDL_BindGPUFragmentSamplers(pass, 0, binds, 3);
             bound_texture = tex;
             bound_normal = nrm;
             ++stats.texture_binds;

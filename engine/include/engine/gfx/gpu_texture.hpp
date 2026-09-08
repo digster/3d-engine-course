@@ -67,14 +67,26 @@ public:
                                       const image_data& src, bool srgb,
                                       const char* name = nullptr);
 
-    /// Create a depth attachment: no upload, no sampling, cleared by the render
-    /// pass that uses it.
+    /// Create a depth attachment: no upload, cleared by the render pass that
+    /// uses it.
     ///
     /// `format` must be one the device supports for this usage — ask with
     /// `supported_depth_format` below rather than assuming, because only
     /// `D16_UNORM` is guaranteed.
+    ///
+    /// @param sampled also ask for `SDL_GPU_TEXTUREUSAGE_SAMPLER`, so a LATER
+    ///        pass can read this buffer back — Lesson 6.8, and the whole of what
+    ///        separates a shadow map from an ordinary depth target. It is a
+    ///        parameter rather than always-on because the comment this replaces
+    ///        was right: **asking for a usage you do not need can force the
+    ///        driver into a slower layout**, and the scene's own depth buffer is
+    ///        read by nothing. There is a second cost, and it is the one that
+    ///        bites on phones: a sampled depth target cannot stay in tile memory,
+    ///        so `store_op` has to become `STORE` and the buffer is written out
+    ///        to main memory in full.
     [[nodiscard]] bool create_depth(const gpu_device& dev, SDL_GPUTextureFormat format,
-                                    Uint32 width, Uint32 height, const char* name = nullptr);
+                                    Uint32 width, Uint32 height, const char* name = nullptr,
+                                    bool sampled = false);
 
     void destroy();
 
@@ -124,6 +136,28 @@ public:
                               address_mode wrap = address_mode::repeat,
                               const char* name = nullptr);
 
+    /// A **comparison sampler** — Lesson 6.8, and the two fields that make it one
+    /// are `enable_compare` and `compare_op`, verified against `SDL3/SDL_gpu.h`
+    /// rather than guessed (6.7 left that as a `VERIFY` and this discharges it).
+    ///
+    /// **WHAT IT DOES, AND WHY IT CANNOT BE DONE WITH AN ORDINARY SAMPLER.** A
+    /// shadow lookup does not want a depth, it wants a yes-or-no. Ask a linear
+    /// sampler for four texels around a point and it hands back their AVERAGE
+    /// DEPTH, and averaging depths is not a blurrier answer, it is a wrong one:
+    /// an occluder at 0.3 and one at 0.9 average to 0.6, which a receiver at 0.5
+    /// passes — "fully lit", with half its taps occluded. A comparison sampler
+    /// performs the test on each texel FIRST and filters the four booleans, which
+    /// gives 0.5. §6 derives it with those numbers.
+    ///
+    /// Every field here is dictated by the job, which is why this is a named
+    /// function rather than four more defaulted parameters: `LINEAR` because
+    /// filtering the comparison results is the entire point,
+    /// `CLAMP_TO_EDGE` because a lookup outside the map must not wrap round to
+    /// the far side of the scene, and `LESS_OR_EQUAL` because our depth runs 0 at
+    /// the near plane (conventions §4) and "nearer than or equal to what is
+    /// stored" is what "lit" means.
+    [[nodiscard]] bool create_comparison(const gpu_device& dev, const char* name = nullptr);
+
     void destroy();
 
     [[nodiscard]] bool valid() const { return sampler_ != nullptr; }
@@ -144,6 +178,22 @@ private:
 [[nodiscard]] SDL_GPUTextureFormat supported_depth_format(const gpu_device& dev,
                                                           const SDL_GPUTextureFormat* candidates,
                                                           int count);
+
+/// The first of `candidates` this device accepts as a depth target **that can
+/// also be sampled** — Lesson 6.8.
+///
+/// A separate function rather than a flag on the one above, because it asks a
+/// genuinely different question and can get a different answer. SDL guarantees
+/// `D16_UNORM` for `DEPTH_STENCIL_TARGET`; it guarantees NOTHING about any depth
+/// format for `SAMPLER`, and a device that refuses every combination cannot have
+/// shadow maps at all. Asking is the only honest way to find out — the same
+/// discipline 4.2 applied to the swapchain format and 4.7 to depth.
+///
+/// @return `INVALID` if none of them work, which the caller must treat as "this
+///         machine gets no shadows" rather than as an error.
+[[nodiscard]] SDL_GPUTextureFormat supported_shadow_format(const gpu_device& dev,
+                                                           const SDL_GPUTextureFormat* candidates,
+                                                           int count);
 
 // `name_of(SDL_GPUTextureFormat)` lives in gpu_device.hpp, where Lesson 4.2 put
 // it to log the swapchain format; Lesson 4.7 added the depth rows to the same

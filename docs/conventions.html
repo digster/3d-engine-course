@@ -87,6 +87,7 @@
       <li><a href="#depth-and-textures">Depth and textures &mdash; formats, precision, samplers</a></li>
       <li><a href="#interop">Interop &mdash; glTF, and what agrees with what</a></li>
       <li><a href="#normal-maps">Normal maps &mdash; the four conventions</a></li>
+      <li><a href="#shadow-maps">Shadow maps &mdash; what the comparison assumes</a></li>
       <li><a href="#units">Units and angles</a></li>
       <li><a href="#simulation">The simulation contract</a></li>
       <li><a href="#colour">Colour and diagram conventions</a></li>
@@ -2199,6 +2200,78 @@
        the correct assertion is that the error <em>equals</em> the quantisation floor
        (5.546&thinsp;&times;&thinsp;10<sup>&minus;3</sup>) rather than that it is below some chosen
        number. Math Toolbox &sect;7f derives the general bound.</p>
+  </div>
+
+  <h2 id="shadow-maps"><span class="num">7m</span>Shadow maps &mdash; what the comparison assumes</h2>
+
+  <p>
+    Added in Lesson 6.8. A shadow lookup is one comparison between two floats, and every one of the
+    decisions below has to agree on both sides of it. They go on this page rather than in a comment
+    because the next light &mdash; a spot light, a cascade &mdash; needs the same audit, and because
+    four of the six have a wrong answer that still draws a picture.
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <caption class="visually-hidden">Shadow-mapping conventions, this course&rsquo;s answer for
+        each, and the symptom of getting it wrong</caption>
+      <thead>
+        <tr><th>Decision</th><th>This course</th><th>Symptom when wrong</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Depth range</strong></td>
+          <td>0 at the near plane, 1 at the far one &mdash; &sect;4, unchanged.
+              <code>orthographic</code>&rsquo;s third row is built for it.</td>
+          <td>Everything is shadowed, or nothing is. Loud, and the easy one.</td>
+        </tr>
+        <tr>
+          <td><strong>Comparison</strong></td>
+          <td><code>LESS_OR_EQUAL</code>, in the SAMPLER
+              (<code>gpu_sampler::create_comparison</code>), because smaller is nearer.</td>
+          <td>The shadow is the exact inverse of itself &mdash; lit where it should be dark.</td>
+        </tr>
+        <tr>
+          <td><strong>Clear value</strong></td>
+          <td><strong>1.0</strong>, the far plane. A cleared map says nothing occludes anything,
+              which is the identity element for the test.</td>
+          <td>Clear to 0 and the whole scene is in shadow of an empty map.</td>
+        </tr>
+        <tr>
+          <td><strong>NDC &rarr; uv</strong></td>
+          <td><code>(x&middot;0.5 + 0.5, 0.5 &minus; y&middot;0.5)</code>. NDC&rsquo;s +y is up; a
+              texture&rsquo;s v runs down (&sect;6). The CPU reuses
+              <code>viewport::to_screen</code> so there is one implementation.</td>
+          <td>The shadow is mirrored vertically about the map&rsquo;s centre &mdash; which on a
+              symmetric scene can look almost right.</td>
+        </tr>
+        <tr>
+          <td><strong>Which texel</strong></td>
+          <td>The <em>nearest stored sample</em>. On the GPU that is the texel containing the uv,
+              because hardware samples at pixel CENTRES; on this course&rsquo;s CPU rasterizer,
+              which evaluates attributes at INTEGER pixel coordinates, it is
+              <code>round</code>, not <code>floor</code>.</td>
+          <td>Every offset biased half a texel one way: the reach doubles, the derived bias is half
+              what is needed, and acne returns on one side of every slope.</td>
+        </tr>
+        <tr>
+          <td><strong>Outside the map</strong></td>
+          <td><strong>Lit.</strong> Range-checked in the shader, not left to the sampler
+              &mdash; <code>CLAMP_TO_EDGE</code> is a fallback, not the semantics.</td>
+          <td>The edge texel&rsquo;s occluder smeared to the horizon; or, under
+              <code>REPEAT</code>, one corner of the scene shadowing the opposite corner.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout">
+    <span class="label">And two quantities every shadow formula is written in</span>
+    <p><code>world_per_texel</code> &mdash; the map&rsquo;s resolving power in metres, the box&rsquo;s
+       side divided by its resolution &mdash; and <code>depth_range</code>, how many metres one unit
+       of device depth is worth. The second is <em>a single number only because the light&rsquo;s
+       projection is orthographic</em>; under a perspective (spot) projection it varies across the
+       frustum, and every bias derived from it becomes position-dependent. Lesson 6.8 &sect;3.3.</p>
   </div>
 
   <h2 id="units"><span class="num">8</span>Units and angles</h2>

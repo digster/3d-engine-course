@@ -34,7 +34,9 @@
 #include <engine/gfx/mesh.hpp>
 #include <engine/gfx/projector.hpp>
 #include <engine/gfx/raster.hpp>
+#include <engine/gfx/bounds.hpp>
 #include <engine/gfx/scene.hpp>
+#include <engine/gfx/shadow.hpp>
 #include <engine/gfx/soft_renderer.hpp>
 #include <engine/gfx/viewport.hpp>
 #include <engine/math/mat4.hpp>
@@ -112,6 +114,49 @@ public:
                 // map is GENERATED rather than shipped, which is the same door
                 // `insert_mesh` has used for generated geometry since 5.5.
                 bump_cells_ = SDL_atoi(argv[++i]);
+            }
+            else if (SDL_strcmp(argv[i], "--shadow") == 0 && i + 1 < argc)
+            {
+                // The map's side, in texels; 0 turns the whole pass off so the
+                // before picture and the after picture come out of the same
+                // binary. Lesson 6.8 — and the number is on the command line
+                // rather than fixed because RESOLUTION IS THE SUBJECT: every
+                // formula in §4 is a multiple of `world_per_texel`, and halving
+                // this doubles the bias the same geometry needs.
+                shadow_res_ = SDL_atoi(argv[++i]);
+            }
+            else if (SDL_strcmp(argv[i], "--bias") == 0 && i + 1 < argc)
+            {
+                const char* w = argv[++i];
+                bias_ = (SDL_strcmp(w, "none") == 0)     ? engine::shadow_bias::none
+                      : (SDL_strcmp(w, "constant") == 0) ? engine::shadow_bias::constant
+                      : (SDL_strcmp(w, "normal") == 0)   ? engine::shadow_bias::normal_offset
+                                                         : engine::shadow_bias::slope_scaled;
+            }
+            else if (SDL_strcmp(argv[i], "--constant-bias") == 0 && i + 1 < argc)
+            {
+                constant_bias_ = static_cast<float>(SDL_atof(argv[++i]));
+            }
+            else if (SDL_strcmp(argv[i], "--pcf") == 0 && i + 1 < argc)
+            {
+                pcf_ = SDL_atoi(argv[++i]);
+            }
+            else if (SDL_strcmp(argv[i], "--shadow-cull") == 0 && i + 1 < argc)
+            {
+                const char* w = argv[++i];
+                shadow_cull_ = (SDL_strcmp(w, "front") == 0) ? engine::cull_mode::front
+                             : (SDL_strcmp(w, "back") == 0)  ? engine::cull_mode::back
+                                                             : engine::cull_mode::none;
+            }
+            else if (SDL_strcmp(argv[i], "--no-ground") == 0)
+            {
+                ground_ = false;
+            }
+            else if (SDL_strcmp(argv[i], "--no-ground-cast") == 0)
+            {
+                // Keep the ground, drop it from the shadow pass. See `casters()`
+                // for the two separate things this changes.
+                ground_casts_ = false;
             }
             else if (SDL_strcmp(argv[i], "--pose") == 0 && i + 1 < argc)
             {
@@ -233,10 +278,7 @@ public:
                 for (const engine::vec3 v : g->vertices)
                 {
                     const engine::vec4 w = m * engine::vec4{v.x, v.y, v.z, 1.0f};
-                    bounds_min_ = {SDL_min(bounds_min_.x, w.x), SDL_min(bounds_min_.y, w.y),
-                                   SDL_min(bounds_min_.z, w.z)};
-                    bounds_max_ = {SDL_max(bounds_max_.x, w.x), SDL_max(bounds_max_.y, w.y),
-                                   SDL_max(bounds_max_.z, w.z)};
+                    bounds_.expand(engine::vec3{w.x, w.y, w.z});
                 }
             }
 
@@ -287,10 +329,7 @@ public:
 
         for (const engine::vec3 v : g->vertices)
         {
-            bounds_min_ = {SDL_min(bounds_min_.x, v.x), SDL_min(bounds_min_.y, v.y),
-                           SDL_min(bounds_min_.z, v.z)};
-            bounds_max_ = {SDL_max(bounds_max_.x, v.x), SDL_max(bounds_max_.y, v.y),
-                           SDL_max(bounds_max_.z, v.z)};
+            bounds_.expand(v);
         }
         return true;
     }
@@ -298,9 +337,9 @@ public:
     /// Framing, the generated normal map and the light — shared by both paths.
     [[nodiscard]] bool finish_setup()
     {
-        centre_ = (bounds_min_ + bounds_max_) * 0.5f;
-        const engine::vec3 extent = bounds_max_ - bounds_min_;
-        const float radius = 0.5f * engine::length(extent);
+        centre_ = bounds_.centre();
+        const engine::vec3 extent = bounds_.extent();
+        const float radius = bounds_.radius();
 
         // Enough distance that a sphere of that radius fits the vertical field
         // of view, plus a margin. tan(fov/2) is the half-height at unit depth,
@@ -308,9 +347,9 @@ public:
         distance_ = 1.45f * radius / SDL_tanf(0.5f * k_fov_y);
 
         SDL_Log("  bounds (%.2f %.2f %.2f) .. (%.2f %.2f %.2f), camera at %.2f",
-                static_cast<double>(bounds_min_.x), static_cast<double>(bounds_min_.y),
-                static_cast<double>(bounds_min_.z), static_cast<double>(bounds_max_.x),
-                static_cast<double>(bounds_max_.y), static_cast<double>(bounds_max_.z),
+                static_cast<double>(bounds_.min.x), static_cast<double>(bounds_.min.y),
+                static_cast<double>(bounds_.min.z), static_cast<double>(bounds_.max.x),
+                static_cast<double>(bounds_.max.y), static_cast<double>(bounds_.max.z),
                 static_cast<double>(distance_));
 
         // ---- LESSON 6.7: a normal map, generated and inserted -------------
@@ -349,8 +388,90 @@ public:
         lights_.key.irradiance = engine::k_reference_irradiance;
         lights_.ambient = {0.05f, 0.06f, 0.08f};
 
+        // ---- LESSON 6.8: SOMETHING FOR THE SHADOW TO LAND ON ---------------
+        //
+        // Every picture in this course so far has had its subject floating in
+        // the dark, and that was fine while nothing could occlude anything. A
+        // shadow needs a receiver, and the receiver is where the whole lesson
+        // becomes visible: acne is a pattern ACROSS A LIT SURFACE, and a scene
+        // with no large lit surface cannot show one.
+        //
+        // The quad is authored in the z = 0 plane (`quad_mesh`), so the rotation
+        // below is the one that takes local +z to world +y. Written as three
+        // columns rather than a rotation helper because Lesson 2.5's sentence is
+        // the fastest way to check it: a matrix IS where the basis vectors land,
+        // so read column 2 and confirm it says (0, 1, 0).
+        caster_count_ = static_cast<int>(objects_.size());
+        if (ground_)
+        {
+            const engine::mesh_handle quad = assets_.insert_mesh(
+                "generated:ground",
+                engine::with_normals(engine::quad_mesh(), engine::normal_style::flat));
+            if (!quad.valid()) { return false; }
+
+            const float side = 3.0f * SDL_max(SDL_max(extent.x, extent.z), 1e-3f);
+
+            engine::scene_object g;
+            g.geometry = quad;
+            g.name = "ground";
+            g.xform.position = {centre_.x, bounds_.min.y, centre_.z};
+            g.xform.rotation = engine::mat3{{1.0f, 0.0f, 0.0f},
+                                            {0.0f, 0.0f, -1.0f},
+                                            {0.0f, 1.0f, 0.0f}};
+            g.xform.scale = {side, side, 1.0f};
+            g.mat.tint = 0xFF9A9AA2u;
+            g.mat.surface = {.roughness = 0.85f};
+
+            // A sheet has no inside, so back-face culling would delete it when
+            // seen from below — Lesson 3.4's rule, and `cull_of` is where it
+            // lives.
+            g.closed = false;
+            objects_.push_back(g);
+        }
+
+        // ---- The map ------------------------------------------------------
+        //
+        // `shadow_res_` is a side, so the storage is its square: 1024 costs 4 MB
+        // of float depth here and 2 MB as a 16-bit target on the GPU.
+        if (shadow_res_ > 0)
+        {
+            if (!shadows_.create(shadow_res_)) { return false; }
+            shadows_.settings().bias = bias_;
+            shadows_.settings().constant_bias = constant_bias_;
+            shadows_.settings().pcf_radius = pcf_;
+            shadows_.settings().cull = shadow_cull_;
+
+            SDL_Log("  shadow map    : %dx%d, bias %s, PCF %dx%d, caster cull %s",
+                    shadow_res_, shadow_res_, engine::name_of(bias_),
+                    2 * pcf_ + 1, 2 * pcf_ + 1,
+                    (shadow_cull_ == engine::cull_mode::front) ? "FRONT"
+                    : (shadow_cull_ == engine::cull_mode::back) ? "BACK" : "none");
+        }
+
         if (shot_path_ != nullptr) { t_ = pose_; }
         return true;
+    }
+
+    /// The objects the shadow pass rasterises. Everything, by default.
+    ///
+    /// **`--no-ground-cast` DROPS THE GROUND FROM THE MAP, AND TWO THINGS
+    /// CHANGE AT ONCE.** The first is the fit: the box is sized to its contents,
+    /// and a ground plane three times the model's width triples the box's side
+    /// and cuts the texel density to a ninth — a 1024 map made to resolve like a
+    /// 341. That is the commonest reason a shadow map looks blocky, and it costs
+    /// one `subspan` to avoid.
+    ///
+    /// The second is more interesting and is §4.2's whole point: **the ground
+    /// stops having acne.** Acne is a surface failing its own depth test, so a
+    /// surface that is not IN the map cannot have it. That is a real trick and a
+    /// bad general rule — it works here because this ground is one flat sheet,
+    /// and it fails the moment a receiver is folded, stacked or curved enough to
+    /// occlude itself.
+    [[nodiscard]] std::span<const engine::scene_object> casters() const
+    {
+        const std::size_t n = ground_casts_ ? objects_.size()
+                                            : static_cast<std::size_t>(caster_count_);
+        return std::span<const engine::scene_object>(objects_.data(), n);
     }
 
     void on_fixed_step(float h) override
@@ -371,6 +492,18 @@ public:
         // transforms into the geometry.
         const engine::vec3 eye = orbit_eye();
         const engine::mat4 view = engine::look_at(eye, centre_, {0.0f, 1.0f, 0.0f});
+
+        // ---- LESSON 6.8: THE DEPTH PASS ------------------------------------
+        //
+        // Before the camera draws anything, the light does. Every frame, because
+        // the fit depends on the scene's bounds and an animated scene moves —
+        // this one does not, and re-fitting anyway is the honest default: a map
+        // cached against a scene that has changed is a shadow of where things
+        // used to be.
+        if (shadows_.valid())
+        {
+            shadows_.render(casters(), assets_.meshes(), lights_.key, &shadow_stats_);
+        }
 
         int drawn = 0;
         for (const engine::scene_object& obj : objects_)
@@ -402,7 +535,13 @@ public:
                 .albedo = albedo,
                 .normal_map = normals,   // 6.7
                 .encode = engine::encode_mode::fast,
-                .traverse = engine::traversal::scanline};
+                .traverse = engine::traversal::scanline,
+
+                // 6.8. Null when `--shadow 0`, which is the whole of "turn the
+                // feature off" — the same nullable-pointer bargain `lights` and
+                // `albedo` already make, so a picture without shadows is the
+                // picture this demo drew yesterday, bit for bit.
+                .shadows = shadows_.valid() ? &shadows_ : nullptr};
 
             engine::draw_triangles(fb(), &depth_, triangles_, false, style);
             drawn += static_cast<int>(triangles_.size());
@@ -411,6 +550,16 @@ public:
         if (shot_path_ != nullptr)
         {
             SDL_Log("gltf_view: %zu object(s), %d triangles", objects_.size(), drawn);
+            if (shadows_.valid())
+            {
+                const engine::light_camera& lc = shadows_.camera();
+                SDL_Log("  shadow pass  : %d caster triangles into %d texels, %.2f ms",
+                        shadow_stats_.triangles, shadow_stats_.texels,
+                        shadow_stats_.render_ms);
+                SDL_Log("  fit          : %.4f world units per texel, depth range %.3f",
+                        static_cast<double>(lc.world_per_texel),
+                        static_cast<double>(lc.depth_range));
+            }
             request_quit(engine::save_ppm(fb(), shot_path_));
         }
     }
@@ -431,6 +580,18 @@ private:
     float pose_ = 3.0f;   ///< the orbit angle a --shot freezes at
     int bump_cells_ = 6;  ///< 6.7: cells across the generated normal map; 0 = off
 
+    // ---- Lesson 6.8 --------------------------------------------------------
+    int shadow_res_ = 1024;        ///< the map's side in texels; 0 = no shadows
+    int pcf_ = 1;                  ///< kernel radius: 0 = one tap, 1 = 3x3
+    int caster_count_ = 0;         ///< objects_ before the ground was appended
+    bool ground_ = true;
+    bool ground_casts_ = true;    ///< is the ground in the map? See casters().
+    float constant_bias_ = 0.0f;
+    engine::shadow_bias bias_ = engine::shadow_bias::slope_scaled;
+    engine::cull_mode shadow_cull_ = engine::cull_mode::none;
+    engine::shadow_map shadows_;
+    engine::shadow_stats shadow_stats_;
+
     static constexpr float k_fov_y = 50.0f * 3.14159265f / 180.0f;
 
     engine::asset_store assets_;
@@ -438,9 +599,15 @@ private:
     engine::lighting lights_;
 
     /// World-space bounds of everything loaded, and what the camera derives from
-    /// them. Seeded to the extremes so the first vertex sets both.
-    engine::vec3 bounds_min_{1e30f, 1e30f, 1e30f};
-    engine::vec3 bounds_max_{-1e30f, -1e30f, -1e30f};
+    /// them.
+    ///
+    /// **LESSON 6.8 REPLACED TWO LOOSE `vec3` WITH ONE `aabb`**, and the reason
+    /// is not tidiness: the shadow map needs exactly this quantity to fit its
+    /// orthographic box, so the pattern acquired its third caller and moved into
+    /// the engine (`gfx/bounds.hpp`). The inside-out default that used to be
+    /// spelled `1e30f` here by hand is now the type's own, which is what removes
+    /// the first-vertex special case.
+    engine::aabb bounds_;
     engine::vec3 centre_{};
     float distance_ = 4.0f;
 

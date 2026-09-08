@@ -55,6 +55,9 @@ add_library(engine STATIC
     src/gfx/gpu_present.cpp
     src/gfx/gpu_scene.cpp
     src/gfx/gpu_shader.cpp
+    # Lesson 6.8. The GPU half of the shadow map: a second render pass, a
+    # pipeline with no colour target, and a depth texture that can be sampled.
+    src/gfx/gpu_shadow.cpp
     src/gfx/gpu_texture.cpp
     # Lesson 6.6. The second asset format, and it gets its own translation
     # unit for the same reason obj.cpp has one: it is the ONLY file allowed
@@ -64,6 +67,11 @@ add_library(engine STATIC
     src/gfx/mesh.cpp
     src/gfx/obj.cpp
     src/gfx/raster.cpp
+    # Lesson 6.8. The shadow map, and it gets a translation unit rather than a
+    # header because it owns buffers and reaches into the whole software
+    # pipeline — `collect_triangles` and `draw_triangles` both — which is more
+    # than a header should drag into every file that mentions a light.
+    src/gfx/shadow.cpp
     src/gfx/soft_renderer.cpp
     src/gfx/texture.cpp
     # Lesson 5.2. Note what is NOT here: platform/main.hpp, which carries

@@ -7,7 +7,7 @@ There is no engine to download here and no framework doing the interesting parts
 write the math library, the rasterizer, the ECS, the renderer, the physics, and the editor. By
 the end you have a real engine and a game built on its public API.
 
-**Status:** curriculum and conventions published; lessons in progress — **Modules 0–5 are complete** and Module 6 is under way (63 of 95 lessons). The CPU software rasterizer is finished end to end, the same scene is drawn on a real GPU through SDL_GPU, and the tree is now a static library with a public API, a platform/application layer, its own logging, handle-based resource storage, an asset system that can load, share and free, a reusable A/B timing harness that has decided three architecture questions with numbers instead of folklore, and **a working from-scratch ECS** — a generational entity id honoured by every pool, sparse-set component storage, queries that lead with the smallest pool, a **transform hierarchy** whose resolve cost is flat in depth with a camera that is an ordinary entity, (5.10) an **input layer that knows what the player meant** rather than which key they hit, (5.11) **a debug-draw system and a tooling UI** — a queue of world-space geometry with lifetimes that anything in the engine can fill, and Dear ImGui behind a 182-line facade — and, opening Module 6, (6.1) **a colour pipeline that is correct at both ends**, which found and fixed a four-module-old bug that had every GPU-rendered pixel too dark, (6.2) **a shading equation with units** — a BRDF measured in inverse steradians, a light measured in irradiance, and a hemisphere integrator that turns "is this model physically plausible?" into a number — (6.3) **a story about what a surface is**: three microfacet distributions and a masking term, each held to an identity that has a right-hand side, and (6.4) **a physically-based BRDF, live in both renderers** — Cook–Torrance with its `4(n·l)(n·v)` denominator *derived* rather than quoted, Fresnel built from the physics with `F0` read off an index of refraction, the metallic workflow arriving as a consequence, and energy conservation measured at a worst hemispherical reflectance of 0.9255 where the model it replaced reached 1.4300, (6.5) **a material system** &mdash; one home for what a surface is, referencing its textures by handle rather than by pointer, with the rule that decides membership set by the hardware rather than by taste &mdash; and (6.6) **a glTF 2.0 loader**, text and binary, with node hierarchies, multi-primitive meshes and the full metallic-roughness material model arriving through the asset store with *no conversion at all*, because three of the four convention checks against this engine come out as "do nothing" &mdash; and (6.7) **per-pixel normals in both renderers**, from a tangent frame derived out of the uv chart rather than copied, with a texture that finally knows whether it holds colour or data. Start at
+**Status:** curriculum and conventions published; lessons in progress — **Modules 0–5 are complete** and Module 6 is under way (64 of 95 lessons). The CPU software rasterizer is finished end to end, the same scene is drawn on a real GPU through SDL_GPU, and the tree is now a static library with a public API, a platform/application layer, its own logging, handle-based resource storage, an asset system that can load, share and free, a reusable A/B timing harness that has decided three architecture questions with numbers instead of folklore, and **a working from-scratch ECS** — a generational entity id honoured by every pool, sparse-set component storage, queries that lead with the smallest pool, a **transform hierarchy** whose resolve cost is flat in depth with a camera that is an ordinary entity, (5.10) an **input layer that knows what the player meant** rather than which key they hit, (5.11) **a debug-draw system and a tooling UI** — a queue of world-space geometry with lifetimes that anything in the engine can fill, and Dear ImGui behind a 182-line facade — and, opening Module 6, (6.1) **a colour pipeline that is correct at both ends**, which found and fixed a four-module-old bug that had every GPU-rendered pixel too dark, (6.2) **a shading equation with units** — a BRDF measured in inverse steradians, a light measured in irradiance, and a hemisphere integrator that turns "is this model physically plausible?" into a number — (6.3) **a story about what a surface is**: three microfacet distributions and a masking term, each held to an identity that has a right-hand side, and (6.4) **a physically-based BRDF, live in both renderers** — Cook–Torrance with its `4(n·l)(n·v)` denominator *derived* rather than quoted, Fresnel built from the physics with `F0` read off an index of refraction, the metallic workflow arriving as a consequence, and energy conservation measured at a worst hemispherical reflectance of 0.9255 where the model it replaced reached 1.4300, (6.5) **a material system** &mdash; one home for what a surface is, referencing its textures by handle rather than by pointer, with the rule that decides membership set by the hardware rather than by taste &mdash; and (6.6) **a glTF 2.0 loader**, text and binary, with node hierarchies, multi-primitive meshes and the full metallic-roughness material model arriving through the asset store with *no conversion at all*, because three of the four convention checks against this engine come out as "do nothing" &mdash; (6.7) **per-pixel normals in both renderers**, from a tangent frame derived out of the uv chart rather than copied, with a texture that finally knows whether it holds colour or data, and (6.8) **shadows in both renderers** &mdash; a z-buffer rendered from the light, an orthographic projection derived from an interval remap, and a bias that is *derived rather than tuned*: shadow acne turns out to be a sampling error whose magnitude follows from half a texel of lateral travel times the surface's slope, predicted at 50% of a lit plane and measured at 50.1%, with the worst real error reaching 92% of the derived bound. Start at
 [`docs/index.html`](docs/index.html).
 
 ---
@@ -130,6 +130,12 @@ demo of anything:
 # Lesson 6.7 — the comparison that is the whole lesson
 ./build/demos/gltf_view --model torus.obj --bumps 0   # flat
 ./build/demos/gltf_view --model torus.obj             # normal-mapped
+
+# Lesson 6.8 — shadows, and the artefact FIRST
+./build/demos/gltf_view --model torus.obj --bias none --pcf 0          # shadow acne
+./build/demos/gltf_view --model torus.obj --bias slope-scaled --pcf 0  # the derived fix
+./build/demos/gltf_view --model torus.obj --pcf 2                      # a soft edge
+./build/demos/gltf_view --model torus.obj --shadow 128                 # what resolution buys
 ```
 
 `hello_cube` is the standing acceptance test for the public API: every symbol in it comes from a
@@ -707,6 +713,51 @@ location 3, caught by 4.5's `check_layout` before anything rendered. The fix is 
 rather than the smaller one: **a vertex layout is per-pipeline state**, so a shader that reads no
 tangent does not declare one. 33 checks; the reference render **byte-identical** for the sixteenth
 lesson.
+
+**Lesson 6.8** starts from a sentence that has been true since Lesson 3.6 and never said out loud:
+every light in this engine is *unoccluded*. `lambert(n, l)` asks whether a surface **faces** the
+light — a fact about one surface's orientation — where the question we want is whether it can
+**see** the light, which is a fact about that surface and every other object in the scene. That is
+why every object in every picture so far floats.
+
+The fix is one sentence, and the engine already owns both halves: **render the scene from the light
+and keep only the depth.** "The nearest surface along every ray from a viewpoint" is not a new
+algorithm, it is a z-buffer — Lesson 3.1's — so on the CPU the entire depth pass is
+`collect_triangles` followed by `draw_triangles` with a different camera, and not one line of the
+rasterizer changes. *A shadow map is not a new renderer; it is the renderer you already have, aimed
+somewhere else.*
+
+What is genuinely hard is the **comparison**, and it gets the whole lesson. A directional light has
+no position, so there is no eye to hang a frustum on: what replaces the pyramid is a *box*, and
+**orthographic projection** is derived here from an interval remap rather than quoted. Its bottom
+row is `(0, 0, 0, 1)`, so **w comes out exactly 1** — and that one fact is spent three times: depth
+becomes affine so precision is uniform (perspective's near-to-far ratio is measured at over 100×),
+the near plane may be *negative* so the light's eye can sit inside the scene it lights, and a
+fragment's light-space position can be recovered from Lesson 3.7's interpolated world position for
+**zero new varyings**.
+
+Then the artefact, shown before the fix: **shadow acne**, 36,786 pixels of moiré on a 480×270 frame,
+with not one line of code misbehaving. It is not a mystery. The map stores *one* depth per texel and
+the fragment is somewhere else inside it, so **half of every texel's footprint is downhill of its
+own sample** — predicted at 50%, measured at **50.1%**. The magnitude follows from the same picture:
+lateral travel × tan θ ÷ depth range. The worst measured error reaches **92% of that bound**, which
+is what makes it a derivation rather than a safe over-estimate.
+
+From there each cure is a consequence. A constant bias must **peter-pan**, exactly: it unshadows
+everything whose caster is within `bias × depth_range` world units, which bites hardest where a
+caster *touches* its receiver — the one cue shadows were added for. **Normal-offset bias needs the
+geometric normal**, and this is the first line in the engine that must tell it from Lesson 6.7's
+shading normal: acne is a disagreement about where the *triangles* are, and a normal map does not
+move a triangle. And PCF arrives with two numbers that settle its order — occluders at 0.3 and 0.9
+average to a depth of 0.6, which reports a receiver at 0.5 *fully lit*, where comparing first gives
+0 and 1 and a mean of 0.5. That is the entire reason `SamplerComparisonState` exists.
+
+One finding came out of rendering rather than reasoning: **a 3×3 kernel reaches 2.12 texel-diagonals,
+not 0.71**, so a correct bias stops being correct the moment PCF is switched on — and the acne
+returns looking like a filtering bug. The GPU port is a second render pass with
+`num_color_targets = 0`, a depth texture that can be *sampled*, and the third identity-element
+fallback in the scene renderer: **1.0 is the identity for a depth comparison**. 53 checks; the
+reference render **byte-identical** for the seventeenth lesson.
 
 **An edge is a change in the *action*, not in a signal.** Bind `jump` to both a key and a mouse
 button, press one while the other is held, and there is still exactly one press edge. Derive

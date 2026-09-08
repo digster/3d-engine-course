@@ -80,6 +80,26 @@ SamplerState      albedo_sampler : register(s0, space2);
 Texture2D<float4> normal_map     : register(t1, space2);
 SamplerState      normal_sampler : register(s1, space2);
 
+// ---- The shadow map — Lesson 6.8 -------------------------------------------
+//
+// `Texture2D<float>`, not `float4`: a depth target has one channel and declaring
+// four would be asking the driver to invent three.
+//
+// **`SamplerComparisonState` IS A DIFFERENT TYPE FROM `SamplerState`**, and that
+// is the whole reason this pair looks unlike the two above it. An ordinary
+// sampler hands back a filtered DEPTH; a comparison sampler performs the test
+// against a reference you supply and hands back a filtered VISIBILITY. §6
+// derives why those are not the same answer with two numbers: an occluder at 0.3
+// and one at 0.9 average to a depth of 0.6, which a receiver at 0.5 passes
+// outright, where comparing first gives 0 and 1 and an average of 0.5.
+//
+// The comparison itself — `LESS_OR_EQUAL` — lives in the SAMPLER object rather
+// than in this file (`gpu_sampler::create_comparison`), which is worth noticing:
+// it is fixed-function state, so it costs nothing, and it is chosen on the C++
+// side where the depth convention that justifies it also lives.
+Texture2D<float>       shadow_map     : register(t2, space2);
+SamplerComparisonState shadow_sampler : register(s2, space2);
+
 // ---- Per FRAME -------------------------------------------------------------
 cbuffer Light : register(b0, space3)
 {
@@ -101,6 +121,26 @@ cbuffer Light : register(b0, space3)
     float3 eye_world;   // 48 — a highlight is view-dependent (Lesson 3.7)
     float  spec_model;  // 60 — 0 = none, 1 = Phong, 2 = Blinn,
                         //      3 = Cook-Torrance (Lesson 6.4, the default)
+
+    // ---- Lesson 6.8 -------------------------------------------------------
+    //
+    // The block goes from 64 bytes to 176, and it can afford to: this is a
+    // PER-FRAME push, one copy for the whole frame, where 6.7's `material`
+    // block is charged once per draw.
+    float4x4 light_clip_from_world;   //  64 — world -> the light's clip space
+
+    float shadow_strength;     // 128 — 0 disables the lookup entirely
+    float shadow_texel;        // 132 — world units per shadow texel
+    float shadow_depth_range;  // 136 — far - near, in world units
+    float shadow_bias;         // 140 — the constant term, in device depth
+    float shadow_slope_scale;  // 144
+    float shadow_max_slope;    // 148 — the clamp on tan(theta)
+    float shadow_reach;        // 152 — how many texels the furthest tap is away
+    float shadow_pcf;          // 156 — the kernel radius
+    float shadow_mode;         // 160 — 0 none, 1 constant, 2 slope, 3 normal
+    float shadow_normal_scale; // 164
+    float shadow_texel_uv;     // 168 — 1/resolution: one texel, in uv
+    float shadow_pad;          // 172
 };
 
 // ---- Per DRAW --------------------------------------------------------------
@@ -200,6 +240,105 @@ float3 fresnel_schlick(float cos_theta, float3 f0)
     return f0 + (1.0f - f0) * (m2 * m2 * m);
 }
 
+// ---- Lesson 6.8: can this point see the light? ------------------------------
+//
+// The counterpart of `engine::shadow_map::visibility`, line for line, and the
+// two are checked against each other in verify_68 §G. Returns 1 for fully lit
+// and 0 for fully shadowed; everything between is what PCF produces.
+//
+// `geo_cos` is the cosine taken against the GEOMETRIC normal, and the fact that
+// it is a different number from the `n_dot_l` the shading equation uses is
+// Lesson 6.7 collecting: acne is a disagreement about where the TRIANGLES are,
+// and a normal map does not move a triangle.
+float shadow_visibility(float3 world_pos, float3 geometric_n, float geo_cos)
+{
+    // Not enabled, or the surface faces away from the light — in which case the
+    // direct term is already zero and consulting the map could only introduce a
+    // wrong answer at a silhouette.
+    if (shadow_strength <= 0.0f || geo_cos <= 0.0f) { return 1.0f; }
+
+    // tan(theta) from the cosine, clamped. At exactly grazing incidence the
+    // required bias is infinite and the honest answer is that a shadow map
+    // cannot resolve that surface at all; `shadow_max_slope` is where we stop
+    // pretending. `engine::slope_from_cosine` is the same three lines.
+    const float c = min(1.0f, geo_cos);
+    const float sin_theta = sqrt(max(0.0f, 1.0f - c * c));
+    const float slope = min(shadow_max_slope, sin_theta / c);
+
+    // NORMAL-OFFSET MOVES THE POINT; EVERY OTHER MODE MOVES THE DEPTH. §4.5.
+    float3 p = world_pos;
+    if (shadow_mode > 2.5f)
+    {
+        p += geometric_n * (shadow_normal_scale * shadow_texel * sin_theta
+                            * shadow_reach * 1.41421356f);
+    }
+
+    // Into the light's clip space. `w` is 1 — the light's projection is
+    // orthographic and has no perspective divide — so this is affine in the
+    // world position, which is exactly why it can be done HERE, per fragment,
+    // from a varying that has existed since Lesson 3.7, instead of costing four
+    // more interpolated floats on every draw in the scene.
+    const float4 clip = mul(light_clip_from_world, float4(p, 1.0f));
+    if (clip.w <= 0.0f) { return 1.0f; }
+    const float3 ndc = clip.xyz / clip.w;
+
+    // NDC -> uv, with the y flip. NDC's +y is up; a texture's v runs DOWN from
+    // the top-left corner (texture.hpp, quoting SDL's own coordinate section),
+    // so the two disagree by exactly this subtraction. `viewport::to_screen`
+    // performs the identical flip on the CPU side.
+    const float2 uv = float2(ndc.x * 0.5f + 0.5f, 0.5f - ndc.y * 0.5f);
+    const float depth = ndc.z;
+
+    // Outside the box the light was fitted to. The sampler clamps rather than
+    // wrapping, but clamping would report the EDGE texel's occluder for
+    // everything beyond it — a shadow smeared to the horizon. Range-checking is
+    // what makes "outside the map" mean "unlit by nothing", which is lit.
+    if (any(abs(ndc.xy) > 1.0f) || depth < 0.0f || depth > 1.0f) { return 1.0f; }
+
+    // ---- The bias, in device depth units -----------------------------------
+    //
+    // §4.4: the furthest tap is `shadow_reach` texels away laterally, walking
+    // that far across a surface of slope `tan(theta)` changes its depth by that
+    // distance times the slope, and dividing by the depth range converts a
+    // world-space error into the units the comparison is performed in.
+    float bias = shadow_bias;
+    if (shadow_mode > 1.5f && shadow_mode < 2.5f)
+    {
+        bias += shadow_slope_scale * shadow_reach * shadow_texel * slope
+              / max(1e-6f, shadow_depth_range);
+    }
+    else if (shadow_mode < 0.5f)
+    {
+        bias = 0.0f;   // `none` — the acne, on purpose
+    }
+
+    const float reference = depth - bias;
+
+    // ---- PCF: compare, THEN average ----------------------------------------
+    //
+    // `SampleCmpLevelZero` does the comparing, and it does it on all four texels
+    // of its bilinear footprint before blending them — so one tap is already 2x2
+    // PCF in hardware, and the loop below widens that further. `LevelZero`
+    // rather than `SampleCmp` because there is no mip chain here and the
+    // gradient-based variant cannot be called from inside non-uniform control
+    // flow anyway.
+    const int r = clamp((int)shadow_pcf, 0, 3);
+
+    float lit = 0.0f;
+    float taps = 0.0f;
+    for (int dy = -r; dy <= r; ++dy)
+    {
+        for (int dx = -r; dx <= r; ++dx)
+        {
+            const float2 at = uv + float2(dx, dy) * shadow_texel_uv;
+            lit += shadow_map.SampleCmpLevelZero(shadow_sampler, at, reference);
+            taps += 1.0f;
+        }
+    }
+
+    return 1.0f - shadow_strength * (1.0f - lit / taps);
+}
+
 float4 main(Input input) : SV_Target0
 {
     // Lesson 3.8's finding, in silicon: the three corner normals are interpolated
@@ -281,7 +420,22 @@ float4 main(Input input) : SV_Target0
     // the cosine. No albedo appears in it, because how much light arrives cannot
     // depend on the colour of what it lands on. Untouched by Lesson 6.4 — the
     // light's half of the equation and the surface's half really are separable.
-    const float3 e = key * n_dot_l;
+    // ---- LESSON 6.8: AND WHETHER IT ARRIVES AT ALL --------------------------
+    //
+    // `visibility` multiplies `E`, the light's half of the equation, and not
+    // `f_r` — a shadow is a fact about whether the light ARRIVES and says
+    // nothing about what the surface would do with it. That is the same division
+    // Lesson 6.2 drew when it moved the cosine onto the light's side. Fold it
+    // into the BRDF instead and a shadowed metal stops being metal.
+    //
+    // Note what it does NOT multiply: `ambient`, three lines below. Ambient is
+    // light that has bounced off everything else in the room, and an object
+    // standing in the way of the sun does not stop the room existing — the
+    // ambient term is precisely what a shadowed surface is left with.
+    const float visibility = shadow_visibility(input.world, geometric,
+                                               dot(geometric, l));
+
+    const float3 e = key * n_dot_l * visibility;
 
     // ---- What the surface does ----------------------------------------------
     //

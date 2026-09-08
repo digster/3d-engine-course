@@ -6648,3 +6648,75 @@ normal mapping arrived and made those faces band instead of dimple.
 Nothing was wrong with the asset, the test, or the loader. A property that had no observable
 consequence acquired one. Worth remembering when a new feature makes old content look broken: check
 whether the content was always like that.
+
+### A regular sampling grid aliases against a regular texel grid
+
+`verify_68` §C measures shadow acne by walking a grid of points across a plane and counting how many
+report themselves shadowed. The first version used a plain 96×96 grid and reported **3.3%** where the
+true figure is **50.1%**, and a worst-case depth error at 22% of a bound that is in fact tight.
+
+Nothing was wrong with the renderer. The grid's spacing came out at 4.8 shadow texels, so every
+sample landed at nearly the same position *inside* its texel: the measurement covered a sliver of the
+sub-texel space instead of all of it. The fix is a **Weyl sequence** — step the sub-texel offset by
+the golden ratio's fractional part, the number hardest to approximate by a rational and therefore the
+one that never falls back into step with the grid.
+
+This is not a testing footnote. It is the same aliasing the shadow map itself suffers from, it is why
+a shadow's edge crawls when the light moves, and it is the reason cascaded shadow maps snap their box
+to texel boundaries. **When a measurement disagrees with your eyes, suspect both.**
+
+### An assertion stricter than its own message fails correct code
+
+`verify_48` carried `sizeof(scene_light_uniforms) == 64 && sizeof(material_uniforms) == 32` under the
+message *"the two fragment blocks fill whole registers"*. Lesson 6.8 grew the light block to 176
+bytes — still a whole number of 16-byte registers, so the property the message names was never
+violated — and the harness failed.
+
+The invariant is `% 16 == 0`. Pinning an exact size under a message about packing meant a legitimate
+change failed a test that was not about it, and the diagnosis cost more than the fix. Write the
+assertion the message claims; if an exact size is also worth pinning, pin it *separately*, with its
+own message saying which lesson set it and why.
+
+### Where your rasterizer samples decides `round` versus `floor`
+
+This engine's `fill_triangle` evaluates every attribute — depth included — at **integer** pixel
+coordinates, not at pixel centres. So the depth stored "for texel *i*" is the surface's depth at
+exactly *x* = *i*, and a shadow lookup must take `round(x)` to find the nearest stored sample.
+
+Hardware samples at pixel *centres*, and `SampleCmp` selects the texel *containing* the uv — a
+different spelling of the same [−0.5, +0.5) offset. Write `floor` on the CPU side to "match the GPU"
+and every offset is biased half a texel in one direction: the sampling reach doubles, the derived
+bias is half what is needed, and acne returns on one side of every slope while the other side looks
+perfect.
+
+The general form: **a lookup and the pass that wrote the thing being looked up must agree about where
+a sample sits**, and that agreement is a property of the rasterizer, not of the API.
+
+### A bound that is never reached is not a derivation
+
+Lesson 6.8 derives shadow bias as `reach × world_per_texel × tan θ ÷ depth_range` and then measures
+the worst actual disagreement: 1.931e−3 against a bound of 2.101e−3, **92% of it**.
+
+That last number is the point of the test. A bound you cannot exceed is easy to write and tells you
+nothing; a bound that is *reached* means the derivation describes what actually happens. Had the
+measurement come out at 22% — as it did, from the aliasing above — the bound would have been
+describing something else, and the bias built on it would have been a superstition that happened to
+work.
+
+Applies to any derived tolerance: **measure how close the worst real case gets to it, and treat a
+large gap as a bug in the derivation rather than as safety margin.**
+
+### Anything derived from one sample's footprint must be re-derived when the footprint widens
+
+The bias above was derived for a single lookup, where the fragment sits somewhere inside its own
+texel — half a texel diagonal, `√2/2 = 0.707` texels of reach. A 3×3 PCF kernel reads a texel one
+step out in each direction, so its furthest tap is **2.121** texels away: three times as far.
+
+A bias sized for one tap therefore covers a third of what a 3×3 needs, and the acne walks back in **at
+the exact moment PCF is switched on** — which makes it look like a filtering bug rather than a bias
+one. Measured: 78 stray pixels at radius 0, **10,348** at radius 1, 20,265 at radius 2; after the
+correction, 174 and 224, which is the legitimate soft edge.
+
+Found by rendering, not by reasoning. The general rule is worth carrying: a formula whose inputs
+include "how far apart are the two things I am comparing" has a hidden dependency on every filter,
+kernel or footprint downstream of it.

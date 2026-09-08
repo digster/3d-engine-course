@@ -590,10 +590,32 @@ enum class specular_model
 /// **not one code moves**, through either encoder. Both halves of that sentence are
 /// measurements, and the second one is why the reference render is byte-identical
 /// for a thirteenth lesson.
+///
+/// **LESSON 6.8 ADDS `visibility`, AND WHERE IT GOES IS THE WHOLE POINT.** It
+/// multiplies `E` — the light's half of the equation — and not `f_r`, because a
+/// shadow is a fact about whether the light ARRIVES and says nothing whatever
+/// about what the surface would do with it if it did. That is the same division
+/// Lesson 6.2 drew when it moved the cosine onto the light's side, and putting
+/// the shadow anywhere else would be visible: fold it into the BRDF and a
+/// shadowed metal stops being metal.
+///
+/// It deliberately does **not** multiply the ambient term. Ambient models light
+/// that has bounced off everything else in the room, and an object standing in
+/// the way of the sun does not stop the room from existing — indeed the ambient
+/// term is exactly what a shadowed surface is left with, which is why
+/// `lighting::ambient` being a *cool* colour is what makes shadows read as blue.
+/// A shadow that darkened the ambient too would render pure black, which is what
+/// a shadow looks like in vacuum and nowhere else.
+///
+/// Defaults to 1 — fully lit — so every call site written before this lesson
+/// behaves identically. The same bargain `to_eye` did not get in 3.7 and for the
+/// opposite reason: there, silence was a bug worth a compile error; here,
+/// silence is the correct answer for a scene with no shadow map.
 [[nodiscard]] inline linear_rgb shade(linear_rgb albedo, vec3 normal, vec3 to_eye,
                                       const lighting& lights, microsurface surface = {},
                                       specular_model model = specular_model::cook_torrance,
-                                      ndf_model distribution = ndf_model::ggx)
+                                      ndf_model distribution = ndf_model::ggx,
+                                      float visibility = 1.0f)
 {
     const vec3 n = normalised_or(normal, vec3{0.0f, 0.0f, 0.0f});
     const vec3 l = lights.key.to_light();
@@ -606,9 +628,13 @@ enum class specular_model
     // depend on the colour of what it lands on. Unchanged since Lesson 6.2, and it
     // is worth noticing that this lesson did not have to touch it: the light's half
     // of the equation and the surface's half really are separable.
-    const float er = lights.key.colour.r * lights.key.irradiance * n_dot_l;
-    const float eg = lights.key.colour.g * lights.key.irradiance * n_dot_l;
-    const float eb = lights.key.colour.b * lights.key.irradiance * n_dot_l;
+    //
+    // LESSON 6.8: `visibility` joins the product here, beside the cosine, for the
+    // reason given above — both are statements about how much light reaches this
+    // point, and neither is a statement about the surface.
+    const float er = lights.key.colour.r * lights.key.irradiance * n_dot_l * visibility;
+    const float eg = lights.key.colour.g * lights.key.irradiance * n_dot_l * visibility;
+    const float eb = lights.key.colour.b * lights.key.irradiance * n_dot_l * visibility;
 
     // WHAT THE SURFACE DOES. Both branches return a full BRDF in sr^-1, so the
     // product below is the same shape either way — which is the point of having
@@ -672,10 +698,11 @@ enum class specular_model
 [[nodiscard]] inline Uint32 shade_encoded(Uint32 albedo_encoded, vec3 normal, vec3 to_eye,
                                           const lighting& lights, microsurface surface = {},
                                           specular_model model = specular_model::cook_torrance,
-                                          ndf_model distribution = ndf_model::ggx)
+                                          ndf_model distribution = ndf_model::ggx,
+                                          float visibility = 1.0f)
 {
     return to_encoded(shade(to_linear(albedo_encoded), normal, to_eye, lights, surface,
-                            model, distribution));
+                            model, distribution, visibility));
 }
 
 } // namespace engine

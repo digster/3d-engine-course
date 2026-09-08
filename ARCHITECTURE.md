@@ -920,18 +920,36 @@ chore. What follows is on disk.
 │   │       │                     #   count_differences — grouped by PURPOSE.
 │   │       │                     #   + draw_debug_lines(): the SOFTWARE BACKEND
 │   │       │                     #   for the queue above, four lines long   [5.11]
-│   │       └── gltf.hpp          # gltf_status/report, gltf_material_desc,    [6.6]
-│   │                             #   gltf_primitive, gltf_scene_data,
-│   │                             #   parse_gltf / load_gltf. DESCRIPTIONS, not
-│   │                             #   handles — see §"Assets, and the second format"
-│   └── src/                # ---- PRIVATE. 33 sources; no demo can name this path ----
+│   │       ├── gltf.hpp          # gltf_status/report, gltf_material_desc,    [6.6]
+│   │       │                     #   gltf_primitive, gltf_scene_data,
+│   │       │                     #   parse_gltf / load_gltf. DESCRIPTIONS, not
+│   │       │                     #   handles — see §"Assets, and the second format"
+│   │       ├── bounds.hpp        # aabb, transformed(). Header-only, and it     [6.8]
+│   │       │                     #   arrived at its FOURTH call site. The
+│   │       │                     #   inside-out default is the identity element
+│   │       │                     #   for expand(), which deletes the
+│   │       │                     #   first-vertex branch from every caller
+│   │       ├── shadow.hpp        # light_camera, fit_directional, shadow_bias,  [6.8]
+│   │       │                     #   shadow_settings, slope_from_cosine,
+│   │       │                     #   pcf_reach_texels, slope_scaled_bias,
+│   │       │                     #   quantisation_bias, shadow_map. INCLUDES
+│   │       │                     #   raster.hpp — a shadow pass IS a rasterizer
+│   │       │                     #   pass, which is why raster.hpp only
+│   │       │                     #   forward-declares shadow_map back
+│   │       └── gpu_shadow.hpp    # gpu_shadow_map: a depth-only pipeline        [6.8]
+│   │                             #   (num_color_targets = 0), a SAMPLED depth
+│   │                             #   texture, a comparison sampler, its own
+│   │                             #   render pass, and fill_uniforms() so the two
+│   │                             #   renderers cannot disagree about a bias
+│   └── src/                # ---- PRIVATE. 35 sources; no demo can name this path ----
 │       ├── core/           # actions [5.10], clock, fixed_step, input, log, profile
 │       ├── platform/       # platform.cpp, app.cpp                            [5.2]
 │       ├── ui/             # debug_ui.cpp — THE ONLY engine TU that          [5.11]
 │       │                   #   includes <imgui.h>. That containment is what
 │       │                   #   made a PUBLIC dependency acceptable
 │       └── gfx/            # …+ soft_renderer.cpp, debug_draw.cpp,
-│                           #   debug_lines.cpp [5.11]; image.cpp is the
+│                           #   debug_lines.cpp [5.11], shadow.cpp and
+│                           #   gpu_shadow.cpp [6.8]; image.cpp is the
 │                           #   ONE unit that contains stb_image + save_ppm,
 │                           #   and gltf.cpp [6.6] is the ONE unit that
 │                           #   contains cgltf. Same containment, same reason
@@ -1614,6 +1632,45 @@ Built roughly in dependency order — each module's milestone is the next module
   reads a tangent should not declare the attribute, because it is a fetch paid for nothing and the
   location is a resource other buffers want. The buffer carries the tangent either way, so opting out
   pays the memory and not the bandwidth.
+
+- **A shadow map is the z-buffer, aimed somewhere else** (Module 6, Lesson 6.8). `lambert(n, l)` asks
+  whether a surface *faces* the light; the question we want is whether it can *see* the light, and
+  nothing in the shading equation has ever consulted the rest of the scene. Rendering depth from the
+  light answers it, because "the nearest surface along every ray from a viewpoint" is precisely what
+  a z-buffer computes. `shadow_map::render` is `collect_triangles` + `draw_triangles` with a
+  different camera; the rasterizer is untouched.
+
+  **The projection is orthographic, and that fact is spent three times.** A directional light has no
+  position, so the frustum is a box; `mat4::orthographic` maps it onto the clip cube by scale and
+  offset alone, leaving `w` **exactly 1**. Because `w` is 1, device depth is affine in view depth, so
+  `depth_range` is a single number valid everywhere in the box and the quantisation term is a
+  constant — where `perspective` crowds precision against the near plane by a factor measured at
+  over 100×. Because `w` is 1, the near plane may be *negative*, so the light's eye sits at the
+  scene's centre. And because `w` is 1, the whole world-to-light map is affine, so a fragment's
+  light-space position can be recovered from its interpolated world position instead of being
+  interpolated — **zero new varyings**, on every draw in the scene, shadowed or not.
+
+  **The bias is derived, and the derivation is the lesson.** The map stores one depth per texel,
+  sampled at one point; the fragment is elsewhere inside that texel, so half of every texel's
+  footprint is downhill of its own sample and half of every lit surface shadows itself (measured:
+  50.1%). The worst error is the lateral travel — `reach × world_per_texel` — times the surface's
+  depth gradient `tan θ`, over `depth_range`, and the measurement reaches **92% of that bound**.
+  Everything else follows: a constant bias cancels an error proportional to `tan θ` with a number
+  that is not, so it must be sized for the steepest surface present and unshadows everything whose
+  caster is within `bias × depth_range` — which is peter-panning, worst exactly where a caster
+  touches its receiver.
+
+  **`reach` is where the formula hides a dependency.** It is half a texel diagonal for one lookup and
+  `(r + ½)√2` for a PCF kernel — three times as far at 3×3 — so a correct bias stops being correct
+  the moment the kernel widens, and the artefact arrives looking like a filtering bug. Found by
+  rendering; `pcf_reach_texels` is the fix and `verify_68` §E is the regression test.
+
+  **The GPU port is where the pass structure becomes real.** `gpu_shadow_map` owns a pipeline with
+  `num_color_targets = 0`, a depth texture created with `SAMPLER` usage (which forces `STORE` where
+  the scene's own depth buffer has been `DONT_CARE` since 4.7 — the whole tile write, on tiled
+  hardware), and a comparison sampler, because filtering depths and then comparing is not a blurrier
+  answer but a wrong one. `gpu_scene_renderer` gains a third fallback binding, and the pattern is now
+  explicit: hand the shader the identity element of the feature it is missing.
 
 - **ECS, not a scene tree** (Module 5). Data-oriented storage chosen after demonstrating —
   with cache-line reasoning and measurements — why OOP scene graphs creak at scale. Archetype
@@ -2342,6 +2399,14 @@ Full detail with diagrams in [`docs/conventions.html`](docs/conventions.html); t
 | Transforming a direction | A **normal** takes the inverse transpose, because it is defined by being *perpendicular*. A **tangent** takes the model matrix, because it lies *in* the surface and is a difference of positions (3.6, 6.7) |
 | Vertex layouts | **Per-pipeline state.** A shader that does not read an attribute should not declare one — locations are numbered across the whole pipeline, so a widened layout takes a location away from whatever was using it (6.7) |
 | Test tolerances | **Derive them from the encoding**, never choose them. A tolerance that is wrong rather than merely loose fails a correct implementation, which is the more expensive mistake (6.7) |
+| A shadow's place in the equation | It multiplies **E**, beside the cosine — a shadow is a fact about whether light *arrives* — and never the ambient term, which is exactly what a shadowed surface is left with (6.8) |
+| Shadow bias | **Derived, not tuned**: `reach × world_per_texel × tan θ ÷ depth_range`. A constant cancels an error proportional to tan θ with a number that is not, so it must peter-pan by `bias × depth_range` world units (6.8) |
+| Which normal a bias uses | The **geometric** one. Acne is a disagreement about where the *triangles* are, and a normal map does not move a triangle — the first place 6.7's two normals must be told apart (6.8) |
+| Filtering a comparison | **Compare, then filter.** The values you average must be the values you want the average of, and a depth is not a visibility (6.8) |
+| A derived tolerance's own test | **Measure how close the worst real case gets to the bound.** 92% is a derivation; 22% means the bound describes something else (6.8) |
+| Anything sized to one sample | Re-derive it when the footprint widens. A 3×3 kernel reaches 2.12 texel-diagonals, not 0.71, so a one-tap bias fails the moment PCF is switched on (6.8) |
+| A missing binding | Bind the **identity element** of the feature: white for a multiply, lavender for a basis change, **1.0 for a depth comparison**. A declared sampler slot with nothing bound draws nothing, silently (4.7, 6.7, 6.8) |
+| Fitting a light to a scene | Fit to the **casters**, not the receivers. A receiver changes no answer in the map and triples the box, cutting texel density to a ninth (6.8) |
 | A format limit | **Report it, never truncate.** A narrowed index renders — as a spray of triangles between the wrong corners — with nothing anywhere saying so. `skipped_too_large` + `max_primitive_vertices` is what a caller can act on (6.6) |
 | Specular denominator | `4(n·l)(n·v)`: the 4 is the half-vector Jacobian, the (v·h) cancels against projected area, (n·v) is radiance's, (n·l) is the BRDF's (6.4) |
 | Angles | Radians. Always. |

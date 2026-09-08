@@ -10,6 +10,8 @@
 
 #include <engine/gfx/raster.hpp>
 
+#include <engine/gfx/shadow.hpp>   // 6.8: fill_style holds a pointer; the fill needs the type
+
 #include <engine/gfx/depth_buffer.hpp>
 #include <engine/gfx/framebuffer.hpp>
 
@@ -487,6 +489,19 @@ void fill_triangle(framebuffer& fb, depth_buffer* depth,
     // the inner loop pays a multiply instead. Lesson 2.3 §4.
     const float inv_area = 1.0f / static_cast<float>(area);
 
+    // LESSON 6.8. Is there a map to consult? Decided once per triangle, like
+    // every other question whose answer is constant across a fill. `lit` is part
+    // of the test because the visibility term multiplies `E`, and `E` only exists
+    // on that path.
+    const bool shadowed = (style.shadows != nullptr) && (style.shade == shading::lit)
+                          && (style.lights != nullptr);
+
+    // LESSON 6.8. A depth-only fill, which is what a shadow pass is. Requires a
+    // depth attachment: with neither target there would be nothing left for the
+    // fill to do, and silently doing nothing is worse than drawing the wrong
+    // thing because it looks like the call never happened.
+    const bool depth_only = style.depth_only && (depth != nullptr);
+
     // `lit` needs somewhere to read the light from. A null `lights` is not an
     // error — it is a pipeline that was never given one — so fall back to the
     // unlit path rather than dereferencing nothing. Decided once per triangle.
@@ -768,6 +783,36 @@ void fill_triangle(framebuffer& fb, depth_buffer* depth,
                 shading_normal = tt * tn.x + bb * tn.y + nn * tn.z;
             }
 
+            // ---- LESSON 6.8: CAN THIS POINT SEE THE LIGHT? -------
+            //
+            // Two things are worth reading twice here. The first
+            // is that the normal handed to the shadow lookup is
+            // `n`, the GEOMETRIC one, and not `shading_normal`:
+            // shadow acne is a disagreement about where the
+            // TRIANGLES are, and a normal map does not move a
+            // triangle. 6.7 is what made those two different, and
+            // this is the first line in the engine that has to
+            // choose between them.
+            //
+            // The second is that this cosine is computed here
+            // rather than taken from `shade`, and it is genuinely
+            // a DIFFERENT cosine from the one that scales the
+            // light: that one uses the shading normal, because it
+            // asks how much light the surface receives; this one
+            // uses the geometric normal, because it asks how
+            // steeply the surface is tilted relative to the map's
+            // texel grid. Sharing one value between them would be
+            // shorter and would put a normal map's tilt into the
+            // bias, which is a bias that varies per texel of an
+            // image and has nothing to do with the geometry.
+            float visibility = 1.0f;
+            if (shadowed)
+            {
+                const vec3 gn = normalised_or(n, vec3{0.0f, 1.0f, 0.0f});
+                const float geo_cos = dot(gn, style.lights->key.to_light());
+                visibility = style.shadows->visibility(p, gn, geo_cos);
+            }
+
             // `shade` normalises `n` itself — a decision made in 3.6
             // ("a caller who forgets gets a brightness scaled by the
             // normal's length, which looks like a lighting bug and is
@@ -776,7 +821,8 @@ void fill_triangle(framebuffer& fb, depth_buffer* depth,
             // the middle of the triangle; §3.5 measures by how much.
             return to_encoded(shade(albedo, shading_normal, style.eye - p,
                                       *style.lights, style.surface,
-                                      style.model),
+                                      style.model, ndf_model::ggx,
+                                      visibility),
                                 style.encode);
         }
         else
@@ -887,7 +933,11 @@ void fill_triangle(framebuffer& fb, depth_buffer* depth,
 
                     if (depth_test(zrow, x, f0, f1, f2))
                     {
-                        row[x] = fragment(f0, f1, f2);
+                        // LESSON 6.8. `depth_only` skips the fragment, not the
+                        // store — the store is one word and the fragment is the
+                        // whole shading equation. A shadow pass takes this
+                        // branch on every pixel it covers.
+                        if (!depth_only) { row[x] = fragment(f0, f1, f2); }
                     }
                 }
 
@@ -994,12 +1044,12 @@ void fill_triangle(framebuffer& fb, depth_buffer* depth,
                     // difference against it. Moving this call inside the
                     // `if (visible)` below would make the quad traversal cheap and
                     // would stop it modelling anything at all.
-                    const Uint32 colour = fragment(f0, f1, f2);
-                    ++local.shaded;
+                    const Uint32 colour = depth_only ? 0u : fragment(f0, f1, f2);
+                    if (!depth_only) { ++local.shaded; }
 
                     if (covered[i]) { ++local.covered; } else { ++local.helpers; }
 
-                    if (visible)
+                    if (visible && !depth_only)
                     {
                         fb.row(ly)[lx] = colour;
                     }
