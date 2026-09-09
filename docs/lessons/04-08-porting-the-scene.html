@@ -1925,6 +1925,29 @@ const engine::vec3 n = engine::cross(b - a, c - a);</code></pre>
     close to zero.
   </p>
 
+  <div class="callout warn">
+    <span class="label">Added after Lesson 6.1: what this 87% did <em>not</em> test</span>
+    <p>The number above is sound for what it measures, and the sentence before this box still
+       stands: geometry, winding, depth and perspective-correct interpolation genuinely agreed,
+       and a convention error anywhere in that chain would have collapsed the figure. Keep the
+       result. What it cannot support is the broader reading — <em>&ldquo;the GPU path is
+       correct&rdquo;</em> — and it is worth knowing why now rather than in two modules.</p>
+    <p><strong>This harness built its own render target, and gave it an <code>_SRGB</code>
+       format.</strong> The shipped demo did not: it returned linear light into a swapchain whose
+       header says the values are sRGB-encoded. So the comparison ran against a configuration the
+       program never used. Lesson 6.1 opens by measuring what that cost —
+       <strong>every GPU pixel drawn since Module 4 is too dark, by a factor of 2.3 at mid grey
+       and by thirteen in shadow</strong> — and the error is a <em>ratio</em>, savage in the darks
+       and absent near white, which is much of the answer to how it survived four modules and this
+       very comparison.</p>
+    <p>The transferable lesson is not about colour. <strong>A harness that constructs its own
+       configuration tests that configuration, not your program.</strong> This one was written to
+       isolate the rasterizers from presentation, which is a reasonable instinct and is why the
+       shape is easy to miss — the isolation removed the exact surface where the bug lived. When a
+       test builds its own setup, ask which part of the shipped path it just stopped covering.
+       6.1 also gives the fix, which is one call, <em>asked and not assumed</em>.</p>
+  </div>
+
   <h4>The 2.5% that are badly wrong</h4>
 
   <p>
@@ -13519,7 +13542,8 @@ cmake --build build --config Debug
       equation itself within <strong>one float ULP</strong> across 12,288 comparisons. The
       disagreements have causes: sub-pixel coverage at silhouettes, texture undersampling under
       minification, and a one-code floor in the darks where two implementations of the sRGB
-      curve part company.
+      curve part company. <em>They agree in the configuration this harness built — which, as
+      Lesson 6.1 discovers, is not the one the demo shipped. See the note in §3.</em>
     </li>
     <li>
       <strong>Never report a percentage without a magnitude.</strong> 100% of a flat floor's

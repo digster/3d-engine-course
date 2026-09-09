@@ -6122,6 +6122,39 @@ roadmap: RESHAPED 2026-09-08, AFTER TWO EXTERNAL REVIEWS OF THE PUBLISHED OUTLIN
         three dead prerequisite links in 6.8 and a stale `next` in 5.1 on its
         first run. §11's pre-flight now requires it green.
 
+        TWO RETROFITS TO PUBLISHED LESSONS, made the same day as the reshape.
+          6.6 §10 — THE alphaMode GAP, which was the importer's ONE SILENT ONE.
+            gltf_material_desc carries `alpha` (baseColorFactor[3], consumed by
+            nothing) and does NOT read alphaMode or alphaCutoff, so MASK and
+            BLEND import as fully opaque. Every other limit in that importer
+            reports — too_many_vertices and unsupported_primitive fire a status,
+            the factor-x-texture conflict logs AND returns an assertable count —
+            and this one fires nothing, which breaks §10's own stated rule.
+            THE REASON IS NOT AN OVERSIGHT: a status says "the file wants what
+            the engine cannot do", and the engine had no blend state to compare
+            against (pipeline_desc has carried `no blending` since 4.4). It
+            cannot report a conflict with a concept that does not exist yet.
+            Named now, fixed in 6.11. Cutout foliage and glass are the common
+            cases and both come back as cardboard.
+            THREE COPIES MOVED TOGETHER: engine/include/engine/gfx/gltf.hpp, its
+            PIN at scratch/l66_gltf.hpp (build_66.py splices the pin, not the
+            live header), and the already-rendered listing inside the page.
+            Editing only the header would have left the page disagreeing with
+            the repo, invisibly.
+          4.8 §3 — WHAT THE 87% DID NOT TEST. The figure STANDS for what it
+            measured (geometry, winding, depth, perspective-correct interp all
+            genuinely agreed, and a convention error would have collapsed it);
+            what it cannot support is "the GPU path is correct". The harness
+            BUILT ITS OWN _SRGB RENDER TARGET and the shipped demo did not, so
+            it compared against a configuration the program never ran — 6.1
+            measures the cost at 2.3x too dark at mid grey, 13x in shadow.
+            THE TRANSFERABLE LESSON IS NOT ABOUT COLOUR: a harness that
+            constructs its own configuration tests THAT configuration. This one
+            was written to isolate the rasterizers from presentation, which is a
+            reasonable instinct, and the isolation removed the exact surface the
+            bug lived on. The recap's "the two renderers agree" now carries the
+            qualifier too, because a skimmer reads the recap and stops.
+
 
 next: 6.9 — Cascaded Shadow Maps
       (planned filename: docs/lessons/06-09-cascaded-shadows.html — 6.8's TWO next

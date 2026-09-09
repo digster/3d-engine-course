@@ -6766,3 +6766,35 @@ kernel or footprint downstream of it.
 - **zsh does not word-split unquoted parameters.** `node check-pages.mjs $PAGES` passed 42 page
   paths as one argument and reported a single bogus FAIL. Use `${(f)PAGES}` (split on newlines).
   This will bite again in any loop over a captured file list.
+
+## Retrofitting a published lesson (2026-09-08)
+
+- **A pinned listing means three copies, not one.** `build_66.py` splices `gltf.hpp` from
+  `scratch/l66_gltf.hpp`, not from the live header, so correcting a doc comment meant editing the
+  header, the pin, *and* the rendered listing already inside the page. Editing only the header
+  leaves the page disagreeing with the repo and nothing reports it; editing only the page means the
+  next rebuild silently reverts you. **Check `LISTING_SOURCE` before touching any file a published
+  lesson lists.** Diff the pin against that lesson's commit first, so you know you are starting
+  from a clean snapshot.
+
+- **The most damaging gaps are the ones that fire no status.** 6.6's importer reports every limit
+  it has — `too_many_vertices`, `unsupported_primitive`, an assertable `factor_texture_conflicts`
+  count — except `alphaMode`, which is silent. And the reason is worth generalising: **a status
+  code needs a concept to compare against.** The engine had no blend state, so the importer could
+  not report a conflict with something that did not exist. When a subsystem "forgets" to report a
+  case, check whether it has anywhere to put the answer before calling it an oversight.
+
+- **When correcting a published measurement, separate the number from the reading.** 4.8's 87% is
+  *sound for what it measured* — geometry, winding, depth and interpolation genuinely agreed. What
+  was wrong was the broader inference that the GPU path was correct. Saying "keep the result, here
+  is what it cannot support" is both more accurate and more useful than retracting a figure that
+  was never false.
+
+- **A harness that builds its own configuration tests that configuration.** 4.8's comparison
+  constructed its own `_SRGB` target to isolate the rasterizers from presentation — a reasonable
+  instinct that removed the exact surface the bug lived on, and let a real defect survive four
+  modules *and* a pixel-by-pixel comparison. When a test constructs its own setup, ask which part
+  of the shipped path it just stopped covering.
+
+- **Qualify the recap too.** A reader who skims takes the recap's summary as the finding. A caveat
+  buried in §3 does not reach them.

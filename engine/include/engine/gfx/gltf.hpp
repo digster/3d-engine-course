@@ -138,8 +138,15 @@ struct gltf_material_desc
     /// plausible enough to survive review.
     linear_rgb base_colour{1.0f, 1.0f, 1.0f};
 
-    /// `baseColorFactor[3]`. Carried because the file said it; unused until the
-    /// engine has alpha blending, which is not this lesson.
+    /// `baseColorFactor[3]`. Carried because the file said it; unused until
+    /// **Lesson 6.11** gives this engine alpha blending.
+    ///
+    /// What is NOT read: `alphaMode` and `alphaCutoff`. This field is the
+    /// factor's fourth component and nothing else, so a material marked
+    /// `MASK` or `BLEND` imports as fully opaque — and alone among this
+    /// importer's gaps, that one fires no status and logs no warning,
+    /// because the pipeline has had no blend state to conflict with since
+    /// Lesson 4.4. Named in 6.6 §10.
     float alpha = 1.0f;
 
     /// `metallicFactor` and `roughnessFactor`, straight into Lesson 6.4's type.
