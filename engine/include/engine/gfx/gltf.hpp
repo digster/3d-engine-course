@@ -111,7 +111,7 @@ enum class gltf_status
 /// descriptions into materials.
 ///
 /// The same split every real pipeline makes, and the reason it survives contact
-/// with reality: the importer runs once, offline in Module 8, and its output has
+/// with reality: the importer runs once, offline in Module 9, and its output has
 /// to be serializable. A handle is not.
 struct gltf_material_desc
 {
@@ -363,7 +363,7 @@ inline constexpr int k_max_primitive_vertices = 65536;
 /// @param out      cleared first; may hold partial data on failure.
 ///
 /// **Separate from `load_gltf` for the same reason `parse_obj` was**: bytes can
-/// come from a string literal in a test, or from a pack file in Module 8. A
+/// come from a string literal in a test, or from a pack file in Module 9. A
 /// parser that can only be handed a path is a parser that can only be tested
 /// with a filesystem.
 [[nodiscard]] gltf_report parse_gltf(std::span<const std::byte> bytes,

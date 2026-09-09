@@ -690,7 +690,7 @@ released  = !keys_[k] &amp;&amp;  keys_prev_[k];</code></pre>
     ever pack key states into bit words instead of a byte per key, the whole frame's edge detection
     becomes <code>changed = cur ^ prev; pressed = changed &amp; cur;</code> across sixteen keys at a
     time. We do not need that speed now, and reaching for it before it is needed would be exactly
-    the premature optimisation Module 8 teaches you to avoid. It is worth knowing the door is there.
+    the premature optimisation Module 9 teaches you to avoid. It is worth knowing the door is there.
   </p>
 
   <h3 id="copy">3.3 Why it must be a copy</h3>
@@ -2442,7 +2442,7 @@ Controls: WASD/arrows move · Space cycles colour · left-click teleports · whe
         held_frames_[i] + 1 : 0;</code>. The query returns the entry. A 512-iteration loop per frame
         is nothing, but it is worth noticing that it is now <em>work proportional to the whole
         keyboard</em> rather than to the keys you asked about — the first time in this engine that a
-        convenience has a per-frame cost attached, and exactly the kind of trade Module 8 teaches you
+        convenience has a per-frame cost attached, and exactly the kind of trade Module 9 teaches you
         to measure rather than guess about.
       </p>
       <p style="margin-bottom:0">
@@ -2475,7 +2475,7 @@ Controls: WASD/arrows move · Space cycles colour · left-click teleports · whe
       <p>
         The interesting design questions are the ones the exercise asks. Bindings want to be data —
         loaded from a config file so players can rebind without a recompile, which drags in the
-        serialisation work of Module 8. Analogue sources (a gamepad stick that is 0.6 to the left)
+        serialisation work of Module 9. Analogue sources (a gamepad stick that is 0.6 to the left)
         need a threshold to answer a boolean question, so the layer eventually wants a <em>value</em>
         query alongside the boolean ones. And a key bound to two actions is not necessarily an error:
         it is fine across contexts (Esc closes a menu in one, opens it in another), which is the

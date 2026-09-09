@@ -1665,7 +1665,7 @@
     <strong>The ambient term still has no specular half.</strong> <code>shade()</code> ends in
     <code>albedo * ambient</code>, exactly as it has since Lesson 3.6, and nothing in this lesson
     touched it. So a mirror in a bright uniform room renders black except where the key light
-    reaches it. Lesson 6.2 Exercise 13.5 predicted precisely this, and it is Lesson 6.12's subject:
+    reaches it. Lesson 6.2 Exercise 13.5 predicted precisely this, and it is Lesson 6.15's subject:
     the missing term is the specular half of image-based lighting.
   </p>
 
@@ -2449,7 +2449,7 @@ inline constexpr float k_inv_pi = std::numbers::inv_pi_v&lt;float&gt;;
 ///
 /// so it renders at exactly 1.0 when `E_perp` is **pi**. That is the physical
 /// meaning of &quot;correctly exposed&quot; for this engine, and it is the same convention
-/// a photographer&#x27;s white card encodes. It is a *choice*, not a law — Lesson 6.10
+/// a photographer&#x27;s white card encodes. It is a *choice*, not a law — Lesson 6.12
 /// replaces it with a real exposure control and a tonemapper, at which point
 /// lights get authored in lux and this constant becomes the default rather than
 /// the rule.
@@ -2551,7 +2551,7 @@ struct directional_light
 /// right answer for a uniform environment, and the constant that has to be
 /// remembered everywhere else is the one place it is not needed. What remains wrong
 /// with it is not the arithmetic but the assumption: real bounced light is not
-/// uniform, it comes mostly from the sky and the floor, and Lesson 6.12 replaces
+/// uniform, it comes mostly from the sky and the floor, and Lesson 6.15 replaces
 /// `L_a` with an environment map that says which direction it came from.
 struct lighting
 {
@@ -3009,7 +3009,7 @@ enum class specular_model
     // 6.4 deliberately did not touch it: it has no specular counterpart, so a
     // mirror in a bright uniform room still renders black except where the key
     // light hits it. That missing term is the specular half of image-based
-    // lighting, and it is Lesson 6.12&#x27;s subject. Naming it here is cheaper than
+    // lighting, and it is Lesson 6.15&#x27;s subject. Naming it here is cheaper than
     // discovering it there.
     return {f_r.r * er + albedo.r * lights.ambient.r,
             f_r.g * eg + albedo.g * lights.ambient.g,
@@ -3340,7 +3340,7 @@ float4 main(Input input) : SV_Target0
     // cancelled against the hemisphere it was integrated over (light.hpp). It
     // still has no specular counterpart, so a mirror in a bright uniform room
     // renders black except where the key light reaches it — that missing term is
-    // Lesson 6.12&#x27;s image-based lighting.
+    // Lesson 6.15&#x27;s image-based lighting.
     const float3 lit = f_r * e + base * ambient;
 
     // ---- The last place light exists — Lesson 6.1 ---------------------------
@@ -4216,7 +4216,7 @@ cmake --build build --config Debug</code></pre>
          because the excess needs light arriving from a wide range of directions to accumulate —
          with one directional light you mostly see a brighter rim. <strong>That is the real
          lesson:</strong> an energy error of 34% can be nearly invisible under a single light and
-         becomes obvious the moment Lesson 6.12 adds an environment. Bugs that only appear when you
+         becomes obvious the moment Lesson 6.15 adds an environment. Bugs that only appear when you
          add the next feature are the expensive kind.</p></details>
   </div>
 

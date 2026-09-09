@@ -95,7 +95,7 @@ namespace engine::ecs
 struct entity
 {
     /// Generation in the high 12 bits, index in the low 20. Public because an
-    /// entity is a value, and because serialization (Module 8) wants this word.
+    /// entity is a value, and because serialization (Module 9) wants this word.
     std::uint32_t bits = 0;
 
     /// Which slot of the allocator this entity occupies. Meaningless when
@@ -154,7 +154,7 @@ inline constexpr entity null_entity{};
 /// Complexity: `create`, `destroy` and `alive` are O(1) with no allocation once
 /// the slot vector has reached its high-water mark.
 ///
-/// **Not thread-safe**, exactly as `engine::pool` is not. Module 8's job system
+/// **Not thread-safe**, exactly as `engine::pool` is not. Module 9's job system
 /// revisits every shared container in the engine at once.
 class entity_allocator
 {

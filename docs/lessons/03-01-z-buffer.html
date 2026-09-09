@@ -515,7 +515,7 @@ for each triangle, in any order whatsoever:
   <p>
     <strong>It is order-independent.</strong> Swap any two triangles in the loop and the final image is
     identical, because <code>min</code> does not care about order. That is what makes it safe to hand
-    triangles to a GPU in whatever order they finish being transformed &mdash; and, in Module 8, safe
+    triangles to a GPU in whatever order they finish being transformed &mdash; and, in Module 9, safe
     to rasterize them on several threads.
   </p>
 
@@ -6413,7 +6413,7 @@ cmake --build build</code></pre>
       </li>
       <li>
         <strong>Order independence.</strong> Triangles can be submitted in any order, which is what
-        makes the same algorithm work on a GPU in Module 4 and across threads in Module 8.
+        makes the same algorithm work on a GPU in Module 4 and across threads in Module 9.
       </li>
       <li>
         <strong>A depth attachment shaped like the hardware&rsquo;s.</strong> Separate from the colour

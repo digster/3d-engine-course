@@ -94,7 +94,7 @@ inline constexpr float k_inv_pi = std::numbers::inv_pi_v<float>;
 ///
 /// so it renders at exactly 1.0 when `E_perp` is **pi**. That is the physical
 /// meaning of "correctly exposed" for this engine, and it is the same convention
-/// a photographer's white card encodes. It is a *choice*, not a law — Lesson 6.10
+/// a photographer's white card encodes. It is a *choice*, not a law — Lesson 6.12
 /// replaces it with a real exposure control and a tonemapper, at which point
 /// lights get authored in lux and this constant becomes the default rather than
 /// the rule.
@@ -196,7 +196,7 @@ struct directional_light
 /// right answer for a uniform environment, and the constant that has to be
 /// remembered everywhere else is the one place it is not needed. What remains wrong
 /// with it is not the arithmetic but the assumption: real bounced light is not
-/// uniform, it comes mostly from the sky and the floor, and Lesson 6.12 replaces
+/// uniform, it comes mostly from the sky and the floor, and Lesson 6.15 replaces
 /// `L_a` with an environment map that says which direction it came from.
 struct lighting
 {
@@ -680,7 +680,7 @@ enum class specular_model
     // 6.4 deliberately did not touch it: it has no specular counterpart, so a
     // mirror in a bright uniform room still renders black except where the key
     // light hits it. That missing term is the specular half of image-based
-    // lighting, and it is Lesson 6.12's subject. Naming it here is cheaper than
+    // lighting, and it is Lesson 6.15's subject. Naming it here is cheaper than
     // discovering it there.
     return {f_r.r * er + albedo.r * lights.ambient.r,
             f_r.g * eg + albedo.g * lights.ambient.g,

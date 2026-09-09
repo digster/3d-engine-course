@@ -908,7 +908,7 @@ render(lerp(previous, current, alpha));</code></pre>
     <code>h</code> is now a number in our source code. We have not made the integrator accurate — we
     have made its inaccuracy <em>a constant we control</em> instead of a property of the player's
     hardware. The demo shows exactly this: at 10 Hz the ball still flies out of the window, but it
-    does so identically on every machine. Fixing the integrator itself is Module 7's work.
+    does so identically on every machine. Fixing the integrator itself is Module 8's work.
   </p>
 
   <div class="callout warn">
@@ -1462,7 +1462,7 @@ void step_simulation(sim_state&amp; s, float h, int window_w)
     // The same explicit Euler integration as Lesson 1.3, and still first-order:
     // it will still add energy the bounce cannot account for. What has changed is
     // that `h` is now a constant we chose, so the error is identical on every
-    // machine. Consistent, not correct — Module 7 makes it correct.
+    // machine. Consistent, not correct — Module 8 makes it correct.
     s.ball_y += s.ball_vy * h;
     s.ball_vy += k_gravity * h;
 

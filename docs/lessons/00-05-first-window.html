@@ -923,7 +923,7 @@ cmake --build build
           <dd>macOS requires window and event handling on the main thread. Calling
           <code>SDL_Init(SDL_INIT_VIDEO)</code> or creating the window from another thread violates
           that. For us this cannot happen — everything is in <code>main</code> — but it is a real
-          constraint the moment you add threads (Module 8).</dd>
+          constraint the moment you add threads (Module 9).</dd>
           <dt>Fix</dt>
           <dd>Keep window creation and the event loop on the main thread. When we add a job system
           later, worker threads do computation, never windowing.</dd>

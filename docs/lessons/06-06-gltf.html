@@ -1070,7 +1070,7 @@ material = mix(dielectric_brdf, metal_brdf, metallic)</code></pre>
 
   <p>
     Now the architecture question, and it is the one that decides whether this code is still useful
-    in Module 8.
+    in Module 9.
   </p>
 
   <p>
@@ -1130,11 +1130,11 @@ material = mix(dielectric_brdf, metal_brdf, metallic)</code></pre>
     <text x="395" y="348" class="xs" text-anchor="middle">bind_albedo() -&gt; const texture*</text>
     <rect x="520" y="322" width="160" height="20" rx="3" class="fill-soft grid" stroke-width="1.2"/>
     <text x="600" y="336" class="xs" text-anchor="middle">pointers, once per draw</text>
-    <text x="360.0" y="380" class="xs" text-anchor="middle">A parser that returned handles could never be tested from a string literal, nor run offline in Module 8.</text>
+    <text x="360.0" y="380" class="xs" text-anchor="middle">A parser that returned handles could never be tested from a string literal, nor run offline in Module 9.</text>
     </svg>
     <figcaption>
       <span class="fignum">Figure 5.</span>
-      Where a texture reference stops being a string, and the answer decides whether this code still works in Module 8. The tempting shortcut is to hand <code>parse_gltf</code> an <code>asset_store&amp;</code> and get finished materials back &#8212; fewer types, fewer lines, and it costs three things. The parser could no longer be tested without a filesystem (3.5 split <code>parse_obj</code> from <code>load_obj</code> for exactly this and used the split to test a dozen malformed inputs from string literals). Module 8&#8217;s offline asset cooker could not use it, because a handle is meaningless outside the pool that issued it and therefore cannot be serialised. And &#8220;is this the same image?&#8221; would have a second answer, in a second place, that will eventually disagree with the first.
+      Where a texture reference stops being a string, and the answer decides whether this code still works in Module 9. The tempting shortcut is to hand <code>parse_gltf</code> an <code>asset_store&amp;</code> and get finished materials back &#8212; fewer types, fewer lines, and it costs three things. The parser could no longer be tested without a filesystem (3.5 split <code>parse_obj</code> from <code>load_obj</code> for exactly this and used the split to test a dozen malformed inputs from string literals). Module 9&#8217;s offline asset cooker could not use it, because a handle is meaningless outside the pool that issued it and therefore cannot be serialised. And &#8220;is this the same image?&#8221; would have a second answer, in a second place, that will eventually disagree with the first.
     </figcaption>
   </figure>
 
@@ -1151,7 +1151,7 @@ material = mix(dielectric_brdf, metal_brdf, metallic)</code></pre>
        split <code>parse_obj</code> from <code>load_obj</code> for exactly this reason and §8 of
        that lesson used the split to test a dozen malformed inputs from string literals. A parser
        that needs a search path needs a disk.</p>
-    <p><strong>2. Module 8's asset cooker could not use it.</strong> An offline importer runs at
+    <p><strong>2. Module 9's asset cooker could not use it.</strong> An offline importer runs at
        build time and writes its output to a cache. A handle is meaningless outside the pool that
        issued it, so a parser that returns handles produces output that cannot be serialised.</p>
     <p><strong>3. The policy would end up in two places.</strong> "Is this the same image we already
@@ -1856,7 +1856,7 @@ enum class gltf_status
 /// descriptions into materials.
 ///
 /// The same split every real pipeline makes, and the reason it survives contact
-/// with reality: the importer runs once, offline in Module 8, and its output has
+/// with reality: the importer runs once, offline in Module 9, and its output has
 /// to be serializable. A handle is not.
 struct gltf_material_desc
 {
@@ -2077,7 +2077,7 @@ inline constexpr int k_max_primitive_vertices = 65536;
 /// @param out      cleared first; may hold partial data on failure.
 ///
 /// **Separate from `load_gltf` for the same reason `parse_obj` was**: bytes can
-/// come from a string literal in a test, or from a pack file in Module 8. A
+/// come from a string literal in a test, or from a pack file in Module 9. A
 /// parser that can only be handed a path is a parser that can only be tested
 /// with a filesystem.
 [[nodiscard]] gltf_report parse_gltf(std::span&lt;const std::byte&gt; bytes,
@@ -2894,7 +2894,7 @@ struct mesh_import
 /// A string rather than a hashed struct, deliberately: it is human-readable in a
 /// log and in a debugger, which matters much more than the handful of bytes it
 /// costs on a few hundred assets. When there are ten settings and fifty thousand
-/// assets, hash it — and Module 8, which caches cooked assets on disk, is where
+/// assets, hash it — and Module 9, which caches cooked assets on disk, is where
 /// that becomes true.
 [[nodiscard]] std::string asset_key(std::string_view name, const mesh_import&amp; settings);
 
@@ -4736,7 +4736,7 @@ def write_shapes_glb():
             # measurement rather than by eye. At roughness 0.25 a conductor&#x27;s
             # mirror-direction radiance under this engine&#x27;s reference irradiance
             # is 64x displayable white; at 0.40 it is 3.4x. Both clip — there is
-            # no tonemapper until Lesson 6.10 — but one clips a facet and the
+            # no tonemapper until Lesson 6.12 — but one clips a facet and the
             # other clips the object. See the lesson&#x27;s Expected Result.
             {&quot;name&quot;: &quot;silver&quot;,
              &quot;pbrMetallicRoughness&quot;: {&quot;baseColorFactor&quot;: [0.95, 0.93, 0.88, 1.0],
@@ -5784,8 +5784,8 @@ py scratch\make_gltf_assets.py
   <p>
     A polished metal's highlight is <strong>sixty-four times</strong> what the framebuffer can hold,
     so <code>to_encoded</code> clamps it and you get a white facet. That number is the quantitative
-    case for two lessons still to come: <strong>image-based lighting</strong> (6.12) gives a metal
-    something to reflect other than one point light, and a <strong>tonemapper</strong> (6.10) gives
+    case for two lessons still to come: <strong>image-based lighting</strong> (6.15) gives a metal
+    something to reflect other than one point light, and a <strong>tonemapper</strong> (6.12) gives
     the highlight somewhere to go. The materials in the asset are chosen at defensible values (0.40
     and 0.45 — brushed, not polished) so the clipping is a facet rather than an object, and
     <code>--pose</code> exists so you can sweep past it and watch.
@@ -5940,7 +5940,7 @@ py scratch\make_gltf_assets.py
     <strong>Hint.</strong> The subtlety is that transforming an axis-aligned box by a rotation and
     taking the corners' bounds gives you a <em>larger</em> box than the geometry needs — the AABB of
     a rotated AABB is not the AABB of the rotated geometry. Measure the difference on
-    <code>shapes.glb</code>. This is the same conservative-bounds problem Lesson 6.13's frustum
+    <code>shapes.glb</code>. This is the same conservative-bounds problem Lesson 6.16's frustum
     culling has to live with, and meeting it here first is the point of the exercise.
   </p>
 

@@ -168,7 +168,7 @@ public:
     void box(vec3 centre, vec3 half_extent, Uint32 colour,
              float seconds = k_debug_this_frame);
 
-    /// An oriented box: the same 12 edges, through a matrix. Module 7's
+    /// An oriented box: the same 12 edges, through a matrix. Module 8's
     /// collision lessons draw a great many of these.
     void box(const mat4& world_from_local, vec3 half_extent, Uint32 colour,
              float seconds = k_debug_this_frame);

@@ -3242,7 +3242,7 @@ float4 main(Input input) : SV_Target0
     // cancelled against the hemisphere it was integrated over (light.hpp). It
     // still has no specular counterpart, so a mirror in a bright uniform room
     // renders black except where the key light reaches it — that missing term is
-    // Lesson 6.12&#x27;s image-based lighting.
+    // Lesson 6.15&#x27;s image-based lighting.
     const float3 lit = f_r * e + base * ambient;
 
     // ---- The last place light exists — Lesson 6.1 ---------------------------
@@ -4208,7 +4208,7 @@ cmake --build build --config Debug
     <strong>Hint.</strong> Note what the duplication currently costs: if the fragment changes and
     the harness does not, <code>verify_67</code> keeps passing while the renderer is wrong. That is
     the real argument, not tidiness. The HLSL copy cannot be shared — and thinking about why not is
-    worth more than the refactor: what would it take, and what does Module 8's shader work need to
+    worth more than the refactor: what would it take, and what does Module 9's shader work need to
     exist first?
   </p>
 

@@ -891,7 +891,7 @@ private:
     ///
     /// **Note that these two things are separable, and that is the whole point.**
     /// The declarations are what the program is about; the bindings are a policy
-    /// that a settings screen, a config file or Module 8's serializer could
+    /// that a settings screen, a config file or Module 9's serializer could
     /// replace wholesale without any of the code below changing. Today they are
     /// adjacent because there is nowhere else to put them yet.
     void declare_actions()

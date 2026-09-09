@@ -409,7 +409,7 @@
 
   <p>
     That gets you a valid order for the price of one pass. But it gives you something else as
-    well, and this is the part that pays off in Module 8: <strong>within a level, the order does
+    well, and this is the part that pays off in Module 9: <strong>within a level, the order does
     not matter at all.</strong> Everything at depth <em>k</em> depends only on things at depth
     <em>k</em>−1, and nothing at depth <em>k</em> depends on anything else at depth <em>k</em>. A
     level is therefore a batch of completely independent work — a <code>parallel_for</code>
@@ -1088,11 +1088,11 @@ for (const entity e : rows) { order_[cursor_[depth_[e.index()]]++] = e; }</code>
     <line x1="492" y1="349" x2="516" y2="349" class="hi" stroke-width="1.2" marker-end="url(#e-h-l59f4)"/>
     <rect x="520" y="338" width="170" height="22" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.2"/>
     <text x="605" y="353" class="xs mono" text-anchor="middle">level 2: parallel_for</text>
-    <text x="24" y="382" class="xs muted" text-anchor="start">Module 8 does not have to design that. It arrived with the choice of visit order.</text>
+    <text x="24" y="382" class="xs muted" text-anchor="start">Module 9 does not have to design that. It arrived with the choice of visit order.</text>
     </svg>
     <figcaption>
       <span class="fignum">Figure 4.</span>
-      What <code>rebuild()</code> produces: one array of entities and four integers saying where each level starts. Then the loop, and the useful thing about it is the list of what is ABSENT &#8212; no recursion, no stack, no visited set, and no &#8220;has my parent been resolved yet&#8221; test, because the order already guarantees what those would check. Each of them is machinery that would otherwise have to be written, tested and paid for per entity. And the property at the bottom arrived free: everything in a level depends only on the level above, so a level is a <code>parallel_for</code> that Module 8 will not have to design.
+      What <code>rebuild()</code> produces: one array of entities and four integers saying where each level starts. Then the loop, and the useful thing about it is the list of what is ABSENT &#8212; no recursion, no stack, no visited set, and no &#8220;has my parent been resolved yet&#8221; test, because the order already guarantees what those would check. Each of them is machinery that would otherwise have to be written, tested and paid for per entity. And the property at the bottom arrived free: everything in a level depends only on the level above, so a level is a <code>parallel_for</code> that Module 9 will not have to design.
     </figcaption>
   </figure>
 
@@ -1166,7 +1166,7 @@ tree_.resolve(world_);</code></pre>
       stale.
     </p>
     <p>
-      Signals would close the hole and add a mechanism nobody has asked for. Module 8 revisits it
+      Signals would close the hole and add a mechanism nobody has asked for. Module 9 revisits it
       with the editor, which is the first caller that genuinely needs one.
     </p>
   </div>
@@ -1586,7 +1586,7 @@ tree_.resolve(world_);</code></pre>
 //                                 always less than its child&#x27;s. One flat loop per
 //                                 level, nearly flat in depth, and every entity
 //                                 within a level is independent of every other —
-//                                 which is what will let Module 8 run a level as
+//                                 which is what will let Module 9 run a level as
 //                                 a parallel_for.
 //   PERMUTE THE POOL              deferred, with the number attached. Physically
 //                                 packing rows into level order buys another 30%
@@ -1642,8 +1642,8 @@ struct parent
 ///
 /// **Written by `hierarchy::resolve`, and by nothing else.** It is a component
 /// rather than a return value because everything downstream — the renderer, the
-/// culler, Module 7&#x27;s physics — wants to look it up by entity, and because
-/// Module 8&#x27;s serializer will want to skip it precisely BECAUSE it is derived
+/// culler, Module 8&#x27;s physics — wants to look it up by entity, and because
+/// Module 9&#x27;s serializer will want to skip it precisely BECAUSE it is derived
 /// data that can be recomputed from the things that are not.
 ///
 /// An entity with a `transform` but no `world_transform` is simply not resolved.
@@ -1707,7 +1707,7 @@ enum class parent_status
 /// O(depth), and it terminates on a malformed graph: the walk is bounded by the
 /// number of live entities rather than trusted to reach a root, so a pre-existing
 /// cycle makes this return false instead of hanging. Exposed because it is
-/// exactly the check an editor&#x27;s &quot;can I drop this here&quot; needs — Module 8&#x27;s scene
+/// exactly the check an editor&#x27;s &quot;can I drop this here&quot; needs — Module 9&#x27;s scene
 /// hierarchy panel is the first caller.
 [[nodiscard]] inline bool is_ancestor_of(registry&amp; world, entity maybe_ancestor, entity e)
 {
@@ -1829,7 +1829,7 @@ inline void add_hierarchy_components(registry&amp; world, entity e, const transf
 /// rarely is a bug, so `resolve()` asserts what it can about the order&#x27;s
 /// freshness before walking it.
 ///
-/// **Not thread-safe**, like every container in this engine until Module 8.
+/// **Not thread-safe**, like every container in this engine until Module 9.
 class hierarchy
 {
 public:
@@ -1962,7 +1962,7 @@ public:
     /// no stack, no visited set, and no &quot;has my parent been done yet&quot; test —
     /// because the ORDER already guarantees it. Everything a level reads was
     /// written by an earlier level, so within a level the iterations are
-    /// completely independent of one another. That is the property Module 8 turns
+    /// completely independent of one another. That is the property Module 9 turns
     /// into a `parallel_for`, and it is worth noticing that it arrived free with
     /// the choice of visit order rather than being designed in.
     void resolve(registry&amp; world)
@@ -2024,7 +2024,7 @@ public:
     /// it and a debug build asserts on the next `resolve()` whenever the entity
     /// count moved; a release build resolves a stale order, which shows up as one
     /// object failing to follow its parent. Signals would close the footgun and
-    /// add a mechanism nobody has yet asked for — Module 8 revisits it with the
+    /// add a mechanism nobody has yet asked for — Module 9 revisits it with the
     /// editor, which is the first caller that genuinely needs one.
     void mark_topology_changed() { topology_dirty_ = true; }
 
@@ -3161,7 +3161,7 @@ ENGINE_MAIN(swarm_app)
 //      order: a parent&#x27;s depth is always less than its child&#x27;s), then run one
 //      flat loop per level. No recursion, and every level is independent of
 //      everything except the level above — which is what makes it parallelisable
-//      in Module 8. The arrays are NOT moved, so both reads and writes are
+//      in Module 9. The arrays are NOT moved, so both reads and writes are
 //      scattered through them.
 //
 //   C  LEVEL ORDER, ARRAYS PERMUTED. The same order as B, but the rows are
@@ -3507,7 +3507,7 @@ inline void permute_to_level_order(world&amp; w)
 ///
 /// One flat loop per level, and the only thing the loop needs to know is that
 /// everything it reads was written by an EARLIER level. No recursion, no stack,
-/// and — the part that pays off in Module 8 — every iteration within a level is
+/// and — the part that pays off in Module 9 — every iteration within a level is
 /// independent of every other, so a level is a `parallel_for` waiting to happen.
 [[nodiscard]] inline double resolve_levels(world&amp; w)
 {
@@ -5084,7 +5084,7 @@ ecs_swarm: hierarchy 154 rows, 2 roots, 3 levels, 0 orphans, 0 cycles</code></pr
         are derivable, and a stored list is a second source of truth.</li>
     <li><strong>A resolve order that is flat in depth.</strong> Level order, chosen by measurement
         over depth-first recursion, which ran 3.34 → 13.55 ns/entity from depth 1 to 32 while level
-        order ran 3.39 → 4.94. And a level is independent work, so Module 8's job system has its
+        order ran 3.39 → 4.94. And a level is independent work, so Module 9's job system has its
         unit of parallelism already.</li>
     <li><strong>A split between shape and motion.</strong> <code>rebuild()</code> costs about one
         resolve and runs when the shape changes; <code>resolve()</code> runs every frame. That

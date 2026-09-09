@@ -7,7 +7,7 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-09-08 (after Lesson 6.8 — 64 of 95 lessons)
+updated: 2026-09-08 (after Lesson 6.8 — 64 of 107 lessons)
 
 conventions:
   ecs-storage: THE ECS IS A SPARSE SET, DECIDED IN 5.7 BY MEASUREMENT, NOT TASTE.
@@ -88,7 +88,7 @@ conventions:
         and both insert and erase move it — same hazard as mutating a vector inside
         a range-for, and no more forgivable. Debug catches it via the assertion in
         view::fetch (dense position no longer matches the entity). Safe patterns:
-        collect-then-act (lifetime_system), or a deferred command list (Module 8).
+        collect-then-act (lifetime_system), or a deferred command list (Module 9).
         registry::add TO A DEAD ENTITY IS REFUSED, not filed — a row under a dead id
         is invisible to every query and never erased, i.e. a leak with no symptom.
         registry::has DELIBERATELY DOES NOT CHECK LIVENESS: a stale id fails
@@ -104,7 +104,7 @@ conventions:
         profile. pool::components() documents that its dense order is nobody's
         business PRECISELY so a future group may sort it. Also absent, each with a
         reason: exclusion queries (Ex 10.2, ~15 lines), const views, signals,
-        thread safety (Module 8, all containers at once).
+        thread safety (Module 9, all containers at once).
         TWO CONTAINERS CALLED pool, ON PURPOSE. engine::pool<T> mints its own keys;
         engine::ecs::pool<T> is keyed by an id it did not mint. Same three arrays,
         opposite jobs. The namespace keeps them apart; `using namespace engine;`
@@ -451,7 +451,7 @@ conventions:
         DEPTH BUCKETING IS A TOPOLOGICAL SORT, and that is the whole idea: a
         parent's depth is always exactly one less than its child's, so a counting
         sort by depth is O(n) and puts every parent first. WITHIN A LEVEL THE ORDER
-        DOES NOT MATTER AT ALL, which is why a level is a parallel_for Module 8
+        DOES NOT MATTER AT ALL, which is why a level is a parallel_for Module 9
         will not have to design. It arrived with the choice of order.
         MEASURED, THREE CANDIDATES, -O2 -DNDEBUG, M4 Pro, medians of 25:
           DEPTH IS THE AXIS (n = 100,000 in every row, only the shape moves):
@@ -490,7 +490,7 @@ conventions:
         SETS, because 5.8 ships no signals; resolve() asserts order_.size() ==
         transform pool size, which is the strongest check available without a
         version counter AND CANNOT SEE an add plus a remove between two resolves.
-        Said out loud rather than papered over; Module 8 revisits it with the editor.
+        Said out loud rather than papered over; Module 9 revisits it with the editor.
         THE RESOLVE LOOP HAS NO recursion, NO stack, NO visited set and NO "has my
         parent been done yet" test, because THE ORDER ALREADY GUARANTEES what those
         would check. Three "is this a root?" cases — no parent component, dead
@@ -873,7 +873,7 @@ conventions:
         Metal icon. No Xcode PROJECT is needed. SDL_gpu.h has a "Debugging"
         section that says all of this and is the first place to look.
         PIX is D3D12-only and is the better GPU PROFILER; RenderDoc is the better
-        STATE INSPECTOR. Module 8 returns to that split.
+        STATE INSPECTOR. Module 9 returns to that split.
         HOW A CAPTURE WORKS, and it explains every limit: the tool records the
         full CONTENTS of every resource at frame start plus the ordered call list,
         then REPLAYS. That is why it can show any resource at any event, why
@@ -2074,7 +2074,7 @@ conventions:
             other axis AT t, not at the endpoint; then spend the remaining (1-t) of the step.
             VERIFIED: ball at x=16, -105 px/s, h=0.1, face x=14 -> t=0.190476, speed 105->112,
             vel (109.5525,-23.2861), final x=22.8685; naive test on the same step says NO HIT.
-            One impact per step for now — Module 7 iterates until the budget is spent.
+            One impact per step for now — Module 8 iterates until the budget is spent.
   reflect: reflect(v,n) = v - 2*dot(v,n)*n, derived as "subtract the shadow twice". n MUST be
             unit (project_onto's /|n|^2 is what is missing); a length-k normal scales the
             correction by k^2 and the ball silently gains/loses energy. Assert |reflect|==|v|.
@@ -2872,8 +2872,12 @@ conventions:
         apart") WITHIN A DAY, on the code that lesson was written about. 3.10's
         published numbers STAND; nothing needed restating.
 
-curriculum: 95 lessons, ~438 h, 9 modules   (5.10 split into 5.10 + 5.11 in 5.10)
-  M0:6  M1:8  M2:12  M3:10  M4:9  M5:10  M6:15  M7:13  M8:11
+curriculum: 107 lessons, ~510 h, 10 modules   (reshaped 2026-09-08 — see `roadmap:`)
+  M0:6  M1:8  M2:12  M3:10  M4:9  M5:12  M6:18  M7:8  M8:13  M9:11
+  (M8 IS PHYSICS, NEW. M9 is the old M8, Professional Polish & Capstone.
+   M5:10 in the previous line of this file was ALREADY STALE — 5.10 split
+   into 5.10+5.11 and the count was never bumped, which is the same class of
+   drift check-curriculum.py now catches in docs/index.html.)
 
   the-boundary: THE ENGINE IS A STATIC LIBRARY WITH AN OUTSIDE, and the outside is
         enforced by the INCLUDE PATH, not by the style guide.
@@ -2975,14 +2979,14 @@ curriculum: 95 lessons, ~438 h, 9 modules   (5.10 split into 5.10 + 5.11 in 5.10
         EXPOSURE: k_reference_irradiance = pi is THIS ENGINE'S EXPOSURE, named and
         derived (a white Lambertian square-on to it renders at exactly 1.0f, and
         pi * inv_pi IS exactly 1.0f in IEEE single). It is a CHOICE, not a law —
-        6.10's tonemapper replaces it, at which point lights get authored in lux
+        6.12's tonemapper replaces it, at which point lights get authored in lux
         and this becomes a default.
         THE AMBIENT TERM'S PI CANCELS. Uniform hemispherical radiance L_a through
         albedo/pi integrates to albedo * L_a exactly. So `albedo * ambient`, used
         since 3.6 because it looked right, IS right for a uniform environment —
         the one term needing no constant is the one nobody put a constant in. What
         is wrong with it is the ASSUMPTION (real bounced light is not uniform),
-        which is 6.12's subject, and that is now a precise statement rather than
+        which is 6.15's subject, and that is now a precise statement rather than
         the word "fudge".
         BLINN-PHONG IS NOT ENERGY CONSERVING, AND NOT FOR THE EXPECTED REASON.
         The 1/pi tames the raw lobe (2.6650 at shininess 1 without it; first under
@@ -3196,7 +3200,7 @@ curriculum: 95 lessons, ~438 h, 9 modules   (5.10 split into 5.10 + 5.11 in 5.10
         an asset_store& would be fewer types and would cost three things: the
         parser could not be tested without a filesystem (3.5's parse_obj/load_obj
         split, and §8 used it to test a dozen malformed inputs from string
-        literals); Module 8's offline cooker could not use it, since a handle is
+        literals); Module 9's offline cooker could not use it, since a handle is
         meaningless outside its pool and cannot be serialised; and "is this the
         same image?" would have a second answer that eventually disagrees.
         BASE COLOUR: THE FACTOR IS LINEAR, THE TEXTURE IS sRGB. The single most
@@ -3405,7 +3409,7 @@ capabilities:
                 INSIDE-OUT DEFAULT (+1e30 / -1e30) is the identity element for
                 `expand`, which removes the first-vertex branch from every caller.
                 `transformed(box, m)` is the box around the transformed BOX.
-                6.10's frustum culling is the next caller.
+                6.16's frustum culling is the next caller.
     gfx/shadow.{hpp,cpp}  NEW. `light_camera` (view, clip_from_view,
                 clip_from_world, viewport, world_per_texel, depth_range),
                 `fit_directional`, `shadow_bias` (none / constant / slope_scaled /
@@ -3941,7 +3945,7 @@ capabilities:
     0.00025 ms. The stage breakdown is the finding and it is the opposite of the
     intuition: resolve 0.0022, read 200 KB 0.0186, PARSE 3.6903, import 0.0034,
     VALIDATE 2.4873. The disk is a rounding error; the cost is the two steps that
-    look at every vertex. That is why Module 8's cooked assets are a real
+    look at every vertex. That is why Module 9's cooked assets are a real
     optimisation and a faster file format is not.
     A SESSION (five models cycled twice, as [L] does): 8 acquires, 4 file reads,
     4 hits, 205.7 KB. "Loaded once" is now a number.
@@ -4731,10 +4735,10 @@ capabilities:
     Two demos in one executable is deliberately awkward — it is the argument for Module 5's
     demos/ split, accumulating where it can be felt;
     explicit Euler still gains energy — but identically everywhere,
-    at a rate set by h, which is ours to choose (Module 7 fixes the integrator);
+    at a rate set by h, which is ours to choose (Module 8 fixes the integrator);
     colour converts per-operation rather than at the pipeline edges (Module 6);
     the debug-text overlay is the only thing on screen SDL still draws;
-    ONE impact resolved per simulation step (Module 7 iterates until the budget is spent);
+    ONE impact resolved per simulation step (Module 8 iterates until the budget is spent);
     the naive DDA line routine was RETIRED with 1.7's demo — Lesson 2.1 derives line
     drawing properly and puts it in gfx/ (nothing draws lines at the moment)
   - depth_buffer subsystem (src/gfx/depth_buffer): width x height floats, clear to
@@ -4781,8 +4785,8 @@ decisions:
       2 THE COST ACCEPTED IS BOUNDED; THE COST AVOIDED IS NOT. Archetype's query
         win is <=1.94x, only above 1e4, only when selective, only on ungrouped
         arms. Its structural-change loss is 13.8x and GROWS WITH EVERY COMPONENT
-        TYPE THE COURSE ADDS — Module 6 materials, Module 7 rigid bodies,
-        colliders, skeletal state. This entity passes 12 components in Module 7.
+        TYPE THE COURSE ADDS — Module 6 materials, Module 7 skeletal state,
+        Module 8 rigid bodies and colliders. This entity passes 12 components in Modules 7–8.
       3 NOTHING AT THIS SCALE IS ON THE TABLE. Below 1,000 entities every arm is
         within 16% and most within 5%. The demos have four objects.
       4 IT IS A QUARTER OF THE CODE (20 lines vs 100 in the probe) AND THIS IS A
@@ -5574,7 +5578,7 @@ decisions:
   - THE NaN GUARDS ARE ENGINE HARDENING, NOT DEMO SCAFFOLDING. float->int is
     UNDEFINED out of range, and `none` mode reaches it. But the NaN is not really
     the demo's: Module 6 pushes an HDR pipeline through linear_to_srgb_u8 and
-    Module 7's physics will produce the occasional NaN the way all physics does. A
+    Module 8's physics will produce the occasional NaN the way all physics does. A
     cast that is undefined for a value the program can reach is a latent bug
     whichever lesson first reaches it. Note the SHAPE of the test — `!(x < limit)`
     and `!(linear > 0)`, because every comparison with a NaN is false and
@@ -6057,6 +6061,66 @@ files:
             session. 6.7 and 6.8 both landed on 2026-09-08 and share that file the
             same way.)
   (retired: src/ — the whole directory. hello.cpp.)
+
+
+roadmap: RESHAPED 2026-09-08, AFTER TWO EXTERNAL REVIEWS OF THE PUBLISHED OUTLINE.
+        9 modules / 95 lessons / 444 h  ->  10 MODULES / 107 LESSONS / ~510 H.
+        The course was sitting on the exact ceiling of CLAUDE.md §5's old band
+        (75-95), which is why nothing had been added; the band is now 100-115
+        lessons / 450-550 h, amended in §5 with a note.
+        THE THREE GAPS BOTH REVIEWERS FOUND INDEPENDENTLY, from the index alone:
+          MIPMAPS. Not an omission — A PROMISE ON RECORD, made six times: 3.9's
+            prose and its Exercise 8.5, 4.7's exercise 4.7.5, and a doc comment
+            SHIPPED IN texture.hpp's public sampler struct, all saying
+            "Module 6". Module 6 had no such lesson. Now 6.10, and it must
+            precede 6.15 because A PREFILTERED ENVIRONMENT MAP IS A MIP CHAIN.
+          TRANSPARENCY. Worse than a curriculum gap: gpu_pipeline.hpp still says
+            "no blending", and 6.6's glTF importer IGNORES alphaMode, so every
+            downloaded asset with foliage or glass renders as opaque cardboard
+            TODAY. Now 6.11.
+          ANTIALIASING. Genuinely absent. Now 6.14.
+        MODULE 6 RENUMBERED 6.10-6.15 -> 6.12,6.13,6.15,6.16,6.17,6.18.
+        6.9 (CASCADED SHADOW MAPS) DELIBERATELY DID NOT MOVE: 6.8 names it six
+        times in prose plus both nav labels and calls it "an extension of this
+        file". Keeping it saved eight edits and a narrative thread — and it is
+        why `next:` below is unchanged.
+        6.14 "Instancing and a Frame Graph" WAS ALREADY HALF-REDUNDANT: instancing
+        is BUILT (instance-rate input, instance_buffer binding,
+        draw(pass, instances) — gpu_mesh.cpp:218, 180 mentions in 4.5). Split:
+        6.16 = frustum culling FEEDING instanced draws, 6.17 = frame graph alone.
+        5.12 ADDED — a checkpoint game against the public API. The boundary was
+        declared law in 5.1 and has never been used from outside by anyone but
+        the person who drew it; 9.11 would have been its first real test, at
+        hour 434 with 10 h of budget to absorb whatever it found.
+        PHYSICS EXPANDED, NOT LIMITED (the user's explicit call), so it outgrew
+        Module 7 and BECAME MODULE 8; Professional Polish & Capstone -> MODULE 9.
+          Module 7 = Rotation, Animation, Audio (8 lessons, 38 h). Audio 7.13 -> 7.8.
+          Module 8 = Physics (13 lessons, 68 h): integrators, linear bodies,
+            ANGULAR DYNAMICS + INERTIA TENSOR, SAT, GJK, EPA, CONTACT MANIFOLDS
+            WITH PERSISTENCE, broadphase, impulse response, SEQUENTIAL IMPULSES
+            WITH WARM STARTING + ISLANDS + SLEEPING, JOINTS, RAGDOLLS, and the
+            character controller SPLIT OUT as its own lesson (it is not a rigid
+            body, and that is the lesson).
+          8.10 REDEEMS THE PROMISE AT :2077 — "one impact per step for now
+            (Module 8 iterates until the budget is spent)". It took its own module.
+          mat3 NEEDS operator+/-, scalar multiply and an outer product before an
+            inertia tensor can be written; inverse/transpose/multiply already
+            exist. quat.hpp does not exist yet — 7.4 builds it, and every
+            angular lesson depends on that having landed.
+        THE RENUMBER COST, PAID IN FULL: 177 "Module 8" occurrences across 65
+        files, 39 of them PUBLISHED lesson pages. Safe only because the mapping
+        was TOTAL — every "Module 8" in the corpus meant the polish module.
+        THE BARE `8.N` FORM WAS NOT SWEPT AND MUST NEVER BE: of 58 candidates
+        only 4 were lesson references; the rest are intra-page section headings
+        (<h3>8.2), exercise numbers (Exercise 4.8.3) and measurements (8.3 MB,
+        8.4e-8). A blind sed would have corrupted ~54 sites.
+        NEW TOOL: docs/_template/check-curriculum.py. The index had drifted FIVE
+        WAYS AT ONCE (95 vs 94 lessons, 436 vs 438 vs 444 hours, Modules 3/4/6
+        subtotals wrong, Module 5 badged in-progress with all 11 published) and
+        NOTHING HAD EVER CHECKED IT. Now checked: subtotals, headline totals,
+        badges, file existence, ordering, nav chains, internal links. It found
+        three dead prerequisite links in 6.8 and a stale `next` in 5.1 on its
+        first run. §11's pre-flight now requires it green.
 
 
 next: 6.9 — Cascaded Shadow Maps

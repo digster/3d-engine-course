@@ -964,7 +964,7 @@ The seam that works: compile the unit under test together with a test TU that **
 prefers the definition in the object file over the one in `libSDL3.dylib`, so key state becomes
 fully drivable with no changes to the production code. This is how 1.2's six-frame edge table was
 verified value-for-value rather than asserted. Keep such harnesses in the scratchpad — they are
-authoring-time verification, not course content, until Module 8's testing lesson.
+authoring-time verification, not course content, until Module 9's testing lesson.
 
 ## Sub-pixel errors have a damage profile you cannot sample (Lesson 2.4)
 
@@ -1615,7 +1615,7 @@ into a rendering bug, which is much harder to trace. Two honest options: assert,
 limit. We removed it — `std::vector` scratch owned **across frames** by the caller, so `clear()`
 keeps the capacity and the steady state allocates nothing.
 
-That ownership detail is the whole trick, and it is the smallest possible preview of Module 8: the
+That ownership detail is the whole trick, and it is the smallest possible preview of Module 9: the
 fix for allocation in a hot loop is almost never a faster allocator, it is not allocating.
 
 
@@ -1709,7 +1709,7 @@ Two consequences worth carrying:
   `x <= 0`. The negated form is true for a NaN; the direct form is false.
 - A cast that is undefined for a value the program can reach is a latent bug regardless of which
   lesson first reaches it. Lesson 3.3's deliberately-broken mode is what *found* the reachable NaN
-  in `linear_to_srgb_u8`, but Module 6's HDR pipeline and Module 7's physics would both have found
+  in `linear_to_srgb_u8`, but Module 6's HDR pipeline and Module 8's physics would both have found
   it eventually, in circumstances far less convenient.
 
 
@@ -6720,3 +6720,49 @@ correction, 174 and 224, which is the legitimate soft edge.
 Found by rendering, not by reasoning. The general rule is worth carrying: a formula whose inputs
 include "how far apart are the two things I am comparing" has a hidden dependency on every filter,
 kernel or footprint downstream of it.
+
+## Renumbering a live course (roadmap reshape, 2026-09-08)
+
+- **A bare `N.M` in this corpus is almost never a lesson reference.** Renumbering Module 8 → 9
+  turned up 58 candidate `8.N` strings; exactly **4** were lesson references. The rest were
+  intra-page section headings (`<h3>8.2`, and pages number their own sections 1–15), exercise
+  numbers (`Exercise 4.8.3`), and measurements (`8.3 MB`, `8.4 × 10⁻⁸`, `farZ = -8.2`). A blind
+  `sed` over `8.N` would have silently corrupted ~54 sites, most of them numeric data inside
+  published prose. **Sweep the unambiguous long form (`Module 8`, 177 occurrences, verified total);
+  review the short form by hand, every time.**
+
+- **The dangerous replacements are the ones a newline splits.** Three misses survived a 37-rule
+  table purely because the text read `Module 7's\n    /// collision lessons`. Re-scan after any
+  bulk edit with a `re.S` pattern and a keep-list, rather than trusting the rule table's own
+  report — the rules that matched *nothing* are the ones worth reading.
+
+- **Source comments are copied verbatim into published pages, so a fix must be paired.**
+  `scratch/build_NN.py` inlines engine source via `@@LISTING:path@@`. `bounds.hpp`'s comment string
+  is physically embedded in `docs/lessons/06-08-shadow-mapping.html`. Editing only the header
+  leaves the page disagreeing with the repo, and `scratch/` is gitignored so regeneration is not
+  guaranteed. **Edit both, always.**
+
+- **Fix a misattribution to its *current* correct value before renumbering, not after.**
+  `bounds.hpp` said "Lesson 6.10's frustum culling" when 6.10 was HDR and culling was 6.13.
+  Correcting it to 6.13 first let the general 6.13 → 6.16 map carry it home; correcting it
+  afterwards would have needed a special case that the map would have fought.
+
+- **Keeping one lesson number fixed can be worth more than a tidy sequence.** 6.9 stayed put
+  because 6.8 references it six times in prose plus both nav labels and calls cascades "an
+  extension of this file". Inserting before it would have cost 8 edits and a narrative thread;
+  inserting after it cost nothing. **Renumber around the references, not through them.**
+
+- **An unchecked hand-maintained page drifts in every direction at once.** `docs/index.html` had
+  never been validated and had five simultaneous inconsistencies, two of which contradicted *each
+  other* (95 vs 94 lessons) on the same page. `docs/_template/check-curriculum.py` now checks it,
+  and CLAUDE.md §11's pre-flight requires it green.
+
+- **A new linter's first run is mostly its own bugs, and that is normal.** The checker's first pass
+  reported 27 problems; 16 were entity-encoding false positives (`&mdash;` vs `—`, `&middot;` vs
+  `·` — both render identically and pages use them interchangeably). Normalise punctuation entities
+  before comparing, and never `&lt;`/`&gt;`, which appear inside code listings. A linter that cries
+  wolf gets muted, which is worse than no linter.
+
+- **zsh does not word-split unquoted parameters.** `node check-pages.mjs $PAGES` passed 42 page
+  paths as one argument and reported a single bogus FAIL. Use `${(f)PAGES}` (split on newlines).
+  This will bite again in any loop over a captured file list.

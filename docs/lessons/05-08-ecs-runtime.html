@@ -517,7 +517,7 @@
   </p>
 
   <p>
-    There is a second thing to notice about that signature, and it will matter in Module 8. The
+    There is a second thing to notice about that signature, and it will matter in Module 9. The
     query <em>declares the data flow</em>: <code>orbit_system</code> writes placements and reads
     orbits, and you can see that from the first line without reading the body. A job system
     deciding whether two systems may run concurrently needs exactly that information, and here
@@ -1237,7 +1237,7 @@ return at != k_none                                  // component was erased
     <p>
       What is <em>not</em> thread-safe is the counter increment behind it, so the honest rule is
       the one in the header: <strong>touch each component type once before the job system
-      starts.</strong> That constraint is shared by every container in this engine until Module 8
+      starts.</strong> That constraint is shared by every container in this engine until Module 9
       revisits all of them at once.
     </p>
   </div>
@@ -1678,7 +1678,7 @@ void each_impl(F&amp; f, std::index_sequence&lt;I...&gt;) const
       in a debug build the moment the dense position stops matching the entity. The two safe
       patterns are the familiar ones: <strong>collect, then act</strong> (which is what
       <code>lifetime_system</code> in the demo does, and why it takes a scratch vector), or defer
-      the change to a command list — Module 8 builds one for the job system.
+      the change to a command list — Module 9 builds one for the job system.
     </p>
   </div>
 
@@ -1708,7 +1708,7 @@ void each_impl(F&amp; f, std::index_sequence&lt;I...&gt;) const
     lines); <strong>const views</strong>, which need a second class template or a
     <code>const T</code> spelling and have no caller yet; <strong>signals</strong> (on-construct,
     on-destroy callbacks), which every mature ECS grows and none of which we can design without a
-    user; and <strong>thread safety</strong>, which Module 8 addresses for every container in the
+    user; and <strong>thread safety</strong>, which Module 9 addresses for every container in the
     engine at once rather than one at a time.
   </p>
 
@@ -2026,7 +2026,7 @@ namespace engine::ecs
 struct entity
 {
     /// Generation in the high 12 bits, index in the low 20. Public because an
-    /// entity is a value, and because serialization (Module 8) wants this word.
+    /// entity is a value, and because serialization (Module 9) wants this word.
     std::uint32_t bits = 0;
 
     /// Which slot of the allocator this entity occupies. Meaningless when
@@ -2085,7 +2085,7 @@ inline constexpr entity null_entity{};
 /// Complexity: `create`, `destroy` and `alive` are O(1) with no allocation once
 /// the slot vector has reached its high-water mark.
 ///
-/// **Not thread-safe**, exactly as `engine::pool` is not. Module 8&#x27;s job system
+/// **Not thread-safe**, exactly as `engine::pool` is not. Module 9&#x27;s job system
 /// revisits every shared container in the engine at once.
 class entity_allocator
 {
@@ -2672,7 +2672,7 @@ namespace detail
 /// first call, thread-safely (C++11 magic statics), but the counter increment
 /// itself is not atomic: **register your component types from one thread**, which
 /// in practice means &quot;touch each type once before the job system starts&quot;, and is
-/// the same constraint every container in this engine carries until Module 8.
+/// the same constraint every container in this engine carries until Module 9.
 template &lt;typename T&gt;
 [[nodiscard]] inline component_id component_id_of()
 {
@@ -2988,7 +2988,7 @@ namespace engine::ecs
 /// mutating a `std::vector` while ranging over it is silent. The safe patterns are
 /// the same as for a vector: collect the entities you want to change into a small
 /// buffer and act after the loop, or make the change through a deferred command
-/// list (Module 8 builds one for the job system).
+/// list (Module 9 builds one for the job system).
 template &lt;typename... Ts&gt;
 class view
 {
@@ -3287,7 +3287,7 @@ struct lifetime
 // Read the queries and you can see the data flow without reading the bodies:
 // `orbit_system` writes placements and reads orbits; `render_system` reads
 // placement, geometry and material and writes none of them. That is the property
-// Module 8&#x27;s job system will need in order to run two of these at once, and it
+// Module 9&#x27;s job system will need in order to run two of these at once, and it
 // is legible here for free.
 
 /// Put every orbiting entity where its orbit says it should be, at time `t`.

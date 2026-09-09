@@ -526,7 +526,7 @@ figure.dia svg .z-other   { fill: #6e7080; }
       cheap because it stays outside the loop, and the resolution comes from the experiment's
       design rather than from the clock's. A sampling profiler — <code>perf</code>, Instruments,
       VTune — is the other honest route: it interrupts periodically and records where the program
-      was, which perturbs it barely at all. Module 8 uses both properly.
+      was, which perturbs it barely at all. Module 9 uses both properly.
     </p>
   </div>
 
@@ -6566,7 +6566,7 @@ struct cull_stats
 /// them **across frames** rather than declaring them inside the function is what
 /// removes the per-frame allocation, since `clear()` keeps the capacity.
 ///
-/// This is the smallest possible taste of Module 8&#x27;s allocators: the fix for
+/// This is the smallest possible taste of Module 9&#x27;s allocators: the fix for
 /// allocation in a hot loop is almost never a faster allocator, it is not
 /// allocating.
 struct projection_scratch
@@ -10318,7 +10318,7 @@ cmake --build build --config Release -j
         is.</li>
     <li><strong>Ulrich Drepper, "What Every Programmer Should Know About Memory" (2007)</strong> —
         long, and still the best single account of why §4.10's table has a cliff in it. Skim parts
-        2 and 3 and come back to the rest when Module 8 builds allocators.</li>
+        2 and 3 and come back to the rest when Module 9 builds allocators.</li>
     <li><strong>Denis Bakhvalov, <em>Performance Analysis and Tuning on Modern CPUs</em></strong> —
         free, current, and the right next step for sampling profilers and hardware counters, which
         this lesson deliberately did not use.</li>

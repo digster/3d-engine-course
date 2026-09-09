@@ -189,7 +189,7 @@ void load_model(scene_assets& assets, model_state& m, model_choice c, bool apply
     // changed. Validation is a pure function of the mesh and it is the demo's
     // HUD data, not the store's: an asset system that cached the *validator's*
     // opinion would have to decide when that opinion expires, and this demo has
-    // no need to buy that problem. Module 8's cooked assets do, and that is where
+    // no need to buy that problem. Module 9's cooked assets do, and that is where
     // it belongs.
     const engine::mesh_data* loaded = assets.store.mesh_at(m.geometry);
     m.check = loaded != nullptr ? engine::validate(loaded->view()) : engine::mesh_report{};

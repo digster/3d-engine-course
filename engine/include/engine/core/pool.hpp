@@ -36,7 +36,7 @@
 //      If a handle survived only because nothing ever moved, it would be a
 //      pointer with extra steps. Here it demonstrably is not.
 //
-// WHAT THIS IS NOT. It is not thread-safe (Module 8's job system revisits every
+// WHAT THIS IS NOT. It is not thread-safe (Module 9's job system revisits every
 // shared container). It does not sort, and the order of `items()` is
 // deliberately unspecified — depending on it is depending on the history of your
 // removals. And `get()` returns a raw pointer, which is a real hazard with a

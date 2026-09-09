@@ -273,7 +273,7 @@ info.depth_stencil_state.compare_op = SDL_GPU_COMPAREOP_LESS;          // 3.1</c
     <code>compare_op = LESS</code> is the entire z-buffer of lesson 3.1, compressed into one
     enum. If you wrote that depth test — if you have <em>seen</em> the flicker when the
     comparison is backwards — then <code>LESS</code> is obvious and <code>GREATER</code> is a
-    tool you know when to reach for (and in Module 8 you will, for reverse-Z). If you did not,
+    tool you know when to reach for (and in Module 9 you will, for reverse-Z). If you did not,
     it is a magic word.
   </p>
 
@@ -313,7 +313,7 @@ info.depth_stencil_state.compare_op = SDL_GPU_COMPAREOP_LESS;          // 3.1</c
       <!-- lane 1: kept -->
       <g>
         <rect x="16" y="34" width="628" height="104" rx="8" class="fill-soft" stroke="var(--axis-y)" stroke-width="1.8"/>
-        <text x="30" y="54" class="sm t-ok" font-weight="700">KEPT LITERALLY — the same source, still compiling in Module 8</text>
+        <text x="30" y="54" class="sm t-ok" font-weight="700">KEPT LITERALLY — the same source, still compiling in Module 9</text>
         <g class="xs mono">
           <text x="30" y="76">vec2/3/4, mat3/4</text>
           <text x="30" y="92">the OBJ loader</text>
@@ -366,7 +366,7 @@ info.depth_stencil_state.compare_op = SDL_GPU_COMPAREOP_LESS;          // 3.1</c
     <figcaption>
       <span class="fignum">Figure 1.</span> The three buckets. Percentages are rough — they are
       a shape, not a measurement — but the shape is the point: <strong>most of what you write in
-      Modules 1–3 is still in the engine at the end of Module 8.</strong> The "throwaway"
+      Modules 1–3 is still in the engine at the end of Module 9.</strong> The "throwaway"
       renderer is about 400 lines of ~2,500.
     </figcaption>
   </figure>
@@ -375,7 +375,7 @@ info.depth_stencil_state.compare_op = SDL_GPU_COMPAREOP_LESS;          // 3.1</c
     Read the top lane again, because it is the part people do not expect. The maths library you
     write in Module 2 — <code>vec3</code>, <code>mat4</code>, the projection matrix — is not a
     teaching exercise you discard. <strong>It is the maths library of the finished engine.</strong>
-    It is in the capstone game in Module 8. You will have written every line of it, and it will
+    It is in the capstone game in Module 9. You will have written every line of it, and it will
     still be there four hundred hours later.
   </p>
 
@@ -458,7 +458,7 @@ info.depth_stencil_state.compare_op = SDL_GPU_COMPAREOP_LESS;          // 3.1</c
       is already 98% of the way through the depth range. That is not an error — it is the famous
       non-linearity of the depth buffer, and it is why depth precision is lavished near the
       camera and starved far away. We meet it properly in 3.1, and fix it with reverse-Z in
-      Module 8.
+      Module 9.
     </p>
   </div>
 
@@ -545,7 +545,7 @@ info.depth_stencil_state.compare_op = SDL_GPU_COMPAREOP_LESS;          // 3.1</c
       <desc id="f2-d">Two horizontal tracks. The lighting track runs from Lambert in lesson 3.6,
         to Blinn-Phong in 3.7, to the BRDF in 6.2, to microfacet theory in 6.3, to Cook-Torrance
         in 6.4. The memory track runs from new and delete, to RAII, to handles in 5.4, to custom
-        allocators in 8.4. Each step is drawn larger than the last to show increasing depth.</desc>
+        allocators in 9.4. Each step is drawn larger than the last to show increasing depth.</desc>
       <defs>
         <marker id="s-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
           <path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
@@ -598,7 +598,7 @@ info.depth_stencil_state.compare_op = SDL_GPU_COMPAREOP_LESS;          // 3.1</c
           <text x="150" y="98">M1</text>
           <text x="300" y="98">M2</text>
           <text x="450" y="98">5.4</text>
-          <text x="590" y="98">8.4</text>
+          <text x="590" y="98">9.4</text>
         </g>
       </g>
 
@@ -982,7 +982,7 @@ info.depth_stencil_state.compare_op = SDL_GPU_COMPAREOP_LESS;          // 3.1</c
       <p>
         <strong>4. Accumulator — kept literally,</strong> and it is the odd one out: it never
         cared about the renderer at all. The loop from 1.4 is untouched by Module 4 and still
-        running the physics in Module 7. Renderer-agnostic code is the most durable code in an
+        running the physics in Module 8. Renderer-agnostic code is the most durable code in an
         engine — which is itself the boundary rule from
         <a href="00-01-what-is-an-engine.html#boundaries">0.1 §3.4</a> paying a dividend.
       </p>

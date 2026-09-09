@@ -1292,7 +1292,7 @@ template &lt;int K&gt;
     <line x1="24" y1="268" x2="696" y2="268" class="grid" stroke-width="1.2"/>
     <text x="24" y="288" class="xs t-hi" text-anchor="start">The archetype's cost is the entity's TOTAL WIDTH; the sparse set's is one pool, whatever else the entity has.</text>
     <text x="24" y="306" class="xs" text-anchor="start">A real entity carries ten to thirty components. Four is the number that flatters the archetype, and this course will not</text>
-    <text x="24" y="322" class="xs" text-anchor="start">stay at four past Module 7.</text>
+    <text x="24" y="322" class="xs" text-anchor="start">stay at four past Module 8.</text>
     </svg>
     <figcaption>
       <span class="fignum">Figure 5.</span>
@@ -1342,7 +1342,7 @@ template &lt;int K&gt;
     <p>The probe's entity has four. A shipping game entity has ten to thirty — a transform, a
        parent link, a mesh, a material, a bounding volume, a rigid body, a collider, a health
        value, a team, an AI state, a sound emitter, a light, an animation state, a network id.
-       <strong>This course's entity will pass twelve during Module 7</strong>, when rigid bodies
+       <strong>This course's entity will pass twelve during Modules 7–8</strong>, when rigid bodies
        and skeletons arrive. The 13.83× column is the one to plan against, not the 3.08× one.</p>
   </div>
 
@@ -1671,14 +1671,14 @@ template &lt;int K&gt;
     not.</strong> The archetype's query win is at most 1.94×, only above ten thousand entities,
     only when a query is selective, and only on the arms we have <em>not</em> grouped. The
     archetype's structural-change loss is 13.8× and it <em>grows with every component type this
-    course adds</em> — Module 6 adds materials, Module 7 adds rigid bodies, colliders and skeletal
+    course adds</em> — Module 6 adds materials, Module 7 adds skeletal state, Module 8 rigid bodies and colliders and
     state. A cost that scales with the future of the codebase is worse than a larger cost that
     does not.
   </p>
 
   <p>
     <strong>3. Nothing at this engine's scale is on the table anyway.</strong> Below a thousand
-    entities every arm is within 16% and most within 5%. The demos have four objects. Module 8's
+    entities every arm is within 16% and most within 5%. The demos have four objects. Module 9's
     capstone will have hundreds. We are choosing the design that will be right at 10<sup>5</sup>
     entities while paying nothing either way at 10<sup>2</sup>, which means the decision can be
     made on the properties above rather than on today's frame time.
@@ -3625,7 +3625,7 @@ sh scratch/build_bench_57.sh | head -20</code></pre>
          numbers omitted. Then write down what it would take to change this course's mind.</p>
       <details><summary>Hint</summary>
         <p>The strongest archetype case is not the query ratio. It is the memory table plus a
-           claim about what the engine will look like at Module 8.</p>
+           claim about what the engine will look like at Module 9.</p>
       </details>
       <details><summary>Solution sketch</summary>
         <p>The best version runs: at 32 component types the sparse set pays 14.8 MB of index that

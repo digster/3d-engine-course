@@ -76,7 +76,7 @@ std::string shader_path(const char* relative)
     // Built per call rather than cached in a static, deliberately. A function-local
     // static would be one `SDL_GetBasePath` instead of N, and it would also be
     // mutable global state that no test could point somewhere else — which is the
-    // shape of every hot-reload problem in Module 8. Shader loading happens a
+    // shape of every hot-reload problem in Module 9. Shader loading happens a
     // handful of times at start-up; the syscall is not the cost.
     const search_path paths = search_path::beside_executable("shaders");
 

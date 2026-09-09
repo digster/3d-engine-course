@@ -844,7 +844,7 @@ Two habits established here that carry into the refactor:
 - **The simulation is a pure function of `(state, intent, h)`.** No globals, no clock reads, no
   hidden RNG — the PRNG seed lives inside the state struct. `state` is a plain copyable aggregate
   with no pointers, which is what makes `previous = current` cheap enough to run every step, and
-  what will let Module 8 serialise it in one call. A single global read would silently destroy
+  what will let Module 9 serialise it in one call. A single global read would silently destroy
   replayability; see [conventions.html §9](docs/conventions.html).
 
 ### 2.2 Now (Lesson 5.1 onward): engine / demos / tools
@@ -974,7 +974,7 @@ chore. What follows is on disk.
 │                           #   for the ECS: 24 entities are invisible because
 │                           #   they LACK a geometry component, and [F] drifts
 │                           #   the sun so everything follows it
-└── tools/                  # editor, asset cooker (Module 8). Not yet.
+└── tools/                  # editor, asset cooker (Module 9). Not yet.
 ```
 
 **The boundary is the include path, not the style guide.** One property does it:
@@ -1559,7 +1559,7 @@ Built roughly in dependency order — each module's milestone is the next module
   index; it knows nothing about pools, caches, handles or search paths. Handing `parse_gltf` an
   `asset_store&` would be fewer types and would cost three things: the parser could no longer be
   tested without a filesystem (Lesson 3.5 split `parse_obj` from `load_obj` for exactly this and
-  used the split to test a dozen malformed inputs from string literals); Module 8's offline asset
+  used the split to test a dozen malformed inputs from string literals); Module 9's offline asset
   cooker could not use it, because a handle is meaningless outside the pool that issued it and
   therefore cannot be serialised; and "is this the same image we already loaded?" would acquire a
   second answer, in a second place, that will eventually disagree with the first.
@@ -1730,7 +1730,7 @@ Built roughly in dependency order — each module's milestone is the next module
     an archetype from **13.10 ns to 58.48 ns** and leaves the sparse set at **4.25 → 4.23 ns**.
     The cost model is not bytes moved (that predicts 2.3×; the truth is 4.5×) but *independent
     memory streams touched*, two per column per move, because a column is a separate allocation.
-    This engine's entity passes twelve components during Module 7.
+    This engine's entity passes twelve components during Modules 7–8.
   - **A group is an archetype you can add later.** A pool's dense order is nobody else's
     business, so two pools can be sorted into a common order; index *i* then means the same
     entity in both, the query reads no sparse entry at all, and what it walks is byte-identical
@@ -1802,13 +1802,13 @@ Built roughly in dependency order — each module's milestone is the next module
   names while walking it. The walk is over the lead pool's dense array *by position* and both
   `insert` and `erase` move it — the same hazard as mutating a `std::vector` inside a
   range-`for`. A debug build catches it in `view::fetch`; the safe patterns are collect-then-act
-  (`lifetime_system` in `ecs_swarm`) or a deferred command list, which Module 8 builds.
+  (`lifetime_system` in `ecs_swarm`) or a deferred command list, which Module 9 builds.
 
   **Groups are deliberately absent.** 5.7's 0.99× measurement is *why* the sparse set was
   chosen — the migration only runs one way — but building one before there is a profile is
   optimising on a hunch. `pool::components()` documents that its dense order is nobody's business
   *precisely so* a future group may sort it. Also absent, each with a reason: exclusion queries,
-  const views, signals, and thread safety (Module 8 revisits every container at once).
+  const views, signals, and thread safety (Module 9 revisits every container at once).
 
   **What 5.8 did not do: render through it.** `collect_triangles` still takes
   `span<const scene_object>`, so `ecs_swarm`'s render system walks a view and *fills one* — a
@@ -1850,7 +1850,7 @@ Built roughly in dependency order — each module's milestone is the next module
   first. Two consequences follow. The resolve loop has *no recursion, no stack, no visited set
   and no “has my parent been done yet” test*, because the order already guarantees what those
   would check. And **within a level nothing depends on anything else in it**, so a level is a
-  `parallel_for` that Module 8 will not have to design — it arrived with the choice of order.
+  `parallel_for` that Module 9 will not have to design — it arrived with the choice of order.
 
   **`rebuild()` is split from `resolve()` and that split is worth more than the order itself.**
   A rebuild costs about one resolve (measured: 0.93–1.39), and a game re-parents rarely while
@@ -2000,7 +2000,7 @@ Built roughly in dependency order — each module's milestone is the next module
 
 - **Fixed timestep + render interpolation** (Module 1). The accumulator loop, derived rather
   than pasted as folklore. Simulation determinism is a property you design in early or retrofit
-  painfully; physics in Module 7 depends on it already being right.
+  painfully; physics in Module 8 depends on it already being right.
 - **No exceptions, no RTTI in engine core.** Explicit error handling instead. The tradeoff is
   taught honestly in its own section rather than asserted.
 - **Colour and depth are separate attachments** (Module 3, Lesson 3.1). `framebuffer` and
@@ -2068,7 +2068,7 @@ Built roughly in dependency order — each module's milestone is the next module
 - **Normals are transformed by the inverse transpose, everywhere, forever** (Module 3, Lesson
   3.6). `normal_matrix` lives in `src/math/mat4.hpp` rather than in the renderer because it is a
   statement about matrices, not about light — normal mapping (Module 6) and collision response
-  (Module 7) need the same function. The rule exists because a normal is defined by a
+  (Module 8) need the same function. The rule exists because a normal is defined by a
   *relationship* (perpendicular to every tangent) rather than by being an arrow, and only
   `(M⁻¹)ᵀ` preserves it. Critically, it is **identical to the model matrix for rotations and
   parallel to it for uniform scales**, so a codebase can carry the bug indefinitely while its
@@ -2080,7 +2080,7 @@ Built roughly in dependency order — each module's milestone is the next module
   position was ever needed. A specular highlight needs `eye - position`, so the composition comes
   apart and every vertex pays a second multiply. Nothing regressed; a fast path was **bought out by
   a feature**. The general shape — an optimisation is usually a simplifying assumption with a name,
-  and features cash those assumptions in — is worth carrying into Module 8's profiling work, where
+  and features cash those assumptions in — is worth carrying into Module 9's profiling work, where
   "why is this slower than last month?" is usually answered by a feature nobody connected to the
   loop it slowed.
 - **`specular` is the material system arriving one field at a time** (Module 3, Lesson 3.7). Two
@@ -2338,7 +2338,7 @@ interval and an fps counter cannot tell you that you made anything faster.
 
 - **CPU:** the debugger from day one (Module 0), not printf. Breakpoints, watch, stepping.
 - **GPU:** RenderDoc, with a dedicated lesson in Module 4. Frame captures are gitignored.
-- **Profiling:** measure before optimizing. Module 3 profiles the software rasterizer; Module 8
+- **Profiling:** measure before optimizing. Module 3 profiles the software rasterizer; Module 9
   does CPU/GPU profiling case studies *on our own engine*.
 
 ### Refactoring
@@ -2358,7 +2358,7 @@ Since Lesson 5.1 there is a documented procedure, and it is not optional for any
 ### Tests
 
 Unit tests under `tests/`, starting with `math` — it is pure, dependency-free, and every later
-subsystem's correctness rests on it. Module 8 covers a pragmatic testing strategy for the parts
+subsystem's correctness rests on it. Module 9 covers a pragmatic testing strategy for the parts
 of an engine that resist unit testing.
 
 ---
@@ -2393,7 +2393,7 @@ Full detail with diagrams in [`docs/conventions.html`](docs/conventions.html); t
 | Conformance to a published BRDF | The spec's **parameters** are the conformance surface, not its shading. glTF §3.9.6 permits BRDF variation; Appendix B requires a physically accurate one be energy conserving — which selects our coupling over the spec's own sample form (6.6) |
 | Comparing two BRDFs | Reduce both to named terms and find the ones that are not the same expression; then price the survivor at **both** ends of its range. Five of six terms are identical to glTF's, and the survivor is 1.036× at normal incidence and 5.62× at 88° (6.6) |
 | Importing a new format | Audit the conventions against ours **before** writing conversion code, and write the audit down (Conventions §7k). A mismatch does not throw — it produces a plausible picture, and a plausible picture survives review (6.6) |
-| Loader layering | Parsers return **descriptions** (URIs, indices); the asset store returns **handles**. A parser that needs a pool cannot be tested from a string literal nor run offline in Module 8 (6.6) |
+| Loader layering | Parsers return **descriptions** (URIs, indices); the asset store returns **handles**. A parser that needs a pool cannot be tested from a string literal nor run offline in Module 9 (6.6) |
 | A texture's colour space | On the **texture**, not the sampler — because that is where the hardware puts it: an `_SRGB` format decodes, a `_UNORM` one does not, and one image cannot be both at once (6.7) |
 | Tangent frames | Derived from the uv chart, orthogonalised against the normal (which is the one held fixed), handedness stored as `tangent.w` because a recomputed bitangent cannot disagree with the N and T beside it (6.7) |
 | Transforming a direction | A **normal** takes the inverse transpose, because it is defined by being *perpendicular*. A **tangent** takes the model matrix, because it lies *in* the surface and is a difference of positions (3.6, 6.7) |

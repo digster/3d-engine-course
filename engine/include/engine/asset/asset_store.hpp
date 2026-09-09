@@ -118,7 +118,7 @@ struct mesh_import
 /// A string rather than a hashed struct, deliberately: it is human-readable in a
 /// log and in a debugger, which matters much more than the handful of bytes it
 /// costs on a few hundred assets. When there are ten settings and fifty thousand
-/// assets, hash it — and Module 8, which caches cooked assets on disk, is where
+/// assets, hash it — and Module 9, which caches cooked assets on disk, is where
 /// that becomes true.
 [[nodiscard]] std::string asset_key(std::string_view name, const mesh_import& settings);
 

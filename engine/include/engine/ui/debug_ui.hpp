@@ -17,7 +17,7 @@
 // for a tool and exactly wrong for a menu somebody paid for. A game's HUD is
 // built out of the renderer, in Module 6, with a material and a font atlas.
 //
-// So: `engine/ui/` is where the engine's *tooling* surface lives. Module 8's
+// So: `engine/ui/` is where the engine's *tooling* surface lives. Module 9's
 // editor — hierarchy, inspector, gizmos — is built on this file, and the
 // top-level `tools/` directory it will live in is a different thing (executables
 // that use the engine, not part of it).

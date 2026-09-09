@@ -45,7 +45,7 @@
       <span class="dir">Index</span>
       <span class="ttl">All lessons</span>
     </a>
-    <a class="next-l" href="../index.html">
+    <a class="next-l" href="05-02-platform-layer.html">
       <span class="dir">Next →</span>
       <span class="ttl">5.2 — The Platform and Application Layer</span>
     </a>
@@ -289,7 +289,7 @@ int build_scene(scene_object (&amp;out)[k_max_objects], scene_kind kind, spin mo
     A library gives it up on purpose. The moment some code has consumers you do not control, its
     surface stops being an implementation detail and becomes a <em>promise</em>. Break the promise
     and you break somebody else's build — and the somebody else, in our case, is the capstone game
-    in Module 8, plus every demo, plus every harness. They are all us, but they are us at a
+    in Module 9, plus every demo, plus every harness. They are all us, but they are us at a
     distance, which is exactly the point: <strong>an API is a message you write to a person who
     cannot ask you what you meant.</strong>
   </p>
@@ -1107,7 +1107,7 @@ demos/
   sandbox/   main.cpp                                 &lt;- Lessons 1.8 - 4.9
   hello_cube/main.cpp                                 &lt;- the acceptance test
 
-tools/                     &lt;- Module 8. Not yet.</code></pre>
+tools/                     &lt;- Module 9. Not yet.</code></pre>
   </figure>
 
   <p>
@@ -1637,7 +1637,7 @@ grep -rl '#include "' engine demos | xargs sed -i '' -E \
 #
 #     engine/   the library. Public headers under engine/include/engine/.
 #     demos/    executables that link it and may include only those headers.
-#     tools/    (Module 8) the editor and the asset pipeline.
+#     tools/    (Module 9) the editor and the asset pipeline.
 #
 # Read this file, then engine/CMakeLists.txt, then demos/CMakeLists.txt. Together
 # they are about a hundred lines of actual instruction, and the boundary the whole
@@ -2058,7 +2058,7 @@ endfunction()
 #
 # We are one repository building both sides from the same source, so we get none
 # of the benefit and all of the cost. Engines that DO ship shared libraries do it
-# for hot reload and for plugin boundaries; hot reload arrives in Module 8 and it
+# for hot reload and for plugin boundaries; hot reload arrives in Module 9 and it
 # reloads shaders and assets, not code. If that ever changes, this word is the
 # only thing that has to.
 add_library(engine STATIC
@@ -2877,7 +2877,7 @@ struct cull_stats
 /// them **across frames** rather than declaring them inside the function is what
 /// removes the per-frame allocation, since `clear()` keeps the capacity.
 ///
-/// This is the smallest possible taste of Module 8&#x27;s allocators: the fix for
+/// This is the smallest possible taste of Module 9&#x27;s allocators: the fix for
 /// allocation in a hot loop is almost never a faster allocator, it is not
 /// allocating.
 struct projection_scratch
@@ -3004,7 +3004,7 @@ struct collect_stats
 ///
 /// `out` and `scratch` are the caller&#x27;s, and are reused across frames on
 /// purpose: `clear()` keeps the capacity, so a steady-state frame allocates
-/// nothing. It is the smallest taste of Module 8&#x27;s allocators — the fix for
+/// nothing. It is the smallest taste of Module 9&#x27;s allocators — the fix for
 /// allocation in a hot loop is almost never a faster allocator, it is not
 /// allocating.
 void collect_triangles(std::vector&lt;raster_triangle&gt;&amp; out, projection_scratch&amp; scratch,
@@ -11587,7 +11587,7 @@ E. the harness itself
       <span class="dir">Index</span>
       <span class="ttl">All lessons</span>
     </a>
-    <a class="next-l" href="../index.html">
+    <a class="next-l" href="05-02-platform-layer.html">
       <span class="dir">Next →</span>
       <span class="ttl">5.2 — The Platform and Application Layer</span>
     </a>

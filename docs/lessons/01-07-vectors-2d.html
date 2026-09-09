@@ -1225,7 +1225,7 @@ constexpr vec2&amp; operator/=(vec2&amp; v, float s) { v.x /= s; v.y /= s; retur
 }
 
 /// Rotated a quarter turn. Useful for "the direction to my left", for surface
-/// normals in 2-D, and for the separating axes of Module 7's collision work.
+/// normals in 2-D, and for the separating axes of Module 8's collision work.
 ///
 /// Which way it turns depends on which way your y axis points, so the answer is
 /// only meaningful once that is pinned down — in framebuffer coordinates, where
@@ -1937,7 +1937,7 @@ cmake --build build --config Debug
         have been hard-coding since Lesson 1.3, now as a special case of the general rule. That is
         the payoff of the geometric route: the axis-aligned version was never a different idea, only
         a simpler instance. This same function appears again in Module 6 for mirror reflections and
-        in Module 7 for collision response.
+        in Module 8 for collision response.
       </p>
     </details>
   </div>

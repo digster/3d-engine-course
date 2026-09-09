@@ -129,7 +129,7 @@ enum log_category : int
 /// which is what "also" has to mean if a redirect is not to lose your console.
 ///
 /// SDL holds a mutex across the output callback, so the file is written from one
-/// thread at a time even when Module 8's job system is pushing messages from
+/// thread at a time even when Module 9's job system is pushing messages from
 /// several.
 [[nodiscard]] bool set_log_file(const char* path);
 

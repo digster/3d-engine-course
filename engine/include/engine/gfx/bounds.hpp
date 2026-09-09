@@ -14,7 +14,7 @@
 // is the wrong shape *here* for one reason: the quantity a shadow map needs is
 // the extent of the scene **along the light's three axes**, and a box already
 // answers that question directly in whatever frame you put it in, while a sphere
-// would have to be re-tightened. Lesson 6.10's frustum culling will want both
+// would have to be re-tightened. Lesson 6.16's frustum culling will want both
 // and will say so then.
 //
 // WHAT AN AABB IS NOT. It is not the object. `transformed()` below returns the

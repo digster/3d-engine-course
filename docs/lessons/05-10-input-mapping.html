@@ -1255,7 +1255,7 @@ enum class mouse_axis : std::uint8_t
 /// delta with 0.2 and the action is a sensitivity-scaled look control.
 ///
 /// Trivially copyable and free of pointers, so a binding table is
-/// `std::vector&lt;binding&gt;` and Module 8&#x27;s serializer will write it as bytes.
+/// `std::vector&lt;binding&gt;` and Module 9&#x27;s serializer will write it as bytes.
 struct binding
 {
     action_id action;
@@ -1371,7 +1371,7 @@ public:
 
     /// Every binding, in the order they were added.
     ///
-    /// This is what a settings screen enumerates and what Module 8&#x27;s serializer
+    /// This is what a settings screen enumerates and what Module 9&#x27;s serializer
     /// writes. It is deliberately a flat list rather than a per-action map: the
     /// natural question a rebinding UI asks is &quot;what is bound to this action&quot;,
     /// which is a filter over a short list, and the natural question a conflict
@@ -2273,7 +2273,7 @@ private:
     ///
     /// **Note that these two things are separable, and that is the whole point.**
     /// The declarations are what the program is about; the bindings are a policy
-    /// that a settings screen, a config file or Module 8&#x27;s serializer could
+    /// that a settings screen, a config file or Module 9&#x27;s serializer could
     /// replace wholesale without any of the code below changing. Today they are
     /// adjacent because there is nowhere else to put them yet.
     void declare_actions()

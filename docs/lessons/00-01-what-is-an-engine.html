@@ -475,8 +475,8 @@
           <tr><td>No exceptions in the core</td><td>Predictable timing beats convenient error handling when the deadline is hard.</td><td>Module 5.3</td></tr>
           <tr><td>Fixed timestep, decoupled from rendering</td><td>Physics must be deterministic even when frame time is not.</td><td>Module 1.4</td></tr>
           <tr><td>Handles instead of pointers</td><td>So memory can be relocated and compacted for locality.</td><td>Module 5.4</td></tr>
-          <tr><td>Custom arena and pool allocators</td><td>A general-purpose <code>malloc</code> has unpredictable latency.</td><td>Module 8.4</td></tr>
-          <tr><td>A job system</td><td>One core cannot make the deadline; eight might.</td><td>Module 8.2</td></tr>
+          <tr><td>Custom arena and pool allocators</td><td>A general-purpose <code>malloc</code> has unpredictable latency.</td><td>Module 9.4</td></tr>
+          <tr><td>A job system</td><td>One core cannot make the deadline; eight might.</td><td>Module 9.2</td></tr>
         </tbody>
       </table>
     </div>
@@ -769,7 +769,7 @@
         <tr>
           <td><strong>scene ↔ renderer</strong></td>
           <td><strong>Owner.</strong> The scene owns what <em>exists</em>; the renderer owns how to <em>draw</em>.</td>
-          <td>The most contested line in engine design — see below. Ours is drawn in 5.9 and 6.13.</td>
+          <td>The most contested line in engine design — see below. Ours is drawn in 5.9 and 6.16.</td>
         </tr>
       </tbody>
     </table>
@@ -802,7 +802,7 @@
       <li>
         <strong>Is audio simulation?</strong> It is time-stepped and spatial, so yes — but it
         runs on its <em>own</em> thread at its own rate, so also no. Rate change ⇒ boundary; our
-        own rule pulls it out. → 7.13
+        own rule pulls it out. → 7.8
       </li>
     </ul>
     <p>
@@ -909,7 +909,7 @@
   </p>
 
   <p>
-    Nothing happens. 7.3, 7.8, 8.2 — still 60 FPS, still green. Then you hit
+    Nothing happens. 7.3, 8.1, 9.2 — still 60 FPS, still green. Then you hit
     <strong>8.4</strong>, the total reaches 16.70 ms, and the readout does not sag to 59 FPS. It
     <em>falls to 30</em>. One notch. Half your framerate. That is the cliff, and it is worth
     feeling once with your hands rather than only reading about.
@@ -1033,7 +1033,7 @@ gnome-monitor-config list 2>/dev/null || wlr-randr 2>/dev/null</code></pre>
     </ol>
     <p style="margin-bottom:0">
       If any of those four is shaky, the section to reread is linked from the contents above.
-      Number 4 is the one that will still be paying you back in Module 8.
+      Number 4 is the one that will still be paying you back in Module 9.
     </p>
   </div>
 
@@ -1307,7 +1307,7 @@ gnome-monitor-config list 2>/dev/null || wlr-randr 2>/dev/null</code></pre>
     <p>
       The one sentence worth carrying into every remaining lesson: <strong>everything strange
       about engine architecture is an answer to "how do we finish in 16.67 ms, every single
-      time?"</strong> When Module 5 asks you to give up pointers for handles, or Module 8 asks
+      time?"</strong> When Module 5 asks you to give up pointers for handles, or Module 9 asks
       you to write an allocator, that is the question being answered. You will not have to take
       it on faith — you will have measured it.
     </p>

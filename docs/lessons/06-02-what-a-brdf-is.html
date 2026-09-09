@@ -198,7 +198,7 @@ return {albedo.r * (ir + lights.ambient.r) + surface.colour.r * ir * spec, /* �
     You might reasonably think this is pedantry. It is not, and the rest of Module 6 is the proof.
     Every remaining lesson in this module is about replacing the guess in that return statement
     with something better — microfacets in 6.3, Cook–Torrance in 6.4, image-based lighting in
-    6.12 — and <em>every one of those is a claim about how much of the arriving light leaves in a
+    6.15 — and <em>every one of those is a claim about how much of the arriving light leaves in a
     given direction</em>. You cannot check such a claim against an expression that does not know
     what arriving light is.
   </p>
@@ -972,7 +972,7 @@ return {albedo.r * (ir + lights.ambient.r) + surface.colour.r * ir * spec, /* �
     <span class="label">What is still wrong with it, now that we can say</span>
     <p>The arithmetic is exactly right; the <em>assumption</em> is what fails. Real bounced light
        is not uniform — it comes mostly from the sky above and the floor below, and a surface
-       facing up is lit quite differently from one facing sideways. Lesson 6.12 replaces the
+       facing up is lit quite differently from one facing sideways. Lesson 6.15 replaces the
        constant L<sub>a</sub> with an environment map and a precomputed irradiance map, which is
        the same integral with the "uniform" dropped. And the specular half of the ambient has no
        term here at all, which is the other half of that lesson.</p>
@@ -1080,7 +1080,7 @@ return {albedo.r * (ir + lights.ambient.r) + surface.colour.r * ir * spec, /* �
        our display and our lack of a tonemapper, and it is exactly the convention a photographer's
        white card encodes. A real engine authors lights in <em>lux</em> — a sunny day is around
        100,000 — and converts to display values through an explicit exposure and a tonemapping
-       curve. <strong>Lesson 6.10 builds that</strong>, at which point this constant stops being
+       curve. <strong>Lesson 6.12 builds that</strong>, at which point this constant stops being
        the rule and becomes a default.</p>
     <p>Naming it now is the point. The engine has <em>had</em> an exposure convention since Lesson
        3.6; it simply had no name, no derivation, and no place to be written down. An unnamed
@@ -1620,7 +1620,7 @@ const float3 lit = (f_d + f_s) * e + base * ambient;</code></pre>
   <p>
     <strong>It does not give the light a real unit.</strong> <code>irradiance</code> is in
     "engine units" where a white surface reads 1.0. Lux would need an exposure and a tonemapper to
-    get back to a display value; that is Lesson 6.10, and §5.2 says what changes when it arrives.
+    get back to a display value; that is Lesson 6.12, and §5.2 says what changes when it arrives.
   </p>
 
   <p>
@@ -1775,7 +1775,7 @@ inline constexpr float k_inv_pi = std::numbers::inv_pi_v&lt;float&gt;;
 ///
 /// so it renders at exactly 1.0 when `E_perp` is **pi**. That is the physical
 /// meaning of &quot;correctly exposed&quot; for this engine, and it is the same convention
-/// a photographer&#x27;s white card encodes. It is a *choice*, not a law — Lesson 6.10
+/// a photographer&#x27;s white card encodes. It is a *choice*, not a law — Lesson 6.12
 /// replaces it with a real exposure control and a tonemapper, at which point
 /// lights get authored in lux and this constant becomes the default rather than
 /// the rule.
@@ -1877,7 +1877,7 @@ struct directional_light
 /// right answer for a uniform environment, and the constant that has to be
 /// remembered everywhere else is the one place it is not needed. What remains wrong
 /// with it is not the arithmetic but the assumption: real bounced light is not
-/// uniform, it comes mostly from the sky and the floor, and Lesson 6.12 replaces
+/// uniform, it comes mostly from the sky and the floor, and Lesson 6.15 replaces
 /// `L_a` with an environment map that says which direction it came from.
 struct lighting
 {
@@ -3094,7 +3094,7 @@ void section_c_the_pi()
            &quot;a perfect white Lambertian, square-on to a light of irradiance pi, emits &quot;
            &quot;radiance %.9g — EXACTLY 1.0f, code %d. That is the derivation of &quot;
            &quot;k_reference_irradiance, and it is this engine&#x27;s definition of &#x27;correctly &quot;
-           &quot;exposed&#x27; until Lesson 6.10 replaces it with a real one&quot;,
+           &quot;exposed&#x27; until Lesson 6.12 replaces it with a real one&quot;,
            static_cast&lt;double&gt;(radiance), engine::linear_to_srgb_u8(radiance));
 }
 
@@ -3627,7 +3627,7 @@ sh scratch/build_verify_48.sh               # the CPU/GPU comparison, repaired</
             <em>because</em> of §4.4's cancellation. Now add a white specular and watch it fail —
             the sphere reappears, because the specular term reads the key light which is off, so it
             contributes nothing, and the ambient has no specular counterpart at all. That missing
-            term is the specular half of image-based lighting, and it is Lesson 6.12's subject. A
+            term is the specular half of image-based lighting, and it is Lesson 6.15's subject. A
             test that passes and then fails when you extend it is worth more than one that only
             passes.</p>
       </details>
@@ -3707,7 +3707,7 @@ sh scratch/build_verify_48.sh               # the CPU/GPU comparison, repaired</
         step in the tradition this course tries to follow.</li>
     <li><strong>Filament's documentation, §4 "Lighting"</strong> (google.github.io/filament). The
         clearest published account of what it means to author lights in real units and convert them
-        through an exposure — which is the lesson §5.2 defers to 6.10.</li>
+        through an exposure — which is the lesson §5.2 defers to 6.12.</li>
     <li><strong>Lambert, <em>Photometria</em> (1760).</strong> The cosine law is 265 years old and
         the original is a pleasure — Lambert derives it from the same projected-area picture in
         §3, without vectors, because vectors had not been invented.</li>

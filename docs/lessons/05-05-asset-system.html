@@ -396,7 +396,7 @@ m.geometry = lib.meshes.insert(std::move(data));</code></pre>
         <code>assets_lowend/</code> goes in front, and every asset it does not contain falls
         through to the base.</li>
     <li><strong>Editing while the game runs.</strong> Your source tree goes in front of the copy
-        CMake made beside the binary — which is half of Module 8's hot reload, arriving early and
+        CMake made beside the binary — which is half of Module 9's hot reload, arriving early and
         for free.</li>
     <li><strong>A test standing in for a real asset.</strong> Which is exactly what
         <code>verify_55</code> §A does: it writes a deliberately different torus into an override
@@ -1247,7 +1247,7 @@ m.unloaded = true;
   <p>
     That is worth internalising because it is the opposite of the intuition. "Asset loading is
     slow because disks are slow" is a sentence from a different decade; on this machine the disk
-    is a rounding error and the CPU work is everything. It is also why Module 8's cooked assets
+    is a rounding error and the CPU work is everything. It is also why Module 9's cooked assets
     are a real optimisation and a faster <em>file format</em> would not be: the win is not
     reading fewer bytes, it is <em>not parsing them</em>.
   </p>
@@ -1474,7 +1474,7 @@ m.unloaded = true;
 //   - mods and user content            (front root = the mod folder)
 //   - a localisation or platform pack  (front root = assets_ja/, assets_lowend/)
 //   - editing an asset while the game runs, out of the source tree rather than
-//     out of the copy CMake made next to the binary (Module 8&#x27;s hot reload)
+//     out of the copy CMake made next to the binary (Module 9&#x27;s hot reload)
 //   - a test fixture standing in for a real asset, which is what verify_55 does
 //
 // A NAME IS NOT A PATH, and keeping them different types in your head is what
@@ -1831,7 +1831,7 @@ struct mesh_import
 /// A string rather than a hashed struct, deliberately: it is human-readable in a
 /// log and in a debugger, which matters much more than the handful of bytes it
 /// costs on a few hundred assets. When there are ten settings and fifty thousand
-/// assets, hash it — and Module 8, which caches cooked assets on disk, is where
+/// assets, hash it — and Module 9, which caches cooked assets on disk, is where
 /// that becomes true.
 [[nodiscard]] std::string asset_key(std::string_view name, const mesh_import&amp; settings);
 
@@ -3363,7 +3363,7 @@ void load_model(scene_assets&amp; assets, model_state&amp; m, model_choice c, bo
     // changed. Validation is a pure function of the mesh and it is the demo&#x27;s
     // HUD data, not the store&#x27;s: an asset system that cached the *validator&#x27;s*
     // opinion would have to decide when that opinion expires, and this demo has
-    // no need to buy that problem. Module 8&#x27;s cooked assets do, and that is where
+    // no need to buy that problem. Module 9&#x27;s cooked assets do, and that is where
     // it belongs.
     const engine::mesh_data* loaded = assets.store.mesh_at(m.geometry);
     m.check = loaded != nullptr ? engine::validate(loaded-&gt;view()) : engine::mesh_report{};
@@ -4492,7 +4492,7 @@ cmp /tmp/shot_55.ppm scratch/shot_52.ppm &amp;&amp; echo "0 bytes differ"</code>
            reason real engines make the search path immutable after start-up, or invalidate the
            cache when it changes. Adding <code>asset_store::rescan()</code> — unload everything
            whose resolved root has changed — is a genuinely good next step and is most of what
-           Module 8's hot reload needs.</p>
+           Module 9's hot reload needs.</p>
       </details>
     </li>
 
@@ -4531,7 +4531,7 @@ cmp /tmp/shot_55.ppm scratch/shot_52.ppm &amp;&amp; echo "0 bytes differ"</code>
            to nothing" rule do the rest. At a thousand assets with readable keys you are spending
            a few tens of kilobytes on strings — nothing. The crossover is not size, it is
            <em>settings count</em>: once a key would be forty characters of encoded booleans it
-           has stopped being readable, which was its only advantage over a hash, and Module 8's
+           has stopped being readable, which was its only advantage over a hash, and Module 9's
            on-disk cooked-asset cache is where that happens.</p>
       </details>
     </li>
@@ -4654,7 +4654,7 @@ cmp /tmp/shot_55.ppm scratch/shot_52.ppm &amp;&amp; echo "0 bytes differ"</code>
     <li><strong>SDL3 wiki — <code>SDL_GetPathInfo</code>, <code>SDL_GetBasePath</code>,
         <code>SDL_GetPrefPath</code>.</strong> The last of those is the root this lesson does
         <em>not</em> add: writable per-user storage, which is where saves and screenshots belong
-        and which Module 8 will want.</li>
+        and which Module 9 will want.</li>
   </ul>
 
 

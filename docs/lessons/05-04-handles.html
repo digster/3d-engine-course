@@ -797,7 +797,7 @@ using texture_handle = handle&lt;texture&gt;;   // a DIFFERENT type, same 4 byte
   <p>
     <strong>Serialization becomes trivial.</strong> A handle is a 32-bit integer with no
     relationship to any address. Write it, read it, done — no pointer fixups, no relocation
-    tables, no "which base address was this file saved against". Module 8's scene format is a
+    tables, no "which base address was this file saved against". Module 9's scene format is a
     tractable problem largely because of this; a scene graph full of raw pointers is a serious
     exercise in graph surgery, and a scene graph full of handles is a memcpy.
   </p>
@@ -859,7 +859,7 @@ inline constexpr std::uint32_t k_handle_first_generation = 1;</code></pre>
 
   <p>
     The handle itself is a struct with one member and four accessors. It has no invariant to
-    defend, so the member is public: a handle is a <em>value</em>, and Module 8's serializer wants
+    defend, so the member is public: a handle is a <em>value</em>, and Module 9's serializer wants
     exactly that word.
   </p>
 
@@ -1834,7 +1834,7 @@ mesh uploaded   :     8 ->    36 vertices,    12 triangles, generated FLAT norma
 //     `pool` in core/pool.hpp does exactly that on every removal.
 //   - SERIALIZATION BECOMES TRIVIAL. A handle is a 32-bit integer. Write it,
 //     read it, done — no pointer fixups, no relocation table, no &quot;which base
-//     address was this saved against&quot;. Module 8&#x27;s scene format needs this.
+//     address was this saved against&quot;. Module 9&#x27;s scene format needs this.
 //   - IT IS CHEAP TO COPY AND SAFE TO STORE. Four bytes, trivially copyable,
 //     no lifetime relationship to anything. Which is precisely what a component
 //     in Module 5&#x27;s ECS has to be.
@@ -1940,7 +1940,7 @@ struct handle
 {
     /// Generation in the high 12 bits, index in the low 20. Public because a
     /// handle is a value, not an object with an invariant to defend, and because
-    /// serialization (Module 8) wants exactly this word.
+    /// serialization (Module 9) wants exactly this word.
     std::uint32_t bits = 0;
 
     /// Which slot this handle names. Meaningless when `!valid()`.
@@ -2032,7 +2032,7 @@ template &lt;typename T&gt;
 //      If a handle survived only because nothing ever moved, it would be a
 //      pointer with extra steps. Here it demonstrably is not.
 //
-// WHAT THIS IS NOT. It is not thread-safe (Module 8&#x27;s job system revisits every
+// WHAT THIS IS NOT. It is not thread-safe (Module 9&#x27;s job system revisits every
 // shared container). It does not sort, and the order of `items()` is
 // deliberately unspecified — depending on it is depending on the history of your
 // removals. And `get()` returns a raw pointer, which is a real hazard with a
@@ -2751,7 +2751,7 @@ struct cull_stats
 /// them **across frames** rather than declaring them inside the function is what
 /// removes the per-frame allocation, since `clear()` keeps the capacity.
 ///
-/// This is the smallest possible taste of Module 8&#x27;s allocators: the fix for
+/// This is the smallest possible taste of Module 9&#x27;s allocators: the fix for
 /// allocation in a hot loop is almost never a faster allocator, it is not
 /// allocating.
 struct projection_scratch
@@ -2887,7 +2887,7 @@ struct collect_stats
 ///
 /// `out` and `scratch` are the caller&#x27;s, and are reused across frames on
 /// purpose: `clear()` keeps the capacity, so a steady-state frame allocates
-/// nothing. It is the smallest taste of Module 8&#x27;s allocators — the fix for
+/// nothing. It is the smallest taste of Module 9&#x27;s allocators — the fix for
 /// allocation in a hot loop is almost never a faster allocator, it is not
 /// allocating.
 /// `meshes` resolves every object&#x27;s `geometry` handle, and an object whose handle
@@ -4326,7 +4326,7 @@ void load_model(scene_assets&amp; assets, model_state&amp; m, model_choice c, bo
     // changed. Validation is a pure function of the mesh and it is the demo&#x27;s
     // HUD data, not the store&#x27;s: an asset system that cached the *validator&#x27;s*
     // opinion would have to decide when that opinion expires, and this demo has
-    // no need to buy that problem. Module 8&#x27;s cooked assets do, and that is where
+    // no need to buy that problem. Module 9&#x27;s cooked assets do, and that is where
     // it belongs.
     const engine::mesh_data* loaded = assets.store.mesh_at(m.geometry);
     m.check = loaded != nullptr ? engine::validate(loaded-&gt;view()) : engine::mesh_report{};

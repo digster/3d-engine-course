@@ -37,7 +37,7 @@
 //     `pool` in core/pool.hpp does exactly that on every removal.
 //   - SERIALIZATION BECOMES TRIVIAL. A handle is a 32-bit integer. Write it,
 //     read it, done — no pointer fixups, no relocation table, no "which base
-//     address was this saved against". Module 8's scene format needs this.
+//     address was this saved against". Module 9's scene format needs this.
 //   - IT IS CHEAP TO COPY AND SAFE TO STORE. Four bytes, trivially copyable,
 //     no lifetime relationship to anything. Which is precisely what a component
 //     in Module 5's ECS has to be.
@@ -143,7 +143,7 @@ struct handle
 {
     /// Generation in the high 12 bits, index in the low 20. Public because a
     /// handle is a value, not an object with an invariant to defend, and because
-    /// serialization (Module 8) wants exactly this word.
+    /// serialization (Module 9) wants exactly this word.
     std::uint32_t bits = 0;
 
     /// Which slot this handle names. Meaningless when `!valid()`.

@@ -4259,7 +4259,7 @@ struct cull_stats
 /// them **across frames** rather than declaring them inside the function is what
 /// removes the per-frame allocation, since `clear()` keeps the capacity.
 ///
-/// This is the smallest possible taste of Module 8&#x27;s allocators: the fix for
+/// This is the smallest possible taste of Module 9&#x27;s allocators: the fix for
 /// allocation in a hot loop is almost never a faster allocator, it is not
 /// allocating.
 struct projection_scratch
@@ -8637,7 +8637,7 @@ cmake --build build --config Release
         One draw of six vertices is strictly cheaper than two draws of three: same bytes, same
         pipeline, one command instead of two. That generalises into the single most important
         renderer optimisation there is — <em>batch</em> — and it is why Module 6 sorts draws by
-        material and Module 8 measures what that saves. The counter-argument is that objects need
+        material and Module 9 measures what that saves. The counter-argument is that objects need
         different transforms, which is what Lesson 4.6's uniforms and instancing exist to solve.
       </p>
     </details>

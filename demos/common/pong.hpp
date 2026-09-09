@@ -75,7 +75,7 @@ inline constexpr float right_x = width - paddle_inset - paddle_w;
 ///
 /// The simulation never touches the keyboard. It is handed this, and that is the
 /// whole of its knowledge of the outside world — which is what makes it
-/// replayable, testable, and (Module 8) recordable. Lesson 1.4's determinism
+/// replayable, testable, and (Module 9) recordable. Lesson 1.4's determinism
 /// argument only holds if the sim's inputs are explicit, and this struct is what
 /// "explicit" looks like.
 struct intent
@@ -99,7 +99,7 @@ enum class phase : Uint8
 /// One plain struct, copyable by memcpy, with no pointers and no owned
 /// resources. That is not tidiness for its own sake — it is what makes
 /// `previous = current` in the fixed-step loop a single cheap assignment, and
-/// what will let Module 8 write the whole thing to disk with one call. Anything
+/// what will let Module 9 write the whole thing to disk with one call. Anything
 /// that cannot be copied like this does not belong in simulation state.
 struct state
 {

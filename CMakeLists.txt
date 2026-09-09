@@ -8,7 +8,7 @@
 #
 #     engine/   the library. Public headers under engine/include/engine/.
 #     demos/    executables that link it and may include only those headers.
-#     tools/    (Module 8) the editor and the asset pipeline.
+#     tools/    (Module 9) the editor and the asset pipeline.
 #
 # Read this file, then engine/CMakeLists.txt, then demos/CMakeLists.txt. Together
 # they are about a hundred lines of actual instruction, and the boundary the whole

@@ -17,7 +17,7 @@
 #
 # We are one repository building both sides from the same source, so we get none
 # of the benefit and all of the cost. Engines that DO ship shared libraries do it
-# for hot reload and for plugin boundaries; hot reload arrives in Module 8 and it
+# for hot reload and for plugin boundaries; hot reload arrives in Module 9 and it
 # reloads shaders and assets, not code. If that ever changes, this word is the
 # only thing that has to.
 add_library(engine STATIC
@@ -81,7 +81,7 @@ add_library(engine STATIC
     src/platform/app.cpp
     src/platform/platform.cpp
     # Lesson 5.11. A new directory again, and the same argument asset/ made in
-    # 5.5: tooling UI is not a graphics subsystem. Module 8's editor lands here
+    # 5.5: tooling UI is not a graphics subsystem. Module 9's editor lands here
     # beside it, and the top-level tools/ directory is a different thing — the
     # executables that USE the engine, not part of it.
     src/ui/debug_ui.cpp

@@ -526,7 +526,7 @@ float4 main(Input input) : SV_Target0
     // cancelled against the hemisphere it was integrated over (light.hpp). It
     // still has no specular counterpart, so a mirror in a bright uniform room
     // renders black except where the key light reaches it — that missing term is
-    // Lesson 6.12's image-based lighting.
+    // Lesson 6.15's image-based lighting.
     const float3 lit = f_r * e + base * ambient;
 
     // ---- The last place light exists — Lesson 6.1 ---------------------------

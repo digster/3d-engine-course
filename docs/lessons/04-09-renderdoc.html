@@ -479,7 +479,7 @@
       <strong>PIX</strong> is Microsoft's, D3D12-only, and worth knowing about for one reason: it
       is considerably better than RenderDoc at <em>GPU timing</em> — where the time in a frame
       actually went, per draw, on the hardware. RenderDoc is the better state inspector; PIX is
-      the better profiler. Module 8's profiling lessons come back to that distinction.
+      the better profiler. Module 9's profiling lessons come back to that distinction.
     </p>
   </div>
 
@@ -1028,7 +1028,7 @@ void SDL_InsertGPUDebugLabel(SDL_GPUCommandBuffer* cb, const char* text);</code>
     That is why real pipelines run an <strong>index-buffer optimiser</strong> as a build step —
     Tom Forsyth's linear-speed vertex-cache optimiser, or <code>meshoptimizer</code> — and why a
     mesh exported straight out of a modelling tool is often leaving half its vertex throughput on
-    the floor. Module 8's asset pipeline is where that becomes ours.
+    the floor. Module 9's asset pipeline is where that becomes ours.
   </p>
 
   <div class="callout warn">
@@ -6540,7 +6540,7 @@ struct cull_stats
 /// them **across frames** rather than declaring them inside the function is what
 /// removes the per-frame allocation, since `clear()` keeps the capacity.
 ///
-/// This is the smallest possible taste of Module 8&#x27;s allocators: the fix for
+/// This is the smallest possible taste of Module 9&#x27;s allocators: the fix for
 /// allocation in a hot loop is almost never a faster allocator, it is not
 /// allocating.
 struct projection_scratch

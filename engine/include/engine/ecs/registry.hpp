@@ -76,7 +76,7 @@ namespace detail
 /// first call, thread-safely (C++11 magic statics), but the counter increment
 /// itself is not atomic: **register your component types from one thread**, which
 /// in practice means "touch each type once before the job system starts", and is
-/// the same constraint every container in this engine carries until Module 8.
+/// the same constraint every container in this engine carries until Module 9.
 template <typename T>
 [[nodiscard]] inline component_id component_id_of()
 {

@@ -2099,7 +2099,7 @@ if (!(std::fabs(cu) &lt; k_cell_limit) || !(std::fabs(cv) &lt; k_cell_limit))
     <span class="label">Why harden the engine for a broken demo mode?</span>
     <p>
       Because the NaN is not really the demo&rsquo;s. Module 6 puts an HDR pipeline through
-      <code>linear_to_srgb_u8</code>, and Module 7&rsquo;s physics will produce the occasional NaN
+      <code>linear_to_srgb_u8</code>, and Module 8&rsquo;s physics will produce the occasional NaN
       the way all physics does. A cast that is undefined for a value the program can reach is a
       latent bug regardless of which lesson first reaches it. Fixing it here, where we can name
       exactly how the NaN arrives, is cheaper than fixing it in Module 6 where we could not.
@@ -4921,7 +4921,7 @@ struct raster_triangle
 /// them **across frames** rather than declaring them inside the function is what
 /// removes the per-frame allocation, since `clear()` keeps the capacity.
 ///
-/// This is the smallest possible taste of Module 8's allocators: the fix for
+/// This is the smallest possible taste of Module 9's allocators: the fix for
 /// allocation in a hot loop is almost never a faster allocator, it is not
 /// allocating.
 struct projection_scratch

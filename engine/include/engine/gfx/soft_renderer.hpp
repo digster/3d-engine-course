@@ -276,7 +276,7 @@ struct cull_stats
 /// them **across frames** rather than declaring them inside the function is what
 /// removes the per-frame allocation, since `clear()` keeps the capacity.
 ///
-/// This is the smallest possible taste of Module 8's allocators: the fix for
+/// This is the smallest possible taste of Module 9's allocators: the fix for
 /// allocation in a hot loop is almost never a faster allocator, it is not
 /// allocating.
 struct projection_scratch
@@ -416,7 +416,7 @@ struct collect_stats
 ///
 /// `out` and `scratch` are the caller's, and are reused across frames on
 /// purpose: `clear()` keeps the capacity, so a steady-state frame allocates
-/// nothing. It is the smallest taste of Module 8's allocators — the fix for
+/// nothing. It is the smallest taste of Module 9's allocators — the fix for
 /// allocation in a hot loop is almost never a faster allocator, it is not
 /// allocating.
 /// `meshes` resolves every object's `geometry` handle, and an object whose handle

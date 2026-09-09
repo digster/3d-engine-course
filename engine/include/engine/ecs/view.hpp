@@ -66,7 +66,7 @@ namespace engine::ecs
 /// mutating a `std::vector` while ranging over it is silent. The safe patterns are
 /// the same as for a vector: collect the entities you want to change into a small
 /// buffer and act after the loop, or make the change through a deferred command
-/// list (Module 8 builds one for the job system).
+/// list (Module 9 builds one for the job system).
 template <typename... Ts>
 class view
 {

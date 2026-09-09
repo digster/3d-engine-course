@@ -3986,7 +3986,7 @@ struct raster_triangle
 /// them **across frames** rather than declaring them inside the function is what
 /// removes the per-frame allocation, since `clear()` keeps the capacity.
 ///
-/// This is the smallest possible taste of Module 8's allocators: the fix for
+/// This is the smallest possible taste of Module 9's allocators: the fix for
 /// allocation in a hot loop is almost never a faster allocator, it is not
 /// allocating.
 struct projection_scratch
@@ -5805,7 +5805,7 @@ cmake --build build
           do the moment a texture is tiled, a uv is offset, or (as here) a floor is centred on the
           origin.</p>
         <p><strong>Fix.</strong> <code>std::floor</code>. The same trap appears in tile lookups, grid
-          hashing and spatial partitioning, and Module 7's broadphase will meet it again.</p>
+          hashing and spatial partitioning, and Module 8's broadphase will meet it again.</p>
       </div>
     </details>
 

@@ -33,7 +33,7 @@
 //                                 always less than its child's. One flat loop per
 //                                 level, nearly flat in depth, and every entity
 //                                 within a level is independent of every other —
-//                                 which is what will let Module 8 run a level as
+//                                 which is what will let Module 9 run a level as
 //                                 a parallel_for.
 //   PERMUTE THE POOL              deferred, with the number attached. Physically
 //                                 packing rows into level order buys another 30%
@@ -89,8 +89,8 @@ struct parent
 ///
 /// **Written by `hierarchy::resolve`, and by nothing else.** It is a component
 /// rather than a return value because everything downstream — the renderer, the
-/// culler, Module 7's physics — wants to look it up by entity, and because
-/// Module 8's serializer will want to skip it precisely BECAUSE it is derived
+/// culler, Module 8's physics — wants to look it up by entity, and because
+/// Module 9's serializer will want to skip it precisely BECAUSE it is derived
 /// data that can be recomputed from the things that are not.
 ///
 /// An entity with a `transform` but no `world_transform` is simply not resolved.
@@ -154,7 +154,7 @@ enum class parent_status
 /// O(depth), and it terminates on a malformed graph: the walk is bounded by the
 /// number of live entities rather than trusted to reach a root, so a pre-existing
 /// cycle makes this return false instead of hanging. Exposed because it is
-/// exactly the check an editor's "can I drop this here" needs — Module 8's scene
+/// exactly the check an editor's "can I drop this here" needs — Module 9's scene
 /// hierarchy panel is the first caller.
 [[nodiscard]] inline bool is_ancestor_of(registry& world, entity maybe_ancestor, entity e)
 {
@@ -276,7 +276,7 @@ inline void add_hierarchy_components(registry& world, entity e, const transform&
 /// rarely is a bug, so `resolve()` asserts what it can about the order's
 /// freshness before walking it.
 ///
-/// **Not thread-safe**, like every container in this engine until Module 8.
+/// **Not thread-safe**, like every container in this engine until Module 9.
 class hierarchy
 {
 public:
@@ -409,7 +409,7 @@ public:
     /// no stack, no visited set, and no "has my parent been done yet" test —
     /// because the ORDER already guarantees it. Everything a level reads was
     /// written by an earlier level, so within a level the iterations are
-    /// completely independent of one another. That is the property Module 8 turns
+    /// completely independent of one another. That is the property Module 9 turns
     /// into a `parallel_for`, and it is worth noticing that it arrived free with
     /// the choice of visit order rather than being designed in.
     void resolve(registry& world)
@@ -471,7 +471,7 @@ public:
     /// it and a debug build asserts on the next `resolve()` whenever the entity
     /// count moved; a release build resolves a stale order, which shows up as one
     /// object failing to follow its parent. Signals would close the footgun and
-    /// add a mechanism nobody has yet asked for — Module 8 revisits it with the
+    /// add a mechanism nobody has yet asked for — Module 9 revisits it with the
     /// editor, which is the first caller that genuinely needs one.
     void mark_topology_changed() { topology_dirty_ = true; }
 

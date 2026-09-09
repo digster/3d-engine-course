@@ -121,7 +121,7 @@ enum class mouse_axis : std::uint8_t
 /// delta with 0.2 and the action is a sensitivity-scaled look control.
 ///
 /// Trivially copyable and free of pointers, so a binding table is
-/// `std::vector<binding>` and Module 8's serializer will write it as bytes.
+/// `std::vector<binding>` and Module 9's serializer will write it as bytes.
 struct binding
 {
     action_id action;
@@ -410,7 +410,7 @@ public:
 
     /// Every binding, in the order they were added.
     ///
-    /// This is what a settings screen enumerates and what Module 8's serializer
+    /// This is what a settings screen enumerates and what Module 9's serializer
     /// writes. It is deliberately a flat list rather than a per-action map: the
     /// natural question a rebinding UI asks is "what is bound to this action",
     /// which is a filter over a short list, and the natural question a conflict

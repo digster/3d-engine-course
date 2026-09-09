@@ -625,7 +625,7 @@ add_library(imgui STATIC
     <text x="365" y="84" class="xs muted" text-anchor="middle">includes</text>
     <line x1="30" y1="276" x2="690" y2="276" class="grid" stroke-width="1.2"/>
     <text x="30" y="300" class="xs t-hi" text-anchor="start">THE DIRECTION IS THE WHOLE DESIGN, AND IT ONLY GOES ONE WAY.</text>
-    <text x="30" y="320" class="xs muted" text-anchor="start">Module 7's collision code includes the left-hand file and compiles against four headers. Put ONE renderer type in it —</text>
+    <text x="30" y="320" class="xs muted" text-anchor="start">Module 8's collision code includes the left-hand file and compiles against four headers. Put ONE renderer type in it —</text>
     <text x="30" y="336" class="xs muted" text-anchor="start">a framebuffer, a projector, even `mesh`, which drags in the handle system — and every physics translation unit</text>
     <text x="30" y="352" class="xs muted" text-anchor="start">compiles the renderer in order to draw a box.</text>
     <text x="30" y="378" class="xs t-hi" text-anchor="start">This is why wire_mesh() takes two spans instead of the `mesh` that owns them. Not fussiness: the only way to</text>
@@ -1727,7 +1727,7 @@ public:
     void box(vec3 centre, vec3 half_extent, Uint32 colour,
              float seconds = k_debug_this_frame);
 
-    /// An oriented box: the same 12 edges, through a matrix. Module 7&#x27;s
+    /// An oriented box: the same 12 edges, through a matrix. Module 8&#x27;s
     /// collision lessons draw a great many of these.
     void box(const mat4&amp; world_from_local, vec3 half_extent, Uint32 colour,
              float seconds = k_debug_this_frame);
@@ -2043,7 +2043,7 @@ void debug_lines::clear()
 // for a tool and exactly wrong for a menu somebody paid for. A game&#x27;s HUD is
 // built out of the renderer, in Module 6, with a material and a font atlas.
 //
-// So: `engine/ui/` is where the engine&#x27;s *tooling* surface lives. Module 8&#x27;s
+// So: `engine/ui/` is where the engine&#x27;s *tooling* surface lives. Module 9&#x27;s
 // editor — hierarchy, inspector, gizmos — is built on this file, and the
 // top-level `tools/` directory it will live in is a different thing (executables
 // that use the engine, not part of it).
@@ -2230,7 +2230,7 @@ private:
     <pre><code class="lang-cpp">// engine/src/ui/debug_ui.cpp — the six ImGui calls that matter, in order.
 //
 // This is the only file in the engine that includes &lt;imgui.h&gt;. Everything else
-// that speaks ImGui is tooling code in demos/ and, from Module 8, tools/ — which
+// that speaks ImGui is tooling code in demos/ and, from Module 9, tools/ — which
 // is the containment that made taking the dependency publicly acceptable in the
 // first place (see the header).
 
@@ -2251,7 +2251,7 @@ namespace {
 // bool, in an anonymous namespace, is the smallest honest way to say that.
 //
 // It is NOT thread-safe, and neither is ImGui: every ImGui:: call must happen on
-// the thread that made the context. Module 8&#x27;s job system does not change that,
+// the thread that made the context. Module 9&#x27;s job system does not change that,
 // and when it arrives this comment is the reminder.
 bool g_context_live = false;
 
@@ -3005,7 +3005,7 @@ enum class mouse_axis : std::uint8_t
 /// delta with 0.2 and the action is a sensitivity-scaled look control.
 ///
 /// Trivially copyable and free of pointers, so a binding table is
-/// `std::vector&lt;binding&gt;` and Module 8&#x27;s serializer will write it as bytes.
+/// `std::vector&lt;binding&gt;` and Module 9&#x27;s serializer will write it as bytes.
 struct binding
 {
     action_id action;
@@ -3294,7 +3294,7 @@ public:
 
     /// Every binding, in the order they were added.
     ///
-    /// This is what a settings screen enumerates and what Module 8&#x27;s serializer
+    /// This is what a settings screen enumerates and what Module 9&#x27;s serializer
     /// writes. It is deliberately a flat list rather than a per-action map: the
     /// natural question a rebinding UI asks is &quot;what is bound to this action&quot;,
     /// which is a filter over a short list, and the natural question a conflict
@@ -3612,7 +3612,7 @@ private:
 #
 #     engine/   the library. Public headers under engine/include/engine/.
 #     demos/    executables that link it and may include only those headers.
-#     tools/    (Module 8) the editor and the asset pipeline.
+#     tools/    (Module 9) the editor and the asset pipeline.
 #
 # Read this file, then engine/CMakeLists.txt, then demos/CMakeLists.txt. Together
 # they are about a hundred lines of actual instruction, and the boundary the whole
@@ -3827,7 +3827,7 @@ add_subdirectory(demos)
 #
 # We are one repository building both sides from the same source, so we get none
 # of the benefit and all of the cost. Engines that DO ship shared libraries do it
-# for hot reload and for plugin boundaries; hot reload arrives in Module 8 and it
+# for hot reload and for plugin boundaries; hot reload arrives in Module 9 and it
 # reloads shaders and assets, not code. If that ever changes, this word is the
 # only thing that has to.
 add_library(engine STATIC
@@ -3879,7 +3879,7 @@ add_library(engine STATIC
     src/platform/app.cpp
     src/platform/platform.cpp
     # Lesson 5.11. A new directory again, and the same argument asset/ made in
-    # 5.5: tooling UI is not a graphics subsystem. Module 8&#x27;s editor lands here
+    # 5.5: tooling UI is not a graphics subsystem. Module 9&#x27;s editor lands here
     # beside it, and the top-level tools/ directory is a different thing — the
     # executables that USE the engine, not part of it.
     src/ui/debug_ui.cpp
@@ -4817,7 +4817,7 @@ private:
     ///
     /// **Note that these two things are separable, and that is the whole point.**
     /// The declarations are what the program is about; the bindings are a policy
-    /// that a settings screen, a config file or Module 8&#x27;s serializer could
+    /// that a settings screen, a config file or Module 9&#x27;s serializer could
     /// replace wholesale without any of the code below changing. Today they are
     /// adjacent because there is nowhere else to put them yet.
     void declare_actions()
@@ -7422,7 +7422,7 @@ ecs_swarm: debug lines queued 152, drawn 152, dropped 0, ui off</code></pre>
             each frame, and it is exactly why Lesson 5.4 built generational handles.</p>
       </details>
       <details><summary>Solution sketch</summary>
-         <p>This is Module 8's inspector in miniature, and the shape you arrive at is the right
+         <p>This is Module 9's inspector in miniature, and the shape you arrive at is the right
             one: the panel holds an <em>id</em>, re-resolves it every frame, and shows nothing
             when the resolve fails. That is the whole reason a handle is not a pointer.</p>
       </details>
@@ -7497,7 +7497,7 @@ ecs_swarm: debug lines queued 152, drawn 152, dropped 0, ui off</code></pre>
   <ul>
     <li><strong>A queue that anybody can fill.</strong> <code>debug_lines</code> holds world-space
         segments with lifetimes, bounded and counted, and includes nothing that can draw — so a
-        collision system in Module 7 will be able to queue a contact normal without compiling the
+        collision system in Module 8 will be able to queue a contact normal without compiling the
         renderer.</li>
     <li><strong>A backend, not a replacement.</strong> Everything in <code>debug_draw.hpp</code>
         survived; the queue was put in front of it. <code>draw_debug_lines</code> is four lines
@@ -7534,7 +7534,7 @@ ecs_swarm: debug lines queued 152, drawn 152, dropped 0, ui off</code></pre>
     Both halves of this lesson get their return in that module and the two after it. The debug
     queue becomes the thing that makes shadow-map frustums, tangent frames and culling bounds
     visible instead of theoretical; the panel becomes how a BRDF's three terms get separate
-    sliders. And Module 8's editor — hierarchy, inspector, gizmos — is built on exactly the two
+    sliders. And Module 9's editor — hierarchy, inspector, gizmos — is built on exactly the two
     files this lesson added.
   </p>
 

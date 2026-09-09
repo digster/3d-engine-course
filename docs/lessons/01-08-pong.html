@@ -202,7 +202,7 @@
     checkpoint exists to teach: <strong>a simulation that advances in steps does not see the
     spaces between them.</strong> Everything else today — the game, the AI, the score, the
     bouncing — is consolidation you have earned. That one idea is new, and it will come back in
-    Module 3 when a triangle straddles the near plane, and again in Module 7 when a bullet meets a
+    Module 3 when a triangle straddles the near plane, and again in Module 8 when a bullet meets a
     wall.
   </p>
 
@@ -643,7 +643,7 @@
     </p>
     <p>
       Rotate one box and the obvious axes stop being obvious; you must test the face normals of
-      both shapes. That is Module 7's SAT lesson, with diagrams, and you will find you already
+      both shapes. That is Module 8's SAT lesson, with diagrams, and you will find you already
       understand the theorem and are only learning the bookkeeping.
     </p>
   </div>
@@ -1028,7 +1028,7 @@
   <p>
     In prose: <em>the window in which two boxes overlap along an axis is as wide as the two boxes
     put together.</em> (Which is a small, generally useful fact: it is the same reason the
-    "Minkowski sum" trick turns box-versus-box into point-versus-bigger-box, and Module 7 will use
+    "Minkowski sum" trick turns box-versus-box into point-versus-bigger-box, and Module 8 will use
     it by name.)
   </p>
 
@@ -1339,7 +1339,7 @@ namespace engine { class framebuffer; }</code></pre>
     its own sake; three concrete properties fall out of it. It can be copied with a single
     assignment, which is what makes <code>previous = current</code> in the fixed-step loop cheap
     enough to do every step. It can be compared field by field, which is how the determinism check
-    in §6 works. And in Module 8 it can be written to disk in one call, because there are no
+    in §6 works. And in Module 9 it can be written to disk in one call, because there are no
     pointers in it to be meaningless when read back.
   </p>
 
@@ -1584,7 +1584,7 @@ namespace engine { class framebuffer; }</code></pre>
       We resolve <strong>one impact per step</strong>. A ball that would strike a paddle and then a
       wall inside the same step gets the wall on the following step instead — half a millisecond
       late at 60&nbsp;Hz, and never noticeable. This is the ninety-percent picture; the missing ten
-      percent is a solver that loops until the whole step is consumed, and Module 7 writes it.
+      percent is a solver that loops until the whole step is consumed, and Module 8 writes it.
       Exercise 1.8.3 asks you to write it early.
     </p>
   </div>
@@ -1841,7 +1841,7 @@ inline constexpr float right_x = width - paddle_inset - paddle_w;
 ///
 /// The simulation never touches the keyboard. It is handed this, and that is the
 /// whole of its knowledge of the outside world — which is what makes it
-/// replayable, testable, and (Module 8) recordable. Lesson 1.4's determinism
+/// replayable, testable, and (Module 9) recordable. Lesson 1.4's determinism
 /// argument only holds if the sim's inputs are explicit, and this struct is what
 /// "explicit" looks like.
 struct intent
@@ -1865,7 +1865,7 @@ enum class phase : Uint8
 /// One plain struct, copyable by memcpy, with no pointers and no owned
 /// resources. That is not tidiness for its own sake — it is what makes
 /// `previous = current` in the fixed-step loop a single cheap assignment, and
-/// what will let Module 8 write the whole thing to disk with one call. Anything
+/// what will let Module 9 write the whole thing to disk with one call. Anything
 /// that cannot be copied like this does not belong in simulation state.
 struct state
 {
@@ -2027,7 +2027,7 @@ void move_paddle(float&amp; y, float direction, float speed, float h)
 ///   - it has a deadzone, without which it would jitter one pixel either side of
 ///     the ball forever.
 ///
-/// This is the entirety of the AI in this course until Module 7's character
+/// This is the entirety of the AI in this course until Module 8's character
 /// controller, and it is worth noticing how far three lines of "move toward the
 /// thing, slowly" get you.
 [[nodiscard]] float ai_direction(const state&amp; s)
@@ -2059,7 +2059,7 @@ void move_paddle(float&amp; y, float direction, float speed, float h)
 /// axis-aligned boxes there are just two axes to check, and each check is the
 /// pair of comparisons below.
 ///
-/// That is the whole idea behind the Separating Axis Theorem, which Module 7
+/// That is the whole idea behind the Separating Axis Theorem, which Module 8
 /// generalises to boxes at arbitrary angles — where the axes to test stop being
 /// obvious but the question does not change.
 [[nodiscard]] bool boxes_overlap(engine::vec2 a_min, engine::vec2 a_size,
@@ -2289,7 +2289,7 @@ void advance_ball(state&amp; s, float h)
 
         // One impact per step, deliberately. A ball that would hit a paddle and
         // then a wall within the same step gets the wall next step instead —
-        // half a millisecond late at 60 Hz, and never noticeable. Module 7 does
+        // half a millisecond late at 60 Hz, and never noticeable. Module 8 does
         // the honest thing and iterates until the step is used up.
         s.ball.y = std::clamp(s.ball.y, 0.0f, court::height - court::ball_size);
     }
@@ -2609,7 +2609,7 @@ constexpr vec2&amp; operator/=(vec2&amp; v, float s) { v.x /= s; v.y /= s; retur
 }
 
 /// Rotated a quarter turn. Useful for "the direction to my left", for surface
-/// normals in 2-D, and for the separating axes of Module 7's collision work.
+/// normals in 2-D, and for the separating axes of Module 8's collision work.
 ///
 /// Which way it turns depends on which way your y axis points, so the answer is
 /// only meaningful once that is pinned down — in framebuffer coordinates, where
@@ -3516,7 +3516,7 @@ cmake --build build</code></pre>
         step — and to count the occurrences so the situation is visible rather than silent.
       </p>
       <p>
-        This structure — earliest impact, resolve, repeat, capped — is what Module 7's collision
+        This structure — earliest impact, resolve, repeat, capped — is what Module 8's collision
         solver looks like. Writing it here, with two objects and one axis, is the cheapest possible
         introduction to it.
       </p>
@@ -3609,7 +3609,7 @@ cmake --build build</code></pre>
         for a surface at any angle, with its unit-normal precondition understood rather than
         memorised.</li>
       <li><strong>Collision is asked about intervals, not instants.</strong> The swept test, the
-        time of impact, and the remainder of the step — the structure Module 7 scales up.</li>
+        time of impact, and the remainder of the step — the structure Module 8 scales up.</li>
       <li><strong>The boundary between engine and game exists</strong> and has never been crossed,
         which is what will make the Module 5 refactor a rename instead of a rewrite.</li>
       <li><strong>The simulation is a pure function of its state and its inputs</strong>, seed

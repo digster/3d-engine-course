@@ -123,7 +123,7 @@ constexpr vec2& operator/=(vec2& v, float s) { v.x /= s; v.y /= s; return v; }
 }
 
 /// Rotated a quarter turn. Useful for "the direction to my left", for surface
-/// normals in 2-D, and for the separating axes of Module 7's collision work.
+/// normals in 2-D, and for the separating axes of Module 8's collision work.
 ///
 /// Which way it turns depends on which way your y axis points, so the answer is
 /// only meaningful once that is pinned down — in framebuffer coordinates, where

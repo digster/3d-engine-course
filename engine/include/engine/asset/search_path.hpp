@@ -23,7 +23,7 @@
 //   - mods and user content            (front root = the mod folder)
 //   - a localisation or platform pack  (front root = assets_ja/, assets_lowend/)
 //   - editing an asset while the game runs, out of the source tree rather than
-//     out of the copy CMake made next to the binary (Module 8's hot reload)
+//     out of the copy CMake made next to the binary (Module 9's hot reload)
 //   - a test fixture standing in for a real asset, which is what verify_55 does
 //
 // A NAME IS NOT A PATH, and keeping them different types in your head is what

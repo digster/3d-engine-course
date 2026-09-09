@@ -1,7 +1,7 @@
 // engine/src/ui/debug_ui.cpp — the six ImGui calls that matter, in order.
 //
 // This is the only file in the engine that includes <imgui.h>. Everything else
-// that speaks ImGui is tooling code in demos/ and, from Module 8, tools/ — which
+// that speaks ImGui is tooling code in demos/ and, from Module 9, tools/ — which
 // is the containment that made taking the dependency publicly acceptable in the
 // first place (see the header).
 
@@ -22,7 +22,7 @@ namespace {
 // bool, in an anonymous namespace, is the smallest honest way to say that.
 //
 // It is NOT thread-safe, and neither is ImGui: every ImGui:: call must happen on
-// the thread that made the context. Module 8's job system does not change that,
+// the thread that made the context. Module 9's job system does not change that,
 // and when it arrives this comment is the reminder.
 bool g_context_live = false;
 

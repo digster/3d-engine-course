@@ -92,7 +92,7 @@ void move_paddle(float& y, float direction, float speed, float h)
 ///   - it has a deadzone, without which it would jitter one pixel either side of
 ///     the ball forever.
 ///
-/// This is the entirety of the AI in this course until Module 7's character
+/// This is the entirety of the AI in this course until Module 8's character
 /// controller, and it is worth noticing how far three lines of "move toward the
 /// thing, slowly" get you.
 [[nodiscard]] float ai_direction(const state& s)
@@ -124,7 +124,7 @@ void move_paddle(float& y, float direction, float speed, float h)
 /// axis-aligned boxes there are just two axes to check, and each check is the
 /// pair of comparisons below.
 ///
-/// That is the whole idea behind the Separating Axis Theorem, which Module 7
+/// That is the whole idea behind the Separating Axis Theorem, which Module 8
 /// generalises to boxes at arbitrary angles — where the axes to test stop being
 /// obvious but the question does not change.
 [[nodiscard]] bool boxes_overlap(engine::vec2 a_min, engine::vec2 a_size,
@@ -354,7 +354,7 @@ void advance_ball(state& s, float h)
 
         // One impact per step, deliberately. A ball that would hit a paddle and
         // then a wall within the same step gets the wall next step instead —
-        // half a millisecond late at 60 Hz, and never noticeable. Module 7 does
+        // half a millisecond late at 60 Hz, and never noticeable. Module 8 does
         // the honest thing and iterates until the step is used up.
         s.ball.y = std::clamp(s.ball.y, 0.0f, court::height - court::ball_size);
     }

@@ -623,7 +623,7 @@ const engine::vec3 n = engine::cross(b - a, c - a);</code></pre>
     That is the shape of the cost and it is worth internalising: <strong>per-draw overhead scales
     with the number of objects, not with their size.</strong> A thousand crates is a thousand
     draws and 144 KB of pushes — which is when it starts to hurt, and which is why Module 6
-    reaches for instancing (one draw, many crates) and Module 8 for a storage buffer holding
+    reaches for instancing (one draw, many crates) and Module 9 for a storage buffer holding
     every object's transform at once. Three objects is not that day.
   </p>
 
@@ -7514,7 +7514,7 @@ struct cull_stats
 /// them **across frames** rather than declaring them inside the function is what
 /// removes the per-frame allocation, since `clear()` keeps the capacity.
 ///
-/// This is the smallest possible taste of Module 8&#x27;s allocators: the fix for
+/// This is the smallest possible taste of Module 9&#x27;s allocators: the fix for
 /// allocation in a hot loop is almost never a faster allocator, it is not
 /// allocating.
 struct projection_scratch
@@ -13415,7 +13415,7 @@ cmake --build build --config Debug
         <strong>Hint:</strong> it will be a fraction of a millisecond, and the exercise is not
         really about the milliseconds — it is about noticing that you have just built the first
         two steps of an asset pipeline: a source format that is convenient to author and a cooked
-        format that is convenient to load. Module 8 formalises the distinction.
+        format that is convenient to load. Module 9 formalises the distinction.
       </p>
     </li>
     <li>

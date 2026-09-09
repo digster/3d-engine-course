@@ -217,7 +217,7 @@ void platform::handle(const SDL_Event& event)
 
     // SDL posts SDL_EVENT_QUIT when the last window closes, so for a
     // single-window program this case is redundant — and it is here anyway,
-    // because a program that grows a second window (a tools window, Module 8)
+    // because a program that grows a second window (a tools window, Module 9)
     // would otherwise silently start ignoring its own close button.
     case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
         if (window_ != nullptr && event.window.windowID == SDL_GetWindowID(window_))

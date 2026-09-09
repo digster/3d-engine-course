@@ -226,7 +226,7 @@ three living pages (index, conventions, math-toolbox) reissued at the boundary.
 | Wall bounce | The general `reflect()` even though a sign flip would do | Same cost (`constexpr`, folds to a negation), and it is the form that survives Exercise 1.8.4's angled wall. Worked example 2 shows a 45° wall turning a vertical drop horizontal — something no component negation can produce. |
 | Randomness | Hand-rolled xorshift32 **inside the state**, not `SDL_rand` | `SDL_rand` exists and works (verified in `SDL_stdinc.h`), but keeps state in a hidden global — which would mean the simulation is not a function of its inputs, and replays and determinism die silently. |
 | Code listings | Spliced from the real files by a script (`@@LISTING:path@@`) | §8 demands zero placeholders and that every listing compile at its point in the course. Splicing makes drift impossible rather than unlikely, and gets the HTML escaping right every time. |
-| Verification | A throwaway harness in the scratchpad, not a test suite in the repo | Testing is Module 8's lesson; adding a framework now would spoil it. The harness proved every number in the lesson, and found that two of its own first assertions were wrong rather than the code. |
+| Verification | A throwaway harness in the scratchpad, not a test suite in the repo | Testing is Module 9's lesson; adding a framework now would spoil it. The harness proved every number in the lesson, and found that two of its own first assertions were wrong rather than the code. |
 
 **Bug found and fixed along the way:** the KaTeX loader sat *below* `<!-- SHARED-SCRIPT:END -->`
 in the template, so `apply-shared.py` never propagated it — every lesson shipped without a maths
@@ -2516,3 +2516,21 @@ light arrows pointed the wrong way until they were made to terminate on the face
 > Based on the STATE and the project's claude instructions, work on the next.
 
 (Resolved to Lesson 6.8 — Shadow Mapping: Bias, Acne, and PCF, per `STATE.md`'s `next:` block.)
+
+## Session — 2026-09-08 (third) — Roadmap reshape, not a lesson
+
+> I got these two feedbacks from other LLMs about our syllabus. Go through it and tell me what you feel about it. Keep your feedback in a numerical list so that I can reference points easily. Do not change anything in the repo yet.
+>
+> (attached: `~/Downloads/feedback1.md`, `~/Downloads/feedback2.md` — two external reviews of the published `docs/index.html`)
+
+Answered as 22 numbered points, after verifying every falsifiable claim in both
+reviews against the repo. All of their arithmetic checked out; three findings
+were stronger than the reviewers could see from outside the code.
+
+> * make a plan on implementing the feedback from points 4 to 10 and update the roadmap accordingly in the claude file, state file, docs etc, that is wherever required.
+> * instead of naming the limits for the physics, expand it to whatever's required.
+
+Ratified in planning: full physics tier (contact dynamics + GJK/EPA + joints);
+physics extracted as **Module 8** with Professional Polish & Capstone pushed to
+**Module 9**; CLAUDE.md §5's size band raised to 100–115 lessons / 450–550 h;
+and a new `docs/_template/check-curriculum.py` to stop the index drifting again.

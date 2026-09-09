@@ -73,9 +73,9 @@
 
         <dt>Prereqs</dt>
         <dd>
-          <a href="02-10-perspective-projection.html">2.10 — Perspective Projection</a>,
-          <a href="03-01-the-z-buffer.html">3.1 — The Z-Buffer</a>,
-          <a href="04-07-depth-and-textures.html">4.7 — Depth, Textures and Samplers</a>,
+          <a href="02-10-perspective.html">2.10 — Perspective Projection</a>,
+          <a href="03-01-z-buffer.html">3.1 — The Z-Buffer</a>,
+          <a href="04-07-textures-and-depth.html">4.7 — Depth, Textures and Samplers</a>,
           <a href="04-08-porting-the-scene.html">4.8 — Porting the Scene</a>,
           <a href="06-07-normal-mapping.html">6.7 — Normal Mapping</a>
         </dd>
@@ -1811,7 +1811,7 @@ SamplerComparisonState shadow_sampler : register(s2, space2);</code></pre>
 // is the wrong shape *here* for one reason: the quantity a shadow map needs is
 // the extent of the scene **along the light&#x27;s three axes**, and a box already
 // answers that question directly in whatever frame you put it in, while a sphere
-// would have to be re-tightened. Lesson 6.10&#x27;s frustum culling will want both
+// would have to be re-tightened. Lesson 6.16&#x27;s frustum culling will want both
 // and will say so then.
 //
 // WHAT AN AABB IS NOT. It is not the object. `transformed()` below returns the
@@ -3731,7 +3731,7 @@ float4 main(Input input) : SV_Target0
     // cancelled against the hemisphere it was integrated over (light.hpp). It
     // still has no specular counterpart, so a mirror in a bright uniform room
     // renders black except where the key light reaches it — that missing term is
-    // Lesson 6.12&#x27;s image-based lighting.
+    // Lesson 6.15&#x27;s image-based lighting.
     const float3 lit = f_r * e + base * ambient;
 
     // ---- The last place light exists — Lesson 6.1 ---------------------------

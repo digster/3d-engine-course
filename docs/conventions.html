@@ -90,6 +90,7 @@
       <li><a href="#shadow-maps">Shadow maps &mdash; what the comparison assumes</a></li>
       <li><a href="#units">Units and angles</a></li>
       <li><a href="#simulation">The simulation contract</a></li>
+      <li><a href="#rotational">Rotational quantities &mdash; torque, spin, inertia</a></li>
       <li><a href="#colour">Colour and diagram conventions</a></li>
       <li><a href="#code">Code organization &mdash; the boundary</a></li>
       <li><a href="#verified">The verified-facts table</a></li>
@@ -2280,11 +2281,11 @@
     <table>
       <thead><tr><th>Quantity</th><th>Unit</th><th>Note</th></tr></thead>
       <tbody>
-        <tr><td>Distance</td><td><strong>1 unit = 1 metre</strong></td><td>Matches glTF. Physics in Module 7 assumes it; so does attenuation in Module 6.</td></tr>
+        <tr><td>Distance</td><td><strong>1 unit = 1 metre</strong></td><td>Matches glTF. Physics in Module 8 assumes it; so does attenuation in Module 6.</td></tr>
         <tr><td>Angles</td><td><strong>radians</strong></td><td>Internally, always. Degrees appear only at UI edges, converted at the boundary.</td></tr>
         <tr><td>Time</td><td><strong>seconds</strong>, as <code>double</code> for accumulation, <code>float</code> for deltas</td><td>See the fixed-timestep lesson in Module 1.</td></tr>
         <tr><td>Colour</td><td><strong>linear</strong> in the renderer, sRGB only at the edges</td><td>The gamma lesson in Module 6 makes this rigorous.</td></tr>
-        <tr><td>Mass</td><td><strong>kilograms</strong></td><td>Module 7.</td></tr>
+        <tr><td>Mass</td><td><strong>kilograms</strong></td><td>Module 8.</td></tr>
       </tbody>
     </table>
   </div>
@@ -2367,6 +2368,73 @@
   </div>
 
   <!-- ===================================================================== -->
+
+  <h2 id="rotational"><span class="num">9b</span>Rotational quantities &mdash; fixed by handedness, not taste</h2>
+
+  <p>
+    Module 8 is the first thing in the course to have an opinion about <em>spin</em>, and every sign in
+    it is already determined by a decision made in §2. Stating them here, before the first physics
+    lesson, is the same move §4 made for SDL_GPU's clip space: <strong>a convention mismatch in
+    rotational dynamics does not crash &mdash; it makes something rotate the wrong way</strong>, which
+    reads as a modelling error rather than a maths error, and is hunted in the wrong file for hours.
+  </p>
+
+  <p>
+    The whole thing follows from one property. The cross product <strong>anticommutes</strong>:
+    <span class="eq-plain">cross(a, b) = &minus;cross(b, a)</span>. So swapping the arguments of any
+    formula below mirrors the frame, and a mirrored frame is a left-handed one &mdash; which our world
+    space is not. Argument order is therefore load-bearing, not stylistic.
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>Quantity</th><th>Form</th><th>What fixes it</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>Positive rotation</strong></td>
+          <td>Counter-clockwise when the axis points <em>toward</em> you</td>
+          <td>The right-hand rule, which is §2's world space. Consistent with §7's CCW-is-front winding &mdash; the same rule, read on a triangle instead of an axis.</td>
+        </tr>
+        <tr>
+          <td><strong>Torque</strong></td>
+          <td><span class="eq-plain">&tau; = r &times; F</span></td>
+          <td>Not <span class="eq-plain">F &times; r</span>. <code>r</code> is the lever arm from the centre of mass to the application point, in <em>world</em> space.</td>
+        </tr>
+        <tr>
+          <td><strong>Velocity of a point on a body</strong></td>
+          <td><span class="eq-plain">v<sub>p</sub> = v + &omega; &times; r</span></td>
+          <td>Not <span class="eq-plain">r &times; &omega;</span>. This is the expression every contact impulse is derived from, so its sign propagates into all of Module 8.</td>
+        </tr>
+        <tr>
+          <td><strong>Angular velocity &omega;</strong></td>
+          <td>An axis whose <em>length</em> is the rate, in rad/s</td>
+          <td>§8: radians internally, always. Not an axis plus a separate scalar &mdash; one vector, so it adds and integrates like one.</td>
+        </tr>
+        <tr>
+          <td><strong>Inertia tensor in world space</strong></td>
+          <td><span class="eq-plain">I<sub>world</sub> = R I<sub>body</sub> R&#7488;</span></td>
+          <td>§6: <code>A*B</code> means <em>B first</em>, so this reads right-to-left as &ldquo;rotate into body space, apply, rotate back&rdquo;. The inverse is <span class="eq-plain">R I<sub>body</sub><sup>&minus;1</sup> R&#7488;</span> &mdash; invert the small constant matrix once, never the world one per frame.</td>
+        </tr>
+        <tr>
+          <td><strong>An immovable body</strong></td>
+          <td>Inverse mass <code>0</code>, inverse inertia the <em>zero matrix</em></td>
+          <td>Stored inverted, so &ldquo;infinite&rdquo; is representable and needs no branch. <code>inverse(mat3)</code> already returns zero on a singular input, which lands on the right answer &mdash; silently, which is worth knowing rather than relying on.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout">
+    <span class="label">The test that catches all six at once</span>
+    <p>
+      Drop a body with an off-centre impulse and check that it spins the way the right-hand rule says
+      it should. Every sign error above produces a body that spins <em>backwards</em> &mdash; not one
+      that explodes, not one that drifts, just one that looks subtly wrong in a way no assertion fires
+      on. Assert the sign of <span class="eq-plain">dot(&omega;, expected_axis)</span> instead of
+      trusting your eyes.
+    </p>
+  </div>
+
   <h2 id="colour"><span class="num">10</span>Colour and diagram conventions</h2>
 
   <p>
