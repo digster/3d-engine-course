@@ -2645,6 +2645,75 @@
   </div>
 
   <div class="tool">
+    <h3>The derivative of a perspective-correct attribute <span class="from">Lesson 6.10</span></h3>
+    <div class="eq">
+      <span>\[ u = \frac{U}{W} \quad\Longrightarrow\quad
+              \frac{\partial u}{\partial x} = \frac{\dfrac{\partial U}{\partial x}
+                                              - u\,\dfrac{\partial W}{\partial x}}{W} \]</span>
+    </div>
+    <p>
+      Perspective-correct interpolation divides one <em>affine</em> function by another: both
+      <em>U</em>&nbsp;=&nbsp;&Sigma;f<sub>i</sub>(u<sub>i</sub>/w<sub>i</sub>) and
+      <em>W</em>&nbsp;=&nbsp;&Sigma;f<sub>i</sub>/w<sub>i</sub> are linear in screen space, because
+      the normalised barycentrics are. So the quotient rule applies, the numerator gradients are
+      <strong>constant over the triangle</strong>, and the per-pixel cost is two multiplies and a
+      subtract.
+    </p>
+    <p>
+      <strong>This is what a CPU rasterizer uses instead of <code>ddx</code>.</strong> A GPU shades
+      in 2&#215;2 quads specifically so a neighbour is always available &mdash; which is why its
+      derivative is a subtraction, and why it cannot be called from divergent control flow. A
+      scanline has no neighbour, and the closed form is <em>exact</em> where a finite difference is
+      not: checked against a central difference of the real interpolation at
+      <strong>5.79&thinsp;&times;&thinsp;10<sup>&minus;6</sup></strong>, which is the difference&rsquo;s
+      own truncation error.
+    </p>
+  </div>
+
+  <div class="tool">
+    <h3>Choosing a level from a footprint <span class="from">Lesson 6.10</span></h3>
+    <div class="eq">
+      <span>\[ 2^{L} = \rho \qquad\Longrightarrow\qquad L = \log_2 \rho \]</span>
+    </div>
+    <p>
+      Each level of a pyramid halves the thing it indexes, so level <em>L</em> is 2<sup><em>L</em></sup>
+      coarser and matching it to a measured quantity &rho; is a logarithm. <strong>The logarithm is
+      a consequence of the halving, not a tuning choice</strong> &mdash; which is why the formula
+      has no constants in it, and a good check on any &ldquo;pick a level&rdquo; scheme you meet.
+    </p>
+    <p>
+      Two details that generalise. The level is <strong>continuous</strong>, and the fractional part
+      is exactly what a trilinear blend interpolates &mdash; rounding it draws a visible boundary,
+      which is Lesson 6.9&rsquo;s cascade seam in another costume. And &rho; is the
+      <strong>larger</strong> of the two axes, which guarantees no aliasing at the price of blurring
+      the smaller one; refusing that trade is what anisotropic filtering is.
+    </p>
+  </div>
+
+  <div class="tool">
+    <h3>Averaging is linear; encodings are not <span class="from">Lesson 6.10</span></h3>
+    <p>
+      A mean of encoded values is not the encoding of the mean. Half of black and white is half the
+      <em>light</em> &mdash; sRGB code <strong>188</strong> &mdash; and averaging the bytes gives
+      code 127, which is <strong>0.2122</strong> of white against the correct 0.5029. That delivers
+      <strong>42.2%</strong> of the light it should, and because a mip chain averages an already
+      averaged level, <strong>it compounds all the way down</strong>.
+    </p>
+    <p>
+      The general rule: <strong>decode, operate, re-encode</strong> &mdash; for any operation that
+      is linear in the quantity rather than in its representation. The tell that you have got it
+      wrong is a systematic drift in one direction (always darker, here, because the curve is
+      convex), and the symptom is usually blamed on whatever varies alongside it. Textures dimming
+      with distance get diagnosed as lighting falloff.
+    </p>
+    <p>
+      And read which space the data is in <em>from the data</em>. A normal map or a roughness map is
+      linear already, so averaging its bytes is correct rather than lazy; an alpha channel is a
+      coverage fraction and was never encoded at all.
+    </p>
+  </div>
+
+  <div class="tool">
     <h3>Auditing a formula by changing what it was derived from <span class="from">Lesson 6.9</span></h3>
     <p>
       Not an equation &mdash; a test. A derived formula and a tuned constant with a good story

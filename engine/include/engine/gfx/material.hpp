@@ -198,6 +198,22 @@ using material_pool = pool<material>;
     return {textures.get(m.albedo_map), m.samp};
 }
 
+/// The same binding, with a mip chain attached. Lesson 6.10.
+///
+/// A separate function rather than a defaulted argument, because the chain does
+/// not live in the `texture_pool` — it is built by whoever wanted mipmapping and
+/// owned by them. Making `bind_albedo` take it would force every existing caller
+/// to pass a null, which is the sort of change that makes nineteen lessons of
+/// listings stop compiling to add one feature none of them use.
+[[nodiscard]] inline texture_binding bind_albedo_mipped(const material& m,
+                                                        const texture_pool& textures,
+                                                        const mip_chain* chain)
+{
+    texture_binding b{textures.get(m.albedo_map), m.samp};
+    b.mips = chain;
+    return b;
+}
+
 /// The same resolve, for the normal map — Lesson 6.7.
 ///
 /// A second function rather than a second field on one binding, because the two

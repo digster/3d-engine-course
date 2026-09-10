@@ -11,6 +11,7 @@
 #include <engine/gfx/raster.hpp>
 
 #include <engine/gfx/cascade.hpp>
+#include <engine/gfx/mipmap.hpp>
 #include <engine/gfx/shadow.hpp>   // 6.8: fill_style holds a pointer; the fill needs the type
 
 #include <engine/gfx/depth_buffer.hpp>
@@ -584,6 +585,38 @@ void fill_triangle(framebuffer& fb, depth_buffer* depth,
     const vec3 pn0 = v0.normal * iw0, pn1 = v1.normal * iw1, pn2 = v2.normal * iw2;
     const vec3 pw0 = v0.world * iw0, pw1 = v1.world * iw1, pw2 = v2.world * iw2;
 
+    // ---- LESSON 6.10: the screen-space uv gradients, once per triangle -------
+    //
+    // THE CPU'S REPLACEMENT FOR ddx/ddy. A GPU shades in 2x2 quads precisely so
+    // a neighbouring fragment is always available to subtract; a scanline
+    // rasterizer has no neighbour, so the derivative has to come from the
+    // triangle itself.
+    //
+    // It is CONSTANT over the triangle and therefore hoisted: `U = sum(f_i*u_i/w_i)`
+    // and `W = sum(f_i/w_i)` are both AFFINE in screen space, because the
+    // normalised barycentrics are, so their gradients do not vary. Only the
+    // quotient rule's per-pixel part (`(dU - u*dW) * w_recip`) is paid inside
+    // the loop, and only when a chain is bound.
+    //
+    // df_i/dx is step_x_i * inv_area — the same edge steps the fill already
+    // walks, divided by the same area it already reciprocated.
+    const float dfx[3] = {static_cast<float>(s.step_x0) * inv_area,
+                          static_cast<float>(s.step_x1) * inv_area,
+                          static_cast<float>(s.step_x2) * inv_area};
+    const float dfy[3] = {static_cast<float>(s.step_y0) * inv_area,
+                          static_cast<float>(s.step_y1) * inv_area,
+                          static_cast<float>(s.step_y2) * inv_area};
+
+    const vec2 dnum_dx{dfx[0] * pu0 + dfx[1] * pu1 + dfx[2] * pu2,
+                       dfx[0] * pv0 + dfx[1] * pv1 + dfx[2] * pv2};
+    const vec2 dnum_dy{dfy[0] * pu0 + dfy[1] * pu1 + dfy[2] * pu2,
+                       dfy[0] * pv0 + dfy[1] * pv1 + dfy[2] * pv2};
+    const float dw_dx = dfx[0] * iw0 + dfx[1] * iw1 + dfx[2] * iw2;
+    const float dw_dy = dfy[0] * iw0 + dfy[1] * iw1 + dfy[2] * iw2;
+
+    // Decided once, like every other question constant across a fill.
+    const bool mipped = style.albedo.mipped();
+
     // Lesson 6.7's third varying, pre-divided by exactly the same rule — the
     // derivation in §3.2 never said what `a` was, and it does not start caring
     // now. Only the `xyz` goes through the correction: `w` is a SIGN, constant
@@ -656,7 +689,11 @@ void fill_triangle(framebuffer& fb, depth_buffer* depth,
             // Lesson 3.10's measured headline and the reason
             // `style.encode` exists.
             return to_encoded(
-                sample(*style.albedo.image, style.albedo.samp, uu, vv),
+                mipped ? sample_mipped(*style.albedo.mips, style.albedo.samp,
+                                       vec2{uu, vv},
+                                       uv_gradients(dnum_dx, dnum_dy, dw_dx, dw_dy,
+                                                    vec2{uu, vv}, w_recip))
+                       : sample(*style.albedo.image, style.albedo.samp, uu, vv),
                 style.encode);
         }
         else if (lit)
@@ -712,7 +749,12 @@ void fill_triangle(framebuffer& fb, depth_buffer* depth,
             {
                 const float uu = (f0 * pu0 + f1 * pu1 + f2 * pu2) * w_recip;
                 const float vv = (f0 * pv0 + f1 * pv1 + f2 * pv2) * w_recip;
-                albedo = sample(*style.albedo.image, style.albedo.samp, uu, vv);
+                albedo = mipped
+                    ? sample_mipped(*style.albedo.mips, style.albedo.samp,
+                                    vec2{uu, vv},
+                                    uv_gradients(dnum_dx, dnum_dy, dw_dx, dw_dy,
+                                                 vec2{uu, vv}, w_recip))
+                    : sample(*style.albedo.image, style.albedo.samp, uu, vv);
             }
             else
             {

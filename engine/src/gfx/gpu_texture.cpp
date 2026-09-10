@@ -107,7 +107,8 @@ gpu_texture& gpu_texture::operator=(gpu_texture&& other) noexcept
 }
 
 bool gpu_texture::create_sampled(const gpu_device& dev, SDL_GPUCommandBuffer* cb,
-                                 const image_data& src, bool srgb, const char* name)
+                                 const image_data& src, bool srgb, const char* name,
+                                 bool mips)
 {
     destroy();
 
@@ -127,11 +128,25 @@ bool gpu_texture::create_sampled(const gpu_device& dev, SDL_GPUCommandBuffer* cb
     SDL_GPUTextureCreateInfo ti{};
     ti.type = SDL_GPU_TEXTURETYPE_2D;
     ti.format = format_;
-    ti.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
+    // LESSON 6.10. COLOR_TARGET is not decoration: SDL generates a chain by
+    // BLITTING each level into the next, so every level must be a render target.
+    // `SDL_gpu.c` asserts on SAMPLER|COLOR_TARGET — but only when the device is
+    // in debug mode, so on a release device the requirement is unchecked and the
+    // result is undefined rather than diagnosed.
+    ti.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER
+             | (mips ? SDL_GPU_TEXTUREUSAGE_COLOR_TARGET : 0u);
     ti.width = width_;
     ti.height = height_;
     ti.layer_count_or_depth = 1;
-    ti.num_levels = 1;              // no mipmaps yet — Module 6
+    // 1 + floor(log2(max side)): the number of halvings before a side reaches 1.
+    // 4.7 wrote `= 1` here with a comment saying Module 6 would change it.
+    levels_ = 1;
+    if (mips)
+    {
+        Uint32 side = (width_ > height_) ? width_ : height_;
+        while (side > 1u) { side >>= 1; ++levels_; }
+    }
+    ti.num_levels = static_cast<Uint32>(levels_);
     ti.sample_count = SDL_GPU_SAMPLECOUNT_1;
 
     texture_ = create_named_texture(device_, ti, name);
@@ -193,6 +208,24 @@ bool gpu_texture::create_sampled(const gpu_device& dev, SDL_GPUCommandBuffer* cb
 
     SDL_EndGPUCopyPass(copy);
     SDL_ReleaseGPUTransferBuffer(device_, staging);
+
+    // ---- LESSON 6.10: the chain ---------------------------------------------
+    //
+    // AFTER the copy pass ends, and that is a requirement rather than tidiness:
+    // "This function must not be called inside of any pass", says the header,
+    // and `SDL_gpu.c` asserts it in debug mode. It reads level 0 — which the
+    // upload above just wrote — and blits its way down.
+    //
+    // Note what we do NOT do: average in linear light ourselves. The texture was
+    // created with an _SRGB format when `srgb` is set, so the hardware decodes
+    // on read and encodes on write, and the blit chain averages in linear light
+    // for free. That is the same correctness the CPU path has to arrange by hand
+    // in `build_mips`, and it is the clearest case in the course of a format
+    // flag doing real work.
+    if (mips && levels_ > 1)
+    {
+        SDL_GenerateMipmapsForGPUTexture(cb, texture_);
+    }
 
     uploaded_bytes_ = bytes;
     return true;
@@ -338,7 +371,7 @@ gpu_sampler& gpu_sampler::operator=(gpu_sampler&& other) noexcept
 }
 
 bool gpu_sampler::create(const gpu_device& dev, filter min_mag, address_mode wrap,
-                         const char* name)
+                         const char* name, filter mip, int max_aniso)
 {
     destroy();
 
@@ -361,7 +394,10 @@ bool gpu_sampler::create(const gpu_device& dev, filter min_mag, address_mode wra
     // that makes minification mean anything.
     si.min_filter = f;
     si.mag_filter = f;
-    si.mipmap_mode = SDL_GPU_SAMPLERMIPMAPMODE_NEAREST;
+    // LESSON 6.10. `linear` here is the "tri" in trilinear: it blends the two
+    // straddling levels instead of snapping to the nearer one.
+    si.mipmap_mode = (mip == filter::linear) ? SDL_GPU_SAMPLERMIPMAPMODE_LINEAR
+                                             : SDL_GPU_SAMPLERMIPMAPMODE_NEAREST;
 
     // THREE ADDRESS MODES FOR THREE AXES. Lesson 3.9's sampler had one, because a
     // 2-D image has two axes and we wrapped both the same way. Real uses differ:
@@ -373,10 +409,21 @@ bool gpu_sampler::create(const gpu_device& dev, filter min_mag, address_mode wra
 
     si.mip_lod_bias = 0.0f;
     si.min_lod = 0.0f;
-    si.max_lod = 0.0f;
 
-    si.enable_anisotropy = false;
-    si.max_anisotropy = 1.0f;
+    // **max_lod = 0 CLAMPS THE WHOLE CHAIN AWAY**, and this line was 0.0f until
+    // Lesson 6.10. It did not matter while every texture had one level; the
+    // moment one has nine it is the difference between mipmapping and an
+    // expensive no-op — you build the chain, set mipmap_mode, see no change, and
+    // go looking in the generator. There is no error and no warning, because
+    // clamping to level 0 is a perfectly legal thing to ask for.
+    si.max_lod = 1000.0f;   // SDL's own "no clamp" idiom; any level the texture has
+
+    // BOTH FIELDS, OR NEITHER. SDL ignores `max_anisotropy` unless
+    // `enable_anisotropy` is true, so setting the clamp alone is a silent no-op —
+    // the same shape of trap as max_lod, one struct field along.
+
+    si.enable_anisotropy = (max_aniso > 1);
+    si.max_anisotropy = static_cast<float>((max_aniso < 1) ? 1 : (max_aniso > 16 ? 16 : max_aniso));
 
     // enable_compare is for SHADOW sampling — the sampler performs the depth
     // comparison itself and returns a filtered 0..1 occlusion instead of a depth.
@@ -413,6 +460,9 @@ bool gpu_sampler::create_comparison(const gpu_device& dev, const char* name)
     // a 0..1 coverage — which is hardware 2x2 PCF for the price of one fetch.
     si.min_filter = SDL_GPU_FILTER_LINEAR;
     si.mag_filter = SDL_GPU_FILTER_LINEAR;
+    // A shadow map has ONE level (6.8 fits a box; 6.9 adds layers, not levels),
+    // so there is nothing between levels to filter. Lesson 6.10 left this alone
+    // deliberately rather than making it a parameter nobody could use.
     si.mipmap_mode = SDL_GPU_SAMPLERMIPMAPMODE_NEAREST;
 
     // CLAMP, never repeat. A lookup that falls outside the light's box must read
@@ -425,7 +475,8 @@ bool gpu_sampler::create_comparison(const gpu_device& dev, const char* name)
 
     si.mip_lod_bias = 0.0f;
     si.min_lod = 0.0f;
-    si.max_lod = 0.0f;
+
+    si.max_lod = 0.0f;   // one level, so clamping to it is the honest value
     si.enable_anisotropy = false;
     si.max_anisotropy = 1.0f;
 

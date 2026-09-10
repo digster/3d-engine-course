@@ -37,6 +37,7 @@
 #include <engine/gfx/bounds.hpp>
 #include <engine/gfx/scene.hpp>
 #include <engine/gfx/cascade.hpp>
+#include <engine/gfx/mipmap.hpp>
 #include <engine/gfx/shadow.hpp>
 #include <engine/gfx/soft_renderer.hpp>
 #include <engine/gfx/viewport.hpp>
@@ -146,6 +147,33 @@ public:
             // boxing the whole scene. `--cascades 1` is 6.8's single map fitted
             // to the frustum rather than the scene, which is worth having
             // separately: it isolates "cascades" from "camera-fitted".
+            // LESSON 6.10. `--mips` builds a chain per albedo texture and binds
+            // it; `--aniso N` turns on anisotropic filtering. Both off by
+            // default, because a chain costs 33% more memory and a surface that
+            // was never undersampled gains nothing from one.
+            // A fine checker on the ground, which is the surface that minifies.
+            // This is Lesson 3.9's shimmering floor, made reachable again so the
+            // fix has something to fix.
+            else if (SDL_strcmp(argv[i], "--floor-tex") == 0 && i + 1 < argc)
+            {
+                floor_tex_ = SDL_atoi(argv[++i]);
+            }
+            else if (SDL_strcmp(argv[i], "--mips") == 0)
+            {
+                mips_ = true;
+            }
+            else if (SDL_strcmp(argv[i], "--aniso") == 0 && i + 1 < argc)
+            {
+                mips_ = true;
+                aniso_ = SDL_atoi(argv[++i]);
+            }
+            else if (SDL_strcmp(argv[i], "--mip-nearest") == 0)
+            {
+                // 3.5's rule: the failure has to be reachable. This is the
+                // visible line across the floor that trilinear exists to hide.
+                mips_ = true;
+                mip_filter_ = engine::filter::nearest;
+            }
             else if (SDL_strcmp(argv[i], "--cascades") == 0 && i + 1 < argc)
             {
                 cascades_ = SDL_atoi(argv[++i]);
@@ -444,6 +472,29 @@ public:
             g.mat.tint = 0xFF9A9AA2u;
             g.mat.surface = {.roughness = 0.85f};
 
+            // LESSON 6.10. A checker DELIBERATELY finer than the screen can
+            // resolve at distance, which is 3.9's shimmering floor rebuilt: the
+            // sparkle is the missing minification filter, and it is the picture
+            // this lesson exists to fix.
+            if (floor_tex_ > 0)
+            {
+                const int side_px = floor_tex_;
+                const int cell = SDL_max(1, side_px / 64);
+                engine::texture checker(side_px, side_px, 0xFF000000u,
+                                        engine::texel_space::srgb);
+                for (int y = 0; y < side_px; ++y)
+                {
+                    for (int x = 0; x < side_px; ++x)
+                    {
+                        const bool on = ((x / cell) + (y / cell)) % 2 == 0;
+                        checker.set_texel(x, y, on ? 0xFFF2F2F2u : 0xFF1A1A1Au);
+                    }
+                }
+                g.mat.albedo_map = assets_.insert_texture("floor checker",
+                                                          std::move(checker));
+                g.mat.tint = 0xFFFFFFFFu;   // the texture IS the albedo (3.9)
+            }
+
             // A sheet has no inside, so back-face culling would delete it when
             // seen from below — Lesson 3.4's rule, and `cull_of` is where it
             // lives.
@@ -455,6 +506,38 @@ public:
         //
         // `shadow_res_` is a side, so the storage is its square: 1024 costs 4 MB
         // of float depth here and 2 MB as a 16-bit target on the GPU.
+        // ---- LESSON 6.10: one chain per DISTINCT albedo texture -------------
+        //
+        // Keyed by pointer rather than one per object, because two objects
+        // sharing a texture must share its chain — building it twice would
+        // double the memory and make the 33% claim a lie.
+        if (mips_)
+        {
+            for (const engine::scene_object& o : objects_)
+            {
+                const engine::texture* img = assets_.textures().get(o.mat.albedo_map);
+                if (img == nullptr || img->empty()) { continue; }
+                bool seen = false;
+                for (const auto& e : chain_of_) { if (e.first == img) { seen = true; break; } }
+                if (seen) { continue; }
+                chains_.push_back(engine::build_mips(*img));
+                chain_of_.emplace_back(img, chains_.size() - 1);
+            }
+            std::size_t base = 0, total = 0;
+            for (std::size_t i = 0; i < chains_.size(); ++i)
+            {
+                base += static_cast<std::size_t>(chains_[i].width())
+                      * static_cast<std::size_t>(chains_[i].height());
+                total += chains_[i].texels();
+            }
+            SDL_Log("  mipmaps       : %zu chain(s), %d levels, %zu -> %zu texels (+%.1f%%), "
+                    "aniso %d, between levels %s",
+                    chains_.size(), chains_.empty() ? 0 : chains_[0].levels(), base, total,
+                    base == 0 ? 0.0 : 100.0 * (static_cast<double>(total) / static_cast<double>(base) - 1.0),
+                    aniso_,
+                    mip_filter_ == engine::filter::linear ? "trilinear" : "NEAREST (the seam)");
+        }
+
         if (shadow_res_ > 0)
         {
             engine::shadow_settings ss;
@@ -573,8 +656,19 @@ public:
             // you read one per pixel, and `bind_albedo` is the named step
             // between them. Inside the fill loop it would be a bounds check and
             // a generation compare per fragment.
-            const engine::texture_binding albedo =
+            engine::texture_binding albedo =
                 engine::bind_albedo(obj.mat, assets_.textures());
+            if (mips_)
+            {
+                // 6.10. The chain is nullable and null is the whole of "off",
+                // so the unmipped path is the one every earlier lesson drew.
+                for (const auto& e : chain_of_)
+                {
+                    if (e.first == albedo.image) { albedo.mips = &chains_[e.second]; break; }
+                }
+                albedo.samp.mip_filter = mip_filter_;
+                albedo.samp.max_anisotropy = aniso_;
+            }
             const engine::texture_binding normals =
                 engine::bind_normal_map(obj.mat, assets_.textures());
 
@@ -667,6 +761,12 @@ private:
     // ---- Lesson 6.8 --------------------------------------------------------
     int shadow_res_ = 1024;        ///< the map's side in texels; 0 = no shadows
     int cascades_ = 0;          // 6.9: 0 = 6.8's single map
+    bool mips_ = false;         // 6.10
+    int floor_tex_ = 0;         // checker side, 0 = untextured ground
+    int aniso_ = 1;
+    engine::filter mip_filter_ = engine::filter::linear;
+    std::vector<engine::mip_chain> chains_;
+    std::vector<std::pair<const engine::texture*, std::size_t>> chain_of_;
     float csm_lambda_ = 0.5f;   // uniform <-> logarithmic blend
     float csm_blend_ = 0.0f;    // 0 shows the seam, which is the point
     bool csm_snap_ = true;

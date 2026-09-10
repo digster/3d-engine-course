@@ -63,9 +63,23 @@ public:
     ///             0.2139 where 0.5 is correct, 43% of the light. Here it is a
     ///             flag, and it happens BEFORE the filter, which is the order
     ///             software cannot easily achieve.
+    /// @param mips build a full mip chain. Lesson 6.10, and the flag 4.7's
+    ///             `num_levels = 1` comment promised.
+    ///
+    ///             **It also adds `COLOR_TARGET` to the usage flags**, which is
+    ///             not decoration: SDL generates a chain by blitting each level
+    ///             into the next, so every level has to be a render target.
+    ///             `SDL_gpu.c` asserts on SAMPLER|COLOR_TARGET and on
+    ///             `num_levels > 1` — but **only when the device is in debug
+    ///             mode**, so on a release device the requirement is unchecked
+    ///             and the result is undefined rather than diagnosed.
     [[nodiscard]] bool create_sampled(const gpu_device& dev, SDL_GPUCommandBuffer* cb,
                                       const image_data& src, bool srgb,
-                                      const char* name = nullptr);
+                                      const char* name = nullptr,
+                                      bool mips = false);
+
+    /// How many mip levels this texture has. 1 unless `mips` was asked for.
+    [[nodiscard]] int levels() const { return levels_; }
 
     /// Create a depth attachment: no upload, cleared by the render pass that
     /// uses it.
@@ -125,6 +139,7 @@ private:
     Uint32 width_ = 0;
     Uint32 height_ = 0;
     Uint32 uploaded_bytes_ = 0;
+    int levels_ = 1;
     SDL_GPUTextureFormat format_ = SDL_GPU_TEXTUREFORMAT_INVALID;
 };
 
@@ -150,10 +165,19 @@ public:
     /// `verify_42` §G has asserted the correspondence on every run since — so if
     /// SDL ever inserts an enumerator, that test fails rather than this cast
     /// silently selecting the wrong mode.
+    /// @param mip  how to filter BETWEEN levels — Lesson 6.10. `linear` is
+    ///             trilinear. Ignored by a texture with one level, which is why
+    ///             passing it costs nothing on the paths that predate 6.10.
+    /// @param max_aniso  above 1 enables anisotropic filtering and sets
+    ///             `max_anisotropy`. **Both fields**: SDL ignores the clamp
+    ///             unless `enable_anisotropy` is true, so setting one without
+    ///             the other is a silent no-op.
     [[nodiscard]] bool create(const gpu_device& dev,
                               filter min_mag = filter::linear,
                               address_mode wrap = address_mode::repeat,
-                              const char* name = nullptr);
+                              const char* name = nullptr,
+                              filter mip = filter::linear,
+                              int max_aniso = 1);
 
     /// A **comparison sampler** — Lesson 6.8, and the two fields that make it one
     /// are `enable_compare` and `compare_op`, verified against `SDL3/SDL_gpu.h`

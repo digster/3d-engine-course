@@ -181,8 +181,38 @@ enum class texel_space
 ///   - anisotropy, LOD clamping and comparison sampling are all Module 6.
 struct sampler
 {
-    /// How to combine texels. One field standing in for SDL's three; see above.
+    /// How to combine texels WITHIN a level. One of SDL's three; the other two
+    /// arrived in Lesson 6.10, below.
     filter texel_filter = filter::linear;
+
+    /// **How to filter BETWEEN mip levels.** Lesson 6.10.
+    ///
+    /// The second of the three fields 3.9 collapsed into one, and 3.9's comment
+    /// said exactly why it could: "without mipmaps there is nothing different
+    /// for a minification filter to do". There is now. `nearest` snaps to the
+    /// closer level and draws a visible line across a floor where the level
+    /// changes; `linear` blends the two straddling levels — trilinear — for the
+    /// cost of a second bilinear fetch.
+    ///
+    /// Ignored when sampling a bare `texture`, which is every call site written
+    /// before 6.10.
+    filter mip_filter = filter::linear;
+
+    /// Nudge the chosen level. Negative sharpens (and re-introduces the
+    /// aliasing), positive blurs. It is the one knob artists actually reach for,
+    /// and `SDL_GPUSamplerCreateInfo::mip_lod_bias` has it — a sampler that
+    /// could not express it would not survive the port.
+    float mip_bias = 0.0f;
+
+    /// **Refuse to choose between blurring and aliasing.** 1 is isotropic.
+    ///
+    /// A grazing floor has a footprint long in one direction and short in the
+    /// other, and one square average cannot represent that: choose the level by
+    /// the long axis and the short one is blurred away; choose it by the short
+    /// axis and the long one aliases. Above 1 this takes several samples ALONG
+    /// the long axis at the level the SHORT axis asked for, which buys the
+    /// detail back at a linear cost. Clamped to 16, as hardware is.
+    int max_anisotropy = 1;
 
     /// Addressing per axis, and **per axis for a reason**: a strip of road wants to
     /// repeat along its length and clamp across its width, and one mode for both
@@ -329,10 +359,28 @@ private:
 ///
 /// **Non-owning.** The texture outlives the binding, exactly as `fill_style`'s
 /// `lighting*` does (3.8).
+/// Lesson 6.10. Defined in `mipmap.hpp`, which includes this file.
+class mip_chain;
+
 struct texture_binding
 {
     const texture* image = nullptr;
     sampler samp{};
+
+    /// An optional mip chain for `image`. Lesson 6.10.
+    ///
+    /// **Nullable, and null is the whole of "no mipmapping"** — the same bargain
+    /// `lights`, `albedo` and 6.9's `cascades` already make. When it is null the
+    /// fill samples `image` exactly as it did in 3.9, which is why nineteen
+    /// lessons of reference renders are still byte-identical.
+    ///
+    /// A forward declaration rather than an include: `mipmap.hpp` includes THIS
+    /// header, so the dependency has to point one way.
+    const mip_chain* mips = nullptr;
+
+    /// Is a chain bound AND wanted? A chain plus `max_anisotropy` and the mip
+    /// filters live in `samp`, so this asks only about the data.
+    [[nodiscard]] bool mipped() const { return mips != nullptr; }
 
     /// Is there anything to sample? A binding with no image is not an error — it
     /// is a pipeline that was never given one, and the fill falls back to vertex

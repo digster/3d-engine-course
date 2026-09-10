@@ -64,6 +64,7 @@ add_library(engine STATIC
     # to see cgltf, so the dependency has exactly one place to leak from.
     src/gfx/gltf.cpp
     src/gfx/image.cpp
+    src/gfx/mipmap.cpp
     src/gfx/mesh.cpp
     src/gfx/obj.cpp
     src/gfx/raster.cpp

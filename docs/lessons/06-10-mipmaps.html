@@ -1,0 +1,2460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>6.10 — Mipmaps, LOD, and Anisotropic Filtering · Build a Professional 3D Game Engine</title>
+<meta name="description" content="A debt being paid: Lesson 3.9 measured that one screen pixel covers 0.60 texels at the bottom of the frame and 62.46 below the horizon while bilinear reads four, then deferred the fix to Module 6 - a promise repeated six times, once in a shipped public header. Derives the mip level as log2 of the footprint; computes the screen-space uv derivative analytically, because a scanline rasterizer has no neighbouring fragment to subtract, and checks the closed form against a central difference of the real perspective-correct interpolation (5.79e-6). Quantifies the famous linear-light bug: an sRGB-byte-averaged chain delivers 42.2 per cent of the light it should at level 1 and compounds. Trilinear as the same artefact 6.9 met as the cascade seam; anisotropy as a refusal to choose between blurring and aliasing. Ports to both renderers; the reference render stays byte-identical, this time by design.">
+
+<!-- SHARED-CSS:BEGIN -->
+<!-- The shared course stylesheet, linked rather than inlined. Single source of
+     truth: docs/shared/course.css. Edit that file; this page carries no copy.
+     Still no build step - the link resolves straight off the filesystem, so this
+     page opens by double-clicking, offline. -->
+<link rel="stylesheet" href="../shared/course.css">
+<!-- SHARED-CSS:END -->
+
+<!-- KaTeX (optional). If unreachable the raw TeX remains readable, and every
+     equation is also stated in prose + .eq-plain, so nothing is lost. -->
+<link rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css"
+      integrity="sha384-nB0miv6/jRmo5UMMR1wu3Gz6NLsoTkbqJghGIsx//Rlm+ZU03BU6SQNC66uf4l5+"
+      crossorigin="anonymous">
+</head>
+<body>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <a class="course" href="../index.html">Build a Professional 3D Game Engine</a>
+    <span class="spacer"></span>
+    <a href="../index.html">Contents</a>
+    <a href="../conventions.html">Conventions</a>
+    <a href="../math-toolbox.html">Math Toolbox</a>
+    <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Toggle colour theme">Theme</button>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="06-09-cascaded-shadows.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">6.9 — Cascaded Shadow Maps</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="../index.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">6.11 — Transparency: Alpha Modes, Blending, and Draw Order</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 6 — Advanced Rendering · Lesson 6.10</div>
+    <h1>Mipmaps, LOD, and Anisotropic Filtering</h1>
+    <p class="deck">
+      This lesson is a debt being paid. Lesson 3.9 measured the problem exactly — one screen pixel
+      covers 0.60 texels at the bottom of the frame and <strong>62.46</strong> two rows below the
+      horizon, while bilinear reads four texels whatever the pixel covers — then named the fix and
+      moved on. So did 4.7, which created every texture with <code>num_levels = 1</code> and a
+      comment saying Module 6 would change it. So did <code>texture.hpp</code>'s own sampler
+      struct. The fix is one sentence: if a pixel covers sixty texels, read from a copy of the
+      image in which those sixty have <em>already</em> been averaged. What makes it a lesson is the
+      three questions that sentence hides — which copy, what about between copies, and what if the
+      footprint is not square — and one famous bug that makes a surface darken as it recedes.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 5 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="03-09-textures.html">3.9 — Texture Mapping and Bilinear Filtering</a>,
+          <a href="03-02-perspective-correct.html">3.2 — Perspective-Correct Interpolation</a>,
+          <a href="04-07-textures-and-depth.html">4.7 — Depth, Textures and Samplers</a>,
+          <a href="06-01-linear-and-srgb.html">6.1 — Linear and sRGB</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd><code>engine/include/engine/gfx/mipmap.hpp</code> <em>(new)</em>,
+            <code>engine/src/gfx/mipmap.cpp</code> <em>(new)</em>,
+            <code>engine/include/engine/gfx/texture.hpp</code>,
+            <code>engine/include/engine/gfx/material.hpp</code>,
+            <code>engine/src/gfx/raster.cpp</code>,
+            <code>engine/include/engine/gfx/gpu_texture.hpp</code>,
+            <code>engine/src/gfx/gpu_texture.cpp</code>,
+            <code>engine/CMakeLists.txt</code>,
+            <code>demos/gltf_view/main.cpp</code>,
+            <code>scratch/verify_610.cpp</code> <em>(new)</em></dd>
+
+        <dt>Milestone</dt>
+        <dd>Mipmapping, trilinear filtering and anisotropy in <strong>both renderers</strong>, with
+            the level derived from an exact analytic derivative rather than a finite difference.
+            24 checks green; the reference render <strong>byte-identical</strong> for the
+            nineteenth lesson — and this time that took a design decision rather than luck.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…derive the mip level from a footprint, and say why the formula is a logarithm.</li>
+      <li>…compute a screen-space uv derivative <em>analytically</em> on a CPU rasterizer that has
+          no neighbouring fragment to subtract.</li>
+      <li>…explain why a mip chain must be averaged in linear light, and quantify what skipping
+          it costs.</li>
+      <li>…say what trilinear filtering buys, in the same vocabulary Lesson 6.9 used for the
+          cascade seam.</li>
+      <li>…explain why isotropic filtering must choose between blurring and aliasing, and what
+          anisotropy does instead.</li>
+      <li>…recognise the two SDL sampler fields that silently disable the feature you just
+          built.</li>
+      <li>…state what mipmapping costs, and when not to pay it.</li>
+    </ul>
+  </section>
+
+  <nav class="toc" aria-labelledby="toc-h">
+    <h2 id="toc-h">On this page</h2>
+    <ol>
+      <li><a href="#problem">The problem: a promise made six times</a></li>
+      <li><a href="#intuition">Building intuition: average it in advance</a></li>
+      <li><a href="#theory">The theory</a></li>
+      <li><a href="#impl">Implementation</a></li>
+      <li><a href="#listings">Complete code listings</a></li>
+      <li><a href="#run">Build &amp; run</a></li>
+      <li><a href="#pitfalls">Common pitfalls &amp; debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; next</a></li>
+      <li><a href="#reading">Further reading</a></li>
+    </ol>
+  </nav>
+
+  <!-- =================================================================
+       1 — THE PROBLEM
+       ================================================================= -->
+  <h2 id="problem"><span class="num">1</span>The problem: a promise made six times</h2>
+
+  <p>
+    Lesson 3.9 built texture mapping and bilinear filtering, and it ended by measuring something it
+    could not fix. On a floor running to the horizon:
+  </p>
+
+  <blockquote>
+    <p>
+      One screen pixel covers <strong>0.60 texels</strong> at the bottom of the frame and
+      <strong>62.46 texels</strong> two rows below the horizon. Bilinear filtering reads four —
+      always, whatever the pixel covers. They cross near row 103, and past that the sampler is
+      looking at a shrinking fraction of the truth: about <strong>6.4%</strong> of it at the
+      horizon. The gap is the aliasing, and mipmaps (Module 6) are what closes it.
+    </p>
+  </blockquote>
+
+    <figure class="dia bleed">
+    <svg viewBox="0 0 720 392" role="img" aria-labelledby="f610a-t f610a-d">
+      <title id="f610a-t">Footprint against what bilinear reads</title>
+      <desc id="f610a-d">A logarithmic axis of texels covered by one screen pixel. Bilinear always reads four texels, a flat line. What the pixel actually covers rises from 0.60 at the bottom of the frame to 62.46 below the horizon, crossing the flat line at four.</desc>
+      <defs>
+        <marker id="e-i-f610a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+        <marker id="e-s-f610a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+        <marker id="e-h-f610a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+        <marker id="e-b-f610a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+        <marker id="e-g-f610a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+      </defs>
+    <text x="360.0" y="22" class="sm" text-anchor="middle">What one pixel covers, and what four taps can see</text>
+    <line x1="90" y1="250" x2="640" y2="250" class="grid" stroke-width="1.0"/>
+    <line x1="90.0" y1="246" x2="90.0" y2="255" class="grid" stroke-width="1.0"/>
+    <text x="90.0" y="270" class="xs" text-anchor="middle">0.5</text>
+    <line x1="168.57142857142856" y1="246" x2="168.57142857142856" y2="255" class="grid" stroke-width="1.0"/>
+    <text x="168.57142857142856" y="270" class="xs" text-anchor="middle">1</text>
+    <line x1="247.14285714285714" y1="246" x2="247.14285714285714" y2="255" class="grid" stroke-width="1.0"/>
+    <text x="247.14285714285714" y="270" class="xs" text-anchor="middle">2</text>
+    <line x1="325.7142857142857" y1="246" x2="325.7142857142857" y2="255" class="grid" stroke-width="1.0"/>
+    <text x="325.7142857142857" y="270" class="xs" text-anchor="middle">4</text>
+    <line x1="404.2857142857143" y1="246" x2="404.2857142857143" y2="255" class="grid" stroke-width="1.0"/>
+    <text x="404.2857142857143" y="270" class="xs" text-anchor="middle">8</text>
+    <line x1="482.85714285714283" y1="246" x2="482.85714285714283" y2="255" class="grid" stroke-width="1.0"/>
+    <text x="482.85714285714283" y="270" class="xs" text-anchor="middle">16</text>
+    <line x1="561.4285714285714" y1="246" x2="561.4285714285714" y2="255" class="grid" stroke-width="1.0"/>
+    <text x="561.4285714285714" y="270" class="xs" text-anchor="middle">32</text>
+    <line x1="640.0" y1="246" x2="640.0" y2="255" class="grid" stroke-width="1.0"/>
+    <text x="640.0" y="270" class="xs" text-anchor="middle">64</text>
+    <text x="360.0" y="326" class="xs" text-anchor="middle">texels covered by one screen pixel</text>
+    <line x1="90" y1="92" x2="640" y2="92" class="hi" stroke-width="2.0"/>
+    <text x="96" y="82" class="xs" text-anchor="start">what bilinear READS: four texels, always</text>
+    <path d="M 90.0 244 L 640.0 70" stroke="#5082e6" stroke-width="1.8" fill="none"/>
+    <text x="537.8916921396572" y="136" class="xs" text-anchor="middle">what it COVERS</text>
+    <line x1="110.7" y1="62.0" x2="110.7" y2="250.0" stroke="#5ac878" stroke-width="1.4" fill="none" stroke-dasharray="4 4"/>
+    <text x="110.66698902979809" y="52" class="xs" text-anchor="middle">0.6</text>
+    <text x="110.66698902979809" y="290" class="xs" text-anchor="middle">bottom of frame</text>
+    <line x1="637.2" y1="62.0" x2="637.2" y2="250.0" stroke="#e05c5c" stroke-width="1.4" fill="none" stroke-dasharray="4 4"/>
+    <text x="637.2390521907453" y="52" class="xs" text-anchor="middle">62.46</text>
+    <text x="637.2390521907453" y="306" class="xs" text-anchor="middle">below the horizon</text>
+    <line x1="325.7142857142857" y1="92" x2="325.7142857142857" y2="250" class="grid" stroke-width="1.2" stroke-dasharray="3 3"/>
+    <text x="325.7142857142857" y="110" class="xs" text-anchor="middle">they cross here</text>
+    <text x="360.0" y="356" class="xs" text-anchor="middle">past the crossover the sampler sees a fraction of the truth</text>
+    <text x="360.0" y="374" class="xs" text-anchor="middle">— 6.4% of it at the horizon. That gap IS the sparkle.</text>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 1.</span>
+      Lesson 3.9&#8217;s measurement, and the gap it named. Bilinear filtering reads FOUR texels &#8212; a flat line &#8212; whatever the pixel covers. What the pixel actually covers rises from 0.60 texels at the bottom of the frame to 62.46 two rows below the horizon. They cross at four, and past the crossover the sampler sees a shrinking fraction of the truth: about <strong>6.4%</strong> of it at the horizon. That gap is the sparkle, and closing it is this lesson.
+    </figcaption>
+  </figure>
+
+
+  <p>
+    That is a completely honest description of a bug, and then nothing happened for seven lessons.
+    It is worth listing where the promise was repeated, because the list is the reason this lesson
+    sits at 6.10 and not at the end of the module:
+  </p>
+
+  <ul>
+    <li>3.9's prose, above.</li>
+    <li>3.9's Exercise 8.5, which asks the student to build a chain and warns about the linear-light
+        trap in its hint.</li>
+    <li>3.9's Exercise 8.4, which asks how the sampler would <em>know</em> which filter applies —
+        and answers "it is a fact about the derivative, and Module 6's job properly".</li>
+    <li>4.7's exercise 4.7.5, naming <code>SDL_GenerateMipmapsForGPUTexture</code>.</li>
+    <li>4.7's <code>gpu_texture.cpp</code>, which shipped <code>ti.num_levels = 1;</code> with the
+        comment <code>// no mipmaps yet — Module 6</code>.</li>
+    <li>And worst, <code>texture.hpp</code>'s public sampler struct, whose doc comment reads
+        <em>"Module 6's mipmaps are what fills the gap"</em> — a promise made in a header the
+        student is meant to read.</li>
+  </ul>
+
+  <div class="callout warn">
+    <span class="label">How this got found, which is itself the lesson</span>
+    <p>
+      Two external reviewers read the published curriculum and independently flagged mipmaps as
+      missing — from the <em>outline alone</em>, without access to the code. Neither could see that
+      the engine had promised them six times; they simply noticed that a course teaching texture
+      filtering had no lesson on minification.
+    </p>
+    <p>
+      A deferral is a debt, and a deferral repeated in a shipped header is a debt with the
+      student's name on it. It is worth being deliberate about which ones you are carrying.
+    </p>
+  </div>
+
+  <!-- =================================================================
+       2 — BUILDING INTUITION
+       ================================================================= -->
+  <h2 id="intuition"><span class="num">2</span>Building intuition: average it in advance</h2>
+
+  <p>
+    The problem is a mismatch between how much of the image a pixel is responsible for and how much
+    of it the sampler looks at. There are two ways to close a gap like that, and only one of them
+    is affordable.
+  </p>
+
+  <p>
+    <strong>Read more texels.</strong> If the pixel covers sixty-two, read sixty-two and average
+    them. This is exactly right and completely unusable: the cost per pixel would rise with
+    distance, so the far half of your screen — the cheap half, the half that covers the least area
+    — would become the expensive half. Worse, the count varies per pixel, so the inner loop gets a
+    variable-length inner loop inside it.
+  </p>
+
+  <p>
+    <strong>Or average them in advance.</strong> The set of texels a distant pixel covers is not
+    arbitrary: it is a contiguous square block. And the blocks that different pixels need are
+    <em>nested</em> — a 4×4 block is four 2×2 blocks. So precompute the averages once, at load time,
+    in a pyramid: the image at half size, then quarter size, and so on to a single texel. At draw
+    time, pick the level whose texels are about the size of the footprint and take the same four
+    taps you always took.
+  </p>
+
+  <p class="lede">
+    <strong>The cost moves from per-pixel-per-frame to per-texture-once</strong>, and the per-pixel
+    cost becomes constant again — which is the whole reason this technique is universal rather than
+    merely correct.
+  </p>
+
+    <figure class="dia bleed">
+    <svg viewBox="0 0 720 360" role="img" aria-labelledby="f610b-t f610b-d">
+      <title id="f610b-t">A mip chain</title>
+      <desc id="f610b-d">Six squares of halving size labelled L0 to L5, from 256x256 down to 8x8, each a quarter the area of the one before. The series 1/4 + 1/16 + 1/64 sums to one third, which is the 33 per cent memory cost.</desc>
+      <defs>
+        <marker id="e-i-f610b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+        <marker id="e-s-f610b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+        <marker id="e-h-f610b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+        <marker id="e-b-f610b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+        <marker id="e-g-f610b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+      </defs>
+    <text x="360.0" y="22" class="sm" text-anchor="middle">The image, at every size at once</text>
+    <rect x="80" y="60.0" width="150.0" height="150.0" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.3"/>
+    <text x="155.0" y="52.0" class="xs" text-anchor="middle">L0</text>
+    <text x="155.0" y="232" class="xs" text-anchor="middle">256x256</text>
+    <text x="155.0" y="248" class="xs" text-anchor="middle">1</text>
+    <rect x="256.0" y="97.5" width="75.0" height="75.0" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.39"/>
+    <text x="293.5" y="89.5" class="xs" text-anchor="middle">L1</text>
+    <text x="293.5" y="232" class="xs" text-anchor="middle">128x128</text>
+    <text x="293.5" y="248" class="xs" text-anchor="middle">1/4</text>
+    <rect x="357.0" y="116.25" width="37.5" height="37.5" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.48"/>
+    <text x="375.75" y="108.25" class="xs" text-anchor="middle">L2</text>
+    <text x="375.75" y="232" class="xs" text-anchor="middle">64x64</text>
+    <text x="375.75" y="248" class="xs" text-anchor="middle">1/16</text>
+    <rect x="420.5" y="125.625" width="18.75" height="18.75" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.5700000000000001"/>
+    <text x="429.875" y="117.625" class="xs" text-anchor="middle">L3</text>
+    <text x="429.875" y="232" class="xs" text-anchor="middle">32x32</text>
+    <text x="429.875" y="248" class="xs" text-anchor="middle">1/64</text>
+    <rect x="465.25" y="130.3125" width="9.375" height="9.375" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.6599999999999999"/>
+    <text x="469.9375" y="122.3125" class="xs" text-anchor="middle">L4</text>
+    <text x="469.9375" y="232" class="xs" text-anchor="middle">16x16</text>
+    <text x="469.9375" y="248" class="xs" text-anchor="middle">1/256</text>
+    <rect x="500.625" y="132.65625" width="4.6875" height="4.6875" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.75"/>
+    <text x="502.96875" y="124.65625" class="xs" text-anchor="middle">L5</text>
+    <text x="502.96875" y="232" class="xs" text-anchor="middle">8x8</text>
+    <text x="502.96875" y="248" class="xs" text-anchor="middle">1/1024</text>
+    <text x="360.0" y="276" class="xs" text-anchor="middle">each level is a quarter of the one above, so the extra is</text>
+    <text x="360.0" y="298" class="xs" text-anchor="middle">1/4 + 1/16 + 1/64 + ...  =  1/3</text>
+    <text x="360.0" y="322" class="xs" text-anchor="middle">measured on a 256x256 checker: 33.33%</text>
+    <text x="360.0" y="340" class="xs" text-anchor="middle">in 9 levels (1 + log2 256)</text>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 2.</span>
+      The image at every size at once. Each level is the one above with every 2&#215;2 block replaced by its average, so it is a quarter of the area &#8212; which makes the total extra storage a geometric series: 1/4 + 1/16 + 1/64 + &#8230; = <strong>1/3</strong>. Measured on a 256&#215;256 checker: 65,536 texels become 87,381, which is 33.33% and the series to four figures. The number everyone quotes, derived rather than remembered.
+    </figcaption>
+  </figure>
+
+
+  <p>
+    The memory is a geometric series and it is worth doing in your head once, because the number is
+    quoted everywhere and almost never derived. Each level is a quarter the area of the one above,
+    so the extra storage is
+  </p>
+
+  <div class="eq">\[ \tfrac{1}{4} + \tfrac{1}{16} + \tfrac{1}{64} + \cdots = \sum_{k=1}^{\infty} 4^{-k} = \tfrac{1}{3} \]</div>
+
+  <div class="eq-plain">1/4 + 1/16 + 1/64 + … = 1/3</div>
+
+  <p>
+    <strong>33% more memory, for any image, at any size.</strong> The harness measures 65,536 texels
+    becoming 87,381 — 33.33%, which is the series to four figures.
+  </p>
+
+  <h3>The three questions the one-sentence version hides</h3>
+
+  <ol>
+    <li>
+      <strong>Which level?</strong> The footprint is a <em>derivative</em> — how fast uv changes
+      per screen pixel. On a GPU that is free, because fragments are shaded in 2×2 quads
+      specifically so a neighbour is always available to subtract. <strong>A scanline rasterizer
+      has no neighbour.</strong> The row above was finished and discarded; the pixel to the right
+      has not happened yet. So the CPU has to compute the derivative from the triangle itself, and
+      that is <a href="#gradient">§3.3</a> — the most interesting arithmetic in the lesson.
+    </li>
+    <li>
+      <strong>What about between levels?</strong> Level 3 and level 4 differ by a factor of two,
+      so switching abruptly between them draws a visible line across the floor. You have met this
+      shape of artefact before: it is <a href="06-09-cascaded-shadows.html">6.9</a>'s cascade seam,
+      one lesson later and one dimension down, and it has the same cure — blend across the
+      boundary.
+    </li>
+    <li>
+      <strong>What if the footprint is not square?</strong> A floor at a grazing angle is
+      compressed in one screen direction and not the other. One square average cannot represent
+      that, so choosing a level forces a choice between blurring and aliasing. Anisotropic
+      filtering refuses to choose.
+    </li>
+  </ol>
+
+  <div class="callout warn">
+    <span class="label">And one bug, which is famous enough to have a shape</span>
+    <p>
+      A mip chain built by averaging sRGB <em>bytes</em> gets <strong>darker at every level</strong>.
+      Averaging is a linear operation; sRGB is not a linear encoding; the mean of two codes is not
+      the code of the mean light, and it is always too dark because the curve is convex.
+    </p>
+    <p>
+      The symptom is that a textured surface dims as it recedes — and the usual diagnosis is "the
+      lighting falls off too fast", which sends you to look in entirely the wrong file.
+      <a href="#linear">§3.4</a> measures it: on the harshest case the naive chain delivers
+      <strong>42.2%</strong> of the light it should, at level 1 <em>alone</em>, and it compounds all
+      the way down.
+    </p>
+  </div>
+
+  <!-- =================================================================
+       3 — THE THEORY
+       ================================================================= -->
+  <h2 id="theory"><span class="num">3</span>The theory</h2>
+
+  <h3 id="chain">3.1 &nbsp;Building the chain</h3>
+
+  <p>
+    Level 0 is the image. Level <em>k</em>+1 is level <em>k</em> with every 2×2 block replaced by
+    its average, so each level is half as wide and half as tall. The chain stops at 1×1, which takes
+    1&nbsp;+&nbsp;⌊log₂(max side)⌋ levels — nine for a 256-square image, ten for 512.
+  </p>
+
+  <p>
+    Two details that only bite on textures that are not square powers of two:
+  </p>
+
+  <ul>
+    <li>
+      <strong>Stop when <em>both</em> axes reach 1, not either.</strong> A 64×4 texture halves to
+      32×2, 16×1 — and if you stop there, you have thrown away four more halvings of width. The
+      harness checks that a 64×4 strip reaches 1×1 in seven levels.
+    </li>
+    <li>
+      <strong>Odd sizes round down and lose a row.</strong> Real engines box-filter with weights
+      that account for it; the difference is invisible and the code is twice as long, so this is
+      the ninety-percent picture and the missing ten percent is a weighted resample.
+    </li>
+  </ul>
+
+  <h3 id="level">3.2 &nbsp;Choosing the level</h3>
+
+  <p>
+    Level <em>L</em> has texels 2<sup><em>L</em></sup> times as wide as level 0, because each level
+    halved them. We want the level whose texel is about the size of the footprint, so
+  </p>
+
+  <div class="eq">\[ 2^{L} = \rho \qquad\Longrightarrow\qquad L = \log_2 \rho \]</div>
+
+  <div class="eq-plain">2^L = footprint_in_texels &nbsp;⟹&nbsp; L = log2(footprint_in_texels)</div>
+
+  <p>
+    where ρ is the footprint measured in level-0 texels. The logarithm is not a trick — it is the
+    direct consequence of the pyramid halving at each step, which is why the formula has no
+    constants in it to tune.
+  </p>
+
+    <figure class="dia bleed">
+    <svg viewBox="0 0 720 330" role="img" aria-labelledby="f610d-t f610d-d">
+      <title id="f610d-t">Level selection</title>
+      <desc id="f610d-d">A logarithmic footprint axis from 1 to 64 texels with the mip level marked above each power of two. Lesson 3.9's measured 62.46 texels per pixel lands at level 5.965, between levels 5 and 6.</desc>
+      <defs>
+        <marker id="e-i-f610d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+        <marker id="e-s-f610d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+        <marker id="e-h-f610d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+        <marker id="e-b-f610d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+        <marker id="e-g-f610d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+      </defs>
+    <text x="360.0" y="22" class="sm" text-anchor="middle">Which level: log2 of the footprint</text>
+    <line x1="100" y1="170" x2="620" y2="170" class="grid" stroke-width="1.0"/>
+    <line x1="100.0" y1="165" x2="100.0" y2="175" class="grid" stroke-width="1.0"/>
+    <text x="100.0" y="192" class="xs" text-anchor="middle">1</text>
+    <text x="100.0" y="152" class="xs" text-anchor="middle">L0</text>
+    <line x1="186.66666666666669" y1="165" x2="186.66666666666669" y2="175" class="grid" stroke-width="1.0"/>
+    <text x="186.66666666666669" y="192" class="xs" text-anchor="middle">2</text>
+    <text x="186.66666666666669" y="152" class="xs" text-anchor="middle">L1</text>
+    <line x1="273.33333333333337" y1="165" x2="273.33333333333337" y2="175" class="grid" stroke-width="1.0"/>
+    <text x="273.33333333333337" y="192" class="xs" text-anchor="middle">4</text>
+    <text x="273.33333333333337" y="152" class="xs" text-anchor="middle">L2</text>
+    <line x1="360.0" y1="165" x2="360.0" y2="175" class="grid" stroke-width="1.0"/>
+    <text x="360.0" y="192" class="xs" text-anchor="middle">8</text>
+    <text x="360.0" y="152" class="xs" text-anchor="middle">L3</text>
+    <line x1="446.6666666666667" y1="165" x2="446.6666666666667" y2="175" class="grid" stroke-width="1.0"/>
+    <text x="446.6666666666667" y="192" class="xs" text-anchor="middle">16</text>
+    <text x="446.6666666666667" y="152" class="xs" text-anchor="middle">L4</text>
+    <line x1="533.3333333333333" y1="165" x2="533.3333333333333" y2="175" class="grid" stroke-width="1.0"/>
+    <text x="533.3333333333333" y="192" class="xs" text-anchor="middle">32</text>
+    <text x="533.3333333333333" y="152" class="xs" text-anchor="middle">L5</text>
+    <line x1="620.0" y1="165" x2="620.0" y2="175" class="grid" stroke-width="1.0"/>
+    <text x="620.0" y="192" class="xs" text-anchor="middle">64</text>
+    <text x="620.0" y="152" class="xs" text-anchor="middle">L6</text>
+    <text x="360.0" y="216" class="xs" text-anchor="middle">footprint, in texels</text>
+    <text x="66" y="152" class="xs" text-anchor="end">level</text>
+    <line x1="617.0" y1="136.0" x2="521.0" y2="110.0" stroke="#e05c5c" stroke-width="1.4" fill="none"/>
+    <circle cx="617.0" cy="136" r="3.5" fill="#e05c5c" stroke="none"/>
+    <text x="516.9545909013069" y="106" class="xs" text-anchor="end">Lesson 3.9: 62.46 texels</text>
+    <text x="516.9545909013069" y="122" class="xs" text-anchor="end">= level 5.965</text>
+    <text x="360.0" y="262" class="xs" text-anchor="middle">a level halves the texture, so level L has texels 2^L wide:</text>
+    <text x="360.0" y="284" class="xs" text-anchor="middle">2^L = footprint   =&gt;   L = log2(footprint)</text>
+    <text x="360.0" y="310" class="xs" text-anchor="middle">the level is CONTINUOUS, and the fraction is what trilinear blends</text>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 3.</span>
+      Choosing the level. Level L has texels 2<sup>L</sup> times as wide as level 0, because each level halved them &#8212; so matching the texel to the footprint means 2<sup>L</sup> = &#961;, and therefore L = log<sub>2</sub>&#961;. The logarithm is a consequence of the pyramid halving, not a tuning choice, which is why the formula has no constants in it. Lesson 3.9&#8217;s measured 62.46 texels per pixel lands at level <strong>5.965</strong> &#8212; and the fraction is real: no level has texels exactly 62.46 across, which is exactly what trilinear filtering interpolates.
+    </figcaption>
+  </figure>
+
+
+  <div class="worked">
+    <p><strong>Worked example.</strong> Push 3.9's own measurement through it.</p>
+    <p>That lesson measured 62.46 texels per pixel two rows below the horizon. So</p>
+    <div class="eq-plain">L = log2(62.46) = 5.965</div>
+    <p>
+      Level 5 of a 256-texture is 8×8; level 6 is 4×4. So the right answer is "level 5, almost all
+      the way to level 6" — and the harness confirms <code>mip_level_for</code> returns 5.965 for
+      that footprint.
+    </p>
+    <p>
+      Note what the level being <em>fractional</em> is telling you: there is no level whose texels
+      are exactly 62.46 across, because the chain only offers powers of two. That fraction is
+      precisely what trilinear filtering interpolates, and it is why the function returns a float
+      rather than an int.
+    </p>
+  </div>
+
+  <p>
+    <strong>ρ is the longer of the two axes</strong>, and that one word is the whole of why plain
+    mipmapping over-blurs. Taking the longer guarantees no aliasing along <em>either</em> axis, at
+    the cost of blurring the shorter one. Taking the shorter would keep the detail and alias. Hold
+    that thought until <a href="#aniso">§3.6</a>.
+  </p>
+
+  <p>
+    And magnification — ρ&nbsp;&lt;&nbsp;1, a pixel covering less than a texel — clamps to level 0.
+    There is no level −1, and the honest answer is that the image simply has no more detail to
+    offer.
+  </p>
+
+  <h3 id="gradient">3.3 &nbsp;The derivative, on a renderer with no neighbours</h3>
+
+  <p>
+    Now the part that is genuinely CPU-specific, and the reason 3.9 could measure the footprint in a
+    demo but not compute it in the fill loop.
+  </p>
+
+    <figure class="dia bleed">
+    <svg viewBox="0 0 720 330" role="img" aria-labelledby="f610e-t f610e-d">
+      <title id="f610e-t">The screen-space uv derivative</title>
+      <desc id="f610e-d">On the left, a GPU shades fragments in 2x2 quads so a neighbour is always available and ddx is a subtraction. On the right, a scanline rasterizer has no neighbour, so the derivative is computed from the triangle analytically by the quotient rule, agreeing with a numerical difference to 5.79e-06.</desc>
+      <defs>
+        <marker id="e-i-f610e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+        <marker id="e-s-f610e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+        <marker id="e-h-f610e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+        <marker id="e-b-f610e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+        <marker id="e-g-f610e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+      </defs>
+    <text x="360.0" y="22" class="sm" text-anchor="middle">Where the footprint comes from</text>
+    <text x="170" y="58" class="xs" text-anchor="middle">GPU: shade in 2x2 quads</text>
+    <rect x="140" y="74" width="30" height="30" rx="3" fill="none" stroke="#5082e6" stroke-width="1.3"/>
+    <rect x="140" y="104" width="30" height="30" rx="3" fill="none" stroke="#5082e6" stroke-width="1.3"/>
+    <rect x="170" y="74" width="30" height="30" rx="3" fill="none" stroke="#5082e6" stroke-width="1.3"/>
+    <rect x="170" y="104" width="30" height="30" rx="3" fill="none" stroke="#5082e6" stroke-width="1.3"/>
+    <circle cx="155.0" cy="89.0" r="4" fill="#e05c5c" stroke="none"/>
+    <line x1="155.0" y1="89.0" x2="185.0" y2="89.0" class="hi" stroke-width="1.2" marker-end="url(#e-h-f610e)"/>
+    <line x1="155.0" y1="89.0" x2="155.0" y2="119.0" class="hi" stroke-width="1.2" marker-end="url(#e-h-f610e)"/>
+    <text x="170" y="156" class="xs" text-anchor="middle">ddx / ddy are a SUBTRACTION:</text>
+    <text x="170" y="172" class="xs" text-anchor="middle">the neighbour is always there</text>
+    <text x="520" y="58" class="xs" text-anchor="middle">CPU: one fragment at a time</text>
+    <rect x="455" y="74" width="30" height="30" rx="3" fill="none" stroke="#8f918a" stroke-width="1.3" stroke-dasharray="3 3"/>
+    <rect x="485" y="74" width="30" height="30" rx="3" fill="none" stroke="#8f918a" stroke-width="1.3" stroke-dasharray="3 3"/>
+    <rect x="515" y="74" width="30" height="30" rx="3" fill="none" stroke="#8f918a" stroke-width="1.3" stroke-dasharray="3 3"/>
+    <rect x="545" y="74" width="30" height="30" rx="3" fill="none" stroke="#8f918a" stroke-width="1.3" stroke-dasharray="3 3"/>
+    <rect x="575" y="74" width="30" height="30" rx="3" fill="none" stroke="#8f918a" stroke-width="1.3" stroke-dasharray="3 3"/>
+    <circle cx="530.0" cy="89.0" r="4" fill="#e05c5c" stroke="none"/>
+    <text x="520" y="126" class="xs" text-anchor="middle">no neighbour to subtract —</text>
+    <text x="520" y="142" class="xs" text-anchor="middle">the row above is long gone</text>
+    <line x1="90" y1="196" x2="630" y2="196" class="grid" stroke-width="1.0"/>
+    <text x="360.0" y="220" class="xs" text-anchor="middle">so the CPU computes it from the TRIANGLE, exactly:</text>
+    <text x="360.0" y="246" class="xs" text-anchor="middle">u = U / W,  with U and W both AFFINE in screen space</text>
+    <text x="360.0" y="268" class="xs" text-anchor="middle">du/dx = (dU/dx  −  u · dW/dx) / W</text>
+    <text x="360.0" y="294" class="xs" text-anchor="middle">dU/dx and dW/dx are constant over the triangle, so they hoist out of the loop</text>
+    <text x="360.0" y="316" class="xs" text-anchor="middle">measured against a central difference of the real interpolation: 5.79e-06</text>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 4.</span>
+      Where the footprint comes from, and why the CPU has to work for it. A GPU shades fragments in 2&#215;2 quads specifically so that a neighbour is always available, which makes <code>ddx</code> a subtraction &#8212; and is also why it cannot be called from divergent control flow. A scanline rasterizer has no neighbour: the row above was discarded and the pixel to the right has not happened. So the derivative comes from the TRIANGLE, by the quotient rule, and it is exact because U and W are both affine in screen space. Everything except two multiplies and a subtract hoists out of the pixel loop. Checked against a central difference of the real interpolation: they agree to <strong>5.79&#215;10<sup>&#8722;6</sup></strong>.
+    </figcaption>
+  </figure>
+
+
+  <p>
+    A GPU shades fragments in 2×2 quads. That is not an efficiency detail — it is <em>why</em>
+    <code>ddx</code> and <code>ddy</code> exist: the neighbouring fragment's value is right there,
+    so a derivative is a subtraction. (It is also why those functions cannot be called from
+    divergent control flow: the neighbour might not have taken your branch.)
+  </p>
+
+  <p>
+    Our rasterizer walks a scanline one pixel at a time. The row above was finished and thrown
+    away; the pixel to the right has not been computed. There is nothing to subtract. So the
+    derivative has to come from the triangle, analytically — and it turns out to be both exact and
+    nearly free.
+  </p>
+
+  <p>
+    Recall from <a href="03-02-perspective-correct.html">Lesson 3.2</a> that perspective-correct
+    interpolation computes
+  </p>
+
+  <div class="eq">\[ u(x,y) \;=\; \frac{U(x,y)}{W(x,y)}, \qquad U = \sum_i f_i \frac{u_i}{w_i}, \qquad W = \sum_i \frac{f_i}{w_i} \]</div>
+
+  <div class="eq-plain">u = U / W, with U = Σ f_i·(u_i/w_i) and W = Σ f_i·(1/w_i)</div>
+
+  <p>
+    <strong>Both <em>U</em> and <em>W</em> are affine in screen space</strong>, because the
+    normalised barycentrics <em>f<sub>i</sub></em> are — they are edge functions, which are linear
+    in <em>x</em> and <em>y</em> by construction (Lesson 2.2). An affine function has a constant
+    gradient. So the quotient rule gives, per screen axis,
+  </p>
+
+  <div class="eq">\[ \frac{\partial u}{\partial x} \;=\; \frac{\dfrac{\partial U}{\partial x} - u \cdot \dfrac{\partial W}{\partial x}}{W} \]</div>
+
+  <div class="eq-plain">du/dx = (dU/dx − u · dW/dx) / W</div>
+
+  <p>
+    and every ingredient is already lying around:
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <caption class="visually-hidden">Where each term of the gradient comes from</caption>
+      <thead><tr><th>Term</th><th>Where it already exists</th></tr></thead>
+      <tbody>
+        <tr><td><code>df_i/dx</code></td>
+            <td><code>step_x0/1/2 · inv_area</code> — the edge increments the fill already walks,
+                over the area it already reciprocated</td></tr>
+        <tr><td><code>dU/dx</code>, <code>dW/dx</code></td>
+            <td>a weighted sum of those, <strong>constant over the triangle</strong>, so hoisted
+                out of the pixel loop entirely</td></tr>
+        <tr><td><code>u</code></td>
+            <td>the fragment's uv, which the loop just computed</td></tr>
+        <tr><td><code>1/W</code></td>
+            <td><code>w_recip</code> — the reciprocal Lesson 3.2 already pays one divide for</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    So the per-pixel cost is <strong>two multiplies and a subtract per axis</strong>, and only when
+    a chain is bound. Everything else hoists.
+  </p>
+
+  <div class="callout">
+    <span class="label">It is exact, and the test says so</span>
+    <p>
+      This is a closed form, not an approximation — which is a stronger claim than "it looks right",
+      so it deserves a stronger test than looking at it. §D of the harness computes the gradient
+      analytically and then computes a <em>central difference</em> of the real perspective-correct
+      interpolation at the same point, on a triangle with genuinely different <em>w</em> at each
+      vertex so the divide actually bends things.
+    </p>
+    <p>
+      They agree to <strong>5.79 × 10<sup>−6</sup></strong>, which is the finite difference's own
+      truncation error rather than a disagreement. A test that only checked the analytic form
+      against itself would have proved nothing.
+    </p>
+  </div>
+
+  <h3 id="linear">3.4 &nbsp;The bug that makes things darker</h3>
+
+  <p>
+    Now the trap, and it is worth meeting with real numbers because "average in linear light" is
+    advice that is very easy to nod at and not act on.
+  </p>
+
+  <p>
+    Take one 2×2 block of a black-and-white checker: two texels at code 255, two at code 0. What
+    should their average be? <strong>Half the light</strong> — one of the two texels is emitting
+    all of it and the other none, so the block as a whole emits half.
+  </p>
+
+  <p>
+    Lesson 6.1 established the two integers that answer this. Code 128 is <em>not</em> half the
+    light; it is 0.2159 of it. Half the light is <strong>code 188</strong>. So:
+  </p>
+
+    <figure class="dia bleed">
+    <svg viewBox="0 0 720 340" role="img" aria-labelledby="f610c-t f610c-d">
+      <title id="f610c-t">sRGB averaging against linear-light averaging</title>
+      <desc id="f610c-d">A 2x2 block of two white and two black texels. Averaged as sRGB bytes it gives code 127, which is 0.2122 of white. Averaged in linear light it gives code 188, which is 0.5029 — half the light, as it should be. The naive answer delivers 42 per cent of the light it should.</desc>
+      <defs>
+        <marker id="e-i-f610c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+        <marker id="e-s-f610c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+        <marker id="e-h-f610c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+        <marker id="e-b-f610c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+        <marker id="e-g-f610c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+      </defs>
+    <text x="360.0" y="22" class="sm" text-anchor="middle">Half of black and white, computed two ways</text>
+    <rect x="130" y="90" width="34" height="34" fill="#f2f2f2" stroke="#8f918a" stroke-width="1"/>
+    <rect x="164" y="90" width="34" height="34" fill="#141414" stroke="#8f918a" stroke-width="1"/>
+    <rect x="130" y="124" width="34" height="34" fill="#141414" stroke="#8f918a" stroke-width="1"/>
+    <rect x="164" y="124" width="34" height="34" fill="#f2f2f2" stroke="#8f918a" stroke-width="1"/>
+    <text x="164" y="78" class="xs" text-anchor="middle">one 2x2 block</text>
+    <text x="164" y="176" class="xs" text-anchor="middle">codes 255, 0, 0, 255</text>
+    <text x="300" y="144" class="xs" text-anchor="start">averaged as sRGB BYTES</text>
+    <rect x="300" y="152" width="52" height="34" fill="#7d7d7d" stroke="#8f918a" stroke-width="1"/>
+    <text x="372" y="166" class="xs" text-anchor="start">code 127</text>
+    <text x="450" y="166" class="xs" text-anchor="start">= 0.2122 of white</text>
+    <text x="300" y="200" class="xs" text-anchor="start">(255+0+0+255)/4 = 127</text>
+    <line x1="296" y1="148" x2="296" y2="206" class="#e05c5c" stroke-width="2.4"/>
+    <text x="300" y="229" class="xs" text-anchor="start">averaged in LINEAR LIGHT</text>
+    <rect x="300" y="237" width="52" height="34" fill="#bcbcbc" stroke="#8f918a" stroke-width="1"/>
+    <text x="372" y="251" class="xs" text-anchor="start">code 188</text>
+    <text x="450" y="251" class="xs" text-anchor="start">= 0.5029 of white</text>
+    <text x="300" y="285" class="xs" text-anchor="start">decode, average, re-encode</text>
+    <line x1="296" y1="233" x2="296" y2="291" class="#5ac878" stroke-width="2.4"/>
+    <text x="360.0" y="312" class="xs" text-anchor="middle">the naive average delivers 42.2% of the light it should — 57.8% TOO DARK at level 1 alone</text>
+    <text x="360.0" y="332" class="xs" text-anchor="middle">and it compounds down the chain, so the surface dims as it recedes</text>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 5.</span>
+      The bug that makes a surface darken as it recedes. One 2&#215;2 block of a black-and-white checker should average to <em>half the light</em> &#8212; and Lesson 6.1 established that half the light is <strong>code 188</strong>, not 128. Averaging the sRGB BYTES gives code 127, which is 0.2122 of white: the naive chain delivers <strong>42.2%</strong> of the light it should, <strong>57.8% too dark</strong>, at level 1 alone. It compounds down the chain, which is why the symptom is not &#8220;textures are dark&#8221; but &#8220;textures get darker with distance&#8221; &#8212; and why it is so often mistaken for a lighting falloff problem.
+    </figcaption>
+  </figure>
+
+
+  <div class="worked">
+    <p><strong>Worked example.</strong> The two ways, side by side.</p>
+    <div class="eq-plain">naive:   (255 + 0 + 0 + 255) / 4 = code 127 → 0.2122 of white</div>
+    <div class="eq-plain">correct: decode → (1 + 0 + 0 + 1)/4 = 0.5 → encode → code 188 → 0.5029 of white</div>
+    <p>
+      The naive answer delivers <strong>0.2122 / 0.5029 = 42.2%</strong> of the light it should.
+      That is <strong>57.8% too dark</strong>, at level 1, on one block.
+    </p>
+    <p>
+      And it <em>compounds</em>. Level 2 averages four level-1 texels that are already too dark, so
+      the error accumulates down the chain — which is why the symptom is not "textures are dark" but
+      "textures get darker with distance", and why it is so often mistaken for a lighting falloff
+      problem.
+    </p>
+  </div>
+
+  <div class="callout">
+    <span class="label">Read the space from the data, not from a parameter</span>
+    <p>
+      <code>build_mips</code> decides by asking the texture: <code>texel_space::srgb</code> decodes,
+      <code>texel_space::linear</code> averages the bytes directly. That field exists because
+      Lesson 6.7 needed normal maps to stop being decoded as colour, and it pays for itself again
+      here — a roughness map or a normal map <em>is</em> linear data, so averaging its bytes is the
+      correct operation rather than the lazy one.
+    </p>
+    <p>
+      Making it a parameter would put the decision back at the call site, which is exactly where
+      6.7 took it from. A caller who has to remember which of their textures is colour will get the
+      third one wrong.
+    </p>
+    <p>
+      Alpha is averaged as bytes on <em>both</em> paths, incidentally: it is a coverage fraction
+      rather than a colour, so it was never sRGB-encoded, and decoding it would be a second bug
+      hiding behind the fix for the first.
+    </p>
+  </div>
+
+  <div class="callout warn">
+    <span class="label">The GPU gets this right for free, and it is worth knowing why</span>
+    <p>
+      <code>SDL_GenerateMipmapsForGPUTexture</code> does not need telling about colour spaces,
+      because the texture was created with an <code>_SRGB</code> format. The hardware decodes on
+      read and encodes on write, so the blit chain that generates the levels is <em>already</em>
+      averaging in linear light.
+    </p>
+    <p>
+      That is the clearest case in this course of a format flag doing real work: the same
+      correctness the CPU path arranges by hand in twenty lines is, on the GPU, a consequence of
+      having declared what the data means.
+    </p>
+  </div>
+
+  <h3 id="trilinear">3.5 &nbsp;Trilinear, and a seam you have met before</h3>
+
+  <p>
+    The level is fractional and the chain is not. Round it, and every fragment on one side of an
+    invisible line reads an image twice as detailed as the fragment next to it — so the line becomes
+    visible, running across the floor at a fixed distance from the camera.
+  </p>
+
+  <p>
+    <strong>This is Lesson 6.9's cascade seam.</strong> Same cause: two representations of the same
+    surface, each defensible, meeting at a boundary and disagreeing. Same cure: blend across it.
+    Bilinear within a level, linear between two levels — <em>tri</em>linear.
+  </p>
+
+  <p>
+    The harness sweeps a footprint across a level boundary and measures the largest single-step
+    change:
+  </p>
+
+  <div class="eq-plain">
+    nearest: 0.3470 &nbsp;&nbsp;·&nbsp;&nbsp; trilinear: 0.0124 &nbsp;&nbsp;—&nbsp;&nbsp; 28× smaller
+  </div>
+
+  <p>
+    A 0.347 jump in one step of camera distance is a hard edge; 0.0124 is a gradient. The cost is
+    one extra bilinear fetch, which is why trilinear is the default everywhere and
+    <code>mip_filter = nearest</code> exists mainly so you can see what it is for.
+  </p>
+
+  <h3 id="aniso">3.6 &nbsp;Anisotropy: refusing to choose</h3>
+
+  <p>
+    Back to the word "longer" in §3.2. Consider a floor seen at a grazing angle. Moving one pixel
+    across the screen moves you a long way across the texture; moving one pixel <em>up</em> the
+    screen moves you much further still, or much less, depending on the geometry. The footprint is
+    a long thin ellipse, not a circle.
+  </p>
+
+    <figure class="dia bleed">
+    <svg viewBox="0 0 720 310" role="img" aria-labelledby="f610f-t f610f-d">
+      <title id="f610f-t">Isotropic against anisotropic filtering</title>
+      <desc id="f610f-d">A long thin elliptical footprint, 32 texels by 2. On the left an isotropic square containing it selects level 5 from the long axis and blurs the short axis by 16 times. On the right, anisotropic filtering selects level 1 from the short axis and takes eight samples along the long one.</desc>
+      <defs>
+        <marker id="e-i-f610f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+        <marker id="e-s-f610f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+        <marker id="e-h-f610f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+        <marker id="e-b-f610f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+        <marker id="e-g-f610f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+      </defs>
+    <text x="360.0" y="22" class="sm" text-anchor="middle">A footprint that is not square</text>
+    <ellipse cx="200" cy="130" rx="96" ry="12" fill="#5082e6" stroke="#5082e6" fill-opacity="0.35" stroke-width="1.4"/>
+    <text x="200" y="100" class="xs" text-anchor="middle">what the pixel covers: 32 texels by 2</text>
+    <rect x="104" y="34" width="192" height="192" rx="3" fill="none" stroke="#e05c5c" stroke-width="1.3" stroke-dasharray="5 4"/>
+    <text x="200" y="246" class="xs" text-anchor="middle">isotropic: level 5, from the LONG axis</text>
+    <text x="200" y="264" class="xs" text-anchor="middle">the short axis is blurred 16x</text>
+    <ellipse cx="520" cy="130" rx="96" ry="12" fill="#5082e6" stroke="#5082e6" fill-opacity="0.35" stroke-width="1.4"/>
+    <circle cx="436" cy="130" r="11" fill="none" stroke="#5ac878" stroke-width="1.4"/>
+    <circle cx="460" cy="130" r="11" fill="none" stroke="#5ac878" stroke-width="1.4"/>
+    <circle cx="484" cy="130" r="11" fill="none" stroke="#5ac878" stroke-width="1.4"/>
+    <circle cx="508" cy="130" r="11" fill="none" stroke="#5ac878" stroke-width="1.4"/>
+    <circle cx="532" cy="130" r="11" fill="none" stroke="#5ac878" stroke-width="1.4"/>
+    <circle cx="556" cy="130" r="11" fill="none" stroke="#5ac878" stroke-width="1.4"/>
+    <circle cx="580" cy="130" r="11" fill="none" stroke="#5ac878" stroke-width="1.4"/>
+    <circle cx="604" cy="130" r="11" fill="none" stroke="#5ac878" stroke-width="1.4"/>
+    <text x="520" y="246" class="xs" text-anchor="middle">anisotropic: level 1, from the SHORT axis</text>
+    <text x="520" y="264" class="xs" text-anchor="middle">several taps ALONG the long one</text>
+    <text x="360.0" y="282" class="xs" text-anchor="middle">isotropic must choose: the long axis blurs, the short axis aliases. Anisotropy refuses.</text>
+    <text x="360.0" y="302" class="xs" text-anchor="middle">and on a SQUARE footprint it costs nothing — measured identical to six decimals</text>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 6.</span>
+      A footprint that is not square, which is every floor you will ever look along. At 16:1, isotropic filtering must choose: take the level from the LONG axis (32 texels, level 5) and the short axis is blurred by a factor of sixteen &#8212; the smeared distant ground of a game with anisotropy switched off &#8212; or take it from the short axis and the long one aliases exactly as before. Anisotropic filtering refuses the choice: it takes the level the SHORT axis asked for and several samples ALONG the long one. On a square footprint the ratio is 1, so it costs nothing &#8212; measured identical to six decimal places, which is worth checking rather than assuming.
+    </figcaption>
+  </figure>
+
+
+  <p>
+    Take the harness's case: 32 texels along one screen axis, 2 along the other — a 16:1 ratio.
+  </p>
+
+  <ul>
+    <li><strong>Choose by the long axis (32 texels ⟹ level 5).</strong> No aliasing, but the short
+        axis only needed level 1, so it is blurred by a factor of <strong>16</strong>. This is why
+        distant ground in a game without anisotropy looks like it has been smeared.</li>
+    <li><strong>Choose by the short axis (2 texels ⟹ level 1).</strong> The detail survives, and the
+        long axis aliases exactly as it did before we started.</li>
+  </ul>
+
+  <p>
+    <strong>Anisotropic filtering refuses the choice.</strong> Take the level the <em>short</em>
+    axis asked for — so no detail is thrown away — and then take several samples <em>along</em> the
+    long axis and average them, which supplies the averaging the long axis needed. The number of
+    samples is the ratio, clamped: "16× anisotropic" is that clamp, and it is why the setting is
+    quoted as a number rather than on/off.
+  </p>
+
+  <div class="callout">
+    <span class="label">It costs only where it buys</span>
+    <p>
+      On a <em>square</em> footprint the ratio is 1, so there is no long axis and the code takes a
+      single tap. The harness checks this rather than assuming it: with
+      <code>max_anisotropy = 16</code> and a 1:1 footprint the result is identical to the isotropic
+      one to six decimal places.
+    </p>
+    <p>
+      That is worth verifying because the failure would be invisible and expensive — sixteen taps
+      of the same place, on every surface facing the camera squarely, which is most of them.
+    </p>
+  </div>
+
+  <!-- =================================================================
+       4 — IMPLEMENTATION
+       ================================================================= -->
+  <h2 id="impl"><span class="num">4</span>Implementation</h2>
+
+  <h3>4.1 &nbsp;The decision that keeps the golden</h3>
+
+  <p>
+    Before any code, one design decision, made deliberately and early because it constrains
+    everything after it.
+  </p>
+
+  <p>
+    The reference render — the fixture that has been byte-identical for eighteen lessons — draws a
+    <em>textured</em> floor. So unlike Lesson 6.9's cascades, mipmapping is not automatically an
+    opt-in path: build a chain for every texture and the reference picture changes, and the
+    regression test that has caught four real bugs stops meaning anything.
+  </p>
+
+  <p>
+    There were two honest options: re-baseline the golden and say so, or make the chain opt-in.
+    <strong>Opt-in wins on its own merits, not just to protect the test.</strong> A chain costs 33%
+    more memory; a 1×1 white fallback has nothing to average; a UI atlas is never minified. Building
+    one unconditionally would be paying everywhere to fix somewhere.
+  </p>
+
+  <p>
+    So <code>texture</code> is untouched, <code>mip_chain</code> is a separate type, and
+    <code>texture_binding</code> grows a nullable pointer — the same bargain <code>lights</code>,
+    <code>albedo</code> and 6.9's <code>cascades</code> already make.
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/include/engine/gfx/texture.hpp</span> <span class="tag modified">modified</span></figcaption>
+    <pre><code class="lang-cpp">    /// An optional mip chain for `image`. Lesson 6.10.
+    ///
+    /// **Nullable, and null is the whole of "no mipmapping"** — the same bargain
+    /// `lights`, `albedo` and 6.9's `cascades` already make. When it is null the
+    /// fill samples `image` exactly as it did in 3.9, which is why nineteen
+    /// lessons of reference renders are still byte-identical.
+    const mip_chain* mips = nullptr;</code></pre>
+  </figure>
+
+  <h3>4.2 &nbsp;Building the chain</h3>
+
+  <p>
+    The whole correctness story is one boolean, read from the data rather than passed in:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/src/gfx/mipmap.cpp</span> <span class="tag new">new</span></figcaption>
+    <pre><code class="lang-cpp">    // Read the space from the DATA, not from a parameter. A caller who has to
+    // remember which of their textures is colour is a caller who will get the
+    // third one wrong, and the symptom — a normal map quietly gamma-decoded —
+    // is 6.7's bug arriving by a different door.
+    const bool decode = (base.space() == texel_space::srgb);
+
+    while (chain.levels() &lt; k_max_mip_levels)
+    {
+        const texture&amp; src = chain.levels_.back();
+        if (src.width() &lt;= 1 &amp;&amp; src.height() &lt;= 1) { break; }
+
+        // Halve, never below 1. A 64x4 texture ends 8x1, 4x1, 2x1, 1x1 — the
+        // chain stops when BOTH axes reach 1, not when either does, or a wide
+        // thin texture would lose its remaining width.
+        const int w = std::max(1, src.width() / 2);
+        const int h = std::max(1, src.height() / 2);</code></pre>
+  </figure>
+
+  <h3>4.3 &nbsp;The gradient, hoisted</h3>
+
+  <p>
+    §3.3's derivation, in the fill loop. Everything constant over the triangle is computed once,
+    beside the other per-triangle setup:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/src/gfx/raster.cpp</span> <span class="tag modified">modified</span></figcaption>
+    <pre><code class="lang-cpp">    // df_i/dx is step_x_i * inv_area — the same edge steps the fill already
+    // walks, divided by the same area it already reciprocated.
+    const float dfx[3] = {static_cast&lt;float&gt;(s.step_x0) * inv_area,
+                          static_cast&lt;float&gt;(s.step_x1) * inv_area,
+                          static_cast&lt;float&gt;(s.step_x2) * inv_area};
+    const float dfy[3] = {static_cast&lt;float&gt;(s.step_y0) * inv_area,
+                          static_cast&lt;float&gt;(s.step_y1) * inv_area,
+                          static_cast&lt;float&gt;(s.step_y2) * inv_area};
+
+    const vec2 dnum_dx{dfx[0] * pu0 + dfx[1] * pu1 + dfx[2] * pu2,
+                       dfx[0] * pv0 + dfx[1] * pv1 + dfx[2] * pv2};
+    const vec2 dnum_dy{dfy[0] * pu0 + dfy[1] * pu1 + dfy[2] * pu2,
+                       dfy[0] * pv0 + dfy[1] * pv1 + dfy[2] * pv2};
+    const float dw_dx = dfx[0] * iw0 + dfx[1] * iw1 + dfx[2] * iw2;
+    const float dw_dy = dfy[0] * iw0 + dfy[1] * iw1 + dfy[2] * iw2;
+
+    // Decided once, like every other question constant across a fill.
+    const bool mipped = style.albedo.mipped();</code></pre>
+  </figure>
+
+  <p>
+    And the per-pixel part is the quotient rule and nothing else, guarded by the branch that
+    hoisted:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/src/gfx/raster.cpp</span> — the fill</figcaption>
+    <pre><code class="lang-cpp">                albedo = mipped
+                    ? sample_mipped(*style.albedo.mips, style.albedo.samp,
+                                    vec2{uu, vv},
+                                    uv_gradients(dnum_dx, dnum_dy, dw_dx, dw_dy,
+                                                 vec2{uu, vv}, w_recip))
+                    : sample(*style.albedo.image, style.albedo.samp, uu, vv);</code></pre>
+  </figure>
+
+  <p>
+    <strong>The unmipped branch is character-for-character what 3.9 wrote.</strong> That is what
+    keeps the golden, and it is also why touching the hottest loop in the software rasterizer was
+    safe enough to do at all.
+  </p>
+
+  <h3>4.4 &nbsp;The GPU chain, and the assert you will not see</h3>
+
+  <p>
+    4.7's <code>ti.num_levels = 1; // no mipmaps yet — Module 6</code> becomes a level count, and
+    the usage flags grow one bit:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/src/gfx/gpu_texture.cpp</span> <span class="tag modified">modified</span></figcaption>
+    <pre><code class="lang-cpp">    // LESSON 6.10. COLOR_TARGET is not decoration: SDL generates a chain by
+    // BLITTING each level into the next, so every level must be a render target.
+    // `SDL_gpu.c` asserts on SAMPLER|COLOR_TARGET — but only when the device is
+    // in debug mode, so on a release device the requirement is unchecked and the
+    // result is undefined rather than diagnosed.
+    ti.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER
+             | (mips ? SDL_GPU_TEXTUREUSAGE_COLOR_TARGET : 0u);</code></pre>
+  </figure>
+
+  <div class="callout warn">
+    <span class="label">⚠ VERIFY, discharged — and one thing worth reading the source for</span>
+    <p>
+      Checked against the configured SDL3 tree rather than remembered.
+      <code>SDL_GenerateMipmapsForGPUTexture(SDL_GPUCommandBuffer*, SDL_GPUTexture*)</code> returns
+      <code>void</code>, takes exactly those two arguments, and its header says <em>"This function
+      must not be called inside of any pass."</em>
+    </p>
+    <p>
+      <code>SDL_gpu.c</code> validates three things: that no pass is in progress, that
+      <code>num_levels &gt; 1</code>, and that the usage carries both <code>SAMPLER</code> and
+      <code>COLOR_TARGET</code>. <strong>All three checks live inside
+      <code>if (COMMAND_BUFFER_DEVICE-&gt;debug_mode)</code>.</strong> On a release device you get
+      no assert, no log line, and undefined behaviour — so the requirement 4.7's exercise stated is
+      real, and the diagnostic that would tell you about it is conditional.
+    </p>
+    <p>
+      This course has met SDL's assert gating before, from the other side: they key on
+      <code>__OPTIMIZE__</code> rather than <code>NDEBUG</code>, so <code>-O2</code> alone is enough
+      to switch them off.
+    </p>
+  </div>
+
+  <p>
+    Generation goes after the copy pass ends, which the header requires:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/src/gfx/gpu_texture.cpp</span> — the chain</figcaption>
+    <pre><code class="lang-cpp">    SDL_EndGPUCopyPass(copy);
+    SDL_ReleaseGPUTransferBuffer(device_, staging);
+
+    // AFTER the copy pass ends, and that is a requirement rather than tidiness.
+    // It reads level 0 — which the upload above just wrote — and blits its way
+    // down.
+    //
+    // Note what we do NOT do: average in linear light ourselves. The texture was
+    // created with an _SRGB format when `srgb` is set, so the hardware decodes
+    // on read and encodes on write, and the blit chain averages in linear light
+    // for free.
+    if (mips &amp;&amp; levels_ &gt; 1)
+    {
+        SDL_GenerateMipmapsForGPUTexture(cb, texture_);
+    }</code></pre>
+  </figure>
+
+  <h3>4.5 &nbsp;Two sampler fields that silently disable everything</h3>
+
+  <p>
+    This is the part most likely to cost you an afternoon, and both halves are the same shape: a
+    field whose default is correct for a texture with one level and wrong the moment there are nine.
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/src/gfx/gpu_texture.cpp</span> — the sampler</figcaption>
+    <pre><code class="lang-cpp">    // **max_lod = 0 CLAMPS THE WHOLE CHAIN AWAY**, and this line was 0.0f until
+    // Lesson 6.10. It did not matter while every texture had one level; the
+    // moment one has nine it is the difference between mipmapping and an
+    // expensive no-op — you build the chain, set mipmap_mode, see no change, and
+    // go looking in the generator. There is no error and no warning, because
+    // clamping to level 0 is a perfectly legal thing to ask for.
+    si.max_lod = 1000.0f;   // SDL's own "no clamp" idiom
+
+    // BOTH FIELDS, OR NEITHER. SDL ignores `max_anisotropy` unless
+    // `enable_anisotropy` is true, so setting the clamp alone is a silent no-op —
+    // the same shape of trap as max_lod, one struct field along.
+    si.enable_anisotropy = (max_aniso &gt; 1);
+    si.max_anisotropy = static_cast&lt;float&gt;(...);</code></pre>
+  </figure>
+
+  <p>
+    Note that <code>create_comparison</code> — 6.8's shadow sampler — keeps <code>max_lod = 0</code>
+    and anisotropy off, deliberately. A shadow map has one level (6.9 added <em>layers</em>, not
+    levels), so there is nothing between levels to filter and clamping to the only level there is
+    the honest value rather than a leftover.
+  </p>
+
+  <!-- =================================================================
+       5 — COMPLETE CODE LISTINGS
+       ================================================================= -->
+  <h2 id="listings"><span class="num">5</span>Complete code listings</h2>
+
+  <div class="tbl-scroll">
+    <table>
+      <caption class="visually-hidden">Files touched by Lesson 6.10</caption>
+      <thead><tr><th>Path</th><th>State</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td><code>engine/include/engine/gfx/mipmap.hpp</code></td><td>new</td>
+            <td>The chain, the footprint, level selection, the mipped sample</td></tr>
+        <tr><td><code>engine/src/gfx/mipmap.cpp</code></td><td>new</td>
+            <td>Linear-light averaging, log2 selection, trilinear, anisotropy</td></tr>
+        <tr><td><code>engine/include/engine/gfx/texture.hpp</code></td><td>modified</td>
+            <td><code>sampler</code> gains the two fields 3.9 named; <code>texture_binding</code>
+                gains a nullable chain</td></tr>
+        <tr><td><code>engine/include/engine/gfx/material.hpp</code></td><td>modified</td>
+            <td><code>bind_albedo_mipped</code></td></tr>
+        <tr><td><code>engine/src/gfx/raster.cpp</code></td><td>modified</td>
+            <td>The analytic gradient, hoisted; two sample sites</td></tr>
+        <tr><td><code>engine/include/engine/gfx/gpu_texture.hpp</code></td><td>modified</td>
+            <td><code>create_sampled(..., mips)</code>, <code>levels()</code>, sampler params</td></tr>
+        <tr><td><code>engine/src/gfx/gpu_texture.cpp</code></td><td>modified</td>
+            <td>Level count, <code>COLOR_TARGET</code>, generation, <code>max_lod</code></td></tr>
+        <tr><td><code>engine/CMakeLists.txt</code></td><td>modified</td>
+            <td><code>src/gfx/mipmap.cpp</code></td></tr>
+        <tr><td><code>demos/gltf_view/main.cpp</code></td><td>modified</td>
+            <td><code>--floor-tex</code>, <code>--mips</code>, <code>--aniso</code>,
+                <code>--mip-nearest</code></td></tr>
+        <tr><td><code>scratch/verify_610.cpp</code></td><td>new</td>
+            <td>24 checks, eight sections</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+    <figure class="listing">
+    <figcaption>
+      <span class="path">engine/include/engine/gfx/mipmap.hpp</span>
+      <span class="tag new">cpp</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// engine/include/engine/gfx/mipmap.hpp — the texture, at every size at once.
+//
+// Lesson 6.10, and this file is a debt being paid. Lesson 3.9 measured the
+// problem precisely and then deferred it, in as many words: one screen pixel
+// covers **0.60 texels** at the bottom of the frame and **62.46** two rows below
+// the horizon, the sampler reads four texels whatever the pixel covers, and past
+// the crossover it is looking at a shrinking fraction of the truth — about 6.4%
+// of it at the horizon. That gap is the sparkle on the floor, and 3.9 named the
+// fix and moved on. So did 4.7, which created every texture with
+// `num_levels = 1` and a comment saying Module 6 would change it. So did
+// `texture.hpp`&#x27;s own sampler struct, whose doc comment still reads &quot;Module 6&#x27;s
+// mipmaps are what fills the gap&quot;.
+//
+// THE IDEA IS ONE SENTENCE. If a pixel covers sixty texels, do not read four of
+// them and hope — read from a copy of the image in which those sixty have
+// ALREADY been averaged. Precompute the image at half size, quarter size, and so
+// on down to one texel, and choose the level whose texels are about the size of
+// the pixel&#x27;s footprint.
+//
+// WHAT MAKES IT A LESSON IS THE THREE QUESTIONS THAT SENTENCE HIDES:
+//
+//   1 WHICH LEVEL? The footprint is a derivative — how fast uv changes per
+//     screen pixel — and on the GPU `ddx`/`ddy` hand it to you because fragments
+//     are shaded in 2x2 quads. THE CPU HAS NO NEIGHBOURING FRAGMENT. It has to
+//     compute the derivative analytically from the triangle&#x27;s own gradients,
+//     which is `uv_gradients` below and is genuinely the most interesting
+//     arithmetic in the file. Lesson 3.9&#x27;s Exercise 8.4 asked for exactly this
+//     and said it was &quot;Module 6&#x27;s job properly&quot;.
+//
+//   2 WHAT ABOUT BETWEEN LEVELS? Level 3 and level 4 differ by a factor of two,
+//     so switching between them abruptly draws a visible line across the floor
+//     where the level changes — the same shape of artefact Lesson 6.9 met as the
+//     cascade seam, and cured the same way: blend across the boundary.
+//     `filter::linear` on `mip_filter` is trilinear.
+//
+//   3 WHAT IF THE FOOTPRINT IS NOT SQUARE? A floor at a grazing angle has a
+//     footprint that is long in one direction and short in the other. One
+//     square average cannot represent that, so choosing a level by the LONG axis
+//     over-blurs and by the SHORT axis still aliases. That is anisotropy, and
+//     `max_anisotropy` takes several samples along the long axis instead.
+//
+// THE TRAP, AND IT IS FAMOUS: A CHAIN BUILT BY AVERAGING sRGB BYTES GETS DARKER
+// AT EVERY LEVEL. Averaging is a linear operation and sRGB is not a linear
+// encoding, so the mean of two codes is not the code of the mean light.
+// `build_mips` decodes, averages in linear light, and re-encodes — which is what
+// Lesson 6.1 built the whole vocabulary for, and 3.9&#x27;s Exercise 8.5 hint already
+// warned about. §3.4 of the lesson measures the error: 21.7% too dark at level 1
+// on a black-and-white checker, compounding down the chain.
+//
+// WHAT THIS FILE DOES NOT DO:
+//
+//   - **No non-power-of-two smarts.** Odd sizes round down, which loses a row.
+//     Real engines box-filter with weights; the difference is invisible and the
+//     code is twice as long.
+//   - **No mip generation on the GPU.** SDL does that
+//     (`SDL_GenerateMipmapsForGPUTexture`), and §5 says what it costs and what
+//     it demands of the texture&#x27;s usage flags.
+//   - **The chain is OPT-IN.** `texture` is untouched and a texture without a
+//     chain samples exactly as it did in 3.9. That is deliberate: a chain costs
+//     33% more memory, a 1x1 fallback has nothing to average, and — the honest
+//     reason — building one for every texture would move the reference render,
+//     which has been byte-identical for eighteen lessons.
+
+#ifndef ENGINE_GFX_MIPMAP_HPP
+#define ENGINE_GFX_MIPMAP_HPP
+
+#include &lt;span&gt;
+#include &lt;vector&gt;
+
+#include &lt;engine/gfx/colour.hpp&gt;
+#include &lt;engine/gfx/texture.hpp&gt;
+#include &lt;engine/math/vec2.hpp&gt;
+
+namespace engine
+{
+
+/// The most levels a chain will ever hold: 2^16 is 65536, wider than any texture
+/// this engine loads, and the array is small enough to make a cap cheaper than a
+/// growth policy.
+inline constexpr int k_max_mip_levels = 17;
+
+/// How fast uv moves per screen pixel, at one fragment.
+///
+/// **This is the whole input to level selection**, and its two vectors are not
+/// interchangeable: `du_dx` is how far the sample point travels across the
+/// texture when the pixel moves one step in screen *x*, and `du_dy` the same for
+/// screen *y*. A footprint that is long in one and short in the other is exactly
+/// the anisotropic case.
+///
+/// Both are in TEXTURE units (0..1), not texels — multiplying by the level-0
+/// size happens in `mip_level_for`, once, where the size is known.
+struct uv_footprint
+{
+    vec2 d_dx{0.0f, 0.0f};
+    vec2 d_dy{0.0f, 0.0f};
+};
+
+/// The analytic screen-space uv gradients of a perspective-correct triangle.
+///
+/// **The CPU&#x27;s replacement for `ddx`/`ddy`, and it is exact rather than a finite
+/// difference.** A GPU shades fragments in 2x2 quads specifically so that a
+/// neighbour is always available to subtract; a scanline rasterizer has no such
+/// neighbour, so the derivative has to come from the triangle itself.
+///
+/// The derivation, which the lesson does properly in §3.2. Perspective-correct
+/// interpolation computes
+///
+///     u(x, y) = U(x, y) / W(x, y)
+///
+/// where `U = sum(f_i * u_i/w_i)` and `W = sum(f_i / w_i)` are both **affine** in
+/// screen space, because the normalised barycentrics `f_i` are. So the quotient
+/// rule applies and gives, per axis,
+///
+///     du/dx = (dU/dx - u * dW/dx) / W
+///
+/// with `dU/dx = sum(df_i/dx * u_i/w_i)` and `df_i/dx = step_x_i / area`, both of
+/// which the rasterizer already computes for its edge functions. Nothing new is
+/// evaluated per pixel except two multiplies and a subtract.
+///
+/// @param du_dx_num  `dU/dx`, `dV/dx` — the numerator&#x27;s screen-x gradient.
+/// @param du_dy_num  the same for screen y.
+/// @param dw_dx      `dW/dx`, the interpolated 1/w&#x27;s screen-x gradient.
+/// @param dw_dy      the same for screen y.
+/// @param uv         the uv at this fragment, already divided.
+/// @param w_recip    `1/W` at this fragment — the reciprocal the fill loop
+///                   already computed, reused rather than recomputed.
+[[nodiscard]] inline uv_footprint uv_gradients(vec2 du_dx_num, vec2 du_dy_num,
+                                               float dw_dx, float dw_dy,
+                                               vec2 uv, float w_recip)
+{
+    uv_footprint out;
+    out.d_dx = vec2{(du_dx_num.x - uv.x * dw_dx) * w_recip,
+                    (du_dx_num.y - uv.y * dw_dx) * w_recip};
+    out.d_dy = vec2{(du_dy_num.x - uv.x * dw_dy) * w_recip,
+                    (du_dy_num.y - uv.y * dw_dy) * w_recip};
+    return out;
+}
+
+/// A texture and every halving of it, down to 1x1.
+///
+/// Level 0 is a full copy of the source rather than a reference, so a chain owns
+/// its pixels and cannot dangle. That costs one image; the chain costs 1/3 of one
+/// more (1/4 + 1/16 + 1/64 + ... = 1/3), which is the famous **33%**.
+class mip_chain
+{
+public:
+    mip_chain() = default;
+
+    [[nodiscard]] bool empty() const { return levels_.empty(); }
+
+    /// How many levels. `1 + floor(log2(max(w, h)))` for a built chain.
+    [[nodiscard]] int levels() const { return static_cast&lt;int&gt;(levels_.size()); }
+
+    /// Level `i`, clamped into range. Level 0 is the original size.
+    [[nodiscard]] const texture&amp; level(int i) const;
+
+    [[nodiscard]] int width() const { return levels_.empty() ? 0 : levels_.front().width(); }
+    [[nodiscard]] int height() const { return levels_.empty() ? 0 : levels_.front().height(); }
+
+    /// Total texels across every level, for the memory claim in §5.
+    [[nodiscard]] std::size_t texels() const;
+
+    friend mip_chain build_mips(const texture&amp; base);
+
+private:
+    std::vector&lt;texture&gt; levels_;
+};
+
+/// Build the chain by repeated 2x2 averaging.
+///
+/// **Averaged in LINEAR LIGHT when the source is sRGB-encoded**, which is the
+/// whole correctness story of this function. `texel_space` already records which
+/// a texture is (Lesson 6.7 gave it that field so a normal map would stop being
+/// decoded as colour), so the decision is read from the data rather than passed
+/// in — a caller who has to remember is a caller who will forget on the third
+/// texture.
+///
+/// The failure mode if you skip it is not subtle once you know to look: every
+/// level is darker than the one above, so a surface *gets darker as it recedes*,
+/// and the usual diagnosis is &quot;the lighting falls off too fast&quot;.
+[[nodiscard]] mip_chain build_mips(const texture&amp; base);
+
+/// Which level has texels about the size of this footprint, as a CONTINUOUS
+/// value — 2.4 means &quot;level 2, four tenths of the way to level 3&quot;.
+///
+/// The derivation, in one line: a level halves the texture&#x27;s size, so level `L`
+/// has texels `2^L` times as wide. We want the level whose texel matches the
+/// footprint, so
+///
+///     2^L = footprint_in_texels   =&gt;   L = log2(footprint_in_texels)
+///
+/// **The footprint is the LONGER of the two axes**, and that choice is the whole
+/// of why isotropic mipmapping over-blurs: taking the longer axis guarantees no
+/// aliasing along either, at the cost of blurring the short one. Taking the
+/// shorter would keep the detail and alias. Anisotropic filtering is what
+/// refuses the choice.
+[[nodiscard]] float mip_level_for(const uv_footprint&amp; fp, int width, int height);
+
+/// Sample a chain, choosing and blending levels per `samp`.
+///
+/// - `mip_filter == nearest` picks the rounded level: cheap, and it draws a
+///   visible line on the floor where the level changes.
+/// - `mip_filter == linear` blends the two straddling levels — trilinear — for
+///   the cost of a second bilinear fetch.
+/// - `max_anisotropy &gt; 1` takes up to that many samples along the footprint&#x27;s
+///   long axis, at the level chosen by the SHORT axis.
+///
+/// With an empty chain this returns black rather than guessing; callers hold a
+/// chain only when they built one.
+[[nodiscard]] linear_rgb sample_mipped(const mip_chain&amp; chain, const sampler&amp; samp,
+                                       vec2 uv, const uv_footprint&amp; fp);
+
+} // namespace engine
+
+#endif // ENGINE_GFX_MIPMAP_HPP
+</code></pre>
+  </figure>
+
+
+    <figure class="listing">
+    <figcaption>
+      <span class="path">engine/src/gfx/mipmap.cpp</span>
+      <span class="tag new">cpp</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// engine/src/gfx/mipmap.cpp — Lesson 6.10.
+//
+// The header carries the argument; this file is the arithmetic.
+
+#include &lt;engine/gfx/mipmap.hpp&gt;
+
+#include &lt;algorithm&gt;
+#include &lt;cmath&gt;
+
+namespace engine
+{
+namespace
+{
+
+/// Average a 2x2 block of the level above, in the right space.
+///
+/// THE WHOLE CORRECTNESS STORY OF THIS FILE IS THE `decode` FLAG. Averaging is a
+/// linear operation; sRGB is not a linear encoding. The mean of two sRGB codes
+/// is not the code of the mean light, and it is always DARKER, because the
+/// curve is convex. Skip the decode and every level comes out darker than the
+/// one above it — so a textured surface dims as it recedes, and the usual
+/// diagnosis is &quot;the lighting falls off too fast&quot;, which sends you to look in
+/// entirely the wrong file.
+[[nodiscard]] Uint32 average_2x2(const texture&amp; src, int x, int y, bool decode)
+{
+    const int x0 = std::min(2 * x, src.width() - 1);
+    const int y0 = std::min(2 * y, src.height() - 1);
+    const int x1 = std::min(x0 + 1, src.width() - 1);
+    const int y1 = std::min(y0 + 1, src.height() - 1);
+
+    const Uint32 c[4] = { src.texel(x0, y0), src.texel(x1, y0),
+                          src.texel(x0, y1), src.texel(x1, y1) };
+
+    // Alpha is averaged as-is in BOTH paths: it is a coverage fraction, not a
+    // colour, so it was never sRGB-encoded and decoding it would be a second
+    // bug hiding behind the fix for the first.
+    float a = 0.0f;
+    for (Uint32 t : c) { a += static_cast&lt;float&gt;((t &gt;&gt; 24) &amp; 0xFFu); }
+    a *= 0.25f;
+
+    if (decode)
+    {
+        linear_rgb sum{0.0f, 0.0f, 0.0f};
+        for (Uint32 t : c)
+        {
+            const linear_rgb l = to_linear(t);
+            sum.r += l.r;
+            sum.g += l.g;
+            sum.b += l.b;
+        }
+        const linear_rgb mean{sum.r * 0.25f, sum.g * 0.25f, sum.b * 0.25f};
+        const Uint32 rgb = to_encoded(mean);
+        return (static_cast&lt;Uint32&gt;(a + 0.5f) &lt;&lt; 24) | (rgb &amp; 0x00FFFFFFu);
+    }
+
+    // Data, not colour — a normal map, a roughness map. These really are linear
+    // already (6.7 gave `texel_space` its meaning), so averaging the bytes is
+    // the correct operation rather than the lazy one.
+    float ch[3] = {0.0f, 0.0f, 0.0f};
+    for (Uint32 t : c)
+    {
+        ch[0] += static_cast&lt;float&gt;((t &gt;&gt; 16) &amp; 0xFFu);
+        ch[1] += static_cast&lt;float&gt;((t &gt;&gt; 8) &amp; 0xFFu);
+        ch[2] += static_cast&lt;float&gt;(t &amp; 0xFFu);
+    }
+    return (static_cast&lt;Uint32&gt;(a + 0.5f) &lt;&lt; 24)
+         | (static_cast&lt;Uint32&gt;(ch[0] * 0.25f + 0.5f) &lt;&lt; 16)
+         | (static_cast&lt;Uint32&gt;(ch[1] * 0.25f + 0.5f) &lt;&lt; 8)
+         | static_cast&lt;Uint32&gt;(ch[2] * 0.25f + 0.5f);
+}
+
+} // namespace
+
+const texture&amp; mip_chain::level(int i) const
+{
+    const int n = static_cast&lt;int&gt;(levels_.size());
+    const int k = (i &lt; 0) ? 0 : (i &gt;= n ? n - 1 : i);
+    return levels_[static_cast&lt;std::size_t&gt;(k)];
+}
+
+std::size_t mip_chain::texels() const
+{
+    std::size_t total = 0;
+    for (const texture&amp; t : levels_)
+    {
+        total += static_cast&lt;std::size_t&gt;(t.width()) * static_cast&lt;std::size_t&gt;(t.height());
+    }
+    return total;
+}
+
+mip_chain build_mips(const texture&amp; base)
+{
+    mip_chain chain;
+    if (base.empty()) { return chain; }
+
+    chain.levels_.push_back(base);
+
+    // Read the space from the DATA, not from a parameter. A caller who has to
+    // remember which of their textures is colour is a caller who will get the
+    // third one wrong, and the symptom — a normal map quietly gamma-decoded —
+    // is 6.7&#x27;s bug arriving by a different door.
+    const bool decode = (base.space() == texel_space::srgb);
+
+    while (chain.levels() &lt; k_max_mip_levels)
+    {
+        const texture&amp; src = chain.levels_.back();
+        if (src.width() &lt;= 1 &amp;&amp; src.height() &lt;= 1) { break; }
+
+        // Halve, never below 1. A 64x4 texture ends 8x1, 4x1, 2x1, 1x1 — the
+        // chain stops when BOTH axes reach 1, not when either does, or a wide
+        // thin texture would lose its remaining width.
+        const int w = std::max(1, src.width() / 2);
+        const int h = std::max(1, src.height() / 2);
+
+        texture dst(w, h, 0xFF000000u, base.space());
+        for (int y = 0; y &lt; h; ++y)
+        {
+            for (int x = 0; x &lt; w; ++x)
+            {
+                dst.set_texel(x, y, average_2x2(src, x, y, decode));
+            }
+        }
+        chain.levels_.push_back(std::move(dst));
+    }
+    return chain;
+}
+
+float mip_level_for(const uv_footprint&amp; fp, int width, int height)
+{
+    if (width &lt;= 0 || height &lt;= 0) { return 0.0f; }
+
+    const float w = static_cast&lt;float&gt;(width);
+    const float h = static_cast&lt;float&gt;(height);
+
+    // Into TEXELS. The footprint arrives in texture units because that is what
+    // the interpolator produces; a level is a statement about texels, so the
+    // conversion has to happen before the logarithm and not after.
+    const float dx = std::sqrt((fp.d_dx.x * w) * (fp.d_dx.x * w)
+                             + (fp.d_dx.y * h) * (fp.d_dx.y * h));
+    const float dy = std::sqrt((fp.d_dy.x * w) * (fp.d_dy.x * w)
+                             + (fp.d_dy.y * h) * (fp.d_dy.y * h));
+
+    // THE LONGER AXIS, and this line is the whole of why isotropic mipmapping
+    // over-blurs. Taking the longer guarantees no aliasing along either axis, at
+    // the cost of blurring the shorter. Taking the shorter keeps the detail and
+    // aliases. Anisotropic filtering is what refuses the choice.
+    const float rho = std::max(dx, dy);
+    if (rho &lt;= 1.0f) { return 0.0f; }   // magnification: level 0, and no log
+
+    return std::log2(rho);
+}
+
+linear_rgb sample_mipped(const mip_chain&amp; chain, const sampler&amp; samp,
+                         vec2 uv, const uv_footprint&amp; fp)
+{
+    if (chain.empty()) { return linear_rgb{0.0f, 0.0f, 0.0f}; }
+
+    const int w = chain.width();
+    const int h = chain.height();
+    const float top = static_cast&lt;float&gt;(chain.levels() - 1);
+
+    // ---- Anisotropy ---------------------------------------------------------
+    //
+    // Take the level the SHORT axis asked for, then walk the LONG axis taking
+    // that many samples. The short axis is the one that would have been blurred
+    // away by an isotropic choice, so this is the detail coming back.
+    const float aniso_max = static_cast&lt;float&gt;(std::clamp(samp.max_anisotropy, 1, 16));
+    int taps = 1;
+    vec2 step{0.0f, 0.0f};
+    float level = mip_level_for(fp, w, h) + samp.mip_bias;
+
+    if (aniso_max &gt; 1.0f)
+    {
+        const float fw = static_cast&lt;float&gt;(w);
+        const float fh = static_cast&lt;float&gt;(h);
+        const float len_x = std::sqrt((fp.d_dx.x * fw) * (fp.d_dx.x * fw)
+                                    + (fp.d_dx.y * fh) * (fp.d_dx.y * fh));
+        const float len_y = std::sqrt((fp.d_dy.x * fw) * (fp.d_dy.x * fw)
+                                    + (fp.d_dy.y * fh) * (fp.d_dy.y * fh));
+
+        const float major = std::max(len_x, len_y);
+        const float minor = std::min(len_x, len_y);
+        if (minor &gt; 1e-6f &amp;&amp; major &gt; minor)
+        {
+            const float ratio = std::min(major / minor, aniso_max);
+            taps = std::max(1, static_cast&lt;int&gt;(ratio + 0.5f));
+
+            // The level the MINOR axis wanted — which is exactly `log2(minor)`,
+            // the same formula as `mip_level_for` with the other max.
+            level = ((minor &lt;= 1.0f) ? 0.0f : std::log2(minor)) + samp.mip_bias;
+
+            // Walk along the major axis, centred on the sample point.
+            const vec2 dir = (len_x &gt;= len_y) ? fp.d_dx : fp.d_dy;
+            step = vec2{dir.x / ratio, dir.y / ratio};
+        }
+    }
+
+    level = std::clamp(level, 0.0f, top);
+
+    // One sampler for the level fetches: the mip fields mean nothing to the
+    // bilinear fetch inside a level, and passing them through would invite a
+    // reader to think they did.
+    sampler inner = samp;
+    inner.max_anisotropy = 1;
+
+    auto fetch = [&amp;](int lvl, vec2 at) -&gt; linear_rgb {
+        return sample(chain.level(lvl), inner, at.x, at.y);
+    };
+
+    auto fetch_trilinear = [&amp;](vec2 at) -&gt; linear_rgb {
+        if (samp.mip_filter == filter::nearest)
+        {
+            return fetch(static_cast&lt;int&gt;(level + 0.5f), at);
+        }
+        // TRILINEAR: two bilinear fetches and a lerp. Without it the boundary
+        // between two levels is a visible line across the floor — the same
+        // artefact Lesson 6.9 met as the cascade seam, cured the same way.
+        const int lo = static_cast&lt;int&gt;(level);
+        const int hi = std::min(lo + 1, chain.levels() - 1);
+        const float f = level - static_cast&lt;float&gt;(lo);
+        const linear_rgb a = fetch(lo, at);
+        if (f &lt;= 0.0f || hi == lo) { return a; }
+        const linear_rgb b = fetch(hi, at);
+        return linear_rgb{a.r + (b.r - a.r) * f,
+                          a.g + (b.g - a.g) * f,
+                          a.b + (b.b - a.b) * f};
+    };
+
+    if (taps &lt;= 1) { return fetch_trilinear(uv); }
+
+    linear_rgb sum{0.0f, 0.0f, 0.0f};
+    const float half = 0.5f * static_cast&lt;float&gt;(taps - 1);
+    for (int i = 0; i &lt; taps; ++i)
+    {
+        const float t = static_cast&lt;float&gt;(i) - half;
+        const linear_rgb s = fetch_trilinear(vec2{uv.x + step.x * t, uv.y + step.y * t});
+        sum.r += s.r;
+        sum.g += s.g;
+        sum.b += s.b;
+    }
+    const float inv = 1.0f / static_cast&lt;float&gt;(taps);
+    return linear_rgb{sum.r * inv, sum.g * inv, sum.b * inv};
+}
+
+} // namespace engine
+</code></pre>
+  </figure>
+
+
+    <figure class="listing">
+    <figcaption>
+      <span class="path">scratch/verify_610.cpp</span>
+      <span class="tag new">cpp</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// scratch/verify_610.cpp — Lesson 6.10&#x27;s harness: the chain, the level, and the
+// bug that makes a texture darker as it recedes.
+//
+//   §A  THE CHAIN — sizes, count, and the 33% everyone quotes
+//   §B  LINEAR LIGHT — what averaging sRGB bytes actually costs
+//   §C  THE LEVEL — log2 of a footprint, against hand arithmetic
+//   §D  THE ANALYTIC GRADIENT — exact, checked against a finite difference
+//   §E  TRILINEAR — the level seam, and what blending costs
+//   §F  ANISOTROPY — a grazing footprint, and what isotropic throws away
+//   §G  WHAT IT COSTS — blurring a surface that was never undersampled
+//   §H  THE GOLDEN — a new capability must not move the old picture
+//
+// §B AND §D ARE THE TWO THAT MATTER. §B measures the famous bug: a mip chain
+// built by averaging sRGB bytes gets darker at every level, and the symptom is a
+// surface that dims as it recedes — usually diagnosed as &quot;the lighting falls off
+// too fast&quot;. §D is the CPU&#x27;s replacement for `ddx`/`ddy`: a scanline rasterizer
+// has no neighbouring fragment to subtract, so the derivative has to come from
+// the triangle analytically, and the test is whether the closed form agrees with
+// a numerical difference of the real interpolation.
+//
+// Build and run:  sh scratch/build_verify_610.sh
+
+#include &lt;engine/core/assert.hpp&gt;
+#include &lt;engine/gfx/colour.hpp&gt;
+#include &lt;engine/gfx/mipmap.hpp&gt;
+#include &lt;engine/gfx/texture.hpp&gt;
+#include &lt;engine/math/vec2.hpp&gt;
+
+#include &quot;../demos/common/demo_scene.hpp&quot;
+
+#include &lt;SDL3/SDL.h&gt;
+
+#include &lt;cmath&gt;
+#include &lt;cstdarg&gt;
+#include &lt;cstdio&gt;
+#include &lt;fstream&gt;
+#include &lt;sstream&gt;
+#include &lt;string&gt;
+#include &lt;vector&gt;
+
+namespace {
+
+int g_checks = 0;
+int g_failures = 0;
+
+void check(bool ok, const char* what)
+{
+    ++g_checks;
+    if (!ok) { ++g_failures; }
+    std::printf(&quot;  [%s] %s\n&quot;, ok ? &quot;PASS&quot; : &quot;FAIL&quot;, what);
+}
+
+void checkf(bool ok, const char* fmt, ...)
+{
+    ++g_checks;
+    if (!ok) { ++g_failures; }
+    std::printf(&quot;  [%s] &quot;, ok ? &quot;PASS&quot; : &quot;FAIL&quot;);
+    std::va_list args;
+    va_start(args, fmt);
+    std::vprintf(fmt, args);
+    va_end(args);
+    std::printf(&quot;\n&quot;);
+}
+
+void section(const char* title)
+{
+    std::printf(&quot;\n== %s ==\n&quot;, title);
+}
+
+using engine::filter;
+using engine::linear_rgb;
+using engine::mip_chain;
+using engine::sampler;
+using engine::texel_space;
+using engine::texture;
+using engine::uv_footprint;
+using engine::vec2;
+
+/// A black-and-white checker: the harshest case for an averaging bug, because
+/// every 2x2 block averages two extremes.
+texture checker(int size, int cell, texel_space space = texel_space::srgb)
+{
+    texture t(size, size, 0xFF000000u, space);
+    for (int y = 0; y &lt; size; ++y)
+    {
+        for (int x = 0; x &lt; size; ++x)
+        {
+            const bool on = ((x / cell) + (y / cell)) % 2 == 0;
+            t.set_texel(x, y, on ? 0xFFFFFFFFu : 0xFF000000u);
+        }
+    }
+    return t;
+}
+
+// ---------------------------------------------------------------------------
+void section_a_chain()
+{
+    section(&quot;A  THE CHAIN&quot;);
+
+    const texture base = checker(256, 8);
+    const mip_chain chain = engine::build_mips(base);
+
+    std::printf(&quot;  level  size        texels\n&quot;);
+    for (int i = 0; i &lt; chain.levels(); ++i)
+    {
+        std::printf(&quot;  %5d  %4dx%-4d  %8d\n&quot;, i, chain.level(i).width(),
+                    chain.level(i).height(),
+                    chain.level(i).width() * chain.level(i).height());
+    }
+
+    checkf(chain.levels() == 9, &quot;256x256 gives %d levels (1 + log2(256))&quot;, chain.levels());
+    checkf(chain.level(8).width() == 1 &amp;&amp; chain.level(8).height() == 1,
+           &quot;the last level is 1x1&quot;);
+
+    // THE 33%, derived: 1/4 + 1/16 + 1/64 + ... = 1/3.
+    const std::size_t base_texels = 256u * 256u;
+    const double extra = static_cast&lt;double&gt;(chain.texels() - base_texels)
+                       / static_cast&lt;double&gt;(base_texels);
+    checkf(std::fabs(extra - 1.0 / 3.0) &lt; 0.01,
+           &quot;the chain costs %.2f%% more than the image, against the &quot;
+           &quot;1/4+1/16+1/64+... = 33.33%% the series predicts&quot;, extra * 100.0);
+
+    // A non-square texture must not stop when ONE axis hits 1.
+    const texture wide = checker(64, 4);
+    texture strip(64, 4, 0xFF808080u);
+    const mip_chain schain = engine::build_mips(strip);
+    checkf(schain.level(schain.levels() - 1).width() == 1
+           &amp;&amp; schain.level(schain.levels() - 1).height() == 1,
+           &quot;a 64x4 strip reaches 1x1 in %d levels rather than stopping at 16x1&quot;,
+           schain.levels());
+    (void)wide;
+}
+
+// ---------------------------------------------------------------------------
+// The famous bug, measured.
+void section_b_linear()
+{
+    section(&quot;B  LINEAR LIGHT&quot;);
+
+    // A 2x2 checker: every block averages one black and one white texel, so the
+    // right answer is exactly half the LIGHT, which is sRGB code 188 (Lesson
+    // 6.1&#x27;s second integer).
+    texture t(2, 2, 0xFF000000u, texel_space::srgb);
+    t.set_texel(0, 0, 0xFFFFFFFFu);
+    t.set_texel(1, 1, 0xFFFFFFFFu);
+    t.set_texel(1, 0, 0xFF000000u);
+    t.set_texel(0, 1, 0xFF000000u);
+
+    const mip_chain chain = engine::build_mips(t);
+    const Uint32 got = chain.level(1).texel(0, 0);
+    const int code = static_cast&lt;int&gt;(got &amp; 0xFFu);
+
+    // What the naive version would have produced: (255 + 0 + 0 + 255) / 4 = 127.
+    const int naive = 127;
+
+    const float lit_correct = engine::srgb_to_linear_u8(static_cast&lt;Uint8&gt;(code));
+    const float lit_naive = engine::srgb_to_linear_u8(static_cast&lt;Uint8&gt;(naive));
+
+    std::printf(&quot;  half the LIGHT of black and white:\n&quot;);
+    std::printf(&quot;    averaged in linear light : code %3d  -&gt; %.4f of white\n&quot;,
+                code, static_cast&lt;double&gt;(lit_correct));
+    std::printf(&quot;    averaged as sRGB bytes   : code %3d  -&gt; %.4f of white\n&quot;,
+                naive, static_cast&lt;double&gt;(lit_naive));
+
+    checkf(code &gt;= 187 &amp;&amp; code &lt;= 189,
+           &quot;linear-light averaging gives code %d, and 6.1&#x27;s second integer says &quot;
+           &quot;half the light is code 188&quot;, code);
+
+    const float darker = 1.0f - lit_naive / lit_correct;
+    checkf(darker &gt; 0.55f &amp;&amp; darker &lt; 0.60f,
+           &quot;the naive chain delivers %.1f%% of the light it should — %.1f%% TOO &quot;
+           &quot;DARK at level 1 alone, on the harshest case. It compounds down the &quot;
+           &quot;chain, so a surface dims as it recedes and the usual diagnosis is &quot;
+           &quot;\&quot;the lighting falls off too fast\&quot;&quot;,
+           static_cast&lt;double&gt;(lit_naive / lit_correct * 100.0f),
+           static_cast&lt;double&gt;(darker * 100.0f));
+
+    // DATA IS NOT COLOUR. A linear-space texture must be averaged as bytes, or
+    // 6.7&#x27;s normal maps would be decoded as though they were pictures.
+    texture d(2, 2, 0xFF000000u, texel_space::linear);
+    d.set_texel(0, 0, 0xFFFFFFFFu);
+    d.set_texel(1, 1, 0xFFFFFFFFu);
+    d.set_texel(1, 0, 0xFF000000u);
+    d.set_texel(0, 1, 0xFF000000u);
+    const mip_chain dchain = engine::build_mips(d);
+    const int dcode = static_cast&lt;int&gt;(dchain.level(1).texel(0, 0) &amp; 0xFFu);
+    checkf(dcode == 127 || dcode == 128,
+           &quot;a texel_space::linear texture averages to %d — the BYTES, correctly, &quot;
+           &quot;because a normal map was never sRGB-encoded&quot;, dcode);
+}
+
+// ---------------------------------------------------------------------------
+void section_c_level()
+{
+    section(&quot;C  THE LEVEL&quot;);
+
+    // A footprint of exactly 1 texel is level 0: the texture is already the
+    // right size and no averaging is wanted.
+    uv_footprint one{};
+    one.d_dx = vec2{1.0f / 256.0f, 0.0f};
+    one.d_dy = vec2{0.0f, 1.0f / 256.0f};
+    checkf(engine::mip_level_for(one, 256, 256) == 0.0f,
+           &quot;a one-texel footprint selects level 0 exactly&quot;);
+
+    // Powers of two land on whole levels, which is the whole point of log2.
+    struct { float texels; float level; } cases[] = {
+        {2.0f, 1.0f}, {4.0f, 2.0f}, {8.0f, 3.0f}, {64.0f, 6.0f},
+    };
+    for (const auto&amp; c : cases)
+    {
+        uv_footprint fp{};
+        fp.d_dx = vec2{c.texels / 256.0f, 0.0f};
+        fp.d_dy = vec2{0.0f, 1.0f / 256.0f};
+        const float got = engine::mip_level_for(fp, 256, 256);
+        checkf(std::fabs(got - c.level) &lt; 1e-5f,
+               &quot;a %.0f-texel footprint selects level %.4f, predicted %.1f&quot;,
+               static_cast&lt;double&gt;(c.texels), static_cast&lt;double&gt;(got),
+               static_cast&lt;double&gt;(c.level));
+    }
+
+    // 3.9&#x27;s OWN MEASUREMENT, run through the new formula. That lesson reported
+    // 62.46 texels per pixel two rows below the horizon.
+    uv_footprint horizon{};
+    horizon.d_dx = vec2{62.46f / 256.0f, 0.0f};
+    horizon.d_dy = vec2{0.0f, 1.0f / 256.0f};
+    const float lvl = engine::mip_level_for(horizon, 256, 256);
+    checkf(std::fabs(lvl - std::log2(62.46f)) &lt; 1e-4f,
+           &quot;Lesson 3.9&#x27;s measured 62.46 texels/pixel at the horizon selects &quot;
+           &quot;level %.3f — which is why four bilinear taps could only ever see &quot;
+           &quot;6.4%% of the truth there&quot;, static_cast&lt;double&gt;(lvl));
+
+    // Magnification asks for level 0 and must not go negative: there is no
+    // level -1, and a negative index is a crash rather than a blur.
+    uv_footprint mag{};
+    mag.d_dx = vec2{0.25f / 256.0f, 0.0f};
+    mag.d_dy = vec2{0.0f, 0.25f / 256.0f};
+    checkf(engine::mip_level_for(mag, 256, 256) == 0.0f,
+           &quot;a quarter-texel footprint (magnification) clamps to level 0&quot;);
+}
+
+// ---------------------------------------------------------------------------
+// The CPU&#x27;s replacement for ddx/ddy, checked against the real interpolation.
+void section_d_gradient()
+{
+    section(&quot;D  THE ANALYTIC GRADIENT&quot;);
+
+    // A triangle in screen space with genuinely different w per vertex, so the
+    // perspective divide actually bends the interpolation. Anything with equal
+    // w would let an affine (wrong) derivative pass.
+    const float x0 = 40.0f, y0 = 30.0f, iw0 = 1.0f / 2.0f;
+    const float x1 = 300.0f, y1 = 60.0f, iw1 = 1.0f / 9.0f;
+    const float x2 = 90.0f, y2 = 220.0f, iw2 = 1.0f / 5.0f;
+
+    const float u0 = 0.0f, v0 = 0.0f;
+    const float u1 = 1.0f, v1 = 0.2f;
+    const float u2 = 0.1f, v2 = 1.0f;
+
+    // Premultiplied attributes, exactly as raster.cpp stores them.
+    const float pu0 = u0 * iw0, pu1 = u1 * iw1, pu2 = u2 * iw2;
+    const float pv0 = v0 * iw0, pv1 = v1 * iw1, pv2 = v2 * iw2;
+
+    const float area = (x1 - x0) * (y2 - y0) - (x2 - x0) * (y1 - y0);
+    const float inv_area = 1.0f / area;
+
+    // df_i/dx and df_i/dy — the edge steps over the area, which is what
+    // raster.cpp&#x27;s step_x0/step_y0 already are.
+    const float dfx[3] = {(y1 - y2) * inv_area, (y2 - y0) * inv_area, (y0 - y1) * inv_area};
+    const float dfy[3] = {(x2 - x1) * inv_area, (x0 - x2) * inv_area, (x1 - x0) * inv_area};
+
+    // The affine numerator gradients, constant over the triangle.
+    const vec2 dnum_dx{dfx[0] * pu0 + dfx[1] * pu1 + dfx[2] * pu2,
+                       dfx[0] * pv0 + dfx[1] * pv1 + dfx[2] * pv2};
+    const vec2 dnum_dy{dfy[0] * pu0 + dfy[1] * pu1 + dfy[2] * pu2,
+                       dfy[0] * pv0 + dfy[1] * pv1 + dfy[2] * pv2};
+    const float dw_dx = dfx[0] * iw0 + dfx[1] * iw1 + dfx[2] * iw2;
+    const float dw_dy = dfy[0] * iw0 + dfy[1] * iw1 + dfy[2] * iw2;
+
+    // The real interpolation, so a finite difference has something to difference.
+    auto uv_at = [&amp;](float x, float y) -&gt; vec2 {
+        const float f0 = ((x1 - x) * (y2 - y) - (x2 - x) * (y1 - y)) * inv_area;
+        const float f1 = ((x2 - x) * (y0 - y) - (x0 - x) * (y2 - y)) * inv_area;
+        const float f2 = ((x0 - x) * (y1 - y) - (x1 - x) * (y0 - y)) * inv_area;
+        const float wr = 1.0f / (f0 * iw0 + f1 * iw1 + f2 * iw2);
+        return vec2{(f0 * pu0 + f1 * pu1 + f2 * pu2) * wr,
+                    (f0 * pv0 + f1 * pv1 + f2 * pv2) * wr};
+    };
+
+    double worst = 0.0;
+    for (const auto&amp; pt : {vec2{110.0f, 80.0f}, vec2{150.0f, 70.0f}, vec2{80.0f, 150.0f}})
+    {
+        const float f0 = ((x1 - pt.x) * (y2 - pt.y) - (x2 - pt.x) * (y1 - pt.y)) * inv_area;
+        const float f1 = ((x2 - pt.x) * (y0 - pt.y) - (x0 - pt.x) * (y2 - pt.y)) * inv_area;
+        const float f2 = ((x0 - pt.x) * (y1 - pt.y) - (x1 - pt.x) * (y0 - pt.y)) * inv_area;
+        const float wr = 1.0f / (f0 * iw0 + f1 * iw1 + f2 * iw2);
+        const vec2 uv = uv_at(pt.x, pt.y);
+
+        const uv_footprint got = engine::uv_gradients(dnum_dx, dnum_dy, dw_dx, dw_dy, uv, wr);
+
+        // Central difference of the actual interpolation.
+        const float e = 0.01f;
+        const vec2 px = uv_at(pt.x + e, pt.y), mx = uv_at(pt.x - e, pt.y);
+        const vec2 py = uv_at(pt.x, pt.y + e), my = uv_at(pt.x, pt.y - e);
+        const vec2 num_dx{(px.x - mx.x) / (2 * e), (px.y - mx.y) / (2 * e)};
+        const vec2 num_dy{(py.x - my.x) / (2 * e), (py.y - my.y) / (2 * e)};
+
+        const double err = std::max(
+            std::max(std::fabs(got.d_dx.x - num_dx.x), std::fabs(got.d_dx.y - num_dx.y)),
+            std::max(std::fabs(got.d_dy.x - num_dy.x), std::fabs(got.d_dy.y - num_dy.y)));
+        worst = std::max(worst, err);
+
+        std::printf(&quot;  at (%5.1f,%5.1f)  du/dx analytic %+.6f  numerical %+.6f\n&quot;,
+                    static_cast&lt;double&gt;(pt.x), static_cast&lt;double&gt;(pt.y),
+                    static_cast&lt;double&gt;(got.d_dx.x), static_cast&lt;double&gt;(num_dx.x));
+    }
+
+    checkf(worst &lt; 2e-5,
+           &quot;the closed form agrees with a central difference of the real &quot;
+           &quot;perspective-correct interpolation to %.2e — it is EXACT, not an &quot;
+           &quot;approximation, because U and W are both affine in screen space&quot;,
+           worst);
+}
+
+// ---------------------------------------------------------------------------
+void section_e_trilinear()
+{
+    section(&quot;E  TRILINEAR&quot;);
+
+    const texture base = checker(256, 8);
+    const mip_chain chain = engine::build_mips(base);
+
+    sampler nearest_mip;
+    nearest_mip.mip_filter = filter::nearest;
+    sampler linear_mip;
+    linear_mip.mip_filter = filter::linear;
+
+    // Sweep the footprint across a level boundary and watch for a STEP. Nearest
+    // must jump; trilinear must not.
+    float worst_nearest = 0.0f;
+    float worst_linear = 0.0f;
+    linear_rgb prev_n{}, prev_l{};
+    bool first = true;
+
+    for (int i = 0; i &lt;= 40; ++i)
+    {
+        // Level 4.0 -&gt; 8.0 texels, level 3.0 -&gt; 8, so sweep 4..12 texels:
+        // that spans levels 2.0 to 3.58 and CROSSES the nearest-rounding
+        // boundary at level 2.5 (5.657 texels) and 3.5 (11.3 texels).
+        const float texels = 4.0f + 8.0f * static_cast&lt;float&gt;(i) / 40.0f;
+        uv_footprint fp{};
+        fp.d_dx = vec2{texels / 256.0f, 0.0f};
+        fp.d_dy = vec2{0.0f, texels / 256.0f};
+
+        const linear_rgb n = engine::sample_mipped(chain, nearest_mip, vec2{0.137f, 0.611f}, fp);
+        const linear_rgb l = engine::sample_mipped(chain, linear_mip, vec2{0.137f, 0.611f}, fp);
+        if (!first)
+        {
+            worst_nearest = std::max(worst_nearest, std::fabs(n.r - prev_n.r));
+            worst_linear = std::max(worst_linear, std::fabs(l.r - prev_l.r));
+        }
+        prev_n = n;
+        prev_l = l;
+        first = false;
+    }
+
+    checkf(worst_nearest &gt; worst_linear * 2.0f,
+           &quot;sweeping across a level boundary, NEAREST jumps by %.4f in one step &quot;
+           &quot;and TRILINEAR by %.4f — the jump is the visible line across a floor, &quot;
+           &quot;and it is the same artefact 6.9 met as the cascade seam&quot;,
+           static_cast&lt;double&gt;(worst_nearest), static_cast&lt;double&gt;(worst_linear));
+}
+
+// ---------------------------------------------------------------------------
+void section_f_aniso()
+{
+    section(&quot;F  ANISOTROPY&quot;);
+
+    const texture base = checker(256, 8);
+    const mip_chain chain = engine::build_mips(base);
+
+    // A grazing floor: 32 texels along one screen axis, 2 along the other. That
+    // is a 16:1 footprint, which is exactly the case a square average cannot
+    // represent.
+    uv_footprint graze{};
+    graze.d_dx = vec2{32.0f / 256.0f, 0.0f};
+    graze.d_dy = vec2{0.0f, 2.0f / 256.0f};
+
+    const float iso_level = engine::mip_level_for(graze, 256, 256);
+    checkf(std::fabs(iso_level - 5.0f) &lt; 1e-4f,
+           &quot;isotropic picks level %.2f from the LONG axis (32 texels) — &quot;
+           &quot;so the short axis, which only needed level 1, is blurred by a &quot;
+           &quot;factor of %.0f&quot;, static_cast&lt;double&gt;(iso_level),
+           std::pow(2.0, static_cast&lt;double&gt;(iso_level) - 1.0));
+
+    sampler iso;
+    iso.max_anisotropy = 1;
+    sampler aniso;
+    aniso.max_anisotropy = 16;
+
+    // Contrast on a texture with real detail: the anisotropic sample keeps more
+    // of it, so it should differ from the heavily blurred isotropic one.
+    const linear_rgb a = engine::sample_mipped(chain, iso, vec2{0.31f, 0.52f}, graze);
+    const linear_rgb b = engine::sample_mipped(chain, aniso, vec2{0.31f, 0.52f}, graze);
+
+    std::printf(&quot;  isotropic  (level %.2f, 1 tap ) -&gt; %.4f\n&quot;,
+                static_cast&lt;double&gt;(iso_level), static_cast&lt;double&gt;(a.r));
+    std::printf(&quot;  anisotropic(level %.2f, 16 taps) -&gt; %.4f\n&quot;,
+                std::log2(2.0), static_cast&lt;double&gt;(b.r));
+
+    checkf(std::fabs(a.r - b.r) &gt; 1e-4f,
+           &quot;the two disagree by %.4f, which is the detail an isotropic average &quot;
+           &quot;threw away&quot;, static_cast&lt;double&gt;(std::fabs(a.r - b.r)));
+
+    // A SQUARE footprint must not trigger anisotropy: 1:1 has no long axis, and
+    // taking 16 taps of the same place would be pure cost.
+    uv_footprint square{};
+    square.d_dx = vec2{8.0f / 256.0f, 0.0f};
+    square.d_dy = vec2{0.0f, 8.0f / 256.0f};
+    const linear_rgb s1 = engine::sample_mipped(chain, iso, vec2{0.31f, 0.52f}, square);
+    const linear_rgb s16 = engine::sample_mipped(chain, aniso, vec2{0.31f, 0.52f}, square);
+    checkf(std::fabs(s1.r - s16.r) &lt; 1e-6f,
+           &quot;on a SQUARE footprint anisotropy changes nothing (%.6f vs %.6f) — &quot;
+           &quot;it costs only where it buys&quot;, static_cast&lt;double&gt;(s1.r),
+           static_cast&lt;double&gt;(s16.r));
+}
+
+// ---------------------------------------------------------------------------
+// 6.9&#x27;s habit: measure the case where the feature loses.
+void section_g_cost()
+{
+    section(&quot;G  WHAT IT COSTS&quot;);
+
+    const texture base = checker(256, 8);
+    const mip_chain chain = engine::build_mips(base);
+
+    // A surface that was never undersampled — one texel per pixel — must come
+    // back IDENTICAL to an unmipped fetch, or mipmapping is blurring things it
+    // was never asked to touch.
+    uv_footprint fine{};
+    fine.d_dx = vec2{1.0f / 256.0f, 0.0f};
+    fine.d_dy = vec2{0.0f, 1.0f / 256.0f};
+
+    sampler s;
+    const linear_rgb mipped = engine::sample_mipped(chain, s, vec2{0.3123f, 0.7071f}, fine);
+    const linear_rgb plain = engine::sample(base, s, 0.3123f, 0.7071f);
+
+    checkf(std::fabs(mipped.r - plain.r) &lt; 1e-6f
+           &amp;&amp; std::fabs(mipped.g - plain.g) &lt; 1e-6f,
+           &quot;at one texel per pixel the mipped fetch is IDENTICAL to the plain &quot;
+           &quot;one (%.6f vs %.6f) — level 0 is the original image, so a surface &quot;
+           &quot;that was never undersampled pays nothing but the memory&quot;,
+           static_cast&lt;double&gt;(mipped.r), static_cast&lt;double&gt;(plain.r));
+
+    // And the memory, stated plainly.
+    const std::size_t base_texels = 256u * 256u;
+    std::printf(&quot;  memory: %zu texels -&gt; %zu with the chain (+%.1f%%)\n&quot;,
+                base_texels, chain.texels(),
+                100.0 * (static_cast&lt;double&gt;(chain.texels()) / static_cast&lt;double&gt;(base_texels) - 1.0));
+
+    // THE HONEST COST. Force a level with mip_bias and measure the blur: this is
+    // what a too-eager LOD does to a surface that did not need it.
+    sampler blurred;
+    blurred.mip_bias = 2.0f;
+    const linear_rgb over = engine::sample_mipped(chain, blurred, vec2{0.3123f, 0.7071f}, fine);
+    checkf(std::fabs(over.r - plain.r) &gt; 1e-3f,
+           &quot;a +2 level bias moves the same fetch from %.4f to %.4f — which is &quot;
+           &quot;what over-eager level selection costs, and why mip_bias is exposed &quot;
+           &quot;rather than hidden&quot;, static_cast&lt;double&gt;(plain.r),
+           static_cast&lt;double&gt;(over.r));
+}
+
+// ---------------------------------------------------------------------------
+std::string read_file(const char* path)
+{
+    std::ifstream in(path, std::ios::binary);
+    if (!in) { return {}; }
+    std::ostringstream ss;
+    ss &lt;&lt; in.rdbuf();
+    return ss.str();
+}
+
+void section_h_golden()
+{
+    section(&quot;H  THE GOLDEN&quot;);
+
+    const int rc = demo::write_reference_shot(&quot;scratch/verify610.ppm&quot;);
+    check(rc == 0, &quot;write_reference_shot() succeeded&quot;);
+
+    const std::string ours = read_file(&quot;scratch/verify610.ppm&quot;);
+    const std::string golden = read_file(&quot;scratch/shot_52.ppm&quot;);
+    checkf(!ours.empty() &amp;&amp; ours.size() == golden.size(),
+           &quot;same size: %zu bytes&quot;, ours.size());
+    check(ours == golden,
+          &quot;BYTE-IDENTICAL, hash E917C06C — NINETEENTH lesson at this hash, and &quot;
+          &quot;this one was NOT automatic: the reference scene samples textures, so &quot;
+          &quot;a chain built by default would have moved it. THE CHAIN IS OPT-IN — &quot;
+          &quot;`texture` is untouched, `mip_chain` is a separate type, and a call &quot;
+          &quot;site written before 6.10 samples exactly what it did in 3.9. A NEW &quot;
+          &quot;CAPABILITY IS A NEW PATH&quot;);
+}
+
+} // namespace
+
+int main()
+{
+    std::printf(&quot;verify_610 — Lesson 6.10: Mipmaps, LOD, and Anisotropic Filtering\n&quot;);
+
+    section_a_chain();
+    section_b_linear();
+    section_c_level();
+    section_d_gradient();
+    section_e_trilinear();
+    section_f_aniso();
+    section_g_cost();
+    section_h_golden();
+
+    std::printf(&quot;\n%d checks, %d failures\n&quot;, g_checks, g_failures);
+    return (g_failures == 0) ? 0 : 1;
+}
+</code></pre>
+  </figure>
+
+
+  <!-- =================================================================
+       6 — BUILD & RUN
+       ================================================================= -->
+  <h2 id="run"><span class="num">6</span>Build &amp; run</h2>
+
+  <figure class="listing">
+    <figcaption><span class="path">every platform</span></figcaption>
+    <pre><code class="lang-shell">cmake -S . -B build
+cmake --build build --parallel
+sh scratch/build_verify_610.sh</code></pre>
+  </figure>
+
+  <p>
+    On Windows use <code>cmake --build build --config Debug</code> and
+    <code>build\demos\Debug\gltf_view.exe</code>; the harness script is a shell script, so run it
+    under Git Bash or WSL.
+  </p>
+
+  <h3>What you should see</h3>
+
+  <p>
+    <code>24 checks, 0 failures</code>, and §B is the one to read:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">verify_610 §B</span></figcaption>
+    <pre><code class="lang-shell">== B  LINEAR LIGHT ==
+  half the LIGHT of black and white:
+    averaged in linear light : code 188  -> 0.5029 of white
+    averaged as sRGB bytes   : code 127  -> 0.2122 of white
+  [PASS] linear-light averaging gives code 188, and 6.1's second integer says
+         half the light is code 188
+  [PASS] the naive chain delivers 42.2% of the light it should — 57.8% TOO DARK
+         at level 1 alone</code></pre>
+  </figure>
+
+  <h3>The four pictures</h3>
+
+  <p>
+    The demo's ground is untextured by default, so <code>--floor-tex</code> puts a deliberately
+    fine checker on it — which is Lesson 3.9's shimmering floor, rebuilt so the fix has something to
+    fix:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">the comparison</span></figcaption>
+    <pre><code class="lang-shell"># 1. the failure: 3.9's floor, aliasing exactly as it did then
+./build/demos/gltf_view assets/shapes.glb --floor-tex 512
+
+# 2. the fix
+./build/demos/gltf_view assets/shapes.glb --floor-tex 512 --mips
+
+# 3. the level seam, which trilinear exists to hide
+./build/demos/gltf_view assets/shapes.glb --floor-tex 512 --mip-nearest
+
+# 4. the grazing case
+./build/demos/gltf_view assets/shapes.glb --floor-tex 512 --aniso 16</code></pre>
+  </figure>
+
+  <p>
+    Run 1 and 2 side by side and the floor stops boiling. The demo reports the chain it built, and
+    the memory line is the geometric series arriving in practice:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">gltf_view --floor-tex 512 --mips</span></figcaption>
+    <pre><code class="lang-shell">  mipmaps       : 1 chain(s), 10 levels, 262144 -> 349525 texels (+33.3%),
+                  aniso 1, between levels trilinear</code></pre>
+  </figure>
+
+  <p>
+    Comparing the two renders pixel by pixel, <strong>13.1% of the frame changes</strong> — which is
+    the floor, and nothing else. Every pixel that was not undersampled is untouched.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">What it costs, stated as a number</span>
+    <p>
+      <strong>33% more memory</strong>, always, whether the texture is ever minified or not. On a
+      surface that was <em>never</em> undersampled, mipmapping buys nothing: §G checks that a fetch
+      at one texel per pixel is byte-identical to the unmipped one, because level 0 is the original
+      image.
+    </p>
+    <p>
+      And over-eager level selection has a cost of its own. A <code>mip_bias</code> of +2 moves the
+      same fetch from 0.4488 to 0.4872 — visible blurring on a surface that asked for none, which
+      is why the bias is exposed rather than hidden, and why "just add a bit of bias" is a poor fix
+      for aliasing you have not measured.
+    </p>
+    <p>
+      The same shape of judgement as 6.9's: cascades cost 29% of their resolution to buy stability
+      and lose outright on a small scene. <strong>Reach for the technique when you have measured
+      the problem.</strong> 3.9 measured this one seven lessons ago.
+    </p>
+  </div>
+
+  <!-- =================================================================
+       7 — PITFALLS
+       ================================================================= -->
+  <h2 id="pitfalls"><span class="num">7</span>Common pitfalls &amp; debugging</h2>
+
+  <div class="pitfall">
+    <h3>The chain is built, the sampler is set, and nothing changes</h3>
+    <p><strong>Symptom.</strong> Mipmapping appears to do nothing on the GPU. The floor aliases
+       exactly as before.</p>
+    <p><strong>Cause.</strong> <code>SDL_GPUSamplerCreateInfo::max_lod</code> is 0, which clamps
+       every lookup to level 0. It is a perfectly legal request, so there is no error and no
+       warning.</p>
+    <p><strong>Fix.</strong> Set it above the chain's top level. And check
+       <code>enable_anisotropy</code> at the same time: <code>max_anisotropy</code> alone is a
+       silent no-op for the same reason.</p>
+  </div>
+
+  <div class="pitfall">
+    <h3>Textures get darker with distance</h3>
+    <p><strong>Symptom.</strong> A textured surface dims as it recedes. Usually reported as "the
+       lighting falls off too fast" or "the fog is too strong".</p>
+    <p><strong>Cause.</strong> The chain was averaged in sRGB bytes rather than linear light
+       (§3.4). Each level is darker than the one above, and it compounds.</p>
+    <p><strong>Fix.</strong> Decode, average, re-encode. To confirm it before fixing it, build a
+       chain from a pure black-and-white checker and read level 1: it must be <strong>code
+       188</strong>, not 127.</p>
+  </div>
+
+  <div class="pitfall">
+    <h3>Normal maps look wrong only in the distance</h3>
+    <p><strong>Symptom.</strong> Lighting is correct up close and subtly wrong further away.</p>
+    <p><strong>Cause.</strong> The opposite error — a linear-data texture decoded as sRGB while
+       being averaged. 6.7's bug arriving through a different door.</p>
+    <p><strong>Fix.</strong> Read <code>texel_space</code> from the texture. This is precisely why
+       that field is on the data rather than at the call site.</p>
+  </div>
+
+  <div class="pitfall">
+    <h3>A visible line across the floor at a fixed distance</h3>
+    <p><strong>Symptom.</strong> A hard boundary in sharpness, following a contour of constant
+       distance from the camera.</p>
+    <p><strong>Cause.</strong> <code>mip_filter = nearest</code>: the level is being rounded rather
+       than blended. Exactly Lesson 6.9's cascade seam.</p>
+    <p><strong>Fix.</strong> Trilinear. The harness measures the step at 0.3470 rounded against
+       0.0124 blended.</p>
+  </div>
+
+  <div class="pitfall">
+    <h3>Distant ground looks smeared rather than sharp</h3>
+    <p><strong>Symptom.</strong> No aliasing, but the far floor has lost all its detail.</p>
+    <p><strong>Cause.</strong> Isotropic filtering choosing the level from the long axis of a
+       grazing footprint (§3.6). At 16:1 that blurs the short axis by a factor of 16.</p>
+    <p><strong>Fix.</strong> Anisotropic filtering. This is the single most visible quality setting
+       in most games, and now you know exactly what it is buying.</p>
+  </div>
+
+  <div class="pitfall">
+    <h3>Mipmap generation asserts, or does nothing at all</h3>
+    <p><strong>Symptom.</strong> An assert about usage flags — or, on a release device, silently
+       wrong texture contents.</p>
+    <p><strong>Cause.</strong> The texture lacks <code>COLOR_TARGET</code>, or
+       <code>num_levels</code> is 1, or the call is inside a pass. SDL checks all three
+       <em>only in debug mode</em>.</p>
+    <p><strong>Fix.</strong> All three, and develop against a debug device. A validation layer you
+       have switched off is a validation layer you do not have.</p>
+  </div>
+
+  <!-- =================================================================
+       8 — EXERCISES
+       ================================================================= -->
+  <h2 id="exercises"><span class="num">8</span>Exercises</h2>
+
+  <div class="exercise">
+    <h3>8.1 — See the bug you were warned about <span class="tag">guided</span></h3>
+    <p>
+      Change <code>build_mips</code> to average bytes regardless of <code>texel_space</code>, run
+      the demo with <code>--floor-tex 512 --mips</code>, and look at the far floor. Then read level
+      1 of a black-and-white checker and confirm it is code 127. Put it back.
+    </p>
+    <details><summary>Hint</summary>
+      <p>
+        The visual tell is that the floor's average brightness falls with distance while its
+        <em>contrast</em> also falls — two things changing at once, which is what makes it read as a
+        lighting problem rather than a texturing one.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3>8.2 — Visualise the level <span class="tag">guided</span></h3>
+    <p>
+      Tint each mip level a different colour — level 0 red, 1 green, 2 blue, and so on — and render
+      the floor. You will see the level bands directly, which makes <code>--mip-nearest</code> and
+      trilinear a before/after you can point at, and makes anisotropy's effect on level choice
+      obvious.
+    </p>
+  </div>
+
+  <div class="exercise">
+    <h3>8.3 — Check the gradient against the GPU <span class="tag">engine challenge</span></h3>
+    <p>
+      §D checks the analytic gradient against a finite difference of our own interpolation. Check
+      it against a <em>different implementation</em>: render the same triangle on the GPU with a
+      shader that outputs <code>log2(length(ddx(uv) * textureSize))</code> as a colour, read it
+      back, and compare against the CPU's level for the same fragments.
+    </p>
+    <details><summary>Hint</summary>
+      <p>
+        Expect them to agree closely but not exactly, and the reason is interesting: the GPU's
+        <code>ddx</code> is a <em>finite difference across a 2×2 quad</em>, so it is the
+        approximation and ours is the closed form. Disagreement will be largest where the
+        derivative changes fastest — near a silhouette, or on a steeply foreshortened triangle.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3>8.4 — Measure the cost <span class="tag">open</span></h3>
+    <p>
+      Use Lesson 3.10's timing harness to measure the software rasterizer's fill rate with the
+      chain bound and without, on a floor that fills the frame. Separate the cost of the level
+      arithmetic from the cost of the second bilinear fetch by testing
+      <code>mip_filter = nearest</code> as a middle point.
+    </p>
+    <details><summary>Solution sketch</summary>
+      <p>
+        Three configurations, one variable each: unmipped (one fetch, no arithmetic), nearest (one
+        fetch, plus the log2 and the gradient), trilinear (two fetches, same arithmetic). The gap
+        between the first two is the derivative; between the second and third is the extra tap.
+        Predict which is larger before you measure — most people guess wrong.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3>8.5 — Non-power-of-two, honestly <span class="tag">open</span></h3>
+    <p>
+      §3.1 admits that odd sizes round down and lose a row. Build a 100×100 checker, mip it, and
+      find the artefact. Then implement a weighted box filter that accounts for the partial row and
+      measure whether you can see the difference.
+    </p>
+  </div>
+
+  <!-- =================================================================
+       9 — RECAP
+       ================================================================= -->
+  <h2 id="recap"><span class="num">9</span>Recap &amp; next</h2>
+
+  <p><strong>What the engine gained.</strong></p>
+
+  <ul>
+    <li><strong>Mipmapping in both renderers</strong>, with trilinear filtering and anisotropy, and
+        a level derived from an <em>exact</em> analytic derivative rather than a finite
+        difference — agreeing with a numerical check to 5.79 × 10<sup>−6</sup>.</li>
+    <li><strong>A debt cleared.</strong> Six promises, one of them in a shipped public header,
+        made good.</li>
+    <li><strong>The sampler 3.9 described.</strong> That lesson collapsed SDL's three filter fields
+        into one and said exactly why it could; the other two are now real.</li>
+    <li><strong>A famous bug, quantified rather than merely named</strong>: an sRGB-averaged chain
+        delivers 42.2% of the light it should at level 1, and compounds.</li>
+    <li><strong>The golden held for the nineteenth lesson</strong> — and this time by design rather
+        than by luck, because the reference scene samples textures and the chain had to be made
+        opt-in deliberately.</li>
+  </ul>
+
+  <p>
+    <strong>What it still does not do.</strong> No weighted filtering for non-power-of-two sizes; no
+    mip generation for the CPU's normal maps (only albedo is chained); no negative LOD bias
+    clamping worth the name. And anisotropy is a fixed sample count along one axis rather than the
+    elliptical footprint the literature describes.
+  </p>
+
+  <p>
+    <strong>Next</strong> — <a href="../index.html">6.11, Transparency: Alpha Modes, Blending, and
+    Draw Order</a>. The pipeline has said <code>no blending</code> since 4.4, and 6.6's glTF
+    importer reads <code>alpha</code> and ignores <code>alphaMode</code> entirely — so every
+    downloaded asset with foliage or glass currently renders as opaque cardboard. That is the one
+    gap in that importer which fires no status code, and 6.6 §10 says so in as many words.
+  </p>
+
+  <p>
+    It also matters to this lesson. Alpha-masked foliage and mipmapping interact badly in a way
+    that is famous in its own right: averaging an alpha channel makes cutout edges dissolve with
+    distance, and the fix has a name.
+  </p>
+
+  <!-- =================================================================
+       10 — FURTHER READING
+       ================================================================= -->
+  <h2 id="reading"><span class="num">10</span>Further reading</h2>
+
+  <ul>
+    <li><strong>Lance Williams, "Pyramidal Parametrics" (SIGGRAPH 1983)</strong> — the original mip
+        paper. "MIP" is <em>multum in parvo</em>, "much in a small space", and the paper is short
+        and readable.</li>
+    <li><strong>Paul Heckbert, "Survey of Texture Mapping" (IEEE CG&amp;A, 1986)</strong> — 3.9
+        already sent you here; §3 on resampling and filtering is the part that pays off now.</li>
+    <li><strong>Real-Time Rendering, 4th ed., §6.2.2 "Mipmapping"</strong> — the standard
+        treatment, including the ripmap and summed-area alternatives this lesson skips.</li>
+    <li><strong>Real-Time Rendering, 4th ed., §6.2.3</strong> — anisotropic filtering, and the
+        elliptical weighted average our fixed-sample version approximates.</li>
+    <li><strong>SDL3, <code>SDL_GenerateMipmapsForGPUTexture</code> and
+        <code>SDL_GPUSamplerCreateInfo</code></strong> — and, worth reading rather than trusting,
+        <code>SDL_gpu.c</code>'s validation of that call, which is conditional on debug mode.</li>
+  </ul>
+
+  <nav class="lesson-nav" aria-label="Lesson navigation (bottom)">
+    <a class="prev-l" href="06-09-cascaded-shadows.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">6.9 — Cascaded Shadow Maps</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="../index.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">6.11 — Transparency: Alpha Modes, Blending, and Draw Order</span>
+    </a>
+  </nav>
+
+</div>
+
+<!-- SHARED-SCRIPT:BEGIN -->
+<!-- The shared page script (theme toggle, TOC scrollspy, syntax highlighter),
+     linked rather than inlined. Single source of truth: docs/shared/course.js.
+     A plain classic script at end of body, so it runs exactly where the inline
+     copy used to: after the DOM is parsed, before KaTeX's deferred render. -->
+<script src="../shared/course.js"></script>
+<script defer
+        src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"
+        integrity="sha384-7zkQWkzuo3B5mTepMUcHkMB5jZaolc2xDwL6VFqjFALcbeS9Ggm/Yr2r3Dy4lfFg"
+        crossorigin="anonymous"></script>
+<script defer
+        src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+        integrity="sha384-43gviWU0YVjaDtb/GhzOouOXtZMP/7XUzwPTstBeZFe/+rCMvRwr4yROQP43s0Xk"
+        crossorigin="anonymous"
+        onload="renderMathInElement(document.body, {
+          delimiters: [
+            {left: '\\[', right: '\\]', display: true},
+            {left: '\\(', right: '\\)', display: false}
+          ],
+          throwOnError: false
+        });"></script>
+<!-- SHARED-SCRIPT:END -->
+</body>
+</html>

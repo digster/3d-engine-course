@@ -6848,3 +6848,52 @@ kernel or footprint downstream of it.
   `scratch/` still held the old text. Pins must be taken from the state you actually intend to
   ship, not from the lesson's original commit — the renumber had moved on since. See
   `state-md-is-append-and-merge` and the pipeline notes.
+
+## Lesson 6.10 — Mipmaps, LOD, and anisotropic filtering
+
+- **Decide the golden question before writing code, not after the diff.** Unlike every lesson since
+  6.4, this one's reference render was *not* automatically safe: the fixture samples textures, so a
+  mip chain built by default would have moved it. Two honest options existed — re-baseline and say
+  so, or make the chain opt-in — and opt-in won on its own merits (33% memory, a 1×1 fallback has
+  nothing to average). Had I written the code first, the choice would have been made by whichever
+  was easier to retrofit.
+
+- **A deferral repeated in a shipped public header is a debt with the student's name on it.**
+  Mipmaps were promised six times: prose, two exercises, a `num_levels = 1` comment, and a doc
+  comment in `texture.hpp`'s sampler struct. Two external reviewers found the gap **from the
+  published outline alone**, without the code. Keep a list of what you are deferring, and check it
+  against what you have shipped.
+
+- **`rule()` takes a class, not a colour — and the failure is invisible.** Passing a hex string
+  gives `class="#e05c5c"`, which matches no CSS rule, so the line renders as nothing at all. No
+  error, no warning, and `check-page.js` cannot see a line that is not drawn. Two dashed markers
+  were missing from a figure for three build cycles. **Only the visual pass catches this**; added a
+  `cline()` helper so the mistake is not available.
+
+- **Figure numbers must follow page order, and nothing checks it.** The numbers live in
+  `build_NN.py`'s `FIGURES` dict, the order lives in the body fragments, and they drifted the
+  moment a figure was authored before the section that shows it — producing `fig4.png` captioned
+  "Figure 5". Read the captions in order, every time; it is a five-second check that no tool does.
+
+- **`svgSpill` can be vertical.** A label past the bottom of the viewBox reports as `overPx` just
+  like one past the right edge, and I spent a cycle shortening text that was already narrow enough.
+  Check the y coordinate against `H` before shortening the string.
+
+- **At 390 px the SVG scales but the text does not.** Font size is CSS px, not SVG units, so a long
+  string that fits comfortably at 1280 px overflows at mobile width regardless of the viewBox.
+  Split long captions into two lines rather than widening the canvas.
+
+- **On a log axis, adjacent values collide however you draw them.** 62.46 and 64 are three pixels
+  apart at this width, so a vertical marker at the measurement will always land on the "64" tick. A
+  short leader out to clear space says the same thing and collides with nothing.
+
+- **Two SDL sampler fields silently disable mipmapping, and they are the same shape:** a default
+  that is correct for a one-level texture and wrong for a nine-level one. `max_lod = 0` clamps the
+  entire chain away, and `max_anisotropy` is ignored without `enable_anisotropy`. Neither errors,
+  because both are legal requests. When a feature "does nothing", suspect a clamp before a bug.
+
+- **SDL's GPU validation is conditional on debug mode.** All three checks on
+  `SDL_GenerateMipmapsForGPUTexture` — no pass in progress, `num_levels > 1`, usage carrying
+  `SAMPLER|COLOR_TARGET` — live inside `if (device->debug_mode)`. On a release device the
+  requirement is unchecked and the result undefined. Related: SDL's asserts key on `__OPTIMIZE__`
+  rather than `NDEBUG`, so `-O2` alone switches them off.

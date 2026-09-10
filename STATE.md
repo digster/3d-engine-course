@@ -7,7 +7,7 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-09-10 (after Lesson 6.9 — 65 of 107 lessons)
+updated: 2026-09-10 (after Lesson 6.10 — 66 of 107 lessons)
 
 conventions:
   ecs-storage: THE ECS IS A SPARSE SET, DECIDED IN 5.7 BY MEASUREMENT, NOT TASTE.
@@ -3386,6 +3386,103 @@ completed:
   - 6.8  Shadow Mapping: Bias, Acne, and PCF
 
 capabilities:
+  - 6.10 MIPMAPPING IN BOTH RENDERERS, AND A DEBT OF SIX PROMISES CLEARED.
+    65 -> 66 public headers, 36 -> 37 sources. Golden byte-identical at E917C06C
+    for the NINETEENTH lesson — AND THIS ONE WAS NOT AUTOMATIC.
+    THE GOLDEN DECISION, MADE FIRST AND ON PURPOSE: the reference scene SAMPLES
+    TEXTURES, so a chain built by default would have moved it. Two honest
+    options — re-baseline and say so, or make the chain opt-in. OPT-IN WINS ON
+    ITS OWN MERITS: 33% memory, a 1x1 fallback has nothing to average, a UI atlas
+    is never minified. `texture` untouched, `mip_chain` a separate type,
+    `texture_binding::mips` nullable. Decide this BEFORE writing code, not after
+    the diff.
+    THE DEBT: mipmaps were promised BY NAME SIX TIMES — 3.9's prose, 3.9's
+    Exercises 8.4 and 8.5, 4.7's exercise 4.7.5, 4.7's shipped
+    `ti.num_levels = 1; // no mipmaps yet — Module 6`, and a doc comment IN
+    texture.hpp's PUBLIC SAMPLER STRUCT. Two external reviewers found the gap
+    from the outline alone.
+    gfx/mipmap.{hpp,cpp}  NEW. `uv_footprint`, `uv_gradients`, `mip_chain`,
+                `build_mips`, `mip_level_for`, `sample_mipped`.
+                k_max_mip_levels = 17.
+    THE LEVEL IS log2 OF THE FOOTPRINT, and the logarithm is a CONSEQUENCE of the
+                pyramid halving rather than a tuning choice — which is why the
+                formula has no constants. 3.9's own measured 62.46 texels/pixel
+                lands at level 5.965, and the FRACTION IS REAL: no level has
+                texels exactly 62.46 across, which is what trilinear blends.
+                rho is the LONGER axis, and that one word is the whole of why
+                isotropic filtering over-blurs.
+    THE ANALYTIC GRADIENT IS THE CPU-SPECIFIC PART AND THE BEST THING HERE.
+                A GPU shades in 2x2 quads SO THAT a neighbour exists, which is
+                why ddx is a subtraction and why it cannot be called from
+                divergent flow. A SCANLINE RASTERIZER HAS NO NEIGHBOUR — the row
+                above is discarded, the pixel to the right has not happened. So
+                the derivative comes from the TRIANGLE:
+                  u = U/W, U and W BOTH AFFINE in screen space (the normalised
+                  barycentrics are), so the quotient rule gives
+                  du/dx = (dU/dx - u*dW/dx) / W
+                df_i/dx is step_x_i * inv_area — the edge steps the fill ALREADY
+                walks over the area it ALREADY reciprocated. dU/dx and dW/dx are
+                CONSTANT over the triangle, so everything but two multiplies and
+                a subtract HOISTS. It is EXACT, not an approximation, and §D
+                proves it against a CENTRAL DIFFERENCE of the real interpolation
+                on a triangle with genuinely different w per vertex: 5.79e-06,
+                which is the finite difference's own truncation error.
+                (3.9's Exercise 8.4 asked for exactly this and called it
+                "Module 6's job properly".)
+    THE LINEAR-LIGHT BUG, QUANTIFIED RATHER THAN NAMED. Averaging is linear, sRGB
+                is not, and the curve is convex so the error is always DARKER.
+                One 2x2 of black and white should be HALF THE LIGHT = 6.1's code
+                188. Naive byte average = code 127 = 0.2122 of white, so it
+                DELIVERS 42.2% OF THE LIGHT IT SHOULD — 57.8% too dark AT LEVEL 1
+                ALONE — and it COMPOUNDS down the chain. Symptom: a surface that
+                dims as it RECEDES, usually diagnosed as "the lighting falls off
+                too fast", which sends you to the wrong file.
+                `build_mips` reads texel_space FROM THE DATA (6.7's field paying
+                for itself again): srgb decodes, linear averages bytes. ALPHA IS
+                AVERAGED AS BYTES ON BOTH PATHS — coverage, never encoded.
+                THE GPU GETS THIS FREE because the texture has an _SRGB FORMAT,
+                so the blit chain decodes and encodes in hardware. The clearest
+                case in the course of a format flag doing real work.
+    TRILINEAR IS 6.9'S CASCADE SEAM, one lesson later and one dimension down:
+                two defensible representations meeting at a boundary. Measured
+                step across a level boundary: NEAREST 0.3470, TRILINEAR 0.0124,
+                28x smaller.
+    ANISOTROPY IS A REFUSAL TO CHOOSE. At 16:1, the long axis picks level 5 and
+                blurs the short one SIXTEENFOLD (the smeared distant ground of a
+                game with aniso off); the short axis picks level 1 and the long
+                one aliases. Take the SHORT axis's level and several taps ALONG
+                the long one. ON A SQUARE FOOTPRINT IT COSTS NOTHING — verified
+                identical to six decimals, which matters because the failure
+                would be invisible and expensive.
+    texture.hpp `sampler` gains mip_filter, mip_bias, max_anisotropy — the two
+                fields 3.9 collapsed into one and SAID SO. That comment is now
+                discharged.
+    TWO SDL FIELDS THAT SILENTLY DISABLE THE WHOLE FEATURE, both the same shape
+                (a default that is correct at one level and wrong at nine):
+                  max_lod = 0 CLAMPS THE ENTIRE CHAIN AWAY. No error, no warning
+                    — clamping to level 0 is a legal request. You build the
+                    chain, set mipmap_mode, see no change, go looking in the
+                    generator. Now 1000.0f.
+                  max_anisotropy IS IGNORED unless enable_anisotropy is true.
+                create_comparison KEEPS max_lod = 0 and aniso off, deliberately:
+                a shadow map has ONE LEVEL (6.9 added LAYERS, not levels).
+    ⚠ VERIFY DISCHARGED against the SDL3 tree:
+                SDL_GenerateMipmapsForGPUTexture(cb, texture) returns void, takes
+                exactly two args, and MUST NOT BE CALLED INSIDE A PASS.
+                SDL_gpu.c validates three things — no pass in progress,
+                num_levels > 1, and usage carrying SAMPLER|COLOR_TARGET — AND ALL
+                THREE LIVE INSIDE `if (COMMAND_BUFFER_DEVICE->debug_mode)`. On a
+                release device the requirement is UNCHECKED and the result is
+                undefined rather than diagnosed. (4.7's exercise claimed the
+                COLOR_TARGET requirement; it was right, and this is the line.)
+    THE COST, SAID WITH NUMBERS: 33% memory always (1/4+1/16+... = 1/3, measured
+                65,536 -> 87,381 texels). At ONE TEXEL PER PIXEL the mipped fetch
+                is IDENTICAL to the plain one, because level 0 is the original —
+                so a surface never undersampled pays only memory. A +2 mip_bias
+                moves the same fetch 0.4488 -> 0.4872, which is what over-eager
+                LOD costs and why the bias is exposed rather than hidden.
+                On the demo floor, 13.1% of the frame changes when mips come on —
+                the floor, and nothing else.
   - 6.9 CASCADED SHADOW MAPS IN BOTH RENDERERS, AND AN AUDIT 6.8 PASSED.
     63 -> 65 public headers, 35 -> 36 sources. Golden byte-identical at E917C06C
     for the EIGHTEENTH lesson: cascades are an opt-in path and the reference
@@ -5820,6 +5917,7 @@ files:
   engine/include/engine/gfx/: clip.hpp, colour.hpp, debug_draw.hpp,
             bounds.hpp                                                       [6.8]
             cascade.hpp                                                      [6.9]
+            mipmap.hpp                                                      [6.10]
             debug_lines.hpp                                                 [5.11]
             depth_buffer.hpp, framebuffer.hpp, gpu_buffer.hpp, gpu_debug.hpp,
             gpu_device.hpp, gpu_mesh.hpp, gpu_pipeline.hpp, gpu_present.hpp,
@@ -5846,7 +5944,8 @@ files:
   engine/src/asset/: search_path.cpp, asset_store.cpp                   [5.5]
   engine/src/core/: actions.cpp [5.10], clock.cpp, fixed_step.cpp, input.cpp,
             log.cpp, profile.cpp
-  engine/src/gfx/: cascade.cpp [6.9], clip.cpp, colour.cpp, debug_draw.cpp,
+  engine/src/gfx/: cascade.cpp [6.9], mipmap.cpp [6.10], clip.cpp, colour.cpp,
+            debug_draw.cpp,
             debug_lines.cpp [5.11],
             depth_buffer.cpp,
             framebuffer.cpp, gpu_buffer.cpp, gpu_debug.cpp, gpu_device.cpp,
@@ -6239,67 +6338,64 @@ roadmap: RESHAPED 2026-09-08, AFTER TWO EXTERNAL REVIEWS OF THE PUBLISHED OUTLIN
             qualifier too, because a skimmer reads the recap and stops.
 
 
-next: 6.10 — Mipmaps, LOD, and Anisotropic Filtering
-      (planned filename: docs/lessons/06-10-mipmaps.html — 6.9's TWO next links
-      point at the index and BOTH need repointing; scratch/l69_body_a.html holds
-      the top one and build_69.py's TAIL the bottom.
-      PIN FIRST. build_69.py's LISTING_SOURCE is EMPTY and correctly so — every
-      file it lists, 6.9 created. That stops being true the moment 6.10 edits
-      one. It lists THREE: cascade.hpp, cascade.cpp and verify_69.cpp. 6.10 is
-      unlikely to touch cascade.* but WILL touch texture.hpp/sampler and
-      gpu_texture, so check before assuming. The command:
-        for f in engine/include/engine/gfx/cascade.hpp \
-                 engine/src/gfx/cascade.cpp; do
-          git show <6.9 commit>:$f > scratch/l69_$(basename $f)
+next: 6.11 — Transparency: Alpha Modes, Blending, and Draw Order
+      (planned filename: docs/lessons/06-11-transparency.html — 6.10's TWO next
+      links point at the index and BOTH need repointing; scratch/l610_body_a.html
+      holds the top one and build_610.py's TAIL the bottom.
+      PIN FIRST. build_610.py's LISTING_SOURCE is EMPTY and correctly so — every
+      file it lists, 6.10 created. It lists THREE: mipmap.hpp, mipmap.cpp and
+      verify_610.cpp. 6.11 will NOT touch mipmap.* except possibly for alpha
+      averaging (see below), but WILL touch material.hpp, gltf.cpp, raster.*,
+      gpu_pipeline.* and scene.frag.hlsl. The command:
+        for f in engine/include/engine/gfx/mipmap.hpp \
+                 engine/src/gfx/mipmap.cpp; do
+          git show <6.10 commit>:$f > scratch/l610_$(basename $f)
         done
-        cp scratch/verify_69.cpp scratch/l69_verify_69.cpp   # gitignored
-      Then re-run build_69.py and `git diff` the page: EIGHT lessons running,
+        cp scratch/verify_610.cpp scratch/l610_verify_610.cpp   # gitignored
+      Then re-run build_610.py and `git diff` the page: NINE lessons running,
       the diff has been exactly the nav lines meant to move.
 
-      WHAT 6.10 IS ABOUT, AND IT IS A DEBT COMING DUE. Mipmaps were promised to
-      the student BY NAME SIX TIMES and never delivered: 3.9's prose ("mipmaps
-      (Module 6) are what closes it"), 3.9's Exercise 8.5, 4.7's exercise 4.7.5,
-      and — worst — a DOC COMMENT SHIPPED IN texture.hpp's public sampler struct
-      saying "Module 6's mipmaps are what fills the gap". Two external reviewers
-      found this from the index alone. This lesson is the payment.
-      WHAT THE ENGINE ALREADY HAS, AND IT IS MORE THAN IT LOOKS:
-        - 3.9 measured the footprint properly: one screen pixel covers 0.60
-          texels at the bottom of the frame and 62.46 two rows below the
-          horizon. The failure is ALREADY QUANTIFIED; 6.10 fixes it.
-        - `sampler` has ONE `texel_filter` where SDL has min_filter, mag_filter
-          and mipmap_mode. 3.9's own doc comment says why and names the gap.
-        - 4.7 creates every texture with `num_levels = 1` and a comment saying
-          Module 6 changes it. gpu_texture::create_depth_array (6.9) is the
-          precedent for a create path that takes a level/layer count.
-        - `SDL_GenerateMipmapsForGPUTexture` exists; 4.7's exercise 4.7.5 names
-          it. ⚠ VERIFY the exact signature and the COLOR_TARGET usage bit
-          requirement against SDL_gpu.h before writing it.
-      THE DERIVATIONS 6.10 OWES:
-        1 THE LEVEL FROM THE FOOTPRINT: level = log2(max derivative length).
-          On the GPU ddx/ddy are free; ON THE CPU THERE ARE NO NEIGHBOURING
-          FRAGMENTS, so the derivative must come from the triangle's uv
-          gradients analytically — 3.9's Exercise 8.4 already asks for this and
-          says it is "Module 6's job properly".
-        2 TRILINEAR: blending two levels, and why the seam between levels is
-          visible without it (the same shape of argument as 6.9's cascade seam,
-          which is worth saying out loud — 6.9 §3.7 is the rehearsal).
-        3 ANISOTROPY: a square average cannot fix a footprint long in one
-          direction and short in the other. 3.9's Figure 6 already shows exactly
-          that case.
-      THE TRAP THAT MUST BE IN THE LESSON: A MIP CHAIN BUILT BY AVERAGING sRGB
-      BYTES GETS DARKER EVERY LEVEL. 3.9's Exercise 8.5 hint already states it;
-      6.1 built the whole vocabulary. Average in LINEAR light. This is a famous,
-      long-lived bug and the course is now equipped to explain it exactly.
-      AND THE CONSTRAINT: 6.15's IBL CANNOT BE BUILT BEFORE THIS. A prefiltered
-      environment map IS a mip chain indexed by roughness. That is why mipmaps
-      sit at 6.10 and not at the end of the module.
-      THE TEST TO BEAT: the golden should stay E917C06C — NINETEENTH lesson.
-      Mipmaps change sampling, so this one is NOT automatic: the reference scene
-      DOES sample textures. Either the chain is opt-in (num_levels stays 1 for
-      the reference texture) or the golden moves and the lesson must say so and
-      re-baseline deliberately. DECIDE THIS EARLY, not after the diff.
-      CARRY FORWARD: 6.9's habit of MEASURING THE CASE WHERE THE FEATURE LOSES.
-      Cascades cost 29% of the resolution to buy stability and lose outright on
-      a small scene; mipmaps cost 33% more memory and blur a surface that was
-      never undersampled. Say so with a number.
+      WHAT 6.11 IS ABOUT, AND IT IS A CORRECTNESS GAP IN SHIPPED CODE, not a
+      missing feature. Three facts that are all already true today:
+        1 gpu_pipeline.hpp has said `no blending` since 4.4. There is no blend
+          state in the engine at all, on either renderer.
+        2 6.6's glTF importer READS `alpha` (baseColorFactor[3]) and IGNORES
+          `alphaMode` and `alphaCutoff` entirely, so a material marked MASK or
+          BLEND imports as fully opaque.
+        3 THAT IS THE ONE GAP IN THAT IMPORTER WHICH FIRES NO STATUS. 6.6 §10
+          says so in as many words — it was retrofitted on 2026-09-08 precisely
+          because the silence broke §10's own rule. Every other limit reports:
+          too_many_vertices, unsupported_primitive, factor_texture_conflicts.
+          THE REASON IS STRUCTURAL: a status says "the file wants what the engine
+          cannot do", and the engine had no blend state to compare against. 6.11
+          gives it one, so the status becomes WRITABLE — close that loop
+          explicitly, it is the payoff for having named the gap honestly.
+      WHAT THE LESSON OWES:
+        1 ALPHA MASKING vs BLENDING, and why the first keeps the depth buffer
+          honest: a masked fragment is discarded, so depth is never written and
+          order does not matter. A blended one writes colour but must NOT write
+          depth, or it occludes what is behind it.
+        2 PREMULTIPLIED ALPHA, derived from what blending actually multiplies
+          rather than asserted. src*a + dst*(1-a) vs src + dst*(1-a), and why
+          the second composites correctly under filtering and the first does not.
+        3 DRAW ORDER. Opaque geometry never needed sorting because the z-buffer
+          IS the sort (3.1). Blending is not commutative, so transparent geometry
+          must be drawn back-to-front — which is a per-frame sort the engine has
+          never had, and 6.13's frustum culling will want the same traversal.
+        4 THE SORTING FAILURE MODE, shown: two transparent quads intersecting,
+          where NO per-object order is correct. Name OIT, do not build it.
+      THE MIPMAP INTERACTION, and it is a genuinely famous bug worth a section:
+        AVERAGING AN ALPHA CHANNEL MAKES CUTOUT FOLIAGE DISSOLVE WITH DISTANCE.
+        A leaf texture that is 50% coverage at level 0 averages toward 0.5 alpha
+        everywhere, so an alpha TEST at 0.5 starts rejecting half of it — the
+        tree thins out as it recedes. The fix has a name (alpha-to-coverage, or
+        rescaling the chain to preserve coverage) and 6.10 built the chain this
+        lands on. 6.10 §9 already promises this connection.
+      THE TEST TO BEAT: the golden should stay E917C06C — TWENTIETH lesson. This
+      one SHOULD be automatic: blending is new pipeline state and the reference
+      scene is opaque. But VERIFY IT EARLY rather than assuming, because
+      `fill_style` gaining a blend mode could change a default.
+      CARRY FORWARD: 6.10's habit of DECIDING THE GOLDEN QUESTION FIRST, and
+      6.9's of measuring the case where the feature loses. Blending costs a
+      read-modify-write per fragment and a sort per frame; say what by.
 ```

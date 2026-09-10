@@ -2540,3 +2540,9 @@ and a new `docs/_template/check-curriculum.py` to stop the index drifting again.
 > next
 
 (Resolved to Lesson 6.9 — Cascaded Shadow Maps, per `STATE.md`'s `next:` block.)
+
+## Session — 2026-09-10 (second) — Lesson 6.10
+
+> next
+
+(Resolved to Lesson 6.10 — Mipmaps, LOD, and Anisotropic Filtering, per `STATE.md`'s `next:` block.)
