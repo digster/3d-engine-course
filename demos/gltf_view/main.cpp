@@ -36,6 +36,7 @@
 #include <engine/gfx/raster.hpp>
 #include <engine/gfx/bounds.hpp>
 #include <engine/gfx/scene.hpp>
+#include <engine/gfx/cascade.hpp>
 #include <engine/gfx/shadow.hpp>
 #include <engine/gfx/soft_renderer.hpp>
 #include <engine/gfx/viewport.hpp>
@@ -140,6 +141,27 @@ public:
             else if (SDL_strcmp(argv[i], "--pcf") == 0 && i + 1 < argc)
             {
                 pcf_ = SDL_atoi(argv[++i]);
+            }
+            // LESSON 6.9. `--cascades 4` splits the CAMERA's frustum instead of
+            // boxing the whole scene. `--cascades 1` is 6.8's single map fitted
+            // to the frustum rather than the scene, which is worth having
+            // separately: it isolates "cascades" from "camera-fitted".
+            else if (SDL_strcmp(argv[i], "--cascades") == 0 && i + 1 < argc)
+            {
+                cascades_ = SDL_atoi(argv[++i]);
+            }
+            else if (SDL_strcmp(argv[i], "--csm-lambda") == 0 && i + 1 < argc)
+            {
+                csm_lambda_ = static_cast<float>(SDL_atof(argv[++i]));
+            }
+            else if (SDL_strcmp(argv[i], "--csm-blend") == 0 && i + 1 < argc)
+            {
+                csm_blend_ = static_cast<float>(SDL_atof(argv[++i]));
+            }
+            // 3.5's rule: the failure has to be reachable, or the fix is folklore.
+            else if (SDL_strcmp(argv[i], "--no-snap") == 0)
+            {
+                csm_snap_ = false;
             }
             else if (SDL_strcmp(argv[i], "--shadow-cull") == 0 && i + 1 < argc)
             {
@@ -435,11 +457,32 @@ public:
         // of float depth here and 2 MB as a 16-bit target on the GPU.
         if (shadow_res_ > 0)
         {
+            engine::shadow_settings ss;
+            ss.bias = bias_;
+            ss.constant_bias = constant_bias_;
+            ss.pcf_radius = pcf_;
+            ss.cull = shadow_cull_;
+
+            if (cascades_ > 0)
+            {
+                if (!cascade_.create(cascades_, shadow_res_)) { return false; }
+                cascade_.settings().count = cascade_.count();
+                cascade_.settings().lambda = csm_lambda_;
+                cascade_.settings().snap = csm_snap_;
+                cascade_.settings().blend_fraction = csm_blend_;
+                cascade_.settings().near_d = 0.1f;
+                // Stop the cascades WELL SHORT of the camera's own 100 m far
+                // plane. Shadows out there are worth nothing and every metre
+                // spent on them makes cascade 0 coarser.
+                cascade_.settings().far_d = 4.0f * distance_;
+                cascade_.apply_shadow_settings(ss);
+                SDL_Log("  cascades      : %d x %dx%d, lambda %.2f, snap %s, blend %.2f",
+                        cascade_.count(), shadow_res_, shadow_res_,
+                        static_cast<double>(csm_lambda_), csm_snap_ ? "on" : "OFF",
+                        static_cast<double>(csm_blend_));
+            }
             if (!shadows_.create(shadow_res_)) { return false; }
-            shadows_.settings().bias = bias_;
-            shadows_.settings().constant_bias = constant_bias_;
-            shadows_.settings().pcf_radius = pcf_;
-            shadows_.settings().cull = shadow_cull_;
+            shadows_.settings() = ss;
 
             SDL_Log("  shadow map    : %dx%d, bias %s, PCF %dx%d, caster cull %s",
                     shadow_res_, shadow_res_, engine::name_of(bias_),
@@ -500,7 +543,19 @@ public:
         // this one does not, and re-fitting anyway is the honest default: a map
         // cached against a scene that has changed is a shadow of where things
         // used to be.
-        if (shadows_.valid())
+        if (cascade_.valid())
+        {
+            // The camera's frustum, as the fit needs it: the view matrix
+            // inverted (rigid, so `rigid_inverse` is the whole inverse) plus the
+            // two numbers `perspective` was built from.
+            engine::camera_frustum cf;
+            cf.world_from_view = engine::rigid_inverse(view);
+            cf.fovy_radians = k_fov_y;
+            cf.aspect = static_cast<float>(k_width) / static_cast<float>(k_height);
+            cascade_.render(casters(), assets_.meshes(), lights_.key, cf,
+                            &shadow_stats_);
+        }
+        else if (shadows_.valid())
         {
             shadows_.render(casters(), assets_.meshes(), lights_.key, &shadow_stats_);
         }
@@ -541,7 +596,13 @@ public:
                 // feature off" — the same nullable-pointer bargain `lights` and
                 // `albedo` already make, so a picture without shadows is the
                 // picture this demo drew yesterday, bit for bit.
-                .shadows = shadows_.valid() ? &shadows_ : nullptr};
+                .shadows = (!cascade_.valid() && shadows_.valid()) ? &shadows_ : nullptr,
+
+                // 6.9. Takes priority when both are set; the view axis is what
+                // selects a cascade, and it must be the AXIAL depth.
+                .cascades = cascade_.valid() ? &cascade_ : nullptr,
+                .view_eye = eye,
+                .view_forward = engine::normalised(centre_ - eye)};
 
             engine::draw_triangles(fb(), &depth_, triangles_, false, style);
             drawn += static_cast<int>(triangles_.size());
@@ -550,15 +611,38 @@ public:
         if (shot_path_ != nullptr)
         {
             SDL_Log("gltf_view: %zu object(s), %d triangles", objects_.size(), drawn);
-            if (shadows_.valid())
+            if (shadows_.valid() || cascade_.valid())
             {
-                const engine::light_camera& lc = shadows_.camera();
                 SDL_Log("  shadow pass  : %d caster triangles into %d texels, %.2f ms",
                         shadow_stats_.triangles, shadow_stats_.texels,
                         shadow_stats_.render_ms);
-                SDL_Log("  fit          : %.4f world units per texel, depth range %.3f",
-                        static_cast<double>(lc.world_per_texel),
-                        static_cast<double>(lc.depth_range));
+
+                if (cascade_.valid())
+                {
+                    // ONE LINE PER CASCADE, because the whole point of the
+                    // lesson is that they differ — a single averaged number
+                    // would hide exactly the thing worth seeing.
+                    float near_d = cascade_.settings().near_d;
+                    for (int i = 0; i < cascade_.count(); ++i)
+                    {
+                        const engine::light_camera& c = cascade_.map(i).camera();
+                        const float far_d = cascade_.splits()[static_cast<std::size_t>(i)];
+                        SDL_Log("  cascade %d    : [%6.2f, %6.2f] m  %.5f m/texel  "
+                                "depth range %.3f",
+                                i, static_cast<double>(near_d),
+                                static_cast<double>(far_d),
+                                static_cast<double>(c.world_per_texel),
+                                static_cast<double>(c.depth_range));
+                        near_d = far_d;
+                    }
+                }
+                else
+                {
+                    const engine::light_camera& lc = shadows_.camera();
+                    SDL_Log("  fit          : %.4f world units per texel, depth range %.3f",
+                            static_cast<double>(lc.world_per_texel),
+                            static_cast<double>(lc.depth_range));
+                }
             }
             request_quit(engine::save_ppm(fb(), shot_path_));
         }
@@ -582,6 +666,10 @@ private:
 
     // ---- Lesson 6.8 --------------------------------------------------------
     int shadow_res_ = 1024;        ///< the map's side in texels; 0 = no shadows
+    int cascades_ = 0;          // 6.9: 0 = 6.8's single map
+    float csm_lambda_ = 0.5f;   // uniform <-> logarithmic blend
+    float csm_blend_ = 0.0f;    // 0 shows the seam, which is the point
+    bool csm_snap_ = true;
     int pcf_ = 1;                  ///< kernel radius: 0 = one tap, 1 = 3x3
     int caster_count_ = 0;         ///< objects_ before the ground was appended
     bool ground_ = true;
@@ -590,6 +678,7 @@ private:
     engine::shadow_bias bias_ = engine::shadow_bias::slope_scaled;
     engine::cull_mode shadow_cull_ = engine::cull_mode::none;
     engine::shadow_map shadows_;
+    engine::cascaded_shadow_map cascade_;   // 6.9
     engine::shadow_stats shadow_stats_;
 
     static constexpr float k_fov_y = 50.0f * 3.14159265f / 180.0f;

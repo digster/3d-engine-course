@@ -10,6 +10,7 @@
 
 #include <engine/gfx/raster.hpp>
 
+#include <engine/gfx/cascade.hpp>
 #include <engine/gfx/shadow.hpp>   // 6.8: fill_style holds a pointer; the fill needs the type
 
 #include <engine/gfx/depth_buffer.hpp>
@@ -493,7 +494,8 @@ void fill_triangle(framebuffer& fb, depth_buffer* depth,
     // every other question whose answer is constant across a fill. `lit` is part
     // of the test because the visibility term multiplies `E`, and `E` only exists
     // on that path.
-    const bool shadowed = (style.shadows != nullptr) && (style.shade == shading::lit)
+    const bool shadowed = (style.shadows != nullptr || style.cascades != nullptr)
+                          && (style.shade == shading::lit)
                           && (style.lights != nullptr);
 
     // LESSON 6.8. A depth-only fill, which is what a shadow pass is. Requires a
@@ -810,7 +812,17 @@ void fill_triangle(framebuffer& fb, depth_buffer* depth,
             {
                 const vec3 gn = normalised_or(n, vec3{0.0f, 1.0f, 0.0f});
                 const float geo_cos = dot(gn, style.lights->key.to_light());
-                visibility = style.shadows->visibility(p, gn, geo_cos);
+                if (style.cascades != nullptr)
+                {
+                    // AXIAL, not radial — raster.hpp says why, and the
+                    // difference is 22% at the corner of the frame.
+                    const float vd = dot(p - style.view_eye, style.view_forward);
+                    visibility = style.cascades->visibility(p, gn, geo_cos, vd);
+                }
+                else
+                {
+                    visibility = style.shadows->visibility(p, gn, geo_cos);
+                }
             }
 
             // `shade` normalises `n` itself — a decision made in 3.6

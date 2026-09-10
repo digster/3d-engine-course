@@ -162,10 +162,22 @@ void shadow_map::render(std::span<const scene_object> objects, const mesh_pool& 
 {
     if (!valid()) { return; }
 
+    // The one-map case fits the box itself, from the same meshes it is about to
+    // draw. Lesson 6.9's cascades fit elsewhere and call the overload below.
+    const aabb scene = bounds_of(objects, meshes);
+    render(objects, meshes, fit_directional(key, scene, resolution_), scene, stats_out);
+}
+
+void shadow_map::render(std::span<const scene_object> objects, const mesh_pool& meshes,
+                        const light_camera& cam, const aabb& bounds,
+                        shadow_stats* stats_out)
+{
+    if (!valid()) { return; }
+
     const Uint64 t0 = SDL_GetPerformanceCounter();
 
-    bounds_ = bounds_of(objects, meshes);
-    cam_ = fit_directional(key, bounds_, resolution_);
+    bounds_ = bounds;
+    cam_ = cam;
 
     // A cleared buffer is full of `k_far`, which reads back as "the light sees
     // all the way to the far plane here" — nothing occludes, everything is lit.

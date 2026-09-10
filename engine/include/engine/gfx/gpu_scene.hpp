@@ -265,7 +265,8 @@ public:
                       SDL_GPUSampler* sampler,
                       frame_log* log = nullptr,
                       SDL_GPUTexture* shadow = nullptr,
-                      SDL_GPUSampler* shadow_sampler = nullptr) const;
+                      SDL_GPUSampler* shadow_sampler = nullptr,
+                      const cascade_uniforms* cascades = nullptr) const;
 
     /// The white 1x1 texture, for callers that want to bind it themselves.
     [[nodiscard]] SDL_GPUTexture* white() const { return white_.handle(); }

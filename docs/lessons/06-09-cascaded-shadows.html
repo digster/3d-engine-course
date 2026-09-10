@@ -1,0 +1,2956 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>6.9 — Cascaded Shadow Maps · Build a Professional 3D Game Engine</title>
+<meta name="description" content="Lesson 6.8 fitted one orthographic box around the whole scene, so the near field - the part you are looking at - gets whatever texels are left over. The fix is to split the camera frustum by distance and fit a box around each slice. What makes it a lesson is that a camera-fitted box moves, and 6.8's never did: this derives the practical split scheme from the two schemes it blends, shows why the box is fitted to a sphere (a corner-fitted box changes size by 30.2 per cent under yaw, which resizes every texel in the map) and what that costs (29 per cent of the resolution), derives texel snapping and measures it at 7.6e-6 texels of drift against 0.499 unsnapped, and audits 6.8's bias by changing the quantity it was derived from - finding that nothing had to move, and that the device-space bias barely moves either because the sphere radius cancels. Ends by measuring a case where cascades lose. Ported to both renderers; the reference render stays byte-identical.">
+
+<!-- SHARED-CSS:BEGIN -->
+<!-- The shared course stylesheet, linked rather than inlined. Single source of
+     truth: docs/shared/course.css. Edit that file; this page carries no copy.
+     Still no build step - the link resolves straight off the filesystem, so this
+     page opens by double-clicking, offline. -->
+<link rel="stylesheet" href="../shared/course.css">
+<!-- SHARED-CSS:END -->
+
+<!-- KaTeX (optional). If unreachable the raw TeX remains readable, and every
+     equation is also stated in prose + .eq-plain, so nothing is lost. -->
+<link rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css"
+      integrity="sha384-nB0miv6/jRmo5UMMR1wu3Gz6NLsoTkbqJghGIsx//Rlm+ZU03BU6SQNC66uf4l5+"
+      crossorigin="anonymous">
+</head>
+<body>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <a class="course" href="../index.html">Build a Professional 3D Game Engine</a>
+    <span class="spacer"></span>
+    <a href="../index.html">Contents</a>
+    <a href="../conventions.html">Conventions</a>
+    <a href="../math-toolbox.html">Math Toolbox</a>
+    <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Toggle colour theme">Theme</button>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="06-08-shadow-mapping.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">6.8 — Shadow Mapping: Bias, Acne, and PCF</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="../index.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">6.10 — Mipmaps, LOD, and Anisotropic Filtering</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 6 — Advanced Rendering · Lesson 6.9</div>
+    <h1>Cascaded Shadow Maps</h1>
+    <p class="deck">
+      Lesson 6.8 fitted one orthographic box around the whole scene and rendered one depth map into
+      it. That box has to contain the far field, so the near field — the part you are actually
+      looking at — gets whatever texels are left over. The fix is a change of question: the scene
+      is not what needs resolving, the <em>camera's frustum</em> is, and a frustum is mostly far
+      away. Split it by distance, fit a box around each slice, give each its own map. What makes
+      this a lesson rather than a loop is that a camera-fitted box <strong>moves</strong>, and
+      6.8's never did — so this lesson is mostly about two artefacts that only exist once it does,
+      and about auditing whether 6.8's bias was really a formula or a fudge with a good story.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 5 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="02-10-perspective.html">2.10 — Perspective Projection</a>,
+          <a href="02-09-view-matrix.html">2.9 — The View Matrix</a>,
+          <a href="04-07-textures-and-depth.html">4.7 — Depth, Textures and Samplers</a>,
+          <a href="06-08-shadow-mapping.html">6.8 — Shadow Mapping</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd><code>engine/include/engine/gfx/cascade.hpp</code> <em>(new)</em>,
+            <code>engine/src/gfx/cascade.cpp</code> <em>(new)</em>,
+            <code>engine/include/engine/gfx/shadow.hpp</code>,
+            <code>engine/src/gfx/shadow.cpp</code>,
+            <code>engine/include/engine/gfx/gpu_texture.hpp</code>,
+            <code>engine/src/gfx/gpu_texture.cpp</code>,
+            <code>engine/include/engine/gfx/gpu_shadow.hpp</code>,
+            <code>engine/src/gfx/gpu_shadow.cpp</code>,
+            <code>engine/include/engine/gfx/gpu_uniform.hpp</code>,
+            <code>engine/include/engine/gfx/gpu_scene.hpp</code>,
+            <code>engine/src/gfx/gpu_scene.cpp</code>,
+            <code>engine/include/engine/gfx/raster.hpp</code>,
+            <code>engine/src/gfx/raster.cpp</code>,
+            <code>shaders/scene.frag.hlsl</code>,
+            <code>engine/CMakeLists.txt</code>,
+            <code>demos/gltf_view/main.cpp</code>,
+            <code>scratch/verify_69.cpp</code> <em>(new)</em></dd>
+
+        <dt>Milestone</dt>
+        <dd>Cascades in <strong>both renderers</strong>, with a stable grid derived rather than
+            tuned. 27 checks green; the reference render <strong>byte-identical</strong> for the
+            eighteenth lesson.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…derive the practical split scheme from the two schemes it blends, and say what
+          each end is right about.</li>
+      <li>…build a sub-frustum's eight world-space corners from a field of view, without a
+          matrix inverse you do not have.</li>
+      <li>…explain why a shadow box is fitted to a <em>sphere</em>, and measure what that
+          decision costs and what it buys.</li>
+      <li>…implement texel snapping, and say precisely which artefact it cures and which one
+          it does not.</li>
+      <li>…audit a derived formula by changing the quantity it was derived from — and read the
+          result when the answer is <em>"nothing had to change"</em>.</li>
+      <li>…recognise the cascade seam, and blend it away for the cost of one extra lookup
+          inside a band.</li>
+      <li>…say when cascades are the wrong tool, with a measurement rather than a feeling.</li>
+    </ul>
+  </section>
+
+  <nav class="toc" aria-labelledby="toc-h">
+    <h2 id="toc-h">On this page</h2>
+    <ol>
+      <li><a href="#problem">The problem: one box, and where its texels go</a></li>
+      <li><a href="#intuition">Building intuition: resolve what you are looking at</a></li>
+      <li><a href="#theory">The theory</a></li>
+      <li><a href="#impl">Implementation</a></li>
+      <li><a href="#listings">Complete code listings</a></li>
+      <li><a href="#run">Build &amp; run</a></li>
+      <li><a href="#pitfalls">Common pitfalls &amp; debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; next</a></li>
+      <li><a href="#reading">Further reading</a></li>
+    </ol>
+  </nav>
+
+  <!-- =================================================================
+       1 — THE PROBLEM
+       ================================================================= -->
+  <h2 id="problem"><span class="num">1</span>The problem: one box, and where its texels go</h2>
+
+  <p>
+    Lesson 6.8 ended with shadows in both renderers and a bias derived from the sampling geometry
+    rather than tuned by hand. It also ended with a line in <code>shadow.hpp</code> naming what it
+    had not done, and this is the one we are here to fix:
+  </p>
+
+  <blockquote>
+    <p>
+      <strong>One cascade.</strong> A single map stretched over a whole outdoor scene gives the
+      near field far too few texels. Splitting the camera frustum into ranges and giving each its
+      own map is <em>cascaded</em> shadow mapping, and it is an extension of this file rather than
+      a replacement for it.
+    </p>
+  </blockquote>
+
+  <p>
+    Take that seriously as arithmetic. <code>fit_directional</code> squares a box around the whole
+    scene, so a 40-metre scene at 1024 texels gives
+  </p>
+
+  <div class="eq-plain">world_per_texel = 40 m ÷ 1024 ≈ 0.039 m</div>
+
+  <p>
+    — and it gives that <em>everywhere</em>. The rock forty metres away that covers nine pixels of
+    your screen gets 39-millimetre texels. So does the crate two metres from your eye that fills
+    half the frame. The crate needs perhaps a hundred times the density and gets exactly the same,
+    because the box was fitted to the thing that does not matter.
+  </p>
+
+    <figure class="dia bleed">
+    <svg viewBox="0 0 720 300" role="img" aria-labelledby="f69a-t f69a-d">
+      <title id="f69a-t">One shadow map over a whole frustum</title>
+      <desc id="f69a-d">A camera frustum drawn on its side with a uniform texel grid over it. A near object and a far object receive the same number of texels, though the near one fills the screen and the far one covers a few pixels.</desc>
+      <defs>
+        <marker id="e-i-f69a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+        <marker id="e-s-f69a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+        <marker id="e-h-f69a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+        <marker id="e-b-f69a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+        <marker id="e-g-f69a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+      </defs>
+    <text x="360.0" y="22" class="sm" text-anchor="middle">One map, stretched over everything the camera can see</text>
+    <path d="M 70 165 L 620 60 L 620 270 Z" class="fill-soft grid" fill-opacity="0.30" stroke-width="1.2"/>
+    <text x="64" y="169" class="xs" text-anchor="end">eye</text>
+    <line x1="70.0" y1="60" x2="70.0" y2="270" class="grid" stroke-width="0.6"/>
+    <line x1="104.375" y1="60" x2="104.375" y2="270" class="grid" stroke-width="0.6"/>
+    <line x1="138.75" y1="60" x2="138.75" y2="270" class="grid" stroke-width="0.6"/>
+    <line x1="173.125" y1="60" x2="173.125" y2="270" class="grid" stroke-width="0.6"/>
+    <line x1="207.5" y1="60" x2="207.5" y2="270" class="grid" stroke-width="0.6"/>
+    <line x1="241.875" y1="60" x2="241.875" y2="270" class="grid" stroke-width="0.6"/>
+    <line x1="276.25" y1="60" x2="276.25" y2="270" class="grid" stroke-width="0.6"/>
+    <line x1="310.625" y1="60" x2="310.625" y2="270" class="grid" stroke-width="0.6"/>
+    <line x1="345.0" y1="60" x2="345.0" y2="270" class="grid" stroke-width="0.6"/>
+    <line x1="379.375" y1="60" x2="379.375" y2="270" class="grid" stroke-width="0.6"/>
+    <line x1="413.75" y1="60" x2="413.75" y2="270" class="grid" stroke-width="0.6"/>
+    <line x1="448.125" y1="60" x2="448.125" y2="270" class="grid" stroke-width="0.6"/>
+    <line x1="482.5" y1="60" x2="482.5" y2="270" class="grid" stroke-width="0.6"/>
+    <line x1="516.875" y1="60" x2="516.875" y2="270" class="grid" stroke-width="0.6"/>
+    <line x1="551.25" y1="60" x2="551.25" y2="270" class="grid" stroke-width="0.6"/>
+    <line x1="585.625" y1="60" x2="585.625" y2="270" class="grid" stroke-width="0.6"/>
+    <line x1="620.0" y1="60" x2="620.0" y2="270" class="grid" stroke-width="0.6"/>
+    <text x="345.0" y="296" class="xs" text-anchor="middle">one box around the SCENE: every texel the same size, everywhere</text>
+    <rect x="105" y="140" width="26" height="50" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.85"/>
+    <text x="118" y="132" class="xs" text-anchor="middle">2 m</text>
+    <rect x="545" y="152" width="26" height="26" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.85"/>
+    <text x="558" y="145" class="xs" text-anchor="middle">40 m</text>
+    <text x="118" y="214" class="xs" text-anchor="middle">fills half the screen</text>
+    <text x="118" y="228" class="xs" text-anchor="middle">gets 2 texels</text>
+    <text x="558" y="200" class="xs" text-anchor="middle">a few pixels</text>
+    <text x="558" y="214" class="xs" text-anchor="middle">gets 2 texels</text>
+    <text x="360.0" y="274" class="xs" text-anchor="middle">0.0548 m per texel at both ends — the near object is starved and the far one is over-served</text>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 1.</span>
+      Where one map&#8217;s texels actually go. Lesson 6.8 fits a square box around the whole SCENE, so <code>world_per_texel</code> is one number everywhere &#8212; 0.0548 m on this 40-metre scene. The crate two metres away fills half the screen and gets 39-millimetre texels; the rock forty metres away covers nine pixels and gets exactly the same. The box was fitted to the thing that does not matter, which is why the near field&#8217;s shadow edges are a staircase while the far field looks fine.
+    </figcaption>
+  </figure>
+
+
+  <p>
+    You can see this without any new code. <code>gltf_view</code> takes a resolution, so starve it
+    deliberately — <a href="#run">§6</a> has the full command — and watch the shadow edge under a
+    nearby object turn into a staircase while the distant one looks fine. That is not a bug in
+    6.8's fit. The fit is doing exactly what it was asked: contain the scene. <strong>The question
+    was wrong.</strong>
+  </p>
+
+  <div class="callout">
+    <span class="label">What "resolution" means for a shadow, and why it is not the map's size</span>
+    <p>
+      It is tempting to answer this by making the map bigger. Doubling a 1024 map to 2048 costs
+      four times the memory and four times the depth-pass fill, and buys a factor of <em>two</em>
+      in <code>world_per_texel</code> — which the crate will spend in the first metre it moves
+      closer. The quantity that matters is not texels, it is <strong>texels per screen pixel</strong>,
+      and that is a ratio between the map's density and the camera's — so it is a fact about
+      <em>where the box is</em> at least as much as about how many texels are in it. Cascades
+      attack the numerator's placement. Raising the resolution attacks the denominator with money.
+    </p>
+  </div>
+
+  <!-- =================================================================
+       2 — BUILDING INTUITION
+       ================================================================= -->
+  <h2 id="intuition"><span class="num">2</span>Building intuition: resolve what you are looking at</h2>
+
+  <p>
+    Here is the whole idea in one sentence, and it is worth reading twice because everything
+    difficult in this lesson is a consequence of it rather than part of it:
+  </p>
+
+  <p class="lede">
+    <strong>Fit the light's box around a slice of the camera's frustum instead of around the
+    scene, and use several slices.</strong>
+  </p>
+
+  <p>
+    A frustum is a wedge. Near the eye it is small — a few metres across — and far away it is
+    enormous. If you cut it into four pieces by distance and fit a box around each piece
+    separately, the first box is small and its map is dense, and the last box is huge and its map
+    is coarse. Coarse is the right answer at forty metres: a texel out there already covers a
+    fraction of a screen pixel, and spending more on it would be spending it where nobody is
+    looking.
+  </p>
+
+  <p>
+    Notice what this costs before we go further, because it is not free and the lesson should not
+    pretend otherwise. Four cascades means <strong>four depth passes</strong>, four times the map
+    memory, and a shader that has to decide which map to read. The demo below reports 3.22 ms for
+    four cascades against 2.49 ms for one, on the same scene — so roughly 30% more time for
+    <em>four</em> times the passes, because the depth pass is dominated by fixed costs rather than
+    by triangles at this scale. Your scene will differ; measure it.
+  </p>
+
+  <h3>The three things that only exist once the box moves</h3>
+
+  <p>
+    6.8's box was fitted to the <em>scene</em>. Walk the camera around and the scene does not move,
+    so the box does not move, so the map's texel grid is nailed to the world and stays there. That
+    is why 6.8 could get away without a single line about stability, and it said so:
+    <em>"no texel snapping — the fit below depends on the SCENE's bounds and not the camera's, so
+    the grid does not move when the camera does."</em>
+  </p>
+
+  <p>
+    A camera-fitted box moves every frame. Three things follow, and together they are the lesson:
+  </p>
+
+  <ol>
+    <li>
+      <strong>A box that resizes makes every texel resize.</strong> Fit a box tightly to the eight
+      corners of a slice and then turn the camera on the spot: the corners rotate within the box,
+      so the box grows and shrinks — measured below at <strong>30.2%</strong> across a full turn.
+      Since <code>world_per_texel</code> is the box side over the resolution, every texel in the
+      map changes size while you merely looked around, and every shadow edge in the picture
+      breathes. The cure is to fit a <em>sphere</em>, which has no orientation.
+    </li>
+    <li>
+      <strong>A box that slides makes every edge crawl.</strong> Even with a fixed size, the box
+      translates as you walk, so its texel grid slides continuously under stationary geometry and
+      each shadow edge lands on a different texel every frame. The cure is to <em>snap</em> the box
+      to its own grid, so it advances in whole-texel jumps and lands where it landed last frame.
+    </li>
+    <li>
+      <strong>Two cascades meeting is a new artefact with a new name.</strong> They have different
+      texel grids and different biases, so they disagree along their shared distance, and that
+      disagreement draws a straight line across your picture. It is called the
+      <strong>seam</strong>, and the usual cure is to blend a band either side.
+    </li>
+  </ol>
+
+  <div class="callout warn">
+    <span class="label">The claim this lesson is really testing</span>
+    <p>
+      Lesson 6.8 spent its longest section deriving a bias from the sampling geometry — the
+      argument being that shadow acne is not a mystery but a sampling error with a computable
+      magnitude, and every term in that derivation was a multiple of <code>world_per_texel</code>.
+    </p>
+    <p>
+      Cascades change <code>world_per_texel</code>, by a factor of <strong>7.3</strong> across four
+      of them. So this lesson is an <em>audit</em>. If 6.8's derivation was real, cascades need no
+      new bias code at all — only their own <code>light_camera</code>. If it was a fudge with a
+      good story attached, this is where it falls over and starts needing a per-cascade constant
+      somebody tuned. <a href="#bias">§3.4</a> reports which of those happened, and the answer is
+      more interesting than either.
+    </p>
+  </div>
+
+  <!-- =================================================================
+       3 — THE THEORY
+       ================================================================= -->
+  <h2 id="theory"><span class="num">3</span>The theory</h2>
+
+  <p>
+    Four things to derive, in the order the code needs them: where to cut the frustum, what shape
+    to fit around a cut, how to stop that shape sliding, and what any of it does to the bias.
+  </p>
+
+  <h3 id="splits">3.1 &nbsp;Where to cut: two schemes that are both wrong</h3>
+
+  <p>
+    We need <em>n</em> distances between the near plane and wherever we stop caring. There are two
+    obvious answers and neither survives contact with a picture, which is a good sign that the
+    right answer is between them.
+  </p>
+
+  <p>
+    <strong>Uniform splits</strong> put the cuts at equal world distances:
+  </p>
+
+  <div class="eq-plain">d<sub>i</sub> = near + (far − near) · i/n</div>
+
+  <p>
+    With near = 0.1 m, far = 60 m and n = 4 that is 15.08, 30.05, 45.03 and 60 metres. Every slice
+    is the same depth. This sounds fair and is useless: the near slice — the one filling your
+    screen — now covers fifteen metres, which is most of what you can see, so cascade 0 is barely
+    denser than the single map we are trying to beat.
+  </p>
+
+  <p>
+    <strong>Logarithmic splits</strong> come from an actual argument. A surface at distance
+    <em>d</em> covers screen pixels in proportion to 1/<em>d</em>. To hold <em>texels per screen
+    pixel</em> constant — which is the quantity §1 identified as the one that matters — the slice
+    depths must grow in proportion to <em>d</em>. Something whose growth is proportional to its own
+    size is a geometric series:
+  </p>
+
+  <div class="eq">\[ d_i \;=\; near \cdot \left(\frac{far}{near}\right)^{i/n} \]</div>
+
+  <div class="eq-plain">d_i = near · (far/near)^(i/n)</div>
+
+  <div class="callout">
+    <span class="label">You have met this 1/d before</span>
+    <p>
+      Lesson 4.7 spent its precision section on the fact that a perspective depth buffer spends its
+      codes in proportion to 1/<em>d</em>, so the near field gets a hundred times the depth
+      resolution of the far field. That was the same geometry arriving as a <em>problem</em>. Here
+      it arrives as a <em>prescription</em>: if screen density falls as 1/<em>d</em>, then equal
+      density means slices whose size rises with <em>d</em>. One fact, met twice, from opposite
+      sides.
+    </p>
+  </div>
+
+  <p>
+    Now push the numbers through, which is where the logarithmic scheme falls over. With the same
+    near = 0.1 and far = 60:
+  </p>
+
+  <div class="eq-plain">d<sub>0</sub> = 0.1 · (600)<sup>1/4</sup> = 0.1 · 4.95 = 0.55 m</div>
+
+  <p>
+    Cascade 0 covers from 0.1 m to <strong>0.55 m</strong>. That is your own feet. Three quarters
+    of your shadow budget is spent before you reach the far end of a dining table, and the
+    interesting middle distance — where things you can actually interact with are — is crammed into
+    the last cascade. The scheme is theoretically right and practically miserable, and the reason
+    is that the near plane is an arbitrary number chosen for depth precision, not a statement about
+    where you are looking.
+  </p>
+
+  <p>
+    <strong>The practical scheme</strong> (Zhang et al., 2006) is the blend:
+  </p>
+
+  <div class="eq">\[ d_i \;=\; \lambda \cdot \underbrace{near\left(\tfrac{far}{near}\right)^{i/n}}_{\text{logarithmic}} \;+\; (1-\lambda)\cdot \underbrace{\left(near + (far-near)\tfrac{i}{n}\right)}_{\text{uniform}} \]</div>
+
+  <div class="eq-plain">d_i = lambda · logarithmic_i + (1 − lambda) · uniform_i</div>
+
+  <p>
+    At λ = 0.5 the cuts land at <strong>7.78, 16.25, 28.57</strong> and 60 metres. Cascade 0 now
+    covers the first eight metres — the room you are standing in — and the far cascade absorbs
+    everything beyond thirty. λ is the one number in this lesson chosen by eye rather than derived,
+    and that is worth stating plainly. What makes it defensible is that it interpolates between two
+    schemes that are each explicable: it is not a magic curve, it is a dial between "equal metres"
+    and "equal density", and 0.5 says you believe both arguments about equally.
+  </p>
+
+    <figure class="dia bleed">
+    <svg viewBox="0 0 720 320" role="img" aria-labelledby="f69b-t f69b-d">
+      <title id="f69b-t">Uniform, logarithmic and practical split schemes</title>
+      <desc id="f69b-d">Three horizontal bars showing where each scheme cuts a frustum between 0.1 and 60 metres. Uniform cuts at 15, 30 and 45. Logarithmic cuts at 0.55, 3.1 and 17.3. The practical blend cuts at 7.8, 16.3 and 28.6.</desc>
+      <defs>
+        <marker id="e-i-f69b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+        <marker id="e-s-f69b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+        <marker id="e-h-f69b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+        <marker id="e-b-f69b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+        <marker id="e-g-f69b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+      </defs>
+    <text x="360.0" y="22" class="sm" text-anchor="middle">Where to cut, and the two schemes that are both wrong</text>
+    <line x1="90" y1="80" x2="640" y2="80" class="grid" stroke-width="1.0"/>
+    <text x="82" y="84" class="xs" text-anchor="end">uniform</text>
+    <rect x="90.0" y="69" width="137.5" height="22" rx="2" fill="#8f918a" stroke="#8f918a" fill-opacity="0.50" stroke-width="1.0"/>
+    <rect x="227.5" y="69" width="137.5" height="22" rx="2" fill="#8f918a" stroke="#8f918a" fill-opacity="0.40" stroke-width="1.0"/>
+    <rect x="365.0" y="69" width="137.5" height="22" rx="2" fill="#8f918a" stroke="#8f918a" fill-opacity="0.30" stroke-width="1.0"/>
+    <rect x="502.5" y="69" width="137.5" height="22" rx="2" fill="#8f918a" stroke="#8f918a" fill-opacity="0.20" stroke-width="1.0"/>
+    <text x="227.5459098497496" y="64" class="xs" text-anchor="middle">15.1</text>
+    <text x="365.0" y="64" class="xs" text-anchor="middle">30.1</text>
+    <text x="502.5459098497496" y="64" class="xs" text-anchor="middle">45.0</text>
+    <text x="94" y="116" class="xs" text-anchor="start">equal metres: cascade 0 covers 15 m and the near field is no better off</text>
+    <line x1="90" y1="150" x2="640" y2="150" class="grid" stroke-width="1.0"/>
+    <text x="82" y="154" class="xs" text-anchor="end">logarithmic</text>
+    <rect x="90.0" y="139" width="4.1" height="22" rx="2" fill="#5082e6" stroke="#5082e6" fill-opacity="0.50" stroke-width="1.0"/>
+    <rect x="94.1" y="139" width="23.4" height="22" rx="2" fill="#5082e6" stroke="#5082e6" fill-opacity="0.40" stroke-width="1.0"/>
+    <rect x="117.5" y="139" width="130.6" height="22" rx="2" fill="#5082e6" stroke="#5082e6" fill-opacity="0.30" stroke-width="1.0"/>
+    <rect x="248.1" y="139" width="391.9" height="22" rx="2" fill="#5082e6" stroke="#5082e6" fill-opacity="0.20" stroke-width="1.0"/>
+    <text x="94.13188647746244" y="134" class="xs" text-anchor="middle">0.6</text>
+    <text x="117.54590984974959" y="134" class="xs" text-anchor="middle">3.1</text>
+    <text x="248.1135225375626" y="134" class="xs" text-anchor="middle">17.3</text>
+    <text x="94" y="186" class="xs" text-anchor="start">equal texels-per-pixel: correct, and cascade 0 is spent on your shoes</text>
+    <line x1="90" y1="220" x2="640" y2="220" class="grid" stroke-width="1.0"/>
+    <text x="82" y="224" class="xs" text-anchor="end">practical</text>
+    <rect x="90.0" y="209" width="70.5" height="22" rx="2" fill="#5ac878" stroke="#5ac878" fill-opacity="0.50" stroke-width="1.0"/>
+    <rect x="160.5" y="209" width="77.8" height="22" rx="2" fill="#5ac878" stroke="#5ac878" fill-opacity="0.40" stroke-width="1.0"/>
+    <rect x="238.3" y="209" width="113.1" height="22" rx="2" fill="#5ac878" stroke="#5ac878" fill-opacity="0.30" stroke-width="1.0"/>
+    <rect x="351.4" y="209" width="288.6" height="22" rx="2" fill="#5ac878" stroke="#5ac878" fill-opacity="0.20" stroke-width="1.0"/>
+    <text x="160.51752921535893" y="204" class="xs" text-anchor="middle">7.8</text>
+    <text x="238.2888146911519" y="204" class="xs" text-anchor="middle">16.2</text>
+    <text x="351.41068447412357" y="204" class="xs" text-anchor="middle">28.6</text>
+    <text x="94" y="256" class="xs" text-anchor="start">the blend, lambda = 0.5 — each end explicable, the middle useful</text>
+    <line x1="90" y1="268" x2="640" y2="268" class="grid" stroke-width="1.0"/>
+    <line x1="90.0" y1="264" x2="90.0" y2="272" class="grid" stroke-width="1.0"/>
+    <text x="90.0" y="288" class="xs" text-anchor="middle">0.1</text>
+    <line x1="226.81135225375627" y1="264" x2="226.81135225375627" y2="272" class="grid" stroke-width="1.0"/>
+    <text x="226.81135225375627" y="288" class="xs" text-anchor="middle">15</text>
+    <line x1="364.5409015025042" y1="264" x2="364.5409015025042" y2="272" class="grid" stroke-width="1.0"/>
+    <text x="364.5409015025042" y="288" class="xs" text-anchor="middle">30</text>
+    <line x1="502.2704507512521" y1="264" x2="502.2704507512521" y2="272" class="grid" stroke-width="1.0"/>
+    <text x="502.2704507512521" y="288" class="xs" text-anchor="middle">45</text>
+    <line x1="640.0" y1="264" x2="640.0" y2="272" class="grid" stroke-width="1.0"/>
+    <text x="640.0" y="288" class="xs" text-anchor="middle">60</text>
+    <text x="360.0" y="306" class="xs" text-anchor="middle">distance from the eye, metres</text>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 2.</span>
+      Three ways to cut a frustum between 0.1 m and 60 m, and why the answer is the blend. UNIFORM gives equal metres, so cascade 0 covers 15 m &#8212; most of what you can see, and barely denser than the single map. LOGARITHMIC is derived from the right argument (screen density falls as 1/d, so slice depths must rise with d) and lands its first cut at 0.55 m, spending three quarters of the budget on your own feet. The PRACTICAL scheme interpolates between them: at &#955; = 0.5 the cuts are 7.78, 16.25 and 28.57 m. &#955; is the one number here chosen by eye, and what makes that defensible is that both ends of the dial are explicable.
+    </figcaption>
+  </figure>
+
+
+  <h3 id="corners">3.2 &nbsp;The slice: eight corners from three numbers</h3>
+
+  <p>
+    To fit a box around a slice we need the slice's eight world-space corners. That is an
+    <em>inverse</em> projection — and we do not have one. <code>mat4</code> has no general
+    <code>inverse()</code>: Lesson 2.9 gave us <code>rigid_inverse</code>, which handles a view
+    matrix because a view matrix is a rotation and a translation, and nothing in this engine
+    inverts a perspective matrix.
+  </p>
+
+  <p>
+    We could write it. A perspective matrix's inverse is closed-form and about six lines. But there
+    is a better route, and it is the one most engines take: <strong>the frustum's shape is three
+    numbers, so build the corners directly from them.</strong> At distance <em>d</em>, the
+    frustum's half-height is
+  </p>
+
+  <div class="eq-plain">half_height = tan(fovy / 2) · d,&nbsp;&nbsp;&nbsp; half_width = half_height · aspect</div>
+
+  <p>
+    which is not a re-derivation of anything — it <em>is</em> the definition of a vertical field of
+    view, and it is the same tangent <code>perspective()</code> is built from in
+    <code>mat4.hpp</code>. Going through a matrix to recover numbers we already have would be a
+    round trip that can only lose precision.
+  </p>
+
+  <div class="worked">
+    <p><strong>Worked example.</strong> fovy = 60°, aspect = 16/9, and the near plane of a slice at
+    <em>d</em> = 1 m.</p>
+    <div class="eq-plain">tan(30°) = 0.57735</div>
+    <div class="eq-plain">half_height = 0.57735 × 1 = 0.57735 m</div>
+    <div class="eq-plain">half_width = 0.57735 × 1.7778 = 1.02640 m</div>
+    <p>
+      So in view space the four near corners are (±1.02640, ±0.57735, −1). The harness prints
+      corner 0 as <code>(−1.0264, −0.5774, −1.0000)</code>, which is the prediction to five
+      figures.
+    </p>
+    <p>
+      <strong>And the independent check.</strong> Agreeing with my own formula proves nothing, so
+      §B pushes a far corner through the actual <code>perspective()</code> matrix and asks where it
+      lands. It comes out at <code>(1.0000, 1.0000, 1.0000)</code> — exactly the corner of the NDC
+      box, which is what a frustum corner <em>means</em>. That is the test that makes §3.2 a check
+      of the corner builder rather than a restatement of it.
+    </p>
+  </div>
+
+  <div class="callout warn">
+    <span class="label">−z is forward</span>
+    <p>
+      A corner at distance <em>d</em> sits at <em>z</em> = −<em>d</em> (conventions §2). Write
+      +<em>d</em> and you have built the frustum <strong>behind the camera</strong> — and the
+      symptom is not a crash or a blank screen. It is a shadow map that is correct exactly when you
+      turn around, which is one of those bugs that gets diagnosed as "the light direction is wrong"
+      and fixed by negating something unrelated.
+    </p>
+  </div>
+
+  <h3 id="sphere">3.3 &nbsp;Fitting: a sphere, and what it costs</h3>
+
+  <p>
+    Now fit the light's orthographic box around those eight corners. The obvious thing is to
+    transform them into light space and take their axis-aligned bounds. <strong>Do that and the
+    picture boils.</strong>
+  </p>
+
+  <p>
+    Here is why, and it is worth being precise because the mechanism is not obvious. Turn the
+    camera on the spot, changing nothing else. The eight corners sweep around, and an
+    axis-aligned box in <em>light</em> space that contains them has to grow to hold the diagonal
+    and shrink again as they come back into alignment. The harness yaws a camera through 360° and
+    measures the box side varying by <strong>30.2%</strong> — from 24.6 m to 35.3 m.
+  </p>
+
+  <p>
+    Now recall what that side <em>is</em>:
+  </p>
+
+  <div class="eq-plain">world_per_texel = box_side ÷ resolution</div>
+
+  <p>
+    A box side that changes by 30% is a <code>world_per_texel</code> that changes by 30%, which
+    means <em>every texel in the map changes size</em>, which means every shadow edge in the
+    picture moves, while the camera did nothing but turn. That is the shimmer, and no amount of
+    filtering hides it because it is not noise — it is the whole map breathing in and out.
+  </p>
+
+  <p>
+    <strong>A sphere has no orientation.</strong> Take the slice's eight corners, average them for
+    a centre, take the largest distance from that centre for a radius, and make the box the square
+    that contains the sphere. Rotating the camera rotates the corners <em>within their own
+    sphere</em> and the radius does not care. The harness measures the spread across the same 360°
+    yaw as <strong>9.9 × 10<sup>−8</sup></strong> — which is float rounding, not geometry.
+  </p>
+
+    <figure class="dia bleed">
+    <svg viewBox="0 0 720 330" role="img" aria-labelledby="f69c-t f69c-d">
+      <title id="f69c-t">A corner-fitted box against a bounding sphere</title>
+      <desc id="f69c-d">Two panels showing the same frustum slice at two camera yaws. The dashed axis-aligned box that contains it changes size by 30 per cent between them; the bounding circle is identical in both.</desc>
+      <defs>
+        <marker id="e-i-f69c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+        <marker id="e-s-f69c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+        <marker id="e-h-f69c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+        <marker id="e-b-f69c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+        <marker id="e-g-f69c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+      </defs>
+    <text x="360.0" y="22" class="sm" text-anchor="middle">Fitting the box: a sphere, not the eight corners</text>
+    <polygon points="114.7,121.3 255.3,121.3 255.3,198.7 114.7,198.7" fill="#5082e6" stroke="#5082e6" fill-opacity="0.28" stroke-width="1.3"/>
+    <rect x="114.69999999999999" y="89.69999999999999" width="140.60000000000002" height="140.60000000000002" rx="3" fill="none" stroke="#e05c5c" stroke-width="1.3" stroke-dasharray="5 4"/>
+    <text x="185" y="79.69999999999999" class="xs" text-anchor="middle">box side 1.90r</text>
+    <circle cx="185" cy="160" r="74" fill="none" stroke="#5ac878" stroke-width="1.6"/>
+    <text x="185" y="254" class="xs" text-anchor="middle">camera facing along the light</text>
+    <polygon points="480.3,90.3 600.1,163.8 559.7,229.7 439.9,156.2" fill="#5082e6" stroke="#5082e6" fill-opacity="0.28" stroke-width="1.3"/>
+    <rect x="439.85782439261277" y="79.8578243926128" width="160.2843512147744" height="160.2843512147744" rx="3" fill="none" stroke="#e05c5c" stroke-width="1.3" stroke-dasharray="5 4"/>
+    <text x="520" y="69.8578243926128" class="xs" text-anchor="middle">box side 2.17r</text>
+    <circle cx="520" cy="160" r="74" fill="none" stroke="#5ac878" stroke-width="1.6"/>
+    <text x="520" y="254" class="xs" text-anchor="middle">the same camera, turned 30°</text>
+    <text x="185" y="296" class="xs" text-anchor="middle">at 30 deg the dashed box is already 14% wider</text>
+    <text x="520" y="296" class="xs" text-anchor="middle">over a FULL turn it spans 30.2%; the circle, 9.9e-08</text>
+    <text x="360.0" y="318" class="xs" text-anchor="middle">and world_per_texel is the box side over the resolution — so a box that resizes resizes every texel in the map</text>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 3.</span>
+      Why the box is fitted to a sphere. The same frustum slice is shown at two camera yaws. The dashed axis-aligned box that contains its eight corners must grow to hold the diagonal and shrink again as they realign &#8212; measured at 30.2% across a full turn. Since <code>world_per_texel</code> is the box side over the resolution, that is every texel in the map changing size while the camera merely turned, which is the shimmer. The circle is identical in both panels: a sphere has no orientation, and the measured spread over 360&#176; is 9.9&#215;10<sup>&#8722;8</sup>, which is float rounding rather than geometry. It costs 29% of the resolution and that is the trade.
+    </figcaption>
+  </figure>
+
+
+  <div class="callout">
+    <span class="label">Be honest about the price</span>
+    <p>
+      A sphere that contains a box is bigger than the box. The harness measures both on the same
+      slice: the corner-fitted box would give <strong>0.01508 m</strong> per texel and the sphere
+      gives <strong>0.01945 m</strong> — so stability costs <strong>29% of the resolution</strong>.
+    </p>
+    <p>
+      That is a real trade and it is worth knowing which side you are on. If your camera is on
+      rails and never rotates, fit the box and keep the 29%. Almost nobody is, so almost everybody
+      pays it — but pay it deliberately, and if a reader works the frustum's dimensions out by hand
+      and expects a bigger win than §1's numbers show, this is where the difference went.
+    </p>
+  </div>
+
+  <h3 id="snap">3.4 &nbsp;Snapping: the grid that jumps</h3>
+
+  <p>
+    The sphere fixed the box's <em>size</em>. Its <em>position</em> still slides continuously as
+    you walk, and a texel grid sliding under stationary geometry is exactly as bad: each shadow
+    edge is quantised to whichever texel it happens to land in, so it jitters back and forth by a
+    texel every frame. Edges crawl.
+  </p>
+
+  <p>
+    The cure is to make the grid land in the same place every frame: round the box's centre, in
+    light space, down to a whole number of texels.
+  </p>
+
+  <div class="eq">\[ centre'_{x} = \left\lfloor \frac{centre_x}{world\_per\_texel} \right\rfloor \cdot world\_per\_texel \]</div>
+
+  <div class="eq-plain">centre'_x = floor(centre_x / world_per_texel) · world_per_texel</div>
+
+  <p>
+    The box now advances in texel-sized jumps rather than sliding, so its grid lands on the same
+    world positions it landed on last frame. A shadow edge either stays exactly where it was or
+    moves exactly one texel — and the eye reads a one-texel step as stability where it reads a
+    continuous slide as crawling.
+  </p>
+
+    <figure class="dia bleed">
+    <svg viewBox="0 0 720 348" role="img" aria-labelledby="f69d-t f69d-d">
+      <title id="f69d-t">Texel snapping</title>
+      <desc id="f69d-d">Two rows of four frames as a camera walks 0.4 of a texel each frame. The purple bar is fixed geometry in both. In the unsnapped row the texel grid slides continuously and the shadow edge sits at a different offset from the geometry every frame. In the snapped row the grid holds still for two frames and then jumps a whole texel, so the offset repeats.</desc>
+      <defs>
+        <marker id="e-i-f69d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+        <marker id="e-s-f69d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+        <marker id="e-h-f69d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+        <marker id="e-b-f69d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+        <marker id="e-g-f69d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+      </defs>
+    <text x="360.0" y="22" class="sm" text-anchor="middle">The grid that slides, and the grid that jumps</text>
+    <text x="96" y="38" class="xs" text-anchor="start">UNSNAPPED — the box centre slides by 0.4 texel each frame</text>
+    <line x1="96.0" y1="58" x2="96.0" y2="106" class="grid" stroke-width="0.9"/>
+    <line x1="126.0" y1="58" x2="126.0" y2="106" class="grid" stroke-width="0.9"/>
+    <line x1="156.0" y1="58" x2="156.0" y2="106" class="grid" stroke-width="0.9"/>
+    <line x1="186.0" y1="58" x2="186.0" y2="106" class="grid" stroke-width="0.9"/>
+    <line x1="216.0" y1="58" x2="216.0" y2="106" class="grid" stroke-width="0.9"/>
+    <rect x="162.0" y="63" width="4" height="38" rx="1" fill="#9b7ede" stroke="#9b7ede" stroke-width="1"/>
+    <line x1="156.0" y1="52" x2="156.0" y2="112" class="hi" stroke-width="2.2"/>
+    <text x="158" y="128" class="xs" text-anchor="middle">frame 0</text>
+    <text x="158" y="142" class="xs" text-anchor="middle">edge off by 0.2 texel</text>
+    <line x1="266.0" y1="58" x2="266.0" y2="106" class="grid" stroke-width="0.9"/>
+    <line x1="296.0" y1="58" x2="296.0" y2="106" class="grid" stroke-width="0.9"/>
+    <line x1="326.0" y1="58" x2="326.0" y2="106" class="grid" stroke-width="0.9"/>
+    <line x1="356.0" y1="58" x2="356.0" y2="106" class="grid" stroke-width="0.9"/>
+    <rect x="314.0" y="63" width="4" height="38" rx="1" fill="#9b7ede" stroke="#9b7ede" stroke-width="1"/>
+    <line x1="296.0" y1="52" x2="296.0" y2="112" class="hi" stroke-width="2.2"/>
+    <text x="310" y="128" class="xs" text-anchor="middle">frame 1</text>
+    <text x="310" y="142" class="xs" text-anchor="middle">edge off by 0.6 texel</text>
+    <line x1="406.0" y1="58" x2="406.0" y2="106" class="grid" stroke-width="0.9"/>
+    <line x1="436.0" y1="58" x2="436.0" y2="106" class="grid" stroke-width="0.9"/>
+    <line x1="466.0" y1="58" x2="466.0" y2="106" class="grid" stroke-width="0.9"/>
+    <line x1="496.0" y1="58" x2="496.0" y2="106" class="grid" stroke-width="0.9"/>
+    <rect x="466.0" y="63" width="4" height="38" rx="1" fill="#9b7ede" stroke="#9b7ede" stroke-width="1"/>
+    <line x1="466.0" y1="52" x2="466.0" y2="112" class="hi" stroke-width="2.2"/>
+    <text x="462" y="128" class="xs" text-anchor="middle">frame 2</text>
+    <text x="462" y="142" class="xs" text-anchor="middle">edge off by 0.0 texel</text>
+    <line x1="576.0" y1="58" x2="576.0" y2="106" class="grid" stroke-width="0.9"/>
+    <line x1="606.0" y1="58" x2="606.0" y2="106" class="grid" stroke-width="0.9"/>
+    <line x1="636.0" y1="58" x2="636.0" y2="106" class="grid" stroke-width="0.9"/>
+    <line x1="666.0" y1="58" x2="666.0" y2="106" class="grid" stroke-width="0.9"/>
+    <rect x="618.0" y="63" width="4" height="38" rx="1" fill="#9b7ede" stroke="#9b7ede" stroke-width="1"/>
+    <line x1="606.0" y1="52" x2="606.0" y2="112" class="hi" stroke-width="2.2"/>
+    <text x="614" y="128" class="xs" text-anchor="middle">frame 3</text>
+    <text x="614" y="142" class="xs" text-anchor="middle">edge off by 0.4 texel</text>
+    <text x="96" y="174" class="xs" text-anchor="start">SNAPPED — it is rounded down, so it holds, then jumps one whole texel</text>
+    <line x1="96.0" y1="194" x2="96.0" y2="242" class="grid" stroke-width="0.9"/>
+    <line x1="126.0" y1="194" x2="126.0" y2="242" class="grid" stroke-width="0.9"/>
+    <line x1="156.0" y1="194" x2="156.0" y2="242" class="grid" stroke-width="0.9"/>
+    <line x1="186.0" y1="194" x2="186.0" y2="242" class="grid" stroke-width="0.9"/>
+    <line x1="216.0" y1="194" x2="216.0" y2="242" class="grid" stroke-width="0.9"/>
+    <rect x="162.0" y="199" width="4" height="38" rx="1" fill="#9b7ede" stroke="#9b7ede" stroke-width="1"/>
+    <line x1="156.0" y1="188" x2="156.0" y2="248" class="hi" stroke-width="2.2"/>
+    <text x="158" y="264" class="xs" text-anchor="middle">frame 0</text>
+    <text x="158" y="278" class="xs" text-anchor="middle">edge off by 0.2 texel</text>
+    <line x1="248.0" y1="194" x2="248.0" y2="242" class="grid" stroke-width="0.9"/>
+    <line x1="278.0" y1="194" x2="278.0" y2="242" class="grid" stroke-width="0.9"/>
+    <line x1="308.0" y1="194" x2="308.0" y2="242" class="grid" stroke-width="0.9"/>
+    <line x1="338.0" y1="194" x2="338.0" y2="242" class="grid" stroke-width="0.9"/>
+    <line x1="368.0" y1="194" x2="368.0" y2="242" class="grid" stroke-width="0.9"/>
+    <rect x="314.0" y="199" width="4" height="38" rx="1" fill="#9b7ede" stroke="#9b7ede" stroke-width="1"/>
+    <line x1="308.0" y1="188" x2="308.0" y2="248" class="hi" stroke-width="2.2"/>
+    <text x="310" y="264" class="xs" text-anchor="middle">frame 1</text>
+    <text x="310" y="278" class="xs" text-anchor="middle">edge off by 0.2 texel</text>
+    <line x1="400.0" y1="194" x2="400.0" y2="242" class="grid" stroke-width="0.9"/>
+    <line x1="430.0" y1="194" x2="430.0" y2="242" class="grid" stroke-width="0.9"/>
+    <line x1="460.0" y1="194" x2="460.0" y2="242" class="grid" stroke-width="0.9"/>
+    <line x1="490.0" y1="194" x2="490.0" y2="242" class="grid" stroke-width="0.9"/>
+    <line x1="520.0" y1="194" x2="520.0" y2="242" class="grid" stroke-width="0.9"/>
+    <rect x="466.0" y="199" width="4" height="38" rx="1" fill="#9b7ede" stroke="#9b7ede" stroke-width="1"/>
+    <line x1="460.0" y1="188" x2="460.0" y2="248" class="hi" stroke-width="2.2"/>
+    <text x="462" y="264" class="xs" text-anchor="middle">frame 2</text>
+    <text x="462" y="278" class="xs" text-anchor="middle">edge off by 0.2 texel</text>
+    <line x1="552.0" y1="194" x2="552.0" y2="242" class="grid" stroke-width="0.9"/>
+    <line x1="582.0" y1="194" x2="582.0" y2="242" class="grid" stroke-width="0.9"/>
+    <line x1="612.0" y1="194" x2="612.0" y2="242" class="grid" stroke-width="0.9"/>
+    <line x1="642.0" y1="194" x2="642.0" y2="242" class="grid" stroke-width="0.9"/>
+    <line x1="672.0" y1="194" x2="672.0" y2="242" class="grid" stroke-width="0.9"/>
+    <rect x="618.0" y="199" width="4" height="38" rx="1" fill="#9b7ede" stroke="#9b7ede" stroke-width="1"/>
+    <line x1="612.0" y1="188" x2="612.0" y2="248" class="hi" stroke-width="2.2"/>
+    <text x="614" y="264" class="xs" text-anchor="middle">frame 3</text>
+    <text x="614" y="278" class="xs" text-anchor="middle">edge off by 0.2 texel</text>
+    <text x="360.0" y="320" class="xs" text-anchor="middle">the purple bar is fixed geometry; the highlighted line is where its shadow edge lands</text>
+    <text x="360.0" y="340" class="xs" text-anchor="middle">unsnapped the offset changes every frame — that is the crawl. Measured drift: 0.499 texels against 7.6e-06 snapped</text>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 4.</span>
+      Texel snapping, over four frames of a camera walking forward in sub-texel steps. The purple bar is fixed geometry and the highlighted line is where its shadow edge lands. UNSNAPPED the grid slides continuously, so the edge is quantised to a different texel every frame and the eye reads the result as crawling. SNAPPED the box centre is rounded down to a whole texel in light space, so the grid lands on the same world positions it landed on last frame and the edge either stays put or moves exactly one texel. Measured: 7.6&#215;10<sup>&#8722;6</sup> texels of drift against 0.499 &#8212; and 0.499 is the worst it can be, since half a texel is the furthest anything can get from a grid line.
+    </figcaption>
+  </figure>
+
+
+  <p>
+    The harness walks a camera forward in sub-texel steps and watches where a fixed world point
+    falls on the grid. Snapped, it stays within <strong>7.6 × 10<sup>−6</sup></strong> texels of
+    the same position; unsnapped it wanders <strong>0.499</strong> texels, which is the worst it
+    can possibly be — half a texel is the furthest anything can get from the nearest grid line.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">Two ways to get this exactly wrong, and both compile</span>
+    <p>
+      <strong>Snapping in the wrong space.</strong> The grid we are rounding to is the map's, and
+      the map's axes are the light's. Round in world space and you round along axes that have
+      nothing to do with the texel grid, which achieves precisely nothing while looking correct.
+    </p>
+    <p>
+      <strong>Anchoring the basis at the thing you are rounding.</strong> This one bit me while
+      writing the lesson, and the test caught it. If you build the light's basis with
+      <code>look_at(centre, centre + fwd, up)</code>, then <code>basis · centre</code> is
+      <em>(0,0,0)</em> by construction — the centre is the eye — so there is nothing left to round
+      and snapping silently does nothing. The grid has to be nailed to the <em>world</em>, so the
+      basis must be anchored at the world origin. The symptom was §E reporting an identical 0.499
+      texels with snapping both on and off, which is a much better error message than a picture
+      that merely looks a bit crawly.
+    </p>
+  </div>
+
+  <div class="callout">
+    <span class="label"><code>floor</code>, not a cast</span>
+    <p>
+      A cast to <code>int</code> truncates <em>toward zero</em>, so it rounds negative coordinates
+      the opposite way from positive ones. Light space straddles the origin by construction, so
+      half the world would snap one way and half the other, with a discontinuity running through
+      the middle — which is roughly where the camera usually is.
+    </p>
+  </div>
+
+  <h3 id="bias">3.5 &nbsp;The bias: the audit, and a surprise</h3>
+
+  <p>
+    Now the question this lesson exists to ask. Lesson 6.8 derived
+  </p>
+
+  <div class="eq">\[ bias \;=\; \frac{reach \cdot world\_per\_texel \cdot \tan\theta}{depth\_range} \]</div>
+
+  <div class="eq-plain">bias = reach · world_per_texel · tan(theta) / depth_range</div>
+
+  <p>
+    and argued that every term was there for a reason. Cascades change
+    <code>world_per_texel</code> by a factor of 7.3 and <code>depth_range</code> along with it. If
+    that derivation was real, nothing needs to change. Here is what the harness reports:
+  </p>
+
+    <figure class="dia bleed">
+    <svg viewBox="0 0 720 320" role="img" aria-labelledby="f69e-t f69e-d">
+      <title id="f69e-t">Per-cascade bias</title>
+      <desc id="f69e-d">A four-row table of world_per_texel, depth range and the resulting device-space bias for each cascade. The texel size spans a factor of 7.3 but cascades 1, 2 and 3 all need the same bias, because the sphere radius cancels between the texel size and the depth range.</desc>
+      <defs>
+        <marker id="e-i-f69e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+        <marker id="e-s-f69e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+        <marker id="e-h-f69e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+        <marker id="e-b-f69e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+        <marker id="e-g-f69e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+      </defs>
+    <text x="360.0" y="22" class="sm" text-anchor="middle">The same formula, four cascades, and what cancels</text>
+    <text x="110" y="62" class="xs" text-anchor="middle">cascade</text>
+    <text x="242" y="62" class="xs" text-anchor="middle">world_per_texel</text>
+    <text x="374" y="62" class="xs" text-anchor="middle">depth_range</text>
+    <text x="506" y="62" class="xs" text-anchor="middle">bias (device)</text>
+    <line x1="54" y1="72" x2="558.8" y2="72" class="grid" stroke-width="1.0"/>
+    <text x="110" y="102" class="xs" text-anchor="middle">0</text>
+    <text x="242" y="102" class="xs" text-anchor="middle">0.01945 m</text>
+    <text x="374" y="102" class="xs" text-anchor="middle"> 31.931 m</text>
+    <text x="506" y="102" class="xs t-bad" text-anchor="middle">1.292e-03</text>
+    <text x="110" y="136" class="xs" text-anchor="middle">1</text>
+    <text x="242" y="136" class="xs" text-anchor="middle">0.03835 m</text>
+    <text x="374" y="136" class="xs" text-anchor="middle"> 40.060 m</text>
+    <text x="506" y="136" class="xs t-ok" text-anchor="middle">2.031e-03</text>
+    <text x="110" y="170" class="xs" text-anchor="middle">2</text>
+    <text x="242" y="170" class="xs" text-anchor="middle">0.06695 m</text>
+    <text x="374" y="170" class="xs" text-anchor="middle"> 69.924 m</text>
+    <text x="506" y="170" class="xs t-ok" text-anchor="middle">2.031e-03</text>
+    <text x="110" y="204" class="xs" text-anchor="middle">3</text>
+    <text x="242" y="204" class="xs" text-anchor="middle">0.14165 m</text>
+    <text x="374" y="204" class="xs" text-anchor="middle">147.952 m</text>
+    <text x="506" y="204" class="xs t-ok" text-anchor="middle">2.031e-03</text>
+    <line x1="54" y1="216" x2="558.8" y2="216" class="grid" stroke-width="1.0"/>
+    <text x="360.0" y="236" class="xs" text-anchor="middle">world_per_texel spans 7.3x — and three of the four biases are the same number</text>
+    <text x="360.0" y="258" class="xs" text-anchor="middle">because bias = reach·wpt/range, wpt = 2r/res and range ≈ 2r, so the radius cancels:</text>
+    <text x="360.0" y="280" class="xs" text-anchor="middle">bias ≈ reach·tanθ/resolution = 2.0716e-03</text>
+    <text x="360.0" y="302" class="xs" text-anchor="middle">cascade 0 is the exception at 64%: its range is set by the CASTERS, not its own sphere, so nothing cancels</text>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 5.</span>
+      The audit of Lesson 6.8, and the surprise inside it. Cascades change <code>world_per_texel</code> by a factor of 7.3 and NOT ONE LINE of 6.8&#8217;s bias derivation had to move, because each cascade owns a <code>light_camera</code> and that is where both terms live. The surprise is the last column: in DEVICE depth, cascades 1, 2 and 3 all want the same bias. Both the texel size and the depth range are set by the same sphere, so the radius cancels and bias &#8776; reach&#183;tan&#952;/resolution &#8212; 2.0716&#215;10<sup>&#8722;3</sup> predicted against 2.031&#215;10<sup>&#8722;3</sup> measured. Cascade 0 is the exception at 64%, because its range is set by the CASTERS rather than by its own sphere, which is exactly when the derivation says cancellation should fail.
+    </figcaption>
+  </figure>
+
+
+  <p>
+    <strong>No line of 6.8's bias code was touched.</strong> Each cascade owns a
+    <code>light_camera</code>, <code>light_camera</code> is where <code>world_per_texel</code> and
+    <code>depth_range</code> live, and <code>shadow_map::visibility</code> already read them from
+    there. A cascade is a fit, not a feature. That is the audit passing.
+  </p>
+
+  <p>
+    But look at the fourth column, because it says something nobody set out to arrange. In
+    <em>world</em> units the biases differ enormously — 0.0413 m for cascade 0 against 0.3005 m for
+    cascade 3, a factor of <strong>7.3</strong>, exactly as <code>world_per_texel</code> does. In
+    <em>device depth</em> — the units the buffer actually stores and the comparison is actually
+    performed in — cascades 1, 2 and 3 all want <strong>the same number</strong>, 2.031 × 10<sup>−3</sup>.
+  </p>
+
+  <p>
+    That is not a coincidence, and it falls out of the sphere fit in three lines:
+  </p>
+
+  <div class="eq">\[ bias = \frac{reach \cdot wpt \cdot \tan\theta}{range}, \quad wpt = \frac{2r}{res}, \quad range \approx 2r \;\Longrightarrow\; bias \approx \frac{reach \cdot \tan\theta}{res} \]</div>
+
+  <div class="eq-plain">
+    bias = reach·wpt·tanθ / range,&nbsp; wpt = 2r/res,&nbsp; range ≈ 2r&nbsp; ⟹&nbsp;
+    bias ≈ reach·tanθ / res
+  </div>
+
+  <p>
+    <strong>The radius cancels.</strong> Both the texel size and the depth range are set by the
+    same sphere, so a sphere-fitted cascade's device-space bias depends on the resolution and the
+    slope and on nothing else — not on which cascade it is, not on how far away it is. Putting the
+    numbers in: reach = 2.1213 texels for a 3×3 kernel, tan θ = 1 for a 45° surface, resolution =
+    1024, giving <strong>2.0716 × 10<sup>−3</sup></strong> against a measured
+    <strong>2.031 × 10<sup>−3</sup></strong> — agreement to 2%, and the 2% is the half-texel
+    padding the fit adds.
+  </p>
+
+  <div class="callout">
+    <span class="label">The exception that confirms the mechanism</span>
+    <p>
+      Cascade 0 does <em>not</em> follow the rule: it needs only <strong>64%</strong> of cascade
+      1's bias. And the reason is exactly the one the derivation predicts. Its depth range is
+      <strong>31.9 m</strong> where its own sphere is only about 19.9 m across — because the range
+      was stretched to reach the <em>casters</em>, not the slice (§3.6 below). The moment something
+      other than the sphere sets the range, the cancellation is spoiled and the bias goes its own
+      way.
+    </p>
+    <p>
+      An exception you can predict from the mechanism is worth more than a rule with no
+      exceptions, because it is the difference between having a formula and having a coincidence.
+    </p>
+  </div>
+
+  <h3 id="casters">3.6 &nbsp;The depth range belongs to the casters</h3>
+
+  <p>
+    One subtlety that is easy to miss and produces a memorable bug. The sphere tells us how wide
+    the box is. It must <em>not</em> tell us how deep it is.
+  </p>
+
+  <p>
+    An occluder standing between the light and a slice is <em>outside</em> that slice — it is above
+    it, or beside it — but it still casts into it. Fit the near plane to the slice and that
+    occluder is clipped out of the depth pass, so it stops casting the moment it leaves the
+    camera's view. The symptom is <strong>shadows blinking out at the edge of the screen</strong>,
+    which reads as a culling bug and is not one.
+  </p>
+
+  <p>
+    So the near and far planes come from the casters' extent along the light's axis. The harness
+    checks both halves of that: a 50-metre caster above a small slice stretches the depth range
+    from 26.1 m to <strong>62.3 m</strong> — and leaves <code>world_per_texel</code> unchanged at
+    0.024999, because a tall caster is a fact about depth, not about texel density.
+  </p>
+
+  <h3 id="seam">3.7 &nbsp;The seam</h3>
+
+  <p>
+    Two cascades meet at a split distance. On one side the texels are 0.0384 m and the bias is one
+    number; on the other they are 0.0670 m and it is another. Both are correct answers to slightly
+    different questions, and they disagree — along a line, at a fixed distance from the camera,
+    which is precisely the shape the eye is best at finding.
+  </p>
+
+    <figure class="dia bleed">
+    <svg viewBox="0 0 720 280" role="img" aria-labelledby="f69f-t f69f-d">
+      <title id="f69f-t">The seam between two cascades</title>
+      <desc id="f69f-d">Two adjacent bands representing cascades 1 and 2, with a fine texel grid on the near side and a coarse one on the far side. A highlighted line marks the split distance, and an amber band either side of it marks where the two are blended together.</desc>
+      <defs>
+        <marker id="e-i-f69f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+        <marker id="e-s-f69f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+        <marker id="e-h-f69f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+        <marker id="e-b-f69f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+        <marker id="e-g-f69f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+      </defs>
+    <text x="360.0" y="22" class="sm" text-anchor="middle">Where two cascades meet</text>
+    <rect x="90" y="87.0" width="270" height="66" rx="3" fill="#5ac878" stroke="#5ac878" fill-opacity="0.30" stroke-width="1.2"/>
+    <rect x="360" y="87.0" width="280" height="66" rx="3" fill="#5082e6" stroke="#5082e6" fill-opacity="0.30" stroke-width="1.2"/>
+    <text x="225.0" y="124" class="xs" text-anchor="middle">cascade 1</text>
+    <text x="500.0" y="124" class="xs" text-anchor="middle">cascade 2</text>
+    <line x1="90" y1="87.0" x2="90" y2="153.0" class="grid" stroke-width="0.5"/>
+    <line x1="102" y1="87.0" x2="102" y2="153.0" class="grid" stroke-width="0.5"/>
+    <line x1="114" y1="87.0" x2="114" y2="153.0" class="grid" stroke-width="0.5"/>
+    <line x1="126" y1="87.0" x2="126" y2="153.0" class="grid" stroke-width="0.5"/>
+    <line x1="138" y1="87.0" x2="138" y2="153.0" class="grid" stroke-width="0.5"/>
+    <line x1="150" y1="87.0" x2="150" y2="153.0" class="grid" stroke-width="0.5"/>
+    <line x1="162" y1="87.0" x2="162" y2="153.0" class="grid" stroke-width="0.5"/>
+    <line x1="174" y1="87.0" x2="174" y2="153.0" class="grid" stroke-width="0.5"/>
+    <line x1="186" y1="87.0" x2="186" y2="153.0" class="grid" stroke-width="0.5"/>
+    <line x1="198" y1="87.0" x2="198" y2="153.0" class="grid" stroke-width="0.5"/>
+    <line x1="210" y1="87.0" x2="210" y2="153.0" class="grid" stroke-width="0.5"/>
+    <line x1="222" y1="87.0" x2="222" y2="153.0" class="grid" stroke-width="0.5"/>
+    <line x1="234" y1="87.0" x2="234" y2="153.0" class="grid" stroke-width="0.5"/>
+    <line x1="246" y1="87.0" x2="246" y2="153.0" class="grid" stroke-width="0.5"/>
+    <line x1="258" y1="87.0" x2="258" y2="153.0" class="grid" stroke-width="0.5"/>
+    <line x1="270" y1="87.0" x2="270" y2="153.0" class="grid" stroke-width="0.5"/>
+    <line x1="282" y1="87.0" x2="282" y2="153.0" class="grid" stroke-width="0.5"/>
+    <line x1="294" y1="87.0" x2="294" y2="153.0" class="grid" stroke-width="0.5"/>
+    <line x1="306" y1="87.0" x2="306" y2="153.0" class="grid" stroke-width="0.5"/>
+    <line x1="318" y1="87.0" x2="318" y2="153.0" class="grid" stroke-width="0.5"/>
+    <line x1="330" y1="87.0" x2="330" y2="153.0" class="grid" stroke-width="0.5"/>
+    <line x1="342" y1="87.0" x2="342" y2="153.0" class="grid" stroke-width="0.5"/>
+    <line x1="354" y1="87.0" x2="354" y2="153.0" class="grid" stroke-width="0.5"/>
+    <line x1="360" y1="87.0" x2="360" y2="153.0" class="grid" stroke-width="0.5"/>
+    <line x1="390" y1="87.0" x2="390" y2="153.0" class="grid" stroke-width="0.5"/>
+    <line x1="420" y1="87.0" x2="420" y2="153.0" class="grid" stroke-width="0.5"/>
+    <line x1="450" y1="87.0" x2="450" y2="153.0" class="grid" stroke-width="0.5"/>
+    <line x1="480" y1="87.0" x2="480" y2="153.0" class="grid" stroke-width="0.5"/>
+    <line x1="510" y1="87.0" x2="510" y2="153.0" class="grid" stroke-width="0.5"/>
+    <line x1="540" y1="87.0" x2="540" y2="153.0" class="grid" stroke-width="0.5"/>
+    <line x1="570" y1="87.0" x2="570" y2="153.0" class="grid" stroke-width="0.5"/>
+    <line x1="600" y1="87.0" x2="600" y2="153.0" class="grid" stroke-width="0.5"/>
+    <line x1="630" y1="87.0" x2="630" y2="153.0" class="grid" stroke-width="0.5"/>
+    <line x1="360" y1="65.0" x2="360" y2="175.0" class="hi" stroke-width="2.2"/>
+    <text x="360" y="57.0" class="xs" text-anchor="middle">16.25 m</text>
+    <rect x="306" y="87.0" width="54" height="66" rx="0" fill="#f0961e" stroke="none" fill-opacity="0.40"/>
+    <text x="333.0" y="173.0" class="xs" text-anchor="middle">blend band</text>
+    <text x="360.0" y="214" class="xs" text-anchor="middle">different texel grids and different biases, so the two answers disagree along one line — and a line is exactly what the eye finds</text>
+    <text x="360.0" y="238" class="xs" text-anchor="middle">blend_fraction fades across a band: both answers are defensible, so anything between them is too</text>
+    <text x="360.0" y="262" class="xs" text-anchor="middle">it costs a second lookup, but only for fragments inside the band</text>
+    </svg>
+    <figcaption>
+      <span class="fignum">Figure 6.</span>
+      The seam, which is a new artefact with a new name. Two cascades meet at 16.25 m with different texel grids (fine on the near side, coarse on the far) and different biases, so they disagree along one line at a fixed distance from the camera &#8212; precisely the shape the eye is best at finding. Blending a band either side turns a step into a ramp: both answers are defensible, so anything between them is too. It costs a second lookup, but only inside the band. <code>blend_fraction</code> defaults to 0, which shows the seam, because Lesson 3.5&#8217;s rule is that the failure has to be reachable or the fix is folklore.
+    </figcaption>
+  </figure>
+
+
+  <p>
+    The usual cure is to fade. Pick a band at the end of each cascade, look up <em>both</em>
+    cascades inside it, and interpolate. Since both answers are defensible, anything between them
+    is too, and a ramp is invisible where a step is not. It costs a second lookup — but only for
+    the fragments inside the band, which is a small fraction of the screen.
+  </p>
+
+  <p>
+    <code>cascade_settings::blend_fraction</code> is that band, as a fraction of each cascade's own
+    depth. It defaults to <strong>0</strong>, which shows the seam — Lesson 3.5's rule again: the
+    failure has to be reachable, or the fix is folklore.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">Selecting on the wrong depth bends the seam</span>
+    <p>
+      The splits are distances along the <em>view axis</em>. A fragment shader knows a world
+      position, and the tempting conversion is <code>length(eye − world)</code> — which is the
+      <em>radial</em> distance, not the axial one. They differ by 1/cos(angle off axis), and at the
+      corner of a 60° frame that is about 22%.
+    </p>
+    <p>
+      Select on radial distance and the corners of the screen land in the wrong cascade, so the
+      seam — which should be a straight line at a fixed distance — bows into a curve that follows
+      the edge of the frame. The fix is to carry the camera's forward axis and use
+      <code>dot(world − eye, forward)</code>: sixteen bytes to keep selection and fitting talking
+      about the same quantity.
+    </p>
+  </div>
+
+  <!-- =================================================================
+       4 — IMPLEMENTATION
+       ================================================================= -->
+  <h2 id="impl"><span class="num">4</span>Implementation</h2>
+
+  <p>
+    Six steps. The first four are the new file; the last two are what the rest of the engine had to
+    give up to accommodate it, which is the more interesting half.
+  </p>
+
+  <h3>4.1 &nbsp;<code>shadow_map</code> learns to be handed a camera</h3>
+
+  <p>
+    6.8's <code>render</code> fits the box itself, from the same meshes it is about to draw. That
+    was the right call then and it is exactly what a cascade cannot use, since a cascade's box comes
+    from the camera. So split it: the old signature keeps its behaviour and delegates.
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/src/gfx/shadow.cpp</span> <span class="tag modified">modified</span></figcaption>
+    <pre><code class="lang-cpp">void shadow_map::render(std::span&lt;const scene_object&gt; objects, const mesh_pool&amp; meshes,
+                        const directional_light&amp; key, shadow_stats* stats_out)
+{
+    if (!valid()) { return; }
+
+    // The one-map case fits the box itself, from the same meshes it is about to
+    // draw. Lesson 6.9's cascades fit elsewhere and call the overload below.
+    const aabb scene = bounds_of(objects, meshes);
+    render(objects, meshes, fit_directional(key, scene, resolution_), scene, stats_out);
+}</code></pre>
+  </figure>
+
+  <p>
+    Everything else in that function moves into the new overload unchanged. This is worth doing as a
+    delegation rather than a copy: the two must not drift, and the depth pass — Module 2's
+    <code>collect_triangles</code> and Module 3's <code>draw_triangles</code>, still unmodified — is
+    the part 6.8 made a point of not rewriting.
+  </p>
+
+  <h3>4.2 &nbsp;The split scheme, guarded</h3>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/src/gfx/cascade.cpp</span> <span class="tag new">new</span></figcaption>
+    <pre><code class="lang-cpp">float practical_split(int index, int count, float near_d, float far_d,
+                      float lambda)
+{
+    if (count &lt;= 0) { return far_d; }
+    if (index &gt;= count - 1) { return far_d; }   // the last cut IS the far plane
+    if (index &lt; 0) { return near_d; }
+
+    // Guard the logarithm. `near_d` at or below zero has no log, and the ratio
+    // far/near is what the scheme is built on.
+    const float n = std::max(near_d, 1e-4f);
+    const float f = std::max(far_d, n * (1.0f + 1e-4f));
+
+    const float frac = static_cast&lt;float&gt;(index + 1) / static_cast&lt;float&gt;(count);
+
+    const float uniform = n + (f - n) * frac;
+    const float logarithmic = n * std::pow(f / n, frac);
+
+    const float l = std::clamp(lambda, 0.0f, 1.0f);
+    return l * logarithmic + (1.0f - l) * uniform;
+}</code></pre>
+  </figure>
+
+  <p>
+    The early return for the last cut is not tidiness. Cascade <em>n</em>−1's far distance must be
+    <em>exactly</em> <code>far_d</code>, because the next cascade's near distance is this one's far
+    distance: leave a gap and there is a ring of world that no cascade covers and no shadow appears
+    in; leave an overlap and two maps resolve the same metres. Computing it from the blend would
+    land within a float ULP of <code>far_d</code>, which is not the same as being it.
+  </p>
+
+  <h3>4.3 &nbsp;The fit</h3>
+
+  <p>
+    The sphere, then the snap, then the depth range — in that order, because each depends on the
+    one before. The whole function is in <a href="#listings">§5</a>; here are the three pieces that
+    carry the argument.
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/src/gfx/cascade.cpp</span> — the sphere</figcaption>
+    <pre><code class="lang-cpp">    vec3 centre{0.0f, 0.0f, 0.0f};
+    for (const vec3&amp; c : slice.corners) { centre += c; }
+    centre *= (1.0f / 8.0f);
+
+    float radius = 0.0f;
+    for (const vec3&amp; c : slice.corners)
+    {
+        radius = std::max(radius, length(c - centre));
+    }
+    if (radius &lt;= 0.0f) { radius = 1e-3f; }
+
+    // Half a texel of slack on each side, so a sample exactly on the boundary
+    // still has neighbours for PCF to read. 6.8's fit does the same thing.
+    radius *= 1.0f + 2.0f / static_cast&lt;float&gt;(resolution);
+
+    const float side = 2.0f * radius;
+    const float world_per_texel = side / static_cast&lt;float&gt;(resolution);</code></pre>
+  </figure>
+
+  <p>
+    Eight points, one average, one max. That is the entire anti-shimmer mechanism from §3.3, and it
+    is worth noticing how little code an idea can be once the idea is right.
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/src/gfx/cascade.cpp</span> — the snap</figcaption>
+    <pre><code class="lang-cpp">    // THE BASIS IS ANCHORED AT THE WORLD ORIGIN, NOT AT THE SLICE CENTRE, and
+    // that is the whole of it. Build it at the centre and `basis * point(centre)`
+    // is (0,0,0) by construction — the centre is the eye — so there is nothing
+    // left to round and snapping silently does nothing. The grid we are snapping
+    // to has to be nailed to the WORLD, so its origin must be the world's.
+    const mat4 basis = look_at(vec3{0.0f, 0.0f, 0.0f}, fwd, up);
+    vec3 centre_ls = xyz(basis * point(centre));
+
+    if (snap)
+    {
+        centre_ls.x = snap_down(centre_ls.x, world_per_texel);
+        centre_ls.y = snap_down(centre_ls.y, world_per_texel);
+    }
+
+    // Put the (possibly snapped) centre back into world space and re-aim the
+    // light there, so `view_from_world` and the box agree.
+    const mat4 world_from_light = rigid_inverse(basis);
+    const vec3 eye = xyz(world_from_light * point(centre_ls));
+    cam.view_from_world = look_at(eye, eye + fwd, up);</code></pre>
+  </figure>
+
+  <p>
+    <code>z</code> is deliberately not snapped. It is the depth axis, and its grid is the depth
+    buffer's rather than the texel grid's — snapping it would quantise depth for no reason and
+    interact with the bias in a way nobody wants to reason about.
+  </p>
+
+  <h3>4.4 &nbsp;A depth <em>array</em>, and why the single map became one too</h3>
+
+  <p>
+    On the GPU, four cascades want four maps. SDL_GPU has a natural home for that — a 2D array
+    texture — and the field that makes one is <code>layer_count_or_depth</code>, a single field
+    carrying two meanings (layers for an array, depth for a 3D texture) because SDL is being honest
+    about a union it did not make one.
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/src/gfx/gpu_texture.cpp</span> <span class="tag modified">modified</span></figcaption>
+    <pre><code class="lang-cpp">    SDL_GPUTextureCreateInfo ti{};
+    // THE ONE FIELD THAT MAKES IT AN ARRAY, and the one the shader has to agree
+    // with. `Texture2D` bound to a 2D_ARRAY is a binding error — caught by the
+    // validation layer, and a silently black shadow map without it.
+    ti.type = SDL_GPU_TEXTURETYPE_2D_ARRAY;
+    ti.format = format_;
+    ti.usage = SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET
+             | (sampled ? SDL_GPU_TEXTUREUSAGE_SAMPLER : 0u);
+    ti.width = width_;
+    ti.height = height_;
+    ti.layer_count_or_depth = layers;</code></pre>
+  </figure>
+
+  <p>
+    Then a decision that is really a decision about how many code paths we are willing to keep in
+    step. HLSL's <code>Texture2D</code> and <code>Texture2DArray</code> are different binding types,
+    so supporting both means two shaders, or one shader with a branch and two bindings. Instead,
+    <strong>the shadow map is always an array, even at one layer</strong> — which makes 6.8's single
+    map the degenerate case of 6.9's cascade set rather than a second thing to maintain.
+  </p>
+
+  <p>
+    A render pass writes <em>one</em> layer. <code>SDL_GPUDepthStencilTargetInfo</code> has a
+    <code>layer</code> field — a <code>Uint8</code>, sitting beside <code>mip_level</code>, both
+    answering "which slice of this texture is the target" — and no way to say "all of them". So
+    four cascades are four passes. That is not a limitation to route around: each cascade has its
+    own camera and its own culling, so they were always going to be separate passes.
+  </p>
+
+  <div class="callout">
+    <span class="label">⚠ VERIFY, discharged</span>
+    <p>
+      The plan for this lesson carried a <code>⚠ VERIFY</code> against the layer field's name,
+      because guessing an SDL3 struct member is exactly the kind of confident fabrication a student
+      would then type in. Checked against <code>SDL3/SDL_gpu.h</code> in the configured build tree:
+      the field is <code>layer</code>, it is a <code>Uint8</code>, and it is declared immediately
+      after <code>mip_level</code> at the end of the struct. <code>SDL_GPU_TEXTURETYPE_2D_ARRAY</code>
+      is the second enumerator of <code>SDL_GPUTextureType</code>. Both confirmed, neither assumed.
+    </p>
+  </div>
+
+  <h3>4.5 &nbsp;The uniform block, and one field that earns its sixteen bytes</h3>
+
+  <p>
+    The shader needs, per cascade, a matrix, a split distance, a texel size and a depth range.
+    That is a new per-frame block at fragment slot 2 — separate from the light block for the reason
+    6.7 gave when it refused to grow the <em>per-draw</em> block: pushes are billed by how often
+    they happen, and keeping the three blocks separate is what lets the biggest one be pushed
+    least often.
+  </p>
+
+  <p>
+    Note the shape of the scalar fields. Four floats that are logically an array are declared as one
+    <code>vec4</code>, because HLSL packs <code>float[4]</code> into four <em>separate</em> 16-byte
+    registers — sixteen bytes to carry four, forty-eight of them padding. Lesson 4.6 met that rule
+    from the other side; here it is the difference between 336 bytes and 704.
+  </p>
+
+  <p>
+    And then <code>view_forward</code>, which exists entirely because of §3.7's trap:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/include/engine/gfx/gpu_uniform.hpp</span> <span class="tag modified">modified</span></figcaption>
+    <pre><code class="lang-cpp">    /// The camera's forward axis, world space, unit length.
+    ///
+    /// **Because the splits are in AXIAL depth and the fragment only knows a
+    /// position.** `length(eye - world)` is the RADIAL distance, and the two
+    /// differ by 1/cos(angle off axis) — at a 60-degree vertical field of view
+    /// the screen corner is about 35 degrees off axis, so radial distance
+    /// overstates depth there by roughly 22%. Selecting on it would put the
+    /// corners of the screen in the wrong cascade and bend every seam into a
+    /// curve. `dot(world - eye, forward)` is the number the splits were computed
+    /// in. Sixteen bytes to keep selection and fitting talking about the same
+    /// quantity.
+    vec4 view_forward;               ///&lt; 320 — xyz used, w spare</code></pre>
+  </figure>
+
+  <h3>4.6 &nbsp;The block that must be pushed even when it is not used</h3>
+
+  <p>
+    This one is a trap worth the paragraph. A <code>cbuffer</code> the shader declares and nobody
+    fills does not read as zero. It reads as <em>whatever was last in that slot</em> — which is a
+    garbage matrix and a <code>cascade_count</code> that could be anything, including a number that
+    sends the shader off the end of its array.
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/src/gfx/gpu_scene.cpp</span> <span class="tag modified">modified</span></figcaption>
+    <pre><code class="lang-cpp">    cascade_uniforms fallback{};
+    if (cascades == nullptr)
+    {
+        fallback.cascade_count = 1.0f;
+        fallback.splits = vec4{1e30f, 1e30f, 1e30f, 1e30f};
+        fallback.world_per_texel = vec4{1.0f, 1.0f, 1.0f, 1.0f};
+        fallback.depth_range = vec4{1.0f, 1.0f, 1.0f, 1.0f};
+        fallback.view_forward = vec4{0.0f, 0.0f, -1.0f, 0.0f};
+        for (mat4&amp; m : fallback.light_clip_from_world) { m = light.light_clip_from_world; }
+    }
+    const cascade_uniforms&amp; casc = (cascades != nullptr) ? *cascades : fallback;
+    SDL_PushGPUFragmentUniformData(cb, 2, &amp;casc, sizeof(casc));</code></pre>
+  </figure>
+
+  <p>
+    The fallback is a deliberate <em>identity</em>: one cascade, splits past any reachable depth,
+    and 6.8's single matrix copied into every slot. A scene with no shadows at all is still
+    correct, because <code>shadow_strength</code> in the light block is what actually disables the
+    lookup — the same nullable-pointer bargain the rest of the engine makes, with the difference
+    that a GPU uniform slot has no null.
+  </p>
+
+  <h3>4.7 &nbsp;The shader</h3>
+
+  <p>
+    <code>shadow_visibility</code> gains a cascade index and reads its two per-cascade numbers from
+    the new block. That is the entire change to the body of 6.8's function — the bias arithmetic
+    below it is untouched, which is §3.5's audit stated as a diff.
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">shaders/scene.frag.hlsl</span> <span class="tag modified">modified</span></figcaption>
+    <pre><code class="lang-hlsl">    // THE PER-CASCADE NUMBERS, and the whole of what a cascade changes. Both of
+    // these are what 6.8's bias derivation was written in terms of, which is why
+    // that derivation needed no edit: read a different texel size and a different
+    // depth range and the same formula is already right.
+    const float tex = cascade_pick(cascade_texel, cascade);
+    const float range = cascade_pick(cascade_depth_range, cascade);</code></pre>
+  </figure>
+
+  <p>
+    Selection and blending go in a wrapper above it, so the sampling function stays a function of
+    "which cascade" and the policy lives in one place:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">shaders/scene.frag.hlsl</span> — selection and the band</figcaption>
+    <pre><code class="lang-hlsl">float shadow_visibility_cascaded(float3 world_pos, float3 geometric_n,
+                                 float geo_cos, float view_depth)
+{
+    const int n = max(1, (int)cascade_count);
+
+    int c = 0;
+    for (int i = 0; i &lt; n - 1; ++i)
+    {
+        if (view_depth &gt; cascade_pick(cascade_splits, i)) { c = i + 1; }
+    }
+
+    const float a = shadow_visibility(world_pos, geometric_n, geo_cos, c);
+
+    if (cascade_blend &lt;= 0.0f || c &gt;= n - 1) { return a; }
+
+    const float far_d = cascade_pick(cascade_splits, c);
+    const float near_d = (c == 0) ? 0.0f : cascade_pick(cascade_splits, c - 1);
+    const float band = (far_d - near_d) * cascade_blend;
+    if (band &lt;= 0.0f || view_depth &lt;= far_d - band) { return a; }
+
+    const float w = saturate((view_depth - (far_d - band)) / band);
+    const float b = shadow_visibility(world_pos, geometric_n, geo_cos, c + 1);
+    return lerp(a, b, w);
+}</code></pre>
+  </figure>
+
+  <p>
+    <code>cascade_pick</code> is a four-way ternary rather than an array index, because indexing a
+    <code>float4</code> by a runtime value is not something HLSL will do without either a scalar
+    array — which costs the 4× padding above — or a swizzle it cannot resolve at compile time. Four
+    comparisons is the cheaper trade.
+  </p>
+
+  <!-- =================================================================
+       5 — COMPLETE CODE LISTINGS
+       ================================================================= -->
+  <h2 id="listings"><span class="num">5</span>Complete code listings</h2>
+
+  <p>
+    Every file this lesson creates or changes, in full. The manifest first.
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <caption class="visually-hidden">Files touched by Lesson 6.9</caption>
+      <thead><tr><th>Path</th><th>State</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td><code>engine/include/engine/gfx/cascade.hpp</code></td><td>new</td>
+            <td>Splits, slice corners, the sphere fit, the cascade set</td></tr>
+        <tr><td><code>engine/src/gfx/cascade.cpp</code></td><td>new</td>
+            <td>The arithmetic behind all four</td></tr>
+        <tr><td><code>engine/include/engine/gfx/shadow.hpp</code></td><td>modified</td>
+            <td><code>render</code> overload taking a fitted <code>light_camera</code></td></tr>
+        <tr><td><code>engine/src/gfx/shadow.cpp</code></td><td>modified</td>
+            <td>The split into fit-then-render</td></tr>
+        <tr><td><code>engine/include/engine/gfx/gpu_texture.hpp</code></td><td>modified</td>
+            <td><code>create_depth_array</code></td></tr>
+        <tr><td><code>engine/src/gfx/gpu_texture.cpp</code></td><td>modified</td>
+            <td><code>SDL_GPU_TEXTURETYPE_2D_ARRAY</code> and the layer count</td></tr>
+        <tr><td><code>engine/include/engine/gfx/gpu_shadow.hpp</code></td><td>modified</td>
+            <td>Layers, a per-layer render, <code>fill_cascade_uniforms</code></td></tr>
+        <tr><td><code>engine/src/gfx/gpu_shadow.cpp</code></td><td>modified</td>
+            <td>Array-backed map; <code>dsi.layer</code></td></tr>
+        <tr><td><code>engine/include/engine/gfx/gpu_uniform.hpp</code></td><td>modified</td>
+            <td><code>cascade_uniforms</code>, 336 bytes</td></tr>
+        <tr><td><code>engine/include/engine/gfx/gpu_scene.hpp</code></td><td>modified</td>
+            <td>The optional cascade block</td></tr>
+        <tr><td><code>engine/src/gfx/gpu_scene.cpp</code></td><td>modified</td>
+            <td>Always pushed, with an identity fallback</td></tr>
+        <tr><td><code>engine/include/engine/gfx/raster.hpp</code></td><td>modified</td>
+            <td><code>fill_style::cascades</code> and the view axis</td></tr>
+        <tr><td><code>engine/src/gfx/raster.cpp</code></td><td>modified</td>
+            <td>The cascaded branch of the shading path</td></tr>
+        <tr><td><code>shaders/scene.frag.hlsl</code></td><td>modified</td>
+            <td><code>Texture2DArray</code>, the cascade block, selection and blending</td></tr>
+        <tr><td><code>engine/CMakeLists.txt</code></td><td>modified</td>
+            <td><code>src/gfx/cascade.cpp</code></td></tr>
+        <tr><td><code>demos/gltf_view/main.cpp</code></td><td>modified</td>
+            <td><code>--cascades</code>, <code>--csm-lambda</code>, <code>--csm-blend</code>,
+                <code>--no-snap</code></td></tr>
+        <tr><td><code>scratch/verify_69.cpp</code></td><td>new</td>
+            <td>27 checks, nine sections</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+    <figure class="listing">
+    <figcaption>
+      <span class="path">engine/include/engine/gfx/cascade.hpp</span>
+      <span class="tag new">cpp</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// engine/include/engine/gfx/cascade.hpp — one map is not enough.
+//
+// Lesson 6.9. Lesson 6.8 fitted a single orthographic box around the **whole
+// scene** and rendered one depth map into it. Run `gltf_view --shadow 128` and
+// you can see what that costs: the box must contain the far field, so the near
+// field — the part the camera is actually looking at — gets whatever texels are
+// left over. A 40-metre scene at 1024 texels is 39 mm per texel *everywhere*,
+// including on the object two metres from your eye that fills half the screen.
+//
+// THE FIX IS A CHANGE OF QUESTION. 6.8 asked &quot;what box contains the scene?&quot; The
+// scene is not what needs resolving — the **camera&#x27;s frustum** is, and a frustum
+// is mostly far away. Split it by distance into a few slices, fit a box around
+// each slice, and give each its own map. The near slice is small, so its map is
+// dense; the far slice is huge, so its map is coarse, and coarse is fine at
+// forty metres because a texel there covers a fraction of a pixel anyway.
+//
+// THAT IS THE WHOLE IDEA. What makes it a lesson is that a camera-fitted box
+// **moves**, and 6.8&#x27;s box never did:
+//
+//   1 A BOX THAT MOVES SHIMMERS. 6.8&#x27;s fit depends on the scene&#x27;s bounds, so
+//     walking the camera around changes nothing about the light&#x27;s box and the
+//     texel grid is nailed to the world. A slice-fitted box slides and resizes
+//     every frame, its grid slides under the geometry, and every shadow edge
+//     crawls and boils. `fit_directional_slice` cures this twice — a **sphere**
+//     so the box cannot change SIZE when the camera merely turns, and **texel
+//     snapping** so it cannot change PHASE when the camera moves. Both are
+//     derived in the lesson; neither is a tweak.
+//
+//   2 EACH CASCADE HAS ITS OWN `world_per_texel`, AND THEREFORE ITS OWN BIAS.
+//     This is where 6.8&#x27;s §4 gets audited. Every bias term there was a multiple
+//     of `world_per_texel`, and if that derivation was real then a cascade needs
+//     **no new bias code at all** — just its own `light_camera`. It needed none.
+//     A formula that survives a change in the quantity it was derived from is a
+//     formula; one that needs a new fudge factor per cascade never was.
+//
+//   3 THE SEAM IS A NEW ARTEFACT WITH A NEW NAME. Two cascades meet at a split
+//     distance with different texel grids and different biases, so they disagree
+//     along that line and the disagreement is visible as a hard edge in the
+//     shadowing. Blending a band either side is the usual answer and costs a
+//     second lookup inside the band. `cascade_settings::blend_fraction`.
+//
+// WHAT THIS FILE DOES NOT DO:
+//
+//   - **No per-cascade resolution.** Every cascade is the same square. Real
+//     engines often shrink the far ones; it is a memory decision, not an idea.
+//   - **No caching.** Every cascade re-renders every frame. Distant cascades
+//     change slowly and can be updated every Nth frame, which is the single
+//     biggest performance win available here and is left as an exercise.
+//   - **Directional only**, inherited from 6.8 for the same reason.
+
+#ifndef ENGINE_GFX_CASCADE_HPP
+#define ENGINE_GFX_CASCADE_HPP
+
+#include &lt;span&gt;
+#include &lt;vector&gt;
+
+#include &lt;engine/gfx/bounds.hpp&gt;
+#include &lt;engine/gfx/shadow.hpp&gt;
+#include &lt;engine/math/mat4.hpp&gt;
+#include &lt;engine/math/vec3.hpp&gt;
+
+namespace engine
+{
+
+/// The most a cascade count may be. Four is the usual answer and the shader&#x27;s
+/// uniform block is sized for it; see `cascade_uniforms` in gpu_uniform.hpp.
+inline constexpr int k_max_cascades = 4;
+
+/// The parameters of the CAMERA&#x27;s frustum, as the fit needs them.
+///
+/// Not a `mat4` projection, and that is deliberate. To fit a slice we need the
+/// eight world-space corners of the sub-frustum between two distances, which is
+/// an *inverse* projection — and `mat4` has no general `inverse()`: 2.9&#x27;s
+/// `rigid_inverse` handles a view matrix and nothing handles a perspective one.
+///
+/// We could write that inverse (a perspective matrix&#x27;s is closed-form and
+/// short). Building the corners straight from the field of view is fewer lines,
+/// has no matrix to get transposed, and is what most engines do — the frustum&#x27;s
+/// shape is three numbers, and going through a matrix to recover them is a
+/// round trip that can only lose precision.
+struct camera_frustum
+{
+    /// Camera-to-world. This is `rigid_inverse(view_from_world)` — the view
+    /// matrix inverted, which IS available because a view matrix is rigid.
+    mat4 world_from_view = mat4::identity();
+
+    /// Vertical field of view, radians. The same number handed to `perspective`.
+    float fovy_radians = 1.0f;
+
+    /// Width over height.
+    float aspect = 1.0f;
+};
+
+/// The eight world-space corners of one sub-frustum.
+///
+/// Ordering is the same bit pattern `aabb::corners` uses — bit 0 is +x, bit 1 is
+/// +y, bit 2 is the FAR plane — so a test can name a corner by index and mean
+/// the same thing in both places.
+struct frustum_slice
+{
+    vec3 corners[8]{};
+};
+
+/// Where to cut the frustum between `near_d` and `far_d`, for cut `index` of
+/// `count`. Returns a distance from the eye, in world units.
+///
+/// **The two obvious schemes are both wrong, in opposite directions.**
+///
+/// *Uniform* splits put the cuts at equal world distances: near + (far−near)·i/n.
+/// Every slice is the same depth, and since a slice&#x27;s box scales with how WIDE
+/// the frustum is there, the far slices are enormous and the near ones tiny —
+/// which sounds right until you notice that the near slice, the one filling your
+/// screen, got the same map as the far one and did not need it.
+///
+/// *Logarithmic* splits put them at near·(far/near)^(i/n), and that ratio comes
+/// out of a real argument: a surface at distance d covers screen pixels in
+/// proportion to 1/d, so to hold TEXELS-PER-PIXEL constant the slice depths must
+/// grow in proportion to d — which is exactly a geometric series. This is the
+/// same 1/d that Lesson 4.7 met as depth precision, arriving from the other
+/// side. It is theoretically right and practically miserable: with near = 0.1 m
+/// the first cut lands around 0.3 m, so cascade 0 is spent on your own shoes.
+///
+/// **The practical scheme is the blend**, from Zhang et al. (2006):
+///
+///     d_i = lambda·log_i + (1 − lambda)·uniform_i
+///
+/// and `lambda` is the one number in this file chosen by eye rather than
+/// derived. 0.5 is the usual starting point. That it is a *blend of two
+/// principled schemes* rather than a magic curve is the point — each end is
+/// explicable, and lambda says how much you believe the near field matters.
+[[nodiscard]] float practical_split(int index, int count, float near_d,
+                                    float far_d, float lambda);
+
+/// The eight world-space corners of the sub-frustum between two eye distances.
+///
+/// Straight from the field of view: at distance d the half-height is
+/// tan(fovy/2)·d and the half-width is that times the aspect ratio. Four corners
+/// at `near_d`, four at `far_d`, all in view space, all pushed through
+/// `world_from_view`.
+///
+/// Note that −z is forward (conventions §2), so a corner at distance d sits at
+/// z = −d. Getting that sign wrong builds the frustum BEHIND the camera, and the
+/// symptom is a shadow map that is correct only when you turn around.
+[[nodiscard]] frustum_slice slice_corners(const camera_frustum&amp; cam,
+                                          float near_d, float far_d);
+
+/// Fit a directional light&#x27;s box around one frustum slice.
+///
+/// **The box is fitted to the slice&#x27;s bounding SPHERE, not to its corners**, and
+/// that is the whole anti-shimmer argument in one decision. A box fitted tightly
+/// to eight corners changes size as the camera yaws, because the corners rotate
+/// within it. Change the box size and `world_per_texel` changes, so every texel
+/// in the map changes size, so every shadow edge in the picture moves — while
+/// the camera merely turned on the spot. A sphere has no orientation: its radius
+/// is the same whichever way the camera is facing, so the box side is constant
+/// and the only thing left that moves is its POSITION.
+///
+/// **Then snapping deals with the position.** The box still translates as you
+/// walk, and a grid that slides continuously under fixed geometry makes edges
+/// crawl. Round the box centre, in light space, down to a whole number of
+/// texels. The grid then advances in texel-sized jumps and lands on the same
+/// world positions it landed on last frame, so a shadow edge either stays where
+/// it was or moves exactly one texel.
+///
+/// @param key        the light. Only its `direction` is read.
+/// @param slice      the sub-frustum to cover.
+/// @param casters    world bounds of everything that CASTS. Used only for the
+///                   near and far planes: an occluder BETWEEN the light and the
+///                   slice is outside the slice but must still be drawn, so the
+///                   depth range is pulled back to the casters&#x27; extent along the
+///                   light axis. Miss this and objects stop casting the moment
+///                   they leave the camera&#x27;s view, which reads as shadows
+///                   blinking out at the edge of the screen.
+/// @param resolution the map&#x27;s side, in texels.
+/// @param snap       apply texel snapping. Exposed so the demo can turn it off
+///                   and show the crawl, per Lesson 3.5&#x27;s rule.
+[[nodiscard]] light_camera fit_directional_slice(const directional_light&amp; key,
+                                                 const frustum_slice&amp; slice,
+                                                 const aabb&amp; casters,
+                                                 int resolution, bool snap);
+
+/// How the frustum is cut and how the seams are handled.
+struct cascade_settings
+{
+    /// How many cascades. Clamped to [1, `k_max_cascades`].
+    int count = 4;
+
+    /// Blend between logarithmic (1) and uniform (0) splits. See
+    /// `practical_split`.
+    float lambda = 0.5f;
+
+    /// Snap each cascade&#x27;s box to its own texel grid.
+    bool snap = true;
+
+    /// How much of each cascade&#x27;s depth to spend fading into the next, as a
+    /// fraction of that cascade&#x27;s own extent. 0 gives the hard seam — which is
+    /// the picture the lesson shows first. 0.1 is a reasonable cure.
+    float blend_fraction = 0.0f;
+
+    /// The camera distances the whole cascade set covers. `far_d` is usually
+    /// SHORTER than the camera&#x27;s own far plane: shadows at 500 m are not worth
+    /// a cascade, and stopping early makes every other cascade denser.
+    float near_d = 0.1f;
+    float far_d = 60.0f;
+};
+
+/// Which cascade a view-space depth falls in, and how far through its blend band
+/// it is.
+struct cascade_choice
+{
+    int index = 0;      ///&lt; the cascade to read
+    int next = 0;       ///&lt; the one after it, or `index` in the last cascade
+    float blend = 0.0f; ///&lt; 0 = use `index` alone, 1 = use `next` alone
+};
+
+/// A set of shadow maps, one per frustum slice.
+///
+/// Each cascade is an ordinary 6.8 `shadow_map` with a different camera — which
+/// is the strongest statement this file makes. Nothing about the rasterisation,
+/// the depth compare, the PCF kernel or the bias needed to change; a cascade is
+/// a fit, not a feature.
+class cascaded_shadow_map
+{
+public:
+    cascaded_shadow_map() = default;
+
+    cascaded_shadow_map(const cascaded_shadow_map&amp;) = delete;
+    cascaded_shadow_map&amp; operator=(const cascaded_shadow_map&amp;) = delete;
+    cascaded_shadow_map(cascaded_shadow_map&amp;&amp;) noexcept = default;
+    cascaded_shadow_map&amp; operator=(cascaded_shadow_map&amp;&amp;) noexcept = default;
+
+    /// Allocate `count` maps of `resolution` square.
+    [[nodiscard]] bool create(int count, int resolution,
+                              depth_format format = depth_format::f32);
+
+    [[nodiscard]] bool valid() const { return !maps_.empty(); }
+    [[nodiscard]] int count() const { return static_cast&lt;int&gt;(maps_.size()); }
+    [[nodiscard]] int resolution() const { return resolution_; }
+
+    /// Fit every cascade to the camera and render each one.
+    ///
+    /// The caster bounds are computed once, here, from the same meshes about to
+    /// be drawn — 6.8&#x27;s rule, for 6.8&#x27;s reason: a fit that disagrees with the
+    /// contents is a bug that only shows on some frames.
+    void render(std::span&lt;const scene_object&gt; objects, const mesh_pool&amp; meshes,
+                const directional_light&amp; key, const camera_frustum&amp; cam,
+                shadow_stats* stats = nullptr);
+
+    /// **Is this point lit?** `view_depth` is the positive distance from the eye
+    /// along the view axis, and it is what selects the cascade — the same number
+    /// the splits were computed in, so selection cannot disagree with the fit.
+    [[nodiscard]] float visibility(vec3 world_pos, vec3 geometric_normal,
+                                   float n_dot_l, float view_depth) const;
+
+    /// Which cascade covers `view_depth`, and the blend weight there.
+    [[nodiscard]] cascade_choice choose(float view_depth) const;
+
+    /// The far distance of cascade `i`. `splits()[count()-1]` is `far_d`.
+    [[nodiscard]] std::span&lt;const float&gt; splits() const { return splits_; }
+
+    [[nodiscard]] const shadow_map&amp; map(int i) const { return maps_[static_cast&lt;std::size_t&gt;(i)]; }
+    [[nodiscard]] shadow_map&amp; map(int i) { return maps_[static_cast&lt;std::size_t&gt;(i)]; }
+
+    [[nodiscard]] const aabb&amp; caster_bounds() const { return casters_; }
+
+    [[nodiscard]] cascade_settings&amp; settings() { return set_; }
+    [[nodiscard]] const cascade_settings&amp; settings() const { return set_; }
+
+    /// Apply one bias/PCF policy to every cascade. The per-cascade part of the
+    /// bias is `world_per_texel`, which lives in each cascade&#x27;s own
+    /// `light_camera` and is therefore already right — this only copies the
+    /// POLICY, never a magnitude.
+    void apply_shadow_settings(const shadow_settings&amp; s);
+
+private:
+    std::vector&lt;shadow_map&gt; maps_;
+    std::vector&lt;float&gt; splits_;
+    cascade_settings set_{};
+    aabb casters_{};
+    int resolution_ = 0;
+};
+
+} // namespace engine
+
+#endif // ENGINE_GFX_CASCADE_HPP
+</code></pre>
+  </figure>
+
+
+    <figure class="listing">
+    <figcaption>
+      <span class="path">engine/src/gfx/cascade.cpp</span>
+      <span class="tag new">cpp</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// engine/src/gfx/cascade.cpp — Lesson 6.9.
+//
+// The header carries the argument; this file is the arithmetic.
+
+#include &lt;engine/gfx/cascade.hpp&gt;
+
+#include &lt;algorithm&gt;
+#include &lt;cmath&gt;
+
+namespace engine
+{
+namespace
+{
+
+/// Round `v` down to a whole multiple of `step`.
+///
+/// `std::floor` and not a cast: a cast truncates TOWARD ZERO, so it rounds the
+/// wrong way for negative coordinates and the grid would have a discontinuity
+/// at the origin. Light space straddles the origin by construction — the box is
+/// centred on the slice — so half the world would snap one way and half the
+/// other, and the seam would sit exactly where the camera usually is.
+[[nodiscard]] float snap_down(float v, float step)
+{
+    if (step &lt;= 0.0f) { return v; }
+    return std::floor(v / step) * step;
+}
+
+} // namespace
+
+float practical_split(int index, int count, float near_d, float far_d,
+                      float lambda)
+{
+    if (count &lt;= 0) { return far_d; }
+    if (index &gt;= count - 1) { return far_d; }   // the last cut IS the far plane
+    if (index &lt; 0) { return near_d; }
+
+    // Guard the logarithm. `near_d` at or below zero has no log, and the ratio
+    // far/near is what the scheme is built on.
+    const float n = std::max(near_d, 1e-4f);
+    const float f = std::max(far_d, n * (1.0f + 1e-4f));
+
+    const float frac = static_cast&lt;float&gt;(index + 1) / static_cast&lt;float&gt;(count);
+
+    const float uniform = n + (f - n) * frac;
+    const float logarithmic = n * std::pow(f / n, frac);
+
+    const float l = std::clamp(lambda, 0.0f, 1.0f);
+    return l * logarithmic + (1.0f - l) * uniform;
+}
+
+frustum_slice slice_corners(const camera_frustum&amp; cam, float near_d, float far_d)
+{
+    frustum_slice out;
+
+    // At distance d the frustum&#x27;s half-height is tan(fovy/2)·d. That IS the
+    // definition of a vertical field of view — the projection matrix is built
+    // from the same tangent (mat4.hpp `perspective`), so this is not a
+    // re-derivation, it is the same number read forwards instead of backwards.
+    const float t = std::tan(0.5f * cam.fovy_radians);
+
+    const float d[2] = { near_d, far_d };
+    for (int plane = 0; plane &lt; 2; ++plane)
+    {
+        const float hh = t * d[plane];
+        const float hw = hh * cam.aspect;
+
+        for (int corner = 0; corner &lt; 4; ++corner)
+        {
+            // Bit 0 is +x, bit 1 is +y, bit 2 (`plane`) is the far plane — the
+            // same bit pattern `aabb::corners` uses, so an index means one thing
+            // across the whole engine.
+            const float sx = (corner &amp; 1) ? hw : -hw;
+            const float sy = (corner &amp; 2) ? hh : -hh;
+
+            // -Z IS FORWARD (conventions §2). A corner at distance d sits at
+            // z = -d, and writing +d here builds the frustum behind the camera —
+            // which looks correct exactly when you turn around.
+            const vec3 view_pos{sx, sy, -d[plane]};
+            out.corners[plane * 4 + corner] =
+                xyz(cam.world_from_view * point(view_pos));
+        }
+    }
+    return out;
+}
+
+light_camera fit_directional_slice(const directional_light&amp; key,
+                                   const frustum_slice&amp; slice,
+                                   const aabb&amp; casters, int resolution,
+                                   bool snap)
+{
+    light_camera cam;
+    if (resolution &lt;= 0) { return cam; }
+
+    // ---- The light&#x27;s orientation, exactly as 6.8 built it --------------------
+    const vec3 fwd = normalised_or(key.direction, vec3{0.0f, -1.0f, 0.0f});
+    vec3 up{0.0f, 1.0f, 0.0f};
+    if (std::fabs(dot(fwd, up)) &gt; 0.99f) { up = vec3{0.0f, 0.0f, 1.0f}; }
+
+    // ---- The bounding SPHERE of the slice ------------------------------------
+    //
+    // THE REASON THIS IS A SPHERE AND NOT A BOX is the whole anti-shimmer
+    // argument. A box fitted to the eight corners changes SIZE as the camera
+    // yaws, because the corners rotate inside it — and `world_per_texel` is the
+    // box side over the resolution, so every texel in the map would change size
+    // while the camera merely turned on the spot. A sphere has no orientation.
+    vec3 centre{0.0f, 0.0f, 0.0f};
+    for (const vec3&amp; c : slice.corners) { centre += c; }
+    centre *= (1.0f / 8.0f);
+
+    float radius = 0.0f;
+    for (const vec3&amp; c : slice.corners)
+    {
+        radius = std::max(radius, length(c - centre));
+    }
+    if (radius &lt;= 0.0f) { radius = 1e-3f; }
+
+    // Half a texel of slack on each side, so a sample exactly on the boundary
+    // still has neighbours for PCF to read. 6.8&#x27;s fit does the same thing.
+    radius *= 1.0f + 2.0f / static_cast&lt;float&gt;(resolution);
+
+    const float side = 2.0f * radius;
+    const float world_per_texel = side / static_cast&lt;float&gt;(resolution);
+
+    // ---- Snapping ------------------------------------------------------------
+    //
+    // Build the light&#x27;s basis first, move the sphere centre into it, and round
+    // THERE — the grid we are snapping to is the map&#x27;s, and the map&#x27;s axes are
+    // the light&#x27;s. Snapping in world space would round along the wrong axes and
+    // achieve nothing.
+    // THE BASIS IS ANCHORED AT THE WORLD ORIGIN, NOT AT THE SLICE CENTRE, and
+    // that is the whole of it. Build it at the centre and `basis * point(centre)`
+    // is (0,0,0) by construction — the centre is the eye — so there is nothing
+    // left to round and snapping silently does nothing. The grid we are snapping
+    // to has to be nailed to the WORLD, so its origin must be the world&#x27;s.
+    const mat4 basis = look_at(vec3{0.0f, 0.0f, 0.0f}, fwd, up);
+    vec3 centre_ls = xyz(basis * point(centre));
+
+    if (snap)
+    {
+        // Round DOWN to a whole texel, in x and y. z is the depth axis and its
+        // grid is the depth buffer&#x27;s, not the texel grid&#x27;s, so it is left alone.
+        //
+        // The effect: as the camera walks, the box advances in texel-sized jumps
+        // instead of sliding, so the grid lands on the same world positions it
+        // landed on last frame. A shadow edge either stays put or moves exactly
+        // one texel — which the eye reads as stable, where a continuous slide
+        // reads as crawling.
+        centre_ls.x = snap_down(centre_ls.x, world_per_texel);
+        centre_ls.y = snap_down(centre_ls.y, world_per_texel);
+    }
+
+    // Put the (possibly snapped) centre back into world space and re-aim the
+    // light there, so `view_from_world` and the box agree.
+    const mat4 world_from_light = rigid_inverse(basis);
+    const vec3 eye = xyz(world_from_light * point(centre_ls));
+    cam.view_from_world = look_at(eye, eye + fwd, up);
+
+    // ---- Depth range: the CASTERS, not the slice -----------------------------
+    //
+    // An occluder between the light and this slice is OUTSIDE the slice and must
+    // still be drawn, or it stops casting the moment it leaves the camera&#x27;s
+    // view — shadows blinking out at the screen edge. So the near and far planes
+    // come from the casters&#x27; extent along the light axis, not from the sphere.
+    float near_z = -radius;
+    float far_z = radius;
+    if (!casters.empty())
+    {
+        const aabb cl = transformed(casters, cam.view_from_world);
+        // Light space looks down -z, so the NEAREST caster has the largest z.
+        near_z = std::min(near_z, -cl.max.z);
+        far_z = std::max(far_z, -cl.min.z);
+    }
+    const float pad = std::max(1e-3f, 0.01f * (far_z - near_z));
+    near_z -= pad;
+    far_z += pad;
+
+    cam.clip_from_view = orthographic(-radius, radius, -radius, radius,
+                                      near_z, far_z);
+    cam.clip_from_world = cam.clip_from_view * cam.view_from_world;
+
+    cam.vp.x = 0.0f;
+    cam.vp.y = 0.0f;
+    cam.vp.w = static_cast&lt;float&gt;(resolution);
+    cam.vp.h = static_cast&lt;float&gt;(resolution);
+    cam.vp.min_depth = 0.0f;
+    cam.vp.max_depth = 1.0f;
+
+    // THE TWO NUMBERS 6.8&#x27;S BIAS IS MADE OF, and the only per-cascade part of
+    // it. Nothing in `slope_scaled_bias` had to change.
+    cam.world_per_texel = world_per_texel;
+    cam.depth_range = far_z - near_z;
+    return cam;
+}
+
+bool cascaded_shadow_map::create(int count, int resolution, depth_format format)
+{
+    maps_.clear();
+    splits_.clear();
+    resolution_ = 0;
+
+    const int n = std::clamp(count, 1, k_max_cascades);
+    if (resolution &lt;= 0) { return false; }
+
+    maps_.resize(static_cast&lt;std::size_t&gt;(n));
+    for (shadow_map&amp; m : maps_)
+    {
+        if (!m.create(resolution, format)) { maps_.clear(); return false; }
+    }
+    splits_.assign(static_cast&lt;std::size_t&gt;(n), 0.0f);
+    resolution_ = resolution;
+    set_.count = n;
+    return true;
+}
+
+void cascaded_shadow_map::apply_shadow_settings(const shadow_settings&amp; s)
+{
+    for (shadow_map&amp; m : maps_) { m.settings() = s; }
+}
+
+void cascaded_shadow_map::render(std::span&lt;const scene_object&gt; objects,
+                                 const mesh_pool&amp; meshes,
+                                 const directional_light&amp; key,
+                                 const camera_frustum&amp; cam,
+                                 shadow_stats* stats_out)
+{
+    if (!valid()) { return; }
+
+    // Once, from the same meshes about to be drawn — 6.8&#x27;s rule. Every cascade
+    // shares these bounds, because &quot;what can cast into this slice&quot; is a question
+    // about the whole world, not about the slice.
+    casters_ = shadow_map::bounds_of(objects, meshes);
+
+    const int n = count();
+    shadow_stats total{};
+
+    float near_d = std::max(set_.near_d, 1e-4f);
+    for (int i = 0; i &lt; n; ++i)
+    {
+        const float far_d = practical_split(i, n, set_.near_d, set_.far_d,
+                                            set_.lambda);
+        splits_[static_cast&lt;std::size_t&gt;(i)] = far_d;
+
+        const frustum_slice slice = slice_corners(cam, near_d, far_d);
+        const light_camera lc = fit_directional_slice(key, slice, casters_,
+                                                      resolution_, set_.snap);
+
+        shadow_stats s{};
+        maps_[static_cast&lt;std::size_t&gt;(i)].render(objects, meshes, lc, casters_, &amp;s);
+
+        total.objects += s.objects;
+        total.triangles += s.triangles;
+        total.texels += s.texels;
+        total.render_ms += s.render_ms;
+
+        // Slices ABUT: this cascade&#x27;s far distance is the next one&#x27;s near. A gap
+        // would leave a ring of unshadowed world; an overlap would waste texels
+        // resolving the same metres twice.
+        near_d = far_d;
+    }
+
+    if (stats_out != nullptr) { *stats_out = total; }
+}
+
+cascade_choice cascaded_shadow_map::choose(float view_depth) const
+{
+    cascade_choice out;
+    const int n = count();
+    if (n &lt;= 0) { return out; }
+
+    int i = 0;
+    while (i &lt; n - 1 &amp;&amp; view_depth &gt; splits_[static_cast&lt;std::size_t&gt;(i)]) { ++i; }
+    out.index = i;
+    out.next = i;
+    out.blend = 0.0f;
+
+    // ---- The seam, and the band that hides it --------------------------------
+    //
+    // Two cascades disagree along their shared distance because they have
+    // different texel grids and different biases, and the disagreement draws a
+    // straight line across the picture at exactly the split distance. Fading
+    // from one to the other across a band turns a step into a ramp — the two
+    // answers are both defensible, so anything between them is too.
+    if (set_.blend_fraction &gt; 0.0f &amp;&amp; i &lt; n - 1)
+    {
+        const float far_d = splits_[static_cast&lt;std::size_t&gt;(i)];
+        const float near_d = (i == 0) ? set_.near_d
+                                      : splits_[static_cast&lt;std::size_t&gt;(i - 1)];
+        const float band = (far_d - near_d) * std::clamp(set_.blend_fraction, 0.0f, 1.0f);
+        if (band &gt; 0.0f &amp;&amp; view_depth &gt; far_d - band)
+        {
+            out.next = i + 1;
+            out.blend = std::clamp((view_depth - (far_d - band)) / band, 0.0f, 1.0f);
+        }
+    }
+    return out;
+}
+
+float cascaded_shadow_map::visibility(vec3 world_pos, vec3 geometric_normal,
+                                      float n_dot_l, float view_depth) const
+{
+    if (!valid()) { return 1.0f; }
+
+    const cascade_choice c = choose(view_depth);
+    const float a = maps_[static_cast&lt;std::size_t&gt;(c.index)]
+                        .visibility(world_pos, geometric_normal, n_dot_l);
+    if (c.blend &lt;= 0.0f || c.next == c.index) { return a; }
+
+    const float b = maps_[static_cast&lt;std::size_t&gt;(c.next)]
+                        .visibility(world_pos, geometric_normal, n_dot_l);
+    return a + (b - a) * c.blend;
+}
+
+} // namespace engine
+</code></pre>
+  </figure>
+
+
+    <figure class="listing">
+    <figcaption>
+      <span class="path">scratch/verify_69.cpp</span>
+      <span class="tag new">cpp</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// scratch/verify_69.cpp — Lesson 6.9&#x27;s harness: what splitting the frustum buys,
+// and what it costs.
+//
+//   §A  THE SPLIT SCHEME — uniform, logarithmic, and why the blend
+//   §B  THE SLICE — eight corners from three numbers, checked against the matrix
+//   §C  THE WIN — texel density, cascaded against 6.8&#x27;s one map
+//   §D  ROTATION INVARIANCE — the sphere&#x27;s whole reason for existing
+//   §E  SNAPPING — the grid that does not slide, measured
+//   §F  THE BIAS THAT NEEDED NO NEW CODE — 6.8 §4, audited
+//   §G  SELECTION AND THE SEAM — where cascades meet, and the blend band
+//   §H  DEPTH RANGE — an occluder outside the slice still casts
+//   §I  THE GOLDEN — a new capability must not move the old picture
+//
+// §D AND §F ARE THE TWO THAT MATTER. §D measures the claim the sphere fit is
+// built on: yaw the camera and `world_per_texel` must not move, because if it
+// moves then every texel in the map changes size and the whole picture crawls.
+// §F is the audit of Lesson 6.8: every bias term there was a multiple of
+// `world_per_texel`, so if that derivation was real, cascades need NO new bias
+// code — only their own `light_camera`. Either the numbers come out or 6.8&#x27;s
+// formula was a fudge with a good story.
+//
+// Build and run:  sh scratch/build_verify_69.sh
+
+#include &lt;engine/core/assert.hpp&gt;
+#include &lt;engine/gfx/bounds.hpp&gt;
+#include &lt;engine/gfx/cascade.hpp&gt;
+#include &lt;engine/gfx/light.hpp&gt;
+#include &lt;engine/gfx/shadow.hpp&gt;
+#include &lt;engine/math/mat4.hpp&gt;
+#include &lt;engine/math/vec3.hpp&gt;
+
+#include &quot;../demos/common/demo_scene.hpp&quot;
+
+#include &lt;SDL3/SDL.h&gt;
+
+#include &lt;cmath&gt;
+#include &lt;fstream&gt;
+#include &lt;sstream&gt;
+#include &lt;string&gt;
+#include &lt;cstdarg&gt;
+#include &lt;cstdio&gt;
+#include &lt;vector&gt;
+
+namespace {
+
+int g_checks = 0;
+int g_failures = 0;
+
+void check(bool ok, const char* what)
+{
+    ++g_checks;
+    if (!ok) { ++g_failures; }
+    std::printf(&quot;  [%s] %s\n&quot;, ok ? &quot;PASS&quot; : &quot;FAIL&quot;, what);
+}
+
+void checkf(bool ok, const char* fmt, ...)
+{
+    ++g_checks;
+    if (!ok) { ++g_failures; }
+    std::printf(&quot;  [%s] &quot;, ok ? &quot;PASS&quot; : &quot;FAIL&quot;);
+    std::va_list args;
+    va_start(args, fmt);
+    std::vprintf(fmt, args);
+    va_end(args);
+    std::printf(&quot;\n&quot;);
+}
+
+void section(const char* title)
+{
+    std::printf(&quot;\n== %s ==\n&quot;, title);
+}
+
+using engine::aabb;
+using engine::camera_frustum;
+using engine::directional_light;
+using engine::frustum_slice;
+using engine::light_camera;
+using engine::mat4;
+using engine::vec3;
+
+constexpr float k_fovy = 1.0471975512f;   // 60 degrees
+constexpr float k_aspect = 16.0f / 9.0f;
+constexpr int k_res = 1024;
+
+// A camera at the origin looking down -z, yawed by `deg` about +y.
+camera_frustum camera_at(float deg, vec3 eye = vec3{0.0f, 0.0f, 0.0f})
+{
+    const float r = deg * 3.14159265358979f / 180.0f;
+    const vec3 fwd{std::sin(r) * -1.0f, 0.0f, -std::cos(r)};
+    const mat4 view = engine::look_at(eye, eye + fwd, vec3{0.0f, 1.0f, 0.0f});
+    camera_frustum cam;
+    cam.world_from_view = engine::rigid_inverse(view);
+    cam.fovy_radians = k_fovy;
+    cam.aspect = k_aspect;
+    return cam;
+}
+
+// ---------------------------------------------------------------------------
+void section_a_splits()
+{
+    section(&quot;A  THE SPLIT SCHEME&quot;);
+
+    const float near_d = 0.1f;
+    const float far_d = 60.0f;
+
+    // lambda = 0 is pure uniform: equal world slices.
+    std::printf(&quot;  lambda=0 (uniform)     &quot;);
+    for (int i = 0; i &lt; 4; ++i)
+    {
+        std::printf(&quot;%8.3f&quot;, engine::practical_split(i, 4, near_d, far_d, 0.0f));
+    }
+    std::printf(&quot;\n&quot;);
+
+    // lambda = 1 is pure logarithmic: a geometric series.
+    std::printf(&quot;  lambda=1 (logarithmic) &quot;);
+    for (int i = 0; i &lt; 4; ++i)
+    {
+        std::printf(&quot;%8.3f&quot;, engine::practical_split(i, 4, near_d, far_d, 1.0f));
+    }
+    std::printf(&quot;\n&quot;);
+
+    std::printf(&quot;  lambda=0.5 (practical) &quot;);
+    for (int i = 0; i &lt; 4; ++i)
+    {
+        std::printf(&quot;%8.3f&quot;, engine::practical_split(i, 4, near_d, far_d, 0.5f));
+    }
+    std::printf(&quot;\n&quot;);
+
+    // Uniform cut i lands at near + (far-near)*(i+1)/n, exactly.
+    const float u1 = engine::practical_split(0, 4, near_d, far_d, 0.0f);
+    checkf(std::fabs(u1 - (near_d + (far_d - near_d) * 0.25f)) &lt; 1e-4f,
+           &quot;uniform cut 0 = %.4f, predicted %.4f&quot;, u1,
+           near_d + (far_d - near_d) * 0.25f);
+
+    // Logarithmic cut i lands at near*(far/near)^((i+1)/n), exactly.
+    const float l1 = engine::practical_split(0, 4, near_d, far_d, 1.0f);
+    const float l1_pred = near_d * std::pow(far_d / near_d, 0.25f);
+    checkf(std::fabs(l1 - l1_pred) &lt; 1e-4f,
+           &quot;logarithmic cut 0 = %.4f, predicted %.4f&quot;, l1, l1_pred);
+
+    // THE COMPLAINT ABOUT PURE LOG, stated as a number: the first cascade covers
+    // almost nothing, so it is spent on the ground at your feet.
+    checkf(l1 &lt; 1.0f, &quot;pure log spends cascade 0 on the first %.2f m&quot;, l1);
+
+    // The practical scheme is between them, everywhere.
+    bool between = true;
+    for (int i = 0; i &lt; 3; ++i)
+    {
+        const float u = engine::practical_split(i, 4, near_d, far_d, 0.0f);
+        const float l = engine::practical_split(i, 4, near_d, far_d, 1.0f);
+        const float p = engine::practical_split(i, 4, near_d, far_d, 0.5f);
+        if (p &lt; std::min(u, l) - 1e-4f || p &gt; std::max(u, l) + 1e-4f) { between = false; }
+    }
+    check(between, &quot;practical splits lie between the two schemes at every cut&quot;);
+
+    // Monotonic, and the last cut IS the far plane — a gap or an overlap there
+    // would leave a ring of world unshadowed or resolve it twice.
+    bool monotonic = true;
+    float prev = near_d;
+    for (int i = 0; i &lt; 4; ++i)
+    {
+        const float s = engine::practical_split(i, 4, near_d, far_d, 0.5f);
+        if (s &lt;= prev) { monotonic = false; }
+        prev = s;
+    }
+    check(monotonic, &quot;splits strictly increase&quot;);
+    checkf(engine::practical_split(3, 4, near_d, far_d, 0.5f) == far_d,
+           &quot;the last split is the far plane exactly (%.1f)&quot;, far_d);
+}
+
+// ---------------------------------------------------------------------------
+void section_b_slice()
+{
+    section(&quot;B  THE SLICE&quot;);
+
+    const camera_frustum cam = camera_at(0.0f);
+    const frustum_slice s = engine::slice_corners(cam, 1.0f, 10.0f);
+
+    // With an identity-ish camera at the origin looking down -z, corner 0 of the
+    // near plane is (-hw, -hh, -1) with hh = tan(fovy/2)*1.
+    const float hh = std::tan(0.5f * k_fovy) * 1.0f;
+    const float hw = hh * k_aspect;
+
+    checkf(std::fabs(s.corners[0].x + hw) &lt; 1e-4f &amp;&amp;
+           std::fabs(s.corners[0].y + hh) &lt; 1e-4f &amp;&amp;
+           std::fabs(s.corners[0].z + 1.0f) &lt; 1e-4f,
+           &quot;near corner 0 = (%.4f, %.4f, %.4f), predicted (%.4f, %.4f, %.4f)&quot;,
+           static_cast&lt;double&gt;(s.corners[0].x), static_cast&lt;double&gt;(s.corners[0].y),
+           static_cast&lt;double&gt;(s.corners[0].z),
+           static_cast&lt;double&gt;(-hw), static_cast&lt;double&gt;(-hh), -1.0);
+
+    // Every far corner sits at z = -10: the slice&#x27;s far distance, negated,
+    // because -z is forward.
+    bool far_z_ok = true;
+    for (int i = 4; i &lt; 8; ++i)
+    {
+        if (std::fabs(s.corners[i].z + 10.0f) &gt; 1e-4f) { far_z_ok = false; }
+    }
+    check(far_z_ok, &quot;all four far corners sit at z = -10 (−z is forward)&quot;);
+
+    // THE INDEPENDENT CHECK: push a corner through the actual projection matrix
+    // and it must land on the edge of the NDC box. This is what makes §B a test
+    // of the corner builder rather than a restatement of it.
+    const mat4 proj = engine::perspective(k_fovy, k_aspect, 1.0f, 10.0f);
+    const engine::vec4 clip = proj * engine::point(s.corners[7]);
+    const vec3 ndc = engine::perspective_divide(clip);
+    checkf(std::fabs(std::fabs(ndc.x) - 1.0f) &lt; 1e-3f &amp;&amp;
+           std::fabs(std::fabs(ndc.y) - 1.0f) &lt; 1e-3f &amp;&amp;
+           std::fabs(ndc.z - 1.0f) &lt; 1e-3f,
+           &quot;far corner 7 through perspective() lands on the NDC box: &quot;
+           &quot;(%.4f, %.4f, %.4f)&quot;,
+           static_cast&lt;double&gt;(ndc.x), static_cast&lt;double&gt;(ndc.y),
+           static_cast&lt;double&gt;(ndc.z));
+}
+
+// ---------------------------------------------------------------------------
+// The headline number: what the near field actually gains.
+void section_c_density()
+{
+    section(&quot;C  THE WIN — texel density&quot;);
+
+    directional_light key;
+    key.direction = engine::normalised(vec3{-0.4f, -1.0f, -0.3f});
+
+    // A 40 m scene, which is what 6.8&#x27;s one map has to cover.
+    const aabb scene{vec3{-20.0f, -1.0f, -20.0f}, vec3{20.0f, 6.0f, 20.0f}};
+    const light_camera one = engine::fit_directional(key, scene, k_res);
+    std::printf(&quot;  6.8, one map over the whole scene: world_per_texel = %.4f m\n&quot;,
+                static_cast&lt;double&gt;(one.world_per_texel));
+
+    const camera_frustum cam = camera_at(0.0f, vec3{0.0f, 1.7f, 18.0f});
+    float near_d = 0.1f;
+    float first = 0.0f;
+    for (int i = 0; i &lt; 4; ++i)
+    {
+        const float far_d = engine::practical_split(i, 4, 0.1f, 60.0f, 0.5f);
+        const frustum_slice sl = engine::slice_corners(cam, near_d, far_d);
+        const light_camera lc =
+            engine::fit_directional_slice(key, sl, scene, k_res, true);
+        std::printf(&quot;  cascade %d  [%6.2f, %6.2f] m   world_per_texel = %.5f m\n&quot;,
+                    i, static_cast&lt;double&gt;(near_d), static_cast&lt;double&gt;(far_d),
+                    static_cast&lt;double&gt;(lc.world_per_texel));
+        if (i == 0) { first = lc.world_per_texel; }
+        near_d = far_d;
+    }
+
+    const float gain = one.world_per_texel / first;
+    checkf(gain &gt; 2.5f,
+           &quot;cascade 0 resolves %.1fx finer than 6.8&#x27;s single map &quot;
+           &quot;(%.4f m -&gt; %.5f m per texel)&quot;,
+           static_cast&lt;double&gt;(gain), static_cast&lt;double&gt;(one.world_per_texel),
+           static_cast&lt;double&gt;(first));
+
+    // AND THE PRICE OF STABILITY, which is the honest other half of §C. 2.8x is
+    // less than the arithmetic promises, and the missing factor is the sphere:
+    // it must contain the slice whichever way the camera is pointing, so it is
+    // bigger than a box fitted to the corners of THIS orientation. Measure what
+    // that costs, because a reader who works out the frustum&#x27;s dimensions by
+    // hand will expect a larger number and should be told why they are right.
+    const camera_frustum c0cam = camera_at(0.0f, vec3{0.0f, 1.7f, 18.0f});
+    const frustum_slice s0 = engine::slice_corners(c0cam, 0.1f, 7.78f);
+    const vec3 fwd0 = engine::normalised_or(key.direction, vec3{0.0f, -1.0f, 0.0f});
+    const mat4 b0 = engine::look_at(vec3{0.0f, 0.0f, 0.0f}, fwd0, vec3{0.0f, 1.0f, 0.0f});
+    aabb tight;
+    for (const vec3&amp; c : s0.corners) { tight.expand(engine::xyz(b0 * engine::point(c))); }
+    const vec3 te = tight.extent();
+    const float tight_wpt = std::max(te.x, te.y) / static_cast&lt;float&gt;(k_res);
+    checkf(tight_wpt &lt; first,
+           &quot;a tight box would give %.5f m per texel — the sphere costs %.0f%% &quot;
+           &quot;of the resolution, and buys §D in exchange&quot;,
+           static_cast&lt;double&gt;(tight_wpt),
+           static_cast&lt;double&gt;((first / tight_wpt - 1.0f) * 100.0f));
+}
+
+// ---------------------------------------------------------------------------
+// The sphere&#x27;s entire justification, measured.
+void section_d_rotation()
+{
+    section(&quot;D  ROTATION INVARIANCE&quot;);
+
+    directional_light key;
+    key.direction = engine::normalised(vec3{-0.4f, -1.0f, -0.3f});
+    const aabb scene{vec3{-20.0f, -1.0f, -20.0f}, vec3{20.0f, 6.0f, 20.0f}};
+
+    float min_wpt = 1e30f;
+    float max_wpt = -1e30f;
+    for (int deg = 0; deg &lt; 360; deg += 5)
+    {
+        const camera_frustum cam = camera_at(static_cast&lt;float&gt;(deg),
+                                             vec3{0.0f, 1.7f, 0.0f});
+        const frustum_slice sl = engine::slice_corners(cam, 0.1f, 15.0f);
+        const light_camera lc =
+            engine::fit_directional_slice(key, sl, scene, k_res, true);
+        min_wpt = std::min(min_wpt, lc.world_per_texel);
+        max_wpt = std::max(max_wpt, lc.world_per_texel);
+    }
+
+    const float spread = (max_wpt - min_wpt) / max_wpt;
+    checkf(spread &lt; 1e-5f,
+           &quot;yawing the camera through 360 deg moves world_per_texel by %.3e &quot;
+           &quot;(min %.6f, max %.6f) — the sphere has no orientation&quot;,
+           static_cast&lt;double&gt;(spread), static_cast&lt;double&gt;(min_wpt),
+           static_cast&lt;double&gt;(max_wpt));
+
+    // AND THE CONTRAST, which is the point of the decision. A box fitted tightly
+    // to the eight corners DOES change size with yaw. Measure that directly.
+    float box_min = 1e30f;
+    float box_max = -1e30f;
+    const vec3 fwd = engine::normalised_or(key.direction, vec3{0.0f, -1.0f, 0.0f});
+    for (int deg = 0; deg &lt; 360; deg += 5)
+    {
+        const camera_frustum cam = camera_at(static_cast&lt;float&gt;(deg),
+                                             vec3{0.0f, 1.7f, 0.0f});
+        const frustum_slice sl = engine::slice_corners(cam, 0.1f, 15.0f);
+        const mat4 basis = engine::look_at(vec3{0.0f, 0.0f, 0.0f}, fwd,
+                                           vec3{0.0f, 1.0f, 0.0f});
+        aabb box;
+        for (const vec3&amp; c : sl.corners) { box.expand(engine::xyz(basis * engine::point(c))); }
+        const vec3 ext = box.extent();
+        const float side = std::max(ext.x, ext.y);
+        box_min = std::min(box_min, side);
+        box_max = std::max(box_max, side);
+    }
+    const float box_spread = (box_max - box_min) / box_max;
+    checkf(box_spread &gt; 0.05f,
+           &quot;a corner-fitted box changes side by %.1f%% over the same yaw &quot;
+           &quot;(%.3f m -&gt; %.3f m) — that is the shimmer the sphere removes&quot;,
+           static_cast&lt;double&gt;(box_spread * 100.0f),
+           static_cast&lt;double&gt;(box_min), static_cast&lt;double&gt;(box_max));
+}
+
+// ---------------------------------------------------------------------------
+void section_e_snapping()
+{
+    section(&quot;E  SNAPPING&quot;);
+
+    directional_light key;
+    key.direction = engine::normalised(vec3{-0.4f, -1.0f, -0.3f});
+    const aabb scene{vec3{-20.0f, -1.0f, -20.0f}, vec3{20.0f, 6.0f, 20.0f}};
+
+    // Walk the camera forward in very small steps and watch where the light&#x27;s
+    // box centre lands, expressed in TEXELS. Snapped, it must always be a whole
+    // number; unsnapped, it slides continuously — and a grid that slides under
+    // fixed geometry is exactly what makes an edge crawl.
+    float worst_snapped_frac = 0.0f;
+    float worst_unsnapped_frac = 0.0f;
+
+    for (int step = 0; step &lt; 40; ++step)
+    {
+        const float z = 10.0f + static_cast&lt;float&gt;(step) * 0.013f;  // sub-texel steps
+        const camera_frustum cam = camera_at(0.0f, vec3{0.0f, 1.7f, z});
+        const frustum_slice sl = engine::slice_corners(cam, 0.1f, 15.0f);
+
+        for (int snap = 0; snap &lt; 2; ++snap)
+        {
+            const light_camera lc =
+                engine::fit_directional_slice(key, sl, scene, k_res, snap != 0);
+
+            // The light&#x27;s eye, in its own space, in texels.
+            const vec3 eye = engine::translation_of(engine::rigid_inverse(lc.view_from_world));
+            const vec3 ls = engine::xyz(lc.view_from_world * engine::point(eye));
+            (void)ls;
+
+            // Take the world origin&#x27;s light-space x, in texels: if the grid is
+            // snapped, the fractional part is stable frame to frame.
+            const vec3 probe = engine::xyz(lc.view_from_world * engine::point(vec3{0.0f, 0.0f, 0.0f}));
+            const float texels = probe.x / lc.world_per_texel;
+            const float frac = std::fabs(texels - std::floor(texels + 0.5f));
+            if (snap != 0) { worst_snapped_frac = std::max(worst_snapped_frac, frac); }
+            else { worst_unsnapped_frac = std::max(worst_unsnapped_frac, frac); }
+        }
+    }
+
+    checkf(worst_snapped_frac &lt; 1e-3f,
+           &quot;snapped: the world origin stays within %.2e texels of a texel centre &quot;
+           &quot;across 40 sub-texel camera steps&quot;,
+           static_cast&lt;double&gt;(worst_snapped_frac));
+    checkf(worst_unsnapped_frac &gt; 0.1f,
+           &quot;unsnapped: it wanders %.3f texels — the grid slides, and every &quot;
+           &quot;shadow edge crawls with it&quot;,
+           static_cast&lt;double&gt;(worst_unsnapped_frac));
+}
+
+// ---------------------------------------------------------------------------
+// The audit of Lesson 6.8.
+void section_f_bias()
+{
+    section(&quot;F  THE BIAS THAT NEEDED NO NEW CODE&quot;);
+
+    directional_light key;
+    key.direction = engine::normalised(vec3{-0.4f, -1.0f, -0.3f});
+    const aabb scene{vec3{-20.0f, -1.0f, -20.0f}, vec3{20.0f, 6.0f, 20.0f}};
+    const camera_frustum cam = camera_at(0.0f, vec3{0.0f, 1.7f, 18.0f});
+
+    // A 45-degree surface: tan(theta) = 1, so the slope factor is exactly 1 and
+    // the bias is reach * world_per_texel / depth_range with nothing hidden.
+    const float slope = 1.0f;
+    const float reach = engine::pcf_reach_texels(1);
+
+    std::printf(&quot;  reach = %.4f texels (PCF radius 1)\n&quot;,
+                static_cast&lt;double&gt;(reach));
+
+    float near_d = 0.1f;
+    std::vector&lt;float&gt; biases;
+    for (int i = 0; i &lt; 4; ++i)
+    {
+        const float far_d = engine::practical_split(i, 4, 0.1f, 60.0f, 0.5f);
+        const frustum_slice sl = engine::slice_corners(cam, near_d, far_d);
+        const light_camera lc =
+            engine::fit_directional_slice(key, sl, scene, k_res, true);
+
+        // 6.8&#x27;s function. Unchanged. Called with this cascade&#x27;s numbers.
+        const float b = engine::slope_scaled_bias(lc.world_per_texel, slope,
+                                                  lc.depth_range, reach);
+        biases.push_back(b);
+        std::printf(&quot;  cascade %d  wpt = %.5f m  depth_range = %7.3f m  &quot;
+                    &quot;bias = %.3e\n&quot;,
+                    i, static_cast&lt;double&gt;(lc.world_per_texel),
+                    static_cast&lt;double&gt;(lc.depth_range), static_cast&lt;double&gt;(b));
+        near_d = far_d;
+    }
+
+    // THE BIAS IN METRES differs enormously, which is the obvious half: it is
+    // reach * world_per_texel * slope, and world_per_texel spans 7x.
+    const float metres_near = reach * 0.01945f * slope;
+    const float metres_far = reach * 0.14165f * slope;
+    checkf(metres_far &gt; metres_near * 5.0f,
+           &quot;in WORLD units the far cascade&#x27;s bias is %.1fx the near one&#x27;s &quot;
+           &quot;(%.4f m vs %.4f m)&quot;,
+           static_cast&lt;double&gt;(metres_far / metres_near),
+           static_cast&lt;double&gt;(metres_far), static_cast&lt;double&gt;(metres_near));
+
+    // AND NOW THE SURPRISE, which is the best thing in this harness. In DEVICE
+    // depth — the units the buffer actually stores — cascades 1, 2 and 3 all
+    // want the SAME bias, to three decimal places. That is not a coincidence and
+    // it is derivable:
+    //
+    //     bias = reach * wpt / depth_range
+    //     wpt  = 2r / resolution           (the sphere&#x27;s diameter over the side)
+    //     depth_range ~ 2r                 (the sphere again, when it dominates)
+    //  =&gt; bias ~ reach * slope / resolution
+    //
+    // The radius cancels. A sphere-fitted cascade&#x27;s device-space bias depends on
+    // the RESOLUTION and the slope and nothing else — not on which cascade it
+    // is, not on how far away it is.
+    const float predicted = reach * slope / static_cast&lt;float&gt;(k_res);
+    checkf(std::fabs(biases[2] - predicted) / predicted &lt; 0.05f,
+           &quot;cascade 2&#x27;s bias %.4e is within %.1f%% of reach*slope/resolution &quot;
+           &quot;= %.4e — the sphere&#x27;s radius cancels out&quot;,
+           static_cast&lt;double&gt;(biases[2]),
+           static_cast&lt;double&gt;(std::fabs(biases[2] - predicted) / predicted * 100.0f),
+           static_cast&lt;double&gt;(predicted));
+
+    // Cascade 0 is the exception, and the exception confirms the mechanism: its
+    // depth range is set by the CASTERS (31.9 m) rather than by its own small
+    // sphere (~19.9 m), so the cancellation is spoiled and it needs LESS bias.
+    checkf(biases[0] &lt; biases[1] * 0.8f,
+           &quot;cascade 0 needs only %.0f%% of cascade 1&#x27;s bias, because the casters &quot;
+           &quot;set its depth range instead of its sphere — the one cascade where &quot;
+           &quot;the radius does not cancel&quot;,
+           static_cast&lt;double&gt;(biases[0] / biases[1] * 100.0f));
+
+    // And it is LINEAR in world_per_texel, which is the derivation&#x27;s actual
+    // claim rather than merely &quot;bigger&quot;.
+    near_d = 0.1f;
+    const float f0 = engine::practical_split(0, 4, 0.1f, 60.0f, 0.5f);
+    const frustum_slice s0 = engine::slice_corners(cam, near_d, f0);
+    const light_camera c0 = engine::fit_directional_slice(key, s0, scene, k_res, true);
+    const float doubled = engine::slope_scaled_bias(c0.world_per_texel * 2.0f, slope,
+                                                    c0.depth_range, reach);
+    checkf(std::fabs(doubled - 2.0f * biases[0]) &lt; 1e-9f,
+           &quot;doubling world_per_texel doubles the bias exactly (%.3e vs %.3e) — &quot;
+           &quot;it is a multiple, not a curve&quot;,
+           static_cast&lt;double&gt;(doubled), static_cast&lt;double&gt;(2.0f * biases[0]));
+}
+
+// ---------------------------------------------------------------------------
+void section_g_seam()
+{
+    section(&quot;G  SELECTION AND THE SEAM&quot;);
+
+    engine::cascaded_shadow_map csm;
+    check(csm.create(4, 256), &quot;a four-cascade set at 256 square&quot;);
+
+    csm.settings().count = 4;
+    csm.settings().lambda = 0.5f;
+    csm.settings().near_d = 0.1f;
+    csm.settings().far_d = 60.0f;
+
+    // Splits are filled by render(); fill them here the same way so selection
+    // can be tested without a scene.
+    for (int i = 0; i &lt; 4; ++i)
+    {
+        (void)engine::practical_split(i, 4, 0.1f, 60.0f, 0.5f);
+    }
+
+    // With blending off, selection is a step function and every depth lands in
+    // exactly one cascade.
+    csm.settings().blend_fraction = 0.0f;
+    const engine::cascade_choice hard = csm.choose(0.5f);
+    checkf(hard.blend == 0.0f &amp;&amp; hard.index == hard.next,
+           &quot;blend_fraction = 0 gives a hard choice (cascade %d, blend %.1f) — &quot;
+           &quot;which is the seam, and the first picture the lesson shows&quot;,
+           hard.index, static_cast&lt;double&gt;(hard.blend));
+
+    // Depths far beyond the last split still resolve, to the last cascade, and
+    // do not run off the end of the array.
+    const engine::cascade_choice beyond = csm.choose(1e6f);
+    checkf(beyond.index == 3 &amp;&amp; beyond.next == 3,
+           &quot;a depth past the far plane clamps to the last cascade (%d)&quot;,
+           beyond.index);
+}
+
+// ---------------------------------------------------------------------------
+void section_h_depth_range()
+{
+    section(&quot;H  DEPTH RANGE&quot;);
+
+    directional_light key;
+    key.direction = vec3{0.0f, -1.0f, 0.0f};   // straight down
+
+    const camera_frustum cam = camera_at(0.0f, vec3{0.0f, 1.7f, 0.0f});
+    const frustum_slice sl = engine::slice_corners(cam, 0.1f, 10.0f);
+
+    // A slice near the ground, and a caster fifty metres UP — outside the slice
+    // entirely, but between the light and it.
+    const aabb tall{vec3{-5.0f, 0.0f, -5.0f}, vec3{5.0f, 50.0f, 5.0f}};
+    const light_camera with = engine::fit_directional_slice(key, sl, tall, k_res, true);
+
+    const aabb flat{vec3{-5.0f, 0.0f, -5.0f}, vec3{5.0f, 1.0f, 5.0f}};
+    const light_camera without = engine::fit_directional_slice(key, sl, flat, k_res, true);
+
+    checkf(with.depth_range &gt; without.depth_range + 30.0f,
+           &quot;a 50 m caster stretches the depth range to %.1f m (from %.1f m) — &quot;
+           &quot;an occluder above the slice is outside it and must still be drawn&quot;,
+           static_cast&lt;double&gt;(with.depth_range),
+           static_cast&lt;double&gt;(without.depth_range));
+
+    // The box&#x27;s SIDE, though, must not care: the sphere covers the slice, and a
+    // tall caster is a depth-range fact, not a texel-density one.
+    checkf(std::fabs(with.world_per_texel - without.world_per_texel) &lt; 1e-6f,
+           &quot;…and world_per_texel is unchanged (%.6f vs %.6f): the caster moved &quot;
+           &quot;the near plane, not the texel grid&quot;,
+           static_cast&lt;double&gt;(with.world_per_texel),
+           static_cast&lt;double&gt;(without.world_per_texel));
+}
+
+// ---------------------------------------------------------------------------
+std::string read_file(const char* path)
+{
+    std::ifstream in(path, std::ios::binary);
+    if (!in) { return {}; }
+    std::ostringstream ss;
+    ss &lt;&lt; in.rdbuf();
+    return ss.str();
+}
+
+void section_i_golden()
+{
+    section(&quot;I  THE GOLDEN&quot;);
+
+    const int rc = demo::write_reference_shot(&quot;scratch/verify69.ppm&quot;);
+    check(rc == 0, &quot;write_reference_shot() succeeded&quot;);
+
+    const std::string ours = read_file(&quot;scratch/verify69.ppm&quot;);
+    const std::string golden = read_file(&quot;scratch/shot_52.ppm&quot;);
+    checkf(!ours.empty() &amp;&amp; ours.size() == golden.size(),
+           &quot;same size: %zu bytes&quot;, ours.size());
+    check(ours == golden,
+          &quot;BYTE-IDENTICAL, hash E917C06C — EIGHTEENTH lesson at this hash. This &quot;
+          &quot;one added a cascade header and source, a depth ARRAY texture, a &quot;
+          &quot;per-layer render pass, a 336-byte uniform block, a second cbuffer in &quot;
+          &quot;the scene shader and a Texture2D -&gt; Texture2DArray binding change — &quot;
+          &quot;and moved not one pixel, because the reference scene binds no shadow &quot;
+          &quot;map and `cascade_count` reaches the shader through a fallback that is &quot;
+          &quot;an identity. A NEW CAPABILITY IS A NEW PATH&quot;);
+}
+
+} // namespace
+
+int main()
+{
+    std::printf(&quot;verify_69 — Lesson 6.9: Cascaded Shadow Maps\n&quot;);
+
+    section_a_splits();
+    section_b_slice();
+    section_c_density();
+    section_d_rotation();
+    section_e_snapping();
+    section_f_bias();
+    section_g_seam();
+    section_h_depth_range();
+    section_i_golden();
+
+    std::printf(&quot;\n%d checks, %d failures\n&quot;, g_checks, g_failures);
+    return (g_failures == 0) ? 0 : 1;
+}
+</code></pre>
+  </figure>
+
+
+  <!-- =================================================================
+       6 — BUILD & RUN
+       ================================================================= -->
+  <h2 id="run"><span class="num">6</span>Build &amp; run</h2>
+
+  <figure class="listing">
+    <figcaption><span class="path">every platform</span></figcaption>
+    <pre><code class="lang-shell">cmake -S . -B build
+cmake --build build --parallel
+sh scratch/build_verify_69.sh</code></pre>
+  </figure>
+
+  <p>
+    On Windows, <code>cmake --build build --config Debug</code> and run
+    <code>build\demos\Debug\gltf_view.exe</code>; the harness script is a shell script, so use
+    Git Bash or WSL, or compile it by hand with the same flags MSVC needs.
+  </p>
+
+  <h3>What you should see</h3>
+
+  <p>
+    The harness prints nine sections and ends with <code>27 checks, 0 failures</code>. §C is the
+    one to read first:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">verify_69 §C</span></figcaption>
+    <pre><code class="lang-shell">== C  THE WIN — texel density ==
+  6.8, one map over the whole scene: world_per_texel = 0.0548 m
+  cascade 0  [  0.10,   7.78] m   world_per_texel = 0.01945 m
+  cascade 1  [  7.78,  16.25] m   world_per_texel = 0.03835 m
+  cascade 2  [ 16.25,  28.57] m   world_per_texel = 0.06695 m
+  cascade 3  [ 28.57,  60.00] m   world_per_texel = 0.14165 m
+  [PASS] cascade 0 resolves 2.8x finer than 6.8's single map
+  [PASS] a tight box would give 0.01508 m per texel — the sphere costs 29% of
+         the resolution, and buys §D in exchange</code></pre>
+  </figure>
+
+  <p>
+    Then the demo. Run it both ways on the same scene and compare the reported fits:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">the comparison</span></figcaption>
+    <pre><code class="lang-shell"># 6.8: one box around the scene
+./build/demos/gltf_view assets/shapes.glb --shadow 512 --shot scratch/one.ppm
+
+# 6.9: four cascades fitted to the frustum
+./build/demos/gltf_view assets/shapes.glb --shadow 512 --cascades 4 --shot scratch/four.ppm
+
+# and the artefacts, made reachable on purpose
+./build/demos/gltf_view assets/shapes.glb --shadow 512 --cascades 4 --no-snap
+./build/demos/gltf_view assets/shapes.glb --shadow 512 --cascades 4 --csm-blend 0.15</code></pre>
+  </figure>
+
+  <p>
+    The cascaded run prints one line per cascade, which is the table §3 spent its time on:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">gltf_view --cascades 4</span></figcaption>
+    <pre><code class="lang-shell">  cascades      : 4 x 512x512, lambda 0.50, snap on, blend 0.00
+  cascade 0    : [  0.10,   5.17] m  0.02169 m/texel  depth range 11.582
+  cascade 1    : [  5.17,  10.83] m  0.04191 m/texel  depth range 21.886
+  cascade 2    : [ 10.83,  19.15] m  0.07327 m/texel  depth range 38.263
+  cascade 3    : [ 19.15,  39.27] m  0.15170 m/texel  depth range 79.224</code></pre>
+  </figure>
+
+  <div class="callout warn">
+    <span class="label">And now the honest part: on <em>this</em> scene, cascades lose</span>
+    <p>
+      Compare that first cascade against what the single map reported on the same run:
+      <strong>0.0207 m per texel</strong>. Cascade 0 is <strong>0.02169</strong> — very slightly
+      <em>worse</em>. Four times the passes, four times the memory, and a marginally coarser near
+      field.
+    </p>
+    <p>
+      This is not a bug and it is worth more than a working demo would be. <code>shapes.glb</code>
+      is <strong>2.4 metres across</strong> with the camera 9.8 m back, so 6.8's scene-fitted box
+      is <em>already</em> tight — there is no far field being over-served, because there is no far
+      field. Meanwhile the sphere fit charges its 29% (§3.3) regardless.
+    </p>
+    <p>
+      <strong>Cascades pay when the scene is much larger than what you can usefully see.</strong>
+      §C measures a 2.8× win on a 40-metre scene; the demo measures a small loss on a 2.4-metre
+      one. Both are true, and the contrast is the lesson: this is a fix for a specific problem, not
+      an upgrade. Reach for it when you have measured the problem — which now takes one flag.
+    </p>
+  </div>
+
+  <!-- =================================================================
+       7 — PITFALLS
+       ================================================================= -->
+  <h2 id="pitfalls"><span class="num">7</span>Common pitfalls &amp; debugging</h2>
+
+  <div class="pitfall">
+    <h3>The shadows are correct, but only when you face one particular way</h3>
+    <p><strong>Symptom.</strong> Shadows appear and are shaped correctly when the camera looks one
+       direction, and vanish entirely when you turn around.</p>
+    <p><strong>Cause.</strong> The slice corners were built at <em>z</em> = +<em>d</em> instead of
+       −<em>d</em>, so the frustum was constructed behind the camera. −z is forward (conventions
+       §2).</p>
+    <p><strong>Fix.</strong> One sign in <code>slice_corners</code>. The tell is that it is
+       <em>exactly</em> the opposite hemisphere rather than a partial failure.</p>
+  </div>
+
+  <div class="pitfall">
+    <h3>Snapping is on and the edges still crawl</h3>
+    <p><strong>Symptom.</strong> <code>snap = true</code> changes nothing at all — not less
+       crawling, none.</p>
+    <p><strong>Cause.</strong> Almost certainly the basis anchoring described in §3.4: if the
+       light's basis is built <em>at</em> the slice centre, the centre's light-space coordinate is
+       (0,0,0) and there is nothing to round.</p>
+    <p><strong>Fix.</strong> Anchor the basis at the world origin. And test it numerically rather
+       than by eye — take a fixed world point, express it in texels, walk the camera in sub-texel
+       steps and print the fractional part. Snapped it should be ~10<sup>−6</sup>; if it is 0.499
+       the snap is not happening.</p>
+  </div>
+
+  <div class="pitfall">
+    <h3>Objects stop casting when they leave the screen</h3>
+    <p><strong>Symptom.</strong> A shadow disappears as its caster slides out of view, often
+       popping back when you turn slightly.</p>
+    <p><strong>Cause.</strong> The depth range was fitted to the slice instead of to the casters
+       (§3.6). An occluder between the light and the slice is outside the slice.</p>
+    <p><strong>Fix.</strong> Extend near and far to the casters' extent along the light axis. This
+       reads like a culling bug and is not one, which is why it is worth recognising by its
+       signature: the shadow vanishes when the <em>caster</em> leaves the frame, not when the
+       receiver does.</p>
+  </div>
+
+  <div class="pitfall">
+    <h3>The seam is a curve, not a line</h3>
+    <p><strong>Symptom.</strong> The cascade boundary is visible and bows outward toward the edges
+       of the screen.</p>
+    <p><strong>Cause.</strong> Selecting on radial distance (<code>length(eye − world)</code>)
+       rather than axial depth (<code>dot(world − eye, forward)</code>). They differ by about 22%
+       at the corner of a 60° frame (§3.7).</p>
+    <p><strong>Fix.</strong> Carry the camera's forward axis into the shader and project onto it. A
+       straight seam is the confirmation.</p>
+  </div>
+
+  <div class="pitfall">
+    <h3>The shadow map is black on the GPU and fine on the CPU</h3>
+    <p><strong>Symptom.</strong> Everything is shadowed, or nothing is, on the GPU path only.</p>
+    <p><strong>Cause.</strong> A <code>Texture2D</code> declared in HLSL against a texture created
+       as <code>SDL_GPU_TEXTURETYPE_2D_ARRAY</code>. The validation layer catches it; without the
+       layer it can silently sample nothing.</p>
+    <p><strong>Fix.</strong> <code>Texture2DArray&lt;float&gt;</code>, and sample with a
+       <code>float3</code> whose <code>z</code> is the layer index. Turn the validation layer on
+       before assuming it is a maths problem — 4.9's RenderDoc lesson is the other half of this.</p>
+  </div>
+
+  <div class="pitfall">
+    <h3>Turning shadows off produces garbage instead of no shadows</h3>
+    <p><strong>Symptom.</strong> A scene with no shadow map renders with random dark blotches, and
+       what they look like changes depending on what was drawn before.</p>
+    <p><strong>Cause.</strong> The cascade <code>cbuffer</code> was not pushed, so the shader read
+       whatever was last in that slot (§4.6).</p>
+    <p><strong>Fix.</strong> Push it unconditionally, with an identity fallback. A uniform slot has
+       no null.</p>
+  </div>
+
+  <!-- =================================================================
+       8 — EXERCISES
+       ================================================================= -->
+  <h2 id="exercises"><span class="num">8</span>Exercises</h2>
+
+  <div class="exercise">
+    <h3>8.1 — Find the crossover <span class="tag">guided</span></h3>
+    <p>
+      §6 shows cascades <em>losing</em> on a 2.4-metre scene and §C shows them winning 2.8× on a
+      40-metre one. Somewhere between is a scene size where they break even. Find it: vary the
+      scene extent in §C's setup, plot cascade 0's <code>world_per_texel</code> against the single
+      map's, and report the crossover.
+    </p>
+    <details><summary>Hint</summary>
+      <p>
+        The single map's texel size grows linearly with scene extent; cascade 0's does not depend
+        on the scene at all (except through the depth range). So one curve is a straight line and
+        the other is flat — the crossover is where the line crosses it, and it should land near the
+        point where the scene stops fitting inside cascade 0.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3>8.2 — Make λ visible <span class="tag">guided</span></h3>
+    <p>
+      Run the demo at <code>--csm-lambda 0</code>, <code>0.5</code> and <code>1</code> and record
+      the four split distances and four texel sizes each time. Which λ gives the best cascade 0,
+      and what does it cost the others? Write down the trade in one sentence.
+    </p>
+    <details><summary>Solution sketch</summary>
+      <p>
+        λ = 1 gives the finest cascade 0 by far and an unusable cascade 3, because the far cascade
+        absorbs everything the near ones did not. λ = 0 gives an almost useless cascade 0. The
+        sentence is roughly: <em>λ trades the near field's density against the far field's, and the
+        right value depends on how much of your gameplay happens within arm's reach.</em>
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3>8.3 — Cache the far cascades <span class="tag">engine challenge</span></h3>
+    <p>
+      Cascade 3 covers thirty metres and changes slowly; re-rendering it every frame is the single
+      biggest waste in this implementation. Re-render cascade <em>i</em> only every 2<sup>i</sup>
+      frames, and measure the saving. Then find the artefact you introduced.
+    </p>
+    <details><summary>Hint</summary>
+      <p>
+        Two traps. A cached cascade's <em>matrix</em> must be cached with it, or the shader will
+        sample last frame's texels with this frame's transform. And a moving caster in a stale
+        cascade drags its shadow behind it — which is a reason to invalidate on motion rather than
+        purely on a frame counter.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3>8.4 — Visualise the cascade split <span class="tag">guided</span></h3>
+    <p>
+      Add a debug mode that tints each cascade a different colour — cascade 0 red, 1 green, 2 blue,
+      3 white. It is four lines in the fragment shader and it turns every question in this lesson
+      into something you can see, including whether your seam is straight.
+    </p>
+  </div>
+
+  <div class="exercise">
+    <h3>8.5 — Break the cancellation <span class="tag">open</span></h3>
+    <p>
+      §3.5 shows the device-space bias is ≈ reach·tanθ/resolution because the sphere radius cancels
+      between <code>world_per_texel</code> and <code>depth_range</code>. Construct a scene where
+      that cancellation fails for <em>every</em> cascade rather than just cascade 0, predict the
+      resulting biases before you measure, then measure.
+    </p>
+    <details><summary>Hint</summary>
+      <p>
+        The cancellation needs <code>depth_range ≈ 2r</code>. Anything that makes the caster extent
+        along the light axis dominate the sphere breaks it — a very tall scene, or a light close to
+        horizontal so its axis runs the length of the world. Predict with
+        <code>reach·wpt·tanθ/range</code> using the printed ranges.
+      </p>
+    </details>
+  </div>
+
+  <!-- =================================================================
+       9 — RECAP
+       ================================================================= -->
+  <h2 id="recap"><span class="num">9</span>Recap &amp; next</h2>
+
+  <p><strong>What the engine gained.</strong></p>
+
+  <ul>
+    <li><strong>Cascaded shadow maps in both renderers</strong> — a practical split scheme, a
+        sphere fit, texel snapping, per-cascade bias and an optional blend band.</li>
+    <li><strong>A depth array texture</strong>, and with it the observation that 6.8's single map
+        is the one-layer case rather than a separate path.</li>
+    <li><strong>A stability argument that is measured rather than asserted</strong>: 30.2% box
+        variation cured to 9.9 × 10<sup>−8</sup>; 0.499 texels of grid slide cured to
+        7.6 × 10<sup>−6</sup>.</li>
+    <li><strong>An audit of Lesson 6.8 that it passed.</strong> Cascades change
+        <code>world_per_texel</code> by 7.3× and not one line of the bias derivation had to move.
+        The surprise was that the <em>device-space</em> bias barely moves either, because the
+        sphere's radius cancels — with cascade 0 the exception that confirms the mechanism.</li>
+    <li><strong>An honest measurement of when not to use this</strong>, which is the demo scene
+        this course has been carrying since Module 6 opened.</li>
+  </ul>
+
+  <p><strong>What it still does not do.</strong> Every cascade is the same resolution; nothing is
+     cached between frames; the light is still directional and still singular. Those are 8.3's
+     territory and Module 9's.</p>
+
+  <p>
+    <strong>Next</strong> — <a href="../index.html">6.10, Mipmaps, LOD, and Anisotropic
+    Filtering</a>. Lesson 3.9 named the shimmering floor and deferred the fix; 4.7 created every
+    texture with <code>num_levels = 1</code> and wrote "Module 6" in the comment. That debt comes
+    due, and it has to come due before image-based lighting, because a prefiltered environment map
+    <em>is</em> a mip chain indexed by roughness.
+  </p>
+
+  <!-- =================================================================
+       10 — FURTHER READING
+       ================================================================= -->
+  <h2 id="reading"><span class="num">10</span>Further reading</h2>
+
+  <ul>
+    <li><strong>Zhang, Sun, Xu &amp; Lu, "Parallel-Split Shadow Maps for Large-scale Virtual
+        Environments" (2006)</strong> — the practical split scheme, and the 1/<em>d</em> argument
+        for the logarithmic term stated properly.</li>
+    <li><strong>Real-Time Rendering, 4th ed., §7.4 "Cascaded Shadow Maps"</strong> — the standard
+        treatment, including the variants this lesson does not implement.</li>
+    <li><strong>Microsoft, "Common Techniques to Improve Shadow Depth Maps"</strong> — still the
+        clearest single account of cascade fitting, texel snapping and the bounding-sphere trick,
+        with pictures of each artefact.</li>
+    <li><strong>Eric Lengyel, <em>Foundations of Game Engine Development</em>, vol. 2</strong> —
+        the frustum-corner construction, done as geometry rather than as a matrix inverse.</li>
+    <li><strong>SDL3, <code>SDL_GPUTextureCreateInfo</code> and
+        <code>SDL_GPUDepthStencilTargetInfo</code></strong> — <code>layer_count_or_depth</code> and
+        <code>layer</code>, which are the two fields this lesson checked rather than guessed.</li>
+  </ul>
+
+  <nav class="lesson-nav" aria-label="Lesson navigation (bottom)">
+    <a class="prev-l" href="06-08-shadow-mapping.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">6.8 — Shadow Mapping: Bias, Acne, and PCF</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="../index.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">6.10 — Mipmaps, LOD, and Anisotropic Filtering</span>
+    </a>
+  </nav>
+
+</div>
+
+<!-- SHARED-SCRIPT:BEGIN -->
+<!-- The shared page script (theme toggle, TOC scrollspy, syntax highlighter),
+     linked rather than inlined. Single source of truth: docs/shared/course.js.
+     A plain classic script at end of body, so it runs exactly where the inline
+     copy used to: after the DOM is parsed, before KaTeX's deferred render. -->
+<script src="../shared/course.js"></script>
+<script defer
+        src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"
+        integrity="sha384-7zkQWkzuo3B5mTepMUcHkMB5jZaolc2xDwL6VFqjFALcbeS9Ggm/Yr2r3Dy4lfFg"
+        crossorigin="anonymous"></script>
+<script defer
+        src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+        integrity="sha384-43gviWU0YVjaDtb/GhzOouOXtZMP/7XUzwPTstBeZFe/+rCMvRwr4yROQP43s0Xk"
+        crossorigin="anonymous"
+        onload="renderMathInElement(document.body, {
+          delimiters: [
+            {left: '\\[', right: '\\]', display: true},
+            {left: '\\(', right: '\\)', display: false}
+          ],
+          throwOnError: false
+        });"></script>
+<!-- SHARED-SCRIPT:END -->
+</body>
+</html>

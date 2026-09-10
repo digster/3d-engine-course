@@ -44,7 +44,8 @@ namespace engine {
 /// a shadow pass is a rasterizer pass — so including it back would be a cycle.
 /// A pointer to an incomplete type is all `fill_style` needs, and `raster.cpp`
 /// is the one place that has to see the definition.
-class shadow_map; class framebuffer; }
+class shadow_map;
+class cascaded_shadow_map; class framebuffer; }
 namespace engine { class depth_buffer; }
 
 namespace engine {
@@ -646,6 +647,24 @@ struct fill_style
     /// only that path computes. Bound to a `shading::textured` fill it is
     /// silently ignored, exactly as `lights` already is.
     const shadow_map* shadows = nullptr;
+
+    /// A CASCADE SET, which takes priority over `shadows` when both are set.
+    /// Lesson 6.9.
+    ///
+    /// Two pointers rather than one variant, because they are two different
+    /// answers to the same question and a fill wants exactly one of them. The
+    /// cascaded path also needs a view axis, below, which the single-map path
+    /// does not — a variant would have to carry that field for both.
+    const cascaded_shadow_map* cascades = nullptr;
+
+    /// The camera's eye and forward axis, for selecting a cascade.
+    ///
+    /// **Axial depth, not radial**: `dot(p - eye, forward)` is the quantity the
+    /// splits were computed in. `length(p - eye)` is up to 22% larger at the
+    /// corner of a 60-degree frame, which would put the corners of the screen in
+    /// the wrong cascade and bend every seam. Ignored unless `cascades` is set.
+    vec3 view_eye{0.0f, 0.0f, 0.0f};
+    vec3 view_forward{0.0f, 0.0f, -1.0f};
 
     /// **Test and write depth; compute and store no colour** — Lesson 6.8.
     ///

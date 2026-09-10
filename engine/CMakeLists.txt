@@ -71,6 +71,7 @@ add_library(engine STATIC
     # header because it owns buffers and reaches into the whole software
     # pipeline — `collect_triangles` and `draw_triangles` both — which is more
     # than a header should drag into every file that mentions a light.
+    src/gfx/cascade.cpp
     src/gfx/shadow.cpp
     src/gfx/soft_renderer.cpp
     src/gfx/texture.cpp

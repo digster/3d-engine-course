@@ -6798,3 +6798,53 @@ kernel or footprint downstream of it.
 
 - **Qualify the recap too.** A reader who skims takes the recap's summary as the finding. A caveat
   buried in §3 does not reach them.
+
+## Lesson 6.9 — Cascaded shadow maps
+
+- **A derived formula proves itself when you change what it was derived from.** 6.8's bias was
+  `reach·world_per_texel·tanθ/depth_range`. Cascades change `world_per_texel` by 7.3×, and not one
+  line had to move — because both terms live in `light_camera` and `visibility()` already read them
+  from there. That is the difference between a formula and a tuned constant with a good story: the
+  constant needs a new value per cascade, the formula does not. **Design the audit into the next
+  lesson, not into the one making the claim.**
+
+- **The strongest result was the one nobody arranged.** In device depth the bias is *constant*
+  across cascades 1–3 (2.031e-03), because a sphere-fitted cascade has `wpt = 2r/res` and
+  `range ≈ 2r`, so the radius cancels and `bias ≈ reach·tanθ/resolution` — 2% from the prediction.
+  And cascade 0 disobeys **exactly** where the derivation says it should, its range being set by the
+  casters rather than its sphere. An exception you can predict from the mechanism is worth more than
+  a rule with no exceptions.
+
+- **Anchor a quantisation basis somewhere other than the thing you are quantising.** Texel snapping
+  did nothing at all, silently, because the light basis was built with
+  `look_at(centre, centre + fwd, up)` — making `basis * point(centre)` exactly `(0,0,0)`, so there
+  was nothing left to round. The harness caught it as "§E reports an identical 0.499 texels with
+  snapping on and off", which is a far better error message than a picture that looks slightly
+  crawly. **A no-op that compiles is why the measurement has to be numeric.**
+
+- **Measure the case where the feature loses, and put it in the lesson.** On this course's own demo
+  scene (2.4 m across, camera 9.8 m back) cascades come out *worse* than 6.8's single map — 0.02169
+  against 0.0207 — because there is no far field to over-serve and the sphere fit charges 29%
+  regardless. The 2.8× win only appears on a 40 m scene. Shipping both numbers is what stops a
+  reader cargo-culting the technique.
+
+- **A uniform slot has no null.** A `cbuffer` the shader declares and nobody pushes reads as
+  whatever was last in that slot — not as zero. The cascade block is therefore pushed on every
+  frame, with a deliberate identity fallback, even when shadows are off. The nullable-pointer
+  bargain the rest of the engine makes does not survive the crossing to GPU state.
+
+- **Radial distance is not axial depth, and the difference has a shape.** Splits are computed in
+  view-space depth; a fragment knows a position. `length(eye − world)` overstates depth by
+  1/cos(off-axis) — ~22% at the corner of a 60° frame — so selecting a cascade on it bends the seam
+  into a curve that follows the frame edge. Sixteen bytes of `view_forward` keeps selection and
+  fitting talking about the same quantity.
+
+- **Making one case the degenerate case of another beats maintaining two.** `Texture2D` and
+  `Texture2DArray` are different HLSL binding types, so supporting both means two shaders. Making
+  the shadow map *always* an array — one layer for 6.8's single map — left exactly one code path.
+
+- **The rebuild-and-diff discipline caught a real regression this session.** Retrofit edits made to
+  a *rendered page* were silently reverted by the first rebuild, because the source fragment in
+  `scratch/` still held the old text. Pins must be taken from the state you actually intend to
+  ship, not from the lesson's original commit — the renumber had moved on since. See
+  `state-md-is-append-and-merge` and the pipeline notes.

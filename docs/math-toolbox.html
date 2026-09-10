@@ -2607,6 +2607,63 @@
     </p>
   </div>
 
+  <div class="tool">
+    <h3>Blending two schemes you can each defend <span class="from">Lesson 6.9</span></h3>
+    <div class="eq">
+      <span>\[ d_i = \lambda \cdot near\left(\tfrac{far}{near}\right)^{i/n}
+                 + (1-\lambda)\left(near + (far-near)\tfrac{i}{n}\right) \]</span>
+    </div>
+    <p>
+      The practical split scheme, and a pattern worth taking away from it. Two schemes were each
+      <em>right about something</em> &mdash; uniform about covering ground evenly, logarithmic
+      about holding texels-per-pixel constant, which is the same 1/<em>d</em> Lesson 4.7 met as
+      depth precision &mdash; and each unusable alone. The blend is not a fudge because
+      <strong>both ends of the dial are explicable</strong>; &lambda; says which argument you
+      believe more. Contrast a magic curve, where no value of the parameter has a story.
+    </p>
+  </div>
+
+  <div class="tool">
+    <h3>Quantising to a grid to buy stability <span class="from">Lesson 6.9</span></h3>
+    <div class="eq">
+      <span>\[ c' = \left\lfloor \frac{c}{step} \right\rfloor \cdot step \]</span>
+    </div>
+    <p>
+      When a sampling grid moves under fixed data, every sample lands somewhere new each frame and
+      the result flickers. Rounding the grid&rsquo;s origin to a whole step makes it land in the
+      same places it landed last time, so the answer either repeats or changes by exactly one step.
+      Measured for shadows: <strong>0.499 texels of drift &rarr; 7.6&thinsp;&times;&thinsp;10<sup>&minus;6</sup></strong>.
+    </p>
+    <p>
+      Three things to get right, and each fails silently. <strong>Round in the grid&rsquo;s own
+      space</strong>, not the world&rsquo;s. <strong>Anchor the basis somewhere other than the
+      thing being rounded</strong> &mdash; anchor it at the point itself and that point&rsquo;s
+      coordinate is 0 by construction, so there is nothing to round. And use
+      <strong><code>floor</code>, not a cast</strong>: a cast truncates toward zero, so it rounds
+      negative coordinates the other way and puts a discontinuity through the origin.
+    </p>
+  </div>
+
+  <div class="tool">
+    <h3>Auditing a formula by changing what it was derived from <span class="from">Lesson 6.9</span></h3>
+    <p>
+      Not an equation &mdash; a test. A derived formula and a tuned constant with a good story
+      attached look identical until the quantity underneath one of them moves. Lesson 6.8 derived a
+      bias from <code>world_per_texel</code>; Lesson 6.9 changed that quantity by
+      <strong>7.3&times;</strong> and asked what broke. Nothing did.
+    </p>
+    <p>
+      The stronger result was the one nobody arranged. Because a sphere-fitted cascade has
+      <em>wpt</em>&nbsp;=&nbsp;2<em>r</em>/res and <em>range</em>&nbsp;&asymp;&nbsp;2<em>r</em>, the
+      radius <strong>cancels</strong>, and the device-space bias collapses to
+      reach&middot;tan&theta;/resolution &mdash; independent of which cascade it is. Predicted
+      2.0716&thinsp;&times;&thinsp;10<sup>&minus;3</sup>, measured 2.031. And the one cascade that
+      disobeys is the one whose depth range is set by something other than its sphere, which is
+      precisely where the derivation says the cancellation should fail. <strong>An exception you
+      can predict from the mechanism is worth more than a rule with no exceptions.</strong>
+    </p>
+  </div>
+
   <h2 id="performance"><span class="num">8</span>Reasoning about cost</h2>
 
   <p>

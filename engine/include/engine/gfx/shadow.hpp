@@ -350,6 +350,19 @@ public:
     void render(std::span<const scene_object> objects, const mesh_pool& meshes,
                 const directional_light& key, shadow_stats* stats = nullptr);
 
+    /// Render with a camera someone else fitted.
+    ///
+    /// Lesson 6.9. A cascade is a `shadow_map` whose box was fitted to a slice
+    /// of the CAMERA's frustum rather than to the scene, and that is the only
+    /// difference — so the fit is the one thing it has to be able to replace.
+    /// The overload above is this one with `fit_directional` called first.
+    ///
+    /// `bounds` is recorded for `scene_bounds()` and is not re-fitted; pass the
+    /// caster bounds the camera was built against, or the two will disagree.
+    void render(std::span<const scene_object> objects, const mesh_pool& meshes,
+                const light_camera& cam, const aabb& bounds,
+                shadow_stats* stats = nullptr);
+
     /// **Is this point lit?** 1 for fully lit, 0 for fully shadowed, and the
     /// values between are what PCF produces.
     ///

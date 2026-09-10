@@ -272,7 +272,8 @@ draw_stats gpu_scene_renderer::render(SDL_GPUCommandBuffer* cb, SDL_GPURenderPas
                                       const scene_light_uniforms& light,
                                       SDL_GPUSampler* sampler, frame_log* log,
                                       SDL_GPUTexture* shadow,
-                                      SDL_GPUSampler* shadow_sampler) const
+                                      SDL_GPUSampler* shadow_sampler,
+                                      const cascade_uniforms* cascades) const
 {
     draw_stats stats;
     if (cb == nullptr || pass == nullptr || items == nullptr || count <= 0) { return stats; }
@@ -285,6 +286,28 @@ draw_stats gpu_scene_renderer::render(SDL_GPUCommandBuffer* cb, SDL_GPURenderPas
     SDL_PushGPUVertexUniformData(cb, 0, &camera, sizeof(camera));
     SDL_PushGPUFragmentUniformData(cb, 0, &light, sizeof(light));
     stats.uniform_bytes += static_cast<Uint32>(sizeof(camera) + sizeof(light));
+
+    // ---- The cascades — Lesson 6.9 ------------------------------------------
+    //
+    // ALWAYS PUSHED, EVEN WHEN THERE ARE NO SHADOWS. A cbuffer the shader
+    // declares and nobody fills does not read as zero — it reads as whatever was
+    // last in that slot, which is a garbage matrix and a `cascade_count` that
+    // may be anything. The fallback below is a deliberate identity: one cascade,
+    // a split past any reachable depth, and `shadow_strength` in the light block
+    // is what actually disables the lookup.
+    cascade_uniforms fallback{};
+    if (cascades == nullptr)
+    {
+        fallback.cascade_count = 1.0f;
+        fallback.splits = vec4{1e30f, 1e30f, 1e30f, 1e30f};
+        fallback.world_per_texel = vec4{1.0f, 1.0f, 1.0f, 1.0f};
+        fallback.depth_range = vec4{1.0f, 1.0f, 1.0f, 1.0f};
+        fallback.view_forward = vec4{0.0f, 0.0f, -1.0f, 0.0f};
+        for (mat4& m : fallback.light_clip_from_world) { m = light.light_clip_from_world; }
+    }
+    const cascade_uniforms& casc = (cascades != nullptr) ? *cascades : fallback;
+    SDL_PushGPUFragmentUniformData(cb, 2, &casc, sizeof(casc));
+    stats.uniform_bytes += static_cast<Uint32>(sizeof(casc));
 
     if (log != nullptr)
     {

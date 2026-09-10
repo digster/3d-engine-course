@@ -7,7 +7,7 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-09-08 (after Lesson 6.8 — 64 of 107 lessons)
+updated: 2026-09-10 (after Lesson 6.9 — 65 of 107 lessons)
 
 conventions:
   ecs-storage: THE ECS IS A SPARSE SET, DECIDED IN 5.7 BY MEASUREMENT, NOT TASTE.
@@ -3386,6 +3386,87 @@ completed:
   - 6.8  Shadow Mapping: Bias, Acne, and PCF
 
 capabilities:
+  - 6.9 CASCADED SHADOW MAPS IN BOTH RENDERERS, AND AN AUDIT 6.8 PASSED.
+    63 -> 65 public headers, 35 -> 36 sources. Golden byte-identical at E917C06C
+    for the EIGHTEENTH lesson: cascades are an opt-in path and the reference
+    scene binds no map.
+    THE LESSON'S CLAIM: A CASCADE IS A FIT, NOT A FEATURE. Each cascade is an
+    ordinary 6.8 `shadow_map` with a different camera. Nothing about the
+    rasterisation, the depth compare, the PCF kernel OR THE BIAS changed.
+    THE AUDIT, AND WHY IT MATTERS: 6.8 derived bias from `world_per_texel`.
+    Cascades change that by 7.3x. If the derivation was real, nothing should
+    need to move — AND NOTHING DID, because `light_camera` owns both terms and
+    `visibility()` already read them from there.
+    THE RESULT NOBODY ARRANGED: in DEVICE depth the bias is CONSTANT across
+    cascades 1-3 at 2.031e-03. wpt = 2r/res and range ~ 2r, SO THE RADIUS
+    CANCELS: bias ~ reach*tan(theta)/resolution = 2.0716e-03 predicted, 2%
+    agreement. CASCADE 0 IS THE EXCEPTION AT 64% because its range is set by the
+    CASTERS (31.9 m) not its own sphere (19.9 m) — an exception PREDICTED BY the
+    mechanism, which is worth more than a rule without one.
+    gfx/cascade.{hpp,cpp}  NEW. `camera_frustum`, `frustum_slice`,
+                `practical_split`, `slice_corners`, `fit_directional_slice`,
+                `cascade_settings`, `cascade_choice`, `cascaded_shadow_map`.
+                k_max_cascades = 4.
+    THE SPHERE, NOT THE CORNERS, and it is the whole anti-shimmer argument: a
+                corner-fitted box changes side by 30.2% under yaw (measured
+                24.6 -> 35.3 m), and wpt is the side over the resolution, so
+                every texel resizes while the camera merely turned. A sphere has
+                no orientation: measured spread 9.93e-08. IT COSTS 29% OF THE
+                RESOLUTION (0.01508 tight vs 0.01945 sphere) and the lesson says
+                so.
+    SNAPPING, AND THE BUG THE HARNESS CAUGHT: round the box centre to a whole
+                texel IN LIGHT SPACE. 0.499 texels of drift -> 7.63e-06.
+                THE BASIS MUST BE ANCHORED AT THE WORLD ORIGIN. Built at the
+                slice centre, `basis * point(centre)` is (0,0,0) BY CONSTRUCTION
+                and snapping silently does nothing — §E reported an identical
+                0.499 with snap on and off, which is a far better error message
+                than a slightly crawly picture. `floor`, never a cast: a cast
+                truncates toward zero and puts a discontinuity at the origin.
+    DEPTH RANGE COMES FROM THE CASTERS, not the slice. An occluder between the
+                light and the slice is OUTSIDE it and must still be drawn, or
+                shadows blink out at the screen edge (reads as a culling bug,
+                is not one). Measured: a 50 m caster stretches range 26.1 ->
+                62.3 m and leaves wpt untouched at 0.024999.
+    shadow.hpp  `render(objects, meshes, light_camera, bounds, stats)` — the fit
+                is the one thing a cascade has to replace. The old signature
+                delegates.
+    gpu_texture `create_depth_array`. SDL_GPU_TEXTURETYPE_2D_ARRAY +
+                layer_count_or_depth. THE SHADOW MAP IS NOW ALWAYS AN ARRAY,
+                EVEN AT ONE LAYER, so 6.8's single map is the degenerate case of
+                6.9's and the shader has ONE code path — Texture2D and
+                Texture2DArray are different binding types, so carrying both
+                means two shaders.
+    ⚠ VERIFY DISCHARGED against SDL3/SDL_gpu.h: the per-pass layer field is
+                `SDL_GPUDepthStencilTargetInfo::layer`, a Uint8, declared after
+                `mip_level`. A pass targets ONE layer, so N cascades are N
+                passes — which they were anyway, each having its own camera.
+    gpu_uniform `cascade_uniforms`, 336 bytes, FRAGMENT SLOT 2. float4 not
+                float[4]: HLSL gives each scalar-array element its own 16-byte
+                register, so float[4] costs 64 bytes to carry 16.
+    view_forward IS NOT PADDING. Splits are AXIAL depth; a fragment knows a
+                position. length(eye-world) is RADIAL and differs by
+                1/cos(off-axis) — ~22% at the corner of a 60 deg frame — so
+                selecting on it bends the seam into a curve following the frame
+                edge. dot(world-eye, forward) is the number the splits were
+                computed in.
+    gpu_scene   THE CASCADE BLOCK IS PUSHED EVEN WHEN THERE ARE NO SHADOWS. A
+                cbuffer the shader declares and nobody fills reads as WHATEVER
+                WAS LAST IN THAT SLOT, not as zero. The fallback is an identity:
+                one cascade, splits at 1e30, 6.8's matrix in every slot. A
+                uniform slot has no null.
+    raster      `fill_style::cascades` (takes priority over `shadows`) plus
+                `view_eye`/`view_forward`. Two pointers, not a variant: they are
+                two answers to one question and only the cascaded one needs an
+                axis.
+    THE HONEST MEASUREMENT, and it is the one to remember: ON THIS COURSE'S OWN
+                DEMO SCENE CASCADES LOSE. shapes.glb is 2.4 m across with the
+                camera 9.8 m back, so 6.8's scene fit is ALREADY tight — cascade
+                0 comes out at 0.02169 against the single map's 0.0207, slightly
+                WORSE, because there is no far field to over-serve and the
+                sphere charges its 29% anyway. §C measures a 2.8x WIN on a 40 m
+                scene. CASCADES PAY WHEN THE SCENE IS MUCH LARGER THAN WHAT YOU
+                CAN USEFULLY SEE; they are a fix for a measured problem, not an
+                upgrade.
   - 6.8 SHADOWS IN BOTH RENDERERS, FROM A BIAS THAT IS DERIVED RATHER THAN TUNED.
     60 -> 63 public headers, 33 -> 35 sources, 14 -> 16 shaders. Golden
     byte-identical at E917C06C for the SEVENTEENTH lesson, because the reference
@@ -3410,7 +3491,7 @@ capabilities:
                 `expand`, which removes the first-vertex branch from every caller.
                 `transformed(box, m)` is the box around the transformed BOX.
                 6.16's frustum culling is the next caller.
-    gfx/shadow.{hpp,cpp}  NEW. `light_camera` (view, clip_from_view,
+  gfx/shadow.{hpp,cpp}  NEW. `light_camera` (view, clip_from_view,
                 clip_from_world, viewport, world_per_texel, depth_range),
                 `fit_directional`, `shadow_bias` (none / constant / slope_scaled /
                 normal_offset), `shadow_settings`, `shadow_stats`,
@@ -5738,6 +5819,7 @@ files:
              engine::pool<T>; see conventions:ecs-runtime.)
   engine/include/engine/gfx/: clip.hpp, colour.hpp, debug_draw.hpp,
             bounds.hpp                                                       [6.8]
+            cascade.hpp                                                      [6.9]
             debug_lines.hpp                                                 [5.11]
             depth_buffer.hpp, framebuffer.hpp, gpu_buffer.hpp, gpu_debug.hpp,
             gpu_device.hpp, gpu_mesh.hpp, gpu_pipeline.hpp, gpu_present.hpp,
@@ -5764,7 +5846,8 @@ files:
   engine/src/asset/: search_path.cpp, asset_store.cpp                   [5.5]
   engine/src/core/: actions.cpp [5.10], clock.cpp, fixed_step.cpp, input.cpp,
             log.cpp, profile.cpp
-  engine/src/gfx/: clip.cpp, colour.cpp, debug_draw.cpp, debug_lines.cpp [5.11],
+  engine/src/gfx/: cascade.cpp [6.9], clip.cpp, colour.cpp, debug_draw.cpp,
+            debug_lines.cpp [5.11],
             depth_buffer.cpp,
             framebuffer.cpp, gpu_buffer.cpp, gpu_debug.cpp, gpu_device.cpp,
             gpu_mesh.cpp, gpu_pipeline.cpp, gpu_present.cpp, gpu_scene.cpp,
@@ -6156,76 +6239,67 @@ roadmap: RESHAPED 2026-09-08, AFTER TWO EXTERNAL REVIEWS OF THE PUBLISHED OUTLIN
             qualifier too, because a skimmer reads the recap and stops.
 
 
-next: 6.9 — Cascaded Shadow Maps
-      (planned filename: docs/lessons/06-09-cascaded-shadows.html — 6.8's TWO next
-      links point at the index and BOTH need repointing; scratch/l68_body_a.html
-      holds the top one and build_68.py's TAIL the bottom. AND build_68.py PINS
-      NOTHING while listing EIGHT files whole: bounds.hpp, shadow.{hpp,cpp},
-      gpu_shadow.{hpp,cpp}, shadow.vert.hlsl, scene.frag.hlsl and verify_68.cpp.
-      Every one of those except the vertex shader is a file 6.9 will edit. Pin
-      first:
-        for f in engine/include/engine/gfx/bounds.hpp \
-                 engine/include/engine/gfx/shadow.hpp \
-                 engine/src/gfx/shadow.cpp \
-                 engine/include/engine/gfx/gpu_shadow.hpp \
-                 engine/src/gfx/gpu_shadow.cpp \
-                 shaders/shadow.vert.hlsl shaders/scene.frag.hlsl; do
-          git show <6.8 commit>:$f > scratch/l68_$(basename $f)
+next: 6.10 — Mipmaps, LOD, and Anisotropic Filtering
+      (planned filename: docs/lessons/06-10-mipmaps.html — 6.9's TWO next links
+      point at the index and BOTH need repointing; scratch/l69_body_a.html holds
+      the top one and build_69.py's TAIL the bottom.
+      PIN FIRST. build_69.py's LISTING_SOURCE is EMPTY and correctly so — every
+      file it lists, 6.9 created. That stops being true the moment 6.10 edits
+      one. It lists THREE: cascade.hpp, cascade.cpp and verify_69.cpp. 6.10 is
+      unlikely to touch cascade.* but WILL touch texture.hpp/sampler and
+      gpu_texture, so check before assuming. The command:
+        for f in engine/include/engine/gfx/cascade.hpp \
+                 engine/src/gfx/cascade.cpp; do
+          git show <6.9 commit>:$f > scratch/l69_$(basename $f)
         done
-        cp scratch/verify_68.cpp scratch/l68_verify_68.cpp        # gitignored
-      Then re-run build_68.py and `git diff` the page. SEVEN lessons running the
-      diff has been exactly the nav lines meant to move. AND EMPTY LISTING_SOURCE
-      WHEN COPYING build_68.py — build_66.py carried 6.5's pins inert for a whole
-      lesson, which made the discipline look satisfied when it was not.
+        cp scratch/verify_69.cpp scratch/l69_verify_69.cpp   # gitignored
+      Then re-run build_69.py and `git diff` the page: EIGHT lessons running,
+      the diff has been exactly the nav lines meant to move.
 
-      WHAT 6.9 IS ACTUALLY ABOUT, and 6.8 already set up its opening argument:
-      `gltf_view --shadow 128` is what ONE map over a whole scene looks like
-      everywhere. The near field of an outdoor scene gets a handful of texels
-      because the box has to contain the far field too, and the fix is to split
-      the CAMERA's frustum by distance and give each slice its own map.
-      WHAT THAT BRINGS BACK, all of it deliberately deferred by 6.8:
-        1 A BOX THAT MOVES WITH THE CAMERA, and therefore TEXEL SNAPPING.
-          6.8's fit depends on the SCENE's bounds, so the light's box does not
-          move when the camera does and the shimmer snapping exists to cure
-          cannot occur — shadow.hpp says so in as many words. A camera-fitted
-          box moves every frame, its texel grid slides under the geometry, and
-          every shadow edge crawls. Snap the light-space centre to a whole
-          number of texels. verify_68 §C's Weyl-sequence finding is the same
-          aliasing seen from the measurement side; that connection is worth
-          making explicitly.
-        2 A PER-CASCADE `world_per_texel`, AND THEREFORE A PER-CASCADE BIAS.
-          Every formula in 6.8 §4 is a multiple of it, so a shared bias is
-          wrong in three cascades out of four. `shadow_settings` is currently
-          one struct for one map.
-        3 THE SEAM, which is a NEW ARTEFACT WITH A NEW NAME. Two cascades
-          disagree along their boundary because they have different texel
-          grids and different biases; blending a band either side is the usual
-          answer and costs a second lookup.
-      WHAT THE ENGINE NEEDS THAT IT DOES NOT HAVE:
-        1 THE CAMERA FRUSTUM'S CORNERS IN WORLD SPACE — the eight points of a
-          sub-frustum between two split distances. That is an inverse
-          projection, and `mat4` has no `inverse()` at all: 2.9's
-          `rigid_inverse` handles a view matrix and nothing handles a
-          projection. Either invert it analytically (a perspective matrix's
-          inverse is closed-form and short) or build the corners directly from
-          fovy, aspect and the two distances, which is what most engines do
-          and is fewer lines.
-        2 A TEXTURE ARRAY, or N textures. `gpu_texture` hard-codes
-          `layer_count_or_depth = 1`, and SDL_GPU's Texture2DArray needs a
-          `SDL_GPUTextureType` change plus a layer index in
-          `SDL_GPUDepthStencilTargetInfo`. ⚠ VERIFY the field name against
-          SDL3/SDL_gpu.h before writing it.
-        3 A SPLIT SCHEME. The practical answer is a blend of uniform and
-          logarithmic (Zhang et al.'s "practical split scheme"), which is one
-          line and DERIVABLE — the log term is what equalises texel density in
-          screen space, and 4.7's depth-precision work is the same 1/d
-          argument arriving again.
-      THE TEST TO BEAT: the golden should stay E917C06C — EIGHTEENTH lesson.
-      Cascades are a change to an opt-in path, so the same argument applies.
-      CARRY FORWARD: 6.8's habit of DERIVING the bias from the sampling geometry
-      rather than choosing it — a cascade changes `world_per_texel` and nothing
-      else in the derivation, which is the test of whether 6.8's formula was
-      really a formula. And 6.8's §9 finding: A MEASUREMENT CAN ALIAS AGAINST
-      THE THING IT MEASURES. A regular grid over a regular grid reported 3.3%
-      where the truth was 50%.
+      WHAT 6.10 IS ABOUT, AND IT IS A DEBT COMING DUE. Mipmaps were promised to
+      the student BY NAME SIX TIMES and never delivered: 3.9's prose ("mipmaps
+      (Module 6) are what closes it"), 3.9's Exercise 8.5, 4.7's exercise 4.7.5,
+      and — worst — a DOC COMMENT SHIPPED IN texture.hpp's public sampler struct
+      saying "Module 6's mipmaps are what fills the gap". Two external reviewers
+      found this from the index alone. This lesson is the payment.
+      WHAT THE ENGINE ALREADY HAS, AND IT IS MORE THAN IT LOOKS:
+        - 3.9 measured the footprint properly: one screen pixel covers 0.60
+          texels at the bottom of the frame and 62.46 two rows below the
+          horizon. The failure is ALREADY QUANTIFIED; 6.10 fixes it.
+        - `sampler` has ONE `texel_filter` where SDL has min_filter, mag_filter
+          and mipmap_mode. 3.9's own doc comment says why and names the gap.
+        - 4.7 creates every texture with `num_levels = 1` and a comment saying
+          Module 6 changes it. gpu_texture::create_depth_array (6.9) is the
+          precedent for a create path that takes a level/layer count.
+        - `SDL_GenerateMipmapsForGPUTexture` exists; 4.7's exercise 4.7.5 names
+          it. ⚠ VERIFY the exact signature and the COLOR_TARGET usage bit
+          requirement against SDL_gpu.h before writing it.
+      THE DERIVATIONS 6.10 OWES:
+        1 THE LEVEL FROM THE FOOTPRINT: level = log2(max derivative length).
+          On the GPU ddx/ddy are free; ON THE CPU THERE ARE NO NEIGHBOURING
+          FRAGMENTS, so the derivative must come from the triangle's uv
+          gradients analytically — 3.9's Exercise 8.4 already asks for this and
+          says it is "Module 6's job properly".
+        2 TRILINEAR: blending two levels, and why the seam between levels is
+          visible without it (the same shape of argument as 6.9's cascade seam,
+          which is worth saying out loud — 6.9 §3.7 is the rehearsal).
+        3 ANISOTROPY: a square average cannot fix a footprint long in one
+          direction and short in the other. 3.9's Figure 6 already shows exactly
+          that case.
+      THE TRAP THAT MUST BE IN THE LESSON: A MIP CHAIN BUILT BY AVERAGING sRGB
+      BYTES GETS DARKER EVERY LEVEL. 3.9's Exercise 8.5 hint already states it;
+      6.1 built the whole vocabulary. Average in LINEAR light. This is a famous,
+      long-lived bug and the course is now equipped to explain it exactly.
+      AND THE CONSTRAINT: 6.15's IBL CANNOT BE BUILT BEFORE THIS. A prefiltered
+      environment map IS a mip chain indexed by roughness. That is why mipmaps
+      sit at 6.10 and not at the end of the module.
+      THE TEST TO BEAT: the golden should stay E917C06C — NINETEENTH lesson.
+      Mipmaps change sampling, so this one is NOT automatic: the reference scene
+      DOES sample textures. Either the chain is opt-in (num_levels stays 1 for
+      the reference texture) or the golden moves and the lesson must say so and
+      re-baseline deliberately. DECIDE THIS EARLY, not after the diff.
+      CARRY FORWARD: 6.9's habit of MEASURING THE CASE WHERE THE FEATURE LOSES.
+      Cascades cost 29% of the resolution to buy stability and lose outright on
+      a small scene; mipmaps cost 33% more memory and blur a surface that was
+      never undersampled. Say so with a number.
 ```

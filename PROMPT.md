@@ -2534,3 +2534,9 @@ Ratified in planning: full physics tier (contact dynamics + GJK/EPA + joints);
 physics extracted as **Module 8** with Professional Polish & Capstone pushed to
 **Module 9**; CLAUDE.md §5's size band raised to 100–115 lessons / 450–550 h;
 and a new `docs/_template/check-curriculum.py` to stop the index drifting again.
+
+## Session — 2026-09-10 — Lesson 6.9
+
+> next
+
+(Resolved to Lesson 6.9 — Cascaded Shadow Maps, per `STATE.md`'s `next:` block.)

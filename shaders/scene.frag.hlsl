@@ -97,8 +97,39 @@ SamplerState      normal_sampler : register(s1, space2);
 // than in this file (`gpu_sampler::create_comparison`), which is worth noticing:
 // it is fixed-function state, so it costs nothing, and it is chosen on the C++
 // side where the depth convention that justifies it also lives.
-Texture2D<float>       shadow_map     : register(t2, space2);
+// LESSON 6.9: AN ARRAY, ALWAYS — even for one cascade. `Texture2D` and
+// `Texture2DArray` are different binding types, so carrying both would mean two
+// shaders; making the single map a one-layer array makes 6.8's case the
+// degenerate case of 6.9's and leaves exactly one code path here.
+Texture2DArray<float>  shadow_map     : register(t2, space2);
 SamplerComparisonState shadow_sampler : register(s2, space2);
+
+// ---- Per FRAME: the cascades — Lesson 6.9 ----------------------------------
+//
+// A second per-frame block rather than a bigger `Light`, because pushes are
+// billed by how often they happen and these are pushed at the same rate but read
+// only when shadows are on.
+//
+// `float4` and not `float[4]`: HLSL puts each element of a scalar array in its
+// OWN 16-byte register, so `float splits[4]` would cost 64 bytes to carry 16.
+cbuffer Cascades : register(b2, space3)
+{
+    float4x4 cascade_clip_from_world[4];
+    float4   cascade_splits;          // view-space far distance of each cascade
+    float4   cascade_texel;           // world_per_texel, per cascade
+    float4   cascade_depth_range;     // far - near, per cascade
+    float    cascade_count;
+    float    cascade_blend;
+    float    cascade_pad0;
+    float    cascade_pad1;
+    float4   cascade_view_forward;    // the camera's axis; see gpu_uniform.hpp
+};
+
+// Index a float4 by a runtime value without a scalar array.
+float cascade_pick(float4 v, int i)
+{
+    return (i == 0) ? v.x : (i == 1) ? v.y : (i == 2) ? v.z : v.w;
+}
 
 // ---- Per FRAME -------------------------------------------------------------
 cbuffer Light : register(b0, space3)
@@ -250,7 +281,8 @@ float3 fresnel_schlick(float cos_theta, float3 f0)
 // it is a different number from the `n_dot_l` the shading equation uses is
 // Lesson 6.7 collecting: acne is a disagreement about where the TRIANGLES are,
 // and a normal map does not move a triangle.
-float shadow_visibility(float3 world_pos, float3 geometric_n, float geo_cos)
+float shadow_visibility(float3 world_pos, float3 geometric_n, float geo_cos,
+                        int cascade)
 {
     // Not enabled, or the surface faces away from the light — in which case the
     // direct term is already zero and consulting the map could only introduce a
@@ -261,6 +293,13 @@ float shadow_visibility(float3 world_pos, float3 geometric_n, float geo_cos)
     // required bias is infinite and the honest answer is that a shadow map
     // cannot resolve that surface at all; `shadow_max_slope` is where we stop
     // pretending. `engine::slope_from_cosine` is the same three lines.
+    // THE PER-CASCADE NUMBERS, and the whole of what a cascade changes. Both of
+    // these are what 6.8's bias derivation was written in terms of, which is why
+    // that derivation needed no edit: read a different texel size and a different
+    // depth range and the same formula is already right.
+    const float tex = cascade_pick(cascade_texel, cascade);
+    const float range = cascade_pick(cascade_depth_range, cascade);
+
     const float c = min(1.0f, geo_cos);
     const float sin_theta = sqrt(max(0.0f, 1.0f - c * c));
     const float slope = min(shadow_max_slope, sin_theta / c);
@@ -269,7 +308,7 @@ float shadow_visibility(float3 world_pos, float3 geometric_n, float geo_cos)
     float3 p = world_pos;
     if (shadow_mode > 2.5f)
     {
-        p += geometric_n * (shadow_normal_scale * shadow_texel * sin_theta
+        p += geometric_n * (shadow_normal_scale * tex * sin_theta
                             * shadow_reach * 1.41421356f);
     }
 
@@ -278,7 +317,7 @@ float shadow_visibility(float3 world_pos, float3 geometric_n, float geo_cos)
     // world position, which is exactly why it can be done HERE, per fragment,
     // from a varying that has existed since Lesson 3.7, instead of costing four
     // more interpolated floats on every draw in the scene.
-    const float4 clip = mul(light_clip_from_world, float4(p, 1.0f));
+    const float4 clip = mul(cascade_clip_from_world[cascade], float4(p, 1.0f));
     if (clip.w <= 0.0f) { return 1.0f; }
     const float3 ndc = clip.xyz / clip.w;
 
@@ -304,8 +343,8 @@ float shadow_visibility(float3 world_pos, float3 geometric_n, float geo_cos)
     float bias = shadow_bias;
     if (shadow_mode > 1.5f && shadow_mode < 2.5f)
     {
-        bias += shadow_slope_scale * shadow_reach * shadow_texel * slope
-              / max(1e-6f, shadow_depth_range);
+        bias += shadow_slope_scale * shadow_reach * tex * slope
+              / max(1e-6f, range);
     }
     else if (shadow_mode < 0.5f)
     {
@@ -331,12 +370,52 @@ float shadow_visibility(float3 world_pos, float3 geometric_n, float geo_cos)
         for (int dx = -r; dx <= r; ++dx)
         {
             const float2 at = uv + float2(dx, dy) * shadow_texel_uv;
-            lit += shadow_map.SampleCmpLevelZero(shadow_sampler, at, reference);
+            lit += shadow_map.SampleCmpLevelZero(shadow_sampler,
+                                                 float3(at, (float)cascade), reference);
             taps += 1.0f;
         }
     }
 
     return 1.0f - shadow_strength * (1.0f - lit / taps);
+}
+
+// ---- Choosing a cascade, and hiding the seam — Lesson 6.9 ------------------
+//
+// `view_depth` is the positive distance from the eye along the view axis: the
+// same number the splits were computed in, so selection cannot disagree with
+// the fit. It is recovered here from the world position rather than carried as
+// a varying, for 6.8's reason — a varying costs four bytes on every draw in the
+// scene whether it is shadowed or not.
+//
+// THE SEAM. Two cascades meet at a split distance with different texel grids and
+// different biases, so they disagree along that line and the disagreement draws
+// a straight edge across the picture. `cascade_blend` fades from one to the
+// other across a band: both answers are defensible, so anything between them is
+// too. At 0 the band vanishes and the seam is visible, which is the first
+// picture the lesson shows.
+float shadow_visibility_cascaded(float3 world_pos, float3 geometric_n,
+                                 float geo_cos, float view_depth)
+{
+    const int n = max(1, (int)cascade_count);
+
+    int c = 0;
+    for (int i = 0; i < n - 1; ++i)
+    {
+        if (view_depth > cascade_pick(cascade_splits, i)) { c = i + 1; }
+    }
+
+    const float a = shadow_visibility(world_pos, geometric_n, geo_cos, c);
+
+    if (cascade_blend <= 0.0f || c >= n - 1) { return a; }
+
+    const float far_d = cascade_pick(cascade_splits, c);
+    const float near_d = (c == 0) ? 0.0f : cascade_pick(cascade_splits, c - 1);
+    const float band = (far_d - near_d) * cascade_blend;
+    if (band <= 0.0f || view_depth <= far_d - band) { return a; }
+
+    const float w = saturate((view_depth - (far_d - band)) / band);
+    const float b = shadow_visibility(world_pos, geometric_n, geo_cos, c + 1);
+    return lerp(a, b, w);
 }
 
 float4 main(Input input) : SV_Target0
@@ -432,8 +511,12 @@ float4 main(Input input) : SV_Target0
     // light that has bounced off everything else in the room, and an object
     // standing in the way of the sun does not stop the room existing — the
     // ambient term is precisely what a shadowed surface is left with.
-    const float visibility = shadow_visibility(input.world, geometric,
-                                               dot(geometric, l));
+    // AXIAL depth, not radial — gpu_uniform.hpp's `view_forward` says why, and
+    // the difference is 22% at the corner of a 60-degree frame.
+    const float view_depth = dot(input.world - eye_world, cascade_view_forward.xyz);
+    const float visibility = shadow_visibility_cascaded(input.world, geometric,
+                                                        dot(geometric, l),
+                                                        view_depth);
 
     const float3 e = key * n_dot_l * visibility;
 

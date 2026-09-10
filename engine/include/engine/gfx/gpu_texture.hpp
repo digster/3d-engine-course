@@ -88,6 +88,25 @@ public:
                                     Uint32 width, Uint32 height, const char* name = nullptr,
                                     bool sampled = false);
 
+    /// A stack of depth slices addressed as one texture. Lesson 6.9.
+    ///
+    /// `layers` maps to `layer_count_or_depth`, and the type becomes
+    /// `SDL_GPU_TEXTURETYPE_2D_ARRAY` — which the shader must match with
+    /// `Texture2DArray`, because a `Texture2D` bound to an array texture is a
+    /// binding error the validation layer catches and a silent black map on
+    /// drivers that do not.
+    ///
+    /// **A render pass targets ONE layer at a time.**
+    /// `SDL_GPUDepthStencilTargetInfo` has a `layer` field (a `Uint8`, beside
+    /// `mip_level`) and no way to say "all of them", so N cascades are N passes.
+    /// That is not a limitation to route around: each cascade has its own camera
+    /// and its own culling, so they were always going to be separate passes.
+    [[nodiscard]] bool create_depth_array(const gpu_device& dev,
+                                          SDL_GPUTextureFormat format,
+                                          Uint32 width, Uint32 height,
+                                          Uint32 layers, const char* name = nullptr,
+                                          bool sampled = false);
+
     void destroy();
 
     [[nodiscard]] bool valid() const { return texture_ != nullptr; }

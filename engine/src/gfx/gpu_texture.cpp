@@ -246,6 +246,54 @@ bool gpu_texture::create_depth(const gpu_device& dev, SDL_GPUTextureFormat forma
     return true;
 }
 
+bool gpu_texture::create_depth_array(const gpu_device& dev, SDL_GPUTextureFormat format,
+                                     Uint32 width, Uint32 height, Uint32 layers,
+                                     const char* name, bool sampled)
+{
+    destroy();
+
+    if (!dev.valid() || width == 0 || height == 0 || layers == 0
+        || format == SDL_GPU_TEXTUREFORMAT_INVALID)
+    {
+        return false;
+    }
+
+    device_ = dev.handle();
+    width_ = width;
+    height_ = height;
+    format_ = format;
+
+    SDL_GPUTextureCreateInfo ti{};
+    // THE ONE FIELD THAT MAKES IT AN ARRAY, and the one the shader has to agree
+    // with. `Texture2D` bound to a 2D_ARRAY is a binding error — caught by the
+    // validation layer, and a silently black shadow map without it.
+    ti.type = SDL_GPU_TEXTURETYPE_2D_ARRAY;
+    ti.format = format_;
+    ti.usage = SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET
+             | (sampled ? SDL_GPU_TEXTUREUSAGE_SAMPLER : 0u);
+    ti.width = width_;
+    ti.height = height_;
+    // `layer_count_or_depth` is one field carrying two meanings: the LAYER COUNT
+    // for a 2D array, the DEPTH for a 3D texture. The name is SDL being honest
+    // about a union it did not make one.
+    ti.layer_count_or_depth = layers;
+    ti.num_levels = 1;
+    ti.sample_count = SDL_GPU_SAMPLECOUNT_1;
+
+    texture_ = create_named_texture(device_, ti, name);
+    if (texture_ == nullptr)
+    {
+        ENGINE_LOG_ERROR(engine::log_gpu,
+                "SDL_CreateGPUTexture(depth array %ux%ux%u %s) failed: %s",
+                width_, height_, layers, name_of(format_), SDL_GetError());
+        destroy();
+        return false;
+    }
+
+    uploaded_bytes_ = 0;
+    return true;
+}
+
 void gpu_texture::destroy()
 {
     if (device_ != nullptr && texture_ != nullptr)

@@ -14,7 +14,8 @@ gpu_shadow_map::~gpu_shadow_map()
 
 bool gpu_shadow_map::create(const gpu_device& dev,
                             SDL_GPUShader* vertex, SDL_GPUShader* fragment,
-                            int resolution, SDL_GPUTextureFormat format)
+                            int resolution, SDL_GPUTextureFormat format,
+                            int layers)
 {
     destroy();
 
@@ -30,8 +31,14 @@ bool gpu_shadow_map::create(const gpu_device& dev,
     // depth buffer. gpu_texture.hpp names the two costs; this is where they are
     // paid, deliberately, because a shadow map that cannot be read is a shadow
     // map that does nothing.
-    if (!depth_.create_depth(dev, format, static_cast<Uint32>(resolution),
-                             static_cast<Uint32>(resolution), "shadow map", true))
+    // ALWAYS AN ARRAY, EVEN AT ONE LAYER (Lesson 6.9). The shader binds a
+    // `Texture2DArray`, so a one-cascade map and a four-cascade map differ only
+    // in `layer_count_or_depth` — and 6.8's single map becomes the degenerate
+    // case of this one instead of a second code path to keep in step.
+    layers_ = (layers < 1) ? 1 : (layers > k_max_cascades ? k_max_cascades : layers);
+    if (!depth_.create_depth_array(dev, format, static_cast<Uint32>(resolution),
+                                   static_cast<Uint32>(resolution),
+                                   static_cast<Uint32>(layers_), "shadow map", true))
     {
         ENGINE_LOG_ERROR(engine::log_gpu, "gpu_shadow: the %dx%d depth texture was not created",
                          resolution, resolution);
@@ -108,13 +115,19 @@ void gpu_shadow_map::destroy()
 }
 
 void gpu_shadow_map::render(SDL_GPUCommandBuffer* cb, const gpu_draw_item* items, int count,
-                            const light_camera& cam, frame_log* log) const
+                            const light_camera& cam, frame_log* log,
+                            int layer) const
 {
     if (!valid() || cb == nullptr || items == nullptr || count <= 0) { return; }
 
     // ---- A pass with a depth attachment and nothing else --------------------
     SDL_GPUDepthStencilTargetInfo dsi{};
     dsi.texture = depth_.handle();
+
+    // WHICH CASCADE THIS PASS WRITES. A `Uint8`, sitting beside `mip_level` —
+    // both are "which slice of this texture is the target", and both default to
+    // zero, which is why the one-cascade case needed no change here at all.
+    dsi.layer = static_cast<Uint8>((layer < 0) ? 0 : (layer >= layers_ ? layers_ - 1 : layer));
 
     // 1 is the far plane, so a cleared map says "the light sees all the way to
     // the back of its box here" — nothing occludes, everything is lit. The same
@@ -229,6 +242,37 @@ void gpu_shadow_map::fill_uniforms(scene_light_uniforms& out, const light_camera
     out.shadow_normal_scale = set.normal_scale;
     out.shadow_texel_uv = (resolution > 0) ? 1.0f / static_cast<float>(resolution) : 0.0f;
     out.pad2 = 0.0f;
+}
+
+void gpu_shadow_map::fill_cascade_uniforms(cascade_uniforms& out,
+                                           const cascaded_shadow_map& csm,
+                                           vec3 view_forward)
+{
+    out = cascade_uniforms{};
+    const vec3 f = normalised_or(view_forward, vec3{0.0f, 0.0f, -1.0f});
+    out.view_forward = vec4{f.x, f.y, f.z, 0.0f};
+
+    const int n = csm.count();
+    out.cascade_count = static_cast<float>(n);
+    out.blend_fraction = csm.settings().blend_fraction;
+
+    float* splits = &out.splits.x;
+    float* wpt = &out.world_per_texel.x;
+    float* range = &out.depth_range.x;
+
+    for (int i = 0; i < 4; ++i)
+    {
+        // CASCADES PAST THE END REPEAT THE LAST ONE rather than holding zero.
+        // A zero split would make the shader select a cascade that was never
+        // rendered, and a zero `world_per_texel` would make its bias zero —
+        // which is acne, appearing only when the count is below four. Clamping
+        // makes the unused slots harmless instead of merely unused.
+        const int src = (i < n) ? i : (n - 1);
+        out.light_clip_from_world[i] = csm.map(src).camera().clip_from_world;
+        splits[i] = csm.splits()[static_cast<std::size_t>(src)];
+        wpt[i] = csm.map(src).camera().world_per_texel;
+        range[i] = csm.map(src).camera().depth_range;
+    }
 }
 
 } // namespace engine

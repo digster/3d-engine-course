@@ -51,6 +51,7 @@
 #include <engine/math/mat4.hpp>
 #include <engine/math/vec2.hpp>
 #include <engine/math/vec3.hpp>
+#include <engine/math/vec4.hpp>
 
 #include <SDL3/SDL.h>
 
@@ -287,6 +288,59 @@ struct scene_light_uniforms
 };
 
 static_assert(sizeof(scene_light_uniforms) == 176, "eleven registers, exactly filled");
+
+/// The per-cascade half of the shadow contract. Lesson 6.9, **fragment slot 2**.
+///
+/// A SEPARATE BLOCK RATHER THAN A BIGGER `scene_light_uniforms`, for the reason
+/// 6.7 gave when it refused to grow the per-draw block: pushes are billed by how
+/// often they happen. This is per-FRAME data pushed once, beside a per-frame
+/// light block and a per-draw material block, and keeping the three separate is
+/// what lets the biggest one be pushed the fewest times.
+///
+/// **Everything here is `float4`-aligned on purpose.** Four floats that logically
+/// form an array of four scalars are written as one `float4` because HLSL packs a
+/// `float[4]` into four SEPARATE registers — sixteen bytes each, twelve of them
+/// padding. Lesson 4.6 met the same rule from the other side; here it is the
+/// difference between 320 bytes and 704.
+struct cascade_uniforms
+{
+    /// One `clip_from_world` per cascade. Cascade i's matrix at index i.
+    mat4 light_clip_from_world[4];   ///< 0
+
+    /// The far distance of each cascade, in VIEW space — the same number the
+    /// splits were computed in, so selection cannot disagree with the fit.
+    vec4 splits;                     ///< 256
+
+    /// `world_per_texel` per cascade. The only per-cascade term in 6.8's bias,
+    /// which is why nothing else in the bias had to change.
+    vec4 world_per_texel;            ///< 272
+
+    /// `depth_range` per cascade.
+    vec4 depth_range;                ///< 288
+
+    float cascade_count;             ///< 304 — as a float; the shader compares it
+    float blend_fraction;            ///< 308 — 0 shows the seam, which is the point
+    float cpad0;                     ///< 312
+    float cpad1;                     ///< 316
+
+    /// The camera's forward axis, world space, unit length.
+    ///
+    /// **Because the splits are in AXIAL depth and the fragment only knows a
+    /// position.** `length(eye - world)` is the RADIAL distance, and the two
+    /// differ by 1/cos(angle off axis) — at a 60-degree vertical field of view
+    /// the screen corner is about 35 degrees off axis, so radial distance
+    /// overstates depth there by roughly 22%. Selecting on it would put the
+    /// corners of the screen in the wrong cascade and bend every seam into a
+    /// curve. `dot(world - eye, forward)` is the number the splits were computed
+    /// in. Sixteen bytes to keep selection and fitting talking about the same
+    /// quantity.
+    vec4 view_forward;               ///< 320 — xyz used, w spare
+};
+
+static_assert(sizeof(cascade_uniforms) == 336, "twenty-one registers, exactly filled");
+static_assert(offsetof(cascade_uniforms, view_forward) == 320, "");
+static_assert(offsetof(cascade_uniforms, splits) == 256, "four matrices first");
+static_assert(offsetof(cascade_uniforms, cascade_count) == 304, "");
 static_assert(offsetof(scene_light_uniforms, light_clip_from_world) == 64,
               "a float4x4 must start on a register boundary");
 static_assert(offsetof(scene_light_uniforms, shadow_strength) == packed_offset(128, 1), "");
