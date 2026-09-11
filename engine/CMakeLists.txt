@@ -38,6 +38,10 @@ add_library(engine STATIC
     src/core/input.cpp
     src/core/log.cpp          # Lesson 5.3
     src/core/profile.cpp
+    # Lesson 6.11. Compositing, and the two enums that say what a surface's
+    # alpha MEANS. Below `colour.cpp` in the list and above it in the dependency
+    # graph: `blend.hpp` includes `colour.hpp` and nothing includes `blend.cpp`.
+    src/gfx/blend.cpp
     src/gfx/clip.cpp
     src/gfx/colour.cpp
     src/gfx/debug_draw.cpp
@@ -46,6 +50,10 @@ add_library(engine STATIC
     # from a physics system, debug_draw.cpp is reachable only from a renderer.
     src/gfx/debug_lines.cpp
     src/gfx/depth_buffer.cpp
+    # Lesson 6.11. Bucketing and back-to-front sorting. A translation unit rather
+    # than a header because `order_draws` is a real algorithm over a span, and
+    # 6.13's frustum culling walks the same list — one place, not two.
+    src/gfx/draw_order.cpp
     src/gfx/framebuffer.cpp
     src/gfx/gpu_buffer.cpp
     src/gfx/gpu_debug.cpp

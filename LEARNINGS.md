@@ -6897,3 +6897,48 @@ kernel or footprint downstream of it.
   `SAMPLER|COLOR_TARGET` — live inside `if (device->debug_mode)`. On a release device the
   requirement is unchecked and the result undefined. Related: SDL's asserts key on `__OPTIMIZE__`
   rather than `NDEBUG`, so `-O2` alone switches them off.
+
+## Lesson 6.11 — transparency
+
+- **An explicit `destroy()` just before a scope ends is almost always a bug.** `verify_611` §H
+  segfaulted on exit with every check passing. The device was declared first — so C++ was already
+  going to destroy it *last*, which is exactly the order the shaders, meshes and samplers need.
+  Calling `gpu.destroy()` at the end of the function ran the device's teardown in the *middle* of
+  that sequence, and the shader destructors then released handles against freed memory. Deleting
+  the cleanup fixed it. RAII's ordering guarantee is the feature; hand-written teardown is how you
+  opt out of it without meaning to.
+
+- **A refactor can keep a golden, but only if the float operations keep their ORDER.** `sample`
+  and `sample_mipped` were both rewritten as wrappers over four-channel versions, and
+  `average_2x2` grew a per-texel weight — and the reference render stayed byte-identical, because
+  the colour channels are combined by the identical expressions in the identical sequence and the
+  default weights are exactly `1.0f` over exactly `4.0f`, so `sum * (1/4)` is bit-for-bit
+  `sum * 0.25f`. "Equivalent in effect" and "identical to the last bit" are different claims, and
+  only the second one survives a byte comparison. Plan for the second when a golden is in play.
+
+- **Do not test a symmetric-looking property at its symmetric point.** The check that `over` is
+  not commutative was written at `a = 0.5`, where `src*a + dst*(1-a)` weights both operands
+  equally and the two orderings coincide — so the test failed while the code was right. The most
+  obvious value to pick was the one value at which the property is invisible.
+
+- **`enable_blend` is the third member of a family.** Fill in every field of
+  `SDL_GPUColorTargetBlendState` and leave the enable false, and the state is perfect, the picture
+  is unchanged, and nothing errors. Same shape as 6.10's `max_lod = 0` and `max_anisotropy`
+  without `enable_anisotropy`. Also note that the zero-initialised alpha factors are
+  `SDL_GPU_BLENDFACTOR_INVALID`, which is not a synonym for "the same as the colour ones".
+
+- **A harness section that creates a GPU device should not be followed by one that does not.**
+  `verify_611`'s golden ran after the GPU section and inherited its initialised video subsystem and
+  destroyed device. Moving the golden ahead of it costs nothing and removes a whole class of
+  "the reference render moved" that has nothing to do with the reference render.
+
+- **"Empty space" in a plot is not a measurement.** Two figures placed their annotations in
+  regions that looked clear; `check-page.js` reported six texts sitting on a polyline. On a
+  diagram whose curves cross most of the box there is very little genuinely empty interior — put
+  the legend outside the plot and stop guessing.
+
+- **A published assertion can legitimately go red.** `verify_67` asserted
+  `sizeof(material_uniforms) == 32`, which was true of 6.7 and stopped being true when 6.11 spent a
+  third register. The fix is to amend the assertion to what it was ever *about* (the flag is
+  derived) and record the supersession in a comment — not to leave a harness failing, and not to
+  pretend the earlier lesson was wrong.

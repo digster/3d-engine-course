@@ -2546,3 +2546,10 @@ and a new `docs/_template/check-curriculum.py` to stop the index drifting again.
 > next
 
 (Resolved to Lesson 6.10 — Mipmaps, LOD, and Anisotropic Filtering, per `STATE.md`'s `next:` block.)
+
+## Session — 2026-09-10 (third) — Lesson 6.11
+
+> next
+
+(Resolved to Lesson 6.11 — Transparency: Alpha Modes, Blending, and Draw Order, per `STATE.md`'s
+`next:` block.)

@@ -7,7 +7,7 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-09-10 (after Lesson 6.10 — 66 of 107 lessons)
+updated: 2026-09-10 (after Lesson 6.11 — 67 of 107 lessons)
 
 conventions:
   ecs-storage: THE ECS IS A SPARSE SET, DECIDED IN 5.7 BY MEASUREMENT, NOT TASTE.
@@ -110,6 +110,63 @@ conventions:
         opposite jobs. The namespace keeps them apart; `using namespace engine;`
         plus `using namespace engine::ecs;` makes bare `pool` ambiguous, which is
         the good kind of breakage. The engine never writes `using namespace`.
+  transparency: LESSON 6.11. ALPHA IS COVERAGE — THE FRACTION OF THE PIXEL'S
+        AREA A SURFACE OCCUPIES — NOT OPACITY, AND NEVER A QUANTITY OF LIGHT.
+        `colour.hpp` has said so since 1.6 ("carry it separately if you need it");
+        6.11 is what carrying it separately turned out to mean. Every result in
+        the lesson falls out of that one reframing.
+        THE THREE MODES LAND ON OPPOSITE SIDES OF 6.5'S LINE, and the pipeline
+        count is the proof rather than the illustration:
+          MASK  is A NUMBER IN A BUFFER — `material_uniforms::alpha_cutoff` and a
+                `clip` in the shader. ZERO new pipelines. Its only price is that
+                THE DEPTH WRITE MOVES AFTER THE FRAGMENT, because the fragment is
+                what decides whether there IS a fragment — the same dependency
+                that costs a GPU its early-Z for any shader containing `discard`.
+          BLEND is PIPELINE STATE — factors, op, and DEPTH WRITES OFF. SIX new
+                pipelines, because it is a SECOND AXIS and 3 x 3 = 9. A second
+                axis MULTIPLIES the count; that is why real engines hash state
+                into a pipeline cache instead of enumerating. Ours enumerates
+                because nine is countable (0.05 ms warm).
+        THE TWO INTEGERS, A THIRD TIME. Half-coverage white over black is half
+        the LIGHT = code 188; lerping the STORED BYTES gives code 128 and emits
+        0.2159 — 42.9% of the answer. EXACT AT a=0 AND a=1 and worst in the
+        middle (0.2898 of full white at a=0.55), which is precisely why the bug
+        survives review: every fade starts and finishes correctly.
+        AND THE HARDWARE MAKES THE SAME MISTAKE, MEASURED. The same draw into an
+        _SRGB target and a UNORM one with the shader encoding: 188 against 127,
+        42.2% — the SAME shortfall 6.10 found in a naive mip chain, because it is
+        the same arithmetic. Blending happens in the ROP, AFTER the shader
+        returns, so THE SHADER CANNOT FIX IT; only the target's format can.
+        `scene.frag.hlsl` predicted this in a 6.1 comment ("correct for opaque
+        geometry and wrong the moment anything blends") and 6.11 discharged it.
+        PREMULTIPLIED ALPHA IS FOR FILTERING, NOT FOR COMPOSITING. The saved
+        multiply is incidental; the property is that `over` composes
+        ASSOCIATIVELY in that form, so an AVERAGE of premultiplied fragments is a
+        valid composite. Straight-alpha filtering across a cutout edge halves the
+        leaf's green (0.2636 against 0.5271) because the transparent texels are
+        BLACK — what an image editor leaves in a cleared region — and that deficit
+        IS the dark halo. `alpha_storage` therefore lives on `texture` beside
+        `texel_space`: a property of the DATA, read by `fetch` and `build_mips`,
+        not remembered by call sites (6.7's rule, second application).
+        AVERAGING AND THRESHOLDING DO NOT COMMUTE, which is why alpha-tested
+        foliage dissolves with distance: an ordinary chain passes 0.2500 at level
+        6 where the source passed 0.3635, 31.2% of the leaves gone, with NOTHING
+        in the chain wrong. Castano's rescale (bisection on one scale factor per
+        level — coverage is a STEP function of the scale, so no derivative, so
+        not Newton) holds it to 0.0115 down to 8x8 and then STOPS: a 4x4 level has
+        sixteen texels, so its coverage can only be k/16. Measure where a
+        technique stops rather than widening a tolerance until the test passes.
+        DRAW ORDER: BACK TO FRONT, AXIAL, STABLE. Axial (`dot(p-eye, forward)`) is
+        6.9's cascade distinction arriving a second time and worth 16.6% at a
+        frame corner. Stable because two objects at equal depth have NO correct
+        order, and an unstable sort turns a tie into a flicker. MASKED GEOMETRY IS
+        NOT SORTED — `stable_partition` on `mode != blend`, NOT `mode == opaque`,
+        which is the line most likely to be written backwards; reading
+        `alpha_mode` as a scale from solid to see-through puts every leaf in the
+        scene into a per-frame sort in exchange for nothing.
+        THE CEILING, NAMED RATHER THAN GLOSSED: two INTERSECTING blended quads
+        need both orders at once. Not a better sort — OIT, which is a different
+        data structure and is not built.
   colour-pipeline: TWO CONVERSIONS, AT THE EDGES — NOT ONE PER OPERATION, AND NOT
         "CAREFULLY". 6.1 turned 1.6's rule into a pipeline and found the missing
         edge. THIS SUPERSEDES NOTHING IN conventions:colour, which stands entire;
@@ -3384,8 +3441,45 @@ completed:
   - 6.6  glTF 2.0 Loading
   - 6.7  Normal Mapping and the TBN Derivation
   - 6.8  Shadow Mapping: Bias, Acne, and PCF
+  - 6.9  Cascaded Shadow Maps
+  - 6.10 Mipmaps, LOD, and Anisotropic Filtering
+  - 6.11 Transparency: Alpha Modes, Blending, and Draw Order
+        (6.9 and 6.10 were missing from this list until 6.11 added them — the
+         list had not been appended to since 6.8 while `capabilities:` below was
+         kept current, which is the append-and-merge rule being half-followed.
+         Both are published and both are in the index; the omission was here.)
 
 capabilities:
+  - 6.11 TRANSPARENCY IN BOTH RENDERERS, AND THE LAST SILENT GAP IN THE glTF
+    IMPORTER CLOSED. 66 -> 68 public headers, 37 -> 39 sources. Golden
+    byte-identical at E917C06C for the TWENTIETH lesson — and this one survived a
+    REFACTOR rather than an addition.
+    NOT A MISSING FEATURE BUT A CORRECTNESS GAP IN SHIPPED CODE. Three facts were
+    already true: `pipeline_desc` had said "no blending" since 4.4; 6.6's importer
+    read `baseColorFactor[3]` and ignored `alphaMode` entirely; and that was the
+    one gap in that importer which FIRED NO STATUS. The reason was structural — a
+    status says "the file wants what the engine cannot do" and there was no blend
+    state to be the other operand — so the gap could not be REPORTED, only
+    REMOVED. Every downloaded asset with foliage or glass had been rendering as
+    opaque cardboard, silently, for five lessons.
+    THE GOLDEN SURVIVED A REFACTOR, WHICH IS NEW. `sample` and `sample_mipped`
+    were both rewritten as WRAPPERS over four-channel versions, and `average_2x2`
+    grew a weight per texel. It came through bit for bit for two reasons, both
+    deliberate: the colour channels are combined by the IDENTICAL expressions in
+    the IDENTICAL ORDER (float addition is not associative), and the default
+    weights are exactly 1.0 with a denominator of exactly 4.0, so `sum * (1/4)`
+    is bit-for-bit `sum * 0.25f`. "Equivalent in effect" and "identical to the
+    last bit" are different claims and only the second one keeps a golden.
+    WHAT IS BUILT: alpha masking and alpha blending on BOTH renderers;
+    premultiplied alpha as a property of image DATA; a coverage-preserving mip
+    chain; a per-frame back-to-front sort; blend state on the GPU pipeline; and
+    `alphaMode`/`alphaCutoff` read at last.
+    NOT BUILT, NAMED: order-independent transparency. Two INTERSECTING blended
+    quads have no correct per-object order — each is in front along part of the
+    overlap — and that is a ceiling rather than a missing sort. Also absent:
+    alpha in the SHADOW pass (a leaf casts a rectangular shadow; Ex 8.4), and
+    two-pass draw for double-sided blended geometry.
+
   - 6.10 MIPMAPPING IN BOTH RENDERERS, AND A DEBT OF SIX PROMISES CLEARED.
     65 -> 66 public headers, 36 -> 37 sources. Golden byte-identical at E917C06C
     for the NINETEENTH lesson — AND THIS ONE WAS NOT AUTOMATIC.
@@ -5918,6 +6012,8 @@ files:
             bounds.hpp                                                       [6.8]
             cascade.hpp                                                      [6.9]
             mipmap.hpp                                                      [6.10]
+            blend.hpp                                                       [6.11]
+            draw_order.hpp                                                  [6.11]
             debug_lines.hpp                                                 [5.11]
             depth_buffer.hpp, framebuffer.hpp, gpu_buffer.hpp, gpu_debug.hpp,
             gpu_device.hpp, gpu_mesh.hpp, gpu_pipeline.hpp, gpu_present.hpp,
@@ -5944,7 +6040,8 @@ files:
   engine/src/asset/: search_path.cpp, asset_store.cpp                   [5.5]
   engine/src/core/: actions.cpp [5.10], clock.cpp, fixed_step.cpp, input.cpp,
             log.cpp, profile.cpp
-  engine/src/gfx/: cascade.cpp [6.9], mipmap.cpp [6.10], clip.cpp, colour.cpp,
+  engine/src/gfx/: cascade.cpp [6.9], mipmap.cpp [6.10],
+            blend.cpp [6.11], draw_order.cpp [6.11], clip.cpp, colour.cpp,
             debug_draw.cpp,
             debug_lines.cpp [5.11],
             depth_buffer.cpp,
@@ -6127,6 +6224,30 @@ files:
            is wider than pinning — ANY GENERATED ARTIFACT NEEDS A
            REGENERATE-AND-DIFF AFTER THE LAST EDIT TO ITS INPUTS, not only when you
            remember to pin.
+  scratch/ (6.11, not shipped with the engine): verify_611.cpp,
+           build_verify_611.sh, figs_611.py, build_611.py,
+           l611_body_{a,b,c}.html, l611_fig{1..6}.svg, shot_figs.mjs (NEW, and
+           SHARED: screenshots every `figure.dia` of a served page at 1280, for
+           the visual pass check-page.js cannot do — 6.10 shipped two invisible
+           markers for three build cycles because a line that was never drawn
+           cannot overlap anything).
+           PINNED BY 6.11, before a line of it was written: l610_mipmap.hpp,
+           l610_mipmap.cpp against commit cf2d208, plus l610_verify_610.cpp as a
+           working-tree copy. The prediction was RIGHT this time — 6.11 grew
+           `average_2x2` a weight per texel and added `mip_options`, so an
+           unpinned build_610.py would have spliced 6.11's code into 6.10's page.
+           THE REBUILD DIFF WAS EXACTLY THE TWO NAV LINES, tenth lesson running.
+           TWO FIGURES WERE REDRAWN AFTER check-page.js REJECTED THEM: figures 3
+           and 5 had annotations placed in what looked like empty regions of a
+           plot, and six of them landed on a polyline. Both now put their legend
+           OUTSIDE the plot box. "Empty" judged by eye on a diagram whose curves
+           cross most of the box is not a measurement.
+           (build_611.py PINS NOTHING YET and lists FIVE files whole — all four
+            new engine files plus the harness. 6.12 is HDR and tonemapping, which
+            changes what a colour target IS, and `blend_over` clamps into [0,1]
+            through `to_encoded` — so blend.{hpp,cpp} are near certain to move.
+            Pin all four before writing a line of 6.12, and take verify_611.cpp
+            early since it is gitignored.)
   scratch/ (6.8, not shipped with the engine): verify_68.cpp, build_verify_68.sh,
            figs_68.py, build_68.py, l68_body_{a,b,c}.html, l68_fig{1..7}.svg.
            SEVEN figures, not six, because §3.5 wants the ARTEFACT shown before
@@ -6338,64 +6459,59 @@ roadmap: RESHAPED 2026-09-08, AFTER TWO EXTERNAL REVIEWS OF THE PUBLISHED OUTLIN
             qualifier too, because a skimmer reads the recap and stops.
 
 
-next: 6.11 — Transparency: Alpha Modes, Blending, and Draw Order
-      (planned filename: docs/lessons/06-11-transparency.html — 6.10's TWO next
-      links point at the index and BOTH need repointing; scratch/l610_body_a.html
-      holds the top one and build_610.py's TAIL the bottom.
-      PIN FIRST. build_610.py's LISTING_SOURCE is EMPTY and correctly so — every
-      file it lists, 6.10 created. It lists THREE: mipmap.hpp, mipmap.cpp and
-      verify_610.cpp. 6.11 will NOT touch mipmap.* except possibly for alpha
-      averaging (see below), but WILL touch material.hpp, gltf.cpp, raster.*,
-      gpu_pipeline.* and scene.frag.hlsl. The command:
-        for f in engine/include/engine/gfx/mipmap.hpp \
-                 engine/src/gfx/mipmap.cpp; do
-          git show <6.10 commit>:$f > scratch/l610_$(basename $f)
+next: 6.12 — HDR and Tonemapping
+      (planned filename: docs/lessons/06-12-hdr-tonemapping.html — 6.11's TWO
+      next links point at the index and BOTH need repointing; scratch/l611_body_a.html
+      holds the top one and build_611.py's TAIL the bottom.
+      PIN FIRST. build_611.py's LISTING_SOURCE is EMPTY and correctly so — every
+      file it lists whole, 6.11 created. It lists FIVE: blend.hpp, blend.cpp,
+      draw_order.hpp, draw_order.cpp and verify_611.cpp. The command:
+        for f in engine/include/engine/gfx/blend.hpp \
+                 engine/src/gfx/blend.cpp \
+                 engine/include/engine/gfx/draw_order.hpp \
+                 engine/src/gfx/draw_order.cpp; do
+          git show <6.11 commit>:$f > scratch/l611_$(basename $f)
         done
-        cp scratch/verify_610.cpp scratch/l610_verify_610.cpp   # gitignored
-      Then re-run build_610.py and `git diff` the page: NINE lessons running,
-      the diff has been exactly the nav lines meant to move.
+        cp scratch/verify_611.cpp scratch/l611_verify_611.cpp   # gitignored
+      Then re-run build_611.py and `git diff` the page: TEN lessons running, the
+      diff has been exactly the nav lines meant to move.
 
-      WHAT 6.11 IS ABOUT, AND IT IS A CORRECTNESS GAP IN SHIPPED CODE, not a
-      missing feature. Three facts that are all already true today:
-        1 gpu_pipeline.hpp has said `no blending` since 4.4. There is no blend
-          state in the engine at all, on either renderer.
-        2 6.6's glTF importer READS `alpha` (baseColorFactor[3]) and IGNORES
-          `alphaMode` and `alphaCutoff` entirely, so a material marked MASK or
-          BLEND imports as fully opaque.
-        3 THAT IS THE ONE GAP IN THAT IMPORTER WHICH FIRES NO STATUS. 6.6 §10
-          says so in as many words — it was retrofitted on 2026-09-08 precisely
-          because the silence broke §10's own rule. Every other limit reports:
-          too_many_vertices, unsupported_primitive, factor_texture_conflicts.
-          THE REASON IS STRUCTURAL: a status says "the file wants what the engine
-          cannot do", and the engine had no blend state to compare against. 6.11
-          gives it one, so the status becomes WRITABLE — close that loop
-          explicitly, it is the payoff for having named the gap honestly.
-      WHAT THE LESSON OWES:
-        1 ALPHA MASKING vs BLENDING, and why the first keeps the depth buffer
-          honest: a masked fragment is discarded, so depth is never written and
-          order does not matter. A blended one writes colour but must NOT write
-          depth, or it occludes what is behind it.
-        2 PREMULTIPLIED ALPHA, derived from what blending actually multiplies
-          rather than asserted. src*a + dst*(1-a) vs src + dst*(1-a), and why
-          the second composites correctly under filtering and the first does not.
-        3 DRAW ORDER. Opaque geometry never needed sorting because the z-buffer
-          IS the sort (3.1). Blending is not commutative, so transparent geometry
-          must be drawn back-to-front — which is a per-frame sort the engine has
-          never had, and 6.13's frustum culling will want the same traversal.
-        4 THE SORTING FAILURE MODE, shown: two transparent quads intersecting,
-          where NO per-object order is correct. Name OIT, do not build it.
-      THE MIPMAP INTERACTION, and it is a genuinely famous bug worth a section:
-        AVERAGING AN ALPHA CHANNEL MAKES CUTOUT FOLIAGE DISSOLVE WITH DISTANCE.
-        A leaf texture that is 50% coverage at level 0 averages toward 0.5 alpha
-        everywhere, so an alpha TEST at 0.5 starts rejecting half of it — the
-        tree thins out as it recedes. The fix has a name (alpha-to-coverage, or
-        rescaling the chain to preserve coverage) and 6.10 built the chain this
-        lands on. 6.10 §9 already promises this connection.
-      THE TEST TO BEAT: the golden should stay E917C06C — TWENTIETH lesson. This
-      one SHOULD be automatic: blending is new pipeline state and the reference
-      scene is opaque. But VERIFY IT EARLY rather than assuming, because
-      `fill_style` gaining a blend mode could change a default.
-      CARRY FORWARD: 6.10's habit of DECIDING THE GOLDEN QUESTION FIRST, and
-      6.9's of measuring the case where the feature loses. Blending costs a
-      read-modify-write per fragment and a sort per frame; say what by.
+      WHY blend.{hpp,cpp} ARE NEAR CERTAIN TO MOVE, and it is the hinge of 6.12.
+      `blend_over` decodes both operands, composites, and RE-ENCODES through
+      `to_encoded`, which CLAMPS into [0,1] — because an 8-bit pixel has nowhere
+      to put the excess, exactly as `linear_rgb`'s doc comment has said since 1.6.
+      6.12's whole subject is that values above 1 stop being an error. So:
+        1 A float colour target has no encode at all, which means the CPU's
+          decode-blend-encode round trip (measured at 3.14x a byte lerp, 68.87 ns
+          against 21.94) is not what the GPU is doing any more either.
+        2 The `_SRGB`-versus-UNORM argument of 6.11 §3.2 DOES NOT TRANSFER
+          UNCHANGED to a float target: there is no transfer function in the ROP
+          to be right or wrong about. State what replaces it rather than leaving
+          6.11's rule to be over-applied.
+        3 `encode_output` in scene.frag.hlsl currently has two legal values and
+          6.12 gives it a third situation. It is already the most over-loaded
+          float in the block.
+
+      WHAT 6.12 OWES, beyond the obvious:
+        1 WHERE THE HDR BUFFER GOES. `gpu_scene_renderer` creates its pipelines
+          against ONE colour format (4.4 bakes it in), so rendering to a float
+          target and then tonemapping to the swapchain is a second pass and a
+          second set of pipelines — on top of the NINE 6.11 just created. This is
+          where the pipeline-count argument stops being a curiosity and starts
+          being a reason to build the cache. Say so.
+        2 THE LIGHT UNITS DEBT. 6.2 and 6.4 both deferred to this lesson by name:
+          until it lands, every light is authored in whatever units happen to
+          look right. `k_reference_irradiance` exists for exactly that reason.
+          Check what those two lessons promised and pay it explicitly.
+        3 THE GOLDEN QUESTION, DECIDED FIRST. 6.10's habit, and 6.11 confirmed it
+          is the right order. A tonemap applied by default WOULD move the
+          reference render — it is a change to every pixel, not a new path — so
+          this is the first lesson since 6.4 where the honest answer may well be
+          "re-baseline and say so". DECIDE BEFORE WRITING CODE; written first,
+          the choice gets made by whichever was easier to retrofit.
+        4 BLOOM IS 6.13, NOT THIS LESSON. The index splits them and the split is
+          right: a bloom needs a post-processing STACK to live in, and a stack is
+          an architecture question.
+      CARRY FORWARD: 6.11's habit of naming a technique's ceiling with a number
+      (the 4x4 coverage floor, the intersecting quads) rather than a hedge.
 ```

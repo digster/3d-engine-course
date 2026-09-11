@@ -88,6 +88,7 @@
       <li><a href="#interop">Interop &mdash; glTF, and what agrees with what</a></li>
       <li><a href="#normal-maps">Normal maps &mdash; the four conventions</a></li>
       <li><a href="#shadow-maps">Shadow maps &mdash; what the comparison assumes</a></li>
+      <li><a href="#transparency">Transparency &mdash; six decisions, four of which draw a picture either way</a></li>
       <li><a href="#units">Units and angles</a></li>
       <li><a href="#simulation">The simulation contract</a></li>
       <li><a href="#rotational">Rotational quantities &mdash; torque, spin, inertia</a></li>
@@ -2273,6 +2274,87 @@
        of device depth is worth. The second is <em>a single number only because the light&rsquo;s
        projection is orthographic</em>; under a perspective (spot) projection it varies across the
        frustum, and every bias derived from it becomes position-dependent. Lesson 6.8 &sect;3.3.</p>
+  </div>
+
+  <h2 id="transparency"><span class="num">7n</span>Transparency &mdash; six decisions, four of which draw a picture either way</h2>
+
+  <p>
+    Added in Lesson 6.11. Compositing is one lerp, and every decision below has to agree on both
+    sides of it &mdash; between the two renderers, between the importer and the material, and
+    between the shader and the hardware that blends after it. They go on this page for the reason
+    &sect;7m&rsquo;s do: most of them have a wrong answer that still produces a plausible image.
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <caption class="visually-hidden">Transparency conventions, this course&rsquo;s answer for
+        each, and the symptom of getting it wrong</caption>
+      <thead>
+        <tr><th>Decision</th><th>This course</th><th>Symptom when wrong</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>What alpha is</strong></td>
+          <td><strong>Coverage</strong> &mdash; the fraction of the pixel&rsquo;s area the surface
+              occupies. Never put through a transfer function, in any texel space, on either
+              renderer.</td>
+          <td>Every half-transparent surface composites as though it covered 73% of the pixel.
+              Looks like a material authored wrongly.</td>
+        </tr>
+        <tr>
+          <td><strong>Where the blend happens</strong></td>
+          <td><strong>Linear light.</strong> Decode both operands, lerp, re-encode
+              (<code>blend_over</code>). On the GPU this means an <code>_SRGB</code> colour target,
+              because the ROP blends whatever bit pattern is in the attachment.</td>
+          <td>Code 128 where 188 is correct &mdash; <strong>42.9%</strong> of the light. Exact at
+              <em>a</em> = 0 and 1, so every fade starts and finishes right and is wrong only in
+              the middle.</td>
+        </tr>
+        <tr>
+          <td><strong>Depth writes</strong></td>
+          <td><code>alpha_mode::blend</code> <strong>tests and never writes</strong>;
+              <code>mask</code> writes only for fragments that survive the cutoff, and therefore
+              only <em>after</em> the fragment has run.</td>
+          <td>Exactly one transparent surface draws and the rest vanish &mdash; which reads as a
+              culling bug, not a depth bug.</td>
+        </tr>
+        <tr>
+          <td><strong>Draw order</strong></td>
+          <td><strong>Back to front</strong>, by <em>axial</em> depth
+              (<code>dot(p &minus; eye, forward)</code>, &sect;7m&rsquo;s cascade rule again), with
+              a <em>stable</em> sort. Masked and opaque geometry are <strong>not</strong> sorted.</td>
+          <td>Reversed: the near pane tints the far one. Radial: two panes side by side swap for no
+              reason. Unstable: ties flicker between frames.</td>
+        </tr>
+        <tr>
+          <td><strong>Alpha storage</strong></td>
+          <td><code>alpha_storage::straight</code> by default, on the <strong>texture</strong>
+              beside <code>texel_space</code> &mdash; a property of the data, not of the read.
+              Premultiplied is what survives a filter.</td>
+          <td>A dark halo following every cutout edge, thickening with distance. It is not an
+              outline anybody drew; it is invisible black averaged in at full weight.</td>
+        </tr>
+        <tr>
+          <td><strong>Cutoff comparison</strong></td>
+          <td>Discard on <code>a &lt; cutoff</code>, so the boundary belongs to the
+              <em>visible</em> side. <code>coverage_of</code> counts it the same way, deliberately.</td>
+          <td>A coverage measurement that describes an image the renderer never draws &mdash; off
+              by a texel or two all around every edge.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout">
+    <span class="label">And the one that is not a convention but a ceiling</span>
+    <p>
+      This engine sorts <strong>per object</strong>. For two transparent surfaces that
+      <em>intersect</em>, no per-object order is correct &mdash; each is in front along part of the
+      overlap &mdash; and that is not a better sort waiting to be written. Order-independent
+      transparency is a different data structure and this course does not build one. An engine that
+      sorts per object and says so is honest; one that implies otherwise costs somebody an
+      afternoon looking for a bug in the sort.
+    </p>
   </div>
 
   <h2 id="units"><span class="num">8</span>Units and angles</h2>

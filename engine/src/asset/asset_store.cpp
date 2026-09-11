@@ -283,6 +283,21 @@ model_load asset_store::load_model(std::string_view name)
         //    runs in the direction nobody expects: linear -> encoded.
         m.tint = to_encoded(desc.base_colour);
 
+        // 2b. TRANSPARENCY, LESSON 6.11 — three fields that go across untouched,
+        //     and the fact that they need no conversion is the point. `alpha` is
+        //     a coverage fraction on both sides, `alpha_cutoff` is a comparison
+        //     threshold on both sides, and `mode` was already spelt out as a
+        //     switch at the cgltf boundary rather than cast. Compare the two
+        //     lines above it, where the base colour has to change space.
+        //
+        //     Until this lesson `desc.alpha` was read by nothing at all and
+        //     `desc.mode` did not exist, so every MASK and BLEND material in
+        //     every imported file arrived here and became opaque — silently,
+        //     which is what 6.6 §10 named and this closes.
+        m.mode = desc.mode;
+        m.alpha = desc.alpha;
+        m.alpha_cutoff = desc.alpha_cutoff;
+
         // 3. THE IMAGE, if the material named one and the search path can find
         //    it. A miss is counted, logged once by `load_image`, and NOT fatal:
         //    the material keeps its base colour and the model draws.

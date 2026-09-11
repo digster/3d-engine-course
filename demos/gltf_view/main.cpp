@@ -37,6 +37,7 @@
 #include <engine/gfx/bounds.hpp>
 #include <engine/gfx/scene.hpp>
 #include <engine/gfx/cascade.hpp>
+#include <engine/gfx/draw_order.hpp>
 #include <engine/gfx/mipmap.hpp>
 #include <engine/gfx/shadow.hpp>
 #include <engine/gfx/soft_renderer.hpp>
@@ -173,6 +174,23 @@ public:
                 // visible line across the floor that trilinear exists to hide.
                 mips_ = true;
                 mip_filter_ = engine::filter::nearest;
+            }
+            // LESSON 6.11. `--alpha` adds the transparency showcase: two
+            // overlapping glass panes and a cutout leaf card. `--no-sort` draws
+            // the blended objects in scene order so the failure is one keystroke
+            // away, and `--blend-encoded` composites on the stored bytes, which
+            // is the 43%-too-dark bug made visible.
+            else if (SDL_strcmp(argv[i], "--alpha") == 0)
+            {
+                alpha_demo_ = true;
+            }
+            else if (SDL_strcmp(argv[i], "--no-sort") == 0)
+            {
+                sort_blended_ = false;
+            }
+            else if (SDL_strcmp(argv[i], "--blend-encoded") == 0)
+            {
+                blend_encoded_ = true;
             }
             else if (SDL_strcmp(argv[i], "--cascades") == 0 && i + 1 < argc)
             {
@@ -506,6 +524,137 @@ public:
         //
         // `shadow_res_` is a side, so the storage is its square: 1024 costs 4 MB
         // of float depth here and 2 MB as a 16-bit target on the GPU.
+        // ---- LESSON 6.11: the transparency showcase -------------------------
+        //
+        // THREE OBJECTS, chosen so that each names one of the lesson's three
+        // subjects and so that the failure of each is visible on its own:
+        //
+        //   a CUTOUT LEAF CARD, `alpha_mode::mask`. Its alpha channel is a hard
+        //        stencil, so it needs no sorting and no blend state at all — the
+        //        cheapest transparency there is, and the one people reach for
+        //        last because "alpha" sounds like one feature.
+        //   TWO GLASS PANES, `alpha_mode::blend`, deliberately OVERLAPPING and
+        //        at different depths. One pane proves nothing; two prove the
+        //        order matters, and `--no-sort` draws them in scene order so the
+        //        wrong one is a keystroke away.
+        //
+        // They are built here rather than loaded, because the point is to have a
+        // scene whose transparency is known exactly — a downloaded asset's glass
+        // would be a second unknown in a measurement of the first.
+        if (alpha_demo_)
+        {
+            // `with_normals` for the same reason the ground needs it: these are
+            // lit surfaces, and `quad_mesh` is bare geometry with uvs and no
+            // normals. A quad with no normal shades black, which looks like a
+            // transparency bug and is not one.
+            const engine::mesh_handle quad = assets_.insert_mesh(
+                "generated:alpha quad",
+                engine::with_normals(engine::quad_mesh(), engine::normal_style::flat));
+            if (quad.valid())
+            {
+                const float span = SDL_max(SDL_max(extent.x, extent.z), 1e-3f);
+
+                // ---- Which way do they face? ---------------------------------
+                //
+                // `quad_mesh` is authored in the z = 0 plane facing +z, and a
+                // pane seen edge-on demonstrates nothing. So they are yawed to
+                // face the camera's SHOT pose — `atan2(dx, dz)` is the angle that
+                // sends +z to the horizontal direction back toward the eye —
+                // and placed along that same axis, in front of the model.
+                //
+                // In a live window the camera keeps orbiting past them, which is
+                // not a defect: it is the demonstration. As the eye crosses the
+                // panes' plane the CORRECT order flips, `order_draws` flips with
+                // it, and `--no-sort` visibly does not.
+                const float yaw = SDL_atan2f(0.86f * SDL_cosf(pose_),
+                                             0.86f * SDL_sinf(pose_));
+                const float cy = SDL_cosf(yaw);
+                const float sy = SDL_sinf(yaw);
+                const engine::mat3 facing{{cy, 0.0f, sy},
+                                          {0.0f, 1.0f, 0.0f},
+                                          {-sy, 0.0f, cy}};
+
+                // The unit vector from the model toward the camera, on the
+                // ground plane. Everything below is placed along it.
+                const engine::vec3 toward{0.86f * SDL_cosf(pose_), 0.0f,
+                                          0.86f * SDL_sinf(pose_)};
+                const engine::vec3 dir = engine::normalised(toward);
+                const engine::vec3 side{-dir.z, 0.0f, dir.x};
+
+                // ---- The leaf card ------------------------------------------
+                //
+                // A circle of full coverage inside a square of none, which is a
+                // leaf reduced to the only property that matters here: an alpha
+                // channel with a HARD EDGE. The transparent texels are black —
+                // which is what an image editor leaves behind, and which is
+                // precisely the colour that bleeds into the edge under a
+                // straight-alpha filter (§5). Making them black is not laziness,
+                // it is the realistic case.
+                constexpr int k_leaf = 128;
+                engine::texture leaf(k_leaf, k_leaf, 0x00000000u,
+                                     engine::texel_space::srgb);
+                for (int y = 0; y < k_leaf; ++y)
+                {
+                    for (int x = 0; x < k_leaf; ++x)
+                    {
+                        const float dx = (static_cast<float>(x) + 0.5f) / k_leaf - 0.5f;
+                        const float dy = (static_cast<float>(y) + 0.5f) / k_leaf - 0.5f;
+                        const bool inside = (dx * dx + dy * dy) < (0.34f * 0.34f);
+                        leaf.set_texel(x, y, inside ? 0xFF4E9A3Cu : 0x00000000u);
+                    }
+                }
+
+                engine::scene_object card;
+                card.geometry = quad;
+                card.name = "leaf card";
+                card.xform.position = {centre_.x + dir.x * span * 1.4f - side.x * span * 1.1f,
+                                       centre_.y,
+                                       centre_.z + dir.z * span * 1.4f - side.z * span * 1.1f};
+                card.xform.rotation = facing;
+                card.xform.scale = {span * 1.5f, span * 1.5f, 1.0f};
+                card.mat.albedo_map = assets_.insert_texture("leaf", std::move(leaf));
+                card.mat.tint = 0xFFFFFFFFu;
+                card.mat.surface = {.roughness = 0.7f};
+                card.mat.mode = engine::alpha_mode::mask;
+                card.mat.alpha_cutoff = engine::k_default_alpha_cutoff;
+                card.closed = false;   // a sheet: `cull_of` will not cull it
+                objects_.push_back(card);
+
+                // ---- Two panes of glass -------------------------------------
+                //
+                // OVERLAPPING IN SCREEN SPACE AND SEPARATED IN DEPTH, which is
+                // the only arrangement in which "which one is in front" is a
+                // question the picture can answer. Coverage 0.45 and 0.55: both
+                // well away from 0 and 1, where a compositing error hides.
+                //
+                // Note the build ORDER — near pane first — which is exactly the
+                // wrong order for blending. `--no-sort` draws them like that.
+                const float along[2] = {1.6f, 0.7f};
+                const float across[2] = {0.30f, 0.75f};
+                const Uint32 tints[2] = {0xFF4C7FD8u, 0xFFD8574Cu};
+                const float alphas[2] = {0.45f, 0.55f};
+                const char* names[2] = {"glass near", "glass far"};
+                for (int k = 0; k < 2; ++k)
+                {
+                    engine::scene_object pane;
+                    pane.geometry = quad;
+                    pane.name = names[k];
+                    pane.xform.position = {
+                        centre_.x + dir.x * span * along[k] + side.x * span * across[k],
+                        centre_.y,
+                        centre_.z + dir.z * span * along[k] + side.z * span * across[k]};
+                    pane.xform.rotation = facing;
+                    pane.xform.scale = {span * 1.6f, span * 1.9f, 1.0f};
+                    pane.mat.tint = tints[k];
+                    pane.mat.surface = {.roughness = 0.25f};
+                    pane.mat.mode = engine::alpha_mode::blend;
+                    pane.mat.alpha = alphas[k];
+                    pane.closed = false;
+                    objects_.push_back(pane);
+                }
+            }
+        }
+
         // ---- LESSON 6.10: one chain per DISTINCT albedo texture -------------
         //
         // Keyed by pointer rather than one per object, because two objects
@@ -643,9 +792,41 @@ public:
             shadows_.render(casters(), assets_.meshes(), lights_.key, &shadow_stats_);
         }
 
-        int drawn = 0;
-        for (const engine::scene_object& obj : objects_)
+        // ---- LESSON 6.11: THE ORDER, DECIDED BEFORE ANYTHING IS DRAWN ------
+        //
+        // The first thing in this course that has to happen *before* the frame
+        // rather than during it. Opaque geometry never needed it — the z-buffer
+        // IS the sort, per pixel — and blending takes that away, because `over`
+        // is not commutative.
+        //
+        // REBUILT EVERY FRAME, and cheaply: the keys are 12 bytes and there are
+        // as many as there are objects, so this is a sort of a handful of small
+        // records rather than of the draws themselves. `order_stats_.out_of_order`
+        // then says whether it was worth doing, which for an orbiting camera and
+        // static geometry is "only while the camera crosses the panes' plane".
+        order_.clear();
+        order_.reserve(objects_.size());
+        const engine::vec3 view_axis = engine::normalised(centre_ - eye);
+        for (std::size_t i = 0; i < objects_.size(); ++i)
         {
+            const engine::scene_object& o = objects_[i];
+            order_.push_back(engine::draw_key{
+                .index = static_cast<int>(i),
+                .depth = engine::view_depth(o.xform.position, eye, view_axis),
+                .mode = o.mat.mode});
+        }
+        order_stats_ = engine::order_draws(order_);
+
+        int drawn = 0;
+        for (const engine::draw_key& key : order_)
+        {
+            // `--no-sort` walks the ORIGINAL order instead, which is scene order
+            // — near pane first, because that is how it was built. One keystroke,
+            // and the far pane tints the near one instead of the other way round.
+            const engine::scene_object& obj =
+                sort_blended_ ? objects_[static_cast<std::size_t>(key.index)]
+                              : objects_[static_cast<std::size_t>(&key - order_.data())];
+
             engine::collect_triangles(triangles_, scratch_, {&obj, 1}, assets_.meshes(),
                                       {view, eye}, projector_, lights_,
                                       engine::render_options{
@@ -696,7 +877,24 @@ public:
                 // selects a cascade, and it must be the AXIAL depth.
                 .cascades = cascade_.valid() ? &cascade_ : nullptr,
                 .view_eye = eye,
-                .view_forward = engine::normalised(centre_ - eye)};
+                .view_forward = engine::normalised(centre_ - eye),
+
+                // ---- 6.11 -------------------------------------------------
+                //
+                // Straight off the material, because the material is where the
+                // artist's intent lives (`material::mode`) and the fill is where
+                // it becomes behaviour. `opacity` and `alpha_cutoff` are handed
+                // over unconditionally: an opaque fill ignores both, which is
+                // what keeps every earlier picture in this demo identical.
+                //
+                // (Designators must appear in DECLARATION order, which is why
+                // they sit here beside `depth_only` rather than up beside
+                // `encode` where they would read better. C++20 evaluates them in
+                // declaration order regardless.)
+                .transparency = obj.mat.mode,
+                .opacity = obj.mat.alpha,
+                .alpha_cutoff = obj.mat.alpha_cutoff,
+                .blend_encoded = blend_encoded_};
 
             engine::draw_triangles(fb(), &depth_, triangles_, false, style);
             drawn += static_cast<int>(triangles_.size());
@@ -705,6 +903,15 @@ public:
         if (shot_path_ != nullptr)
         {
             SDL_Log("gltf_view: %zu object(s), %d triangles", objects_.size(), drawn);
+            // 6.11. Printed whether or not anything is transparent, because
+            // "blended: 0" is the answer that says the sort cost nothing — and a
+            // counter you only see when the feature is on is a counter that
+            // cannot tell you the feature is off.
+            SDL_Log("  draw order    : %d opaque (%d of them masked), %d blended, "
+                    "%d adjacent pair(s) out of order before sorting%s",
+                    order_stats_.opaque, order_stats_.masked, order_stats_.blended,
+                    order_stats_.out_of_order,
+                    sort_blended_ ? "" : "  [--no-sort: the sort's result is IGNORED]");
             if (shadows_.valid() || cascade_.valid())
             {
                 SDL_Log("  shadow pass  : %d caster triangles into %d texels, %.2f ms",
@@ -762,6 +969,11 @@ private:
     int shadow_res_ = 1024;        ///< the map's side in texels; 0 = no shadows
     int cascades_ = 0;          // 6.9: 0 = 6.8's single map
     bool mips_ = false;         // 6.10
+    bool alpha_demo_ = false;      ///< 6.11: build the glass and the leaf card
+    bool sort_blended_ = true;     ///< 6.11: --no-sort makes the failure reachable
+    bool blend_encoded_ = false;   ///< 6.11: composite on stored bytes, wrongly
+    std::vector<engine::draw_key> order_;   ///< 6.11: rebuilt every frame
+    engine::order_report order_stats_{};    ///< 6.11: what the sort was worth
     int floor_tex_ = 0;         // checker side, 0 = untextured ground
     int aniso_ = 1;
     engine::filter mip_filter_ = engine::filter::linear;

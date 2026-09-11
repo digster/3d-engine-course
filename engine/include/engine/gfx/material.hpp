@@ -49,6 +49,7 @@
 
 #include <engine/core/handle.hpp>
 #include <engine/core/pool.hpp>
+#include <engine/gfx/blend.hpp>    // 6.11: alpha_mode, k_default_alpha_cutoff
 #include <engine/gfx/colour.hpp>
 #include <engine/gfx/cull.hpp>
 #include <engine/gfx/microfacet.hpp>
@@ -133,6 +134,63 @@ struct material
     /// Roughness, metallic, F0 — Lesson 6.4's `microsurface`.
     microsurface surface{};
 
+    // ---- Lesson 6.11: transparency ----------------------------------------
+    //
+    // THREE FIELDS, AND THEY TEST 6.5'S OWN LINE. This file opens by asking
+    // "which half can be a number in a buffer?" and putting everything that can
+    // on this struct. Two of the three below can. The first cannot — and it is
+    // here anyway, on purpose, which needs justifying rather than glossing.
+
+    /// Opaque, alpha-tested, or blended. **The one field on this struct that is
+    /// not a number in a buffer**, and the precedent for keeping it here is four
+    /// declarations further down: `cull_of`.
+    ///
+    /// The distinction 6.5 drew was between per-draw DATA and pipeline STATE. A
+    /// blend mode is pipeline state — `SDL_GPUColorTargetBlendState` lives inside
+    /// the create-info, and two objects that differ in it need two pipelines and
+    /// a sort between them. So by that rule this field belongs in `fill_style`
+    /// and `surface_style`, not here.
+    ///
+    /// But `cull_of` already settled the shape of this argument, about `closed`:
+    /// **what belongs to the material is the INTENT, not the state.** A window
+    /// *is* transparent — that is a fact about the surface, true whichever
+    /// renderer draws it and true in a file on disk with no pipeline anywhere
+    /// near it. What the renderer does about it (which pipeline, which pass,
+    /// which sort) is derived at draw time, in one place, from this. The GPU path
+    /// derives a `blend_style`, the software path derives a `fill_style`, and
+    /// neither of them is where an artist's decision should have been stored.
+    ///
+    /// **Defaults to `opaque`, and that is what keeps this lesson an addition
+    /// rather than a re-baseline.** Every material written in the previous
+    /// sixty-five lessons means precisely what it meant.
+    alpha_mode mode = alpha_mode::opaque;
+
+    /// The surface's own opacity, **linear and independent of `tint`**.
+    ///
+    /// glTF calls it `baseColorFactor[3]`, and Lesson 6.6 has been importing it
+    /// into `gltf_material_desc::alpha` and dropping it on the floor ever since,
+    /// because there was nothing here to put it in. There is now.
+    ///
+    /// **It multiplies the albedo texture's alpha; it does not replace it.** Note
+    /// that this is the opposite of the rule `tint` and `albedo_map` follow —
+    /// there, the texture REPLACES the factor, because both of them *are* the
+    /// albedo and a surface has one albedo (3.9). Here they compose, because they
+    /// are two different statements: the image says which *parts* of the surface
+    /// are there, and this says how transparent the *whole* surface is. A glass
+    /// pane with a decal needs both. glTF specifies the multiply, and it is the
+    /// only reading that lets a fade-out animate an existing material.
+    ///
+    /// Ignored entirely under `alpha_mode::opaque`.
+    float alpha = 1.0f;
+
+    /// Under `alpha_mode::mask`, the coverage at which a fragment starts to
+    /// exist. glTF's `alphaCutoff`, default 0.5.
+    ///
+    /// **A number in a buffer, unambiguously** — the fragment stage reads it and
+    /// nothing else does, which is 6.5's test passed on the first try. It is why
+    /// masking needs no pipeline of its own in this engine (see `alpha_mode`).
+    float alpha_cutoff = k_default_alpha_cutoff;
+
     /// Does the albedo come from the image rather than from `tint`?
     ///
     /// **DERIVED, never stored**, and that is the point of writing it as a
@@ -152,6 +210,16 @@ struct material
     /// `normal_mapped` bool beside a separately-chosen handle is two opinions
     /// that can disagree (6.5 §5).
     [[nodiscard]] bool normal_mapped() const { return normal_map.valid(); }
+
+    /// Does this surface need the sorted, depth-write-disabled pass?
+    ///
+    /// **Derived, and deliberately NOT "is it see-through"** — masked geometry is
+    /// see-through and belongs with the opaque draws, because a discarded
+    /// fragment writes no depth and therefore occludes nothing, so no order can
+    /// be wrong. Only `blend` makes draw order part of the answer, and only
+    /// `blend` is what a renderer must sort for. Confusing the two costs a
+    /// per-frame sort over every leaf in the scene for no benefit whatsoever.
+    [[nodiscard]] bool needs_sorting() const { return mode == alpha_mode::blend; }
 };
 
 /// A reference to a material held in a `material_pool`.

@@ -9,6 +9,17 @@
 
 namespace engine {
 
+const char* name_of(blend_style b)
+{
+    switch (b)
+    {
+    case blend_style::opaque:        return "opaque";
+    case blend_style::alpha:         return "alpha";
+    case blend_style::premultiplied: return "premultiplied";
+    }
+    return "?";
+}
+
 const char* name_of(surface_style s)
 {
     switch (s)
@@ -44,7 +55,19 @@ bool gpu_scene_renderer::create(const gpu_device& dev,
         surface_style::solid, surface_style::two_sided, surface_style::wireframe
     };
 
+    // LESSON 6.11. A SECOND AXIS, and therefore a NESTED loop and a PRODUCT.
+    // Three became nine, and the shape of the change is the lesson: transparency
+    // is not a fourth surface style, it is an independent choice that every
+    // surface style has to be crossed with. See `blend_style` in the header for
+    // why that multiplication is where real engines stop enumerating and start
+    // hashing.
+    static constexpr blend_style k_blend_order[k_blends] = {
+        blend_style::opaque, blend_style::alpha, blend_style::premultiplied
+    };
+
     for (int i = 0; i < k_styles; ++i)
+    {
+    for (int j = 0; j < k_blends; ++j)
     {
         pipeline_desc desc(dev, vertex, fragment);
 
@@ -104,13 +127,29 @@ bool gpu_scene_renderer::create(const gpu_device& dev,
             raw.depth_stencil_state.compare_op = SDL_GPU_COMPAREOP_LESS;
         }
 
-        if (!pipelines_[i].create(dev, desc.info()))
+        // ---- The blend axis (Lesson 6.11) -----------------------------------
+        //
+        // TWO CALLS, and the second one is the one people forget. Blending
+        // without disabling the depth write gives a transparent surface that
+        // occludes every transparent surface behind it — so a scene of glass
+        // panes shows exactly one of them, whichever happened to be drawn first,
+        // and the others are simply absent. It reads as a culling bug.
+        if (k_blend_order[j] != blend_style::opaque)
         {
-            ENGINE_LOG_ERROR(engine::log_gpu, "gpu_scene: pipeline '%s' was not created", name_of(k_order[i]));
+            desc.blend(k_blend_order[j] == blend_style::premultiplied);
+            desc.depth_write(false);
+        }
+
+        if (!pipelines_[i][j].create(dev, desc.info()))
+        {
+            ENGINE_LOG_ERROR(engine::log_gpu,
+                             "gpu_scene: pipeline '%s' / '%s' was not created",
+                             name_of(k_order[i]), name_of(k_blend_order[j]));
             destroy();
             return false;
         }
-        create_ms_ += pipelines_[i].create_ms();
+        create_ms_ += pipelines_[i][j].create_ms();
+    }
     }
 
     // ---- One white texel ----------------------------------------------------
@@ -226,7 +265,7 @@ void gpu_scene_renderer::destroy()
     flat_normal_.destroy();
     far_depth_.destroy();
     shadow_sampler_.destroy();
-    for (gpu_pipeline& p : pipelines_) { p.destroy(); }
+    for (auto& row : pipelines_) { for (gpu_pipeline& p : row) { p.destroy(); } }
     depth_w_ = 0;
     depth_h_ = 0;
     create_ms_ = 0.0;
@@ -323,7 +362,10 @@ draw_stats gpu_scene_renderer::render(SDL_GPUCommandBuffer* cb, SDL_GPURenderPas
     SDL_GPUTexture* bound_texture = nullptr;
 
     SDL_GPUTexture* bound_normal = nullptr;   // 6.7
-    bool style_present[k_styles] = {};
+    // 6.11: a matrix now, because the ideal bind count is one per distinct
+    // (surface style, blend style) PAIR present — a solid opaque draw and a solid
+    // blended draw are two pipelines however well the list is sorted.
+    bool style_present[k_styles][k_blends] = {};
 
     // ---- The shadow map, resolved once for the whole frame — Lesson 6.8 -----
     //
@@ -343,9 +385,10 @@ draw_stats gpu_scene_renderer::render(SDL_GPUCommandBuffer* cb, SDL_GPURenderPas
         // A scene whose model failed to load should draw the rest of itself.
         if (item.mesh == nullptr || !item.mesh->valid()) { continue; }
 
-        style_present[static_cast<int>(item.style)] = true;
+        style_present[static_cast<int>(item.style)][static_cast<int>(item.blend)] = true;
 
-        const gpu_pipeline& want = pipelines_[static_cast<int>(item.style)];
+        const gpu_pipeline& want =
+            pipelines_[static_cast<int>(item.style)][static_cast<int>(item.blend)];
         if (!want.valid()) { continue; }
 
         if (&want != bound_pipeline)
@@ -454,9 +497,12 @@ draw_stats gpu_scene_renderer::render(SDL_GPUCommandBuffer* cb, SDL_GPURenderPas
         stats.triangles += tris;
     }
 
-    for (bool present : style_present)
+    for (const auto& row : style_present)
     {
-        if (present) { ++stats.ideal_pipeline_binds; }
+        for (bool present : row)
+        {
+            if (present) { ++stats.ideal_pipeline_binds; }
+        }
     }
 
     return stats;

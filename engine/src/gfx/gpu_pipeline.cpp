@@ -396,6 +396,52 @@ pipeline_desc& pipeline_desc::colour_target_format(SDL_GPUTextureFormat format)
     return *this;
 }
 
+// ---- Lesson 6.11 ------------------------------------------------------------
+
+pipeline_desc& pipeline_desc::blend(bool premultiplied)
+{
+    // `SDL_GPUColorTargetBlendState`, verified field by field against
+    // SDL3/SDL_gpu.h: six enums, a write mask and two bools, in that order.
+    SDL_GPUColorTargetBlendState& b = colour_targets_[0].blend_state;
+
+    // The switch. Without it every other field here is ignored, which is the
+    // usual way this is got wrong — the state is filled in perfectly and the
+    // picture is unchanged, and there is no error anywhere to explain it.
+    // (Lesson 6.10 met exactly this shape twice: `max_lod = 0` clamping a chain
+    // away, and `max_anisotropy` ignored without `enable_anisotropy`. When a
+    // feature "does nothing", suspect the enable.)
+    b.enable_blend = true;
+
+    // src*a + dst*(1-a), or src + dst*(1-a). ONE ENUM APART — see the header,
+    // and `blend.hpp` for what the two expressions actually do to a filtered
+    // edge.
+    b.src_color_blendfactor = premultiplied ? SDL_GPU_BLENDFACTOR_ONE
+                                            : SDL_GPU_BLENDFACTOR_SRC_ALPHA;
+    b.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    b.color_blend_op = SDL_GPU_BLENDOP_ADD;
+
+    // COVERAGE COMPOSES LIKE COVERAGE: a_out = a_src + a_dst*(1 - a_src), which
+    // is `over` applied to the alpha channel itself and is the same expression
+    // in both storage conventions — alpha is never premultiplied by itself.
+    // Leaving these at their zero-initialised values would set both factors to
+    // `INVALID` and the op to `INVALID`, which is not a synonym for "the colour
+    // ones".
+    b.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+    b.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    b.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
+
+    // `enable_color_write_mask` stays false, which SDL documents as "writes to
+    // all channels" — so the mask field is deliberately left alone rather than
+    // set to an all-ones value that would mean the same thing less clearly.
+    return *this;
+}
+
+pipeline_desc& pipeline_desc::depth_write(bool enabled)
+{
+    info_.depth_stencil_state.enable_depth_write = enabled;
+    return *this;
+}
+
 const SDL_GPUGraphicsPipelineCreateInfo& pipeline_desc::info()
 {
     return info_;

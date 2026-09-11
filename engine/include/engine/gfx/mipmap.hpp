@@ -161,6 +161,7 @@ public:
     [[nodiscard]] std::size_t texels() const;
 
     friend mip_chain build_mips(const texture& base);
+    friend mip_chain build_mips(const texture& base, const struct mip_options& opts);
 
 private:
     std::vector<texture> levels_;
@@ -179,6 +180,90 @@ private:
 /// level is darker than the one above, so a surface *gets darker as it recedes*,
 /// and the usual diagnosis is "the lighting falls off too fast".
 [[nodiscard]] mip_chain build_mips(const texture& base);
+
+// ---- Lesson 6.11: what a chain does to an alpha channel ---------------------
+
+/// The two things that go wrong when the image being downsampled is a **cutout**,
+/// and the switches that fix them.
+///
+/// Both defaults reproduce Lesson 6.10 **exactly**, which is deliberate and is
+/// the third time this course has made the same call (6.7's `texel_space`, 6.10's
+/// opt-in chain, this): a new capability is a new path, so nineteen lessons of
+/// measurements and a byte-identical reference render survive it. Neither switch
+/// does anything at all to a fully opaque image — but they are still off by
+/// default, because "does nothing in effect" and "does nothing to the last bit of
+/// every float" are different claims and only the second one keeps a golden.
+struct mip_options
+{
+    /// **Weight the colour average by each texel's alpha** — the cure for the
+    /// dark halo around every cutout edge.
+    ///
+    /// A straight-alpha PNG stores *something* in the colour channels of its
+    /// fully transparent texels, and that something is almost always black,
+    /// because that is what an image editor leaves behind. Average the four
+    /// colours independently and the black is dragged into the visible edge with
+    /// full weight; a leaf gets a dark outline that thickens at every level.
+    ///
+    /// Weighting by alpha is the same arithmetic as premultiplying, averaging,
+    /// and dividing back out — so a texture whose `storage()` is already
+    /// `premultiplied` gets this behaviour **for free and unconditionally**, and
+    /// this flag is what a straight-alpha image needs in order to catch up. That
+    /// is the argument for premultiplied storage in one sentence: it is the
+    /// representation in which averaging is already correct.
+    bool alpha_weighted = false;
+
+    /// **Preserve the fraction of texels that pass an alpha test** — the cure for
+    /// foliage that dissolves with distance.
+    ///
+    /// Zero means "do not", and is the default. A positive value is the cutoff
+    /// the renderer will later test against, and it must be *the same number* or
+    /// the exercise is pointless: this is a rescale computed so that
+    /// `coverage_of(level, cutoff)` matches `coverage_of(level 0, cutoff)`.
+    ///
+    /// The bug it fixes is one of the most familiar sights in games. A leaf
+    /// texture that covers half its area at level 0 has, after a few
+    /// downsamples, an alpha channel that has been averaged toward its mean
+    /// everywhere — so at a cutoff of 0.5 a steadily larger fraction of it fails
+    /// the test, and the tree *thins out as it recedes* until the branches are
+    /// bare. It is not a mip bug and not a test bug: averaging and thresholding
+    /// do not commute, and nothing about either operation on its own is wrong.
+    ///
+    /// (Ignacio Castaño's 2010 note "Computing Alpha Mipmaps" is the standard
+    /// reference and the source of the bisection used here. The other production
+    /// answer is alpha-to-coverage, which is an MSAA feature and therefore
+    /// Lesson 6.14's to introduce.)
+    float coverage_cutoff = 0.0f;
+};
+
+/// Build a chain with the alpha rules above applied.
+///
+/// The one-argument `build_mips` is `build_mips(base, {})`, and stays as the
+/// spelling for the ninety percent of textures that have no meaningful alpha.
+[[nodiscard]] mip_chain build_mips(const texture& base, const mip_options& opts);
+
+/// What fraction of an image's texels would pass an alpha test at `cutoff`?
+///
+/// The number the whole coverage argument is about, and it is worth being able
+/// to print: a leaf texture at 0.5 might be 0.48 at level 0 and 0.31 by level 4,
+/// and *that* is the tree thinning out, stated as a number before it is stated
+/// as a picture.
+///
+/// Counts texels, not area — which are the same thing for a single level, since
+/// every texel in a level covers the same area.
+[[nodiscard]] float coverage_of(const texture& image, float cutoff);
+
+/// Scale an image's alpha channel so that `coverage_of(image, cutoff)` lands as
+/// close to `target` as a bisection on the scale factor can bring it.
+///
+/// **Modifies the alpha only.** The colour channels are untouched — which is
+/// correct for straight storage and, for premultiplied storage, is a small
+/// inconsistency named rather than hidden: rescaling coverage without rescaling
+/// the premultiplied colour makes the two disagree by the scale factor. In
+/// practice a coverage rescale is for alpha *testing*, where the colour is
+/// consumed at full strength and the alpha only ever meets a comparison, so the
+/// disagreement never reaches a blend. `verify_611` §E asserts the coverage and
+/// the lesson's §5 says exactly this.
+void rescale_alpha_to_coverage(texture& image, float target, float cutoff);
 
 /// Which level has texels about the size of this footprint, as a CONTINUOUS
 /// value — 2.4 means "level 2, four tenths of the way to level 3".
@@ -209,6 +294,22 @@ private:
 /// chain only when they built one.
 [[nodiscard]] linear_rgb sample_mipped(const mip_chain& chain, const sampler& samp,
                                        vec2 uv, const uv_footprint& fp);
+
+/// The same sample, **carrying the coverage out with the colour** — Lesson 6.11.
+///
+/// `sample_mipped` is now this with the fourth number dropped, exactly as
+/// `sample` became a wrapper over `sample_rgba` in the same lesson and for the
+/// same reason: a mipped cutout needs its alpha from the level it actually read,
+/// and a second implementation of level selection would be a second place for
+/// the level to be chosen differently.
+///
+/// **The alpha is trilinearly filtered and anisotropically averaged like any
+/// other channel**, which is the thing that makes `mip_options::coverage_cutoff`
+/// necessary rather than optional: every one of those averages moves the alpha
+/// toward its local mean, and a threshold applied afterwards does not care that
+/// the mean was preserved — only that the fraction above the line was not.
+[[nodiscard]] texel_sample sample_mipped_rgba(const mip_chain& chain, const sampler& samp,
+                                              vec2 uv, const uv_footprint& fp);
 
 } // namespace engine
 

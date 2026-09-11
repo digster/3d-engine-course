@@ -192,6 +192,19 @@ cbuffer Material : register(b1, space3)
     // `pad0` is a redefinition rather than a local name — 6.4 found that out
     // the hard way.)
     float  normal_mapped;
+
+    // ---- Lesson 6.11, and it cost a whole register --------------------------
+    //
+    // 6.7's flag was free — it landed in a pad 6.4 had already added. These two
+    // are not: the block goes 32 -> 40 bytes of payload and therefore 32 -> 48
+    // of registers, because a cbuffer is allocated in float4s. The C++ side has
+    // the matching `static_assert`s, and `alpha_pad0`/`alpha_pad1` are named
+    // rather than numbered because HLSL cbuffer members share ONE namespace
+    // across every buffer in a shader.
+    float  alpha;         // 32 — the material's opacity; 1 for anything opaque
+    float  alpha_cutoff;  // 36 — 0 DISABLES the test; see `main`
+    float  alpha_pad0;    // 40
+    float  alpha_pad1;    // 44
 };
 
 // ---- Lesson 6.2 -------------------------------------------------------------
@@ -490,8 +503,36 @@ float4 main(Input input) : SV_Target0
     // to the specular half as well: `f0_of` reads it for a metal. Until this
     // lesson the two halves were independent enough that the order did not
     // matter, and that independence is exactly what Fresnel removed.
-    const float3 sampled = albedo_map.Sample(albedo_sampler, input.uv).rgb;
+    // LESSON 6.11 KEEPS THE FOURTH CHANNEL. One `.rgb` became a whole `float4`,
+    // and the sample itself is unchanged — the alpha was always coming back from
+    // the texture unit, and the shader was throwing it away exactly as
+    // `engine::sample` was on the CPU side.
+    const float4 sampled4 = albedo_map.Sample(albedo_sampler, input.uv);
+    const float3 sampled = sampled4.rgb;
     const float3 base = lerp(albedo, sampled, textured);
+
+    // ---- The coverage, and the test (Lesson 6.11) ---------------------------
+    //
+    // `lerp(1, texture_alpha, textured)` and not a branch, for the reason
+    // `textured` has given since 4.7: every fragment in a draw takes the same
+    // path, so a branch buys nothing and a multiply costs nothing. A material
+    // with no albedo map has coverage 1 from its factor alone.
+    const float src_alpha = alpha * lerp(1.0f, sampled4.a, textured);
+
+    // THE ALPHA TEST, IN ONE INTRINSIC. `clip(x)` discards the fragment when x
+    // is negative — so at `alpha_cutoff = 0` nothing with non-negative coverage
+    // can be discarded and the test disables itself, which is why masking needs
+    // no second pipeline and no shader variant. `uniforms_of` pushes the cutoff
+    // only for a `mask` material and 0 for everything else.
+    //
+    // AND HERE IS WHAT IT COSTS, which is not the subtract: a shader containing
+    // `clip` (or `discard`) cannot have early-Z. The depth test has to wait for
+    // the fragment, because the fragment decides whether there IS a fragment.
+    // The software rasterizer pays the identical price explicitly — `raster.cpp`
+    // reorders its depth write for exactly this reason — and seeing the same
+    // constraint appear in both is the best evidence that it is a fact about the
+    // problem rather than about either implementation.
+    clip(src_alpha - alpha_cutoff);
 
     // ---- What the light delivers (Lesson 6.2) -------------------------------
     //
@@ -636,13 +677,35 @@ float4 main(Input input) : SV_Target0
     // that disagree are a bug that only shows up in a diff. Never pow(x, 1/2.2):
     // that misses the linear toe and is visibly wrong in the darkest codes, which
     // is precisely where this whole subject does its damage.
+    // ---- LESSON 6.11 CASHES THE WARNING ABOVE -------------------------------
+    //
+    // "Correct for opaque geometry and wrong the moment anything blends" was
+    // written in Lesson 6.1 as a prediction. This is the lesson where something
+    // blends, and §7 measures the prediction: half-coverage white over black
+    // comes out at code 128 through the `encode_output == 1` path and code 188
+    // through the `_SRGB` one. **43% of the light**, and the shader cannot fix
+    // it — the blend happens after the shader ends, on whatever is in the target,
+    // so encoding here means the ROP lerps sRGB codes and there is no later
+    // opportunity to undo that.
+    //
+    // The fix is not in this file. It is to render to an `_SRGB` target, which
+    // this engine does whenever the swapchain offers one. What belongs here is
+    // the honest note that the fallback path is a fallback.
+    //
+    // THE ALPHA IS THE SAME NUMBER IN BOTH BRANCHES, and it is NOT encoded in
+    // either. Coverage is a fraction of a pixel, not a quantity of light — the
+    // sentence `colour.hpp` has carried since Lesson 1.6 — so putting it through
+    // a transfer function would be a category error, and one that would make
+    // every half-transparent surface composite as though it covered 73% of the
+    // pixel. Note that `to_encoded` on the CPU side makes the same choice and
+    // `verify_61` asserts it.
     if (encode_output > 0.5f)
     {
         const float3 c = saturate(lit);
         const float3 low  = c * 12.92f;
         const float3 high = 1.055f * pow(c, 1.0f / 2.4f) - 0.055f;
-        return float4(c <= 0.0031308f ? low : high, 1.0f);
+        return float4(c <= 0.0031308f ? low : high, src_alpha);
     }
 
-    return float4(lit, 1.0f);
+    return float4(lit, src_alpha);
 }

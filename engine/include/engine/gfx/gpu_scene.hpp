@@ -94,6 +94,41 @@ enum class surface_style
 
 [[nodiscard]] const char* name_of(surface_style s);
 
+/// The **second** state axis, and the first one this course has had to add —
+/// Lesson 6.11.
+///
+/// `surface_style` is one axis with three values, so the renderer has held three
+/// pipelines since Lesson 4.8. Transparency is not a fourth value of that axis:
+/// a blended surface is still solid, two-sided or wireframe, and every
+/// combination is legitimate. So it is a second axis, and the pipeline count
+/// becomes a **product** rather than a sum — 3 x 3 = 9.
+///
+/// **That multiplication is the real cost of transparency at the API level**, and
+/// it is worth feeling now, at nine, because it is how every real engine ends up
+/// with a pipeline cache keyed on a hash of the whole state. Add MSAA (6.14) and
+/// it is 18. Add a depth-only variant and 27. Nobody enumerates that; they build
+/// the state, hash it, and create on miss. We enumerate, because nine is
+/// countable and because `create_ms()` then measures what the ninth costs.
+///
+/// **Note what is NOT on this axis: `alpha_mode::mask`.** Masking is a uniform
+/// (`material_uniforms::alpha_cutoff`) and a `clip` in the shader, so a masked
+/// draw uses the `opaque` blend style and adds no pipeline at all. `blend.hpp`
+/// argues the general case; this enum is where the argument becomes a number.
+enum class blend_style
+{
+    /// No blending, depth written. Every draw before this lesson.
+    opaque,
+
+    /// `src*a + dst*(1-a)`, depth tested and NOT written.
+    alpha,
+
+    /// `src + dst*(1-a)`, depth tested and NOT written. For sources whose colour
+    /// is already scaled by their coverage — see `alpha_storage`.
+    premultiplied
+};
+
+[[nodiscard]] const char* name_of(blend_style b);
+
 /// One object, ready to draw.
 ///
 /// **Note what is a pointer and what is a value.** The mesh is borrowed — it
@@ -141,6 +176,21 @@ struct gpu_draw_item
     SDL_GPUTexture* normal_map = nullptr;
 
     surface_style style = surface_style::solid;
+
+    /// Which blend state this draw needs — Lesson 6.11.
+    ///
+    /// A **second** enum beside `style` rather than more values of it, because
+    /// they are independent: see `blend_style`. Defaults to `opaque`, so every
+    /// draw item built before this lesson selects pipeline `[style][0]`, which is
+    /// the same pipeline object it selected before.
+    ///
+    /// **The renderer does not derive this from the material**, and that is
+    /// deliberate. It could — `material::needs_sorting()` is right there — but the
+    /// caller is the one who knows whether this draw is in the sorted pass, and a
+    /// renderer that silently switched a draw to a depth-write-disabled pipeline
+    /// because of a uniform would be making an ordering decision on the caller's
+    /// behalf without being able to do the sort that has to go with it.
+    blend_style blend = blend_style::opaque;
 };
 
 /// What one `render()` call actually did. The HUD's numbers, and §4's evidence.
@@ -173,7 +223,8 @@ public:
     gpu_scene_renderer(const gpu_scene_renderer&) = delete;
     gpu_scene_renderer& operator=(const gpu_scene_renderer&) = delete;
 
-    /// Build the three pipelines and the 1x1 white texture.
+    /// Build the **nine** pipelines (Lesson 6.11; three until 6.10) and the 1x1
+    /// white texture.
     ///
     /// @param depth_format what `supported_depth_format` returned, or
     ///        `SDL_GPU_TEXTUREFORMAT_INVALID` for a device with no usable depth
@@ -194,7 +245,7 @@ public:
 
     void destroy();
 
-    [[nodiscard]] bool valid() const { return pipelines_[0].valid(); }
+    [[nodiscard]] bool valid() const { return pipelines_[0][0].valid(); }
 
     /// Create or re-create the depth attachment at `w` x `h`.
     ///
@@ -284,7 +335,14 @@ public:
 private:
     static constexpr int k_styles = 3;
 
-    gpu_pipeline pipelines_[k_styles];
+    /// 6.11. The second axis — see `blend_style`. Three, not two, because
+    /// premultiplied is a different pipeline and not a different shader.
+    static constexpr int k_blends = 3;
+
+    /// **Nine pipelines, indexed `[style][blend]`.** Lesson 4.8 had three; the
+    /// count is a product now, and `create_ms()` reports what the extra six cost
+    /// at startup rather than leaving it to be guessed at.
+    gpu_pipeline pipelines_[k_styles][k_blends];
     gpu_texture depth_;
     gpu_texture white_;
     gpu_texture flat_normal_;   ///< 6.7

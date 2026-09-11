@@ -403,14 +403,59 @@ struct material_uniforms
     /// anyway — which is a multiply instead of a branch, and every fragment in
     /// the draw takes the same path regardless.
     float normal_mapped;
+
+    // ---- Lesson 6.11, and this one is NOT free -----------------------------
+    //
+    // 6.7 got its flag for nothing, because 6.4 had left a `pad0` behind and a
+    // flag is exactly the size of a pad. There is no pad left. Two more floats
+    // take the block from 32 bytes to 40, and a constant buffer is allocated in
+    // 16-byte registers, so 40 becomes 48: **a whole third register for eight
+    // bytes of payload.** That is worth stating plainly rather than hiding
+    // behind a `static_assert`, because it is the moment a uniform block starts
+    // costing what a uniform block costs, and the answer at scale is not "add
+    // fewer fields" — it is to stop pushing per-draw constants and index into a
+    // storage buffer instead, which is Module 9's territory.
+    //
+    // WHY NOT PACK THE FOUR 0-OR-1 FLOATS INTO ONE BITFIELD? Because `textured`,
+    // `normal_mapped` and `alpha` are each read as a `lerp` weight or a multiply
+    // in the shader, and unpacking a bitfield costs an `and` and a compare per
+    // fragment to save eight bytes per DRAW. The arithmetic is not close.
+
+    /// The material's opacity — `material::alpha`, multiplied into the albedo
+    /// texture's own alpha in the shader. 1 for every opaque material, which is
+    /// every material written before this lesson.
+    float alpha;
+
+    /// The coverage below which a masked fragment is discarded.
+    ///
+    /// **ZERO MEANS "DO NOT TEST", and that is a deliberate encoding rather than
+    /// a sentinel to be embarrassed about.** The shader's test is
+    /// `clip(a - alpha_cutoff)`, which discards when the argument is negative; at
+    /// a cutoff of 0 nothing with non-negative alpha can be discarded, so the
+    /// test costs one subtract and disables itself. That is why `alpha_mode`
+    /// needs no third pipeline and no `#ifdef`: **masking is a number in a
+    /// buffer**, exactly as `blend.hpp` claims, and this field is the number.
+    ///
+    /// `uniforms_of` derives it — a `mask` material pushes its cutoff and every
+    /// other material pushes 0 — so a `blend` material cannot accidentally clip.
+    float alpha_cutoff;
+
+    /// 40 -> 48. Named `alpha_pad` and not `pad1`, because HLSL cbuffer members
+    /// share ONE global namespace across every buffer in a shader (6.4 found
+    /// that out the hard way), so every pad in this file needs its own name.
+    float alpha_pad0;
+    float alpha_pad1;
 };
 
-static_assert(sizeof(material_uniforms) == 32, "two registers, exactly filled");
+static_assert(sizeof(material_uniforms) == 48, "three registers — 6.11 bought the third");
 static_assert(offsetof(material_uniforms, albedo) == packed_offset(0, 3), "");
 static_assert(offsetof(material_uniforms, roughness) == packed_offset(12, 1), "");
 static_assert(offsetof(material_uniforms, metallic) == packed_offset(16, 1), "");
 static_assert(offsetof(material_uniforms, f0) == packed_offset(20, 1), "");
 static_assert(offsetof(material_uniforms, textured) == packed_offset(24, 1), "");
+static_assert(offsetof(material_uniforms, normal_mapped) == packed_offset(28, 1), "");
+static_assert(offsetof(material_uniforms, alpha) == packed_offset(32, 1), "");
+static_assert(offsetof(material_uniforms, alpha_cutoff) == packed_offset(36, 1), "");
 
 /// Pack a `material` into the block the fragment shader reads — Lesson 6.5.
 ///
@@ -440,7 +485,22 @@ static_assert(offsetof(material_uniforms, textured) == packed_offset(24, 1), "")
             .f0 = m.surface.f0,
             .textured = m.textured() ? 1.0f : 0.0f,
             // 6.7: derived, like `textured`, from the only field that knows.
-            .normal_mapped = m.normal_mapped() ? 1.0f : 0.0f};
+            .normal_mapped = m.normal_mapped() ? 1.0f : 0.0f,
+            // 6.11: DERIVED for exactly the reason 6.5 gave — one field cannot
+            // contradict itself. A `blend` material pushing a live cutoff would
+            // clip its own soft edges away; an `opaque` one pushing its texture's
+            // alpha would make every leaf-shaped hole in every atlas suddenly
+            // real. The mode decides both numbers, here, in one place.
+            //
+            // (DESIGNATORS MUST BE IN DECLARATION ORDER — `-Wreorder-init-list`
+            // is an error waiting to happen rather than a style note, because
+            // C++20 evaluates them in declaration order regardless of how they
+            // are written, so a reordered list means the initialisers run in an
+            // order the reader did not choose.)
+            .alpha = (m.mode == alpha_mode::opaque) ? 1.0f : m.alpha,
+            .alpha_cutoff = (m.mode == alpha_mode::mask) ? m.alpha_cutoff : 0.0f,
+            .alpha_pad0 = 0.0f,
+            .alpha_pad1 = 0.0f};
 }
 
 } // namespace engine

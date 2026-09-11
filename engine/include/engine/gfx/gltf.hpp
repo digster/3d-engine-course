@@ -60,6 +60,7 @@
 
 #pragma once
 
+#include <engine/gfx/blend.hpp>    // 6.11: alphaMode, at last
 #include <engine/gfx/colour.hpp>
 #include <engine/gfx/mesh.hpp>
 #include <engine/gfx/microfacet.hpp>
@@ -138,16 +139,36 @@ struct gltf_material_desc
     /// plausible enough to survive review.
     linear_rgb base_colour{1.0f, 1.0f, 1.0f};
 
-    /// `baseColorFactor[3]`. Carried because the file said it; unused until
-    /// **Lesson 6.11** gives this engine alpha blending.
+    /// `baseColorFactor[3]`, and **read by something at last** — Lesson 6.11
+    /// gave the engine `material::alpha`, which is where this now lands.
     ///
-    /// What is NOT read: `alphaMode` and `alphaCutoff`. This field is the
-    /// factor's fourth component and nothing else, so a material marked
-    /// `MASK` or `BLEND` imports as fully opaque — and alone among this
-    /// importer's gaps, that one fires no status and logs no warning,
-    /// because the pipeline has had no blend state to conflict with since
-    /// Lesson 4.4. Named in 6.6 §10.
+    /// Between 6.6 and 6.11 this field was carried and consumed by nothing,
+    /// which 6.6 §10 named as this importer's one SILENT gap: `alphaMode` and
+    /// `alphaCutoff` were not read at all, so a material an artist marked
+    /// `MASK` or `BLEND` imported as fully opaque with no status, no warning and
+    /// no count. Every other limit in this file reports.
+    ///
+    /// **The reason was structural rather than sloppy, and the fix is the same
+    /// shape as the reason.** A status code says *"this file wants something the
+    /// engine cannot do"*, and the engine had no blend state to conflict with —
+    /// `pipeline_desc` had said "no blending" since Lesson 4.4. So the gap could
+    /// not be reported, only removed; 6.11 removed it. What remains is
+    /// `gltf_report::masked_materials` and `blended_materials`, which are counts
+    /// of what the file ASKED FOR rather than complaints about it.
     float alpha = 1.0f;
+
+    /// `alphaMode` — Lesson 6.11.
+    ///
+    /// **Defaults to `opaque`, which is also what the spec defaults it to**, so
+    /// a file that says nothing and a file that says `"OPAQUE"` import
+    /// identically, and both import exactly as they did before this lesson.
+    alpha_mode mode = alpha_mode::opaque;
+
+    /// `alphaCutoff` — Lesson 6.11. glTF §5.19.2 defaults it to 0.5 and ignores
+    /// it unless `alphaMode` is `MASK`; cgltf applies that default for us, so
+    /// this field carries 0.5 even for a `BLEND` material and the renderer is
+    /// what declines to read it.
+    float alpha_cutoff = k_default_alpha_cutoff;
 
     /// `metallicFactor` and `roughnessFactor`, straight into Lesson 6.4's type.
     ///
@@ -321,6 +342,17 @@ struct gltf_report
     int generated_normals = 0;  ///< …that did not, and had them computed
     int with_tangents = 0;      ///< …that carried TANGENT (6.7)
     int generated_tangents = 0; ///< …that did not, and had a frame derived (6.7)
+
+    /// Materials the file marked `MASK` and `BLEND` — Lesson 6.11.
+    ///
+    /// **Counts, not complaints.** Both are now fully supported, so neither is a
+    /// status; they are here because a scene that renders as expected except for
+    /// one pane of glass is a scene where the first useful question is "did the
+    /// file even say it was glass?", and a number answers that faster than a
+    /// texture viewer does. They are also the caller's cue that this model needs
+    /// `order_draws` — a scene with `blended_materials == 0` does not.
+    int masked_materials = 0;
+    int blended_materials = 0;
 
     // ---- What we did not build ---------------------------------------------
     int skipped_non_triangles = 0;  ///< point/line/strip/fan primitives dropped

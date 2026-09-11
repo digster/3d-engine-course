@@ -2733,6 +2733,47 @@
     </p>
   </div>
 
+    <h3>The <code>over</code> operator <span class="from">Lesson 6.11</span></h3>
+
+    <p>
+      Compositing a source over a destination, where <em>a</em> is the fraction of the pixel&rsquo;s
+      <em>area</em> the source covers:
+    </p>
+
+    <div class="eq">\[ C_{\text{out}} \;=\; C_{\text{src}}\,a \;+\; C_{\text{dst}}\,(1-a) \]</div>
+    <div class="eq-plain">out = src × a + dst × (1 − a)</div>
+
+    <p>
+      <strong>It is a lerp</strong>, and that single observation carries the whole of its
+      correctness condition: a lerp of encoded values does not interpolate what they encode
+      (&sect;7a, and Lessons 1.6, 2.4, 3.9, 6.10 in turn), so both operands must be linear light.
+      Half-coverage white over black is 0.5 of the light, which stores as code <strong>188</strong>;
+      lerping the stored bytes gives code <strong>128</strong> and emits 0.2159 &mdash;
+      <strong>42.9%</strong> of the answer. The two agree exactly at <em>a</em> = 0 and
+      <em>a</em> = 1 and are worst in the middle, which is why the error survives review.
+    </p>
+
+    <p>
+      <strong>It does not commute.</strong> <code>over(A, over(B, bg)) &ne; over(B, over(A, bg))</code>,
+      which is the entire reason transparent geometry needs sorting and opaque geometry never did.
+      Beware testing this at <em>a</em> = 0.5 exactly, where both operands are weighted equally and
+      the two orderings coincide.
+    </p>
+
+    <p>
+      <strong>Premultiplied form.</strong> If the source&rsquo;s colour has already been scaled by
+      its own coverage, the multiply disappears:
+    </p>
+
+    <div class="eq-plain">out = src + dst × (1 − a)</div>
+
+    <p>
+      One multiply fewer, which is not the point. The point is that this form
+      <strong>composes associatively</strong>, so an <em>average</em> of premultiplied fragments is
+      a valid composite &mdash; which is what makes bilinear filtering, mip downsampling and an
+      antialiasing resolve correct on premultiplied data and wrong on straight data.
+    </p>
+
   <h2 id="performance"><span class="num">8</span>Reasoning about cost</h2>
 
   <p>

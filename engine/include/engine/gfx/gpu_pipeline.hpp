@@ -151,6 +151,55 @@ public:
     [[nodiscard]] layout_report check_layout(const shader_inputs& inputs,
                                              const char* label) const;
 
+    /// Turn on alpha blending for colour target 0 — Lesson 6.11.
+    ///
+    /// **This is the method whose absence `pipeline_desc`'s constructor has been
+    /// documenting since Lesson 4.4** ("no depth test yet, no blending"). Six
+    /// lessons later the depth test arrived; here is the other half.
+    ///
+    /// The state it sets is the standard `over` operator, and it is worth reading
+    /// the four factors against the arithmetic in `blend.hpp` rather than taking
+    /// them as an incantation:
+    ///
+    ///     SRC_ALPHA, ONE_MINUS_SRC_ALPHA, ADD   =>   src*a + dst*(1-a)
+    ///     ONE,       ONE_MINUS_SRC_ALPHA, ADD   =>   src   + dst*(1-a)
+    ///
+    /// The second is the premultiplied form, and the difference is one enum. That
+    /// really is the whole of the API-level difference between the two, which is
+    /// worth knowing because the difference in what they *do* is large enough to
+    /// be worth a section of the lesson.
+    ///
+    /// **The alpha channel gets its own pair of factors and its own op**, which
+    /// SDL exposes and many tutorials leave at whatever the defaults are. Ours
+    /// composites coverage the way coverage composes — `a_out = a_src + a_dst *
+    /// (1 - a_src)`, which is `over` applied to the coverage itself — so that a
+    /// render target used as a layer later (Module 9's editor, a post-process
+    /// input) carries a meaningful alpha rather than the last fragment's.
+    ///
+    /// **THE COLOUR TARGET'S FORMAT DECIDES WHETHER THIS IS CORRECT**, and this
+    /// is the trap the lesson's §7 measures. Hardware blending happens AFTER the
+    /// fragment shader, on whatever is in the target — so on an `_SRGB` target
+    /// the ROP decodes, blends in linear light and re-encodes, for free, and on a
+    /// plain `UNORM` target with a shader that encodes its own output the
+    /// hardware lerps sRGB CODES. That is `blend_over_encoded`, in silicon, and
+    /// it costs 43% of the light at half coverage. `scene.frag.hlsl`'s
+    /// `encode_output` comment predicted exactly this in Lesson 6.1.
+    ///
+    /// @param premultiplied  source colours already scaled by their own alpha
+    pipeline_desc& blend(bool premultiplied = false);
+
+    /// Test depth but do not write it — Lesson 6.11.
+    ///
+    /// **One bool, and the absence of a depth write is the entire reason blended
+    /// geometry composites at all.** A transparent surface does not occlude what
+    /// is behind it, because what is behind it is visible through it; write its
+    /// depth and every transparent surface further away fails the test and
+    /// vanishes. The symptom reads as "the far window disappears when I look
+    /// through the near one", which sounds like a culling bug.
+    ///
+    /// Has no effect when the pipeline has no depth-stencil target.
+    pipeline_desc& depth_write(bool enabled);
+
     /// Render to something other than the swapchain.
     ///
     /// The constructor takes the format from the device's swapchain, which is

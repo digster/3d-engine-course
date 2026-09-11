@@ -155,6 +155,32 @@ namespace {
     desc.double_sided = m.double_sided != 0;
     desc.wants_normal_texture = m.normal_texture.texture != nullptr;
 
+    // ---- LESSON 6.11: the gap 6.6 §10 named -------------------------------
+    //
+    // Two lines, and they close the one silent hole in this importer. Between
+    // 6.6 and 6.11 `alphaMode` was not read at all, so every cutout leaf and
+    // every window imported as opaque cardboard — with no status, because a
+    // status says "the file wants what the engine cannot do" and the engine had
+    // no blend state to compare against. It has one now.
+    //
+    // SPELT OUT AS A SWITCH RATHER THAN CAST, which is Lesson 6.4's rule about
+    // enums crossing a boundary: `cgltf_alpha_mode` and `engine::alpha_mode`
+    // happen to agree in order today, and a `static_cast` would turn the day
+    // either of them gains a value into a silent remapping of every material in
+    // every asset. The switch stops compiling instead.
+    switch (m.alpha_mode)
+    {
+    case cgltf_alpha_mode_opaque: desc.mode = alpha_mode::opaque; break;
+    case cgltf_alpha_mode_mask:   desc.mode = alpha_mode::mask;   break;
+    case cgltf_alpha_mode_blend:  desc.mode = alpha_mode::blend;  break;
+    default:                      desc.mode = alpha_mode::opaque; break;
+    }
+
+    // cgltf applies the spec's default of 0.5 during parsing, so this is never
+    // an uninitialised read — and it carries a cutoff even for BLEND and OPAQUE
+    // materials, which is harmless: the renderer is what declines to consult it.
+    desc.alpha_cutoff = m.alpha_cutoff;
+
     // LESSON 6.7. `cgltf_texture_view::scale` is documented in the header as
     // "equivalent to strength for occlusion_texture" — one field serving two
     // slots, which is a small piece of cgltf economy worth knowing about,
@@ -625,6 +651,17 @@ gltf_report parse_gltf(std::span<const std::byte> bytes,
     for (std::size_t i = 0; i < data->materials_count; ++i)
     {
         out.materials.push_back(describe_material(data->materials[i], i));
+
+        // LESSON 6.11. Counted here rather than inside `describe_material`,
+        // because that function is pure — a `cgltf_material` in, a description
+        // out — and reaching into the report from inside it would give it a
+        // second job and a reason to care what order it is called in.
+        switch (out.materials.back().mode)
+        {
+        case alpha_mode::mask:   ++report.masked_materials;  break;
+        case alpha_mode::blend:  ++report.blended_materials; break;
+        case alpha_mode::opaque: break;
+        }
     }
 
     // ---- Then the scene ----------------------------------------------------

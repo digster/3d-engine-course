@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include <engine/gfx/blend.hpp>    // 6.11: alpha_mode, alpha_storage, the over operator
 #include <engine/gfx/colour.hpp>   // linear_rgb: the space vertex colours are combined in
 #include <engine/gfx/cull.hpp>     // 6.5: cull_mode moved out; see that file
 
@@ -665,6 +666,51 @@ struct fill_style
     /// the wrong cascade and bend every seam. Ignored unless `cascades` is set.
     vec3 view_eye{0.0f, 0.0f, 0.0f};
     vec3 view_forward{0.0f, 0.0f, -1.0f};
+
+    // ---- Lesson 6.11: transparency -----------------------------------------
+    //
+    // Four fields, all defaulted so that every fill written in the previous
+    // sixty-five lessons behaves identically — the same bargain `inv_w = 1`
+    // (3.2), `lights = nullptr` (3.8), an unbound `albedo` (3.9) and a null
+    // `mips` (6.10) each made in turn. A default that changes nothing is what
+    // lets a feature be added to a pipeline object without auditing its call
+    // sites, and it is the only reason the reference render survives this.
+
+    /// Opaque, alpha-tested, or blended.
+    ///
+    /// Named `transparency` and not `mode` on purpose: this struct already has a
+    /// `model` (the specular one), and two fields a letter apart is a bug waiting
+    /// for a tired evening.
+    ///
+    /// **This is where the fill's DEPTH BEHAVIOUR is decided**, which is more
+    /// than the name suggests. `opaque` tests and writes; `mask` shades first and
+    /// writes depth only for fragments that survive the cutoff; `blend` tests and
+    /// never writes at all. See `raster.cpp`, where the three orderings are the
+    /// substance of the lesson.
+    alpha_mode transparency = alpha_mode::opaque;
+
+    /// The material's own opacity, multiplied into whatever the albedo's alpha
+    /// channel says (`material::alpha`). 1 means "as opaque as the texture is".
+    float opacity = 1.0f;
+
+    /// Under `mask`, the coverage below which a fragment does not exist.
+    float alpha_cutoff = k_default_alpha_cutoff;
+
+    /// Is the source colour premultiplied by its own alpha?
+    ///
+    /// A property of the fragment being produced rather than of the image behind
+    /// it — which is why it is here and not read off `albedo.image->storage()`.
+    /// A `shading::lit` fragment is a computed quantity of light, not a texel:
+    /// its relationship to its coverage is whatever the shading equation made it,
+    /// and the fill is the only thing that knows.
+    alpha_storage src_storage = alpha_storage::straight;
+
+    /// Composite on the STORED BYTES instead of in linear light. **Wrong**, and
+    /// summonable for the same reason `blend_space::encoded` and
+    /// `interpolation::affine` are: half-coverage white over black comes out at
+    /// 43% of the light it should have, and seeing that is worth more than
+    /// reading about it.
+    bool blend_encoded = false;
 
     /// **Test and write depth; compute and store no colour** — Lesson 6.8.
     ///

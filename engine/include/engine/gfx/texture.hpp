@@ -27,6 +27,7 @@
 
 #include <engine/core/handle.hpp>   // 6.5: a texture is referenced, not pointed at
 #include <engine/core/pool.hpp>
+#include <engine/gfx/blend.hpp>    // 6.11: alpha_storage, texel_sample
 #include <engine/gfx/colour.hpp>   // linear_rgb: what a sample IS, once decoded
 #include <engine/gfx/image.hpp>    // 6.6: image_data, the thing a file decodes to
 #include <engine/math/vec2.hpp>
@@ -268,13 +269,29 @@ public:
     /// **`space` defaults to `srgb`** (Lesson 6.7), which keeps every texture
     /// written before that lesson meaning exactly what it meant. A default that
     /// changed the answer would have made the whole lesson a re-baseline.
-    texture(int w, int h, Uint32 fill = 0xFF000000u, texel_space space = texel_space::srgb);
+    ///
+    /// **`storage` defaults to `straight`** (Lesson 6.11), for exactly the reason
+    /// `space` defaults to `srgb`: a default that changed the answer would make
+    /// the lesson a re-baseline of every picture in the course rather than an
+    /// addition to it.
+    texture(int w, int h, Uint32 fill = 0xFF000000u, texel_space space = texel_space::srgb,
+            alpha_storage storage = alpha_storage::straight);
 
     /// Colour or data? See `texel_space`. Set at construction and never after:
     /// an image does not stop being a normal map halfway through a frame, and
     /// making it settable would put the decision back at the call site, which is
     /// exactly where this lesson took it from.
     [[nodiscard]] texel_space space() const { return space_; }
+
+    /// Is the colour already multiplied by the alpha? See `alpha_storage`.
+    /// Lesson 6.11.
+    ///
+    /// **The second property of this kind, and the pair is now a pattern worth
+    /// naming**: both `space()` and `storage()` describe what the BYTES MEAN, both
+    /// are fixed at construction, and both exist so that the one function every
+    /// read goes through — `fetch` — can ask instead of every call site
+    /// remembering. `build_mips` reads them for the same reason and says so.
+    [[nodiscard]] alpha_storage storage() const { return storage_; }
 
     [[nodiscard]] int width() const { return width_; }
     [[nodiscard]] int height() const { return height_; }
@@ -301,6 +318,7 @@ private:
     int width_ = 0;
     int height_ = 0;
     texel_space space_ = texel_space::srgb;   ///< 6.7
+    alpha_storage storage_ = alpha_storage::straight;   ///< 6.11
 };
 
 // ---- Addressing --------------------------------------------------------------
@@ -346,6 +364,48 @@ private:
                                         float u, float v);
 [[nodiscard]] linear_rgb sample_bilinear(const texture& image, const sampler& samp,
                                          float u, float v);
+
+// ---- Sampling, with the alpha kept (Lesson 6.11) -----------------------------
+
+/// The same sample, **carrying the coverage out with the colour**.
+///
+/// `sample` above has been throwing the alpha byte away since Lesson 3.9, and
+/// it was right to: `linear_rgb` has three channels, alpha is not one of them
+/// (`colour.hpp`: *"alpha is a coverage fraction rather than a quantity of
+/// light... carry it separately if you need it"*), and until this lesson nothing
+/// in the engine had a use for it. `fetch`'s own comment said so in as many
+/// words. Transparency is the use.
+///
+/// **`sample` is now this function with the fourth number dropped**, rather than
+/// a second implementation of the same arithmetic — two copies of a filtering
+/// rule are two rules, and the day they disagree is the day a textured surface
+/// changes colour when somebody makes it transparent. The colour channels are
+/// bit-identical to what 3.9 returned, which is not a hope: `verify_611` §A
+/// asserts it texel by texel, and the reference render is byte-identical for the
+/// twentieth lesson running.
+///
+/// **The alpha is filtered, not point-sampled**, and with the same weights as
+/// the colour. A bilinear alpha is what makes a cutout edge land between texels
+/// instead of on one, and it is why `alpha_storage::premultiplied` matters: with
+/// straight alpha, filtering the colour and the coverage independently drags the
+/// colour of invisible texels into the visible ones.
+///
+/// **No transfer function is applied to it, ever**, in either `texel_space`. A
+/// coverage fraction is already linear in the only thing it measures.
+[[nodiscard]] texel_sample sample_rgba(const texture& image, const sampler& samp,
+                                       float u, float v);
+
+/// `sample_rgba` with the `vec2` a mesh actually stores.
+[[nodiscard]] inline texel_sample sample_rgba(const texture& image, const sampler& samp,
+                                              vec2 uv)
+{
+    return sample_rgba(image, samp, uv.x, uv.y);
+}
+
+[[nodiscard]] texel_sample sample_nearest_rgba(const texture& image, const sampler& samp,
+                                               float u, float v);
+[[nodiscard]] texel_sample sample_bilinear_rgba(const texture& image, const sampler& samp,
+                                                float u, float v);
 
 // ---- Binding -----------------------------------------------------------------
 

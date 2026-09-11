@@ -12,9 +12,10 @@
 
 namespace engine {
 
-texture::texture(int w, int h, Uint32 fill, texel_space space)
+texture::texture(int w, int h, Uint32 fill, texel_space space, alpha_storage storage)
 {
     space_ = space;
+    storage_ = storage;
 
     if (w <= 0 || h <= 0) { return; }   // stays empty; `sample` has an answer for that
 
@@ -100,9 +101,21 @@ namespace {
     return to_linear(pack_argb(255, 0, 200));
 }
 
+/// The same debug answer, **fully opaque** — Lesson 6.11.
+///
+/// Alpha 1 and not 0, and the choice is the whole reason this is a named
+/// function rather than a brace initialiser at three call sites. An unbound
+/// sampler is a mistake worth seeing; returning coverage 0 would make that
+/// mistake *invisible under an alpha test*, which is the one place a debug
+/// colour must never hide.
+[[nodiscard]] texel_sample unbound_sample()
+{
+    return {unbound_colour(), 1.0f};
+}
+
 /// A stored texel, decoded. **Every** read of the image goes through here, which
 /// is what puts the decode before the filter rather than after it.
-[[nodiscard]] linear_rgb fetch(const texture& image, const sampler& samp, int x, int y)
+[[nodiscard]] texel_sample fetch(const texture& image, const sampler& samp, int x, int y)
 {
     const int tx = wrap_texel(x, image.width(), samp.address_u);
     const int ty = wrap_texel(y, image.height(), samp.address_v);
@@ -120,23 +133,30 @@ namespace {
     {
         // A byte that is a NUMBER, not a colour. `value / 255`, no curve — which
         // is the same arithmetic an `_UNORM` GPU format performs, as against an
-        // `_UNORM_SRGB` one. Alpha is dropped for the same reason it always is
-        // here: `linear_rgb` has three channels and nothing in this engine reads
-        // a texture's alpha yet.
+        // `_UNORM_SRGB` one.
         constexpr float inv_255 = 1.0f / 255.0f;
-        return {static_cast<float>((texel >> 16) & 0xFFu) * inv_255,
-                static_cast<float>((texel >> 8) & 0xFFu) * inv_255,
-                static_cast<float>(texel & 0xFFu) * inv_255};
+        return {{static_cast<float>((texel >> 16) & 0xFFu) * inv_255,
+                 static_cast<float>((texel >> 8) & 0xFFu) * inv_255,
+                 static_cast<float>(texel & 0xFFu) * inv_255},
+                static_cast<float>((texel >> 24) & 0xFFu) * inv_255};
     }
 
-    return to_linear(texel);
+    // LESSON 6.11. The alpha comes out of BOTH arms by the same `value / 255`,
+    // with no curve in either — and that asymmetry is the file's whole thesis in
+    // two lines of code. The colour branches on `texel_space` because a colour
+    // may or may not have been through the transfer function; the coverage never
+    // was, in any image, in any space, because it does not measure light.
+    // Lesson 6.7 gave this function its one branch; 6.11 adds a number that
+    // deliberately sits outside it.
+    constexpr float inv_255 = 1.0f / 255.0f;
+    return {to_linear(texel), static_cast<float>((texel >> 24) & 0xFFu) * inv_255};
 }
 
 } // namespace
 
-linear_rgb sample_nearest(const texture& image, const sampler& samp, float u, float v)
+texel_sample sample_nearest_rgba(const texture& image, const sampler& samp, float u, float v)
 {
-    if (image.empty()) { return unbound_colour(); }
+    if (image.empty()) { return unbound_sample(); }
 
     // "Which texel does this point land in" — and that question is INDEPENDENT of
     // the half-texel argument, which is why `samp.origin` does not appear in this
@@ -159,15 +179,15 @@ linear_rgb sample_nearest(const texture& image, const sampler& samp, float u, fl
     constexpr float k_index_limit = 1.0e7f;
     if (!(std::fabs(x) < k_index_limit) || !(std::fabs(y) < k_index_limit))
     {
-        return unbound_colour();
+        return unbound_sample();
     }
 
     return fetch(image, samp, static_cast<int>(x), static_cast<int>(y));
 }
 
-linear_rgb sample_bilinear(const texture& image, const sampler& samp, float u, float v)
+texel_sample sample_bilinear_rgba(const texture& image, const sampler& samp, float u, float v)
 {
-    if (image.empty()) { return unbound_colour(); }
+    if (image.empty()) { return unbound_sample(); }
 
     // ---- The half texel (§4.3) ---------------------------------------------
     //
@@ -190,7 +210,7 @@ linear_rgb sample_bilinear(const texture& image, const sampler& samp, float u, f
     constexpr float k_index_limit = 1.0e7f;
     if (!(std::fabs(x) < k_index_limit) || !(std::fabs(y) < k_index_limit))
     {
-        return unbound_colour();
+        return unbound_sample();
     }
 
     const float fx = std::floor(x);
@@ -213,10 +233,10 @@ linear_rgb sample_bilinear(const texture& image, const sampler& samp, float u, f
     // present only in the filtered mode, and easy to blame on the geometry.
     // Addressing each of the four indices separately is what makes `repeat`
     // actually seamless and `clamp_to_edge` actually smear.
-    const linear_rgb c00 = fetch(image, samp, x0,     y0);
-    const linear_rgb c10 = fetch(image, samp, x0 + 1, y0);
-    const linear_rgb c01 = fetch(image, samp, x0,     y0 + 1);
-    const linear_rgb c11 = fetch(image, samp, x0 + 1, y0 + 1);
+    const texel_sample c00 = fetch(image, samp, x0,     y0);
+    const texel_sample c10 = fetch(image, samp, x0 + 1, y0);
+    const texel_sample c01 = fetch(image, samp, x0,     y0 + 1);
+    const texel_sample c11 = fetch(image, samp, x0 + 1, y0 + 1);
 
     // ---- Two lerps along u, one along v -------------------------------------
     //
@@ -226,22 +246,56 @@ linear_rgb sample_bilinear(const texture& image, const sampler& samp, float u, f
     // (1-tu)(1-tv), tu(1-tv), (1-tu)tv, tu tv — which sum to 1, which is what makes
     // it an average and not a scaling. Same family as barycentric interpolation
     // (2.3): a weighted average of corner values whose weights sum to one.
-    const auto lerp = [](const linear_rgb& a, const linear_rgb& b, float t) {
-        return linear_rgb{a.r + (b.r - a.r) * t,
-                          a.g + (b.g - a.g) * t,
-                          a.b + (b.b - a.b) * t};
+    //
+    // LESSON 6.11 LERPS FOUR NUMBERS WHERE 3.9 LERPED THREE, and the three
+    // colour channels are computed by the identical expression in the identical
+    // order — `a + (b - a) * t`, per channel, u first then v. That is not an
+    // aesthetic preference: it is what makes this refactor provably free.
+    // Floating-point addition is not associative, so reordering these three
+    // multiply-adds would move the last bit of a great many texels, and the
+    // reference render has been byte-identical since Lesson 5.2. `verify_611` §A
+    // checks the two paths against each other exactly; the golden checks the
+    // whole picture.
+    const auto lerp = [](const texel_sample& a, const texel_sample& b, float t) {
+        return texel_sample{{a.colour.r + (b.colour.r - a.colour.r) * t,
+                             a.colour.g + (b.colour.g - a.colour.g) * t,
+                             a.colour.b + (b.colour.b - a.colour.b) * t},
+                            a.alpha + (b.alpha - a.alpha) * t};
     };
 
-    const linear_rgb top = lerp(c00, c10, tu);
-    const linear_rgb bottom = lerp(c01, c11, tu);
+    const texel_sample top = lerp(c00, c10, tu);
+    const texel_sample bottom = lerp(c01, c11, tu);
     return lerp(top, bottom, tv);
+}
+
+texel_sample sample_rgba(const texture& image, const sampler& samp, float u, float v)
+{
+    return (samp.texel_filter == filter::nearest)
+         ? sample_nearest_rgba(image, samp, u, v)
+         : sample_bilinear_rgba(image, samp, u, v);
+}
+
+// ---- The three-channel entry points, which are now one member access --------
+//
+// Kept as functions rather than deleted, because they are what nineteen lessons
+// of code calls and because dropping a value you do not want is the caller's
+// clearest possible statement that it does not want it. The compiler removes the
+// alpha arithmetic from these paths entirely — it is dead, and one dead multiply-
+// add in a leaf function is exactly the thing a compiler is best at.
+
+linear_rgb sample_nearest(const texture& image, const sampler& samp, float u, float v)
+{
+    return sample_nearest_rgba(image, samp, u, v).colour;
+}
+
+linear_rgb sample_bilinear(const texture& image, const sampler& samp, float u, float v)
+{
+    return sample_bilinear_rgba(image, samp, u, v).colour;
 }
 
 linear_rgb sample(const texture& image, const sampler& samp, float u, float v)
 {
-    return (samp.texel_filter == filter::nearest)
-         ? sample_nearest(image, samp, u, v)
-         : sample_bilinear(image, samp, u, v);
+    return sample_rgba(image, samp, u, v).colour;
 }
 
 // ---- Generated test images ---------------------------------------------------

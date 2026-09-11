@@ -505,6 +505,31 @@ void fill_triangle(framebuffer& fb, depth_buffer* depth,
     // thing because it looks like the call never happened.
     const bool depth_only = style.depth_only && (depth != nullptr);
 
+    // LESSON 6.11. Which of the three alpha modes this fill is running, decided
+    // once per triangle like every other constant question. The names are worth
+    // keeping straight because the two paths differ in WHERE THE DEPTH WRITE
+    // GOES, which is the structural content of this lesson:
+    //
+    //   masked   shade first, then discard or write depth. The fragment decides
+    //            whether there IS a fragment, so the depth write cannot happen
+    //            before it. This is precisely what defeats early-Z on hardware.
+    //   blending test depth, never WRITE it, and composite over what is there.
+    //            A blended surface does not occlude what is behind it, because
+    //            what is behind it is still visible through it — writing depth
+    //            would make the surface hide geometry it is supposed to reveal.
+    //
+    // A depth-only pass ignores both: a shadow map records where surfaces are,
+    // and blending has nothing to contribute to that. Masking arguably does — a
+    // chain-link fence should cast a chain-link shadow — and that is Exercise 4.
+    const bool masked = (style.transparency == alpha_mode::mask) && !depth_only;
+    const bool blending = (style.transparency == alpha_mode::blend) && !depth_only;
+
+    // The opaque path, which is every fill written before this lesson. Hoisted
+    // into a name so the pixel loop below can take ONE branch back to code that
+    // is character for character what 6.10 left, rather than threading two new
+    // conditions through the middle of it.
+    const bool simple = !masked && !blending;
+
     // `lit` needs somewhere to read the light from. A null `lights` is not an
     // error — it is a pipeline that was never given one — so fall back to the
     // unlit path rather than dereferencing nothing. Decided once per triangle.
@@ -643,7 +668,23 @@ void fill_triangle(framebuffer& fb, depth_buffer* depth,
     // enormous or negative, and a uv can land anywhere at all. Nothing here reads
     // out of bounds on such a lane (`wrap_texel` folds any index into range,
     // `linear_to_srgb_u8` refuses a NaN), and whatever it computes is discarded.
-    const auto fragment = [&](float f0, float f1, float f2) -> Uint32 {
+    // LESSON 6.11. `out_alpha` is an out-parameter rather than a second return
+    // value, and the reason is the one this whole struct was built around: the
+    // OPAQUE PATH MUST NOT MOVE. Returning a pair would have changed the call
+    // site that nineteen lessons of measurements were taken through; an ignored
+    // reference costs one store the optimiser deletes, and every colour
+    // expression below is character for character what it was.
+    //
+    // It is set on EVERY path, including the ones that cannot be transparent,
+    // because a fragment function that sometimes leaves an output untouched is a
+    // fragment function whose caller has to know which times those are.
+    const auto fragment = [&](float f0, float f1, float f2, float& out_alpha) -> Uint32 {
+        // Coverage before colour. The default is the material's own opacity —
+        // 1 for everything written before this lesson — and a texture with an
+        // alpha channel MULTIPLIES it rather than replacing it (see
+        // `material::alpha` for why that differs from the albedo's rule).
+        out_alpha = style.opacity;
+
         // ---- Perspective correction, per pixel (Lesson 3.2) ----
         //
         // Interpolate 1/w with the same weights as everything else —
@@ -688,13 +729,21 @@ void fill_triangle(framebuffer& fb, depth_buffer* depth,
             // three `pow` calls against one bilinear fetch — which is
             // Lesson 3.10's measured headline and the reason
             // `style.encode` exists.
-            return to_encoded(
-                mipped ? sample_mipped(*style.albedo.mips, style.albedo.samp,
-                                       vec2{uu, vv},
-                                       uv_gradients(dnum_dx, dnum_dy, dw_dx, dw_dy,
-                                                    vec2{uu, vv}, w_recip))
-                       : sample(*style.albedo.image, style.albedo.samp, uu, vv),
-                style.encode);
+            //
+            // LESSON 6.11 CHANGED THE SPELLING AND NOT THE ARITHMETIC.
+            // `sample_rgba` IS `sample` with the fourth number kept —
+            // literally, since 6.11 made the three-channel entry point
+            // a wrapper over this one — so the colour is bit-identical
+            // and the coverage now arrives instead of being dropped on
+            // the floor inside the sampler.
+            const texel_sample s = mipped
+                ? sample_mipped_rgba(*style.albedo.mips, style.albedo.samp,
+                                     vec2{uu, vv},
+                                     uv_gradients(dnum_dx, dnum_dy, dw_dx, dw_dy,
+                                                  vec2{uu, vv}, w_recip))
+                : sample_rgba(*style.albedo.image, style.albedo.samp, uu, vv);
+            out_alpha = style.opacity * s.alpha;
+            return to_encoded(s.colour, style.encode);
         }
         else if (lit)
         {
@@ -749,12 +798,21 @@ void fill_triangle(framebuffer& fb, depth_buffer* depth,
             {
                 const float uu = (f0 * pu0 + f1 * pu1 + f2 * pu2) * w_recip;
                 const float vv = (f0 * pv0 + f1 * pv1 + f2 * pv2) * w_recip;
-                albedo = mipped
-                    ? sample_mipped(*style.albedo.mips, style.albedo.samp,
-                                    vec2{uu, vv},
-                                    uv_gradients(dnum_dx, dnum_dy, dw_dx, dw_dy,
-                                                 vec2{uu, vv}, w_recip))
-                    : sample(*style.albedo.image, style.albedo.samp, uu, vv);
+
+                // LESSON 6.11. The albedo image's alpha is the CUTOUT — the
+                // fourth channel of the same fetch, at no extra cost, which is
+                // why an alpha test is nearly free on a surface that was already
+                // being textured. Note it is taken from the ALBEDO map and
+                // nowhere else: glTF says base colour carries the alpha, and a
+                // normal map's fourth byte is padding somebody's exporter chose.
+                const texel_sample s = mipped
+                    ? sample_mipped_rgba(*style.albedo.mips, style.albedo.samp,
+                                         vec2{uu, vv},
+                                         uv_gradients(dnum_dx, dnum_dy, dw_dx, dw_dy,
+                                                      vec2{uu, vv}, w_recip))
+                    : sample_rgba(*style.albedo.image, style.albedo.samp, uu, vv);
+                albedo = s.colour;
+                out_alpha = style.opacity * s.alpha;
             }
             else
             {
@@ -933,6 +991,103 @@ void fill_triangle(framebuffer& fb, depth_buffer* depth,
         return true;
     };
 
+    // ---- LESSON 6.11: the depth test WITHOUT the write ---------------------
+    //
+    // A blended fragment has to ask the depth buffer the same question and must
+    // not answer it. Separating the two halves of `depth_test` is the whole of
+    // what "disable depth writes" means, and it is worth seeing that it is one
+    // missing line rather than a mode:
+    //
+    //   A blended surface is visible THROUGH, so it does not occlude. Write its
+    //   depth and the next transparent surface behind it fails the test and
+    //   vanishes — which is the classic symptom of forgetting this, and it looks
+    //   like the far pane of glass "disappearing when you look through the near
+    //   one", not like a depth bug.
+    //
+    // It still TESTS, and that half is not optional: transparent geometry behind
+    // a wall is behind the wall.
+    const auto depth_probe = [&](const float* zrow, int x, float f0, float f1, float f2) -> bool {
+        if (zrow == nullptr) { return true; }
+        const float z = depth->quantise(f0 * v0.z + f1 * v1.z + f2 * v2.z);
+        return z < zrow[x];
+    };
+
+    // ---- LESSON 6.11: one covered pixel, under mask or blend ---------------
+    //
+    // Both non-opaque modes in one place, because they share the property that
+    // forced this function to exist: THE FRAGMENT RUNS BEFORE THE DEPTH BUFFER
+    // IS COMMITTED TO. In the opaque path a fragment that fails the depth test
+    // is never shaded, which is the single largest saving in the rasterizer.
+    // Here it is shaded anyway — masked geometry because its alpha decides
+    // whether it exists at all, blended geometry because it never writes depth
+    // and so has nothing to commit.
+    //
+    // That reordering is a real cost and §7 measures it. It is also exactly why
+    // hardware disables early-Z for shaders containing `discard`: the same
+    // dependency, in silicon.
+    // THE RULE ITSELF, spelt once and shared by both traversals — because two
+    // copies of a rule are two rules, and this one has an ordering constraint in
+    // it that nobody wants to have written down twice.
+    const auto commit_transparent = [&](Uint32* row, float* zrow, int x,
+                                        float f0, float f1, float f2,
+                                        Uint32 colour, float a) {
+        if (masked)
+        {
+            // THE TEST, and it is a comparison rather than a blend: below the
+            // cutoff there is no fragment at all. Note what does NOT happen when
+            // it passes — the alpha is thrown away, and the fragment is written
+            // fully opaque. That is what makes masking cheap and order-free: the
+            // result is an ordinary opaque pixel that happens to have a hole
+            // punched somewhere else.
+            if (a < style.alpha_cutoff) { return; }
+
+            // NOW the depth write, and the order is the lesson. A discarded
+            // fragment must leave the depth buffer alone, or the hole in the
+            // leaf would occlude whatever is behind it — a leaf-shaped patch of
+            // background, punched out of the tree behind it, which is the
+            // unmistakable signature of testing alpha after writing depth.
+            if (zrow != nullptr)
+            {
+                zrow[x] = depth->quantise(f0 * v0.z + f1 * v1.z + f2 * v2.z);
+            }
+            row[x] = colour;
+            return;
+        }
+
+        // ---- BLENDING ------------------------------------------------------
+        //
+        // A read-modify-write, which is the property that makes it expensive and
+        // the property that makes it order-dependent. `row[x]` is read, and what
+        // is in there depends on everything drawn before — so the answer depends
+        // on the draw order, and `draw_order.hpp` exists.
+        //
+        // NO DEPTH WRITE. Not "a depth write we could skip": the absence is the
+        // feature. See `depth_probe` above.
+        //
+        // `blend_over` decodes both operands, composites in linear light and
+        // re-encodes. `blend_encoded` summons the wrong version instead — the
+        // one that lerps stored bytes — because a failure you can switch on
+        // teaches more than a paragraph, and this particular failure is worth
+        // 43% of the light at half coverage.
+        row[x] = style.blend_encoded
+               ? blend_over_encoded(row[x], colour, a)
+               : blend_over(row[x], colour, a, style.encode, style.src_storage);
+    };
+
+    /// Probe, shade, commit — the scanline traversal's whole transparent path.
+    const auto shade_transparent = [&](Uint32* row, float* zrow, int x,
+                                       float f0, float f1, float f2) {
+        // Depth first as a REJECTION, not a commitment — this reads the buffer
+        // and writes nothing. A fragment behind an opaque surface is invisible
+        // whatever its alpha, so this saves the shading in the common case
+        // without changing anybody's depth.
+        if (!depth_probe(zrow, x, f0, f1, f2)) { return; }
+
+        float a = 1.0f;
+        const Uint32 colour = fragment(f0, f1, f2, a);
+        commit_transparent(row, zrow, x, f0, f1, f2, colour, a);
+    };
+
     // **Unbias, then divide** — needed by both traversals and spelt once. The
     // accumulators carry the top-left rule's -1 on any edge that is not
     // top-or-left; that -1 is a statement about who owns a boundary pixel, and it
@@ -985,13 +1140,25 @@ void fill_triangle(framebuffer& fb, depth_buffer* depth,
                     float f0, f1, f2;
                     weights(w0, w1, w2, f0, f1, f2);
 
-                    if (depth_test(zrow, x, f0, f1, f2))
+                    // LESSON 6.11. ONE branch, on a value constant for the whole
+                    // triangle, standing in front of code that is otherwise
+                    // exactly what 6.10 left behind. Everything transparency
+                    // costs is on the other side of it.
+                    if (simple)
                     {
-                        // LESSON 6.8. `depth_only` skips the fragment, not the
-                        // store — the store is one word and the fragment is the
-                        // whole shading equation. A shadow pass takes this
-                        // branch on every pixel it covers.
-                        if (!depth_only) { row[x] = fragment(f0, f1, f2); }
+                        if (depth_test(zrow, x, f0, f1, f2))
+                        {
+                            // LESSON 6.8. `depth_only` skips the fragment, not
+                            // the store — the store is one word and the fragment
+                            // is the whole shading equation. A shadow pass takes
+                            // this branch on every pixel it covers.
+                            float ignored;
+                            if (!depth_only) { row[x] = fragment(f0, f1, f2, ignored); }
+                        }
+                    }
+                    else
+                    {
+                        shade_transparent(row, zrow, x, f0, f1, f2);
                     }
                 }
 
@@ -1091,21 +1258,37 @@ void fill_triangle(framebuffer& fb, depth_buffer* depth,
                     // not on the surface, so it must not write depth — and this
                     // is the line that keeps the output bit-identical.
                     float* const zrow = (depth != nullptr) ? depth->row(ly) : nullptr;
-                    const bool visible = covered[i] && depth_test(zrow, lx, f0, f1, f2);
+
+                    // LESSON 6.11. Under mask or blend the depth buffer must not
+                    // be committed to before the fragment has run, so this lane
+                    // PROBES instead of testing-and-writing, and the commit
+                    // happens below with the alpha in hand. The opaque path is
+                    // unchanged, which is what keeps 4.1's bit-identical claim
+                    // between the two traversals true.
+                    const bool visible = covered[i]
+                        && (simple ? depth_test(zrow, lx, f0, f1, f2)
+                                   : depth_probe(zrow, lx, f0, f1, f2));
 
                     // AND HERE IS THE WHOLE LESSON. The fragment runs whether or
                     // not this lane is covered, because its neighbours may need to
                     // difference against it. Moving this call inside the
                     // `if (visible)` below would make the quad traversal cheap and
                     // would stop it modelling anything at all.
-                    const Uint32 colour = depth_only ? 0u : fragment(f0, f1, f2);
+                    float lane_alpha = 1.0f;
+                    const Uint32 colour = depth_only ? 0u
+                                                     : fragment(f0, f1, f2, lane_alpha);
                     if (!depth_only) { ++local.shaded; }
 
                     if (covered[i]) { ++local.covered; } else { ++local.helpers; }
 
                     if (visible && !depth_only)
                     {
-                        fb.row(ly)[lx] = colour;
+                        if (simple) { fb.row(ly)[lx] = colour; }
+                        else
+                        {
+                            commit_transparent(fb.row(ly), zrow, lx, f0, f1, f2,
+                                               colour, lane_alpha);
+                        }
                     }
                     else if (show_helpers && !covered[i])
                     {
