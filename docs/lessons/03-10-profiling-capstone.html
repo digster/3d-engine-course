@@ -1009,14 +1009,14 @@ figure.dia svg .z-other   { fill: #6e7080; }
       <text x="16" y="330.0" class="sm">the other 4.0% of the frame does not go away.</text>
     </svg>
     <figcaption>
-      <span class="fignum">Figure 6.</span>
+      <span class="fignum">Figure 4.</span>
       Amdahl's law, with this lesson's own optimisation plotted on it. Every curve flattens against a ceiling of 1/(1&nbsp;&#8722;&nbsp;p), because the part you did not speed up does not go away: a phase that is half your frame can never buy more than 2&times; however heroic you are. Our fill is 96% of the frame, so its ceiling is 25&times; &#8212; which is what makes it worth working on at all. Run a finger up the orange curve to the right edge and read that number off; then use the formula in the other direction, as an arithmetic check that your measured whole-frame speedup is one the parts could actually have produced.
     </figcaption>
   </figure>
 
 
   <p>
-    Figure 6 is that formula plotted, with this lesson's own optimisation marked on it. Every
+    Figure 4 is that formula plotted, with this lesson's own optimisation marked on it. Every
     curve flattens against its own ceiling: a phase that is half your frame can never buy you more
     than 2×, no matter what you do to it. Our fill is 96% of the frame, so its ceiling is 25× —
     generous, and it is what makes the fill worth working on at all. If it had been 50% the
@@ -1554,14 +1554,14 @@ private:
       <text x="16" y="280.0" class="sm">The whole lit + textured fragment: <tspan class="mono">46.46</tspan> ns/px with <tspan class="mono">pow</tspan>, <tspan class="mono t-hi">35.21</tspan> with the fitted encode.</text>
     </svg>
     <figcaption>
-      <span class="fignum">Figure 4.</span>
+      <span class="fignum">Figure 5.</span>
       A differential ladder: one fixed geometry, rendered repeatedly with fill styles differing by exactly one thing, so the DELTA between adjacent rungs is the cost of what changed (&#167;3.5). Three results are worth measuring off the picture. The perspective divide &#8212; the thing Lesson 3.2 warned would cost you &#8212; has a delta of &#8722;0.018 ns/px, which is to say it is free. The depth test costs 0.27. And the sRGB encode costs 6.09, which the two brackets at the bottom compare against everything above it combined: 2.94. Lay one against the other. The largest single item in the fragment loop is the one-line call nobody has thought about since Lesson 2.4.
     </figcaption>
   </figure>
 
 
   <p>
-    Three things in Figure 4 are worth stopping on, and only one of them is the one this lesson
+    Three things in Figure 5 are worth stopping on, and only one of them is the one this lesson
     goes on to fix.
   </p>
 
@@ -1696,14 +1696,14 @@ private:
       <text x="76.0" y="362.0" class="xs muted">where a fit made of square roots has to meet a straight line.</text>
     </svg>
     <figcaption>
-      <span class="fignum">Figure 5.</span>
+      <span class="fignum">Figure 6.</span>
       The exact sRGB transfer function with the fitted four-term approximation dashed over it. At any honest scale they are the same line. The vertical marker shows where the linear toe is kept EXACTLY rather than fitted &#8212; every basis function here has an infinite slope at zero where the truth has 12.92, so a fit forced to cover the toe spends all its freedom there and is three codes worse everywhere else. Below, the difference between the two curves magnified 770,000&times;. Two things to read off it: the worst excursion is 0.0115 of an 8-bit code, and the curve CROSSES ZERO repeatedly, which is what a minimax fit looks like and is why the error is a wobble rather than a bias.
     </figcaption>
   </figure>
 
 
   <p>
-    Figure 5 draws the result. At any honest scale the fit and the exact curve are the same line;
+    Figure 6 draws the result. At any honest scale the fit and the exact curve are the same line;
     the difference only becomes visible magnified 770,000×, and when it does you can see it
     <em>oscillate about zero</em>, which is what a minimax fit looks like and is why the error is a
     wobble rather than a bias. Now time all four, and check them:

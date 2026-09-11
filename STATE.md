@@ -6655,10 +6655,29 @@ next: 6.13 — Bloom and the Post-Processing Stack
       ALREADY doing wrong (or already avoiding) before proposing anything, and
       6.11's of naming a technique's ceiling with a number rather than a hedge.
 
-      AND ONE PIECE OF UNFINISHED BUSINESS, NOT 6.13's: `check-page.js`'s new
+      (RESOLVED 2026-09-11, in a follow-up session.) `check-page.js`'s new
       `figOrder` check found out-of-order figure numbers in THREE published
-      lessons — 02-05-matrices, 03-10-profiling-capstone, 04-01-how-gpus-work.
-      Real reader-facing defects (the prose refers to figures by number). The fix
-      must edit the body fragments and the prose references, then rebuild; it was
-      flagged as a task rather than done inside 6.12's session.
+      lessons — 02-05-matrices, 03-10-profiling-capstone, 04-01-how-gpus-work —
+      and all three are fixed by RENUMBERING, not by moving figures: in every one
+      the figure already sat in the section that discusses it, so only the numbers
+      were out of step. Whole site now green, 73 pages x 2 widths.
+      WHAT THAT SWEEP UNCOVERED IS BIGGER THAN THE FIGURES, and it is recorded
+      here because it will bite again:
+        1 build_310.py AND build_41.py STILL STAMPED A `STATE` BLOCK, retired
+          from lesson pages at 5.7. Re-running either would have re-added 60% of
+          a file. Amended, as build_57.py was in 5.8.
+        2 BOTH READ THEIR LISTINGS FROM `src/`, the directory Module 5's refactor
+          DELETED. They had been unreproducible since 5.1 and nobody had noticed,
+          because nobody had needed to rebuild them. Now pinned from the commits
+          that shipped each lesson (26cd723, b9bedf0) and byte-identical again.
+        3 THE RENDERED PAGES WERE MORE CORRECT THAN THEIR SOURCES: the 2026-09-08
+          Module 8->9 renumber (3 sites) and 4.1's `next` nav link had been
+          applied to the shipped HTML and never to the body fragments. A rebuild
+          would have reverted all four. THIRD time this drift has been found.
+        4 LESSON 2.5 HAS NO GENERATOR — the build_NN.py pipeline starts at 3.7,
+          so for that page the rendered HTML IS the source. Do not assume a
+          builder exists before looking.
+      THE ORDER THAT MADE THIS SAFE: prove the builder reproduces the shipped
+      page BYTE-IDENTICALLY first, then make the intended change, then diff. Both
+      final diffs were exactly caption numbers and prose references.
 ```

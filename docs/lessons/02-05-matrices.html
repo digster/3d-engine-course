@@ -513,10 +513,18 @@
     downwards</em>, not the top row read across.
   </p>
 
+  <p>
+    Figure 3 puts the two side by side: the same matrix as it is written on paper and as it sits in
+    memory, with an arrow from each element to the float it becomes. Read the memory strip left to
+    right and you are reading <code>Mî</code> first, then <code>Mĵ</code> — which is the whole
+    convention, and the reason the code below says <code>c0</code> and <code>c1</code> rather than
+    naming rows.
+  </p>
+
   <figure class="dia bleed">
-    <svg viewBox="0 0 620 250" role="img" aria-labelledby="fig4-t fig4-d">
-      <title id="fig4-t">Written in rows, stored in columns</title>
-      <desc id="fig4-d">The matrix with columns (2,0) and (1,3) shown as it is written on paper,
+    <svg viewBox="0 0 620 250" role="img" aria-labelledby="fig3-t fig3-d">
+      <title id="fig3-t">Written in rows, stored in columns</title>
+      <desc id="fig3-d">The matrix with columns (2,0) and (1,3) shown as it is written on paper,
         with the elements labelled by row and column. Arrows lead to a strip of four floats in
         memory, in the order 2, 0, 1, 3 — the left column first, then the right column.</desc>
 
@@ -567,7 +575,7 @@
       <text class="xs muted" x="100" y="214" text-anchor="middle">at(row, col)</text>
       <text class="xs muted" x="100" y="228" text-anchor="middle">indexes this view</text>
     </svg>
-    <figcaption><span class="fignum">Figure 4.</span> The same matrix, twice. Written form on the
+    <figcaption><span class="fignum">Figure 3.</span> The same matrix, twice. Written form on the
       left, memory on the right. <code>at(0,1)</code> — the top-right element as you would write it
       — lives at index <code>[2]</code>, because it is the <em>second column's</em> first component.
       Verified: the four floats really do come out in the order 2, 0, 1, 3.</figcaption>
@@ -625,13 +633,13 @@
     quarter turn ahead of <code>î</code>. Rotation turns everything by the same amount, so it stays
     a quarter turn ahead: it lands at angle <code>θ + 90°</code>. A quarter turn takes
     <code>(x, y)</code> to <code>(−y, x)</code>, so <code>(cos θ, sin θ)</code> becomes
-    <code>(−sin θ, cos θ)</code>. That is the second column, and Figure 3 shows both.
+    <code>(−sin θ, cos θ)</code>. That is the second column, and Figure 4 shows both.
   </p>
 
   <figure class="dia bleed">
-    <svg viewBox="0 46 620 258" role="img" aria-labelledby="fig3-t fig3-d">
-      <title id="fig3-t">The rotation matrix, read off the unit circle</title>
-      <desc id="fig3-d">A unit circle with the basis vector i-hat rotated to angle theta, forming a
+    <svg viewBox="0 46 620 258" role="img" aria-labelledby="fig4-t fig4-d">
+      <title id="fig4-t">The rotation matrix, read off the unit circle</title>
+      <desc id="fig4-d">A unit circle with the basis vector i-hat rotated to angle theta, forming a
         right triangle whose horizontal leg is cos theta and vertical leg is sin theta. The basis
         vector j-hat is rotated to theta plus ninety degrees, landing at minus sin theta, cos theta.
         The two results are listed as the columns of the rotation matrix.</desc>
@@ -685,7 +693,7 @@
         </marker>
       </defs>
     </svg>
-    <figcaption><span class="fignum">Figure 3.</span> No trigonometric identity was used or needed.
+    <figcaption><span class="fignum">Figure 4.</span> No trigonometric identity was used or needed.
       The first column is the definition of sine and cosine; the second is the first, turned a
       quarter more. If you ever forget the rotation matrix — and you will — redraw this and it comes
       back in fifteen seconds, with the minus sign in the right place.</figcaption>
@@ -1354,7 +1362,7 @@ result.m[1][1] = a.m[1][0]*b.m[0][1] + a.m[1][1]*b.m[1][1];</code></pre>
   <p>
     Each is its derivation, transcribed. <code>rotation</code> reads as "the first column is where
     <code>î</code> went, the second is where <code>ĵ</code> went" — and the minus sign is on
-    <code>c1.x</code>, which is the top-<em>right</em> element when written out, exactly as Figure 3
+    <code>c1.x</code>, which is the top-<em>right</em> element when written out, exactly as Figure 4
     shows. If you have ever put that minus sign in the wrong place, it was almost certainly because
     you were transcribing a written matrix into row-major storage.
   </p>

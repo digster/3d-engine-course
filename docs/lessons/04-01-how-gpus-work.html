@@ -33,7 +33,7 @@
    the theme's ink. Chosen per swatch by relative luminance in figs_310.py. */
 figure.dia svg .t-onlight { fill: #22242a; }
 
-/* One class per block-size series in Figure 2. These MUST be classes:
+/* One class per block-size series in Figure 4. These MUST be classes:
    `figure.dia svg text { fill: var(--dia-ink) }` in course.css is CSS, and CSS always
    beats an SVG presentation attribute, so an inline `fill="#eb786e"` on a <text> is
    silently ignored while the same attribute on the <rect> beside it works perfectly.
@@ -307,7 +307,7 @@ figure.dia svg .z-quad16 { fill: #eb786e; }
       <text x="120.0" y="210.0" class="xs muted" text-anchor="end">chains</text>
     </svg>
     <figcaption>
-      <span class="fignum">Figure 4.</span>
+      <span class="fignum">Figure 1.</span>
       A dependent chain runs at the LATENCY of its operation, however many execution units are idle &#8212; the short bars are work and the long dashed gaps are waiting for its own previous result. Interleave four independent chains and the gaps fill completely, with no change to the arithmetic at all. The measured bars beneath say the same thing in numbers: one chain runs at 3.124 ns per step and 32 at 0.112, a speedup of 27.88&#215; bought entirely with <em>other work to do</em>. This is the whole GPU architecture in one picture &#8212; and it is also why a shader that uses fewer registers runs faster, since registers are what limit how many lane groups can be resident at once.
     </figcaption>
   </figure>
@@ -333,7 +333,7 @@ figure.dia svg .z-quad16 { fill: #eb786e; }
     <strong>a shader that uses fewer registers runs faster.</strong> Registers are the resource
     that limits how many lane groups can be resident at once. Fewer registers per lane means more
     groups in flight, which means more independent work available, which means more latency
-    hidden. The word for that ratio is <strong>occupancy</strong>, and it is the table in Figure 4.
+    hidden. The word for that ratio is <strong>occupancy</strong>, and it is the table in Figure 1.
   </p>
 
   <h3 id="intuition-lockstep"><span class="num">2.2</span>Lanes in lockstep</h3>
@@ -457,7 +457,7 @@ figure.dia svg .z-quad16 { fill: #eb786e; }
       <text x="16" y="324.0" class="sm muted">have run the same code &#8212; whether or not the triangle covers them. That is where mipmap selection comes from.</text>
     </svg>
     <figcaption>
-      <span class="fignum">Figure 1.</span>
+      <span class="fignum">Figure 2.</span>
       One triangle over an 8&#215;8 pixel grid divided into 2&#215;2 quads. Blue lanes are covered; red lanes are not, and they run the fragment shader anyway &#8212; 10 of the 24 lanes shaded here, for an efficiency of 58%. Count them off the picture. The reason they run is in the legend: <code>ddx</code> is lane 1 minus lane 0 and <code>ddy</code> is lane 2 minus lane 0, so a screen-space derivative is a subtraction between neighbours &#8212; and a lane cannot subtract against a neighbour that never ran. Every automatic mipmap selection ever made is paid for out of those red squares.
     </figcaption>
   </figure>
@@ -832,14 +832,14 @@ figure.dia svg .z-quad16 { fill: #eb786e; }
       <text x="470.0" y="235.0" class="xs muted">to within 0.09&#215;.</text>
     </svg>
     <figcaption>
-      <span class="fignum">Figure 2.</span>
+      <span class="fignum">Figure 4.</span>
       Lane efficiency against triangle size, for four block widths, averaged over 32 rotations. Read the marked radius: at 8 pixels a 2&#215;2 quad keeps <strong>75.5%</strong> of its lanes and a 16&#215;16 block keeps <strong>8.9%</strong>. Every doubling of the block costs more than the last, and the collapse is worst exactly where modern content lives. That is one half of why the hardware chose 2&#215;2; the other half is that 2&#215;2 is the smallest block containing a neighbour in x and a neighbour in y, so it is the cheapest shape that can produce a derivative at all. The table beside the chart is the price on a real scene.
     </figcaption>
   </figure>
 
 
   <p>
-    Figure 2 sweeps all four widths over the same triangles. At a circumradius of 8 pixels, 2×2
+    Figure 4 sweeps all four widths over the same triangles. At a circumradius of 8 pixels, 2×2
     keeps <strong>75.5%</strong> of its lanes and 16×16 keeps <strong>8.9%</strong>. Every
     doubling costs more than the last, and the collapse is worst exactly where modern content
     lives — small triangles.
@@ -8695,7 +8695,7 @@ cmake --build build --config Release -j
        in the program. If that lane took the other side of the branch, it does not have one.</p>
     <p><strong>Fix.</strong> Sample outside the branch and select afterwards, or compute the
        gradient outside and use an explicit-gradient sample. This is a real constraint you will
-       meet in Module 6, and it falls straight out of Figure 1.</p>
+       meet in Module 6, and it falls straight out of Figure 2.</p>
   </div>
 
   <div class="callout pitfall">
@@ -8738,7 +8738,7 @@ cmake --build build --config Release -j
 
   <h3>8.2 &nbsp;Make the block size a parameter</h3>
   <p>
-    Generalise the quad walk to an arbitrary power-of-two block and reproduce Figure 2's four
+    Generalise the quad walk to an arbitrary power-of-two block and reproduce Figure 4's four
     curves from the real rasterizer rather than from the coverage-only sweep in
     <code>verify_41</code> §D. Do the timings track the lane counts?
   </p>

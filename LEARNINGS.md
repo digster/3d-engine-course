@@ -6982,3 +6982,43 @@ kernel or footprint downstream of it.
   6.12's harness was written with the fix already in place — declare the device first so it is
   destroyed last, and delete the hand-written teardown. Worth recording that the *second*
   application of a lesson is where it pays.
+
+## The figure-order sweep — three lessons, and what it uncovered underneath
+
+- **A checker's first run is worth more than its hundredth.** `figOrder` was added in 6.12 after
+  that lesson's own build misnumbered two figures. Sweeping the back catalogue with it found the
+  same defect in **three published lessons** — 2.5, 3.10 and 4.1 — which had been shipping a
+  numbered cross-reference that landed on the wrong picture. Same pattern as
+  `check-curriculum.py`, which found three dead prerequisite links on its first run.
+
+- **Renumber, do not move.** In all three, every figure already sat in the section that discusses
+  it and every prose reference was adjacent to its own figure; only the numbers were out of step.
+  Moving a figure would have moved it away from the prose that introduces it. The rule that fell
+  out: **when placement and numbering disagree, the placement is almost always the deliberate one**,
+  because it was chosen while writing the argument and the number was assigned in a draft order.
+
+- **Prove the builder reproduces the page BEFORE changing anything.** Both old builders turned out
+  to be unrunnable, and in two different ways that would each have silently corrupted a page:
+  - `build_310.py` and `build_41.py` still **stamped a `STATE` block**, retired from lesson pages at
+    5.7. Re-running either would have re-added 60% of a file.
+  - Both read their listings from `src/`, a directory **Module 5's refactor deleted**. They had been
+    unreproducible since 5.1 and nobody had noticed, because nobody had needed to rebuild them.
+  Fixed by retiring the STATE stamping and pinning every listing from the commit that shipped each
+  lesson — after which both rebuilt **byte-identically**, which is the only thing that makes the
+  subsequent diff trustworthy.
+
+- **A rendered page can be more correct than its source.** The 2026-09-08 Module 8→9 renumber and
+  4.1's "next" nav link had been applied to the shipped HTML and never to the body fragments or the
+  listings. A rebuild would have reverted all four. **If a page is edited by hand, the edit has to
+  go back into whatever generates it, the same day** — this is the third time this exact drift has
+  been found (6.9's retrofit links, and now twice here).
+
+- **Not every page has a generator.** Lesson 2.5 predates the `build_NN.py` pipeline, which starts
+  at 3.7 — so for it the rendered HTML *is* the source and editing it directly is correct. Check
+  before assuming a build script exists.
+
+- **Swapping two values needs a sentinel.** Renaming `fig3 ↔ fig4` (files, caption numbers, and
+  `aria-labelledby` ids) one at a time clobbers one of them. Every swap here went through a
+  temporary name. Related: an assertion of the form "the substitution changed something" is wrong
+  for an identity mapping — 1→1 legitimately changes nothing, and asserting otherwise aborted a
+  script halfway through a rename.
