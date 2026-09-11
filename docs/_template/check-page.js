@@ -196,6 +196,31 @@
   out.svgTextOnShape = onShape;
   out.figures = document.querySelectorAll('figure.dia svg').length;
 
+  // ---- 3b. FIGURE NUMBERS IN PAGE ORDER -----------------------------------
+  //
+  // Added after Lesson 6.12, because this is the SECOND time the same drift
+  // shipped: 6.10 rendered `fig4.png` captioned "Figure 5", and 6.12's first
+  // build put the resolve diagram at 4 while the body showed the per-channel
+  // comparison first. Both happened for the same structural reason — the
+  // NUMBERS live in build_NN.py and the ORDER lives in the body fragments, so
+  // they are two files that have to agree and nothing was making them.
+  //
+  // Nothing else here can catch it. The caption is present, the figure renders,
+  // every reference resolves; only a human reading the captions in sequence
+  // would notice, and a human reading 3,700 lines does not.
+  out.figOrder = (() => {
+    const nums = [...document.querySelectorAll('figure.dia .fignum')]
+      .map(el => {
+        const m = /Figure\s+(\d+)/.exec(el.textContent || '');
+        return m ? Number(m[1]) : null;
+      });
+    const bad = [];
+    nums.forEach((n, i) => {
+      if (n !== i + 1) { bad.push({ position: i + 1, says: n }); }
+    });
+    return bad;
+  })();
+
   // ---- 4. SHARED ASSETS ---------------------------------------------------
   // The CSS and page script are linked from docs/shared/, not inlined, so a
   // wrong relative href is now a real failure mode — and a silent one. Nothing
@@ -293,7 +318,8 @@
             && out.corruptedListings.length === 0 && out.katexOk && out.sharedOk
             && !out.pageScrollsX && out.wrappedListings === 0
             && out.unknownTagClasses.length === 0
-            && out.clippedWithoutToggle.length === 0 && out.listingA11y.length === 0;
+            && out.clippedWithoutToggle.length === 0 && out.listingA11y.length === 0
+            && out.figOrder.length === 0;
     return out;
   });
 })();

@@ -38,6 +38,7 @@
 #include <engine/gfx/scene.hpp>
 #include <engine/gfx/cascade.hpp>
 #include <engine/gfx/draw_order.hpp>
+#include <engine/gfx/hdr.hpp>
 #include <engine/gfx/mipmap.hpp>
 #include <engine/gfx/shadow.hpp>
 #include <engine/gfx/soft_renderer.hpp>
@@ -48,6 +49,7 @@
 
 #include <engine/platform/main.hpp>
 
+#include <memory>
 #include <vector>
 
 namespace {
@@ -180,6 +182,44 @@ public:
             // the blended objects in scene order so the failure is one keystroke
             // away, and `--blend-encoded` composites on the stored bytes, which
             // is the 43%-too-dark bug made visible.
+            // LESSON 6.12. `--hdr` renders into a float buffer and resolves it;
+            // `--tonemap` picks the curve, `--ev` the exposure, `--white` the
+            // point that `reinhard-white` sends to 1, and `--luma` switches from
+            // per-channel to luminance-only. Without `--hdr` the demo draws
+            // exactly what it drew in 6.11, into 8 bits, with a clamp.
+            else if (SDL_strcmp(argv[i], "--hdr") == 0)
+            {
+                hdr_ = true;
+            }
+            else if (SDL_strcmp(argv[i], "--tonemap") == 0 && i + 1 < argc)
+            {
+                hdr_ = true;
+                const char* n = argv[++i];
+                if (SDL_strcmp(n, "reinhard") == 0)      { tone_.op = engine::tonemap::reinhard; }
+                else if (SDL_strcmp(n, "white") == 0)    { tone_.op = engine::tonemap::reinhard_white; }
+                else if (SDL_strcmp(n, "aces") == 0)     { tone_.op = engine::tonemap::aces; }
+                else                                     { tone_.op = engine::tonemap::clamp; }
+            }
+            else if (SDL_strcmp(argv[i], "--ev") == 0 && i + 1 < argc)
+            {
+                hdr_ = true;
+                ev100_ = static_cast<float>(SDL_atof(argv[++i]));
+            }
+            else if (SDL_strcmp(argv[i], "--white") == 0 && i + 1 < argc)
+            {
+                tone_.white = static_cast<float>(SDL_atof(argv[++i]));
+            }
+            else if (SDL_strcmp(argv[i], "--luma") == 0)
+            {
+                tone_.per_channel = false;
+            }
+            // A surface polished enough to blow the lid off. The demo's default
+            // roughness is 0.49, which peaks at 0.8676 — just under 1 — and that
+            // is exactly why the course has got away without HDR for six modules.
+            else if (SDL_strcmp(argv[i], "--polish") == 0 && i + 1 < argc)
+            {
+                polish_ = static_cast<float>(SDL_atof(argv[++i]));
+            }
             else if (SDL_strcmp(argv[i], "--alpha") == 0)
             {
                 alpha_demo_ = true;
@@ -655,6 +695,54 @@ public:
             }
         }
 
+        // ---- LESSON 6.12: take the lid off ---------------------------------
+        //
+        // One line, and it is what makes the rest of this lesson visible. The
+        // scene's materials arrive from the file at roughness ~0.5, whose
+        // mirror-angle peak is 0.8676 — JUST under 1, which is exactly why this
+        // course has got away without an HDR pipeline for six modules. Polish
+        // them and the same shading equation returns 11.59 at roughness 0.20 and
+        // 2823.99 at 0.05, every bit of which an 8-bit target stores as code 255.
+        //
+        // AFTER every object exists, including the ground and 6.11's glass —
+        // placing it earlier would have polished the model and left the floor
+        // alone, which is the sort of half-applied setting that makes a
+        // measurement quietly meaningless.
+        if (polish_ >= 0.0f)
+        {
+            for (engine::scene_object& o : objects_)
+            {
+                o.mat.surface.roughness = polish_;
+            }
+
+            // AND A TORUS, because a sharp highlight has to be CAUGHT. This is
+            // worth more than a convenience: at roughness 0.15 the specular lobe
+            // is a few degrees wide, so a scene of flat faces presents the mirror
+            // angle at no pixel at all and the HDR buffer comes back with a peak
+            // of 0.22 — which is how a renderer with a real clipping problem can
+            // look completely fine. A torus is curved in BOTH directions, so some
+            // point on it satisfies the mirror condition from every viewpoint,
+            // and the highlight cannot hide.
+            const engine::mesh_handle torus = assets_.insert_mesh(
+                "generated:hdr torus", engine::make_torus(64, 32, 1.0f, 0.38f));
+            if (torus.valid())
+            {
+                const float span = SDL_max(SDL_max(extent.x, extent.z), 1e-3f);
+                engine::scene_object t;
+                t.geometry = torus;
+                t.name = "polished torus";
+                t.xform.position = {centre_.x, centre_.y + span * 0.25f, centre_.z};
+                t.xform.scale = {span * 0.9f, span * 0.9f, span * 0.9f};
+                t.mat.tint = 0xFFF0E4C8u;
+                t.mat.surface = {.roughness = polish_, .metallic = 1.0f};
+                t.closed = true;
+                objects_.push_back(t);
+            }
+
+            SDL_Log("  polish        : every material forced to roughness %.2f, "
+                    "plus a metal torus to catch the lobe", polish_);
+        }
+
         // ---- LESSON 6.10: one chain per DISTINCT albedo texture -------------
         //
         // Keyed by pointer rather than one per object, because two objects
@@ -761,6 +849,29 @@ public:
 
         fb().clear(k_background);
         depth_.clear();
+
+        // ---- LESSON 6.12: the float target ---------------------------------
+        //
+        // Allocated on first use rather than in the constructor, because a demo
+        // run without `--hdr` should not pay 6.22 MB for a buffer it never
+        // touches — three times the 8-bit framebuffer, which is the honest price
+        // of the whole lesson.
+        //
+        // IT IS CLEARED IN LINEAR LIGHT, and the conversion is the interesting
+        // part: `k_background` is an authored sRGB colour and the HDR buffer
+        // holds quantities of light, so the clear goes through `to_linear`.
+        // Clearing it to the raw bytes would make the background 2.3x too bright
+        // after the resolve re-encodes — 6.1's bug, in a new place.
+        if (hdr_)
+        {
+            if (!hdr_fb_ || hdr_fb_->width() != fb().width()
+                || hdr_fb_->height() != fb().height())
+            {
+                hdr_fb_ = std::make_unique<engine::hdr_buffer>(fb().width(), fb().height());
+            }
+            hdr_fb_->clear(engine::to_linear(k_background));
+            tone_.exposure = engine::exposure_from_ev100(ev100_);
+        }
 
         // The whole model spins about the world origin, so the objects keep
         // their relative placement — which is the point of not baking the node
@@ -894,10 +1005,55 @@ public:
                 .transparency = obj.mat.mode,
                 .opacity = obj.mat.alpha,
                 .alpha_cutoff = obj.mat.alpha_cutoff,
-                .blend_encoded = blend_encoded_};
+                .blend_encoded = blend_encoded_,
+
+                // 6.12. Null is the whole of "this fill is LDR", and it is the
+                // sixth field on this struct to make that bargain. The
+                // framebuffer is still passed — it supplies the dimensions —
+                // and is simply never written to.
+                .hdr = hdr_ ? hdr_fb_.get() : nullptr};
 
             engine::draw_triangles(fb(), &depth_, triangles_, false, style);
             drawn += static_cast<int>(triangles_.size());
+        }
+
+        // ---- LESSON 6.12: THE RESOLVE --------------------------------------
+        //
+        // Exposure, curve, encode — one pass over a FINISHED image, which is the
+        // structural point of the lesson. Everything above this line rendered
+        // quantities of light; this is where they become codes.
+        //
+        // It happens after the scene and before the overlay, and that ordering is
+        // a real decision rather than an accident of where it was easiest to put:
+        // the debug overlay is authored in sRGB and drawn at the codes it was
+        // authored in, so tonemapping it would darken text nobody asked to be
+        // darkened. Module 9's editor will want exactly the same split.
+        if (hdr_ && hdr_fb_)
+        {
+            const engine::hdr_stats st = engine::measure(*hdr_fb_);
+            engine::resolve(*hdr_fb_, fb(), tone_, engine::encode_mode::fast);
+
+            if (shot_path_ != nullptr)
+            {
+                SDL_Log("  hdr           : max channel %.4f (%.1f stops), max luminance %.4f",
+                        static_cast<double>(st.max_channel),
+                        static_cast<double>(SDL_log(SDL_max(st.max_channel, 1e-6f))
+                                            / SDL_log(2.0)),
+                        static_cast<double>(st.max_luminance));
+                SDL_Log("  over the lid  : %d of %d pixels (%.2f%%) have a channel above 1 — "
+                        "every one of them would be code 255 under a clamp",
+                        st.over_one, st.pixels,
+                        static_cast<double>(100.0f * st.over_fraction()));
+                SDL_Log("  exposure      : EV100 %.3f -> x%.4f   curve %s%s   white %.2f",
+                        static_cast<double>(ev100_),
+                        static_cast<double>(tone_.exposure), engine::name_of(tone_.op),
+                        tone_.per_channel ? "" : " (luminance only)",
+                        static_cast<double>(tone_.white));
+                SDL_Log("  log-average   : %.5f  (arithmetic mean %.5f — the gap is what one "
+                        "specular pixel does to a mean)",
+                        static_cast<double>(st.log_mean_luminance),
+                        static_cast<double>(st.mean_luminance));
+            }
         }
 
         if (shot_path_ != nullptr)
@@ -969,6 +1125,11 @@ private:
     int shadow_res_ = 1024;        ///< the map's side in texels; 0 = no shadows
     int cascades_ = 0;          // 6.9: 0 = 6.8's single map
     bool mips_ = false;         // 6.10
+    bool hdr_ = false;                       ///< 6.12: render into a float buffer
+    float ev100_ = engine::k_reference_ev100;///< 6.12: the exposure, as an EV
+    float polish_ = -1.0f;                   ///< 6.12: override every roughness
+    engine::tonemap_settings tone_{};        ///< 6.12: curve, white point, per-channel
+    std::unique_ptr<engine::hdr_buffer> hdr_fb_;   ///< 6.12: allocated on first use
     bool alpha_demo_ = false;      ///< 6.11: build the glass and the leaf card
     bool sort_blended_ = true;     ///< 6.11: --no-sort makes the failure reachable
     bool blend_encoded_ = false;   ///< 6.11: composite on stored bytes, wrongly

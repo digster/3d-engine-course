@@ -89,6 +89,7 @@
       <li><a href="#normal-maps">Normal maps &mdash; the four conventions</a></li>
       <li><a href="#shadow-maps">Shadow maps &mdash; what the comparison assumes</a></li>
       <li><a href="#transparency">Transparency &mdash; six decisions, four of which draw a picture either way</a></li>
+      <li><a href="#hdr">HDR &mdash; where the range lives, and where it stops</a></li>
       <li><a href="#units">Units and angles</a></li>
       <li><a href="#simulation">The simulation contract</a></li>
       <li><a href="#rotational">Rotational quantities &mdash; torque, spin, inertia</a></li>
@@ -2354,6 +2355,92 @@
       transparency is a different data structure and this course does not build one. An engine that
       sorts per object and says so is honest; one that implies otherwise costs somebody an
       afternoon looking for a bug in the sort.
+    </p>
+  </div>
+
+  <h2 id="hdr"><span class="num">7o</span>HDR &mdash; where the range lives, and where it stops</h2>
+
+  <p>
+    Added in Lesson 6.12. Until that lesson this engine had one colour pipeline and it ended in
+    eight bits; now there are two, and most of the decisions below are about which one a given
+    buffer is in. They go on this page because <em>every</em> one of them has a wrong answer that
+    still produces a picture.
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <caption class="visually-hidden">HDR conventions, this course&rsquo;s answer for each, and the
+        symptom of getting it wrong</caption>
+      <thead>
+        <tr><th>Decision</th><th>This course</th><th>Symptom when wrong</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Where the range lives</strong></td>
+          <td>A <strong>float target</strong>: <code>hdr_buffer</code> (three
+              <code>float</code>s, 3&times; the memory) on the CPU,
+              <code>R16G16B16A16_FLOAT</code> (2&times;, because half) on the GPU. Values above 1
+              are <em>signal</em>, not error.</td>
+          <td>A specular highlight arrives as a flat white blob. Not "too bright" &mdash; 1.0 and
+              55,917 become the same code.</td>
+        </tr>
+        <tr>
+          <td><strong>Exposure</strong></td>
+          <td><code>exposure = 1/(1.2 &times; 2<sup>EV100</sup>)</code>. The 2<sup>EV</sup> is the
+              definition of a stop; the 1.2 is ISO 12232's calibration, quoted rather than derived.
+              The engine&rsquo;s pre-6.12 behaviour is <strong>EV &minus;0.263</strong>.</td>
+          <td>Lights cannot be authored in physical units, so every scene is tuned by eye and no
+              two agree.</td>
+        </tr>
+        <tr>
+          <td><strong>The order</strong></td>
+          <td><strong>Exposure &rarr; curve &rarr; encode</strong>, all three in that order, the
+              encode last and exactly once.</td>
+          <td>Exposure last: the bright end can no longer be told apart. Curve last: it compresses
+              codes, and crushes the shadows first.</td>
+        </tr>
+        <tr>
+          <td><strong>Which curve</strong></td>
+          <td>Per-channel by default. An operator is legal if it is <em>monotonic</em>, near the
+              identity at zero, and bounded by 1 &mdash; everything else is taste.</td>
+          <td>Luminance-only leaves a saturated channel above 1 for the encode to clip, shifting
+              the hue at a threshold nobody chose.</td>
+        </tr>
+        <tr>
+          <td><strong>Where the tonemap runs</strong></td>
+          <td>A <strong>second pass</strong> over a finished image, never in the scene&rsquo;s
+              fragment shader.</td>
+          <td>Auto-exposure becomes impossible, bloom (6.13) has nothing to find, and blending
+              composites tonemapped values &mdash; <code>f(a) over f(b)</code> is not
+              <code>f(a over b)</code>.</td>
+        </tr>
+        <tr>
+          <td><strong><code>encode_output</code></strong></td>
+          <td>Means "must <em>this</em> shader apply the transfer function?" &mdash; so it is
+              <strong>0 for a float target</strong>, permanently, and the encode moves to the
+              resolve.</td>
+          <td>Two encodes or none: a picture that is recognisable and wrong across the whole frame
+              in the familiar gamma way.</td>
+        </tr>
+        <tr>
+          <td><strong>Metering</strong></td>
+          <td>The <strong>log-average</strong> luminance, never the arithmetic mean.</td>
+          <td>One specular pixel in ten thousand moves the mean by 11&times;, and the exposure
+              flickers whenever something shiny turns toward the camera.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout">
+    <span class="label">And what an HDR target does to &sect;7n</span>
+    <p>
+      Lesson 6.11&rsquo;s rule &mdash; that compositing must decode both operands, blend in linear
+      light and re-encode, and that an <code>_SRGB</code> target is what makes hardware blending
+      correct &mdash; <strong>does not transfer to a float target</strong>, because there is no
+      transfer function in the ROP to be right or wrong about. Nothing in a float pipeline stores
+      codes. The operator applies directly, which is 8.1&times; cheaper and exactly correct: the
+      round trip was never a cost of blending, it was a cost of storing something other than light.
     </p>
   </div>
 

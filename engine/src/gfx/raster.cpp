@@ -11,6 +11,7 @@
 #include <engine/gfx/raster.hpp>
 
 #include <engine/gfx/cascade.hpp>
+#include <engine/gfx/hdr.hpp>   // 6.12: fill_style holds a pointer; the fill needs the type
 #include <engine/gfx/mipmap.hpp>
 #include <engine/gfx/shadow.hpp>   // 6.8: fill_style holds a pointer; the fill needs the type
 
@@ -530,6 +531,16 @@ void fill_triangle(framebuffer& fb, depth_buffer* depth,
     // conditions through the middle of it.
     const bool simple = !masked && !blending;
 
+    // LESSON 6.12. Is this fill writing floats? Decided once per triangle, like
+    // every other constant question — and note that it is decided independently
+    // of `simple`, because an HDR target and an alpha mode are orthogonal: all
+    // six combinations are legitimate and the fill has to serve them.
+    //
+    // A DEPTH-ONLY FILL IGNORES IT, for the reason `depth_only` already gives:
+    // that path computes no colour at all, so the width of the colour it is not
+    // computing cannot matter. A shadow map is a depth buffer either way.
+    const bool to_hdr = (style.hdr != nullptr) && !depth_only;
+
     // `lit` needs somewhere to read the light from. A null `lights` is not an
     // error — it is a pipeline that was never given one — so fall back to the
     // unlit path rather than dereferencing nothing. Decided once per triangle.
@@ -668,6 +679,212 @@ void fill_triangle(framebuffer& fb, depth_buffer* depth,
     // enormous or negative, and a uv can land anywhere at all. Nothing here reads
     // out of bounds on such a lane (`wrap_texel` folds any index into range,
     // `linear_to_srgb_u8` refuses a NaN), and whatever it computes is discarded.
+    // ---- LESSON 6.12: the shading, hoisted out of the fragment ------------
+    //
+    // WHY THIS MOVED, and it is a structural point rather than tidiness. An HDR
+    // target wants the shading equation's answer in LINEAR LIGHT — that is the
+    // whole purpose of the buffer — while the 8-bit path wants it encoded. Those
+    // are the same computation with a different last step, and leaving the
+    // encode inside it would have meant either a second copy of a hundred lines
+    // of shading or a decode of a value that had just been encoded.
+    //
+    // NOTE WHAT IS *NOT* HERE: `to_encoded`. This function is the one thing in
+    // this engine that routinely exceeds 1.0 — a polished metal at the mirror
+    // angle reaches 59,003, which is 15.8 stops above white (measured in
+    // scratch/probe_612.cpp) — and until this lesson its answer was clamped one
+    // line later, every time, with no way to ask for the real number.
+    const auto shade_lit = [&](float f0, float f1, float f2, float w_recip,
+                               float& out_alpha) -> linear_rgb {
+        // ---- Per-pixel shading (Lesson 3.8) ----------------
+        //
+        // The whole lesson, in six lines. Interpolate the NORMAL
+        // and the POSITION rather than the answer, then evaluate
+        // the shading equation here — where the pixel is — instead
+        // of at three corners and blending.
+        //
+        // The equation is byte-for-byte the one Lessons 3.6 and
+        // 3.7 built. Nothing about the lighting changed; only
+        // where it is called from. That is the distinction this
+        // lesson exists to draw, and it is worth seeing that the
+        // code says it too.
+        const vec3 n{(f0 * pn0.x + f1 * pn1.x + f2 * pn2.x) * w_recip,
+                     (f0 * pn0.y + f1 * pn1.y + f2 * pn2.y) * w_recip,
+                     (f0 * pn0.z + f1 * pn1.z + f2 * pn2.z) * w_recip};
+        const vec3 p{(f0 * pw0.x + f1 * pw1.x + f2 * pw2.x) * w_recip,
+                     (f0 * pw0.y + f1 * pw1.y + f2 * pw2.y) * w_recip,
+                     (f0 * pw0.z + f1 * pw1.z + f2 * pw2.z) * w_recip};
+
+        // The albedo, from one of two places — Lesson 3.9.
+        //
+        // WITH A TEXTURE BOUND it is a sample, and `sample` already
+        // returns linear light, so it drops straight into the same
+        // slot with no conversion at all. That is not a coincidence
+        // and it is worth pausing on: `sample` returns linear
+        // *because* this is what a texture is for. An albedo is a
+        // reflectance — the fraction of arriving light a surface
+        // sends back — and a fraction has to multiply a quantity of
+        // light, which means both have to be linear. Texture and
+        // light multiply, and that one multiply is Module 3's last
+        // structural gap closing.
+        //
+        // WITHOUT ONE it is the interpolated corner colour, by the
+        // same three multiply-adds as any other attribute, exactly
+        // as 3.8 left it. Note that it is taken in LINEAR light and
+        // handed straight to `shade`, with no encode in between:
+        // `blend_space` is ignored under `lit`, because lighting
+        // arithmetic is linear by definition (conventions §7c) and
+        // there is no meaning to give the encoded variant here. One
+        // encode at the very end, which is where an encode belongs.
+        // Written as one branch rather than "interpolate, then
+        // overwrite if textured", because the interpolation is nine
+        // multiply-adds and a discarded result is still a paid one.
+        // `textured` is constant for the whole triangle, so the
+        // predictor eats the branch itself for free — it is only
+        // the WORK behind it that is worth not doing.
+        linear_rgb albedo{};
+        if (textured)
+        {
+            const float uu = (f0 * pu0 + f1 * pu1 + f2 * pu2) * w_recip;
+            const float vv = (f0 * pv0 + f1 * pv1 + f2 * pv2) * w_recip;
+
+            // LESSON 6.11. The albedo image's alpha is the CUTOUT — the
+            // fourth channel of the same fetch, at no extra cost, which is
+            // why an alpha test is nearly free on a surface that was already
+            // being textured. Note it is taken from the ALBEDO map and
+            // nowhere else: glTF says base colour carries the alpha, and a
+            // normal map's fourth byte is padding somebody's exporter chose.
+            const texel_sample s = mipped
+                ? sample_mipped_rgba(*style.albedo.mips, style.albedo.samp,
+                                     vec2{uu, vv},
+                                     uv_gradients(dnum_dx, dnum_dy, dw_dx, dw_dy,
+                                                  vec2{uu, vv}, w_recip))
+                : sample_rgba(*style.albedo.image, style.albedo.samp, uu, vv);
+            albedo = s.colour;
+            out_alpha = style.opacity * s.alpha;
+        }
+        else
+        {
+            albedo = {(f0 * p0.r + f1 * p1.r + f2 * p2.r) * w_recip,
+                      (f0 * p0.g + f1 * p1.g + f2 * p2.g) * w_recip,
+                      (f0 * p0.b + f1 * p1.b + f2 * p2.b) * w_recip};
+        }
+
+        // ---- LESSON 6.7: THE NORMAL, PERTURBED --------------
+        //
+        // Everything above computed the normal the GEOMETRY has.
+        // This replaces it with the normal the SURFACE has, read
+        // out of an image — and the whole of the work is building
+        // the frame that makes the image's numbers mean something.
+        vec3 shading_normal = n;
+        if (normal_mapped)
+        {
+            const float uu = (f0 * pu0 + f1 * pu1 + f2 * pu2) * w_recip;
+            const float vv = (f0 * pv0 + f1 * pv1 + f2 * pv2) * w_recip;
+
+            // THE MAP IS DATA, NOT COLOUR. `sample` returns
+            // `texel/255` here rather than decoding through the
+            // sRGB curve, because the texture was built with
+            // `texel_space::linear` (6.7 §3). Through the wrong
+            // space the flat value 0.5 comes back as 0.2140 and
+            // every surface tilts toward its own steepest reading.
+            const linear_rgb t = sample(*style.normal_map.image,
+                                        style.normal_map.samp, uu, vv);
+
+            // [0,1] -> [-1,1]. A direction has negative components
+            // and a byte does not, so the encoding is an offset —
+            // which is exactly why an unperturbed normal map is
+            // LAVENDER: (0, 0, 1) stores as (0.5, 0.5, 1.0), and a
+            // pale blue-violet is what "no change" looks like.
+            const vec3 tn{t.r * 2.0f - 1.0f,
+                          t.g * 2.0f - 1.0f,
+                          t.b * 2.0f - 1.0f};
+
+            // THE FRAME, REBUILT PER FRAGMENT. Both the normal and
+            // the tangent were interpolated, so neither is unit
+            // length and they are no longer perpendicular to each
+            // other — interpolation does not preserve either
+            // property. Gram-Schmidt fixes the second and
+            // normalising fixes the first, in that order, and the
+            // NORMAL is what we refuse to move: it is what the
+            // shading is about, and the tangent only has to span
+            // the plane.
+            const vec3 nn = normalised_or(n, vec3{0.0f, 0.0f, 1.0f});
+            const vec3 ti{(f0 * pt0.x + f1 * pt1.x + f2 * pt2.x) * w_recip,
+                          (f0 * pt0.y + f1 * pt1.y + f2 * pt2.y) * w_recip,
+                          (f0 * pt0.z + f1 * pt1.z + f2 * pt2.z) * w_recip};
+            const vec3 tt = normalised_or(ti - nn * dot(nn, ti),
+                                          vec3{1.0f, 0.0f, 0.0f});
+
+            // The bitangent is COMPUTED, not stored — and the sign
+            // is why the tangent is a vec4. A mirrored uv chart
+            // needs the other one, and every symmetric model has a
+            // mirrored chart.
+            const float handed = (f0 * v0.tangent.w + f1 * v1.tangent.w
+                                  + f2 * v2.tangent.w) >= 0.0f ? 1.0f : -1.0f;
+            const vec3 bb = cross(nn, tt) * handed;
+
+            // TANGENT SPACE -> WORLD, which is a matrix multiply
+            // written as its own definition: a matrix IS where the
+            // basis vectors land (Lesson 2.5), and these three ARE
+            // the basis vectors. `tn.z` weights the normal, which
+            // is why a flat map — z = 1, x = y = 0 — returns `nn`
+            // exactly and changes nothing. verify_67 §D asserts
+            // that round trip.
+            shading_normal = tt * tn.x + bb * tn.y + nn * tn.z;
+        }
+
+        // ---- LESSON 6.8: CAN THIS POINT SEE THE LIGHT? -------
+        //
+        // Two things are worth reading twice here. The first
+        // is that the normal handed to the shadow lookup is
+        // `n`, the GEOMETRIC one, and not `shading_normal`:
+        // shadow acne is a disagreement about where the
+        // TRIANGLES are, and a normal map does not move a
+        // triangle. 6.7 is what made those two different, and
+        // this is the first line in the engine that has to
+        // choose between them.
+        //
+        // The second is that this cosine is computed here
+        // rather than taken from `shade`, and it is genuinely
+        // a DIFFERENT cosine from the one that scales the
+        // light: that one uses the shading normal, because it
+        // asks how much light the surface receives; this one
+        // uses the geometric normal, because it asks how
+        // steeply the surface is tilted relative to the map's
+        // texel grid. Sharing one value between them would be
+        // shorter and would put a normal map's tilt into the
+        // bias, which is a bias that varies per texel of an
+        // image and has nothing to do with the geometry.
+        float visibility = 1.0f;
+        if (shadowed)
+        {
+            const vec3 gn = normalised_or(n, vec3{0.0f, 1.0f, 0.0f});
+            const float geo_cos = dot(gn, style.lights->key.to_light());
+            if (style.cascades != nullptr)
+            {
+                // AXIAL, not radial — raster.hpp says why, and the
+                // difference is 22% at the corner of the frame.
+                const float vd = dot(p - style.view_eye, style.view_forward);
+                visibility = style.cascades->visibility(p, gn, geo_cos, vd);
+            }
+            else
+            {
+                visibility = style.shadows->visibility(p, gn, geo_cos);
+            }
+        }
+
+        // `shade` normalises `n` itself — a decision made in 3.6
+        // ("a caller who forgets gets a brightness scaled by the
+        // normal's length, which looks like a lighting bug and is
+        // not one"), and this is the call site that cashes it in.
+        // The interpolated normal is genuinely short here, worst in
+        // the middle of the triangle; §3.5 measures by how much.
+        return shade(albedo, shading_normal, style.eye - p,
+                     *style.lights, style.surface,
+                     style.model, ndf_model::ggx,
+                     visibility);
+    };
+
     // LESSON 6.11. `out_alpha` is an out-parameter rather than a second return
     // value, and the reason is the one this whole struct was built around: the
     // OPAQUE PATH MUST NOT MOVE. Returning a pair would have changed the call
@@ -747,195 +964,12 @@ void fill_triangle(framebuffer& fb, depth_buffer* depth,
         }
         else if (lit)
         {
-            // ---- Per-pixel shading (Lesson 3.8) ----------------
-            //
-            // The whole lesson, in six lines. Interpolate the NORMAL
-            // and the POSITION rather than the answer, then evaluate
-            // the shading equation here — where the pixel is — instead
-            // of at three corners and blending.
-            //
-            // The equation is byte-for-byte the one Lessons 3.6 and
-            // 3.7 built. Nothing about the lighting changed; only
-            // where it is called from. That is the distinction this
-            // lesson exists to draw, and it is worth seeing that the
-            // code says it too.
-            const vec3 n{(f0 * pn0.x + f1 * pn1.x + f2 * pn2.x) * w_recip,
-                         (f0 * pn0.y + f1 * pn1.y + f2 * pn2.y) * w_recip,
-                         (f0 * pn0.z + f1 * pn1.z + f2 * pn2.z) * w_recip};
-            const vec3 p{(f0 * pw0.x + f1 * pw1.x + f2 * pw2.x) * w_recip,
-                         (f0 * pw0.y + f1 * pw1.y + f2 * pw2.y) * w_recip,
-                         (f0 * pw0.z + f1 * pw1.z + f2 * pw2.z) * w_recip};
-
-            // The albedo, from one of two places — Lesson 3.9.
-            //
-            // WITH A TEXTURE BOUND it is a sample, and `sample` already
-            // returns linear light, so it drops straight into the same
-            // slot with no conversion at all. That is not a coincidence
-            // and it is worth pausing on: `sample` returns linear
-            // *because* this is what a texture is for. An albedo is a
-            // reflectance — the fraction of arriving light a surface
-            // sends back — and a fraction has to multiply a quantity of
-            // light, which means both have to be linear. Texture and
-            // light multiply, and that one multiply is Module 3's last
-            // structural gap closing.
-            //
-            // WITHOUT ONE it is the interpolated corner colour, by the
-            // same three multiply-adds as any other attribute, exactly
-            // as 3.8 left it. Note that it is taken in LINEAR light and
-            // handed straight to `shade`, with no encode in between:
-            // `blend_space` is ignored under `lit`, because lighting
-            // arithmetic is linear by definition (conventions §7c) and
-            // there is no meaning to give the encoded variant here. One
-            // encode at the very end, which is where an encode belongs.
-            // Written as one branch rather than "interpolate, then
-            // overwrite if textured", because the interpolation is nine
-            // multiply-adds and a discarded result is still a paid one.
-            // `textured` is constant for the whole triangle, so the
-            // predictor eats the branch itself for free — it is only
-            // the WORK behind it that is worth not doing.
-            linear_rgb albedo{};
-            if (textured)
-            {
-                const float uu = (f0 * pu0 + f1 * pu1 + f2 * pu2) * w_recip;
-                const float vv = (f0 * pv0 + f1 * pv1 + f2 * pv2) * w_recip;
-
-                // LESSON 6.11. The albedo image's alpha is the CUTOUT — the
-                // fourth channel of the same fetch, at no extra cost, which is
-                // why an alpha test is nearly free on a surface that was already
-                // being textured. Note it is taken from the ALBEDO map and
-                // nowhere else: glTF says base colour carries the alpha, and a
-                // normal map's fourth byte is padding somebody's exporter chose.
-                const texel_sample s = mipped
-                    ? sample_mipped_rgba(*style.albedo.mips, style.albedo.samp,
-                                         vec2{uu, vv},
-                                         uv_gradients(dnum_dx, dnum_dy, dw_dx, dw_dy,
-                                                      vec2{uu, vv}, w_recip))
-                    : sample_rgba(*style.albedo.image, style.albedo.samp, uu, vv);
-                albedo = s.colour;
-                out_alpha = style.opacity * s.alpha;
-            }
-            else
-            {
-                albedo = {(f0 * p0.r + f1 * p1.r + f2 * p2.r) * w_recip,
-                          (f0 * p0.g + f1 * p1.g + f2 * p2.g) * w_recip,
-                          (f0 * p0.b + f1 * p1.b + f2 * p2.b) * w_recip};
-            }
-
-            // ---- LESSON 6.7: THE NORMAL, PERTURBED --------------
-            //
-            // Everything above computed the normal the GEOMETRY has.
-            // This replaces it with the normal the SURFACE has, read
-            // out of an image — and the whole of the work is building
-            // the frame that makes the image's numbers mean something.
-            vec3 shading_normal = n;
-            if (normal_mapped)
-            {
-                const float uu = (f0 * pu0 + f1 * pu1 + f2 * pu2) * w_recip;
-                const float vv = (f0 * pv0 + f1 * pv1 + f2 * pv2) * w_recip;
-
-                // THE MAP IS DATA, NOT COLOUR. `sample` returns
-                // `texel/255` here rather than decoding through the
-                // sRGB curve, because the texture was built with
-                // `texel_space::linear` (6.7 §3). Through the wrong
-                // space the flat value 0.5 comes back as 0.2140 and
-                // every surface tilts toward its own steepest reading.
-                const linear_rgb t = sample(*style.normal_map.image,
-                                            style.normal_map.samp, uu, vv);
-
-                // [0,1] -> [-1,1]. A direction has negative components
-                // and a byte does not, so the encoding is an offset —
-                // which is exactly why an unperturbed normal map is
-                // LAVENDER: (0, 0, 1) stores as (0.5, 0.5, 1.0), and a
-                // pale blue-violet is what "no change" looks like.
-                const vec3 tn{t.r * 2.0f - 1.0f,
-                              t.g * 2.0f - 1.0f,
-                              t.b * 2.0f - 1.0f};
-
-                // THE FRAME, REBUILT PER FRAGMENT. Both the normal and
-                // the tangent were interpolated, so neither is unit
-                // length and they are no longer perpendicular to each
-                // other — interpolation does not preserve either
-                // property. Gram-Schmidt fixes the second and
-                // normalising fixes the first, in that order, and the
-                // NORMAL is what we refuse to move: it is what the
-                // shading is about, and the tangent only has to span
-                // the plane.
-                const vec3 nn = normalised_or(n, vec3{0.0f, 0.0f, 1.0f});
-                const vec3 ti{(f0 * pt0.x + f1 * pt1.x + f2 * pt2.x) * w_recip,
-                              (f0 * pt0.y + f1 * pt1.y + f2 * pt2.y) * w_recip,
-                              (f0 * pt0.z + f1 * pt1.z + f2 * pt2.z) * w_recip};
-                const vec3 tt = normalised_or(ti - nn * dot(nn, ti),
-                                              vec3{1.0f, 0.0f, 0.0f});
-
-                // The bitangent is COMPUTED, not stored — and the sign
-                // is why the tangent is a vec4. A mirrored uv chart
-                // needs the other one, and every symmetric model has a
-                // mirrored chart.
-                const float handed = (f0 * v0.tangent.w + f1 * v1.tangent.w
-                                      + f2 * v2.tangent.w) >= 0.0f ? 1.0f : -1.0f;
-                const vec3 bb = cross(nn, tt) * handed;
-
-                // TANGENT SPACE -> WORLD, which is a matrix multiply
-                // written as its own definition: a matrix IS where the
-                // basis vectors land (Lesson 2.5), and these three ARE
-                // the basis vectors. `tn.z` weights the normal, which
-                // is why a flat map — z = 1, x = y = 0 — returns `nn`
-                // exactly and changes nothing. verify_67 §D asserts
-                // that round trip.
-                shading_normal = tt * tn.x + bb * tn.y + nn * tn.z;
-            }
-
-            // ---- LESSON 6.8: CAN THIS POINT SEE THE LIGHT? -------
-            //
-            // Two things are worth reading twice here. The first
-            // is that the normal handed to the shadow lookup is
-            // `n`, the GEOMETRIC one, and not `shading_normal`:
-            // shadow acne is a disagreement about where the
-            // TRIANGLES are, and a normal map does not move a
-            // triangle. 6.7 is what made those two different, and
-            // this is the first line in the engine that has to
-            // choose between them.
-            //
-            // The second is that this cosine is computed here
-            // rather than taken from `shade`, and it is genuinely
-            // a DIFFERENT cosine from the one that scales the
-            // light: that one uses the shading normal, because it
-            // asks how much light the surface receives; this one
-            // uses the geometric normal, because it asks how
-            // steeply the surface is tilted relative to the map's
-            // texel grid. Sharing one value between them would be
-            // shorter and would put a normal map's tilt into the
-            // bias, which is a bias that varies per texel of an
-            // image and has nothing to do with the geometry.
-            float visibility = 1.0f;
-            if (shadowed)
-            {
-                const vec3 gn = normalised_or(n, vec3{0.0f, 1.0f, 0.0f});
-                const float geo_cos = dot(gn, style.lights->key.to_light());
-                if (style.cascades != nullptr)
-                {
-                    // AXIAL, not radial — raster.hpp says why, and the
-                    // difference is 22% at the corner of the frame.
-                    const float vd = dot(p - style.view_eye, style.view_forward);
-                    visibility = style.cascades->visibility(p, gn, geo_cos, vd);
-                }
-                else
-                {
-                    visibility = style.shadows->visibility(p, gn, geo_cos);
-                }
-            }
-
-            // `shade` normalises `n` itself — a decision made in 3.6
-            // ("a caller who forgets gets a brightness scaled by the
-            // normal's length, which looks like a lighting bug and is
-            // not one"), and this is the call site that cashes it in.
-            // The interpolated normal is genuinely short here, worst in
-            // the middle of the triangle; §3.5 measures by how much.
-            return to_encoded(shade(albedo, shading_normal, style.eye - p,
-                                      *style.lights, style.surface,
-                                      style.model, ndf_model::ggx,
-                                      visibility),
-                                style.encode);
+            // LESSON 6.12. One line, and the hundred it replaced are hoisted
+            // above — see `shade_lit`. THE ENCODE IS HERE rather than in there,
+            // because it is the only thing that distinguishes this path from the
+            // HDR one, and putting it at the boundary is what lets both exist.
+            return to_encoded(shade_lit(f0, f1, f2, w_recip, out_alpha),
+                              style.encode);
         }
         else
         {
@@ -991,6 +1025,31 @@ void fill_triangle(framebuffer& fb, depth_buffer* depth,
         return true;
     };
 
+    // ---- LESSON 6.12: the same fragment, un-encoded ------------------------
+    //
+    // The HDR path's fragment. It is deliberately NOT a second implementation:
+    // the `lit` case calls the same `shade_lit` the 8-bit path calls and simply
+    // does not encode it, and every other case goes through `fragment` and
+    // decodes.
+    //
+    // THAT DECODE IS EXACT ENOUGH, AND IT IS WORTH SAYING WHY RATHER THAN
+    // HOPING. The other shading modes cannot exceed 1.0 by construction — a uv
+    // checker is two constants, a texture sample is a reflectance, and an
+    // interpolated vertex colour is a weighted average of three values in [0,1].
+    // So the round trip loses at most the 8-bit encode's own rounding, on values
+    // that had nowhere else to go, and it buys one implementation of four
+    // shading modes instead of two. `lit` is the only mode with a range to
+    // preserve, and it is the one that skips the trip.
+    const auto fragment_linear = [&](float f0, float f1, float f2, float& out_alpha) -> linear_rgb {
+        if (lit)
+        {
+            const float w_recip = 1.0f / (f0 * iw0 + f1 * iw1 + f2 * iw2);
+            out_alpha = style.opacity;
+            return shade_lit(f0, f1, f2, w_recip, out_alpha);
+        }
+        return to_linear(fragment(f0, f1, f2, out_alpha));
+    };
+
     // ---- LESSON 6.11: the depth test WITHOUT the write ---------------------
     //
     // A blended fragment has to ask the depth buffer the same question and must
@@ -1028,9 +1087,10 @@ void fill_triangle(framebuffer& fb, depth_buffer* depth,
     // THE RULE ITSELF, spelt once and shared by both traversals — because two
     // copies of a rule are two rules, and this one has an ordering constraint in
     // it that nobody wants to have written down twice.
-    const auto commit_transparent = [&](Uint32* row, float* zrow, int x,
+    const auto commit_transparent = [&](Uint32* row, linear_rgb* hdr_row,
+                                        float* zrow, int x,
                                         float f0, float f1, float f2,
-                                        Uint32 colour, float a) {
+                                        Uint32 colour, linear_rgb lin, float a) {
         if (masked)
         {
             // THE TEST, and it is a comparison rather than a blend: below the
@@ -1050,7 +1110,7 @@ void fill_triangle(framebuffer& fb, depth_buffer* depth,
             {
                 zrow[x] = depth->quantise(f0 * v0.z + f1 * v1.z + f2 * v2.z);
             }
-            row[x] = colour;
+            if (hdr_row != nullptr) { hdr_row[x] = lin; } else { row[x] = colour; }
             return;
         }
 
@@ -1069,13 +1129,40 @@ void fill_triangle(framebuffer& fb, depth_buffer* depth,
         // one that lerps stored bytes — because a failure you can switch on
         // teaches more than a paragraph, and this particular failure is worth
         // 43% of the light at half coverage.
+        // ---- LESSON 6.12: WHAT AN HDR TARGET DOES TO 6.11'S RULE -----------
+        //
+        // Lesson 6.11 spent a section establishing that compositing must decode
+        // both operands, blend in linear light, and re-encode — and measured the
+        // round trip at 3.14x a naive byte lerp. On a float target THE ROUND TRIP
+        // IS NOT THERE AT ALL. The destination is already linear light and so is
+        // the source, so `over` applies directly, which is both faster and
+        // exactly correct.
+        //
+        // THAT IS THE CLEANEST STATEMENT OF WHAT AN HDR BUFFER IS FOR: not
+        // "brighter pixels", but "the buffer holds the quantity the arithmetic is
+        // defined on". Every conversion 6.11 had to perform was a symptom of
+        // storing something other than light.
+        //
+        // And note that 6.11's `blend_encoded` failure has nowhere to live here:
+        // there are no stored codes to lerp. A knob that cannot express its
+        // mistake on this path is not silently ignored — the mistake genuinely
+        // does not exist.
+        if (hdr_row != nullptr)
+        {
+            hdr_row[x] = (style.src_storage == alpha_storage::premultiplied)
+                       ? over_premultiplied(lin, a, hdr_row[x])
+                       : over(lin, a, hdr_row[x]);
+            return;
+        }
+
         row[x] = style.blend_encoded
                ? blend_over_encoded(row[x], colour, a)
                : blend_over(row[x], colour, a, style.encode, style.src_storage);
     };
 
     /// Probe, shade, commit — the scanline traversal's whole transparent path.
-    const auto shade_transparent = [&](Uint32* row, float* zrow, int x,
+    const auto shade_transparent = [&](Uint32* row, linear_rgb* hdr_row,
+                                       float* zrow, int x,
                                        float f0, float f1, float f2) {
         // Depth first as a REJECTION, not a commitment — this reads the buffer
         // and writes nothing. A fragment behind an opaque surface is invisible
@@ -1084,8 +1171,11 @@ void fill_triangle(framebuffer& fb, depth_buffer* depth,
         if (!depth_probe(zrow, x, f0, f1, f2)) { return; }
 
         float a = 1.0f;
-        const Uint32 colour = fragment(f0, f1, f2, a);
-        commit_transparent(row, zrow, x, f0, f1, f2, colour, a);
+        linear_rgb lin{};
+        Uint32 colour = 0u;
+        if (hdr_row != nullptr) { lin = fragment_linear(f0, f1, f2, a); }
+        else                    { colour = fragment(f0, f1, f2, a); }
+        commit_transparent(row, hdr_row, zrow, x, f0, f1, f2, colour, lin, a);
     };
 
     // **Unbias, then divide** — needed by both traversals and spelt once. The
@@ -1124,6 +1214,11 @@ void fill_triangle(framebuffer& fb, depth_buffer* depth,
             // per-pixel bounds check and index multiply.
             Uint32* const row = fb.row(y);
 
+            // LESSON 6.12. The float target's matching row, or null. Hoisted for
+            // the same reason the colour and depth rows are: the row index does
+            // not change across a scanline.
+            linear_rgb* const hdr_row = to_hdr ? style.hdr->row(y) : nullptr;
+
             // The matching row of the depth attachment, or nullptr when there is
             // no attachment. Hoisted for the same reason the colour row is: the
             // row index does not change across a scanline, so resolving it per
@@ -1152,13 +1247,22 @@ void fill_triangle(framebuffer& fb, depth_buffer* depth,
                             // the store — the store is one word and the fragment
                             // is the whole shading equation. A shadow pass takes
                             // this branch on every pixel it covers.
+                            //
+                            // LESSON 6.12 adds the second branch and nothing
+                            // else: the same fragment, stored un-encoded into a
+                            // wider target.
                             float ignored;
-                            if (!depth_only) { row[x] = fragment(f0, f1, f2, ignored); }
+                            if (depth_only) { /* nothing to store */ }
+                            else if (hdr_row != nullptr)
+                            {
+                                hdr_row[x] = fragment_linear(f0, f1, f2, ignored);
+                            }
+                            else { row[x] = fragment(f0, f1, f2, ignored); }
                         }
                     }
                     else
                     {
-                        shade_transparent(row, zrow, x, f0, f1, f2);
+                        shade_transparent(row, hdr_row, zrow, x, f0, f1, f2);
                     }
                 }
 
@@ -1275,19 +1379,30 @@ void fill_triangle(framebuffer& fb, depth_buffer* depth,
                     // `if (visible)` below would make the quad traversal cheap and
                     // would stop it modelling anything at all.
                     float lane_alpha = 1.0f;
-                    const Uint32 colour = depth_only ? 0u
-                                                     : fragment(f0, f1, f2, lane_alpha);
-                    if (!depth_only) { ++local.shaded; }
+                    linear_rgb lane_lin{};
+                    Uint32 colour = 0u;
+                    if (!depth_only)
+                    {
+                        if (to_hdr) { lane_lin = fragment_linear(f0, f1, f2, lane_alpha); }
+                        else        { colour = fragment(f0, f1, f2, lane_alpha); }
+                        ++local.shaded;
+                    }
 
                     if (covered[i]) { ++local.covered; } else { ++local.helpers; }
 
+                    linear_rgb* const hdr_row = to_hdr ? style.hdr->row(ly) : nullptr;
+
                     if (visible && !depth_only)
                     {
-                        if (simple) { fb.row(ly)[lx] = colour; }
+                        if (simple)
+                        {
+                            if (hdr_row != nullptr) { hdr_row[lx] = lane_lin; }
+                            else                    { fb.row(ly)[lx] = colour; }
+                        }
                         else
                         {
-                            commit_transparent(fb.row(ly), zrow, lx, f0, f1, f2,
-                                               colour, lane_alpha);
+                            commit_transparent(fb.row(ly), hdr_row, zrow, lx,
+                                               f0, f1, f2, colour, lane_lin, lane_alpha);
                         }
                     }
                     else if (show_helpers && !covered[i])

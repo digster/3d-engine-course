@@ -228,6 +228,8 @@ add_hlsl_shader(scene.frag fragment)
 add_hlsl_shader(matrix_probe.frag fragment)   # Lesson 4.8 — the instrument
 add_hlsl_shader(shadow.vert vertex)          # Lesson 6.8 — the depth pass
 add_hlsl_shader(shadow.frag fragment)
+add_hlsl_shader(fullscreen.vert vertex)      # Lesson 6.12 — no vertex buffer at all
+add_hlsl_shader(tonemap.frag fragment)       # Lesson 6.12 — the resolve
 
 # ---- The project -----------------------------------------------------------
 # ORDER MATTERS, and it is the dependency direction made visible: engine/ knows

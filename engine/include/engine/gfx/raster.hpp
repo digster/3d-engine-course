@@ -46,7 +46,7 @@ namespace engine {
 /// A pointer to an incomplete type is all `fill_style` needs, and `raster.cpp`
 /// is the one place that has to see the definition.
 class shadow_map;
-class cascaded_shadow_map; class framebuffer; }
+class cascaded_shadow_map; class framebuffer; class hdr_buffer; }
 namespace engine { class depth_buffer; }
 
 namespace engine {
@@ -711,6 +711,26 @@ struct fill_style
     /// 43% of the light it should have, and seeing that is worth more than
     /// reading about it.
     bool blend_encoded = false;
+
+    /// **Render into a float target instead of an 8-bit one** — Lesson 6.12.
+    ///
+    /// Nullable, and null is the whole of "this fill is LDR" — the sixth field on
+    /// this struct to make that bargain (`lights`, `albedo`, `normal_map`,
+    /// `shadows`, `cascades`, and now this). Every fill written in the previous
+    /// sixty-six lessons passes null and behaves identically.
+    ///
+    /// **The framebuffer is still required, and not as a formality.** It supplies
+    /// the dimensions the bounding box is clipped against — exactly the situation
+    /// `depth_only` documents below, and for exactly the same reason: there is
+    /// nowhere else for a fill to learn how big the target is. When this is set
+    /// the framebuffer is never written to.
+    ///
+    /// **What changes is the last step and only the last step.** The shading
+    /// equation is identical; `to_encoded` does not run, so a value of 59,003
+    /// arrives in the buffer as 59,003 instead of as code 255. A blend on this
+    /// path composites in linear light *directly* — no decode, no re-encode —
+    /// which is the second thing an HDR target buys and is measured in §F.
+    hdr_buffer* hdr = nullptr;
 
     /// **Test and write depth; compute and store no colour** — Lesson 6.8.
     ///

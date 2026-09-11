@@ -7,7 +7,7 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-09-10 (after Lesson 6.11 — 67 of 107 lessons)
+updated: 2026-09-11 (after Lesson 6.12 — 68 of 107 lessons)
 
 conventions:
   ecs-storage: THE ECS IS A SPARSE SET, DECIDED IN 5.7 BY MEASUREMENT, NOT TASTE.
@@ -110,6 +110,80 @@ conventions:
         opposite jobs. The namespace keeps them apart; `using namespace engine;`
         plus `using namespace engine::ecs;` makes bare `pool` ambiguous, which is
         the good kind of breakage. The engine never writes `using namespace`.
+  hdr: LESSON 6.12. THE ENGINE HAD NO HDR BUG — IT WAS AVOIDING THE QUESTION BY
+        CONSTRUCTION, and the two choices that held the lid on are both on record:
+        `k_reference_irradiance` = pi (6.2, so a white surface renders at exactly
+        1.0) and the demo's roughness of 0.49 (peak 0.8676, just under). Measured
+        at the light's MIRROR direction — not a sweep, see below — the same
+        equation gives 1.74 / 11.59 / 177.03 / 2824 at roughness .35/.20/.10/.05
+        and 55,917 for a polished metal. ABOVE 1.0 THE CLAMP IS TOTAL: 1.0 and
+        55,917 are the same code.
+        EXPOSURE = 1/(1.2 * 2^EV100). The 2^EV is the DEFINITION of a stop; the
+        1.2 is 78/(q*100) with q=0.65 from ISO 12232, a CAMERA CALIBRATION quoted
+        rather than derived (CLAUDE.md §3.2's rule, applied). The engine's old
+        behaviour is EV -0.263, which makes it A POINT ON THE NEW SCALE rather
+        than a special case beside it — that reframing is what turns a
+        replacement into a generalisation, and it is worth reaching for whenever
+        a lesson "replaces" something.
+        AN OPERATOR IS LEGAL IF: monotonic (or a highlight comes out darker than
+        its own edge), near the identity at 0 (or the dark end — where the encode
+        spends its codes — is wrong), bounded by 1 (or something downstream
+        clamps and you have a curve AND a clamp). Everything else is taste.
+        REINHARD DERIVED IN ONE LINE: divide by something ~1 for small x and ~x
+        for large x; the simplest is 1+x. WHITE POINT DERIVED from f(W)=1:
+        x(1+x/W^2)/(1+x), and W->inf recovers the plain operator. ACES IS A FIT,
+        five constants, no derivation — and its toe costs 13 CODES at x=0.02,
+        which is a real artistic choice made on your behalf.
+        THE 224. Plain Reinhard never reaches 1, and code 255 needs an input of
+        224 — NOT 768, which is what you get by inverting 254.5/255 in the wrong
+        space. THIS LESSON'S OWN AUTHOR MADE THAT MISTAKE IN A DOC COMMENT and
+        the harness caught it. Keeping codes and light apart is Module 6's
+        recurring subject and it does not stop being hard because you are the one
+        writing about it.
+        PER-CHANNEL vs LUMINANCE-ONLY IS A REAL CHOICE, like blend_space in 2.4.
+        Per-channel desaturates toward white (red:blue 20 -> 3.11), which is what
+        film does and is the default. Luminance-only preserves hue EXACTLY (20.00)
+        and then leaves a channel above 1 for the encode to clip — a pure blue of
+        (0,0,8) has luminance 0.5776, sails through, and arrives at 5.07, because
+        blue's luminance weight is 0.0722. It preserves the hue right up to the
+        point where it does not.
+        THE ORDER IS EXPOSURE -> CURVE -> ENCODE and each wrong order has its own
+        signature, both measured: exposure last turns code 203 into 128 AND
+        destroys the bright end's variation (everything above ~4 was already in
+        one place); curve after the encode maps mid grey to 0.4244 instead of
+        0.3333 and crushes the shadows first.
+        THE RESOLVE IS A SECOND PASS, NOT MORE FRAGMENT SHADER, and the three
+        reasons each become a real limitation within two lessons: an exposure
+        derived from the frame cannot be known while the frame is being drawn;
+        bloom (6.13) operates on the PRE-curve image; and blending would
+        composite tonemapped values, where f(a) over f(b) != f(a over b).
+        ONE TRIANGLE, NOT TWO, and 4.1 is why: fragments shade in aligned 2x2
+        quads, so along a shared diagonal every quad straddles both triangles and
+        is issued twice. NO VERTEX BUFFER AT ALL — the corners come from
+        SV_VertexID; `SDL_DrawGPUPrimitives(pass, 3, 1, 0, 0)` is the whole draw.
+        COLOR_TARGET *AND* SAMPLER on the HDR texture. Omitting the second gives a
+        texture that renders perfectly and reads as undefined, with no error on a
+        release device (6.10: SDL's GPU validation lives inside
+        `if (device->debug_mode)`).
+        METERING IS LOG-SPACE. One pixel in 10,000 at 5000 moves the ARITHMETIC
+        mean to 0.55 (of which 0.50 is that one pixel); the log-average is 0.05016.
+        11x apart on the same image, which is the difference between an exposure
+        that tracks the scene and one that flickers.
+        AND 6.11's _SRGB-vs-UNORM RULE DOES NOT TRANSFER TO A FLOAT TARGET —
+        there is no transfer function in the ROP to be right or wrong about,
+        because nothing in a float pipeline stores codes. `encode_output` has
+        always meant "must THIS shader apply the transfer function?", so on a
+        float target the answer is permanently 0: same number, THIRD reason.
+        Compositing there is 8.1x cheaper (9.25 ns vs 75.12) because 6.11's round
+        trip was never a cost of blending — it was a cost of storing something
+        other than light.
+        A SHARP LOBE CAN MISS THE SCREEN ENTIRELY. At roughness 0.15 the demo's
+        flat-faced scene peaked at 0.22 and reported ZERO pixels over the lid,
+        which is how a renderer with a real clipping problem looks fine. The demo
+        adds a TORUS — curved in both directions, so some point satisfies the
+        mirror condition from every viewpoint. Related diagnostic: if SHARPER
+        surfaces report LOWER peaks, the measurement is missing the lobe, not the
+        physics being surprising.
   transparency: LESSON 6.11. ALPHA IS COVERAGE — THE FRACTION OF THE PIXEL'S
         AREA A SURFACE OCCUPIES — NOT OPACITY, AND NEVER A QUANTITY OF LIGHT.
         `colour.hpp` has said so since 1.6 ("carry it separately if you need it");
@@ -3444,12 +3518,39 @@ completed:
   - 6.9  Cascaded Shadow Maps
   - 6.10 Mipmaps, LOD, and Anisotropic Filtering
   - 6.11 Transparency: Alpha Modes, Blending, and Draw Order
+  - 6.12 HDR and Tonemapping
         (6.9 and 6.10 were missing from this list until 6.11 added them — the
          list had not been appended to since 6.8 while `capabilities:` below was
          kept current, which is the append-and-merge rule being half-followed.
          Both are published and both are in the index; the omission was here.)
 
 capabilities:
+  - 6.12 AN HDR PIPELINE IN BOTH RENDERERS, AND THE LIGHT-UNITS DEBT PAID.
+    68 -> 70 public headers, 39 -> 41 sources, 15 -> 17 shaders. Golden
+    byte-identical at E917C06C for the TWENTY-FIRST lesson.
+    THE ENGINE WAS NOT GETTING HDR WRONG — IT WAS AVOIDING THE QUESTION BY
+    CONSTRUCTION, and saying so is the lesson's opening. TWO choices held the lid
+    on: `k_reference_irradiance` is pi so a white surface renders at exactly 1.0
+    (6.2 §5.2 derived it), and the demo's roughness is 0.49, which peaks at
+    0.8676 — JUST under. Change the second and the SAME shading equation returns
+    11.59 at roughness 0.20, 2824 at 0.05 and 55,917 for a polished metal
+    (15.8 stops), all stored as code 255. Above 1.0 the clamp is TOTAL, not lossy
+    at the margin.
+    THE GOLDEN HELD FOR A STRUCTURAL REASON, WHICH IS NEW AND STRONGER THAN 6.10's
+    AND 6.11's OPT-IN DEFAULTS: the fixture renders into an 8-bit `framebuffer`
+    and everything 6.12 built operates on a DIFFERENT BUFFER TYPE. Not "the
+    tonemapper is optional" but "the tonemapper is a stage over a target the
+    fixture does not have". Decide that question BEFORE writing code — 6.10's
+    habit, now three lessons old and never once wrong.
+    WHAT IS BUILT: `hdr_buffer` (CPU, 3x memory) and R16G16B16A16_FLOAT (GPU, 2x —
+    the difference is entirely the half float); exposure on the photographic EV
+    scale; four curves; `measure()` with BOTH means; a full-screen resolve pass on
+    both sides; `fill_style::hdr` as the sixth nullable target pointer.
+    NOT BUILT, NAMED: auto-exposure (Ex 8.3 — the log-average is already
+    measured), HDR DISPLAY output via SDL_GPUSwapchainComposition (Ex 8.5 — a
+    different subject: colour volume and metadata, not range), and a desaturation
+    step for luminance-only tonemapping.
+
   - 6.11 TRANSPARENCY IN BOTH RENDERERS, AND THE LAST SILENT GAP IN THE glTF
     IMPORTER CLOSED. 66 -> 68 public headers, 37 -> 39 sources. Golden
     byte-identical at E917C06C for the TWENTIETH lesson — and this one survived a
@@ -5996,6 +6097,7 @@ files:
             texture_probe.frag.hlsl,
             scene.vert.hlsl, scene.frag.hlsl,
             shadow.vert.hlsl, shadow.frag.hlsl                            [6.8]
+            fullscreen.vert.hlsl, tonemap.frag.hlsl                       [6.12]
             matrix_probe.frag.hlsl
   engine/: CMakeLists.txt
   engine/include/engine/: engine.hpp                      (the umbrella)
@@ -6014,6 +6116,8 @@ files:
             mipmap.hpp                                                      [6.10]
             blend.hpp                                                       [6.11]
             draw_order.hpp                                                  [6.11]
+            hdr.hpp                                                         [6.12]
+            gpu_post.hpp                                                    [6.12]
             debug_lines.hpp                                                 [5.11]
             depth_buffer.hpp, framebuffer.hpp, gpu_buffer.hpp, gpu_debug.hpp,
             gpu_device.hpp, gpu_mesh.hpp, gpu_pipeline.hpp, gpu_present.hpp,
@@ -6041,7 +6145,8 @@ files:
   engine/src/core/: actions.cpp [5.10], clock.cpp, fixed_step.cpp, input.cpp,
             log.cpp, profile.cpp
   engine/src/gfx/: cascade.cpp [6.9], mipmap.cpp [6.10],
-            blend.cpp [6.11], draw_order.cpp [6.11], clip.cpp, colour.cpp,
+            blend.cpp [6.11], draw_order.cpp [6.11],
+            hdr.cpp [6.12], gpu_post.cpp [6.12], clip.cpp, colour.cpp,
             debug_draw.cpp,
             debug_lines.cpp [5.11],
             depth_buffer.cpp,
@@ -6224,6 +6329,42 @@ files:
            is wider than pinning — ANY GENERATED ARTIFACT NEEDS A
            REGENERATE-AND-DIFF AFTER THE LAST EDIT TO ITS INPUTS, not only when you
            remember to pin.
+  scratch/ (6.12, not shipped with the engine): verify_612.cpp,
+           build_verify_612.sh, figs_612.py, build_612.py,
+           l612_body_{a,b,c}.html, l612_fig{1..6}.svg,
+           probe_612.cpp (a THROWAWAY, and it earned its keep twice: it
+           established the peaks the lesson opens with, and its FIRST version was
+           WRONG in an instructive way — it swept the eye through a plane that did
+           not contain the mirror direction, so SHARPER surfaces reported LOWER
+           peaks. A monotonic relationship coming out backwards is the diagnostic
+           that a measurement is missing the thing it measures).
+           PINNED BY 6.12, before a line of it was written: l611_blend.hpp,
+           l611_blend.cpp, l611_draw_order.hpp, l611_draw_order.cpp against
+           commit adec68d, plus l611_verify_611.cpp as a working-tree copy. THE
+           REBUILD DIFF WAS EXACTLY THE TWO NAV LINES, eleventh lesson running —
+           and the prediction was RIGHT: 6.12 did move blend.hpp (a doc note about
+           where 6.11's rule applies), so an unpinned build_611.py would have
+           spliced it into 6.11's page.
+           NEW TOOL, and it found three SHIPPED defects on its first run:
+           `figOrder` in docs/_template/check-page.js, which verifies that figure
+           captions read 1, 2, 3… in DOM order. 6.12's own first build had the
+           resolve diagram at 4 and the per-channel one at 5 while the body showed
+           them the other way round — the SECOND time this drift has shipped
+           (6.10 rendered fig4.png captioned "Figure 5") — and it happens because
+           the NUMBERS live in build_NN.py and the ORDER lives in the body
+           fragments. Sweeping every lesson page then found 02-05-matrices (3/4
+           swapped), 03-10-profiling-capstone (4,5,6 as 6,4,5) and
+           04-01-how-gpus-work (1,2,3,4 as 4,1,3,2). NOT FIXED IN THIS SESSION —
+           out of scope, and the fix must edit the BODY FRAGMENTS and the prose's
+           numbered references, not the rendered pages. Flagged as a task.
+           (build_612.py PINS NOTHING YET and lists SEVEN files whole. 6.13 is
+            bloom and the post-processing STACK, which is the second user of
+            gpu_post.{hpp,cpp} — and that header says outright it is "deliberately
+            not a stack" and that 6.13 asks the ownership question. Those two are
+            near certain to move and hdr.{hpp,cpp} are likely (a bright-pass
+            threshold and a downsample chain are both HDR operations wanting a
+            home). fullscreen.vert.hlsl should NOT move, which makes it the
+            control.)
   scratch/ (6.11, not shipped with the engine): verify_611.cpp,
            build_verify_611.sh, figs_611.py, build_611.py,
            l611_body_{a,b,c}.html, l611_fig{1..6}.svg, shot_figs.mjs (NEW, and
@@ -6459,59 +6600,65 @@ roadmap: RESHAPED 2026-09-08, AFTER TWO EXTERNAL REVIEWS OF THE PUBLISHED OUTLIN
             qualifier too, because a skimmer reads the recap and stops.
 
 
-next: 6.12 — HDR and Tonemapping
-      (planned filename: docs/lessons/06-12-hdr-tonemapping.html — 6.11's TWO
-      next links point at the index and BOTH need repointing; scratch/l611_body_a.html
-      holds the top one and build_611.py's TAIL the bottom.
-      PIN FIRST. build_611.py's LISTING_SOURCE is EMPTY and correctly so — every
-      file it lists whole, 6.11 created. It lists FIVE: blend.hpp, blend.cpp,
-      draw_order.hpp, draw_order.cpp and verify_611.cpp. The command:
-        for f in engine/include/engine/gfx/blend.hpp \
-                 engine/src/gfx/blend.cpp \
-                 engine/include/engine/gfx/draw_order.hpp \
-                 engine/src/gfx/draw_order.cpp; do
-          git show <6.11 commit>:$f > scratch/l611_$(basename $f)
+next: 6.13 — Bloom and the Post-Processing Stack
+      (planned filename: docs/lessons/06-13-bloom-post-stack.html — 6.12's TWO
+      next links point at the index and BOTH need repointing;
+      scratch/l612_body_a.html holds the top one and build_612.py's TAIL the
+      bottom.
+      PIN FIRST. build_612.py's LISTING_SOURCE is EMPTY and correctly so — every
+      file it lists whole, 6.12 created. It lists SEVEN: hdr.hpp, hdr.cpp,
+      gpu_post.hpp, gpu_post.cpp, fullscreen.vert.hlsl, tonemap.frag.hlsl and
+      verify_612.cpp. The command:
+        for f in engine/include/engine/gfx/hdr.hpp \
+                 engine/src/gfx/hdr.cpp \
+                 engine/include/engine/gfx/gpu_post.hpp \
+                 engine/src/gfx/gpu_post.cpp \
+                 shaders/fullscreen.vert.hlsl \
+                 shaders/tonemap.frag.hlsl; do
+          git show <6.12 commit>:$f > scratch/l612_$(basename $f)
         done
-        cp scratch/verify_611.cpp scratch/l611_verify_611.cpp   # gitignored
-      Then re-run build_611.py and `git diff` the page: TEN lessons running, the
-      diff has been exactly the nav lines meant to move.
+        cp scratch/verify_612.cpp scratch/l612_verify_612.cpp   # gitignored
+      Then re-run build_612.py and `git diff` the page: ELEVEN lessons running,
+      the diff has been exactly the nav lines meant to move.
 
-      WHY blend.{hpp,cpp} ARE NEAR CERTAIN TO MOVE, and it is the hinge of 6.12.
-      `blend_over` decodes both operands, composites, and RE-ENCODES through
-      `to_encoded`, which CLAMPS into [0,1] — because an 8-bit pixel has nowhere
-      to put the excess, exactly as `linear_rgb`'s doc comment has said since 1.6.
-      6.12's whole subject is that values above 1 stop being an error. So:
-        1 A float colour target has no encode at all, which means the CPU's
-          decode-blend-encode round trip (measured at 3.14x a byte lerp, 68.87 ns
-          against 21.94) is not what the GPU is doing any more either.
-        2 The `_SRGB`-versus-UNORM argument of 6.11 §3.2 DOES NOT TRANSFER
-          UNCHANGED to a float target: there is no transfer function in the ROP
-          to be right or wrong about. State what replaces it rather than leaving
-          6.11's rule to be over-applied.
-        3 `encode_output` in scene.frag.hlsl currently has two legal values and
-          6.12 gives it a third situation. It is already the most over-loaded
-          float in the block.
+      WHY gpu_post.{hpp,cpp} ARE CERTAIN TO MOVE. `gpu_post.hpp` says in its own
+      words that it is "deliberately not a post-processing stack", that it is one
+      pass with one input, and that 6.13 is where "how do several of these
+      compose, and who owns the intermediate targets?" gets asked properly. That
+      is a promise on record, in a shipped public header, and 6.13 is where it
+      comes due — the same shape as the mipmap debt 6.10 paid and the alphaMode
+      gap 6.11 closed.
 
-      WHAT 6.12 OWES, beyond the obvious:
-        1 WHERE THE HDR BUFFER GOES. `gpu_scene_renderer` creates its pipelines
-          against ONE colour format (4.4 bakes it in), so rendering to a float
-          target and then tonemapping to the swapchain is a second pass and a
-          second set of pipelines — on top of the NINE 6.11 just created. This is
-          where the pipeline-count argument stops being a curiosity and starts
-          being a reason to build the cache. Say so.
-        2 THE LIGHT UNITS DEBT. 6.2 and 6.4 both deferred to this lesson by name:
-          until it lands, every light is authored in whatever units happen to
-          look right. `k_reference_irradiance` exists for exactly that reason.
-          Check what those two lessons promised and pay it explicitly.
-        3 THE GOLDEN QUESTION, DECIDED FIRST. 6.10's habit, and 6.11 confirmed it
-          is the right order. A tonemap applied by default WOULD move the
-          reference render — it is a change to every pixel, not a new path — so
-          this is the first lesson since 6.4 where the honest answer may well be
-          "re-baseline and say so". DECIDE BEFORE WRITING CODE; written first,
-          the choice gets made by whichever was easier to retrofit.
-        4 BLOOM IS 6.13, NOT THIS LESSON. The index splits them and the split is
-          right: a bloom needs a post-processing STACK to live in, and a stack is
-          an architecture question.
-      CARRY FORWARD: 6.11's habit of naming a technique's ceiling with a number
-      (the 4x4 coverage floor, the intersecting quads) rather than a hedge.
+      WHAT 6.13 OWES, beyond the obvious:
+        1 THE ORDERING ARGUMENT, WHICH IS THE WHOLE REASON BLOOM IS NEXT. A bloom
+          operates on the PRE-TONEMAP image, because it is looking for exactly
+          the values above 1 that 6.12 finally lets the engine keep. So the stack
+          is not "a list of passes" — it is a list with a constraint, and the
+          constraint comes from physics rather than from taste. Say why a bloom
+          applied after the curve looks wrong (everything bright is already at
+          the same value, so the bloom has nothing to select).
+        2 WHO OWNS THE INTERMEDIATE TARGETS. A bloom is a downsample chain and a
+          blur, so it needs several targets at several sizes, reused across
+          frames. That is the question 6.12 declined to answer with one user, and
+          it is the SAME question 6.17's frame graph answers at a larger scale —
+          so 6.13 should build the small honest version and name the larger one
+          rather than pre-empting it.
+        3 THE PIPELINE COUNT, AGAIN. 6.11 made it nine; 6.12 added a resolve
+          pipeline against a second colour format. Every post pass is another
+          one, and this is where the enumerate-versus-hash argument stops being a
+          curiosity. 6.12 §4.6 set that up deliberately.
+        4 THE GOLDEN. Same structural answer as 6.12's should hold — a bloom is a
+          stage over the HDR target and the fixture has no HDR target — but
+          CHECK IT EARLY rather than assuming, because a stack that generalises
+          the resolve could plausibly reach into the LDR path.
+      CARRY FORWARD: 6.12's habit of opening by measuring what the engine was
+      ALREADY doing wrong (or already avoiding) before proposing anything, and
+      6.11's of naming a technique's ceiling with a number rather than a hedge.
+
+      AND ONE PIECE OF UNFINISHED BUSINESS, NOT 6.13's: `check-page.js`'s new
+      `figOrder` check found out-of-order figure numbers in THREE published
+      lessons — 02-05-matrices, 03-10-profiling-capstone, 04-01-how-gpus-work.
+      Real reader-facing defects (the prose refers to figures by number). The fix
+      must edit the body fragments and the prose references, then rebuild; it was
+      flagged as a task rather than done inside 6.12's session.
 ```

@@ -98,6 +98,27 @@ public:
     ///        bites on phones: a sampled depth target cannot stay in tile memory,
     ///        so `store_op` has to become `STORE` and the buffer is written out
     ///        to main memory in full.
+    /// A **colour target that can also be sampled** — Lesson 6.12.
+    ///
+    /// The HDR scene buffer. `COLOR_TARGET` because a pass renders into it, and
+    /// `SAMPLER` because the pass after it reads it — and the second flag is the
+    /// one that is easy to forget, because omitting it produces a texture that
+    /// renders perfectly and reads as undefined. This is the same pair
+    /// `create_depth(..., sampled)` documents for a shadow map, arriving on the
+    /// colour side: one is consumed by the pass that writes it, the other is read
+    /// back by a pass that comes after.
+    ///
+    /// **The format is a parameter and the default is a decision.**
+    /// `k_hdr_format` (R16G16B16A16_FLOAT) is argued for in `gpu_post.hpp`; the
+    /// short version is that a half float's precision is RELATIVE, so the dark
+    /// end gets the same accuracy as the bright end, which is exactly what a
+    /// fixed-point format cannot do.
+    [[nodiscard]] bool create_colour_target(const gpu_device& dev,
+                                            SDL_GPUTextureFormat format,
+                                            Uint32 width, Uint32 height,
+                                            const char* name = nullptr,
+                                            bool sampled = true);
+
     [[nodiscard]] bool create_depth(const gpu_device& dev, SDL_GPUTextureFormat format,
                                     Uint32 width, Uint32 height, const char* name = nullptr,
                                     bool sampled = false);

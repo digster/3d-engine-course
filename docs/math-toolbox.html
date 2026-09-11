@@ -2774,6 +2774,65 @@
       antialiasing resolve correct on premultiplied data and wrong on straight data.
     </p>
 
+    <h3>Exposure, and a curve that fits an unbounded range into [0, 1] <span class="from">Lesson 6.12</span></h3>
+
+    <p>
+      <strong>Exposure</strong> is a multiplier applied before any compression, expressed on the
+      photographic scale so that it can be talked about:
+    </p>
+
+    <div class="eq-plain">exposure = 1 / (1.2 × 2^EV100)</div>
+
+    <p>
+      One EV is one <em>stop</em> is a factor of two &mdash; that part is a definition. The 1.2 is
+      <code>78/(q·100)</code> with <code>q = 0.65</code> from ISO 12232's saturation-based speed,
+      which is a calibration of camera hardware and is quoted rather than derived. This
+      engine&rsquo;s pre-6.12 behaviour, where 1.0 mapped to white, is <strong>EV &minus;0.263</strong>.
+    </p>
+
+    <p>
+      <strong>A tonemap curve</strong> is any <em>f</em>: [0, &infin;) &rarr; [0, 1] that is
+      <strong>monotonic</strong>, <strong>close to the identity near zero</strong>, and
+      <strong>bounded by 1</strong>. Those three are what make one legal; everything else is taste.
+      Reinhard follows from wanting a denominator that is about 1 for small <em>x</em> and about
+      <em>x</em> for large <em>x</em>:
+    </p>
+
+    <div class="eq">\[ f(x) = \frac{x}{1 + x} \qquad\qquad f_W(x) = \frac{x\left(1 + \dfrac{x}{W^2}\right)}{1 + x} \]</div>
+    <div class="eq-plain">f(x) = x/(1+x)        f_W(x) = x(1 + x/W²)/(1 + x)</div>
+
+    <p>
+      The white-point variant is derived by requiring <code>f(W) = 1</code>:
+      <code>W(1 + 1/W)/(1+W) = (W+1)/(1+W) = 1</code>. As <em>W</em> &rarr; &infin; it becomes the
+      plain operator, which is the right behaviour for a generalisation.
+    </p>
+
+    <p>
+      <strong>The plain operator never reaches 1</strong>, and the arithmetic is a useful drill in
+      keeping codes and light apart: code 255 needs an <em>encoded</em> 254.5/255 = 0.998039, which
+      is a <em>linear</em> 0.995545, which needs <code>x = 223.5</code>. An input of
+      <strong>224</strong>, not the ~768 you get by inverting in the wrong space.
+    </p>
+
+    <h3>The log-average, and why a mean will not do <span class="from">Lesson 6.12</span></h3>
+
+    <div class="eq">\[ \bar{L}_{\log} = \exp\left(\frac{1}{N}\sum_i \log(L_i + \delta)\right) \]</div>
+    <div class="eq-plain">log-average = exp( mean of log(L + δ) )</div>
+
+    <p>
+      The geometric mean of luminance, which is what an exposure should be derived from. The
+      <strong>arithmetic</strong> mean is destroyed by outliers &mdash; one pixel in ten thousand at
+      5000 contributes ten times the rest of a dim frame put together, and the two disagree by
+      <strong>11&times;</strong> on exactly that image. The log of a large number is a small number,
+      which is the whole of the robustness.
+    </p>
+
+    <p>
+      The <code>&delta;</code> is not a fudge: a frame&rsquo;s background is exactly zero and
+      <code>log(0)</code> is negative infinity, so without it any frame containing one black pixel
+      has a log-average of zero. Reinhard&rsquo;s 2002 paper specifies it for this reason.
+    </p>
+
   <h2 id="performance"><span class="num">8</span>Reasoning about cost</h2>
 
   <p>

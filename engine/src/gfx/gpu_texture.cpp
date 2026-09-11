@@ -231,6 +231,52 @@ bool gpu_texture::create_sampled(const gpu_device& dev, SDL_GPUCommandBuffer* cb
     return true;
 }
 
+bool gpu_texture::create_colour_target(const gpu_device& dev, SDL_GPUTextureFormat format,
+                                       Uint32 width, Uint32 height, const char* name,
+                                       bool sampled)
+{
+    destroy();
+
+    if (!dev.valid() || width == 0 || height == 0
+        || format == SDL_GPU_TEXTUREFORMAT_INVALID)
+    {
+        return false;
+    }
+
+    device_ = dev.handle();
+    width_ = width;
+    height_ = height;
+    format_ = format;
+
+    SDL_GPUTextureCreateInfo ti{};
+    ti.type = SDL_GPU_TEXTURETYPE_2D;
+    ti.format = format_;
+    // BOTH USAGES. See the header: a scene buffer is written by one pass and read
+    // by the next, and dropping SAMPLER gives a texture that renders correctly
+    // and reads as undefined — with no error on a release device.
+    ti.usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET
+             | (sampled ? SDL_GPU_TEXTUREUSAGE_SAMPLER : 0u);
+    ti.width = width_;
+    ti.height = height_;
+    ti.layer_count_or_depth = 1;
+    ti.num_levels = 1;
+    ti.sample_count = SDL_GPU_SAMPLECOUNT_1;
+
+    texture_ = create_named_texture(device_, ti, name);
+    if (texture_ == nullptr)
+    {
+        ENGINE_LOG_ERROR(engine::log_gpu,
+                         "SDL_CreateGPUTexture(colour %ux%u %s) failed: %s",
+                         width_, height_, name_of(format_), SDL_GetError());
+        destroy();
+        return false;
+    }
+
+    // Nothing is uploaded: a render target's contents come from a render pass.
+    uploaded_bytes_ = 0;
+    return true;
+}
+
 bool gpu_texture::create_depth(const gpu_device& dev, SDL_GPUTextureFormat format,
                                Uint32 width, Uint32 height, const char* name,
                                bool sampled)

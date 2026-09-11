@@ -47,6 +47,7 @@
 
 #pragma once
 
+#include <engine/gfx/hdr.hpp>        // 6.12: tonemap_settings
 #include <engine/gfx/material.hpp>   // 6.5: uniforms_of
 #include <engine/math/mat4.hpp>
 #include <engine/math/vec2.hpp>
@@ -456,6 +457,67 @@ static_assert(offsetof(material_uniforms, textured) == packed_offset(24, 1), "")
 static_assert(offsetof(material_uniforms, normal_mapped) == packed_offset(28, 1), "");
 static_assert(offsetof(material_uniforms, alpha) == packed_offset(32, 1), "");
 static_assert(offsetof(material_uniforms, alpha_cutoff) == packed_offset(36, 1), "");
+
+/// What the resolve pass reads — Lesson 6.12.
+///
+/// **One register of payload and one of padding**, and the padding is honest: a
+/// constant buffer is allocated in 16-byte registers, and five floats need two of
+/// them whatever order they go in. Naming the pads rather than leaving the tail
+/// of the struct undefined is the rule this file has followed since 6.4 — and the
+/// names are unique across the whole shader, because HLSL cbuffer members share
+/// ONE namespace and a second `pad0` is a redefinition.
+struct tonemap_uniforms
+{
+    float exposure = 1.0f;      ///<  0 — multiplied BEFORE the curve
+    float white = 4.0f;         ///<  4 — what `reinhard_white` maps to exactly 1
+    float op = 0.0f;            ///<  8 — 0 clamp, 1 reinhard, 2 reinhard-white, 3 aces
+    float per_channel = 1.0f;   ///< 12 — 1 = per channel, 0 = luminance only
+
+    /// 16 — **`encode_output`'s third situation, moved where it can be answered.**
+    ///
+    /// In `scene.frag.hlsl` that flag means "does the target I write to apply the
+    /// transfer function?", and once the scene renders to a FLOAT target the
+    /// answer there is permanently "no". The question did not go away; it moved
+    /// to the pass that actually writes the display, which is the only place it
+    /// was ever answerable. 1 when the swapchain is a plain UNORM, 0 when it is
+    /// `_SRGB` and the hardware encodes on the write.
+    float encode = 0.0f;
+
+    float pad_t0 = 0.0f;        ///< 20
+    float pad_t1 = 0.0f;        ///< 24
+    float pad_t2 = 0.0f;        ///< 28
+};
+
+static_assert(sizeof(tonemap_uniforms) == 32, "two registers, exactly filled");
+static_assert(offsetof(tonemap_uniforms, exposure) == packed_offset(0, 1), "");
+static_assert(offsetof(tonemap_uniforms, white) == packed_offset(4, 1), "");
+static_assert(offsetof(tonemap_uniforms, op) == packed_offset(8, 1), "");
+static_assert(offsetof(tonemap_uniforms, per_channel) == packed_offset(12, 1), "");
+static_assert(offsetof(tonemap_uniforms, encode) == packed_offset(16, 1), "");
+
+/// Pack `tonemap_settings` into the block the resolve shader reads.
+///
+/// **The operator crosses as a NUMBER, spelled out rather than cast**, which is
+/// 6.4's rule about enums crossing a language boundary: `engine::tonemap` and the
+/// shader's `op` comparisons happen to agree today, and a `static_cast` would
+/// turn the day somebody reorders the enum into a silent change of curve. The
+/// switch stops compiling instead.
+[[nodiscard]] inline tonemap_uniforms uniforms_of(const tonemap_settings& s, bool shader_encodes)
+{
+    float op = 0.0f;
+    switch (s.op)
+    {
+    case tonemap::clamp:          op = 0.0f; break;
+    case tonemap::reinhard:       op = 1.0f; break;
+    case tonemap::reinhard_white: op = 2.0f; break;
+    case tonemap::aces:           op = 3.0f; break;
+    }
+    return {.exposure = s.exposure,
+            .white = s.white,
+            .op = op,
+            .per_channel = s.per_channel ? 1.0f : 0.0f,
+            .encode = shader_encodes ? 1.0f : 0.0f};
+}
 
 /// Pack a `material` into the block the fragment shader reads — Lesson 6.5.
 ///

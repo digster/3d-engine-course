@@ -60,6 +60,9 @@ add_library(engine STATIC
     src/gfx/gpu_device.cpp
     src/gfx/gpu_mesh.cpp
     src/gfx/gpu_pipeline.cpp
+    # Lesson 6.12. The first pass that draws no geometry: one full-screen
+    # triangle, one texture in, one texture out. 6.13 turns it into a stack.
+    src/gfx/gpu_post.cpp
     src/gfx/gpu_present.cpp
     src/gfx/gpu_scene.cpp
     src/gfx/gpu_shader.cpp
@@ -67,6 +70,11 @@ add_library(engine STATIC
     # pipeline with no colour target, and a depth texture that can be sampled.
     src/gfx/gpu_shadow.cpp
     src/gfx/gpu_texture.cpp
+    # Lesson 6.12. Exposure, the tonemap curves and the CPU resolve. A translation
+    # unit rather than a header because `resolve` is a full-screen loop and
+    # `measure` walks every pixel — neither belongs in every file that mentions a
+    # colour.
+    src/gfx/hdr.cpp
     # Lesson 6.6. The second asset format, and it gets its own translation
     # unit for the same reason obj.cpp has one: it is the ONLY file allowed
     # to see cgltf, so the dependency has exactly one place to leak from.

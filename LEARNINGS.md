@@ -6942,3 +6942,43 @@ kernel or footprint downstream of it.
   third register. The fix is to amend the assertion to what it was ever *about* (the flag is
   derived) and record the supersession in a comment — not to leave a harness failing, and not to
   pretend the earlier lesson was wrong.
+
+## Lesson 6.12 — HDR and tonemapping
+
+- **A monotonic relationship coming out backwards means the measurement is missing its target.**
+  `probe_612.cpp`'s first version swept the eye through a plane and reported that *sharper*
+  surfaces had *lower* specular peaks — roughness 0.05 peaking below roughness 0.35. The physics
+  was not surprising; the sweep never passed through the mirror direction, and a sharp lobe is a
+  few degrees wide. Evaluate at `reflect(−to_light, n)`. The same trap bites the demo: a
+  flat-faced scene at roughness 0.15 reports **zero** pixels over the lid, which is how a renderer
+  with a real clipping problem looks completely fine.
+
+- **Keeping codes and light apart does not get easier because you are the one writing about it.**
+  A doc comment in `hdr.hpp` claimed Reinhard needs an input of ~768 to reach code 255. The real
+  answer is **224**: the 254.5/255 threshold is an *encoded* value, and inverting the sRGB
+  transform first gives a linear 0.995545. I inverted in the wrong space — Module 6's recurring
+  mistake, committed in the module about it, and caught only because the harness measured the
+  number instead of repeating it. **Assert quantities you state in prose.**
+
+- **"Decide the golden question before writing code" is now three for three**, and 6.12 produced
+  the strongest form of the answer yet. 6.10 and 6.11 made their features opt-in *by default*;
+  6.12 did not need to, because tonemapping is a stage over a **different buffer type** and the
+  reference fixture has no such buffer. A structural reason beats a flag: nobody can turn it off by
+  accident.
+
+- **Hoisting can be free, and worth proving separately.** Moving a hundred lines of shading out of
+  `fragment` into `shade_lit` was pure code motion, and running the previous lesson's harness
+  immediately afterwards — before adding anything — is what made the later HDR work safe to do.
+  Verify the no-op step on its own; a refactor and a feature landing together have no control.
+
+- **Two files that must agree, with nothing checking them, will drift.** Figure numbers live in
+  `build_NN.py` and figure order lives in the body fragments. 6.10 shipped `fig4.png` captioned
+  "Figure 5"; 6.12's first build did the same thing with two figures. Added `figOrder` to
+  `check-page.js`, which then found the identical defect in **three already-published lessons**
+  (2.5, 3.10, 4.1). The lesson generalises past figures: when a fact is stated in two places, either
+  derive one from the other or check them, because discipline is not a mechanism.
+
+- **An explicit `destroy()` before a scope ends is still a bug.** 6.11's segfault taught this and
+  6.12's harness was written with the fix already in place — declare the device first so it is
+  destroyed last, and delete the hand-written teardown. Worth recording that the *second*
+  application of a lesson is where it pays.

@@ -672,6 +672,22 @@ float4 main(Input input) : SV_Target0
     //                       sRGB codes, so we must encode. Correct for opaque
     //                       geometry and wrong the moment anything blends.
     //
+    // LESSON 6.12 GIVES THIS FLAG A THIRD SITUATION AND NO THIRD VALUE, which is
+    // worth stating plainly rather than letting a reader infer it:
+    //
+    //   RENDERING TO A FLOAT HDR TARGET  -> pass 0, and it is now the only legal
+    //                       answer. There is no transfer function in a float
+    //                       target to be right or wrong about; the values written
+    //                       here ARE quantities of light, and the encode happens
+    //                       later, in `tonemap.frag.hlsl`, over the finished
+    //                       image. Same number as the `_SRGB` case, entirely
+    //                       different reason.
+    //
+    // So the flag's honest meaning has always been "must THIS shader apply the
+    // transfer function?", and 6.11's argument about `_SRGB` targets — which was
+    // about where the BLENDER sits — does not transfer to a float target at all.
+    // Nothing in a float pipeline lerps codes, because nothing stores codes.
+    //
     // The curve is the EXACT piecewise sRGB transform — the same constants as
     // engine::linear_to_srgb, because two implementations of "the sRGB curve"
     // that disagree are a bug that only shows up in a diff. Never pow(x, 1/2.2):
