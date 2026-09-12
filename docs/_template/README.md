@@ -322,6 +322,15 @@ Run silently before emitting any lesson (master prompt §11):
 - [ ] Prev/index/next correct in **both** navs, and `STATE.md` updated (in place, merged)?
 - [ ] Does the length serve depth — nothing padded, nothing truncated?
 - [ ] Every code listing compiles at this point in the course?
+- [ ] **`python3 docs/_template/check-builders.py` green** — every `build_NN.py`
+      still reproduces its published page byte for byte (§15)? Run it whenever a
+      lesson lands, and *before* editing a published page, so the diff you then
+      read is trustworthy.
+- [ ] **`python3 docs/_template/check-curriculum.py` green** — subtotals, totals,
+      badges, nav chains and internal links all agree with the lesson table?
+- [ ] Did this lesson's listings get **pinned** (`LISTING_SOURCE`) before the next
+      one starts editing those files (§15)? A pin costs a minute now and is
+      unrecoverable later.
 
 ## 13. Verifying a page
 
@@ -461,3 +470,89 @@ Do **not** decide "the stylesheet loaded" from `document.styleSheets[…].cssRul
 WebKit treats every file as its own origin and throws a `SecurityError` reading the CSSOM — on a
 sheet that loaded and applied perfectly. Judge it by computed style instead, the way
 `check-page.js` does.
+
+## 15. Reproducibility: a builder must still make its page
+
+```sh
+python3 docs/_template/check-builders.py              # all of them, ~10 s
+python3 docs/_template/check-builders.py 51 66        # just these
+python3 docs/_template/check-builders.py --diff 51    # show the first diff hunks
+python3 docs/_template/check-builders.py --figures    # also regenerate the SVGs first
+```
+
+Every `build_NN.py` runs in a throwaway copy-on-write clone of the tree and its
+output is compared with the published page. Exit status is 0 only when every one
+of them is byte-identical.
+
+**Why this is a standing check and not a one-off.** On 2026-09-12 an audit found
+**27 of 37 builders could no longer make their own page** — and the pages were
+fine, so nothing was visibly wrong until someone tried to rebuild one. Two
+independent causes:
+
+| Cause | What it looks like | The fix |
+|---|---|---|
+| **A — unpinned listings** | The builder opens a repository path, so the page shows the code as it stands *today*. Once Module 5's refactor deleted `src/`, eleven builders died at their first listing; the rest silently showed later lessons' code. | `LISTING_SOURCE`, mapping each listed path to a frozen copy. |
+| **B — stale body fragments** | A correction applied to the shipped HTML and never to the `lNN_body_*.html`, the pin, or `figs_NN.py` it came from. A rebuild *reverts* it. | Port the correction back into the source, with `scratch/autoport.py`. |
+
+**The measurement is the part that was wrong before.** An earlier pass asked one
+question — "did the page file change?" — and read *unchanged* as *reproduces*. A
+builder that dies on its first listing writes nothing, so eleven crashes scored
+as eleven passes, and the problem was filed as two builders. Exit status, output
+existence and output equality are three independent axes; the script reports them
+separately and never infers one from another. If you ever check this by hand,
+**check the exit status as well as the diff.**
+
+### Repairing one
+
+Work one builder at a time, and never accept a diff you have not explained.
+
+```sh
+python3 scratch/pin_listings.py 51 --out scratch/_dict51.txt   # freeze + verify pins
+python3 scratch/fix_builder.py 51 --commit 9e7c9fd --dict scratch/_dict51.txt
+python3 scratch/autoport.py   51            # SHOW the outstanding corrections
+python3 scratch/autoport.py   51 --apply    # port them back into the sources
+python3 docs/_template/check-builders.py 51
+```
+
+The helpers, and the single idea behind them — **the rebuild diff is the oracle**;
+every line it reports is a fix that lives on the page and not in its source:
+
+| Tool | What it does |
+|---|---|
+| `scratch/pin_listings.py` | Freezes every listed path from a commit, then *verifies* each pin appears verbatim in the shipped page. A wrong commit is caught here rather than as a mystery diff later. |
+| `scratch/which_commit.py` | Decides, per file, which commit's version a page actually published. The page embeds each listing escaped, so this is a substring test, not a judgement call. |
+| `scratch/fix_builder.py` | The three mechanical edits every pre-5.8 builder needs: add `LISTING_SOURCE`, retire the STATE stamping, stamp the shared-asset marker comments. |
+| `scratch/autoport.py` | Derives the corrections from the rebuild diff and ports them back. **Unbalanced hunks are reported, never guessed** — pairing a 3-line change against a 1-line one positionally would corrupt the source. |
+| `scratch/extract_listing.py` | Recovers a listing's lesson-era text *from the page itself*, round-trip checked. The last resort for a gitignored file (`scratch/verify_NN.cpp`) that later lessons rewrote. |
+| `scratch/extend_pins.py` | Grows a partial `LISTING_SOURCE` to the full listing set, keeping the original dict as a comment for its provenance. |
+
+### Four things that cost real time here
+
+- **A page can be pinned to a commit that is not its own.** When a lesson landed,
+  its session sometimes re-ran the *previous* builder to retrofit a `next` nav
+  link — and the live reads pulled the new lesson's code into the old lesson's
+  page. `05-02` shows `ENGINE_LOG_*` and `image_report`, both of which Lesson
+  **5.3** introduces; `05-04` shows a doc comment saying "Lesson 5.5 replaced
+  this struct's contents", inside Lesson 5.4. Their pins therefore come from
+  `ea7a05f` and `d599928`. Decide it with `which_commit.py`, never by assuming.
+  **The underlying pedagogical defect is real and is not fixed** — those two
+  pages show code from a lesson the student has not read yet.
+- **`html.unescape()` is not the inverse of the builder's `esc()`.** `esc()` maps
+  five characters; `unescape()` decodes the whole HTML5 entity table, including
+  legacy entities that need no semicolon. Use the five-rule inverse, `&amp;` last.
+- **The drift class recurses.** A page's source is a `.svg`; the `.svg`'s source
+  is `figs_NN.py`. Porting a diagram-label fix into only the SVG leaves the
+  generator able to revert it. `--figures` is the check for that layer.
+- **A correction can sit at any offset inside a wrapped Python string.** A figure
+  caption is split across several source lines, so a fix may exist as a whole
+  line in no source at all, and may land as the first or last character of a
+  fragment. `autoport` searches with context on either side *and neither*.
+
+### Known gaps, so they are not rediscovered as bugs
+
+`figs_45.py`, `figs_46.py` and `figs_48.py` read `.ppm` render captures that later
+sessions overwrote, so `--figures` reports those three as DIFF. **The published
+SVGs are correct and the pages rebuild from them** — it is the SVGs' own inputs
+that are lost, and recovering them would mean re-rendering Module 4 demos on a
+Module 6 engine. `figs_511.py` reads `build/swarm511.ppm`, which is why
+`--figures` keeps `build/` in the clone.

@@ -2571,3 +2571,56 @@ and a new `docs/_template/check-curriculum.py` to stop the index drifting again.
 > next
 
 (Resolved to Lesson 6.14 — Antialiasing: Geometric and Shading, per `STATE.md`'s `next:` block.)
+
+## Session — 2026-09-12 — Builder reproducibility
+
+> In /Users/ishan/lab/3d-engine-course, most lesson page generators (scratch/build_NN.py) can no
+> longer reproduce the published page they created. A full audit on 2026-09-12 found:
+>
+> - 10 reproduce byte-identically
+> - 11 CRASH with FileNotFoundError, writing nothing: build_37 build_38 build_39 build_42 build_43
+>   build_44 build_45 build_46 build_47 build_48 build_49. Cause: their LISTING_META reads files from
+>   `src/`, the directory Module 5's refactor deleted. (build_310 and build_41 had the same fault and
+>   were fixed on 2026-09-11.)
+> - 16 run but produce a DIFFERENT page: build_51 build_52 build_53 build_54 build_55 build_56
+>   build_57 build_58 build_59 build_510 build_511 build_61 build_62 build_64 build_66 build_67
+>
+> There are two distinct causes and they need different fixes:
+>
+> CAUSE A — unpinned listings. Several builders read repository files LIVE (no LISTING_SOURCE entry),
+> so every later lesson's edits leak into an earlier lesson's page. Files listed live by multiple
+> builders include CMakeLists.txt, engine/CMakeLists.txt,
+> engine/include/engine/gfx/soft_renderer.hpp, shaders/scene.frag.hlsl, shaders/scene.vert.hlsl. Fix
+> by pinning each to a frozen copy taken from the commit that shipped that lesson
+> (`git log --diff-filter=A -1 -- docs/lessons/<page>.html` gives it), the way build_66 onward already
+> do. NOTE: the older builders (build_51, 52, 54, 48, 39, …) have no LISTING_SOURCE mechanism at all —
+> the dict and the `LISTING_SOURCE.get(path, path)` lookup in `listing()` both have to be added.
+>
+> CAUSE B — stale body fragments. The 2026-09-08 "Module 8 -> Module 9" renumber was applied to the
+> shipped HTML and never to the scratch/lNN_body_*.html fragments, so a rebuild REVERTS it. Confirmed
+> in 5.1, 5.2, 5.4 and 5.11; likely in others. build_51.py's `next` nav link is stale the same way.
+> This is the FOURTH time this drift class has been found (6.9's retrofit links, then 3.10 and 4.1 on
+> 2026-09-11, now these). Fix by porting the shipped page's corrections back into the fragments.
+>
+> METHOD — this matters, and one wrong version of it caused this to be missed before:
+> 1. Check exit status AND the diff. A crashing builder writes nothing, so "the file did not change"
+>    wrongly reads as "the builder reproduces it". That exact mistake is why this was previously
+>    scoped as two builders.
+> 2. Work one builder at a time. For each: copy the shipped page aside, run the builder, compare. Fix
+>    causes A and B until the rebuild is byte-identical to the SHIPPED page. Never accept a diff you
+>    have not explained.
+> 3. `git checkout -- docs/lessons/` restores any page a failed attempt overwrote; keep the working
+>    tree clean between builders.
+> 4. When all are green, re-run the whole-site check: serve docs/ over HTTP and run
+>    docs/_template/check-page.js via Playwright/Chromium at widths 1280 and 390 (see
+>    docs/_template/README.md §13), plus python3 docs/_template/check-curriculum.py.
+>
+> Finally, add a reproducibility check to the authoring tooling so this cannot silently recur — a
+> script that, for every build_NN.py, runs it in a temp copy of the tree and asserts the output
+> matches the shipped page, reporting crashes and diffs separately. Wire it into the pre-flight
+> checklist in docs/_template/README.md and note it in CLAUDE.md §11's list.
+>
+> Then generate a git commit message (do not commit; never add Claude as author or co-author, per
+> CLAUDE.md).
+
+(Not a lesson. `STATE.md`'s `next:` is unchanged at 6.15.)

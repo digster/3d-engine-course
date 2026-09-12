@@ -7145,3 +7145,79 @@ kernel or footprint downstream of it.
   affordability comes from shading once per primitive per pixel — which is exactly why no sample
   count reaches shading aliasing. The same shape as 6.13's one-tap downsample foreclosing per-texel
   firefly weighting. **Ask what an optimisation removes access to, not just what it saves.**
+
+## The builder reproducibility repair (2026-09-12)
+
+Twenty-seven of thirty-eight page generators could no longer produce their own published page.
+Eleven crashed; sixteen ran and made something different. All thirty-eight reproduce byte-identically
+now, and the standing check is `docs/_template/check-builders.py`.
+
+- **Measure on the axes the failure actually has.** The audit that missed this asked one question —
+  "did the page file change?" — of a three-axis situation: *did it exit 0*, *did it write anything*,
+  *does what it wrote match*. A crashing builder writes nothing, so eleven crashes scored as eleven
+  passes and the problem was filed as two builders. The harness now reports the three separately and
+  refuses to infer one from another. Generalised: **when a check collapses several failure modes
+  into one observation, it will report the benign one.**
+
+- **The rebuild diff is the oracle.** Every line it prints is a correction that lives on the page and
+  not in its source, so repair is not guesswork: derive the pairs from the diff, route each to
+  whichever source produced that line, re-run. What made this mechanical was realising the four
+  spellings a page line can have — verbatim (body fragment), escaped (pinned listing), re-indented
+  (inline SVG), or not a line at all (a figure caption wrapped across Python string literals).
+
+- **A published page is a lossless archive of its own sources.** CLAUDE.md §8's "zero placeholders"
+  rule means every listing is embedded whole. So when `scratch/verify_54.cpp` — gitignored, therefore
+  no history — turned out to have been rewritten by Lessons 6.4 and 6.7, its 5.4-era text was still
+  recoverable *from the page that published it*. `scratch/extract_listing.py` does this and asserts
+  the round-trip. Four listings across 5.4, 5.6, 6.1, 6.2, 6.6 and 6.7 were recovered this way.
+
+- **`html.unescape()` is not the inverse of a five-rule escaper.** It decodes the entire HTML5 entity
+  table, including legacy entities with no semicolon, so round-tripping through it alters bytes the
+  escaper never touched. The inverse of `esc()` is five replacements with `&amp;` undone **last**.
+  Caught only because the extractor asserts its own round-trip — without that assertion it would have
+  written a quietly corrupted pin.
+
+- **A pin's right commit is decidable, not a judgement call.** The page embeds each listing escaped,
+  so "does this page show commit X's version of this file?" is a substring test. `which_commit.py`
+  answers it per file, which matters because two pages are pinned to a *later* lesson's commit
+  (below) and guessing would have silently rewritten them.
+
+- **The drift class recurses.** A page's source is an SVG; the SVG's source is `figs_NN.py`. Porting
+  a diagram-label fix into only the SVG leaves the generator able to revert it — the identical bug
+  one layer down. `check-builders.py --figures` is the check for that layer.
+
+- **My own tool shipped the bug it exists to catch.** `port_line.py` skipped TSV lines beginning with
+  `#` as comments; two of Lesson 5.1's corrections are CMake comment lines, so they were silently
+  dropped while the run still reported success. The fix was to delete the comment convention, which
+  had no user and only a failure mode. Same family as `class="tag mod"`: **plausible output with a
+  hole in it beats an error message at hiding.**
+
+### Two pedagogical defects found, deliberately NOT fixed
+
+Both are Cause A committed to history, and correcting them changes a published lesson's *content*,
+which is a different decision from making its builder reproducible. Recorded here for the author.
+
+- **`05-02-platform-layer.html` shows Lesson 5.3's code.** When 5.3 landed it re-ran `build_52.py` to
+  retrofit a `next` nav link; the live reads pulled 5.3's logging in — 156 lines in, 38 out. The page
+  shows `ENGINE_LOG_ERROR(...)` where 5.2 wrote `SDL_Log(...)`, `image_report` where 5.2 wrote
+  `image_status`, and `#include <engine/core/log.hpp>`, a header 5.3 creates. This violates §8's
+  "every listing must compile at this point in the course".
+
+- **`05-04-handles.html` shows Lesson 5.5's code**, from `d599928`, including a doc comment reading
+  "Lesson 5.5 replaced this struct's contents" — in the past tense, inside Lesson 5.4.
+
+These two are the *only* pages where the next lesson's commit changed more than the nav links; the
+other thirteen were `+2/-2`. That is what makes them findable and bounded.
+
+### One page byte-changed, zero rendered characters
+
+`06-06-gltf.html` had two raw `'` inside a *generated* listing, hand-typed by the 7756e93 retrofit
+where the builder's `esc()` emits `&#x27;`. No pin can make `esc()` produce a bare apostrophe, so the
+page was normalised instead. **A hand-edit to generated output is a fork; the page and its generator
+have to be brought back into agreement in one direction or the other, and the generator wins.**
+
+### Known gap, so it is not rediscovered as a bug
+
+`figs_45/46/48.py` read `.ppm` render captures that later sessions overwrote, so `--figures` reports
+those three as DIFF. The published SVGs are correct and the pages rebuild from them; it is the SVGs'
+own inputs that are lost. Recovering them means re-rendering Module 4 demos on a Module 6 engine.

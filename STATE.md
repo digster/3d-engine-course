@@ -7086,7 +7086,47 @@ next: 6.15 — Skybox and Image-Based Lighting
           only 4 failures because it compared the page before and after and called
           "unchanged" a pass — but a CRASHING builder writes nothing, so eleven
           failures read as successes. CHECK THE EXIT STATUS AS WELL AS THE DIFF.
-          Until that task lands, treat any pre-6.8 builder as unrunnable, and
-          remember that several of them list CMakeLists.txt, scene.frag.hlsl and
-          soft_renderer.hpp LIVE.
+
+          RESOLVED 2026-09-12. **ALL 38 BUILDERS NOW REPRODUCE THEIR PUBLISHED
+          PAGE BYTE-IDENTICALLY**, and the property is now CHECKED rather than
+          trusted: `python3 docs/_template/check-builders.py` runs every
+          build_NN.py in a copy-on-write clone and compares, reporting CRASH,
+          EMPTY and DIFF as separate outcomes (~10 s for all 38). It is in
+          CLAUDE.md §11 and README §12/§15. `--figures` also regenerates each
+          lesson's SVGs first, because the drift class RECURSES: a page's source
+          is an .svg and the .svg's source is figs_NN.py.
+
+          WHAT THIS CHANGES FOR EVERY FUTURE LESSON:
+          1 PIN THE LISTINGS AT THE START OF THE SESSION, before a line of the
+            new lesson is written. Every path a page lists now has a
+            LISTING_SOURCE entry — nothing is read live any more, including
+            CMakeLists.txt, engine/CMakeLists.txt, soft_renderer.hpp and the
+            scene shaders, which were the shared files doing most of the damage.
+          2 IF YOU CORRECT A PUBLISHED PAGE, PORT THE CORRECTION BACK into the
+            fragment, pin or figs_NN.py it came from, or the next rebuild reverts
+            it. `scratch/autoport.py NN` derives the list from the rebuild diff
+            and `--apply` ports it; the diff is the oracle.
+          3 A GITIGNORED LISTING (scratch/verify_NN.cpp) HAS NO HISTORY, so once
+            a later lesson edits it its lesson-era text exists only inside the
+            page. `scratch/extract_listing.py` recovers it from there,
+            round-trip checked. Six were recovered this way.
+
+          TWO PEDAGOGICAL DEFECTS FOUND AND DELIBERATELY LEFT (they change a
+          published lesson's CONTENT, which is the author's call, not a
+          reproducibility fix — see LEARNINGS.md):
+          - 05-02-platform-layer.html SHOWS LESSON 5.3'S CODE. 5.3's session
+            re-ran build_52.py for a nav link and the live reads pulled its
+            logging in (+156/-38). The page shows ENGINE_LOG_* where 5.2 wrote
+            SDL_Log, and includes a header 5.3 creates. Its pins therefore come
+            from ea7a05f, not 5175d70.
+          - 05-04-handles.html SHOWS LESSON 5.5'S CODE (d599928), including a doc
+            comment saying "Lesson 5.5 replaced this struct's contents" — inside
+            Lesson 5.4.
+          These two are the ONLY pages where the next lesson's commit changed more
+          than the nav links; the other thirteen were +2/-2.
+
+          KNOWN GAP, NOT A BUG: figs_45/46/48.py read .ppm captures that later
+          sessions overwrote, so --figures reports those three as DIFF. The
+          published SVGs are correct and the pages rebuild from them; it is the
+          SVGs' own inputs that are lost.
 ```

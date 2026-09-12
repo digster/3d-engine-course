@@ -1193,6 +1193,8 @@ docs/
     ├── lesson-template.html   # canonical lesson skeleton (links the shared files)
     ├── apply-shared.py        # authoring-time: verifies every page's shared links
     ├── check-page.js          # authoring-time: browser-side page verification
+    ├── check-curriculum.py    # authoring-time: index vs lesson table consistency
+    ├── check-builders.py      # authoring-time: every build_NN.py still makes its page
     └── README.md              # authoring & visual style guide
 ```
 
@@ -2276,6 +2278,8 @@ a broken window.
 ```sh
 python3 docs/_template/apply-shared.py --check   # before committing docs/ changes
 python3 docs/_template/apply-shared.py           # after editing lesson-template.html
+python3 docs/_template/check-curriculum.py       # index vs the lesson table
+python3 docs/_template/check-builders.py         # every generator still makes its page
 cd docs && python3 -m http.server 8000           # then verify in a real browser
 ```
 
@@ -2286,6 +2290,21 @@ lints for inline `fill=` on SVG `<text>`, which the shared stylesheet silently o
 Verify pages in **Playwright/Chromium over HTTP, never an embedded preview pane** — the pane
 misreports computed styles, so a dead highlighter or a broken theme toggle can look correct
 there.
+
+#### The generators, and why they are checked
+
+Each lesson page under `docs/lessons/` is assembled by a `scratch/build_NN.py` out of prose
+fragments, computed SVGs and code listings. **A listing must be pinned, never read live.** A
+builder that opens a repository path renders the code as it stands *today*, so every later
+lesson's edits leak backwards into an earlier page — and when Module 5's refactor deleted `src/`,
+eleven builders stopped running at all. The pin is a `LISTING_SOURCE` dict mapping each listed
+path to a frozen copy in `scratch/`.
+
+`check-builders.py` runs every generator in a copy-on-write clone of the tree and compares the
+result with the published page, reporting **crashes, empty output and content differences as
+separate outcomes** — because a crashing builder writes nothing, so "the page did not change" is
+not evidence that it reproduces. It is in the pre-flight checklist (CLAUDE.md §11); the repair
+workflow and its helpers are `docs/_template/README.md` §15.
 
 ### Shaders (Module 4+)
 
