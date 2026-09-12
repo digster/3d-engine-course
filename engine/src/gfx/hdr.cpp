@@ -12,6 +12,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>   // Lesson 6.15: binary16 bit twiddling
+#include <cstring>
 
 namespace engine {
 
@@ -252,6 +254,117 @@ void resolve(const hdr_buffer& src, framebuffer& dst, const tonemap_settings& s,
             out[x] = to_encoded(mapped, mode);
         }
     }
+}
+
+
+// ---------------------------------------------------------------------------
+// Lesson 6.15 — binary16
+// ---------------------------------------------------------------------------
+
+Uint16 float_to_half(float value)
+{
+    // Read the float's bits. `std::memcpy` and not a union or a reinterpret cast:
+    // this is the only way to type-pun that is defined behaviour in C++, and
+    // every compiler this course targets turns it into the same single move.
+    std::uint32_t bits = 0;
+    std::memcpy(&bits, &value, sizeof(bits));
+
+    const std::uint32_t sign = (bits >> 16) & 0x8000u;
+    std::int32_t exponent = static_cast<std::int32_t>((bits >> 23) & 0xFFu) - 127;
+    std::uint32_t mantissa = bits & 0x007FFFFFu;
+
+    // NaN and infinity keep their identity. A NaN must stay a NaN — turning it
+    // into the largest finite half would hide the bug that produced it, and a
+    // silent 65,504 where an environment map has a NaN is far worse to debug
+    // than a level of the prefilter coming back as NaN.
+    if (exponent == 128)
+    {
+        return static_cast<Uint16>(sign | 0x7C00u | (mantissa != 0 ? 0x0200u : 0u));
+    }
+
+    // OVERFLOW -> the largest finite half, 65,504. See the header: an infinity
+    // in a radiance map poisons every integral that touches it.
+    if (exponent > 15) { return static_cast<Uint16>(sign | 0x7BFFu); }
+
+    // SUBNORMAL. Below 2^-14 the exponent is pinned at its minimum and the
+    // mantissa shifts right to make up the difference, with the implicit leading
+    // 1 becoming explicit. Below 2^-25 even that runs out and the answer is
+    // signed zero.
+    if (exponent < -14)
+    {
+        if (exponent < -25) { return static_cast<Uint16>(sign); }
+        mantissa |= 0x00800000u;                       // the implicit 1, made explicit
+        const std::uint32_t shift = static_cast<std::uint32_t>(-exponent - 14) + 13u;
+        const std::uint32_t half_mantissa = mantissa >> shift;
+        // ROUND TO NEAREST EVEN, in the one line that does it: add the bit just
+        // below the rounding point, then add one more if the result is odd and
+        // the remainder is exactly half. Truncating here would darken every
+        // small value by half a step on average.
+        const std::uint32_t remainder = mantissa & ((1u << shift) - 1u);
+        const std::uint32_t halfway = 1u << (shift - 1);
+        std::uint32_t rounded = half_mantissa;
+        if (remainder > halfway || (remainder == halfway && (half_mantissa & 1u) != 0u))
+        {
+            ++rounded;
+        }
+        return static_cast<Uint16>(sign | rounded);
+    }
+
+    // THE COMMON CASE. Rebias the exponent from 127 to 15, keep the top ten
+    // mantissa bits, and round to nearest even on the thirteen we are dropping.
+    const std::uint32_t half_exponent = static_cast<std::uint32_t>(exponent + 15) << 10;
+    const std::uint32_t half_mantissa = mantissa >> 13;
+    const std::uint32_t remainder = mantissa & 0x1FFFu;
+    std::uint32_t out = sign | half_exponent | half_mantissa;
+    if (remainder > 0x1000u || (remainder == 0x1000u && (half_mantissa & 1u) != 0u))
+    {
+        // The carry is allowed to ripple into the exponent, which is correct:
+        // rounding 65,503.9 up gives 65,504, and rounding a mantissa of all ones
+        // up gives the next exponent with a zero mantissa. The one case this
+        // must not do silently is rounding the largest finite half up into
+        // infinity, which cannot happen here because `exponent > 15` was
+        // already handled above.
+        ++out;
+    }
+    return static_cast<Uint16>(out);
+}
+
+float half_to_float(Uint16 bits)
+{
+    const std::uint32_t sign = static_cast<std::uint32_t>(bits & 0x8000u) << 16;
+    const std::uint32_t exponent = (bits >> 10) & 0x1Fu;
+    const std::uint32_t mantissa = bits & 0x03FFu;
+
+    std::uint32_t out;
+    if (exponent == 0)
+    {
+        if (mantissa == 0) { out = sign; }               // signed zero
+        else
+        {
+            // SUBNORMAL, NORMALISED BACK. Shift the mantissa left until its
+            // leading 1 reaches bit 23, decrementing the exponent as we go —
+            // which is the inverse of what the encoder did, written as the loop
+            // it actually is rather than as a clever count-leading-zeros that
+            // would need its own explanation.
+            std::uint32_t m = mantissa;
+            std::int32_t e = -14;
+            while ((m & 0x0400u) == 0u) { m <<= 1; --e; }
+            m &= 0x03FFu;
+            out = sign | (static_cast<std::uint32_t>(e + 127) << 23) | (m << 13);
+        }
+    }
+    else if (exponent == 31)
+    {
+        out = sign | 0x7F800000u | (mantissa << 13);     // inf or NaN
+    }
+    else
+    {
+        out = sign | ((exponent + 112u) << 23) | (mantissa << 13);   // 127 - 15 = 112
+    }
+
+    float value = 0.0f;
+    std::memcpy(&value, &out, sizeof(value));
+    return value;
 }
 
 } // namespace engine

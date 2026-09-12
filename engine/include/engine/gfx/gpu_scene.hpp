@@ -297,6 +297,52 @@ public:
     ///        drift from the code it describes is worse than none, because it
     ///        is believed. `verify_49` §D checks the log against `draw_stats`,
     ///        which is a second reading of the same events.
+    /// The environment's three resources, **gathered into a struct because the
+    /// alternative had stopped being readable**. Lesson 6.15.
+    ///
+    /// `render` already takes nine parameters, four of them optional pointers,
+    /// and `hdr.hpp`'s `resolve` said the same thing one lesson earlier: "two
+    /// inputs is the point at which this signature stops scaling... a third
+    /// would need a struct". Three more would have made twelve. They also
+    /// genuinely belong together — an irradiance map baked from one sky and a
+    /// prefiltered chain baked from another produce a diffuse and a specular
+    /// term that disagree about where the sun is, which is a failure the type
+    /// system can help with by making them arrive as one thing.
+    ///
+    /// **All three are required together.** A null `scene_environment` (or a
+    /// null pointer to one) binds the renderer's own identity fallbacks — a 1x1
+    /// BLACK cube and a 1x1 black table — which is the fourth instance of this
+    /// class's stated pattern: hand the shader the identity element of the
+    /// feature it is missing. Black is the identity for the ADDITION the
+    /// ambient term performs, where white was the identity for the albedo's
+    /// multiply and lavender for a basis change. Note that the fallback is
+    /// bound whether or not `ibl_intensity` is zero: HLSL does not elide a
+    /// resource because a branch did not reach it, and an unbound sampler slot
+    /// is undefined rather than empty.
+    struct scene_environment
+    {
+        SDL_GPUTexture* irradiance = nullptr;   ///< TextureCube, slot 3
+        SDL_GPUTexture* prefiltered = nullptr;  ///< TextureCube, slot 4
+        SDL_GPUTexture* brdf_lut = nullptr;     ///< Texture2D, slot 5
+
+        /// The sampler for both cube maps. **CLAMP_TO_EDGE and trilinear**, and
+        /// the mip filter is not optional: the prefiltered chain is indexed by a
+        /// continuous roughness, so `nearest` between levels would make a
+        /// smoothly-varying roughness step visibly between blur radii.
+        SDL_GPUSampler* cube_sampler = nullptr;
+
+        /// The sampler for the table. **CLAMP_TO_EDGE, linear, one level.**
+        /// Repeat here would wrap a grazing `n.v` round to the head-on entry.
+        SDL_GPUSampler* lut_sampler = nullptr;
+
+        [[nodiscard]] bool complete() const
+        {
+            return irradiance != nullptr && prefiltered != nullptr
+                && brdf_lut != nullptr && cube_sampler != nullptr
+                && lut_sampler != nullptr;
+        }
+    };
+
     /// @param shadow the shadow map to bind at fragment slot 2, or `nullptr` for
     ///        "this scene has none" — in which case the renderer binds its own
     ///        **1x1 depth texture cleared to the far plane**, Lesson 6.8.
@@ -322,7 +368,8 @@ public:
                       frame_log* log = nullptr,
                       SDL_GPUTexture* shadow = nullptr,
                       SDL_GPUSampler* shadow_sampler = nullptr,
-                      const cascade_uniforms* cascades = nullptr) const;
+                      const cascade_uniforms* cascades = nullptr,
+                      const scene_environment* environment = nullptr) const;
 
     /// The white 1x1 texture, for callers that want to bind it themselves.
     [[nodiscard]] SDL_GPUTexture* white() const { return white_.handle(); }
@@ -357,6 +404,14 @@ private:
     /// is the only way to write a depth texture at all: `SDL_UploadToGPUTexture`
     /// cannot target one.
     gpu_texture far_depth_;
+
+    /// 6.15's identity fallbacks — a black cube and a black table. Both are
+    /// 1x1, both are bound whenever the caller has no environment, and both
+    /// exist because a declared-but-unbound sampler slot is undefined behaviour
+    /// rather than a no-op.
+    gpu_texture black_cube_;
+    gpu_texture black_lut_;
+    gpu_sampler cube_sampler_;
 
     /// 6.8. The comparison sampler for the fallback, and for callers that have a
     /// map but no sampler of their own.

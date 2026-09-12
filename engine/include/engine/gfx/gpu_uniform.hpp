@@ -286,10 +286,44 @@ struct scene_light_uniforms
     float shadow_mode;        ///< 160 — 0 none, 1 constant, 2 slope, 3 normal
     float shadow_normal_scale;///< 164 — texels of normal offset at grazing
     float shadow_texel_uv;    ///< 168 — 1/resolution: one texel, in uv
-    float pad2;               ///< 172 — fills the eleventh register
+
+    // ---- Lesson 6.15 --------------------------------------------------------
+
+    /// 172 — **the third free ride**, and the last one this block has to give.
+    ///
+    /// It was `pad2`, the slot 6.8 added to fill the eleventh register, so the
+    /// environment's master switch cost zero bytes — the same gift 6.7 got from
+    /// 6.4's padding and 6.14 got from 6.11's.
+    ///
+    /// **0 means "no environment": the shader falls back to `ambient`**, which
+    /// is what keeps every picture made before this lesson byte-identical. 1
+    /// means the environment at the radiance it was baked with; other values are
+    /// an artistic scalar and are honest about being one.
+    float ibl_intensity;
+
+    /// 176 — `prefiltered.levels() - 1`. **This one costs a whole register**,
+    /// taking the block from eleven to twelve, and the cost is named rather than
+    /// absorbed because three lessons running have been free and a reader could
+    /// reasonably have started to expect it.
+    ///
+    /// It cannot be a constant in the shader. The chain's depth is chosen by
+    /// `bake_environment` at run time, and the roughness-to-level mapping is a
+    /// property of how the chain was built — so a hard-coded 5 in HLSL would be
+    /// a number that must agree with a number in C++, in another language, with
+    /// nothing checking. That is precisely the failure mode the `static_assert`s
+    /// in this file exist to make impossible, so importing it back in through
+    /// the shader would be a poor trade for 16 bytes a frame.
+    float ibl_max_level;
+
+    float ibl_pad0;           ///< 180
+    float ibl_pad1;           ///< 184
+    float ibl_pad2;           ///< 188 — fills the twelfth register
 };
 
-static_assert(sizeof(scene_light_uniforms) == 176, "eleven registers, exactly filled");
+static_assert(sizeof(scene_light_uniforms) == 192, "twelve registers, exactly filled");
+static_assert(offsetof(scene_light_uniforms, ibl_intensity) == 172,
+              "Lesson 6.15 must land in 6.8's pad, or it is not free");
+static_assert(offsetof(scene_light_uniforms, ibl_max_level) == 176, "");
 
 /// The per-cascade half of the shadow contract. Lesson 6.9, **fragment slot 2**.
 ///

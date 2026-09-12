@@ -2,6 +2,9 @@
 
 #include <engine/gfx/gpu_scene.hpp>
 
+#include <engine/gfx/cubemap.hpp>   // Lesson 6.15: the 1x1 black fallback cube
+#include <engine/gfx/gpu_post.hpp>  // k_hdr_format
+
 #include <engine/core/log.hpp>
 #include <engine/gfx/image.hpp>
 
@@ -221,8 +224,33 @@ bool gpu_scene_renderer::create(const gpu_device& dev,
     const SDL_GPUTextureFormat shadow_fmt =
         supported_shadow_format(dev, k_shadow_candidates, 3);
 
+    // ---- Lesson 6.15: the environment's identity elements -------------------
+    //
+    // A 1x1 BLACK cube map and a 1x1 black table, built through the same
+    // `create_cube` path a real environment uses so that the fallback exercises
+    // the code rather than bypassing it. Black is the identity for addition,
+    // which is what the ambient term does with them — see the header.
+    //
+    // `k_hdr_format` and not an 8-bit format, because the shader's
+    // `TextureCube<float4>` binding does not care but a format mismatch between
+    // the fallback and the real thing is the sort of difference that makes a
+    // bug appear only when the feature is switched off.
+    cube_map black_env(1, 1);
+    const bool cube_ok =
+        black_cube_.create_cube(dev, cb, black_env, k_hdr_format, "black cube 1x1 (no env)")
+        && cube_sampler_.create(dev, filter::linear, address_mode::clamp_to_edge,
+                                "environment (trilinear, clamped)", filter::linear);
+
+    image_data black_texel;
+    black_texel.width = 1;
+    black_texel.height = 1;
+    black_texel.source_channels = 4;
+    black_texel.pixels = {0, 0, 0, 255};
+
     if (!white_.create_sampled(dev, cb, one_texel, true, "white 1x1")
-        || !flat_normal_.create_sampled(dev, cb, flat_texel, false, "flat normal 1x1"))
+        || !flat_normal_.create_sampled(dev, cb, flat_texel, false, "flat normal 1x1")
+        || !black_lut_.create_sampled(dev, cb, black_texel, false, "black brdf lut 1x1")
+        || !cube_ok)
     {
         ENGINE_LOG_ERROR(engine::log_gpu, "gpu_scene: the fallback textures were not created");
         SDL_SubmitGPUCommandBuffer(cb);
@@ -332,7 +360,8 @@ draw_stats gpu_scene_renderer::render(SDL_GPUCommandBuffer* cb, SDL_GPURenderPas
                                       SDL_GPUSampler* sampler, frame_log* log,
                                       SDL_GPUTexture* shadow,
                                       SDL_GPUSampler* shadow_sampler,
-                                      const cascade_uniforms* cascades) const
+                                      const cascade_uniforms* cascades,
+                                      const scene_environment* environment) const
 {
     draw_stats stats;
     if (cb == nullptr || pass == nullptr || items == nullptr || count <= 0) { return stats; }
@@ -397,6 +426,23 @@ draw_stats gpu_scene_renderer::render(SDL_GPUCommandBuffer* cb, SDL_GPURenderPas
     SDL_GPUSampler* const shadow_samp =
         (shadow_sampler != nullptr) ? shadow_sampler : shadow_sampler_.handle();
 
+    // ---- The environment, resolved once for the whole frame — Lesson 6.15 ---
+    //
+    // Same shape as the shadow map above and for the same reason: three
+    // resources that do not change between draws, folded into the one
+    // `SDL_BindGPUFragmentSamplers` call the albedo already forces. The array
+    // goes from three entries to six and the call count does not move.
+    //
+    // AN INCOMPLETE ENVIRONMENT IS TREATED AS NO ENVIRONMENT, not as a partial
+    // one. Binding two of the three would leave the shader reading an undefined
+    // slot, and `complete()` says so in one place rather than three.
+    const bool have_env = (environment != nullptr) && environment->complete();
+    SDL_GPUTexture* const irr_tex = have_env ? environment->irradiance : black_cube_.handle();
+    SDL_GPUTexture* const pre_tex = have_env ? environment->prefiltered : black_cube_.handle();
+    SDL_GPUTexture* const lut_tex = have_env ? environment->brdf_lut : black_lut_.handle();
+    SDL_GPUSampler* const cube_samp = have_env ? environment->cube_sampler : cube_sampler_.handle();
+    SDL_GPUSampler* const lut_samp = have_env ? environment->lut_sampler : cube_sampler_.handle();
+
     for (int i = 0; i < count; ++i)
     {
         const gpu_draw_item& item = items[i];
@@ -443,14 +489,25 @@ draw_stats gpu_scene_renderer::render(SDL_GPUCommandBuffer* cb, SDL_GPURenderPas
             // does not merge with an earlier one, it REPLACES the range it names,
             // so slot 2 would be unbound the moment slot 0 changed. One call for
             // the whole set is the only spelling that is correct.
-            SDL_GPUTextureSamplerBinding binds[3]{};
+            // SIX SLOTS NOW, and the comment above about a partial bind
+            // REPLACING the range it names is the reason all six travel
+            // together: slots 3 to 5 do not change within a frame, but rebinding
+            // slot 0 alone would leave them unbound. The rule that made three
+            // correct makes six correct and costs the same call.
+            SDL_GPUTextureSamplerBinding binds[6]{};
             binds[0].texture = tex;
             binds[0].sampler = sampler;
             binds[1].texture = nrm;
             binds[1].sampler = sampler;
             binds[2].texture = shadow_tex;
             binds[2].sampler = shadow_samp;
-            SDL_BindGPUFragmentSamplers(pass, 0, binds, 3);
+            binds[3].texture = irr_tex;
+            binds[3].sampler = cube_samp;
+            binds[4].texture = pre_tex;
+            binds[4].sampler = cube_samp;
+            binds[5].texture = lut_tex;
+            binds[5].sampler = lut_samp;
+            SDL_BindGPUFragmentSamplers(pass, 0, binds, 6);
             bound_texture = tex;
             bound_normal = nrm;
             ++stats.texture_binds;

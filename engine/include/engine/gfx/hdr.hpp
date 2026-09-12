@@ -363,4 +363,55 @@ void resolve(const hdr_buffer& src, framebuffer& dst, const tonemap_settings& s,
              encode_mode mode = encode_mode::exact,
              const hdr_buffer* bloom = nullptr, float bloom_intensity = 0.0f);
 
+
+// ---------------------------------------------------------------------------
+// Lesson 6.15 — half floats, because HDR data has to reach the device somehow
+// ---------------------------------------------------------------------------
+
+/// Encode a `float` as an IEEE 754 **binary16** bit pattern.
+///
+/// **Why this function did not exist until Lesson 6.15.** Everything HDR in this
+/// engine so far has been PRODUCED on the GPU — `gpu_post_stack` renders into a
+/// `k_hdr_format` target and reads it back through a sampler, and no half float
+/// ever crosses the CPU boundary. An environment map is the first HDR data that
+/// is computed on the CPU and has to be uploaded, and `SDL_UploadToGPUTexture`
+/// takes bytes in the texture's own format. There is no half type in C++20 and
+/// no SDL helper, so this is ours to write.
+///
+/// **The format, which is worth knowing once**: 1 sign bit, 5 exponent bits with
+/// a bias of 15, 10 mantissa bits. That gives a largest finite value of 65,504
+/// and about 3 decimal digits of precision — and the precision is RELATIVE,
+/// which is exactly the property `gpu_post.hpp` argues makes half floats right
+/// for light. A sun disc at 6,000 stores with a relative error of about 0.05%;
+/// the sky at 0.4 stores with the same 0.05%.
+///
+/// **The three cases that are not the common one**, each of which produces a
+/// visible artefact if skipped:
+///
+///   - **Overflow.** Anything above 65,504 becomes `inf`, and an `inf` in an
+///     environment map propagates through the prefilter into a whole mip level
+///     of NaN. We CLAMP to the largest finite half instead, and say so here
+///     rather than leaving a caller to discover it: a sun stored at 65,504
+///     instead of 100,000 is wrong by a stop and a half, and an `inf` is wrong
+///     by everything.
+///   - **Underflow to subnormal.** Below 2^-14 the exponent cannot go lower and
+///     the mantissa has to absorb the shift. Getting this wrong rounds small
+///     values to zero, which on a radiance map is invisible until you tonemap
+///     with a low exposure and find the shadows have quantised.
+///   - **Round to nearest even**, not truncate. Truncation biases every value
+///     downward by half a step on average, which over a whole environment map is
+///     a systematic darkening rather than noise.
+///
+/// @return the 16 bits, in the low half of a `Uint16`. Negative inputs are
+///         encoded faithfully even though radiance cannot be negative, because a
+///         function that silently clamps its input is a function whose test
+///         cannot tell you it is working.
+[[nodiscard]] Uint16 float_to_half(float value);
+
+/// Decode a binary16 bit pattern back to `float`. **Exact** — every half is
+/// representable as a float — which is what makes the round trip
+/// `half_to_float(float_to_half(x))` a measurable quantity rather than a hope.
+/// `verify_615` §I measures its worst relative error across five decades.
+[[nodiscard]] float half_to_float(Uint16 bits);
+
 } // namespace engine

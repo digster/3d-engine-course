@@ -104,6 +104,37 @@ SamplerState      normal_sampler : register(s1, space2);
 Texture2DArray<float>  shadow_map     : register(t2, space2);
 SamplerComparisonState shadow_sampler : register(s2, space2);
 
+// ---- LESSON 6.15: THE ENVIRONMENT, IN THREE PIECES -------------------------
+//
+// `TextureCube`, and it is a DIFFERENT BINDING TYPE from both `Texture2D` and
+// `Texture2DArray` — the third such distinction this shader carries, after
+// 6.8's comparison sampler and 6.9's array. A cube takes a `float3` DIRECTION
+// where an array takes a `float2` and an index, and the hardware does the face
+// selection, the divide by the major axis, and the part software cannot: it
+// filters ACROSS FACE EDGES. `cube_map::sample` on the CPU cannot, and its
+// header says so; this is the one place in the lesson where the GPU is simply
+// better rather than merely faster.
+//
+// THREE RESOURCES, NOT ONE, because the split-sum approximation has three
+// factors and they are precomputed at three different rates:
+//
+//   irradiance_map   integral 1, the diffuse half. Depends on the environment
+//                    only. Tiny (32x32 faces) because a cosine convolution
+//                    leaves nothing finer than about 60 degrees.
+//   prefiltered_map  integral 2's first bracket. Depends on the environment,
+//                    with the ROUGHNESS spread across its mip levels.
+//   brdf_lut         integral 2's second bracket. Depends on NEITHER the
+//                    environment nor the material — one 64x64 table serves
+//                    every scene this engine will ever render, which is the
+//                    most surprising consequence of Schlick's Fresnel being
+//                    linear in F0.
+TextureCube<float4> irradiance_map      : register(t3, space2);
+SamplerState        irradiance_sampler  : register(s3, space2);
+TextureCube<float4> prefiltered_map     : register(t4, space2);
+SamplerState        prefiltered_sampler : register(s4, space2);
+Texture2D<float4>   brdf_lut            : register(t5, space2);
+SamplerState        brdf_sampler        : register(s5, space2);
+
 // ---- Per FRAME: the cascades — Lesson 6.9 ----------------------------------
 //
 // A second per-frame block rather than a bigger `Light`, because pushes are
@@ -171,7 +202,32 @@ cbuffer Light : register(b0, space3)
     float shadow_mode;         // 160 — 0 none, 1 constant, 2 slope, 3 normal
     float shadow_normal_scale; // 164
     float shadow_texel_uv;     // 168 — 1/resolution: one texel, in uv
-    float shadow_pad;          // 172
+
+    // ---- Lesson 6.15, and the free ride finally ran out ---------------------
+    //
+    // 172 — this was `shadow_pad`, so `ibl_intensity` costs ZERO BYTES, the
+    // third time a lesson has landed in a slot an earlier one had to add (6.7
+    // into 6.4's padding, 6.14 into 6.11's). 0 disables the environment
+    // entirely and the `ambient` term above is used instead, which is what makes
+    // this lesson's reference render byte-identical to the last twenty-three.
+    float ibl_intensity;       // 172
+
+    // 176 — AND THIS ONE COSTS A WHOLE REGISTER, taking the block from 176 to
+    // 192 bytes. Worth stating rather than absorbing: it is `levels - 1` of the
+    // prefiltered chain, and the shader needs it because the mapping from
+    // roughness to mip level is a property of how the chain was BUILT, not of
+    // the material. Hard-coding 5 here would be a number that has to agree with
+    // a number in `bake_environment`, in a different language, with no way to
+    // check — which is exactly the class of bug the `static_assert`s in
+    // gpu_uniform.hpp exist to prevent.
+    //
+    // The affordability argument is 6.8's, unchanged: this is a PER-FRAME push.
+    // One extra register per frame is 16 bytes; the same register in
+    // `material_uniforms` would be 16 bytes per draw.
+    float ibl_max_level;       // 176
+    float ibl_pad0;            // 180
+    float ibl_pad1;            // 184
+    float ibl_pad2;            // 188
 };
 
 // ---- Per DRAW --------------------------------------------------------------
@@ -435,6 +491,69 @@ float shadow_visibility_cascaded(float3 world_pos, float3 geometric_n,
     return lerp(a, b, w);
 }
 
+// ---------------------------------------------------------------------------
+// LESSON 6.15 — THE AMBIENT TERM, GIVEN A DIRECTION AND A SPECULAR LOBE
+// ---------------------------------------------------------------------------
+//
+// This function replaces `base * ambient`, and the sentence it closes has been
+// sitting at the bottom of this file since Lesson 6.4: "a mirror in a bright
+// uniform room renders black except where the key light reaches it — that
+// missing term is Lesson 6.15's image-based lighting."
+//
+// It is `engine::image_based_light` in cubemap.cpp, line for line, which is the
+// claim this port has to make and which `verify_615` §J checks by driving both
+// with the same inputs.
+float3 image_based_light(float3 n, float3 v, float3 diffuse_albedo, float3 f0,
+                         float roughness)
+{
+    // ---- The diffuse half: EXACT for Lambert --------------------------------
+    //
+    // The irradiance map already holds `integral L_i (n.l) dw`, so dividing by
+    // pi — the Lambert BRDF's normalisation — gives outgoing radiance directly.
+    // With a uniform environment the two pis cancel and this reduces to
+    // `albedo * L`, which is the expression the `ambient` line above has been
+    // computing since Lesson 3.6. The old term is a special case, not a
+    // casualty.
+    const float3 e = irradiance_map.SampleLevel(irradiance_sampler, n, 0.0f).rgb;
+    float3 result = diffuse_albedo * e * k_inv_pi;
+
+    // ---- The specular half: the split sum -----------------------------------
+    //
+    // `reflect(i, n)` in HLSL mirrors an INCIDENT vector, so it wants the
+    // direction pointing AT the surface — hence `-v`. This is the one place
+    // where the prefilter's assumption is cashed: the chain was baked around
+    // this direction on the assumption that n, v and r coincide, so this is the
+    // only direction it can honestly be asked about.
+    const float3 r = reflect(-v, n);
+
+    // LINEAR IN ROUGHNESS, MATCHING HOW THE CHAIN WAS BUILT. `engine::
+    // prefilter_level_for` computes what the GGX lobe actually wants and the two
+    // differ by up to 0.77 of a level (§5.6) — but the chain's levels MEAN
+    // linearly-spaced roughness, so reading it any other way would be looking up
+    // level 4.2 in a table whose level 4.2 is a different thing. The derived
+    // formula's job is to tell you whether the chain is deep enough, not to
+    // index it.
+    const float level = saturate(roughness) * ibl_max_level;
+    const float3 pre = prefiltered_map.SampleLevel(prefiltered_sampler, r, level).rgb;
+
+    // THE TABLE. u = n.v, v = roughness, and the `saturate` on n.v is not
+    // cosmetic: an interpolated normal on a silhouette can give a very slightly
+    // negative dot product, which would wrap to the far edge of the table under
+    // any address mode but CLAMP and read the roughest, most grazing entry
+    // there is — a bright rim on exactly the pixels where it is most visible.
+    const float n_dot_v = saturate(dot(n, v));
+    const float2 ab = brdf_lut.SampleLevel(brdf_sampler,
+                                           float2(n_dot_v, saturate(roughness)),
+                                           0.0f).rg;
+
+    // f0 * scale + bias. Three channels on the left, one scalar pair on the
+    // right, because the table does not depend on F0 — that is Schlick's
+    // linearity, and it is why one 64x64 image serves gold, chrome and plastic
+    // at once.
+    result += pre * (f0 * ab.x + ab.y);
+    return result;
+}
+
 float4 main(Input input) : SV_Target0
 {
     // Lesson 3.8's finding, in silicon: the three corner normals are interpolated
@@ -682,12 +801,35 @@ float4 main(Input input) : SV_Target0
         f_r = base * k_inv_pi + spec_f0 * lobe * k_inv_pi;
     }
 
-    // The ambient term stands outside the product because its own pi already
-    // cancelled against the hemisphere it was integrated over (light.hpp). It
-    // still has no specular counterpart, so a mirror in a bright uniform room
-    // renders black except where the key light reaches it — that missing term is
-    // Lesson 6.15's image-based lighting.
-    const float3 lit = f_r * e + base * ambient;
+    // ---- THE AMBIENT TERM, AND LESSON 6.15 PAYS THE DEBT --------------------
+    //
+    // What stood here for eleven lessons was `base * ambient`: a uniform
+    // radiance through a Lambert BRDF whose pi had already cancelled against the
+    // hemisphere it was integrated over (light.hpp). Two things were wrong with
+    // it and only one was ever written down.
+    //
+    //   IT HAD NO DIRECTION. A surface facing the sky and one facing the floor
+    //   received the same fill light, so nothing was ever grounded.
+    //
+    //   IT HAD NO SPECULAR HALF AT ALL — the one the comment here used to admit
+    //   to. `base` is the diffuse albedo and a metal has none, so chrome in a
+    //   bright room came out black except for one lamp's highlight.
+    //
+    // `ibl_intensity == 0` keeps the old term exactly, which is not a courtesy
+    // to old scenes: it is what lets the reference render stay byte-identical
+    // while a whole lighting model is added underneath it.
+    float3 ambient_term;
+    if (ibl_intensity > 0.0f)
+    {
+        ambient_term = image_based_light(n, v, diffuse_albedo, spec_f0,
+                                         saturate(roughness)) * ibl_intensity;
+    }
+    else
+    {
+        ambient_term = base * ambient;
+    }
+
+    const float3 lit = f_r * e + ambient_term;
 
     // ---- The last place light exists — Lesson 6.1 ---------------------------
     //

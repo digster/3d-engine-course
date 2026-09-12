@@ -2,6 +2,8 @@
 
 #include <engine/gfx/gpu_texture.hpp>
 
+#include <engine/gfx/cubemap.hpp>   // Lesson 6.15: the full type the header only names
+
 #include <engine/core/log.hpp>
 #include <engine/gfx/gpu_debug.hpp>   // Lesson 4.9: named at CREATION, as SDL asks
 
@@ -355,6 +357,200 @@ bool gpu_texture::create_depth(const gpu_device& dev, SDL_GPUTextureFormat forma
     // Nothing is uploaded. A depth buffer is written by the render pass that
     // clears it and by every fragment that passes the test — never by us.
     uploaded_bytes_ = 0;
+    return true;
+}
+
+bool gpu_texture::create_cube(const gpu_device& dev, SDL_GPUCommandBuffer* cb,
+                              const cube_map& src, SDL_GPUTextureFormat format,
+                              const char* name)
+{
+    destroy();
+
+    if (!dev.valid() || cb == nullptr || !src.valid()
+        || format == SDL_GPU_TEXTUREFORMAT_INVALID)
+    {
+        return false;
+    }
+
+    // ---- ASK, DO NOT ASSUME -------------------------------------------------
+    //
+    // The same discipline 4.2 applied to the swapchain format, 4.7 to depth and
+    // 6.14 to sample counts, arriving at the fourth place it is needed. Note
+    // that the query names the TYPE as well as the usage: a device can support a
+    // format for a 2-D texture and refuse it for a cube, and asking the 2-D
+    // question would be asking a question that is not ours.
+    if (!SDL_GPUTextureSupportsFormat(dev.handle(), format,
+                                      SDL_GPU_TEXTURETYPE_CUBE,
+                                      SDL_GPU_TEXTUREUSAGE_SAMPLER))
+    {
+        ENGINE_LOG_ERROR(engine::log_gpu,
+                         "gpu_texture: %s is not supported as a sampled cube map",
+                         name_of(format));
+        return false;
+    }
+
+    // Two formats, and the difference is only how many bytes a channel takes.
+    // Anything else is refused here rather than producing a texture whose
+    // contents are a reinterpretation of the wrong number of bytes — the failure
+    // mode 4.2 called a sheared image, arriving in the depth axis.
+    int channel_bytes;
+    if (format == SDL_GPU_TEXTUREFORMAT_R16G16B16A16_FLOAT)      { channel_bytes = 2; }
+    else if (format == SDL_GPU_TEXTUREFORMAT_R32G32B32A32_FLOAT) { channel_bytes = 4; }
+    else
+    {
+        ENGINE_LOG_ERROR(engine::log_gpu,
+                         "gpu_texture: create_cube needs a 16- or 32-bit float format, not %s",
+                         name_of(format));
+        return false;
+    }
+
+    device_ = dev.handle();
+    width_ = static_cast<Uint32>(src.size());
+    height_ = width_;
+    format_ = format;
+    levels_ = src.levels();
+    samples_ = SDL_GPU_SAMPLECOUNT_1;
+
+    SDL_GPUTextureCreateInfo ti{};
+    // THE ONE FIELD THAT MAKES IT A CUBE, and the shader has to agree: a
+    // `Texture2D` bound to a cube is a binding error the validation layer
+    // catches and a black reflection on drivers that do not.
+    ti.type = SDL_GPU_TEXTURETYPE_CUBE;
+    ti.format = format_;
+    ti.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
+    ti.width = width_;
+    ti.height = height_;
+    // SIX, ALWAYS. `layer_count_or_depth` is the same field 6.9 used for cascade
+    // slices; for a cube SDL requires exactly six and rejects anything else.
+    ti.layer_count_or_depth = 6;
+    ti.num_levels = static_cast<Uint32>(levels_);
+    ti.sample_count = SDL_GPU_SAMPLECOUNT_1;
+
+    texture_ = create_named_texture(device_, ti, name);
+    if (texture_ == nullptr)
+    {
+        ENGINE_LOG_ERROR(engine::log_gpu,
+                         "SDL_CreateGPUTexture(cube %ux%u x6 x%d %s) failed: %s",
+                         width_, height_, levels_, name_of(format_), SDL_GetError());
+        destroy();
+        return false;
+    }
+
+    // ---- ONE STAGING BUFFER, SIZED FOR THE LARGEST FACE ---------------------
+    //
+    // Not one per face and not one for the whole chain. Per face would be 6 x
+    // levels allocations for a job that reuses the same bytes; the whole chain at
+    // once would need SDL's per-level alignment rules to be reproduced by hand,
+    // and `SDL_UploadToGPUTexture` is perfectly happy to be called repeatedly
+    // against one buffer inside a single copy pass. The largest face is level 0,
+    // so that is the size.
+    const Uint32 max_bytes = width_ * height_ * 4u * static_cast<Uint32>(channel_bytes);
+
+    SDL_GPUTransferBufferCreateInfo tb{};
+    tb.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+    tb.size = max_bytes;
+
+    SDL_GPUTransferBuffer* staging =
+        create_named_transfer_buffer(device_, tb, "staging (cube map upload)");
+    if (staging == nullptr)
+    {
+        ENGINE_LOG_ERROR(engine::log_gpu, "SDL_CreateGPUTransferBuffer(%u) failed: %s",
+                         max_bytes, SDL_GetError());
+        destroy();
+        return false;
+    }
+
+    SDL_GPUCopyPass* copy = SDL_BeginGPUCopyPass(cb);
+    Uint32 total = 0;
+
+    for (int level = 0; level < levels_; ++level)
+    {
+        const int n = src.size_at(level);
+        const Uint32 bytes = static_cast<Uint32>(n) * static_cast<Uint32>(n)
+                           * 4u * static_cast<Uint32>(channel_bytes);
+
+        for (int f = 0; f < k_cube_faces; ++f)
+        {
+            void* mapped = SDL_MapGPUTransferBuffer(device_, staging, false);
+            if (mapped == nullptr)
+            {
+                ENGINE_LOG_ERROR(engine::log_gpu, "SDL_MapGPUTransferBuffer failed: %s",
+                                 SDL_GetError());
+                SDL_EndGPUCopyPass(copy);
+                SDL_ReleaseGPUTransferBuffer(device_, staging);
+                destroy();
+                return false;
+            }
+
+            const hdr_buffer& img = src.face(static_cast<cube_face>(f), level);
+            if (channel_bytes == 2)
+            {
+                auto* out = static_cast<Uint16*>(mapped);
+                for (int y = 0; y < n; ++y)
+                {
+                    const linear_rgb* row = img.row(y);
+                    for (int x = 0; x < n; ++x)
+                    {
+                        *out++ = float_to_half(row[x].r);
+                        *out++ = float_to_half(row[x].g);
+                        *out++ = float_to_half(row[x].b);
+                        // ALPHA 1, NOT 0. Nothing reads it — a cube map holds
+                        // radiance and radiance has no coverage — but an
+                        // uninitialised or zero alpha is the kind of thing a
+                        // later blend state picks up silently, and one is the
+                        // answer that survives being read by accident.
+                        *out++ = float_to_half(1.0f);
+                    }
+                }
+            }
+            else
+            {
+                auto* out = static_cast<float*>(mapped);
+                for (int y = 0; y < n; ++y)
+                {
+                    const linear_rgb* row = img.row(y);
+                    for (int x = 0; x < n; ++x)
+                    {
+                        *out++ = row[x].r;
+                        *out++ = row[x].g;
+                        *out++ = row[x].b;
+                        *out++ = 1.0f;
+                    }
+                }
+            }
+            SDL_UnmapGPUTransferBuffer(device_, staging);
+
+            SDL_GPUTextureTransferInfo source{};
+            source.transfer_buffer = staging;
+            source.offset = 0;
+            source.pixels_per_row = static_cast<Uint32>(n);
+            source.rows_per_layer = static_cast<Uint32>(n);
+
+            SDL_GPUTextureRegion dest{};
+            dest.texture = texture_;
+            dest.mip_level = static_cast<Uint32>(level);
+            // THE FACE, AS A LAYER. `SDL_GPUCubeMapFace` is documented as
+            // "can be passed in as the layer field", and `engine::cube_face`
+            // matches its ordering, so this cast is a rename.
+            dest.layer = static_cast<Uint32>(f);
+            dest.w = static_cast<Uint32>(n);
+            dest.h = static_cast<Uint32>(n);
+            dest.d = 1;
+
+            // `cycle = false`: nothing has read this texture yet, so there is no
+            // hazard to break — the same argument `create_sampled` makes, and it
+            // holds even though we are writing the same staging buffer 6 x levels
+            // times, because each upload is ordered after the map that filled it
+            // within one copy pass.
+            SDL_UploadToGPUTexture(copy, &source, &dest, false);
+            total += bytes;
+        }
+    }
+
+    SDL_EndGPUCopyPass(copy);
+    SDL_ReleaseGPUTransferBuffer(device_, staging);
+
+    uploaded_bytes_ = total;
     return true;
 }
 

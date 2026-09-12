@@ -96,5 +96,30 @@ function(engine_use_shaders target)
         VERBATIM)
 
     add_custom_target(${target}_shaders DEPENDS "${stamp}")
+
+    # ---- Lesson 6.15 found this one, and it only bites on a NEW shader ------
+    #
+    # The stamp above DEPENDS on shader FILES, and those files are produced by
+    # custom commands declared in the TOP-LEVEL directory while this target lives
+    # in `demos/`. The Makefile generator cannot resolve a cross-directory file
+    # dependency on its own: it needs a target-level edge as well, or it emits
+    #
+    #     No rule to make target `shaders/skybox.frag.json',
+    #     needed by `demos/sandbox_shaders.stamp'
+    #
+    # **And the reason nobody hit it for fourteen lessons is the nastiest part.**
+    # Once a shader has been built once, the file EXISTS, and make is perfectly
+    # happy to depend on an existing file it has no rule for. So every shader
+    # added before this one worked from the second build onward, and the bug sat
+    # there waiting for the next person to add a shader — or for anyone to build
+    # from a clean tree, where it would have fired on all twenty-three at once.
+    #
+    # The fix is one line: depend on the shader TARGETS too, not just their
+    # output files. `add_dependencies` between targets is what the generator
+    # needs to place the rules in an order it can follow.
+    if(shader_targets)
+        add_dependencies(${target}_shaders ${shader_targets})
+    endif()
+
     add_dependencies(${target} ${target}_shaders)
 endfunction()

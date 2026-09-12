@@ -879,10 +879,32 @@ void fill_triangle(framebuffer& fb, depth_buffer* depth,
         // not one"), and this is the call site that cashes it in.
         // The interpolated normal is genuinely short here, worst in
         // the middle of the triangle; §3.5 measures by how much.
-        return shade(albedo, shading_normal, style.eye - p,
-                     *style.lights, style.surface,
-                     style.model, ndf_model::ggx,
-                     visibility);
+        const linear_rgb direct = shade(albedo, shading_normal, style.eye - p,
+                                        *style.lights, style.surface,
+                                        style.model, ndf_model::ggx,
+                                        visibility);
+
+        // ---- LESSON 6.15: THE AMBIENT TERM, REPLACED ------------------------
+        //
+        // Null is the whole of "no environment", so the line above is untouched
+        // on every path written before this lesson — which is why the reference
+        // render is still byte-identical at hash E917C06C.
+        //
+        // When there IS an environment, the constant fill `shade()` added has
+        // to be REMOVED before the directional one is added, or the surface
+        // receives both. `ambient_only` recomputes exactly the term `shade()`
+        // folded in (light.hpp's `albedo * ambient`, whose pi cancelled against
+        // the hemisphere) so the subtraction is exact rather than approximate.
+        // Passing a lighting struct with a zeroed ambient would be cheaper and
+        // would also copy the struct per fragment; this is one multiply.
+        if (style.env == nullptr) { return direct; }
+
+        const linear_rgb removed = ambient_only(albedo, *style.lights, style.surface);
+        const linear_rgb ibl = image_based_light(*style.env, style.surface, albedo,
+                                                 shading_normal, style.eye - p);
+        return {direct.r - removed.r + ibl.r * style.env_intensity,
+                direct.g - removed.g + ibl.g * style.env_intensity,
+                direct.b - removed.b + ibl.b * style.env_intensity};
     };
 
     // LESSON 6.11. `out_alpha` is an out-parameter rather than a second return

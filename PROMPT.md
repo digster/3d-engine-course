@@ -2624,3 +2624,12 @@ and a new `docs/_template/check-curriculum.py` to stop the index drifting again.
 > CLAUDE.md).
 
 (Not a lesson. `STATE.md`'s `next:` is unchanged at 6.15.)
+
+---
+
+## 2026-09-12 — Lesson 6.15
+
+> next
+
+Produced Lesson 6.15 — Skybox and Image-Based Lighting. `STATE.md`'s `next:` advances to
+6.16 — Frustum Culling and Instanced Submission.

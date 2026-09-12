@@ -241,7 +241,14 @@ void gpu_shadow_map::fill_uniforms(scene_light_uniforms& out, const light_camera
                                                                : 3.0f;
     out.shadow_normal_scale = set.normal_scale;
     out.shadow_texel_uv = (resolution > 0) ? 1.0f / static_cast<float>(resolution) : 0.0f;
-    out.pad2 = 0.0f;
+    // LESSON 6.15 RENAMED THIS SLOT and the compiler caught it, which is the
+    // whole argument for filling padding with a named field: `pad2 = 0` and
+    // `ibl_intensity = 0` are the same store, but only one of them is a
+    // statement about the environment. This function fills the SHADOW half of
+    // the block and must not touch the environment's switch — whoever owns the
+    // environment sets it. Zeroing it here would silently disable IBL from
+    // inside the shadow code, which is exactly the kind of long-range coupling
+    // a `pad` name hides.
 }
 
 void gpu_shadow_map::fill_cascade_uniforms(cascade_uniforms& out,

@@ -7221,3 +7221,83 @@ have to be brought back into agreement in one direction or the other, and the ge
 `figs_45/46/48.py` read `.ppm` render captures that later sessions overwrote, so `--figures` reports
 those three as DIFF. The published SVGs are correct and the pages rebuild from them; it is the SVGs'
 own inputs that are lost. Recovering them means re-rendering Module 4 demos on a Module 6 engine.
+
+---
+
+## Lesson 6.15 — environment lighting (2026-09-12)
+
+### A channel-order bug whose symptom is a plausible picture
+
+`make_brdf_lut` packed its two coefficients with a hand-written shift — `(bias << 8) | scale` —
+reasoning about an RGBA word. **`engine::texture` stores ARGB**, so red is bits 16–23 and `scale`
+went into blue.
+
+What made it expensive is that green is bits 8–15 in *both* layouts, so `bias` read back correctly.
+The shader computes `F0 * scale + bias`; with `scale` reading zero, the specular term became `bias`
+alone — ~0 head-on and ~0.078 at grazing. So IBL was not *broken*, it was **dim in a way that
+invited tuning**. The same mistake then appeared a second time in the harness's ARGB→RGBA unpack.
+
+**A packing spelled out at a call site is a packing that can disagree with the engine's.**
+`colour.hpp::pack_argb` has had the right answer since Lesson 1.6. The five-second diagnostic:
+`scale` at (n·v = 0.9, roughness = 0.1) must be exactly 1.000.
+
+### 6.14's rule about null results has a mirror
+
+6.14: *check a measurement CAN produce a non-null result before believing a null one.*
+6.15: **check a non-null result has CONVERGED before believing it.**
+
+The first draft of the split-sum measurement reported 20% error at roughness 0.25. It was Monte
+Carlo noise: 8,192 importance samples against a 6000:1 sun disc disagree with 1,000,000 by a factor
+of **1.98**, and the under-sampled answer is a number of the right order with nothing wrong-looking
+about it. With the sun removed the same two counts agree to 0.040% — **the sample count was never
+the problem, the dynamic range was.** Both rules are one rule: establish what your instrument can
+see before you read it.
+
+### A null measurement from an environment that cannot exhibit the defect
+
+The seam test read 0.0000% twice, for two different reasons.
+
+1. The probe directions never crossed a face boundary. *Fix: assert the crossing first* — the
+   harness now reports "31 of 31 probe pairs land on different faces" as its own check.
+2. They did cross, and it was **still** zero, because `sky_radiance` depends only on `d.y`: along a
+   vertical face edge the sky is literally constant, so the two clamped edge texels hold the same
+   value. Measured on an environment that varies with *azimuth*, the seam is **12.09%** at 16×16.
+
+The general form is worth more than the seam: **a null result from a fixture that cannot show the
+defect is not evidence the defect is absent** — it is a measurement of the fixture.
+
+### A latent build bug that only a NEW shader could find
+
+`engine_use_shaders` made the copy-stamp depend on shader *files* produced in the top-level
+directory, while the stamp target lives in `demos/`. The Makefile generator needs a target-level
+edge too, so adding `skybox.vert` gave
+
+    No rule to make target `shaders/skybox.frag.json', needed by `demos/sandbox_shaders.stamp'
+
+**Nobody hit it for fourteen lessons because once a shader has been built once, the file exists —
+and `make` will happily depend on an existing file it has no rule for.** Every shader added before
+this one worked from its second build onward. A genuinely clean tree would have failed on all
+twenty-three at once. Fixed with one `add_dependencies(${target}_shaders ${shader_targets})`.
+
+### check-page.js gained a rect test, and it caught two of this lesson's own figures
+
+The text-on-shape check selected `line, polyline, path` — so an **annotation box laid across a
+label** was invisible to every check on the page. 6.15's figures 1, 5 and 6 all shipped first drafts
+with exactly that, and only a screenshot caught the first one.
+
+Two design points in the new check:
+
+- **It tests "crosses", not "contains".** A legend box is *supposed* to have text inside it.
+  Sampling the four edges gives that distinction for free.
+- **It is restricted to `rect[fill="none"]`, and the restriction is measured.** Over every rect it
+  fires 26 times across 12 published pages, and most are filled cells with a label deliberately
+  annotating them — a pixel grid (2.1), a memory layout (1.2, 5.7), an NDC corner (4.4). That is the
+  diagram working. Hollow boxes only: **9 hits across 4 pages**, and those four look real.
+
+### Known finding, not fixed here
+
+The narrowed check reports hollow-box/label crossings in four published pages:
+`00-04-cmake-from-zero` (fig 2, ×2), `00-05-first-window` (fig 2), `01-02-input-state-vs-events`
+(fig 3, ×2) and `02-01-lines` (figs 3 and 6, ×4). Left alone deliberately — fixing them changes
+published visuals and rebuilds four pages whose reproducibility was only just stabilised, which is
+the same call made on 2026-09-12 for the two pedagogical defects above.

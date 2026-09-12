@@ -38,6 +38,14 @@
 
 namespace engine {
 
+/// Lesson 6.15, **forward-declared rather than included**, and the reason is
+/// physical design (Lesson 5.1 §4): `create_cube` takes a `const cube_map&` by
+/// reference, so this header needs only the name. Including `cubemap.hpp` would
+/// drag `hdr.hpp`, `microfacet.hpp` and `texture.hpp` into every translation
+/// unit that wants to make a depth buffer. The one file that needs the full
+/// definition — `gpu_texture.cpp` — includes it.
+class cube_map;
+
 /// Owns an `SDL_GPUTexture`. Move-only, like every device resource here.
 class gpu_texture
 {
@@ -145,6 +153,48 @@ public:
                                     Uint32 width, Uint32 height, const char* name = nullptr,
                                     bool sampled = false,
                                     SDL_GPUSampleCount samples = SDL_GPU_SAMPLECOUNT_1);
+
+    /// A **cube map** — six square faces, addressed by direction. Lesson 6.15.
+    ///
+    /// `SDL_GPU_TEXTURETYPE_CUBE` with `layer_count_or_depth = 6`, and the six
+    /// layers are the six faces **in SDL's own order**, which `engine::cube_face`
+    /// is `static_cast`-compatible with. That correspondence is deliberate and
+    /// asserted (`verify_615` §A), exactly as Lesson 3.9's `filter` enum is
+    /// asserted against `SDL_GPUFilter`: the alternative is a translation
+    /// function whose only failure mode is six faces quietly swapping places.
+    ///
+    /// **A CUBE MAP IS NOT AN ARRAY TEXTURE, EVEN THOUGH IT UPLOADS LIKE ONE.**
+    /// `SDL_GPUTextureRegion::layer` selects the face, exactly as it selects the
+    /// slice of the 2D array Lesson 6.9 built for cascades, so the transfer code
+    /// below is 6.9's with a loop bound of 6. What differs is the SHADER side:
+    /// `TextureCube` takes a `float3` direction where `Texture2DArray` takes a
+    /// `float2` and an index, and the hardware does the face selection, the
+    /// division and — the part you cannot reproduce yourself — the **seamless
+    /// filtering across face edges**. The CPU `cube_map::sample` has a visible
+    /// seam on its blurriest levels for exactly the reason this one does not.
+    ///
+    /// **THE MIP CHAIN IS UPLOADED, NOT GENERATED**, which is the opposite of
+    /// `create_sampled(..., mips = true)` two functions up, and the difference is
+    /// the whole point of the lesson. `SDL_GenerateMipmapsForGPUTexture` builds
+    /// a chain by box-filtering — the right answer when the levels mean "this
+    /// texture, smaller". These levels mean "this environment, blurred by a
+    /// GGX lobe of roughness *r*", which no box filter produces. They are
+    /// computed by `prefilter_environment` and shipped up level by level.
+    ///
+    /// @param format the device format. `SDL_GPU_TEXTUREFORMAT_R16G16B16A16_FLOAT`
+    ///        (`k_hdr_format`) is the one to want — radiance has no upper bound
+    ///        and an 8-bit cube map would clip the sun to white before any
+    ///        integral ran — and the CPU-side floats are converted with
+    ///        `float_to_half`. `R32G32B32A32_FLOAT` is accepted too, at twice
+    ///        the memory. **Support is asked for, not assumed**, and an
+    ///        unsupported format fails rather than falling back: unlike a sample
+    ///        count, there is no sensible cheaper answer.
+    /// @param src  every level of `src` is uploaded, so `src.levels()` sets
+    ///        `num_levels`. A one-level cube map is a skybox; a six-level one is
+    ///        a prefiltered environment.
+    [[nodiscard]] bool create_cube(const gpu_device& dev, SDL_GPUCommandBuffer* cb,
+                                   const cube_map& src, SDL_GPUTextureFormat format,
+                                   const char* name = nullptr);
 
     /// A stack of depth slices addressed as one texture. Lesson 6.9.
     ///

@@ -27,6 +27,7 @@
 
 #include <engine/asset/asset_store.hpp>
 #include <engine/gfx/colour.hpp>
+#include <engine/gfx/cubemap.hpp>
 #include <engine/gfx/depth_buffer.hpp>
 #include <engine/gfx/gltf.hpp>
 #include <engine/gfx/light.hpp>
@@ -264,6 +265,35 @@ public:
             else if (SDL_strcmp(argv[i], "--spec-aa") == 0)
             {
                 aa_.specular = true;
+            }
+            // LESSON 6.15. `--env` bakes a procedural sky and lights the scene
+            // with it: an irradiance map for the diffuse half and a prefiltered
+            // chain plus a BRDF table for the specular one. It REPLACES
+            // `lighting::ambient`, so a metal stops being black wherever the key
+            // light does not reach it, and the background becomes the same sky
+            // the reflections read — which is the honest part of the technique.
+            //
+            // `--env-intensity` is an artistic lie about how bright the sky is,
+            // and it is a flag rather than a re-bake because re-baking takes
+            // five seconds.
+            else if (SDL_strcmp(argv[i], "--env") == 0)
+            {
+                env_enabled_ = true;
+            }
+            else if (SDL_strcmp(argv[i], "--env-intensity") == 0 && i + 1 < argc)
+            {
+                env_enabled_ = true;
+                env_intensity_ = static_cast<float>(SDL_atof(argv[++i]));
+            }
+            // The SIZE of the source cube, exposed because §5.2's convergence
+            // table is worth reproducing: 32 is visibly blocky in a mirror and
+            // indistinguishable from 128 in anything rough.
+            else if (SDL_strcmp(argv[i], "--env-size") == 0 && i + 1 < argc)
+            {
+                env_enabled_ = true;
+                env_size_ = SDL_atoi(argv[++i]);
+                if (env_size_ < 8) { env_size_ = 8; }
+                if (env_size_ > 256) { env_size_ = 256; }
             }
             // The bug, selectable — see `resolve_supersampled`. Averaging the
             // STORED BYTES instead of the light is 6.1's mistake in its fourth
@@ -951,7 +981,37 @@ public:
         engine::framebuffer& target = (aa_fb_ != nullptr) ? *aa_fb_ : fb();
         engine::depth_buffer& target_depth = (aa_depth_ != nullptr) ? *aa_depth_ : depth_;
 
-        target.clear(k_background);
+        // ---- LESSON 6.15: BAKE ONCE, THEN THE SKY IS THE BACKGROUND --------
+        //
+        // On first use, not in the constructor: a run without `--env` should
+        // not pay five seconds and 2.7 MB for maps it never reads — the same
+        // bargain the HDR buffer makes below, and for the same reason.
+        if (env_enabled_ && !env_.valid())
+        {
+            const engine::sky_settings sky;
+            SDL_Log("baking environment (%dx%d source)...", env_size_, env_size_);
+            const Uint64 t0 = SDL_GetTicksNS();
+            env_ = engine::bake_environment(engine::make_sky_environment(env_size_, sky));
+            SDL_Log("  irradiance 32^2, prefilter 6 levels, brdf lut 64^2 — %.2f s",
+                    static_cast<double>(SDL_GetTicksNS() - t0) * 1.0e-9);
+        }
+
+        // THE SKYBOX, ON THE CPU, AND IT IS THE SAME TEXTURE THE REFLECTIONS
+        // READ. That identity is the whole honesty of the technique: a mirror
+        // cannot disagree with what is behind it, because there is one sky.
+        //
+        // A per-pixel loop rather than a clear, and it is a REPLACEMENT for the
+        // clear rather than an addition — every pixel is written, so there is
+        // nothing to clear first. The ray comes from the same construction
+        // `skybox.vert.hlsl` derives: forward plus the image-plane offsets.
+        if (env_.valid())
+        {
+            draw_sky(target);
+        }
+        else
+        {
+            target.clear(k_background);
+        }
         target_depth.clear();
 
         // ---- LESSON 6.12: the float target ---------------------------------
@@ -973,7 +1033,13 @@ public:
             {
                 hdr_fb_ = std::make_unique<engine::hdr_buffer>(fb().width(), fb().height());
             }
-            hdr_fb_->clear(engine::to_linear(k_background));
+            // 6.15: the sky goes into the HDR buffer as RADIANCE, untouched
+            // by any transfer function — the same contract skybox.frag.hlsl
+            // honours. Tonemapping it here and again at the resolve is the
+            // mistake that shows up as reflections brighter than the sky they
+            // reflect.
+            if (env_.valid()) { draw_sky_hdr(*hdr_fb_); }
+            else               { hdr_fb_->clear(engine::to_linear(k_background)); }
             tone_.exposure = engine::exposure_from_ev100(ev100_);
         }
 
@@ -1121,6 +1187,15 @@ public:
                 .cascades = cascade_.valid() ? &cascade_ : nullptr,
                 .view_eye = eye,
                 .view_forward = engine::normalised(centre_ - eye),
+
+                // 6.15. Null when `--env` is absent, which is the whole of
+                // "turn the feature off" — the sixth nullable-pointer bargain
+                // in this struct, and the one that keeps every earlier picture
+                // byte-identical. It sits here rather than beside `lights`
+                // for the reason the 6.11 note below gives: designators must
+                // appear in DECLARATION order.
+                .env = env_.valid() ? &env_ : nullptr,
+                .env_intensity = env_intensity_,
 
                 // ---- 6.11 -------------------------------------------------
                 //
@@ -1289,6 +1364,81 @@ public:
 private:
     /// A slow orbit at the fitted distance, looking at the model's own centre.
     /// A still frame is therefore reproducible and a live one shows every side.
+    // ---- LESSON 6.15: the sky, per pixel -----------------------------------
+    //
+    // `skybox.vert.hlsl`'s derivation, on the CPU and in one function instead of
+    // two shader stages. A pixel at normalised device coordinates (nx, ny) sees
+    // through `forward + nx * right + ny * up`, with `right` and `up` already
+    // scaled by the image plane's half-extents at unit distance:
+    // `tan(fov_y/2)` vertically and `aspect * tan(fov_y/2)` horizontally.
+    //
+    // TEMPLATED OVER THE TARGET because the two callers want the same geometry
+    // and different colour handling — a `framebuffer` takes encoded bytes, an
+    // `hdr_buffer` takes radiance — and writing it twice would be two places for
+    // the ray construction to drift.
+    template <typename Target, typename Write>
+    void draw_sky_into(Target& target, Write write) const
+    {
+        const engine::vec3 eye = orbit_eye();
+        const engine::vec3 forward = engine::normalised(centre_ - eye);
+        const engine::vec3 world_up{0.0f, 1.0f, 0.0f};
+
+        // `cross(forward, up)` and not `cross(up, forward)`: conventions §2 is
+        // right-handed with -Z forward, and the camera's right is the first of
+        // those. Getting it the other way round mirrors the sky left to right —
+        // which, on a sky with no writing in it, is very nearly invisible, and
+        // is the same class of mistake `verify_615` §A measures in the cube's
+        // own face table.
+        const engine::vec3 right = engine::normalised(engine::cross(forward, world_up));
+        const engine::vec3 up = engine::cross(right, forward);
+
+        const float half_h = SDL_tanf(0.5f * k_fov_y);
+        const float aspect = static_cast<float>(target.width())
+                           / static_cast<float>(target.height());
+        const float half_w = half_h * aspect;
+
+        for (int y = 0; y < target.height(); ++y)
+        {
+            // +0.5 for the pixel CENTRE, and the y flip because NDC's +y is up
+            // while a framebuffer's rows run down (conventions §6).
+            const float ny = 1.0f - 2.0f * (y + 0.5f) / target.height();
+            for (int x = 0; x < target.width(); ++x)
+            {
+                const float nx = 2.0f * (x + 0.5f) / target.width() - 1.0f;
+                const engine::vec3 ray = forward + right * (nx * half_w)
+                                                 + up * (ny * half_h);
+                write(target, x, y, env_.radiance.sample(engine::normalised(ray), 0));
+            }
+        }
+    }
+
+    void draw_sky(engine::framebuffer& target) const
+    {
+        // THE ONE PLACE THIS PATH HAS TO TONEMAP, and it is not a choice: an
+        // 8-bit framebuffer holds sRGB codes, so the radiance has to be
+        // compressed and encoded here. Without `--hdr` there is no later pass
+        // to do it, and clamping instead of tonemapping would turn the whole
+        // sky white wherever the sun is — 6.12's subject, arriving as a
+        // consequence rather than a demonstration.
+        engine::tonemap_settings local = tone_;
+        draw_sky_into(target, [&](engine::framebuffer& fbuf, int x, int y,
+                                  engine::linear_rgb c) {
+            fbuf.put_pixel(x, y, engine::to_encoded(engine::apply_tonemap(c, local),
+                                                    engine::encode_mode::fast));
+        });
+    }
+
+    void draw_sky_hdr(engine::hdr_buffer& target) const
+    {
+        // NO TONEMAP HERE. The float target holds quantities of light and the
+        // post stack converts the finished image once, over everything —
+        // exactly the contract `skybox.frag.hlsl` documents on the GPU side.
+        draw_sky_into(target, [](engine::hdr_buffer& buf, int x, int y,
+                                 engine::linear_rgb c) {
+            buf.put_pixel(x, y, c);
+        });
+    }
+
     [[nodiscard]] engine::vec3 orbit_eye() const
     {
         return {centre_.x + distance_ * 0.86f * SDL_cosf(t_),
@@ -1342,6 +1492,18 @@ private:
     engine::asset_store assets_;
     std::vector<engine::scene_object> objects_;
     engine::lighting lights_;
+
+    // ---- Lesson 6.15 --------------------------------------------------------
+    //
+    // Baked once, on first use, because the bake is SECONDS and not
+    // milliseconds: the irradiance convolution alone is 6 x 32^2 output texels
+    // each integrating 6 x 128^2 input texels, which is 6.0e8 cosine
+    // evaluations. That is the right cost for an offline step and the wrong one
+    // for a frame, which is the whole reason the technique precomputes.
+    bool env_enabled_ = false;
+    int env_size_ = 128;
+    float env_intensity_ = 1.0f;
+    engine::environment env_{};
 
     /// World-space bounds of everything loaded, and what the camera derives from
     /// them.

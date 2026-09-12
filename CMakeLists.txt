@@ -238,6 +238,14 @@ add_hlsl_shader(bloom_bright.frag fragment)
 add_hlsl_shader(bloom_down.frag fragment)
 add_hlsl_shader(bloom_up.frag fragment)
 
+# Lesson 6.15 — the sky. A vertex shader of its own after all, where 6.13 needed
+# none: `fullscreen.vert` emits a uv, and a skybox needs a world-space RAY. The
+# two differ by the camera basis, which a post pass does not have and must not
+# acquire — so this is one of the rare cases where copying nine lines is the
+# right answer and generalising the older shader is not.
+add_hlsl_shader(skybox.vert vertex)
+add_hlsl_shader(skybox.frag fragment)
+
 # ---- The project -----------------------------------------------------------
 # ORDER MATTERS, and it is the dependency direction made visible: engine/ knows
 # nothing of demos/ and is added first; demos/ links the engine and is added

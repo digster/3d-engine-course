@@ -7,7 +7,7 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-09-11 (after Lesson 6.14 — 70 of 107 lessons)
+updated: 2026-09-12 (after Lesson 6.15 — 71 of 107 lessons)
 
 conventions:
   ecs-storage: THE ECS IS A SPARSE SET, DECIDED IN 5.7 BY MEASUREMENT, NOT TASTE.
@@ -3569,6 +3569,162 @@ curriculum: 107 lessons, ~510 h, 10 modules   (reshaped 2026-09-08 — see `road
         in 5.7, with a comment naming the reason. A consumer that cannot reach
         inside the library is a direct measurement of what the API lacks.
 
+  environment: THE AMBIENT TERM IS NO LONGER A CONSTANT. Built in 6.15, in
+        engine/gfx/cubemap.{hpp,cpp}. `lighting::ambient` STILL EXISTS and is
+        still the fallback; an `environment` REPLACES it when one is supplied.
+        THE FOUR OBJECTS, and they are only correct TOGETHER (one struct):
+          radiance     the sky itself, six hdr_buffer faces. The skybox draws it.
+          irradiance   integral 1, indexed by NORMAL. 32^2 is plenty.
+          prefiltered  integral 2's first bracket, a mip chain indexed by
+                       ROUGHNESS (not by footprint — that is 6.10's chain).
+          brdf_lut     integral 2's second bracket. 64^2, texel_space::linear,
+                       and it depends on NEITHER the environment NOR the
+                       material, because Schlick is LINEAR in F0.
+        ONLY THE DIFFUSE HALF IS EXACT, and this is the sentence to carry:
+        Lambert's BRDF does not depend on l, so it leaves the integral entirely.
+        Second-order convergence measured (/4.08, /3.92, /3.98 per doubling) to
+        1.1e-5 at 64^2, and `image_based_light` reproduces 6.2's
+        `albedo * ambient` END TO END to 1.291e-05 on a uniform sky. THE OLD
+        TERM IS A SPECIAL CASE, NOT A CASUALTY — and that is the regression test
+        that licenses trusting the rest.
+        THE SPLIT SUM IS AN INTEGRAL OF A PRODUCT REPLACED BY A PRODUCT OF
+        INTEGRALS, and its error HAS A SHAPE (measured against brute force at
+        1e6 samples, against the SAME cube the engine reads):
+          roughness 0.10           0.08% — essentially exact
+          n.v 0.9, any roughness   <= 5.8% dark
+          n.v 0.4, roughness 1     29.0% dark
+          with a sun disc          73.0% dark
+        The four-fold normal/grazing asymmetry IS `n = v = r`: a prefiltered
+        value is indexed by ONE direction while the true integral needs two, so
+        the chain bakes its lobe around the REFLECTION, which at a grazing view
+        points across the horizon and averages in ground the surface never sees.
+        The sun case is a THIRD mechanism — the prefilter weights by n.l where
+        the true integral weights by the whole BRDF. **THE ERROR OF THIS
+        TECHNIQUE DEPENDS ON THE ENVIRONMENT, NOT ONLY ON THE MATERIAL**, which
+        is not in the paper, and is why production keeps the sun as a separate
+        analytic light. Our key light already is one.
+        THE MEASUREMENT IS DECOMPOSED, not quoted: brute force runs twice, once
+        against the analytic sky and once against the BAKED cube, so the bake's
+        error (buyable with texels) is separated from the approximation's (not).
+        On a smooth sky the bake column is 1.0000 throughout.
+  cube-faces: THE TABLE IS WRITTEN ONCE, AS DATA, and both directions read it —
+        so a typo cannot appear in only one of them. sc/tc/ma with signs, exactly
+        the D3D and OpenGL spec's. `engine::cube_face` is enumerator-for-
+        enumerator SDL_GPUCubeMapFace and verify_615 ASSERTS it, the same
+        discipline 3.9's `filter` gets, so the face index goes straight into
+        SDL_GPUTextureRegion::layer. The major axis sign is the LOW BIT of the
+        face index, which that ordering buys for free.
+        THE HANDEDNESS MIRROR IS REAL AND MEASURED, not assumed: the table was
+        written for a LEFT-handed system and conventions §2 pins this world
+        right-handed. Looking along +X, the world's "right" is +Z and the cube's
+        u axis is -Z — dot -1.000. **Faces baked with a right-handed camera come
+        out left-right flipped.** The fix is NOT to correct the table (hardware
+        implements it) but to generate faces with the axes it names;
+        `make_sky_environment` does that by construction.
+  solid-angle: A CUBE TEXEL'S SOLID ANGLE IS NOT UNIFORM AND EVERY INTEGRAL MUST
+        WEIGHT BY IT. dw = dA cos(theta)/r^2 = dA/r^3, because the tilt cosine
+        is itself 1/r. Centre r=1, corner r^3 = 3*sqrt(3) = 5.196, so THE CENTRE
+        TEXEL IS WORTH 5.196 CORNER TEXELS. Measured 0.19321 at 512, converging
+        to the derived 1/(3*sqrt(3)) = 0.19245.
+        WHAT IGNORING IT COSTS IS 1.01%, AND IT IS A BIAS: 1.010005 at 16^2 and
+        1.010066 at 64^2. Sixteen times the texels and the error does not move.
+        A discretisation error is a number you can buy down with memory; a bias
+        is one that is still there when the memory is spent. That distinction is
+        why `cube_texel_solid_angle` is a named public function rather than an
+        expression inside one loop.
+        THE IMPLEMENTATION USES LAMBERT'S CLOSED FORM, not dA/r^3, because a
+        texel at 8^2 is 22.5 degrees across and the small-texel approximation is
+        not good there. f(x,y) = atan2(xy, sqrt(x^2+y^2+1)) differenced at four
+        corners. The check that it is right: six faces sum to 4*pi.
+  prefilter-level: THE ROUGHNESS -> MIP MAPPING IS DERIVED, NOT CHOSEN, and this
+        is 6.14's `ggx_lobe_half_angle` cashing a cheque. Turn the lobe into a
+        SOLID ANGLE (2*pi*(1-cos t), the spherical cap) because a half-angle is
+        not commensurable with a texel and a steradian is; a level-k texel is
+        w0*4^k; set equal and k = 0.5*log2(lobe/w0).
+        w0 IS THE CENTRE TEXEL, and the choice must be stated: the corner would
+        shift every answer by log4(5.196) = 1.19 levels, MORE than the entire
+        disagreement being measured.
+        AND THE FOLKLORE IS NOT ARBITRARY. `roughness * (levels-1)` is within
+        0.770 of a level everywhere (worst at roughness 0.45) and exact at both
+        ends; sqrt(roughness) is off by 2.214. But now the error has a
+        DIRECTION: at roughness 0.10 the lobe wants level 0 and the map reads
+        0.700, so a near-mirror is OVER-blurred; from 0.3 to 0.9 it UNDER-blurs.
+        THE ENGINE SHIPS THE FITTED ONE AND ALSO THE DERIVED ONE, boundary
+        marked — 6.14's discipline. The lookup MUST use the linear map because
+        the chain was BUILT that way; `prefilter_level_for`'s job is to tell you
+        whether your chain is deep enough, not to index it.
+        A HARD LIMIT HIDES IN THE SAME TABLE: at roughness 0.10 the lobe is
+        1.3e-4 sr and a level-0 texel on a 128 face is 2.44e-4 sr — THE LOBE IS
+        SMALLER THAN ONE TEXEL. Below roughness ~0.11 the base resolution, not
+        the prefilter, is the limit. A crisper mirror wants a bigger cube, not a
+        deeper chain.
+  two-fitted-steps: 6.15 HAS EXACTLY TWO FITTED STEPS AND BOTH ARE MARKED IN THE
+        SOURCE, which is 6.14's habit applied again. (1) The linear
+        roughness-to-level map, above. (2) The prefilter weighting radiance by
+        n.l — importance sampling already accounts for D and the Jacobian, and
+        G and Fresnel belong to the OTHER bracket, so putting them here would
+        double-count; n.l is what is left, and Karis (2013) documents it as
+        looking better rather than as following from anything.
+  half-float: binary16 IN hdr.{hpp,cpp}, AND IT DID NOT EXIST BEFORE 6.15 FOR A
+        REASON WORTH KNOWING: everything HDR so far was PRODUCED on the GPU, so
+        no half ever crossed the CPU boundary. An environment map is the first
+        HDR data computed on the CPU that must be uploaded.
+        1 sign, 5 exponent (bias 15), 10 mantissa. Worst relative error 4.85e-4
+        across 1e-4..6e4, which is 2^-11 — half an ulp, the best a correctly
+        rounding conversion can do, and the number that proves it rounds to
+        nearest EVEN rather than truncating (truncation biases every value down
+        by half a step, a systematic darkening).
+        THREE NON-COMMON CASES, each with a visible artefact if skipped:
+        OVERFLOW CLAMPS to 65504 (an inf poisons a whole mip level with NaN);
+        NaN STAYS NaN (hiding it hides the bug that made it); SUBNORMALS below
+        2^-14 (rounding them to zero quantises the shadows, invisible until you
+        tonemap at low exposure).
+  cube-gpu: SDL_GPU_TEXTURETYPE_CUBE, layer_count_or_depth EXACTLY 6, and the
+        six layers ARE the six faces — so the upload loop is 6.9's cascade-array
+        code with a bound of 6. Format is ASKED FOR with the TYPE in the query
+        (a device can accept a format as 2D and refuse it as a cube), and an
+        unsupported one FAILS rather than falling back: unlike a sample count
+        there is no sensible cheaper answer.
+        THE CHAIN IS UPLOADED, NOT GENERATED — the opposite of
+        create_sampled(mips=true) two functions up, and the difference is the
+        whole lesson. SDL_GenerateMipmapsForGPUTexture box-filters, which is
+        right when levels mean "this texture, smaller"; these mean "this
+        environment, blurred by a GGX lobe of roughness r".
+        SIX FRAGMENT SAMPLER SLOTS NOW (was three). 6.8's rule holds and is why
+        they travel together: a partial SDL_BindGPUFragmentSamplers REPLACES the
+        range it names, so slot 3 would be unbound the moment slot 0 changed.
+        THE FOURTH IDENTITY-ELEMENT FALLBACK: white for a multiply (3.9),
+        lavender for a basis change (6.7), 1.0 for a depth comparison (6.8), and
+        **BLACK for the ADDITION the ambient term performs**. Bound whether or
+        not ibl_intensity is zero, because HLSL does not elide a resource
+        because a branch did not reach it.
+  ibl-uniforms: scene_light_uniforms 176 -> 192 BYTES, and the free ride ended.
+        `ibl_intensity` lands in 6.8's pad2 and costs ZERO (third in a row, after
+        6.7 into 6.4's padding and 6.14 into 6.11's); `ibl_max_level` costs a
+        whole register. Named rather than absorbed, because three free lessons
+        could reasonably set an expectation. Affordable by 6.8's argument: this
+        is a PER-FRAME push, so 16 bytes a frame against 16 bytes per draw.
+        IT CANNOT BE A SHADER CONSTANT: the chain's depth is chosen at run time
+        by bake_environment, so a hard-coded 5 in HLSL would be a number that
+        must agree with a number in C++, in another language, with nothing
+        checking — the exact failure mode gpu_uniform.hpp's static_asserts exist
+        to prevent.
+        RENAMING pad2 CAUGHT A REAL COUPLING: gpu_shadow.cpp was zeroing it. The
+        compiler found it, which is the argument for filling padding with NAMED
+        fields — `pad2 = 0` and `ibl_intensity = 0` are the same store, but only
+        one is a statement about the environment.
+  ibl-subtraction: fill_style::env IS THE SIXTH NULLABLE-POINTER BARGAIN (after
+        inv_w=1 in 3.2, lights in 3.8, albedo in 3.9, shadows in 6.8, cascades
+        in 6.9) and it is what keeps the golden byte-identical.
+        WHEN IT IS SET, THE CONSTANT AMBIENT MUST BE SUBTRACTED, because shade()
+        has already added it. `ambient_only()` exists to be subtracted and lives
+        three lines below the line it mirrors — THE SUBTRACTION IS ONLY HONEST
+        IF IT IS CHARACTER-FOR-CHARACTER THE ADDITION. Forget it and every
+        surface is filled twice, which reads as "IBL is too bright" and is
+        "fixed" by tuning env_intensity to ~0.6 — a magic number that goes wrong
+        the first time anyone changes lighting::ambient.
+
+
 completed:
   - 0.1  What a Game Engine Actually Is
   - 0.2  How This Course Works
@@ -3652,8 +3808,59 @@ completed:
          list had not been appended to since 6.8 while `capabilities:` below was
          kept current, which is the append-and-merge rule being half-followed.
          Both are published and both are in the index; the omission was here.)
+  - 6.13 Bloom and the Post-Processing Stack
+  - 6.14 Antialiasing: Geometric and Shading
+  - 6.15 Skybox and Image-Based Lighting
+        (IT HAPPENED AGAIN, AND THE NOTE ABOVE DID NOT PREVENT IT. 6.13 and 6.14
+         were both missing when 6.15 came to append, exactly as 6.9 and 6.10
+         were when 6.11 did — same section, same cause, two lessons after the
+         warning was written into the file. A NOTE IS NOT A CHECK. The durable
+         fix is the one check-curriculum.py already embodies for the index:
+         `completed:` should be derived from, or verified against, the
+         `published` badges rather than maintained by hand. Filed as work, not
+         as another note.)
 
 capabilities:
+  - 6.15 AN ENVIRONMENT LIGHTS THE SCENE AND IS THE SKY BEHIND IT, ON BOTH
+    RENDERERS. 71 -> 72 public headers, 43 -> 44 sources, 21 -> 23 shaders.
+    Golden byte-identical at E917C06C for the TWENTY-FOURTH lesson, and the
+    argument was checked FIRST and found structural SIX times over (twice
+    6.14's three): the fixture's `lighting` has no environment field; shade()
+    never calls image_based_light; cube_map/environment/the BRDF table are types
+    the fixture never constructs; microfacet.hpp's two new functions are called
+    by neither shade() nor cook_torrance_specular; the half-float pair has no
+    CPU-raster caller; and every shader and GPU change is gated behind
+    ibl_intensity, which defaults to 0.
+    (THE COUNTS ABOVE ARE MEASURED, and they correct an off-by-one that has been
+     carried for at least two lessons: `ls engine/include/engine/*/*.hpp
+     engine/include/engine/*.hpp | wc -l` gives 71 at commit 9830dd3 where
+     6.14's entry says 72, and 21 shaders where it says 20. Future lessons:
+     re-measure, do not increment.)
+    See conventions:environment, cube-faces, solid-angle, prefilter-level,
+    two-fitted-steps, half-float, cube-gpu, ibl-uniforms and ibl-subtraction
+    above for the substance.
+    THE CAPABILITIES: a `cube_map` of six hdr_buffer faces with the D3D face
+    table asserted against SDL's enum; an IRRADIANCE convolution (exact for
+    Lambert); a GGX-PREFILTERED chain and a BRDF TABLE (the split sum); a
+    from-scratch binary16 codec; `create_cube` on the device; a skybox with no
+    geometry on both renderers; and `--env` in gltf_view.
+    WHAT IS DELIBERATELY MISSING, so it is not rediscovered as a bug: ONE probe,
+    infinitely far away (no parallax, no local reflections); NO multi-scattering
+    compensation, so the BRDF table sums to 0.3276 at roughness 1 and 67% of the
+    energy is lost — which is NOT the split sum's error but the single-scattering
+    Smith G, and 6.3's probe measured the same thing at 0.3069 from the other
+    direction; and the prefilter runs on the CPU in ~5 s, which is a loading
+    screen you would not ship. All three are exercises 11.3-11.5.
+    THE DEMO: `--env` changes 100% of the frame. The orbit camera sits 26
+    degrees above the scene with a 50-degree fov, so the horizon falls ~1 degree
+    ABOVE the top of frame and the whole background is the LOWER hemisphere —
+    which is why `sky_settings` gained `ground_horizon` and the ground now fades
+    toward the horizon (physically motivated: real ground is brightest where it
+    faces the most sky, and a constant lower hemisphere is the one part of a
+    naive sky model that is obviously wrong).
+    `--env-size 16` starves the source cube and the failure is instructive:
+    rough materials are unchanged (a cosine convolution has nothing finer than
+    60 degrees to lose) while a polished one shows facets.
   - 6.14 ANTIALIASING, BOTH KINDS, AND THE HONEST ACCOUNT OF WHAT EACH REACHES.
     71 -> 72 public headers, 42 -> 43 sources, 20 shaders (none added). Golden
     byte-identical at E917C06C for the TWENTY-THIRD lesson.
@@ -6432,6 +6639,7 @@ files:
             gpu_post.hpp                                                    [6.12]
             bloom.hpp                                                       [6.13]
             antialias.hpp                                                   [6.14]
+            cubemap.hpp                                                     [6.15]
             debug_lines.hpp                                                 [5.11]
             depth_buffer.hpp, framebuffer.hpp, gpu_buffer.hpp, gpu_debug.hpp,
             gpu_device.hpp, gpu_mesh.hpp, gpu_pipeline.hpp, gpu_present.hpp,
@@ -6534,7 +6742,19 @@ files:
                  06-05-material-system.html,
                  06-06-gltf.html,
                  06-07-normal-mapping.html,
-                 06-08-shadow-mapping.html
+                 06-08-shadow-mapping.html,
+                 06-09-cascaded-shadows.html,
+                 06-10-mipmaps.html,
+                 06-11-transparency.html,
+                 06-12-hdr-tonemapping.html,
+                 06-13-bloom-post-stack.html,
+                 06-14-antialiasing.html,
+                 06-15-skybox-ibl.html
+                 (6.9 THROUGH 6.14 WERE ALL MISSING when 6.15 came to append —
+                  the same half-followed append-and-merge the `completed:` list
+                  above records twice. check-curriculum.py verifies the INDEX
+                  against the filesystem; nothing verifies this list, which is
+                  why it is the one that rots.)
   docs/shared/: course.css, course.js      (THE stylesheet + page script; one copy each)
   docs/_template/: lesson-template.html, README.md, apply-shared.py, check-page.js
   scratch/ (5.7, not shipped with the engine): ecs_probe.hpp, bench_57.cpp,
@@ -6645,6 +6865,44 @@ files:
            is wider than pinning — ANY GENERATED ARTIFACT NEEDS A
            REGENERATE-AND-DIFF AFTER THE LAST EDIT TO ITS INPUTS, not only when you
            remember to pin.
+  scratch/ (6.15, not shipped with the engine): verify_615.cpp,
+           build_verify_615.sh, figs_615.py, build_615.py,
+           l615_body_{a,b,c}.html, l615_fig{1..7}.svg,
+           probe_615.cpp and probe_615b.cpp (THROWAWAYS, kept — and the second
+           one EARNED ITS KEEP twice over. The first asked six questions and got
+           two of them WRONG: it reported the split sum 20% dark at roughness
+           0.25 (Monte Carlo noise at 8,192 samples) and it found only the
+           nearest INTEGER mip level, which cannot say whether the folklore
+           mapping is good or lucky. probe_615b re-ran both at a converged
+           sample count and continuously, and overturned the first. 6.2's rule —
+           write another probe the moment one tells you something you did not
+           expect — held for the fourth time.),
+           sanity_615.cpp, golden_615.cpp, dbg_615.cpp, dbg_615b.cpp,
+           dbg_seam.cpp and dbg_ray.cpp (SIX SMALL DIAGNOSTICS, all throwaways.
+           dbg_615b is the one that found the ARGB/RGBA packing bug by printing
+           the LUT's two channels beside the value they should have; dbg_seam is
+           the one that proved the seam test was measuring nothing; dbg_ray is
+           the one that explained why the demo's background is entirely ground.
+           A four-line program that prints the intermediate is faster than any
+           amount of reasoning about which of five things is wrong.),
+           shot_615_env.ppm and shot_615_noenv.ppm (the with/without comparison),
+           verify615.ppm (the golden this run produced).
+           PINNED BY 6.15, before a line of it was written: l614_antialias.hpp,
+           l614_antialias.cpp, l614_gpu_post.hpp and l614_gpu_post.cpp, all four
+           verified against commit 9830dd3, plus l614_verify_614.cpp as a
+           working-tree copy since it is gitignored. ALL FIVE WERE THEN CHECKED
+           BY SUBSTRING AGAINST THE SHIPPED PAGE — which matters most for the
+           gitignored one, whose only provenance is the copy, and the page is
+           the only thing that can confirm the copy is still lesson-era text.
+           Rebuilding gave a diff of exactly the two nav lines meant to move,
+           FOURTEENTH LESSON RUNNING.
+           (build_615.py PINS NOTHING YET and lists FIVE files whole. Lesson
+            6.16 is FRUSTUM CULLING, which touches bounds.hpp, cull.hpp,
+            gpu_mesh and the draw list — none of which appear in 6.15's
+            listings. PIN ANYWAY, for two reasons: verify_615.cpp is gitignored
+            so a working-tree copy now is the only cheap moment, and "nothing
+            here is at risk" is exactly what was said about gpu_post.hpp before
+            6.14 rewrote it.)
   scratch/ (6.14, not shipped with the engine): verify_614.cpp,
            build_verify_614.sh, figs_614.py, build_614.py,
            l614_body_{a,b,c}.html, l614_fig{1..7}.svg,
@@ -7016,117 +7274,102 @@ roadmap: RESHAPED 2026-09-08, AFTER TWO EXTERNAL REVIEWS OF THE PUBLISHED OUTLIN
             qualifier too, because a skimmer reads the recap and stops.
 
 
-next: 6.15 — Skybox and Image-Based Lighting
-      (planned filename: docs/lessons/06-15-skybox-ibl.html — 6.14's TWO next
-      links point at the index and BOTH need repointing; scratch/l614_body_a.html
-      holds the top one and build_614.py's TAIL the bottom.
-      PIN FIRST. build_614.py's LISTING_SOURCE is EMPTY and it lists FIVE files
-      whole, FOUR of which are in the repository (verify_614.cpp is gitignored and
-      must be copied from the working tree):
-        for f in engine/include/engine/gfx/antialias.hpp \
-                 engine/src/gfx/antialias.cpp \
-                 engine/include/engine/gfx/gpu_post.hpp \
-                 engine/src/gfx/gpu_post.cpp; do
-          git show <6.14 commit>:$f > scratch/l614_$(basename $f)
+next: 6.16 — Frustum Culling and Instanced Submission
+      (planned filename: docs/lessons/06-16-frustum-culling.html — 6.15's TWO
+      next links point at the index and BOTH need repointing; scratch/
+      l615_body_a.html holds the top one and build_615.py's TAIL the bottom.
+
+      PIN FIRST. build_615.py's LISTING_SOURCE is EMPTY and it lists FIVE files
+      whole, FOUR of which are in the repository (verify_615.cpp is gitignored
+      and must be copied from the working tree):
+        for f in engine/include/engine/gfx/cubemap.hpp \
+                 engine/src/gfx/cubemap.cpp \
+                 shaders/skybox.vert.hlsl \
+                 shaders/skybox.frag.hlsl; do
+          git show <6.15 commit>:$f > scratch/l615_$(basename $f)
         done
-        cp scratch/verify_614.cpp scratch/l614_verify_614.cpp   # gitignored
-      Then re-run build_614.py and `git diff` the page: THIRTEEN lessons running,
-      the diff has been exactly the nav lines meant to move.
+        cp scratch/verify_615.cpp scratch/l615_verify_615.cpp   # gitignored
+      Then paste what `python3 scratch/pin_listings.py 615 --dry` prints (it
+      verifies every pin by substring against the shipped page — that check is
+      what confirms a gitignored copy has not drifted), re-run build_615.py, and
+      `git diff` the page: FIFTEEN lessons running, the diff has been exactly the
+      nav lines meant to move.
 
-      WHICH FILES 6.15 IS LIKELY TO MOVE. `gpu_texture.{hpp,cpp}` is near certain:
-      A CUBE MAP IS A TEXTURE TYPE THIS ENGINE HAS NEVER CREATED, and
-      SDL_GPU_TEXTURETYPE_CUBE brings six faces, a different addressing mode and
-      its own sampler rules. `mipmap.hpp` is likely — a prefiltered environment
-      map IS a mip chain, indexed by roughness rather than by footprint — and
-      `microfacet.hpp` is likely for the same reason 6.14 put
-      `ggx_lobe_half_angle` there: 6.15 has to decide how much of the sky one mip
-      level should cover, and that is the lobe's width.
-      `antialias.{hpp,cpp}` SHOULD NOT MOVE. Keep them as the control.
+      WHICH FILES 6.16 IS LIKELY TO MOVE. `bounds.hpp` is near certain — 6.8
+      already computes scene AABBs to fit the shadow box and 6.16 needs the same
+      quantity per object. `cull.hpp` is likely (it owns `cull_mode` and
+      `cull_of`, and a frustum test is a different KIND of culling that has to
+      be named without colliding). `gpu_mesh.{hpp,cpp}` is likely for the second
+      half: instancing was BUILT in 4.5-4.6 (instance-rate input,
+      `instance_buffer`, `draw(pass, instances)`) and has never been fed, so
+      6.16 is where a culled set becomes an instance buffer.
+      `cubemap.{hpp,cpp}` SHOULD NOT MOVE. Keep them as the control.
 
-      WHAT 6.15 OWES, beyond the obvious:
-        1 THE SPLIT INTO TWO INTEGRALS, which is the whole reason IBL is tractable.
-          The rendering equation over an environment does not factor, and the
-          split-sum approximation pretends it does — irradiance for the diffuse
-          half, a prefiltered radiance map times a BRDF lookup for the specular.
-          SAY WHICH HALF IS EXACT AND WHICH IS THE APPROXIMATION, and measure the
-          error rather than asserting it is small. 6.14 set the precedent for
-          separating "derived" from "fitted" inside one technique.
-        2 THE DIRECT CONNECTION TO 6.14, WHICH IS NOT A METAPHOR. Prefiltering an
-          environment map by roughness is the SAME OPERATION as filtering the NDF,
-          performed ahead of time instead of per fragment. `ggx_lobe_half_angle`
-          answers "how much sky does level n cover" directly. Make that explicit —
-          it is the third time in this module that the answer has been "prefilter
-          the thing being undersampled" (6.10's mips, 6.14's NDF, now this).
-        3 A NUMBER FOR THE SPLIT-SUM ERROR, since 6.13 and 6.14 both established
-          the habit of naming a technique's ceiling with a measurement rather than
-          a hedge. The natural one is a reference render by brute-force importance
-          sampling against the split-sum result, at several roughnesses.
-        4 THE GOLDEN. Check it EARLY, as 6.12, 6.13 and 6.14 all did — and note
-          that 6.14's argument had THREE independent legs, which is why it was
-          robust. IBL adds a light source the fixture's `lighting` struct does not
-          have, so the structural answer probably holds again; confirm it rather
-          than inheriting it.
-      CARRY FORWARD: 6.14's habit of separating what is DERIVED from what is
-      FITTED inside a single technique and marking the boundary in the code, and
-      its habit of checking that a measurement can produce a non-null result
-      before believing a null one.
+      WHAT 6.16 OWES, beyond the obvious:
+        1 THE PLANES, DERIVED FROM THE MATRIX, not assembled from a camera. The
+          six planes fall out of the rows of the view-projection matrix by one
+          observation (a clip-space coordinate is a signed distance), and that
+          derivation is short, checkable and almost never shown. Do it, and
+          verify by transforming known points.
+        2 THE CONSERVATIVE BOUND IS A LIE WITH A SIZE. An AABB test rejects only
+          what is wholly outside; a box that straddles a plane is kept, and a
+          box can fail all six half-space tests while still intersecting the
+          frustum (the false-positive corner case). Measure how often, on a real
+          scene, rather than asserting it is rare — 6.8 already hit the same
+          conservatism when fitting the shadow box and noted it.
+        3 THE MEASUREMENT THAT MATTERS IS NOT THE CULL RATE. It is frame time,
+          and culling can LOSE on a small scene because the test costs more than
+          the draw it saves. Find the crossover; 6.13's and 6.14's habit of
+          naming a technique's ceiling with a number applies directly.
+        4 THE GOLDEN. Check it EARLY, as 6.12, 6.13, 6.14 and 6.15 all did.
+          6.15's argument had SIX independent legs, which is why it was robust.
+          CULLING IS DIFFERENT IN KIND FROM THE LAST FOUR: it changes WHICH
+          DRAWS HAPPEN, and the fixture's `draw_world` path runs the software
+          rasterizer over a fixed object list. If culling is wired into
+          `collect_triangles` the golden WILL move — and a cull that changes the
+          picture is a BUG, so this is the first lesson in a while where a moved
+          golden is a failure rather than a re-baseline. Confirm the structural
+          answer; do not inherit it.
 
-      AND TWO THINGS 6.14 FOUND THAT ARE NOT ABOUT ANTIALIASING.
-      (1) check-page.js's spill test was TEXT-ONLY and now tests closed SHAPES
-          too — see the scratch/ (6.14) entry. It caught a real defect in 6.14's
-          own figure 7 immediately.
-      (2) **27 OF 37 PAGE BUILDERS CANNOT REPRODUCE THEIR PUBLISHED PAGE.** 11
-          CRASH (build_37..build_49 — they read from `src/`, the directory Module
-          5's refactor deleted) and 16 RUN BUT DIFFER (all of Module 5 plus 61,
-          62, 64, 66, 67), mostly because the 2026-09-08 Module 8->9 renumber was
-          applied to the shipped HTML and never to the body fragments, so a
-          rebuild REVERTS it. This is pre-existing and was filed as its own task
-          rather than fixed inside a lesson.
-          THE METHODOLOGICAL HALF IS THE IMPORTANT ONE: the first audit reported
-          only 4 failures because it compared the page before and after and called
-          "unchanged" a pass — but a CRASHING builder writes nothing, so eleven
-          failures read as successes. CHECK THE EXIT STATUS AS WELL AS THE DIFF.
+      CARRY FORWARD from 6.15:
+        - THE TWO RULES ARE ONE RULE. 6.14: check a measurement CAN produce a
+          non-null result before believing a null one. 6.15: check a non-null
+          result has CONVERGED before believing it. Underneath both: establish
+          what your instrument can see before you read it. 6.16's instrument is
+          a frame timer, which has its own version of this — a 0.2 ms difference
+          on a 3 ms frame is inside the noise unless you measure the noise.
+        - A NULL RESULT FROM A FIXTURE THAT CANNOT SHOW THE DEFECT is not
+          evidence the defect is absent. The seam read 0.0000% twice for two
+          different reasons. For 6.16 the analogue is obvious: a cull rate of 0%
+          on a scene where everything is on screen measures the scene.
+        - PACKINGS SPELLED OUT AT THE CALL SITE DRIFT FROM THE ENGINE'S. The
+          ARGB/RGBA bug cost an hour and produced a plausible picture both
+          times it appeared.
 
-          RESOLVED 2026-09-12. **ALL 38 BUILDERS NOW REPRODUCE THEIR PUBLISHED
-          PAGE BYTE-IDENTICALLY**, and the property is now CHECKED rather than
-          trusted: `python3 docs/_template/check-builders.py` runs every
-          build_NN.py in a copy-on-write clone and compares, reporting CRASH,
-          EMPTY and DIFF as separate outcomes (~10 s for all 38). It is in
-          CLAUDE.md §11 and README §12/§15. `--figures` also regenerates each
-          lesson's SVGs first, because the drift class RECURSES: a page's source
-          is an .svg and the .svg's source is figs_NN.py.
-
-          WHAT THIS CHANGES FOR EVERY FUTURE LESSON:
-          1 PIN THE LISTINGS AT THE START OF THE SESSION, before a line of the
-            new lesson is written. Every path a page lists now has a
-            LISTING_SOURCE entry — nothing is read live any more, including
-            CMakeLists.txt, engine/CMakeLists.txt, soft_renderer.hpp and the
-            scene shaders, which were the shared files doing most of the damage.
-          2 IF YOU CORRECT A PUBLISHED PAGE, PORT THE CORRECTION BACK into the
-            fragment, pin or figs_NN.py it came from, or the next rebuild reverts
-            it. `scratch/autoport.py NN` derives the list from the rebuild diff
-            and `--apply` ports it; the diff is the oracle.
-          3 A GITIGNORED LISTING (scratch/verify_NN.cpp) HAS NO HISTORY, so once
-            a later lesson edits it its lesson-era text exists only inside the
-            page. `scratch/extract_listing.py` recovers it from there,
-            round-trip checked. Six were recovered this way.
-
-          TWO PEDAGOGICAL DEFECTS FOUND AND DELIBERATELY LEFT (they change a
-          published lesson's CONTENT, which is the author's call, not a
-          reproducibility fix — see LEARNINGS.md):
-          - 05-02-platform-layer.html SHOWS LESSON 5.3'S CODE. 5.3's session
-            re-ran build_52.py for a nav link and the live reads pulled its
-            logging in (+156/-38). The page shows ENGINE_LOG_* where 5.2 wrote
-            SDL_Log, and includes a header 5.3 creates. Its pins therefore come
-            from ea7a05f, not 5175d70.
-          - 05-04-handles.html SHOWS LESSON 5.5'S CODE (d599928), including a doc
-            comment saying "Lesson 5.5 replaced this struct's contents" — inside
-            Lesson 5.4.
-          These two are the ONLY pages where the next lesson's commit changed more
-          than the nav links; the other thirteen were +2/-2.
-
-          KNOWN GAP, NOT A BUG: figs_45/46/48.py read .ppm captures that later
-          sessions overwrote, so --figures reports those three as DIFF. The
-          published SVGs are correct and the pages rebuild from them; it is the
-          SVGs' own inputs that are lost.
+      AND TWO THINGS 6.15 FOUND THAT ARE NOT ABOUT LIGHTING.
+      (1) check-page.js's text-on-shape test selected `line, polyline, path`, so
+          an ANNOTATION BOX laid across a label was invisible to every check on
+          the page — 6.15's figures 1, 5 and 6 all shipped first drafts with
+          exactly that. It now tests `rect[fill="none"]` too, sampling the four
+          EDGES so that "crosses" and "contains" stay distinct (a legend box is
+          supposed to contain text). The `fill="none"` restriction is measured,
+          not cautious: over every rect it fires 26 times across 12 published
+          pages, nearly all of them labels deliberately annotating filled cells.
+          KNOWN FINDING, NOT FIXED: the narrowed check still reports 9 hits
+          across 4 pages — 00-04 (fig 2, x2), 00-05 (fig 2),
+          01-02 (fig 3, x2), 02-01 (figs 3 and 6, x4). Left alone deliberately,
+          the same call made on 2026-09-12 for the two pedagogical defects:
+          fixing them changes published visuals and rebuilds four pages whose
+          reproducibility was only just stabilised.
+      (2) A BUILD BUG LATENT FOR FOURTEEN LESSONS, which only adding a NEW
+          shader could surface. `engine_use_shaders` made the copy-stamp depend
+          on shader FILES produced in the top-level directory while the stamp
+          target lives in demos/, and the Makefile generator needs a
+          target-level edge too. Nobody hit it because ONCE A SHADER HAS BEEN
+          BUILT ONCE THE FILE EXISTS, and make will depend on an existing file
+          it has no rule for — so every earlier shader worked from its second
+          build onward, and a clean tree would have failed on all twenty-three
+          at once. Fixed with one `add_dependencies`.
+          THE GENERAL SHAPE IS WORTH MORE THAN THE FIX: a build that is only
+          ever run incrementally cannot tell you it is wrong.
 ```

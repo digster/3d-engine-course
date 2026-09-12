@@ -13,6 +13,7 @@
 
 #include <engine/gfx/blend.hpp>    // 6.11: alpha_mode, alpha_storage, the over operator
 #include <engine/gfx/colour.hpp>   // linear_rgb: the space vertex colours are combined in
+#include <engine/gfx/cubemap.hpp>   // 6.15: fill_style::env
 #include <engine/gfx/cull.hpp>     // 6.5: cull_mode moved out; see that file
 
 // Lesson 3.8. A real include, not a forward declaration, and the difference is the
@@ -666,6 +667,32 @@ struct fill_style
     /// the wrong cascade and bend every seam. Ignored unless `cascades` is set.
     vec3 view_eye{0.0f, 0.0f, 0.0f};
     vec3 view_forward{0.0f, 0.0f, -1.0f};
+
+    /// **The environment, Lesson 6.15** — and it REPLACES `lighting::ambient`
+    /// rather than adding to it, which is the whole content of the field.
+    ///
+    /// Null is the whole of "this scene has no environment", the sixth time
+    /// this struct has made that bargain (`inv_w = 1` in 3.2, `lights` in 3.8,
+    /// an unbound `albedo` in 3.9, `shadows` in 6.8, `cascades` in 6.9). It is
+    /// also what keeps every picture this course has made byte-identical: the
+    /// reference fixture never sets it, so `shade()` is reached by the same
+    /// path it has been reached by for twenty-four lessons.
+    ///
+    /// When it IS set, two things change and both are consequences of the same
+    /// fact — that a constant `ambient` has neither a direction nor a specular
+    /// lobe. The diffuse fill becomes the irradiance map read along the surface
+    /// normal, so a face turned to the sky and one turned to the floor stop
+    /// receiving the same light; and the ambient term gains a specular half for
+    /// the first time in the course, so a metal is no longer black wherever the
+    /// key light does not reach it.
+    const environment* env = nullptr;
+
+    /// A scalar on the environment's contribution. Ignored when `env` is null.
+    ///
+    /// It exists for the same reason `skybox.frag.hlsl`'s `intensity` does: an
+    /// artistic lie about how bright the sky is, made visible rather than
+    /// hidden inside a re-baked map.
+    float env_intensity = 1.0f;
 
     // ---- Lesson 6.11: transparency -----------------------------------------
     //

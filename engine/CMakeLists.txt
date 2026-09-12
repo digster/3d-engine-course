@@ -54,6 +54,12 @@ add_library(engine STATIC
     src/gfx/bloom.cpp
     src/gfx/clip.cpp
     src/gfx/colour.cpp
+    # Lesson 6.15. The environment map and the two integrals it feeds:
+    # irradiance (exact for Lambert) and the split sum (approximate, and
+    # measured). It sits in gfx/ rather than under a new `env/` because it
+    # is a texture type, not a subsystem — the same argument gpu_texture.hpp
+    # makes for keeping depth targets beside sampled ones.
+    src/gfx/cubemap.cpp
     src/gfx/debug_draw.cpp
     # Lesson 5.11. The QUEUE, split from the drawing above it. Two files rather
     # than one because their include lists must differ: this one is reachable

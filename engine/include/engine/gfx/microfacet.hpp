@@ -43,6 +43,7 @@
 #pragma once
 
 #include <engine/gfx/colour.hpp>
+#include <engine/math/vec3.hpp>   // Lesson 6.15: ggx_importance_sample returns a direction
 
 #include <algorithm>
 #include <cmath>
@@ -565,6 +566,75 @@ enum class diffuse_coupling
     const float a2 = std::clamp(alpha * alpha, 0.0f, 0.999999f);
     const float s = alpha * std::sqrt(0.41421356f / (1.0f - a2));
     return std::asin(std::clamp(s, 0.0f, 1.0f));
+}
+
+/// The lobe's **solid angle** — how much of the sky one specular highlight sees.
+///
+/// Lesson 6.15, and it is `ggx_lobe_half_angle` turned into the unit that can be
+/// compared against something. A half-angle is not commensurable with a texel; a
+/// steradian is, because a cube-map texel has one too (`cube_texel_solid_angle`
+/// in `cubemap.hpp`). Setting those two equal is what decides which mip level of
+/// a prefiltered environment map a given roughness should read, and that turns
+/// the usual hand-picked `roughness * (levels - 1)` into something derived.
+///
+/// The cap of a cone of half-angle `t` subtends `2*pi*(1 - cos t)` steradians —
+/// the spherical-cap area, and the one piece of solid-angle geometry worth
+/// memorising. At `t = 90` degrees it is `2*pi`, the whole hemisphere, which is
+/// the right answer for `alpha = 1` and is the check to run first.
+///
+/// **This is the HALF-VECTOR lobe's solid angle**, inheriting that caveat from
+/// the function above. The reflected lobe is about four times larger in solid
+/// angle (twice the angle, and area goes as the angle squared for small caps),
+/// which matters if you are asking about the image of a light rather than about
+/// the surface.
+[[nodiscard]] inline float ggx_lobe_solid_angle(float alpha)
+{
+    return 2.0f * std::numbers::pi_v<float> * (1.0f - std::cos(ggx_lobe_half_angle(alpha)));
+}
+
+/// Draw a microfacet normal from the GGX distribution — **the NDF's own inverse CDF**.
+///
+/// Lesson 6.15. Prefiltering an environment map and integrating the BRDF both
+/// come down to the same question: *given this surface, which directions matter?*
+/// Sampling uniformly over the hemisphere answers it terribly — at roughness 0.1
+/// the lobe is 0.37 degrees wide, so all but roughly one sample in 100,000 lands
+/// where D is numerically zero. Importance sampling puts the samples where the
+/// distribution already is.
+///
+/// **The derivation, which is short because GGX was chosen to make it short.**
+/// The density we want to sample is `D(theta) cos(theta)` over the hemisphere
+/// (the `cos` is there because D is defined per unit *projected* area — Lesson
+/// 6.3 §5). Integrate it over phi and out to theta, and the normalisation is
+/// exactly what makes GGX integrate to one, so the cumulative distribution
+/// collapses to
+///
+///     P(theta) = (1 - cos^2 t) / (cos^2 t (alpha^2 - 1) + 1) ... rearranged,
+///     cos t = sqrt( (1 - u2) / (1 + (alpha^2 - 1) u2) )
+///
+/// with `phi = 2 pi u1` because the distribution is isotropic. No rejection, no
+/// iteration, one square root: that closed form is a large part of why GGX won.
+///
+/// @param u1,u2  a pair in [0,1) — use `hammersley` (cubemap.hpp) rather than
+///               `rand()`, because a low-discrepancy sequence converges as
+///               roughly 1/N against random sampling's 1/sqrt(N).
+/// @return the half-vector in **tangent space, +Z up**, matching the basis
+///         Lesson 6.7's TBN builds (`tangent * x + bitangent * y + normal * z`).
+///         Unit length by construction.
+[[nodiscard]] inline vec3 ggx_importance_sample(float u1, float u2, float alpha)
+{
+    const float a2 = alpha * alpha;
+    const float phi = 2.0f * std::numbers::pi_v<float> * u1;
+
+    // The clamp is not defensive tidying. At alpha very near zero the quotient is
+    // 1 to within float precision and can round a hair ABOVE it, and `sqrt` of
+    // 1 + epsilon is fine but `1 - cos^2` then goes negative and `sin` becomes
+    // NaN — the same rounding-above-one failure `light.hpp` measured at 1.00001
+    // before its `pow`.
+    const float cos_t = std::sqrt(std::clamp((1.0f - u2) / (1.0f + (a2 - 1.0f) * u2),
+                                             0.0f, 1.0f));
+    const float sin_t = std::sqrt(std::max(0.0f, 1.0f - cos_t * cos_t));
+
+    return {sin_t * std::cos(phi), sin_t * std::sin(phi), cos_t};
 }
 
 struct microsurface

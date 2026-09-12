@@ -211,6 +211,65 @@
         }
       });
     });
+
+    // (d) TEXT CROSSING A BOX'S STROKE — added in Lesson 6.15, for the same
+    // reason 6.14 extended the spill test from text to closed shapes: the
+    // selector above is `line, polyline, path`, so an annotation box laid over
+    // a label was invisible to every check on this page. 6.15's figure 6
+    // shipped its first draft with the amber summary box crossing the third
+    // output panel's text, and only a screenshot caught it.
+    //
+    // THE TEST IS "CROSSES", NOT "CONTAINS", and the distinction is the whole
+    // design: a legend box is SUPPOSED to have text inside it. Sampling the
+    // four edges rather than the filled area gives that for free — text sitting
+    // comfortably inside a box puts none of the box's edge points inside its
+    // own bounding box, and text straddling an edge puts several.
+    //
+    // ONLY `fill="none"` RECTS, and the restriction is measured rather than
+    // cautious. Run against every rect, this fires 26 times across 12 published
+    // pages — and most of those are FILLED cells with a label deliberately
+    // annotating them: a pixel-grid diagram (2.1), a memory-layout box (1.2,
+    // 5.7), an NDC corner marker (4.4). A label touching the edge of a filled
+    // cell is the diagram working. Restricting to hollow boxes — which in this
+    // corpus means `hollow()`, i.e. a legend or annotation frame — drops it to
+    // 9 hits across 4 pages, and those four are real.
+    svg.querySelectorAll('rect[fill="none"]').forEach(el => {
+      if (el.closest('defs, marker, clipPath, mask, symbol')) { return; }
+      if (el.closest('.grid') || el.classList.contains('grid')) { return; }
+
+      const r = el.getBoundingClientRect();
+      if (r.width < 2 || r.height < 2) { return; }
+
+      // Sample the perimeter at ~3px, the same density as the stroke walk above.
+      const pts = [];
+      const push = (x, y) => pts.push({ x, y });
+      const stepX = Math.max(1, Math.round(r.width / 3));
+      const stepY = Math.max(1, Math.round(r.height / 3));
+      for (let i = 0; i <= stepX; i++) {
+        const x = r.left + r.width * i / stepX;
+        push(x, r.top); push(x, r.bottom);
+      }
+      for (let i = 0; i <= stepY; i++) {
+        const y = r.top + r.height * i / stepY;
+        push(r.left, y); push(r.right, y);
+      }
+
+      texts.forEach(t => {
+        const pad = 1.5;
+        const inside = pts.filter(p =>
+          p.x > t.r.left + pad && p.x < t.r.right - pad &&
+          p.y > t.r.top + pad && p.y < t.r.bottom - pad);
+        if (inside.length > 1) {
+          const owner = el.closest('[class]');
+          const cls = owner ? owner.getAttribute('class') : '(none)';
+          const key = fi + '|' + t.s + '|rect|' + cls;
+          if (!seen.has(key)) {
+            seen.add(key);
+            onShape.push({ fig: fi + 1, text: t.s.slice(0, 38), shape: 'rect', cls });
+          }
+        }
+      });
+    });
   });
 
   out.svgSpill = spill;

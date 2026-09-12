@@ -687,6 +687,33 @@ enum class specular_model
             f_r.b * eb + albedo.b * lights.ambient.b};
 }
 
+/// **Just the ambient term `shade()` adds** — Lesson 6.15, and it exists to be
+/// SUBTRACTED.
+///
+/// A caller with an environment map wants the direct lighting `shade()` computes
+/// and the image-based ambient in place of the constant one. It cannot ask
+/// `shade()` for the first without the second, so it removes what was added.
+/// That is only honest if the removal is character-for-character the addition,
+/// which is why this is a function beside it rather than the expression written
+/// out a second time at the call site: two copies of `albedo * ambient` can
+/// drift, and this one is three lines from the line it mirrors.
+///
+/// **`surface` is unused, and that is the point of taking it.** The term
+/// multiplies the FULL albedo rather than the diffuse albedo — it predates the
+/// metallic workflow and Lesson 6.4 deliberately left it alone — so a metal's
+/// ambient is currently wrong in a way `image_based_light` fixes. Taking the
+/// parameter documents that this function knows, and makes the signature the
+/// same shape as its replacement's.
+[[nodiscard]] inline linear_rgb ambient_only(linear_rgb albedo,
+                                             const lighting& lights,
+                                             microsurface surface)
+{
+    (void)surface;
+    return {albedo.r * lights.ambient.r,
+            albedo.g * lights.ambient.g,
+            albedo.b * lights.ambient.b};
+}
+
 /// The same, taking and returning an encoded colour — the form the demo wants.
 ///
 /// Decode, shade, re-encode. `to_encoded` clamps, which is where an over-bright

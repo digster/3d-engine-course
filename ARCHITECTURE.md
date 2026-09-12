@@ -1160,6 +1160,29 @@ buffer, the projector and the handle system in order to draw a box. It is also w
 `wire_mesh()` takes two spans instead of the `mesh` that owns them — `mesh.hpp` drags in
 `core/pool.hpp`.
 
+**Lesson 6.15 added the third instance of the same discipline, and this one is a forward
+declaration.** `gpu_texture::create_cube` takes a `const cube_map&`, so `gpu_texture.hpp` needs the
+*name* and not the definition:
+
+```cpp
+namespace engine {
+class cube_map;                      // gfx/cubemap.hpp, defined there, included in the .cpp
+```
+
+Including `cubemap.hpp` instead would drag `hdr.hpp`, `microfacet.hpp`, `texture.hpp` and
+`math/vec2` into every translation unit that wants to make a *depth buffer* — because
+`gpu_texture.hpp` is what a depth target comes from too. One translation unit,
+`gpu_texture.cpp`, needs the full type, and that is where the include lives. Same rule as
+`debug_lines.hpp` above and as `stb_image`'s containment: **an interface's include list is part of
+the interface.**
+
+`cubemap.hpp` itself sits in `gfx/` rather than under a new `env/`, and the argument is the one
+`gpu_texture.hpp` already makes for keeping depth targets beside sampled ones: *an environment map
+is a texture type, not a subsystem.* What is genuinely new about it is the direction of the
+indexing — a `cube_map`'s mip levels mean **roughness**, where Lesson 6.10's `mip_chain` levels
+mean **screen footprint**. The mechanism is identical and the meaning is not, which is why both
+types exist rather than one gaining a flag.
+
 **Dear ImGui is the one dependency that is deliberately PUBLIC** (5.11), against `stb_image`'s
 `PRIVATE` (4.7). The distinction is *concept* versus *vocabulary*: stb wraps to one function and
 one type, while ImGui's value is four hundred widget calls, and a wrapper around those is a
