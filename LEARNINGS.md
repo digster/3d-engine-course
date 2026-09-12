@@ -7301,3 +7301,81 @@ The narrowed check reports hollow-box/label crossings in four published pages:
 (fig 3, ×2) and `02-01-lines` (figs 3 and 6, ×4). Left alone deliberately — fixing them changes
 published visuals and rebuilds four pages whose reproducibility was only just stabilised, which is
 the same call made on 2026-09-12 for the two pedagogical defects above.
+
+---
+
+## A sweep along an axis the effect cannot depend on looks exactly like a measurement
+
+*Lesson 6.16.* The first version of the culling benchmark swept the **object count** — 4, 16, 64,
+256, 1024, 4096 — and produced a table, a trend and a verdict column reading `CULL WINS` six times.
+It contained no information. Culling is O(n) and the work it skips is O(n), so their ratio is
+independent of n and no amount of sweeping n can cross it.
+
+The crossover was in the **cull rate**, and once that was named it could be *predicted* rather than
+hunted: culling costs `c` per object always and saves `w` per object rejected, so break-even is
+`c/w`. Measured `c = 58.3 ns` and `w = 23,821 ns`, predicted **0.2446%**, then found it bracketed
+between the 0% and 0.4% samples.
+
+**Before sweeping a parameter, ask what would have to be true for the answer to depend on it.**
+This is the third member of a family this codebase keeps rediscovering:
+
+| Lesson | Rule |
+|---|---|
+| 6.14 | Check a measurement *can* produce a non-null result before believing a null one |
+| 6.15 | Check a non-null result has *converged* before believing it |
+| 6.16 | Check the *axis* can show the effect before sweeping it |
+
+Underneath all three: **establish what your instrument can see before you read it.**
+
+## Verify against facts, and then check the facts are sufficient
+
+The frustum extraction is checkable without a reference implementation, because a frustum has
+properties that follow from what it *is*: the eye is the apex of the pyramid, so its distance to all
+four side planes is exactly zero. Four independent zeros, and they came out as `0.000000`.
+
+**And they were not enough.** A sign error that *reverses* a plane's normal leaves the apex on the
+plane — zero is zero either way — so all four checks pass while the culler rejects the world. That
+is exactly the bug the first draft made. The checks that catch it are `d(eye, near) == −near` and
+"opposite planes are not exact negations of one another".
+
+*A test that would pass on the bug you actually made is not a test.*
+
+## Rule out the obvious cause before believing it
+
+The far plane came out 1.4 × 10⁻³ from where the arithmetic says it should be. The obvious diagnosis
+was catastrophic cancellation in `row3 − row2`, and the rows really do agree to three digits — case
+apparently closed.
+
+Redoing the same subtraction in `double`, from the same `float` matrix, reproduced the `float`
+answer to seven digits. That *rules the subtraction out*. The error is upstream in `perspective()`,
+where forming `A + 1` with `A = −1.003009` discards eight bits and amplifies A's last ulp by **332×**.
+
+A plausible mechanism that is present is not the same as the mechanism responsible. The cheap
+discriminating experiment — redo the suspect step in higher precision — took four lines.
+
+## A limit that has never been reached cannot tell you it is wrong
+
+`pipeline_desc` held eight vertex attributes and, past the eighth, did `return *this` — dropping
+them **silently**. Nothing in Modules 4 or 5, or eight lessons of Module 6, had ever declared a
+ninth, so the cap had never fired. Lesson 6.16's instanced pipeline wants eleven.
+
+What caught it was Lesson 4.5's `check_layout`, which compares the declared attributes against the
+shader's *reflected* inputs — an independent reading of what the pipeline actually declares. This is
+the sibling of 6.15's finding that **a build only ever run incrementally cannot tell you it is
+wrong**; that one is now acted on too, by running a clean-tree build before shipping.
+
+## Two C++ traps this codebase had avoided by luck
+
+- **`aabb::expand({1, 2, 3})` is ambiguous.** Brace elision makes the braced list a candidate for
+  both `expand(vec3)` and `expand(const aabb&)` — an `aabb` whose first member is initialised from
+  three floats. Every existing call site happened to pass a named variable. Write `expand(vec3{…})`.
+- **`std::vector<int> v(std::size_t(n));` declares a function.** The most vexing parse:
+  `std::size_t(n)` reads as a parameter named `n`. The error surfaces forty lines later at the first
+  use, as an impossible conversion. Use `static_cast<std::size_t>(n)`.
+
+## A test that can pass without testing anything is worse than no test
+
+`golden_615.cpp` compared two files as strings and printed `identical=YES` when **both** reads
+failed — two empty strings are equal. It was run from the correct directory every time, so it never
+fired. `golden_616.cpp` reports both sizes and a differing-byte count, and fails loudly on an empty
+read.

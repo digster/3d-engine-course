@@ -17,6 +17,16 @@
 // would have to be re-tightened. Lesson 6.16's frustum culling will want both
 // and will say so then.
 //
+// **LESSON 6.16 SAYS SO NOW**, and it wanted both for exactly the reason above,
+// read in the other direction. A frustum test against a sphere is four
+// multiplies and an add against ONE plane and it needs no corner selection; a
+// box needs three comparisons to choose a corner before it can do the same
+// arithmetic. So the sphere is the cheap first question and the box is the
+// precise second one — and 6.16 §7 measures whether asking the cheap one first
+// is worth it, which turned out to depend on the answer's distribution rather
+// than on the arithmetic. `bounding_sphere` below is the conversion, and it is
+// deliberately the LOOSE one: see its own comment.
+//
 // WHAT AN AABB IS NOT. It is not the object. `transformed()` below returns the
 // box that contains the transformed *box*, which is generally larger than the
 // box that contains the transformed *object* — rotate a long thin rod by 45° and
@@ -31,6 +41,7 @@
 #include <engine/math/vec3.hpp>
 
 #include <algorithm>   // std::min, std::max
+#include <span>       // bounds_of (6.16)
 
 namespace engine {
 
@@ -148,6 +159,61 @@ struct aabb
         out.expand(vec3{q.x, q.y, q.z});
     }
     return out;
+}
+
+/// A ball: a centre and a radius. **The other bounding volume**, Lesson 6.16.
+///
+/// Four floats against a box's six, and the saving is not the point — the point
+/// is that a sphere is **rotation-invariant**, so a rotating object's bounding
+/// sphere is a translation of the same sphere while its bounding box has to be
+/// rebuilt. That is the whole reason engines keep both: a box is tighter, a
+/// sphere is cheaper to keep true.
+struct sphere
+{
+    vec3 centre{};
+    float radius = -1.0f;   ///< NEGATIVE means empty, matching `aabb`'s inside-out
+
+    [[nodiscard]] bool empty() const { return radius < 0.0f; }
+};
+
+/// The axis-aligned box containing every point in `points`.
+///
+/// A free function over a span rather than a member of anything, because the
+/// callers do not agree on what owns the points: Lesson 6.16 hands it a mesh's
+/// `vertices`, and 6.8's `shadow_map::bounds_of` walks objects instead because it
+/// wants the tight WORLD box and not the box of a box. Both spellings are correct
+/// for what they ask; §5 of Lesson 6.16 is about which question to ask.
+[[nodiscard]] inline aabb bounds_of(std::span<const vec3> points)
+{
+    aabb box;
+    for (const vec3& p : points) { box.expand(p); }
+    return box;
+}
+
+/// The sphere centred on the box's centre that contains the box.
+///
+/// **This is the LOOSE conversion and it is loose by a factor of sqrt(3) in
+/// radius**, because a cube's half-diagonal is sqrt(3) times its half-side. In
+/// volume that is 3*sqrt(3)*pi/6 ≈ **2.72x** the box for a cube — so a sphere
+/// derived this way rejects strictly less than the box it came from, and using
+/// it as a *replacement* for the box test would be a worse culler wearing a
+/// cheaper coat.
+///
+/// It is here because Lesson 6.16 uses it as a **pre-test**, where being loose is
+/// exactly the required property: a volume that contains the box can only ever
+/// produce false keeps, never a false reject, so a box test behind it is still
+/// the final word. Being loose costs accepted work; being tight would cost
+/// correctness.
+///
+/// The tighter answer — the minimal enclosing sphere of the original POINTS
+/// rather than of their box — is Welzl's algorithm, is O(n) expected, and is
+/// genuinely worth it for a mesh you bake once. It is Exercise 6 rather than
+/// engine code, because the pre-test's whole value is that it is nearly free and
+/// a better sphere does not change what the box behind it decides.
+[[nodiscard]] inline sphere bounding_sphere(const aabb& box)
+{
+    if (box.empty()) { return {}; }
+    return {box.centre(), box.radius()};
 }
 
 } // namespace engine

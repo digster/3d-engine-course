@@ -2,6 +2,8 @@
 
 #include <engine/gfx/gpu_scene.hpp>
 
+#include <engine/gfx/instancing.hpp>  // 6.16: instance_batch, gpu_instance
+
 #include <engine/gfx/cubemap.hpp>   // Lesson 6.15: the 1x1 black fallback cube
 #include <engine/gfx/gpu_post.hpp>  // k_hdr_format
 
@@ -43,7 +45,8 @@ bool gpu_scene_renderer::create(const gpu_device& dev,
                                 SDL_GPUShader* vertex, SDL_GPUShader* fragment,
                                 SDL_GPUTextureFormat depth_format,
                                 SDL_GPUTextureFormat colour_format,
-                                SDL_GPUSampleCount samples)
+                                SDL_GPUSampleCount samples,
+                                SDL_GPUShader* instanced_vertex)
 {
     if (vertex == nullptr || fragment == nullptr) { return false; }
 
@@ -161,6 +164,61 @@ bool gpu_scene_renderer::create(const gpu_device& dev,
         }
         create_ms_ += pipelines_[i][j].create_ms();
     }
+    }
+
+    // ---- The tenth pipeline: instanced, solid, opaque — Lesson 6.16 ---------
+    //
+    // Built from the SAME fragment shader as the nine above. That is not a
+    // saving, it is the statement: instancing changes where the vertex stage
+    // gets its transform and the fragment stage never asked, so every Module 6
+    // feature comes along unported. The pipeline is separate anyway because a
+    // pipeline IS the (vertex, fragment, state) triple — Lesson 4.1 — and one
+    // third of it changed.
+    if (instanced_vertex != nullptr)
+    {
+        pipeline_desc desc(dev, instanced_vertex, fragment);
+        desc.samples(samples_);
+
+        // BOTH LAYOUTS, AND THE ORDER MATTERS FOR THE LOCATIONS, NOT THE SLOTS.
+        // `gpu_mesh::describe` takes locations 0-3 from buffer slot 0;
+        // `describe_instances` takes 4-10 from slot 1. Eleven attributes in one
+        // pipeline, which is what raised `pipeline_desc::k_max_attributes` from
+        // eight to sixteen this lesson — see that constant's comment for how the
+        // three dropped attributes announced themselves.
+        gpu_mesh::describe(desc, 0);
+        describe_instances(desc, 1);
+
+        if (colour_format != SDL_GPU_TEXTUREFORMAT_INVALID)
+        {
+            desc.colour_target_format(colour_format);
+        }
+
+        SDL_GPUGraphicsPipelineCreateInfo& raw = desc.raw();
+        raw.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL;
+        raw.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_BACK;
+        if (depth_format_ != SDL_GPU_TEXTUREFORMAT_INVALID)
+        {
+            raw.target_info.has_depth_stencil_target = true;
+            raw.target_info.depth_stencil_format = depth_format_;
+            raw.depth_stencil_state.enable_depth_test = true;
+            raw.depth_stencil_state.enable_depth_write = true;
+            raw.depth_stencil_state.compare_op = SDL_GPU_COMPAREOP_LESS;
+        }
+
+        if (!instanced_.create(dev, desc.info()))
+        {
+            // NOT FATAL, and that is deliberate. A device that cannot build this
+            // pipeline can still draw the whole scene through `render`; losing
+            // instancing costs draw calls, not pixels. Returning false here
+            // would turn an optimisation into a hard requirement.
+            ENGINE_LOG_ERROR(engine::log_gpu,
+                             "gpu_scene: the instanced pipeline was not created; "
+                             "render_batched will draw nothing");
+        }
+        else
+        {
+            create_ms_ += instanced_.create_ms();
+        }
     }
 
     // ---- One white texel ----------------------------------------------------
@@ -301,6 +359,28 @@ void gpu_scene_renderer::destroy()
     flat_normal_.destroy();
     far_depth_.destroy();
     shadow_sampler_.destroy();
+
+    // 6.16 ADDED `instanced_` HERE AND FOUND THREE THAT WERE MISSING.
+    //
+    // `black_cube_`, `black_lut_` and `cube_sampler_` arrived in Lesson 6.15 and
+    // were never added to this function. It is NOT a leak — every one of them is
+    // an RAII member whose destructor runs when the renderer dies, and each
+    // `create_*` calls its own `destroy()` first, so re-creating is clean too.
+    // What it is, is a function that does not do what its name says: after
+    // `destroy()` the object reported `valid() == false` while still holding
+    // three live GPU objects, so "destroyed" and "empty" had quietly stopped
+    // meaning the same thing.
+    //
+    // The transferable part is how it was found: not by a leak report, but by
+    // ADDING A MEMBER AND READING THE LIST. A teardown function is a list that
+    // must be kept in step with a declaration list by hand, and nothing checks
+    // it — which is an argument for having as few members as possible, and, in
+    // Module 9, for the arena that makes teardown one operation instead of eight.
+    black_cube_.destroy();
+    black_lut_.destroy();
+    cube_sampler_.destroy();
+
+    instanced_.destroy();
     for (auto& row : pipelines_) { for (gpu_pipeline& p : row) { p.destroy(); } }
     depth_w_ = 0;
     depth_h_ = 0;
@@ -353,18 +433,17 @@ SDL_GPUDepthStencilTargetInfo gpu_scene_renderer::depth_target_info() const
     return info;
 }
 
-draw_stats gpu_scene_renderer::render(SDL_GPUCommandBuffer* cb, SDL_GPURenderPass* pass,
-                                      const gpu_draw_item* items, int count,
-                                      const camera_uniforms& camera,
-                                      const scene_light_uniforms& light,
-                                      SDL_GPUSampler* sampler, frame_log* log,
-                                      SDL_GPUTexture* shadow,
-                                      SDL_GPUSampler* shadow_sampler,
-                                      const cascade_uniforms* cascades,
-                                      const scene_environment* environment) const
+gpu_scene_renderer::frame_setup
+gpu_scene_renderer::begin_frame(SDL_GPUCommandBuffer* cb,
+                                const camera_uniforms& camera,
+                                const scene_light_uniforms& light,
+                                const cascade_uniforms* cascades,
+                                SDL_GPUTexture* shadow,
+                                SDL_GPUSampler* shadow_sampler,
+                                const scene_environment* environment,
+                                frame_log* log,
+                                draw_stats& stats) const
 {
-    draw_stats stats;
-    if (cb == nullptr || pass == nullptr || items == nullptr || count <= 0) { return stats; }
 
     // ---- Per FRAME, pushed once ---------------------------------------------
     //
@@ -405,17 +484,6 @@ draw_stats gpu_scene_renderer::render(SDL_GPUCommandBuffer* cb, SDL_GPURenderPas
                     static_cast<Uint32>(sizeof(light)));
     }
 
-    // Track what is currently bound so a redundant bind can be skipped AND
-    // counted. The skipping is a small real saving; the counting is the lesson.
-    const gpu_pipeline* bound_pipeline = nullptr;
-    SDL_GPUTexture* bound_texture = nullptr;
-
-    SDL_GPUTexture* bound_normal = nullptr;   // 6.7
-    // 6.11: a matrix now, because the ideal bind count is one per distinct
-    // (surface style, blend style) PAIR present — a solid opaque draw and a solid
-    // blended draw are two pipelines however well the list is sorted.
-    bool style_present[k_styles][k_blends] = {};
-
     // ---- The shadow map, resolved once for the whole frame — Lesson 6.8 -----
     //
     // It does not change between draws, so it is not part of the per-item
@@ -442,6 +510,44 @@ draw_stats gpu_scene_renderer::render(SDL_GPUCommandBuffer* cb, SDL_GPURenderPas
     SDL_GPUTexture* const lut_tex = have_env ? environment->brdf_lut : black_lut_.handle();
     SDL_GPUSampler* const cube_samp = have_env ? environment->cube_sampler : cube_sampler_.handle();
     SDL_GPUSampler* const lut_samp = have_env ? environment->lut_sampler : cube_sampler_.handle();
+
+    frame_setup out;
+    out.shadow = shadow_tex;
+    out.shadow_sampler = shadow_samp;
+    out.irradiance = irr_tex;
+    out.prefiltered = pre_tex;
+    out.brdf_lut = lut_tex;
+    out.cube_sampler = cube_samp;
+    out.lut_sampler = lut_samp;
+    return out;
+}
+
+draw_stats gpu_scene_renderer::render(SDL_GPUCommandBuffer* cb, SDL_GPURenderPass* pass,
+                                      const gpu_draw_item* items, int count,
+                                      const camera_uniforms& camera,
+                                      const scene_light_uniforms& light,
+                                      SDL_GPUSampler* sampler, frame_log* log,
+                                      SDL_GPUTexture* shadow,
+                                      SDL_GPUSampler* shadow_sampler,
+                                      const cascade_uniforms* cascades,
+                                      const scene_environment* environment) const
+{
+    draw_stats stats;
+    if (cb == nullptr || pass == nullptr || items == nullptr || count <= 0) { return stats; }
+
+    const frame_setup frame = begin_frame(cb, camera, light, cascades, shadow,
+                                          shadow_sampler, environment, log, stats);
+
+    // Track what is currently bound so a redundant bind can be skipped AND
+    // counted. The skipping is a small real saving; the counting is the lesson.
+    const gpu_pipeline* bound_pipeline = nullptr;
+    SDL_GPUTexture* bound_texture = nullptr;
+    SDL_GPUTexture* bound_normal = nullptr;   // 6.7
+
+    // 6.11: a matrix now, because the ideal bind count is one per distinct
+    // (surface style, blend style) PAIR present — a solid opaque draw and a solid
+    // blended draw are two pipelines however well the list is sorted.
+    bool style_present[k_styles][k_blends] = {};
 
     for (int i = 0; i < count; ++i)
     {
@@ -499,14 +605,14 @@ draw_stats gpu_scene_renderer::render(SDL_GPUCommandBuffer* cb, SDL_GPURenderPas
             binds[0].sampler = sampler;
             binds[1].texture = nrm;
             binds[1].sampler = sampler;
-            binds[2].texture = shadow_tex;
-            binds[2].sampler = shadow_samp;
-            binds[3].texture = irr_tex;
-            binds[3].sampler = cube_samp;
-            binds[4].texture = pre_tex;
-            binds[4].sampler = cube_samp;
-            binds[5].texture = lut_tex;
-            binds[5].sampler = lut_samp;
+            binds[2].texture = frame.shadow;
+            binds[2].sampler = frame.shadow_sampler;
+            binds[3].texture = frame.irradiance;
+            binds[3].sampler = frame.cube_sampler;
+            binds[4].texture = frame.prefiltered;
+            binds[4].sampler = frame.cube_sampler;
+            binds[5].texture = frame.brdf_lut;
+            binds[5].sampler = frame.lut_sampler;
             SDL_BindGPUFragmentSamplers(pass, 0, binds, 6);
             bound_texture = tex;
             bound_normal = nrm;
@@ -579,6 +685,144 @@ draw_stats gpu_scene_renderer::render(SDL_GPUCommandBuffer* cb, SDL_GPURenderPas
         for (bool present : row)
         {
             if (present) { ++stats.ideal_pipeline_binds; }
+        }
+    }
+
+    return stats;
+}
+
+// ---------------------------------------------------------------------------
+// Lesson 6.16 — the same frame, submitted as batches
+// ---------------------------------------------------------------------------
+
+draw_stats gpu_scene_renderer::render_batched(SDL_GPUCommandBuffer* cb,
+                                              SDL_GPURenderPass* pass,
+                                              const instance_batch* batches, int count,
+                                              SDL_GPUBuffer* instances,
+                                              const camera_uniforms& camera,
+                                              const scene_light_uniforms& light,
+                                              SDL_GPUSampler* sampler, frame_log* log,
+                                              SDL_GPUTexture* shadow,
+                                              SDL_GPUSampler* shadow_sampler,
+                                              const cascade_uniforms* cascades,
+                                              const scene_environment* environment) const
+{
+    draw_stats stats;
+    if (cb == nullptr || pass == nullptr || batches == nullptr || count <= 0) { return stats; }
+    if (instances == nullptr || !instanced_.valid()) { return stats; }
+
+    // THE IDENTICAL PROLOGUE, BY CONSTRUCTION AND NOT BY DISCIPLINE. One call,
+    // one implementation; `render` above makes the same one. See `frame_setup`.
+    const frame_setup frame = begin_frame(cb, camera, light, cascades, shadow,
+                                          shadow_sampler, environment, log, stats);
+
+    // ONE PIPELINE FOR THE WHOLE LOOP. `render`'s change-detection over nine
+    // pipelines has nothing to detect here: `create` builds exactly one instanced
+    // pipeline (solid, opaque) and `batch_instances` only ever produces opaque
+    // multi-instance batches, so the bind happens once, outside the loop.
+    //
+    // That is a real and slightly surprising saving. A perfectly sorted
+    // non-instanced frame still pays one pipeline bind per distinct style present
+    // — `ideal_pipeline_binds` has measured exactly that since Lesson 4.8 — and
+    // here the ideal and the actual are both 1 by construction.
+    SDL_BindGPUGraphicsPipeline(pass, instanced_.handle());
+    stats.pipeline_binds = 1;
+    stats.ideal_pipeline_binds = 1;
+    if (log != nullptr) { log->record(gpu_event_kind::bind_pipeline, "instanced solid"); }
+
+    SDL_GPUTexture* bound_texture = nullptr;
+    SDL_GPUTexture* bound_normal = nullptr;
+
+    for (int b = 0; b < count; ++b)
+    {
+        const instance_batch& batch = batches[b];
+        stats.items += batch.count;
+
+        if (batch.key.mesh == nullptr || !batch.key.mesh->valid()) { continue; }
+
+        // A batch this pipeline cannot express is SKIPPED, not drawn wrongly.
+        // `batch_instances` never produces a blended batch with more than one
+        // instance, but it does hand back single-instance blended and two-sided
+        // batches so the caller has one list; those belong in `render`.
+        if (batch.key.style != surface_style::solid
+            || batch.key.blend != blend_style::opaque)
+        {
+            continue;
+        }
+
+        SDL_GPUTexture* tex = (batch.key.texture != nullptr) ? batch.key.texture
+                                                             : white_.handle();
+        SDL_GPUTexture* nrm = (batch.key.normal_map != nullptr) ? batch.key.normal_map
+                                                                : flat_normal_.handle();
+        if (tex != bound_texture || nrm != bound_normal)
+        {
+            // The same six-slot bind `render` performs, for the same reason: a
+            // partial `SDL_BindGPUFragmentSamplers` REPLACES the range it names
+            // rather than merging, so slots 2-5 must ride along with 0 and 1.
+            SDL_GPUTextureSamplerBinding binds[6]{};
+            binds[0].texture = tex;
+            binds[0].sampler = sampler;
+            binds[1].texture = nrm;
+            binds[1].sampler = sampler;
+            binds[2].texture = frame.shadow;
+            binds[2].sampler = frame.shadow_sampler;
+            binds[3].texture = frame.irradiance;
+            binds[3].sampler = frame.cube_sampler;
+            binds[4].texture = frame.prefiltered;
+            binds[4].sampler = frame.cube_sampler;
+            binds[5].texture = frame.brdf_lut;
+            binds[5].sampler = frame.lut_sampler;
+            SDL_BindGPUFragmentSamplers(pass, 0, binds, 6);
+            bound_texture = tex;
+            bound_normal = nrm;
+            ++stats.texture_binds;
+        }
+
+        // ---- The material, still a push ------------------------------------
+        //
+        // PER BATCH, not per instance, and that is the batch key earning its
+        // keep: every instance in this run was required to have byte-identical
+        // material bytes, so one push serves all of them. A hundred objects that
+        // differ only in placement push 32 bytes once here against 3,200 bytes
+        // through `render`.
+        SDL_PushGPUFragmentUniformData(cb, 1, &batch.key.material,
+                                       sizeof(batch.key.material));
+        stats.uniform_bytes += static_cast<Uint32>(sizeof(batch.key.material));
+
+        // ---- The mesh at slot 0, the instances at slot 1 --------------------
+        batch.key.mesh->bind(pass, 0);
+
+        // ONE BUFFER, MANY BATCHES, ADDRESSED BY OFFSET. `first` is an index into
+        // the instance array, so the byte offset is `first * sizeof(gpu_instance)`
+        // and the hardware's instance index counts from zero inside the binding.
+        // Binding a separate buffer per batch would work and would cost an
+        // allocation per batch per frame; this costs a different `offset` field.
+        SDL_GPUBufferBinding instance_binding{};
+        instance_binding.buffer = instances;
+        instance_binding.offset =
+            static_cast<Uint32>(batch.first) * static_cast<Uint32>(sizeof(gpu_instance));
+        SDL_BindGPUVertexBuffers(pass, 1, &instance_binding, 1);
+
+        const Uint32 tris = (batch.key.mesh->index_count() > 0u)
+            ? batch.key.mesh->index_count() / 3u
+            : batch.key.mesh->vertex_count() / 3u;
+
+        if (log != nullptr)
+        {
+            log->record(gpu_event_kind::push_uniform, "material (per batch)", 1,
+                        static_cast<Uint32>(sizeof(batch.key.material)));
+            log->record(gpu_event_kind::bind_vertex, "instance placements", 1);
+        }
+
+        batch.key.mesh->draw(pass, static_cast<Uint32>(batch.count));
+        ++stats.draws;
+        stats.triangles += tris * static_cast<Uint32>(batch.count);
+
+        if (log != nullptr)
+        {
+            log->record(gpu_event_kind::draw, "instanced batch",
+                        batch.key.mesh->index_count(),
+                        static_cast<Uint32>(batch.count), tris);
         }
     }
 

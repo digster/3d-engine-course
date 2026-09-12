@@ -71,10 +71,22 @@ add_library(engine STATIC
     # 6.16's frustum culling walks the same list — one place, not two.
     src/gfx/draw_order.cpp
     src/gfx/framebuffer.cpp
+    # Lesson 6.16. The six planes, extracted from the view-projection matrix, and
+    # the walk that rejects what they exclude. A translation unit for the reason
+    # draw_order.cpp gives one line above: `cull_visible` is a real algorithm over
+    # a span, and the extraction has six sign conventions in it that must have
+    # exactly one home.
+    src/gfx/frustum.cpp
     src/gfx/gpu_buffer.cpp
     src/gfx/gpu_debug.cpp
     src/gfx/gpu_device.cpp
     src/gfx/gpu_mesh.cpp
+    # Lesson 6.16. Grouping a culled set into instanced draws. Beside gpu_mesh
+    # rather than inside it, because a mesh that knew how many copies of itself
+    # exist would be deciding something that belongs to the scene — which is the
+    # rule `gpu_mesh::bind` has stated since 4.5 and is why it refuses to bind
+    # slot 1.
+    src/gfx/instancing.cpp
     src/gfx/gpu_pipeline.cpp
     # Lesson 6.12. The first pass that draws no geometry: one full-screen
     # triangle, one texture in, one texture out. 6.13 turns it into a stack.

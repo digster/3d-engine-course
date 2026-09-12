@@ -3,6 +3,8 @@
 
 #include <engine/gfx/gpu_pipeline.hpp>
 
+#include <engine/core/assert.hpp>
+
 #include <engine/core/log.hpp>
 
 #include <cstddef>
@@ -244,6 +246,14 @@ pipeline_desc& pipeline_desc::instance_buffer(Uint32 slot, Uint32 pitch)
 pipeline_desc& pipeline_desc::attribute(Uint32 location, Uint32 buffer_slot,
                                         SDL_GPUVertexElementFormat format, Uint32 offset)
 {
+    // 6.16: ASSERT, THEN REFUSE. Refusing alone is what let three dropped
+    // attributes reach `check_layout` as a puzzle rather than reaching the call
+    // site as an error. The refusal stays for release builds — a pipeline with a
+    // missing attribute is a wrong picture, a buffer overrun is worse.
+    ENGINE_ASSERT_MSG(attribute_count_ < k_max_attributes, log_gfx,
+                      "pipeline_desc: attribute %u exceeds the cap of %zu; it is "
+                      "being DROPPED and check_layout will report it missing",
+                      location, k_max_attributes);
     if (attribute_count_ >= k_max_attributes) { return *this; }
 
     SDL_GPUVertexAttribute& a = attributes_[attribute_count_];

@@ -7,9 +7,207 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-09-12 (after Lesson 6.15 — 71 of 107 lessons)
+updated: 2026-09-12 (after Lesson 6.16 — 72 of 107 lessons)
 
 conventions:
+  frustum: SIX PLANES, FROM THE ROWS OF clip_from_world, NEVER FROM A CAMERA.
+        Built in 6.16, engine/include/engine/gfx/frustum.{hpp,cpp}.
+        THE DERIVATION IS ONE OBSERVATION: a clip coordinate IS a signed distance.
+        `x >= -w` is `x + w >= 0` is `(row0 + row3) . p >= 0`, and that is a plane
+        in (a,b,c,d) form. No trigonometry, and — the actual reason — NO SECOND
+        COPY OF THE TRUTH. A geometric construction from eye/fov/aspect silently
+        disagrees with the matrix the renderer uses the moment anyone builds an
+        off-centre (VR), sheared (mirror), oblique (water clip) or reversed-Z
+        projection, and the symptom is objects vanishing at the frame edge, which
+        reads as a RENDERER bug.
+          left  = row0 + row3      right = row3 - row0
+          bottom= row1 + row3      top   = row3 - row1
+          NEAR  = row2 ALONE       far   = row3 - row2
+        THE SIGN GOES ON THE SECOND ROW. `row0 - row3` instead of `row3 - row0` is
+        the same plane reversed; the culler then rejects the whole scene and the
+        TELL is that opposite planes report EXACTLY negated distances. verify_616
+        §A asserts on that directly, because it is the one symptom that names the
+        cause.
+        THE NEAR PLANE IS THE CONVENTION. SDL_GPU clips 0 <= z <= w, so near is
+        row2 with nothing added. Every OpenGL-derived article (and the 2001 Gribb
+        & Hartmann note everything descends from) writes row2 + row3, which under
+        our range puts the near plane roughly a FAR distance behind the camera —
+        so nothing within the visible range is ever culled and the symptom is
+        "culling doesn't seem to help much", which nobody debugs.
+        NORMALISED AT EXTRACTION, always, though the box test does not need it
+        (sign survives any positive scale). Two things do: the sphere test
+        compares a distance against a RADIUS, and every printed distance is
+        meaningless in unknown units. Six square roots per camera per frame.
+        VERIFIED AGAINST FACTS, NOT A REFERENCE. The eye is the APEX, so its
+        distance to all four side planes is exactly 0.000000, and to near is
+        -near. AND FOUR ZEROS ARE NOT ENOUGH: a reversed normal leaves the apex
+        ON the plane, so all four still pass. That is the bug the first draft
+        made. Checks 2 (near = -near) and 4 (opposite planes not negated) exist
+        for exactly that.
+  frustum-precision: THE FAR PLANE IS 1.4e-3 OUT OF PLACE AND IT IS NOT THE
+        EXTRACTION'S FAULT. 6.16 §4, and the method matters more than the
+        finding. The obvious diagnosis is cancellation in `row3 - row2` (three
+        digits of agreement wiped out, visible in the rows). REDOING THE SAME
+        SUBTRACTION IN DOUBLE, FROM THE SAME FLOAT MATRIX, REPRODUCES THE FLOAT
+        ANSWER TO SEVEN DIGITS — which rules the subtraction out.
+        The error is upstream, in perspective(): A = far/(near-far) = -1.003009,
+        and the far plane solves to -B/(A+1). `A + 1` is a cancellation of two
+        nearly-equal numbers IN THE MATRIX BUILDER, dropping ~8 bits and
+        amplifying A's last ulp by 332x. The float matrix's far plane sits at
+        -99.998217; in double it is exactly -100.
+        NOT WORTH FIXING (1.8 mm at 100 m, in the depth range 4.7 measured as
+        worthless anyway) and worth KNOWING, so a real precision problem later is
+        not blamed on the culler. It is also a second independent argument for
+        reversed-Z: A + 1 does not cancel when near and far swap roles.
+        The near plane, being row2 ALONE with no subtraction, is accurate to
+        3.0e-7 — 4557x better, measured.
+  culling-cost: THE MEASUREMENT THAT MATTERS IS NOT THE CULL RATE. A cull rate
+        measures the SCENE, not the technique: point the camera at a wall and
+        cull 99%, at the sky and cull nothing.
+        A SWEEP OVER OBJECT COUNT FOUND NOTHING, and the null result is the
+        lesson: the test is O(n), the work it skips is O(n), so their ratio
+        CANNOT depend on n. Six confident data points along an axis the effect
+        does not depend on look exactly like a measurement. BEFORE SWEEPING A
+        PARAMETER, ASK WHAT WOULD HAVE TO BE TRUE FOR THE ANSWER TO DEPEND ON IT.
+        THE CROSSOVER IS IN THE CULL RATE, and it is predictable: culling costs c
+        per object ALWAYS and saves w per object REJECTED, so break-even is
+        r = c/w. Measured: c = 58.3 ns (the culler on a scene that rejects
+        nothing), w = 23,821 ns (collect_triangles per object). Predicted 0.2446%
+        — ONE OBJECT IN 409 — then bracketed between the 0% and 0.4% samples. At
+        0% culled the loss is 53.7 ns/object, i.e. exactly c.
+        THE SAME CULLER IS A CLEAR WIN ON ONE RENDERER AND A WASH ON ANOTHER.
+        Replace collect_triangles with a GPU submission costing a few hundred ns
+        of CPU and the break-even rate climbs into the tens of percent.
+        COST PER OUTCOME IS ASYMMETRIC AND BACKWARDS FROM MOST OPTIMISATIONS:
+        6.0 plane evaluations per SURVIVOR (all six), 1.95 per REJECT (early
+        exit). A scene that culls heavily is cheaper per object to cull.
+  bounding-volumes: TWO SHAPES, OPPOSITE PROPERTIES, AND 6.8 AND 6.16 CHOOSE
+        DIFFERENTLY ON PURPOSE.
+        6.8's shadow_map::bounds_of walks EVERY VERTEX for a tight world box,
+        because shadow texel density is inversely proportional to the box's side.
+        6.16 must NOT: walking every vertex to decide whether to skip a draw is
+        the very work being avoided, done eagerly. It caches an OBJECT-SPACE box
+        and runs `transformed()`, which returns the box around the transformed
+        BOX. SAME TWO FUNCTIONS, OPPOSITE CHOICES, BOTH CORRECT.
+        THE PRICE IS MEASURED: 10 of the demo's 12 objects inflate by EXACTLY
+        1.0000 (their transforms are axis-aligned), the two rotated meshes by
+        2.41x and 1.90x, summed scene volume 1.40x. Worst case for a cube is
+        3*sqrt(3) = 5.196.
+        THE POSITIVE VERTEX: per axis take max where the normal's component is
+        positive, min where negative. `n . c` is a sum of three INDEPENDENT terms,
+        so maximising the sum means maximising each — three compares, no search,
+        no loop over eight corners. Testing the NEGATIVE vertex too gives the
+        third state, `inside`, which is what lets a hierarchy accept a subtree in
+        one test. We have no hierarchy; the counter is there anyway, because
+        counting is how you find out whether one would pay: 25,859 of 45,512 kept
+        boxes were wholly inside.
+        THE SPHERE PRE-TEST DOES NOT PAY, measured in BOTH regimes: 1.99x slower
+        on a mostly-visible scene (nothing rejected, pure added work) and STILL
+        1.61x slower on a mostly-hidden one (bounding_sphere is 2.72x the box's
+        volume, so boxes the box test rejects immediately survive the sphere and
+        get tested twice). THE PRINCIPLE IS NOT "PRE-TESTS ARE BAD": a filter
+        cascade pays only when the cheap filter is MUCH cheaper AND NEARLY AS
+        SELECTIVE. This one is half the price and substantially less selective.
+        The flag stays, with its number in the comment, because the answer
+        changes for an expensive precise test (OBB, convex hull).
+  conservatism: CONSERVATIVE IN TWO DIRECTIONS, AND ONLY ONE IS ALLOWED TO BE
+        WRONG. A box that straddles is KEPT (the price of bounding anything).
+        AND — the corner case — A BOX CAN PASS ALL SIX HALF-SPACE TESTS WHILE
+        BEING ENTIRELY OUTSIDE, by poking past each plane with a DIFFERENT
+        corner. Measured over 200,000 random boxes: 316 false positives, 0.69% of
+        those KEPT. Not rare enough to forget, not common enough to pay for a
+        better test (the fixes roughly double the cost to recover 2/3 of 1%).
+        THE ASYMMETRY IS THE ENTIRE LICENCE: keeping something invisible costs a
+        draw call; rejecting something visible is a hole in the picture. ZERO
+        visible boxes were rejected, and that is the only correctness figure in
+        the section — everything else is performance.
+        KNOW WHICH WAY YOUR INSTRUMENT LEANS. The ground truth samples a lattice,
+        so it can MISS a thin sliver of overlap and under-report visibility —
+        which makes the quoted false-positive rate an UPPER bound.
+  instancing-engine: BUILT IN 6.16, engine/include/engine/gfx/instancing.{hpp,cpp}.
+        The mechanism has existed since 4.5 (instance-rate input, instance_buffer,
+        draw(pass, n)) and was fed by nothing for eleven lessons.
+        THE BYTES DO NOT MOVE; THE CALLS DO. gpu_instance is 112 bytes, EXACTLY
+        sizeof(object_uniforms), and a static_assert keeps it so. Instancing a
+        hundred objects removes a hundred pushes, a hundred binds and 99 draw
+        calls — and not one byte of per-object data. "INSTANCING SAVES BANDWIDTH"
+        IS A COMMON AND WRONG SUMMARY; it saves SUBMISSION, a CPU cost.
+        MEASURED on 16 cubes: uniform road 3152 B over 16 draws; instanced 640 B
+        + 1792 instance B = 2432 B over ONE draw. The whole 720-byte saving is
+        15 x 48, i.e. fifteen MATERIALS not pushed. The 112-byte block changed
+        road.
+        A 4x4 IS FOUR ATTRIBUTES. A vertex attribute is at most four components in
+        every backend, so a matrix is four consecutive float4 the shader
+        reassembles — and HLSL's float4x4(a,b,c,d) takes ROWS while engine::mat4
+        stores COLUMNS, so scene_instanced.vert TRANSPOSES, deliberately and with
+        the reason written down. Quietly reordering the attributes until the
+        picture looks right also works and leaves the next reader unable to tell a
+        convention from a coincidence.
+        NO INSTANCED FRAGMENT SHADER. scene.frag.hlsl is bound unchanged, because
+        instancing is a vertex-stage question — so PBR, normal maps, cascades,
+        alpha modes and IBL all arrive unported. A pipeline is the PAIR, so it is
+        still a new pipeline (the tenth).
+  batch-key: FIVE THINGS, NOT ONE, AND THAT IS WHY INSTANCING IS A CONTENT
+        DECISION. One instanced draw has one pipeline, one set of bound textures
+        and one set of pushed uniforms, so everything that is not per-instance
+        vertex data is shared: (mesh, albedo, normal map, surface style, blend
+        style, MATERIAL). The material is 32 bytes of floats two objects do not
+        match on by accident.
+        SPELLED OUT, NOT HASHED, because a batch that did not form is a QUESTION —
+        "which of these five did they differ on?" — and a 64-bit hash cannot
+        answer it. batch_report counts splits per field, in the order a content
+        author can act on (mesh = modelling, texture = atlasing, material =
+        parameters).
+        THIS ENGINE'S OWN DEMO SCENE MAKES 12 BATCHES FROM 12 OBJECTS, every split
+        on the mesh, a saving of exactly ZERO. That measurement is in the lesson
+        instead of a claim that instancing helps.
+        BLENDED DRAWS ARE NEVER MERGED, and it is correctness, not laziness: 6.11
+        established `over` is not commutative, so the back-to-front order is part
+        of the picture and an instanced draw cannot express "these, in this order,
+        interleaved with those". They come back as single-instance batches in the
+        caller's order, checked rather than assumed.
+        THE COMPARATOR SORTS ON POINTERS, so the grouping is non-deterministic
+        across runs. Harmless for opaque geometry (3.1: the z-buffer does not care
+        what order draws arrive in) and unacceptable for anything order-dependent,
+        which is exactly why blended draws never reach it.
+        batch_instances TOUCHES NO DEVICE STATE — it compares pointers, enums and
+        material bytes, skips a NULL mesh and does not ask whether one is valid.
+        render_batched asks that. The dividend is that batching runs headless.
+  attribute-cap: A LIMIT THAT HAS NEVER BEEN REACHED CANNOT TELL YOU IT IS WRONG.
+        pipeline_desc held eight vertex attributes and, past the eighth,
+        `return *this` — DROPPED SILENTLY. Nothing in Modules 4 or 5 or eight
+        lessons of Module 6 had ever declared a ninth. 6.16's instanced pipeline
+        wants ELEVEN (4 from gpu_mesh::describe + 7 from describe_instances) and
+        lost three with no diagnostic.
+        WHAT CAUGHT IT was 4.5's check_layout, comparing declared attributes
+        against the shader's REFLECTED inputs and reporting `missing` — an
+        independent reading of what the pipeline actually declares. That is the
+        whole argument for that function, arriving eleven lessons later.
+        Cap now 16; attribute() ASSERTS then refuses (the refusal stays in release
+        — a missing attribute is a wrong picture, a buffer overrun is worse).
+  frame-setup: THE PER-FRAME PROLOGUE IS A FUNCTION, NOT A PATTERN. 6.16 split
+        gpu_scene_renderer::begin_frame out of render() when render_batched
+        arrived needing every one of those ninety lines and none of the loop.
+        Copying them would have made two copies of one rule — the failure this
+        engine has paid for twice (5.1's four hand-transcribed harnesses, 6.15's
+        two spellings of an ARGB packing).
+        THE SPLIT IS AT "DOES THIS CHANGE WITHIN A FRAME?", which is 4.6's
+        draw-rates line: data grouped by RATE of change, not by what it describes.
+        ADDING A MEMBER FOUND THREE THAT WERE MISSING. destroy() had never been
+        taught about black_cube_, black_lut_ or cube_sampler_ (all 6.15). NOT a
+        leak — RAII members, and every create_* destroys first — but after
+        destroy() the object reported valid() == false while holding three live
+        GPU objects, so "destroyed" and "empty" had stopped meaning the same
+        thing. FOUND BY ADDING A MEMBER AND READING THE LIST, which is the only
+        way a teardown function is ever checked. An argument for few members, and
+        for Module 9's arena.
+  forward-declare-to-break-a-cycle: instancing.hpp includes gpu_scene.hpp (a batch
+        key is made of gpu_draw_item's fields), so gpu_scene.hpp CANNOT include
+        instancing.hpp — #pragma once would resolve the cycle by giving whichever
+        file was reached second a half-defined view of the other. gpu_scene.hpp
+        forward-declares `struct instance_batch;` and render_batched takes a
+        POINTER AND A COUNT rather than a std::span (which needs a complete type).
+        The constraint landed on a spelling render() had chosen in 4.8 anyway.
   ecs-storage: THE ECS IS A SPARSE SET, DECIDED IN 5.7 BY MEASUREMENT, NOT TASTE.
         One dense array per component TYPE plus a sparse map entity -> dense index.
         NOT an archetype. The argument is NOT "sparse sets are faster" — on the
@@ -3819,8 +4017,42 @@ completed:
          `completed:` should be derived from, or verified against, the
          `published` badges rather than maintained by hand. Filed as work, not
          as another note.)
+  - 6.16 Frustum Culling and Instanced Submission
+        (APPENDED AT THE TIME, not two lessons later, and the note above is why.
+         The durable fix is still unbuilt — but check-curriculum.py's
+         `published`-badge count IS now cross-checked against the hero stat, and
+         that check failed on this lesson (71 vs 72) until the index was
+         corrected. So one half of the drift this section has suffered twice is
+         now caught by a tool; deriving `completed:` from the same source is the
+         other half and remains work.)
 
 capabilities:
+  - 6.16 THE ENGINE DECIDES WHAT NOT TO DRAW, AND DRAWS THE REST IN FEWER CALLS.
+    72 -> 74 public headers, 44 -> 46 sources, 23 -> 24 shaders, 9 -> 10 scene
+    pipelines. 60 checks green, 0 failures (47 CPU-only, 13 needing a GPU).
+    WHAT IS NEW: frustum_of / classify / intersects / cull_visible over an aabb
+    or a sphere (frustum.{hpp,cpp}); sphere + bounds_of + bounding_sphere on
+    bounds.hpp, redeeming the promise 6.8 wrote into its own header; gpu_instance
+    + describe_instances + batch_instances (instancing.{hpp,cpp});
+    scene_instanced.vert.hlsl; a tenth pipeline and
+    gpu_scene_renderer::render_batched, sharing render()'s prologue through the
+    new private begin_frame.
+    WHAT IS MEASURED RATHER THAN CLAIMED: the far plane's 1.4e-3 displacement
+    traced OUT of the culler and INTO perspective() (332x amplification); 0.69%
+    false positives against ZERO false rejects; 2.41x worst-case box inflation;
+    the sphere pre-test LOSING in both regimes; a break-even cull rate predicted
+    at 0.2446% and then bracketed; 12 objects making 12 batches.
+    THE GOLDEN IS BYTE-IDENTICAL AT E917C06C FOR THE TWENTY-FIFTH LESSON, AND
+    THAT IS A NULL RESULT, NOT A PASS. Nothing in the reference shot is ever
+    outside the frustum (14 objects across 8 frames, 0 culled), so the golden
+    cannot see this lesson at all. Checked, and then the instrument checked: the
+    same code culls 1 when an object is moved 200 units off screen. Part 2 needed
+    a correctness instrument BUILT — render vs render_batched, 0 of 76,800
+    channels differing, with a lit-pixel count guarding the null.
+    THE CLEAN-TREE BUILD WAS RUN, which is 6.15's finding applied: a build only
+    ever run incrementally cannot tell you it is wrong. `rm -rf build-clean &&
+    cmake -S . -B build-clean && cmake --build build-clean` succeeds with the
+    24th shader from scratch.
   - 6.15 AN ENVIRONMENT LIGHTS THE SCENE AND IS THE SKY BEHIND IT, ON BOTH
     RENDERERS. 71 -> 72 public headers, 43 -> 44 sources, 21 -> 23 shaders.
     Golden byte-identical at E917C06C for the TWENTY-FOURTH lesson, and the
@@ -6617,6 +6849,8 @@ files:
             fullscreen.vert.hlsl, tonemap.frag.hlsl                       [6.12]
             bloom_bright.frag.hlsl, bloom_down.frag.hlsl,
             bloom_up.frag.hlsl                                            [6.13]
+            skybox.vert.hlsl, skybox.frag.hlsl                            [6.15]
+            scene_instanced.vert.hlsl                                     [6.16]
             matrix_probe.frag.hlsl
   engine/: CMakeLists.txt
   engine/include/engine/: engine.hpp                      (the umbrella)
@@ -6640,6 +6874,7 @@ files:
             bloom.hpp                                                       [6.13]
             antialias.hpp                                                   [6.14]
             cubemap.hpp                                                     [6.15]
+            frustum.hpp, instancing.hpp                                     [6.16]
             debug_lines.hpp                                                 [5.11]
             depth_buffer.hpp, framebuffer.hpp, gpu_buffer.hpp, gpu_debug.hpp,
             gpu_device.hpp, gpu_mesh.hpp, gpu_pipeline.hpp, gpu_present.hpp,
@@ -6670,6 +6905,8 @@ files:
             blend.cpp [6.11], draw_order.cpp [6.11],
             hdr.cpp [6.12], gpu_post.cpp [6.12], bloom.cpp [6.13],
             antialias.cpp [6.14],
+            cubemap.cpp [6.15],
+            frustum.cpp, instancing.cpp [6.16],
             clip.cpp, colour.cpp,
             debug_draw.cpp,
             debug_lines.cpp [5.11],
@@ -7274,102 +7511,97 @@ roadmap: RESHAPED 2026-09-08, AFTER TWO EXTERNAL REVIEWS OF THE PUBLISHED OUTLIN
             qualifier too, because a skimmer reads the recap and stops.
 
 
-next: 6.16 — Frustum Culling and Instanced Submission
-      (planned filename: docs/lessons/06-16-frustum-culling.html — 6.15's TWO
-      next links point at the index and BOTH need repointing; scratch/
-      l615_body_a.html holds the top one and build_615.py's TAIL the bottom.
+next: 6.17 — A Frame Graph
+      (planned filename: docs/lessons/06-17-frame-graph.html — 6.16's TWO next
+      links point at the index and BOTH need repointing; scratch/l616_body_a.html
+      holds the top one and build_616.py's TAIL the bottom.
 
-      PIN FIRST. build_615.py's LISTING_SOURCE is EMPTY and it lists FIVE files
-      whole, FOUR of which are in the repository (verify_615.cpp is gitignored
+      PIN FIRST. build_616.py's LISTING_SOURCE is EMPTY and it lists SIX files
+      whole, FIVE of which are in the repository (verify_616.cpp is gitignored
       and must be copied from the working tree):
-        for f in engine/include/engine/gfx/cubemap.hpp \
-                 engine/src/gfx/cubemap.cpp \
-                 shaders/skybox.vert.hlsl \
-                 shaders/skybox.frag.hlsl; do
-          git show <6.15 commit>:$f > scratch/l615_$(basename $f)
+        for f in engine/include/engine/gfx/frustum.hpp \
+                 engine/src/gfx/frustum.cpp \
+                 engine/include/engine/gfx/instancing.hpp \
+                 engine/src/gfx/instancing.cpp \
+                 shaders/scene_instanced.vert.hlsl; do
+          git show <6.16 commit>:$f > scratch/l616_$(echo $f | tr / _)
         done
-        cp scratch/verify_615.cpp scratch/l615_verify_615.cpp   # gitignored
-      Then paste what `python3 scratch/pin_listings.py 615 --dry` prints (it
+        cp scratch/verify_616.cpp scratch/l616_scratch_verify_616.cpp   # gitignored
+      Then paste what `python3 scratch/pin_listings.py 616 --dry` prints (it
       verifies every pin by substring against the shipped page — that check is
-      what confirms a gitignored copy has not drifted), re-run build_615.py, and
-      `git diff` the page: FIFTEEN lessons running, the diff has been exactly the
+      what confirms a gitignored copy has not drifted), re-run build_616.py, and
+      `git diff` the page: SIXTEEN lessons running, the diff has been exactly the
       nav lines meant to move.
 
-      WHICH FILES 6.16 IS LIKELY TO MOVE. `bounds.hpp` is near certain — 6.8
-      already computes scene AABBs to fit the shadow box and 6.16 needs the same
-      quantity per object. `cull.hpp` is likely (it owns `cull_mode` and
-      `cull_of`, and a frustum test is a different KIND of culling that has to
-      be named without colliding). `gpu_mesh.{hpp,cpp}` is likely for the second
-      half: instancing was BUILT in 4.5-4.6 (instance-rate input,
-      `instance_buffer`, `draw(pass, instances)`) and has never been fed, so
-      6.16 is where a culled set becomes an instance buffer.
-      `cubemap.{hpp,cpp}` SHOULD NOT MOVE. Keep them as the control.
+      6.16 IS MORE LIKELY THAN USUAL TO BE REACHED INTO. A frame graph OWNS the
+      render passes, and `render_batched` is a NEW PATH through the scene pass
+      that landed one lesson before the graph arrives to describe it. The control
+      that held this lesson (cubemap.* did not move, exactly as predicted) will
+      not obviously hold for gpu_scene.*.
 
-      WHAT 6.16 OWES, beyond the obvious:
-        1 THE PLANES, DERIVED FROM THE MATRIX, not assembled from a camera. The
-          six planes fall out of the rows of the view-projection matrix by one
-          observation (a clip-space coordinate is a signed distance), and that
-          derivation is short, checkable and almost never shown. Do it, and
-          verify by transforming known points.
-        2 THE CONSERVATIVE BOUND IS A LIE WITH A SIZE. An AABB test rejects only
-          what is wholly outside; a box that straddles a plane is kept, and a
-          box can fail all six half-space tests while still intersecting the
-          frustum (the false-positive corner case). Measure how often, on a real
-          scene, rather than asserting it is rare — 6.8 already hit the same
-          conservatism when fitting the shadow box and noted it.
-        3 THE MEASUREMENT THAT MATTERS IS NOT THE CULL RATE. It is frame time,
-          and culling can LOSE on a small scene because the test costs more than
-          the draw it saves. Find the crossover; 6.13's and 6.14's habit of
-          naming a technique's ceiling with a number applies directly.
-        4 THE GOLDEN. Check it EARLY, as 6.12, 6.13, 6.14 and 6.15 all did.
-          6.15's argument had SIX independent legs, which is why it was robust.
-          CULLING IS DIFFERENT IN KIND FROM THE LAST FOUR: it changes WHICH
-          DRAWS HAPPEN, and the fixture's `draw_world` path runs the software
-          rasterizer over a fixed object list. If culling is wired into
-          `collect_triangles` the golden WILL move — and a cull that changes the
-          picture is a BUG, so this is the first lesson in a while where a moved
-          golden is a failure rather than a re-baseline. Confirm the structural
-          answer; do not inherit it.
+      WHICH FILES 6.17 IS LIKELY TO MOVE. `gpu_post.{hpp,cpp}` is near certain —
+      6.13 already said in its own shipped words that it owns intermediates and
+      named where that stops scaling, with ELEVEN RENDER PASSES FOR ONE EFFECT as
+      the number 6.17 has to justify itself against. `gpu_scene.{hpp,cpp}` is
+      likely (two render entry points now, plus begin_frame, plus a depth target
+      it sizes itself). `gpu_shadow.*` and `cascade.*` are likely: the cascade
+      loop is N passes whose count is data. `frustum.*` and `instancing.*` SHOULD
+      NOT MOVE — keep them as the control.
 
-      CARRY FORWARD from 6.15:
-        - THE TWO RULES ARE ONE RULE. 6.14: check a measurement CAN produce a
-          non-null result before believing a null one. 6.15: check a non-null
-          result has CONVERGED before believing it. Underneath both: establish
-          what your instrument can see before you read it. 6.16's instrument is
-          a frame timer, which has its own version of this — a 0.2 ms difference
-          on a 3 ms frame is inside the noise unless you measure the noise.
-        - A NULL RESULT FROM A FIXTURE THAT CANNOT SHOW THE DEFECT is not
-          evidence the defect is absent. The seam read 0.0000% twice for two
-          different reasons. For 6.16 the analogue is obvious: a cull rate of 0%
-          on a scene where everything is on screen measures the scene.
-        - PACKINGS SPELLED OUT AT THE CALL SITE DRIFT FROM THE ENGINE'S. The
-          ARGB/RGBA bug cost an hour and produced a plausible picture both
-          times it appeared.
+      WHAT 6.17 OWES, beyond the obvious:
+        1 THE PASSES ALREADY EXIST AND MUST BE COUNTED FIRST. Shadow, the cascade
+          loop, the scene pass, bloom's bright/down/up chain, the tonemap
+          resolve, the skybox. 6.13 counted eleven for bloom alone. A frame graph
+          proposed before the passes are enumerated is a framework; proposed
+          after, it is an answer. Enumerate, with the numbers.
+        2 THE SAVING THAT IS NOT SCHEDULING. The reason engines build these is
+          ALIASING — two targets whose lifetimes do not overlap share memory —
+          and that is measurable in megabytes on THIS engine today. Measure it
+          before claiming it; 6.13's chain and 6.12's HDR target are the
+          candidates.
+        3 WHAT A GRAPH CANNOT REORDER. Anything whose order is semantic rather
+          than data-dependent: 6.11's back-to-front tail, and now 6.16's
+          batching, which permutes opaque draws precisely BECAUSE the z-buffer
+          makes their order free. A graph that reorders a blended pass is wrong,
+          and the reason is 3.1's property, not a scheduling rule.
+        4 THE GOLDEN. It is a null instrument for the last two lessons and will
+          be for this one too — the fixture renders through the software
+          rasterizer and a frame graph organises GPU passes. CONFIRM THAT
+          STRUCTURALLY, do not inherit it, and expect to BUILD the instrument
+          again as 6.16 §K had to.
 
-      AND TWO THINGS 6.15 FOUND THAT ARE NOT ABOUT LIGHTING.
-      (1) check-page.js's text-on-shape test selected `line, polyline, path`, so
-          an ANNOTATION BOX laid across a label was invisible to every check on
-          the page — 6.15's figures 1, 5 and 6 all shipped first drafts with
-          exactly that. It now tests `rect[fill="none"]` too, sampling the four
-          EDGES so that "crosses" and "contains" stay distinct (a legend box is
-          supposed to contain text). The `fill="none"` restriction is measured,
-          not cautious: over every rect it fires 26 times across 12 published
-          pages, nearly all of them labels deliberately annotating filled cells.
-          KNOWN FINDING, NOT FIXED: the narrowed check still reports 9 hits
-          across 4 pages — 00-04 (fig 2, x2), 00-05 (fig 2),
-          01-02 (fig 3, x2), 02-01 (figs 3 and 6, x4). Left alone deliberately,
-          the same call made on 2026-09-12 for the two pedagogical defects:
-          fixing them changes published visuals and rebuilds four pages whose
-          reproducibility was only just stabilised.
-      (2) A BUILD BUG LATENT FOR FOURTEEN LESSONS, which only adding a NEW
-          shader could surface. `engine_use_shaders` made the copy-stamp depend
-          on shader FILES produced in the top-level directory while the stamp
-          target lives in demos/, and the Makefile generator needs a
-          target-level edge too. Nobody hit it because ONCE A SHADER HAS BEEN
-          BUILT ONCE THE FILE EXISTS, and make will depend on an existing file
-          it has no rule for — so every earlier shader worked from its second
-          build onward, and a clean tree would have failed on all twenty-three
-          at once. Fixed with one `add_dependencies`.
-          THE GENERAL SHAPE IS WORTH MORE THAN THE FIX: a build that is only
-          ever run incrementally cannot tell you it is wrong.
+      CARRY FORWARD from 6.16:
+        - BEFORE SWEEPING A PARAMETER, ASK WHAT WOULD HAVE TO BE TRUE FOR THE
+          ANSWER TO DEPEND ON IT. The object-count sweep produced six confident
+          data points, a trend and a verdict column, and zero information,
+          because both sides were O(n). This is the third member of a family:
+          6.14 (check a measurement CAN produce a non-null result), 6.15 (check a
+          non-null result has CONVERGED), 6.16 (check the axis can show the
+          effect). Underneath all three: ESTABLISH WHAT YOUR INSTRUMENT CAN SEE
+          BEFORE YOU READ IT.
+        - A LIMIT THAT HAS NEVER BEEN REACHED CANNOT TELL YOU IT IS WRONG. The
+          eight-attribute cap, dropped silently for fifteen lessons. Its sibling
+          from 6.15 was "a build only ever run incrementally cannot tell you it
+          is wrong" — and THAT one was acted on this lesson: a clean-tree build
+          was run and passed.
+        - PREDICT, THEN MEASURE. c/w gave 0.2446% before any sweep existed, and
+          the sweep then bracketed it. A prediction that is confirmed is worth
+          more than six measurements that are not — and it is the only way to
+          know the sweep was looking in the right place.
+        - VERIFY AGAINST FACTS, NOT A REFERENCE — and then check the facts are
+          sufficient. Four zeros followed from "the eye is the apex", and the bug
+          actually made would have passed all four.
+
+      AND THREE THINGS 6.16 FOUND THAT ARE NOT ABOUT CULLING.
+      (1) gpu_scene_renderer::destroy() had been missing 6.15's three members
+          since they were added. Found by ADDING A MEMBER AND READING THE LIST.
+      (2) golden_615.cpp compared two files as strings and printed
+          `identical=YES` when BOTH reads failed — two empty strings are equal.
+          It was always run from the right directory so it never fired. Fixed in
+          golden_616.cpp, which now reports sizes and a differing-byte count.
+          A TEST THAT CAN PASS WITHOUT TESTING ANYTHING IS WORSE THAN NO TEST.
+      (3) `aabb::expand({1, 2, 3})` is AMBIGUOUS — brace elision makes the
+          braced list a candidate for both the vec3 and the const aabb&
+          overloads. Every call site in the engine happened to pass a named
+          variable, so it had never come up. Write `expand(vec3{...})`.
 ```

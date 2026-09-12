@@ -60,6 +60,20 @@
 
 namespace engine {
 
+/// **Forward-declared, and that is a physical-design decision** — Lesson 6.16.
+///
+/// `instancing.hpp` includes THIS header, because a batch key is made of
+/// `gpu_draw_item`'s fields. So this header cannot include that one: the two
+/// would form a cycle, and `#pragma once` would resolve it by silently giving
+/// whichever file was reached second a half-defined view of the other.
+///
+/// A forward declaration breaks it exactly, and costs nothing because
+/// `render_batched` below takes a POINTER AND A COUNT rather than a
+/// `std::span` — `std::span<const T>` needs `T` complete, and `render` has taken
+/// a pointer and a count since Lesson 4.8 anyway, so the constraint lands on a
+/// spelling the class had already chosen for other reasons.
+struct instance_batch;
+
 /// Which pipeline an object needs — the part of a material that **cannot be a
 /// number in a buffer**.
 ///
@@ -237,12 +251,32 @@ public:
     /// The upload command buffer is acquired and submitted internally, because
     /// the only thing to upload is four bytes and making a caller thread a
     /// command buffer through for that would be ceremony.
+    /// @param instanced_vertex **Lesson 6.16.** `scene_instanced.vert`, or
+    ///        `nullptr` for "this renderer does no instanced draws". When given,
+    ///        ONE more pipeline is created — solid, opaque — bringing the count
+    ///        to ten.
+    ///
+    ///        **One and not nine**, and the asymmetry is the honest part. The
+    ///        nine exist because `surface_style` and `blend_style` are
+    ///        independent axes that every draw must choose from; instancing is
+    ///        neither, it is a THIRD axis, and crossing it in would make
+    ///        eighteen. We build the one combination that is worth instancing —
+    ///        many copies of a closed opaque mesh, which is what foliage, crates
+    ///        and crowds are — and say plainly that a wireframe instanced draw
+    ///        or a blended instanced draw is unavailable. `batch_instances`
+    ///        refuses to batch blended geometry anyway, for ordering reasons
+    ///        that are correctness rather than convenience, so that half of the
+    ///        gap is a rule and not a shortcut.
+    ///
+    ///        The general answer — build the state, hash it, create on miss — is
+    ///        named in `blend_style`'s comment and is Module 9's pipeline cache.
     [[nodiscard]] bool create(const gpu_device& dev,
                               SDL_GPUShader* vertex, SDL_GPUShader* fragment,
                               SDL_GPUTextureFormat depth_format,
                               SDL_GPUTextureFormat colour_format
                                   = SDL_GPU_TEXTUREFORMAT_INVALID,
-                              SDL_GPUSampleCount samples = SDL_GPU_SAMPLECOUNT_1);
+                              SDL_GPUSampleCount samples = SDL_GPU_SAMPLECOUNT_1,
+                              SDL_GPUShader* instanced_vertex = nullptr);
 
     void destroy();
 
@@ -371,6 +405,45 @@ public:
                       const cascade_uniforms* cascades = nullptr,
                       const scene_environment* environment = nullptr) const;
 
+    /// Draw a frame that has already been culled and batched — Lesson 6.16.
+    ///
+    /// Records the same per-frame state `render` does (camera, light, cascades,
+    /// shadow map, environment — one shared helper, so the two cannot drift) and
+    /// then issues **one draw per batch** instead of one per object.
+    ///
+    /// `instances` is a vertex buffer holding `batches`' instance data end to
+    /// end, in the order `batch_instances` produced — typically a
+    /// `gpu_stream_buffer` written earlier in the same command buffer. It is
+    /// bound at **slot 1**, with a per-batch OFFSET, which is the mechanism that
+    /// lets one buffer serve every batch: `SDL_BindGPUVertexBuffers` takes an
+    /// offset in bytes, so batch `k` binds at `first * sizeof(gpu_instance)` and
+    /// the hardware's instance index then counts from zero within it.
+    ///
+    /// @return the same `draw_stats` shape as `render`, so the two are directly
+    ///         comparable — which is the entire point of §10's measurement. Note
+    ///         that `items` counts INSTANCES and `draws` counts BATCHES, so the
+    ///         ratio between them is what instancing bought.
+    ///
+    /// A batch whose mesh is null or whose style is not solid+opaque is SKIPPED
+    /// and counted in `draw_stats::items` but not `draws` — the renderer has one
+    /// instanced pipeline (see `create`), and silently drawing such a batch with
+    /// the wrong state would be worse than not drawing it.
+    draw_stats render_batched(SDL_GPUCommandBuffer* cb, SDL_GPURenderPass* pass,
+                              const instance_batch* batches, int count,
+                              SDL_GPUBuffer* instances,
+                              const camera_uniforms& camera,
+                              const scene_light_uniforms& light,
+                              SDL_GPUSampler* sampler,
+                              frame_log* log = nullptr,
+                              SDL_GPUTexture* shadow = nullptr,
+                              SDL_GPUSampler* shadow_sampler = nullptr,
+                              const cascade_uniforms* cascades = nullptr,
+                              const scene_environment* environment = nullptr) const;
+
+    /// Was an instanced pipeline created? False when `create` was given no
+    /// `instanced_vertex`, in which case `render_batched` draws nothing.
+    [[nodiscard]] bool has_instanced() const { return instanced_.valid(); }
+
     /// The white 1x1 texture, for callers that want to bind it themselves.
     [[nodiscard]] SDL_GPUTexture* white() const { return white_.handle(); }
 
@@ -385,6 +458,44 @@ public:
     [[nodiscard]] double create_ms() const { return create_ms_; }
 
 private:
+    /// What is resolved once per frame and read by every draw — Lesson 6.16.
+    ///
+    /// **Split out of `render` when `render_batched` arrived.** Until this lesson
+    /// there was one draw loop, and the ninety lines that resolve the fallbacks
+    /// and push the per-frame blocks were simply its prologue. Instanced
+    /// submission adds a second loop that needs every one of those lines and none
+    /// of the first loop's. Copying them would have produced two copies of one
+    /// rule — the failure this engine has already paid for twice (Lesson 5.1's
+    /// four hand-transcribed harnesses; 6.15's two spellings of an ARGB packing).
+    ///
+    /// The split is exactly at "does this change within a frame?", which is the
+    /// same line Lesson 4.6 drew for uniform blocks: **data grouped by RATE of
+    /// change**, not by what it describes.
+    struct frame_setup
+    {
+        SDL_GPUTexture* shadow = nullptr;
+        SDL_GPUSampler* shadow_sampler = nullptr;
+        SDL_GPUTexture* irradiance = nullptr;
+        SDL_GPUTexture* prefiltered = nullptr;
+        SDL_GPUTexture* brdf_lut = nullptr;
+        SDL_GPUSampler* cube_sampler = nullptr;
+        SDL_GPUSampler* lut_sampler = nullptr;
+    };
+
+    /// Push the per-frame uniform blocks and resolve every fallback.
+    ///
+    /// `stats.uniform_bytes` is accumulated through the reference parameter,
+    /// because the bytes are pushed here and the caller is the one reporting.
+    [[nodiscard]] frame_setup begin_frame(SDL_GPUCommandBuffer* cb,
+                                          const camera_uniforms& camera,
+                                          const scene_light_uniforms& light,
+                                          const cascade_uniforms* cascades,
+                                          SDL_GPUTexture* shadow,
+                                          SDL_GPUSampler* shadow_sampler,
+                                          const scene_environment* environment,
+                                          frame_log* log,
+                                          draw_stats& stats) const;
+
     static constexpr int k_styles = 3;
 
     /// 6.11. The second axis — see `blend_style`. Three, not two, because
@@ -395,6 +506,14 @@ private:
     /// count is a product now, and `create_ms()` reports what the extra six cost
     /// at startup rather than leaving it to be guessed at.
     gpu_pipeline pipelines_[k_styles][k_blends];
+
+    /// 6.16. The TENTH pipeline: solid, opaque, and an instance-rate buffer at
+    /// slot 1. Invalid when `create` was given no instanced vertex shader, which
+    /// is the supported way to say "this renderer does no instanced draws" —
+    /// every program built before this lesson keeps working unchanged, because
+    /// the parameter defaults to null.
+    gpu_pipeline instanced_;
+
     gpu_texture depth_;
     gpu_texture white_;
     gpu_texture flat_normal_;   ///< 6.7

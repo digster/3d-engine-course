@@ -246,6 +246,13 @@ add_hlsl_shader(bloom_up.frag fragment)
 add_hlsl_shader(skybox.vert vertex)
 add_hlsl_shader(skybox.frag fragment)
 
+# Lesson 6.16 — the instanced scene. A VERTEX shader and no fragment shader,
+# which is the clearest statement of what instancing is: the per-object transform
+# arrives as seven vertex attributes instead of a pushed constant buffer, and
+# every fragment-stage thing Module 6 built (PBR, normal maps, cascades, alpha
+# modes, IBL) is reused byte-for-byte by binding `scene.frag` beside it.
+add_hlsl_shader(scene_instanced.vert vertex)
+
 # ---- The project -----------------------------------------------------------
 # ORDER MATTERS, and it is the dependency direction made visible: engine/ knows
 # nothing of demos/ and is added first; demos/ links the engine and is added

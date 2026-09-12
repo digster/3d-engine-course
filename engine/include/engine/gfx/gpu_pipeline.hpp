@@ -270,7 +270,26 @@ public:
 
 private:
     static constexpr std::size_t k_max_buffers = 4;
-    static constexpr std::size_t k_max_attributes = 8;
+
+    /// **Raised from 8 to 16 in Lesson 6.16**, and the raise is worth recording
+    /// because of how the old value behaved rather than because of the new one.
+    ///
+    /// Eight was enough for every pipeline in Modules 4 and 5 and for eight
+    /// lessons of Module 6, so nothing ever reached it. 6.16's instanced scene
+    /// pipeline wants **eleven** — four from `gpu_mesh::describe` (position,
+    /// normal, uv, tangent) plus seven from `describe_instances` (a `float4x4`
+    /// is four attributes, and the normal matrix's three columns are three more)
+    /// — and the ninth, tenth and eleventh were **dropped silently**, because
+    /// `attribute()` returned early rather than complaining.
+    ///
+    /// The net that caught it is Lesson 4.5's `check_layout`, which compares the
+    /// declared attributes against the shader's reflected inputs and reports
+    /// `missing`. That is the whole argument for that function existing: A LIMIT
+    /// THAT HAS NEVER BEEN REACHED CANNOT TELL YOU IT IS WRONG, so the only
+    /// defence is an independent reading of what the pipeline actually declares.
+    /// `attribute()` now also asserts, so the next program to overflow it finds
+    /// out at the call site instead of three steps downstream.
+    static constexpr std::size_t k_max_attributes = 16;
 
     SDL_GPUGraphicsPipelineCreateInfo info_{};
 

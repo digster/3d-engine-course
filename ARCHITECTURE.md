@@ -928,7 +928,30 @@ chore. What follows is on disk.
 │   │       │                     #   arrived at its FOURTH call site. The
 │   │       │                     #   inside-out default is the identity element
 │   │       │                     #   for expand(), which deletes the
-│   │       │                     #   first-vertex branch from every caller
+│   │       │                     #   first-vertex branch from every caller.
+│   │       │                     #   + sphere, bounds_of, bounding_sphere  [6.16]
+│   │       │                     #   — the promise this header made to 6.16
+│   │       │                     #   BY NAME, redeemed. The sphere is the LOOSE
+│   │       │                     #   conversion on purpose: as a PRE-test it may
+│   │       │                     #   only ever produce false keeps
+│   │       ├── frustum.hpp       # plane, frustum, frustum_of, classify,      [6.16]
+│   │       │                     #   intersects (aabb and sphere), cull_report,
+│   │       │                     #   cull_visible. THE PLANES COME FROM THE ROWS
+│   │       │                     #   OF clip_from_world, never from a camera —
+│   │       │                     #   so there is no second copy of the truth to
+│   │       │                     #   drift from the matrix the renderer uses.
+│   │       │                     #   k_near_z / k_far_z, because <windows.h>
+│   │       │                     #   makes `near` and `far` macros
+│   │       ├── instancing.hpp    # gpu_instance (112 B — exactly             [6.16]
+│   │       │                     #   sizeof(object_uniforms), and a
+│   │       │                     #   static_assert keeps it so), instance_of,
+│   │       │                     #   describe_instances, batch_key,
+│   │       │                     #   instance_batch, batch_report,
+│   │       │                     #   batch_instances. INCLUDES gpu_scene.hpp,
+│   │       │                     #   which is why gpu_scene.hpp forward-declares
+│   │       │                     #   `struct instance_batch` rather than
+│   │       │                     #   including back — and why render_batched
+│   │       │                     #   takes a pointer and a count, not a span
 │   │       ├── shadow.hpp        # light_camera, fit_directional, shadow_bias,  [6.8]
 │   │       │                     #   shadow_settings, slope_from_cosine,
 │   │       │                     #   pcf_reach_texels, slope_scaled_bias,
@@ -941,7 +964,7 @@ chore. What follows is on disk.
 │   │                             #   texture, a comparison sampler, its own
 │   │                             #   render pass, and fill_uniforms() so the two
 │   │                             #   renderers cannot disagree about a bias
-│   └── src/                # ---- PRIVATE. 35 sources; no demo can name this path ----
+│   └── src/                # ---- PRIVATE. 46 sources; no demo can name this path ----
 │       ├── core/           # actions [5.10], clock, fixed_step, input, log, profile
 │       ├── platform/       # platform.cpp, app.cpp                            [5.2]
 │       ├── ui/             # debug_ui.cpp — THE ONLY engine TU that          [5.11]
@@ -952,7 +975,11 @@ chore. What follows is on disk.
 │                           #   gpu_shadow.cpp [6.8]; image.cpp is the
 │                           #   ONE unit that contains stb_image + save_ppm,
 │                           #   and gltf.cpp [6.6] is the ONE unit that
-│                           #   contains cgltf. Same containment, same reason
+│                           #   contains cgltf. Same containment, same reason.
+│                           #   frustum.cpp + instancing.cpp [6.16] are TUs for
+│                           #   draw_order.cpp's stated reason: each is a real
+│                           #   algorithm over a span, and frustum.cpp's six sign
+│                           #   conventions must have exactly one home
 ├── demos/                  # executables; link engine, include ONLY public headers
 │   ├── CMakeLists.txt
 │   ├── common/             # demo_common: CONTENT, shared so nothing is transcribed

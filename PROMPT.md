@@ -2633,3 +2633,14 @@ and a new `docs/_template/check-curriculum.py` to stop the index drifting again.
 
 Produced Lesson 6.15 — Skybox and Image-Based Lighting. `STATE.md`'s `next:` advances to
 6.16 — Frustum Culling and Instanced Submission.
+
+---
+
+## 2026-09-12 (session 2)
+
+```
+next
+```
+
+Produced Lesson 6.16 — Frustum Culling and Instanced Submission. `STATE.md`'s `next:` advances to
+6.17 — A Frame Graph.
