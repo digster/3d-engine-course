@@ -1274,7 +1274,7 @@ else                         { row[x]     = fragment(f0, f1, f2, ignored); }</co
     <figure class="listing">
     <figcaption>
       <span class="path">engine/include/engine/gfx/hdr.hpp</span>
-      <span class="tag new">cpp</span>
+      <span class="tag new">new</span>
       <span class="lang" data-lang="cpp">C++</span>
     </figcaption>
     <pre><code class="lang-cpp">// engine/include/engine/gfx/hdr.hpp — what to do when a pixel is brighter than white.
@@ -1621,7 +1621,7 @@ void resolve(const hdr_buffer&amp; src, framebuffer&amp; dst, const tonemap_sett
     <figure class="listing">
     <figcaption>
       <span class="path">engine/src/gfx/hdr.cpp</span>
-      <span class="tag new">cpp</span>
+      <span class="tag new">new</span>
       <span class="lang" data-lang="cpp">C++</span>
     </figcaption>
     <pre><code class="lang-cpp">// engine/src/gfx/hdr.cpp — exposure, four curves, and one full-screen pass.
@@ -1862,7 +1862,7 @@ void resolve(const hdr_buffer&amp; src, framebuffer&amp; dst, const tonemap_sett
     <figure class="listing">
     <figcaption>
       <span class="path">engine/include/engine/gfx/gpu_post.hpp</span>
-      <span class="tag new">cpp</span>
+      <span class="tag new">new</span>
       <span class="lang" data-lang="cpp">C++</span>
     </figcaption>
     <pre><code class="lang-cpp">// engine/include/engine/gfx/gpu_post.hpp — the first pass that draws no geometry.
@@ -2010,7 +2010,7 @@ private:
     <figure class="listing">
     <figcaption>
       <span class="path">engine/src/gfx/gpu_post.cpp</span>
-      <span class="tag new">cpp</span>
+      <span class="tag new">new</span>
       <span class="lang" data-lang="cpp">C++</span>
     </figcaption>
     <pre><code class="lang-cpp">// engine/src/gfx/gpu_post.cpp — one pipeline, one sampler, one draw call.
@@ -2131,7 +2131,7 @@ void gpu_tonemap_pass::render(SDL_GPUCommandBuffer* cb, SDL_GPURenderPass* pass,
     <figure class="listing">
     <figcaption>
       <span class="path">shaders/fullscreen.vert.hlsl</span>
-      <span class="tag new">hlsl</span>
+      <span class="tag new">new</span>
       <span class="lang" data-lang="hlsl">HLSL</span>
     </figcaption>
     <pre><code class="lang-hlsl">// shaders/fullscreen.vert.hlsl — a triangle that covers the screen, from nothing.
@@ -2201,7 +2201,7 @@ Output main(uint vertex_id : SV_VertexID)
     <figure class="listing">
     <figcaption>
       <span class="path">shaders/tonemap.frag.hlsl</span>
-      <span class="tag new">hlsl</span>
+      <span class="tag new">new</span>
       <span class="lang" data-lang="hlsl">HLSL</span>
     </figcaption>
     <pre><code class="lang-hlsl">// shaders/tonemap.frag.hlsl — the resolve: exposure, a curve, and the encode.
@@ -2323,7 +2323,7 @@ float4 main(float4 position : SV_Position, float2 uv : TEXCOORD0) : SV_Target0
     <figure class="listing">
     <figcaption>
       <span class="path">scratch/verify_612.cpp</span>
-      <span class="tag new">cpp</span>
+      <span class="tag new">new</span>
       <span class="lang" data-lang="cpp">C++</span>
     </figcaption>
     <pre><code class="lang-cpp">// scratch/verify_612.cpp — Lesson 6.12&#x27;s harness: the lid, the exposure, the curves.

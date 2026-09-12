@@ -7079,3 +7079,19 @@ kernel or footprint downstream of it.
   before the shader sees anything. Per-texel firefly weighting therefore becomes impossible, at a
   measured cost of 4× (1.19% drift against 0.30%). That, not kernel width, is the real reason
   shipping engines use Karis's 13-tap downsample.
+
+- **A tuple whose elements are both strings will not tell you when you swap their meanings.**
+  `LISTING_META`'s entries are `(status, status_word)` and `listing()` emits
+  `<span class="tag {tag}">{word}</span>`. Putting the *language* in the second slot produced a
+  correctly-classed pill reading "cpp", beside a `.lang` span already reading "C++" — so the caption
+  said path / language / language instead of path / status / language. It ran from **6.9 to 6.12**
+  before anyone looked at a pill, because nothing type-checks a pair of strings and
+  `check-page.js`'s `unknownTagClasses` validates only the **class**, which was right the whole
+  time. When a check validates one half of a pair, the other half is unguarded.
+
+- **Scope a repeated defect by sweeping, not by extrapolating from where you noticed it.** This was
+  filed as "two lessons" because that is where it was spotted. A grep over every page found **four**
+  builders and 18 entries — and also 16 *deliberate* pills ("excerpt", "the type", "the resolve")
+  that are hand-written in body fragments and must not be touched. The counts reconciling exactly
+  (3+3+5+7 = 18 generated; the rest authored) is what made it safe to change one set and leave the
+  other.
