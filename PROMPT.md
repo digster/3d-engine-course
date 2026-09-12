@@ -2644,3 +2644,14 @@ next
 
 Produced Lesson 6.16 — Frustum Culling and Instanced Submission. `STATE.md`'s `next:` advances to
 6.17 — A Frame Graph.
+
+---
+
+## 2026-09-12 (session 3)
+
+```
+next
+```
+
+Produced Lesson 6.17 — A Lightweight Frame Graph. `STATE.md`'s `next:` advances to
+6.18 — Text and 2D Overlay Rendering.

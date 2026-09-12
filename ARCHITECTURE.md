@@ -952,6 +952,20 @@ chore. What follows is on disk.
 │   │       │                     #   `struct instance_batch` rather than
 │   │       │                     #   including back — and why render_batched
 │   │       │                     #   takes a pointer and a count, not a span
+│   │       ├── frame_graph.hpp    # frame_graph, fg_texture, fg_texture_desc,  [6.17]
+│   │       │                     #   fg_init, fg_use, fg_pass_context,
+│   │       │                     #   fg_execute_fn, dump_frame_graph. THE FRAME
+│   │       │                     #   IS DECLARED, NOT ASSEMBLED: a resource is a
+│   │       │                     #   VARIABLE WITH VERSIONS (hdr@1 is what the
+│   │       │                     #   scene pass made, hdr@2 what the skybox made
+│   │       │                     #   from it), each produced by exactly one pass.
+│   │       │                     #   From `discard_write` / `clear` / `keep` the
+│   │       │                     #   compiler derives the ORDER, the LOAD op, the
+│   │       │                     #   PRODUCER's STORE op and the LIFETIME. It
+│   │       │                     #   includes only gpu_device + gpu_texture:
+│   │       │                     #   nothing about a bloom, a shadow or a scene
+│   │       │                     #   reaches this file, which is why culling the
+│   │       │                     #   bloom needs no flag in it
 │   │       ├── shadow.hpp        # light_camera, fit_directional, shadow_bias,  [6.8]
 │   │       │                     #   shadow_settings, slope_from_cosine,
 │   │       │                     #   pcf_reach_texels, slope_scaled_bias,
@@ -964,7 +978,7 @@ chore. What follows is on disk.
 │   │                             #   texture, a comparison sampler, its own
 │   │                             #   render pass, and fill_uniforms() so the two
 │   │                             #   renderers cannot disagree about a bias
-│   └── src/                # ---- PRIVATE. 46 sources; no demo can name this path ----
+│   └── src/                # ---- PRIVATE. 47 sources; no demo can name this path ----
 │       ├── core/           # actions [5.10], clock, fixed_step, input, log, profile
 │       ├── platform/       # platform.cpp, app.cpp                            [5.2]
 │       ├── ui/             # debug_ui.cpp — THE ONLY engine TU that          [5.11]
@@ -979,7 +993,11 @@ chore. What follows is on disk.
 │                           #   frustum.cpp + instancing.cpp [6.16] are TUs for
 │                           #   draw_order.cpp's stated reason: each is a real
 │                           #   algorithm over a span, and frustum.cpp's six sign
-│                           #   conventions must have exactly one home
+│                           #   conventions must have exactly one home.
+│                           #   frame_graph.cpp [6.17] is a TU because `compile`
+│                           #   is four real passes over two arrays and nothing
+│                           #   that merely DECLARES a pass should recompile when
+│                           #   the scheduler changes
 ├── demos/                  # executables; link engine, include ONLY public headers
 │   ├── CMakeLists.txt
 │   ├── common/             # demo_common: CONTENT, shared so nothing is transcribed
@@ -1723,6 +1741,48 @@ Built roughly in dependency order — each module's milestone is the next module
   hardware), and a comparison sampler, because filtering depths and then comparing is not a blurrier
   answer but a wrong one. `gpu_scene_renderer` gains a third fallback binding, and the pattern is now
   explicit: hand the shader the identity element of the feature it is missing.
+
+- **The frame is declared, not assembled** (Module 6, Lesson 6.17 — *implemented*).
+  `engine/include/engine/gfx/frame_graph.hpp`. By 6.16 the engine could record **seventeen render
+  passes** in a frame — four cascades, the scene, eleven bloom stages, the resolve — across four
+  owners, two of which begin their own attachments and two of which are handed one. Nothing knew
+  the whole order, and four facts were kept in step by hand: the pass order, every load op, every
+  store op, and which passes run at all (`gpu_post.cpp`'s `if (!s.enabled) { return; }`).
+
+  The fix is one modelling decision. **A resource is not a texture; it is a variable with values
+  over time.** `hdr@1` is what the scene pass produced and `hdr@2` is what the skybox produced from
+  it, each version has exactly one producer, and a pass names the *version* it wants. That is
+  single static assignment applied to render targets, and it turns all four facts into
+  consequences: a pass says what it does with what was already in a target — `discard_write`,
+  `clear` or `keep` — and the compiler derives the ordering edge, the load op, the **producer's**
+  store op and the lifetime. One rule, *STORE iff some live pass consumes this version or the
+  resource is imported*, reproduces Lesson 4.7's `DONT_CARE` on the scene depth and Lesson 6.8's
+  `STORE` on the shadow map, which were argued out in comments nine lessons apart.
+
+  Culling is backward reachability from writes to **imported** resources — the only values
+  observable after the frame ends — so stopping the resolve from sampling the bloom drops eleven
+  passes with no flag anywhere and nothing in `frame_graph.cpp` knowing what a bloom is.
+
+  Two boundaries are load-bearing and must not move. **The graph orders passes, not draws:**
+  everything inside a pass body is recorded by its callback, which is why 6.11's back-to-front
+  blended tail and 6.16's instanced batching are structurally out of reach. And **ordering that
+  comes from data may be handed over; ordering that comes from semantics may not** — until it can
+  be declared, it lives inside an atom the scheduler cannot open, and here that atom is the render
+  pass.
+
+  What it does *not* buy, measured rather than assumed: **memory**. SDL_GPU 3.4.12 has no placed
+  resource and no heap, so the strongest reuse available is a whole texture whose descriptor
+  matches exactly; and the frame is a *chain*, so its peak is 85.7% of its sum. Perfect aliasing
+  would save 14.3% — 5.27 MB at 1920×1080, which is exactly the bloom pyramid — and this engine
+  collects none of it. The pool is built anyway, costs a dozen lines, and is shown working on a
+  graph shaped like a tree.
+
+  Two consequences for the rest of the engine, both of the same shape: `gpu_shadow_map::render_into`
+  and `gpu_bloom::record_stage` record into a pass **somebody else began**, and neither can see a
+  load op, a store op or a layer. A function that never sees a setting cannot get it wrong. The
+  old entry points were rewritten to call the new ones rather than left beside them, because the
+  verification compares the two assembly paths bit for bit and two copies of the same draw code
+  would make that comparison pass while proving nothing.
 
 - **ECS, not a scene tree** (Module 5). Data-oriented storage chosen after demonstrating —
   with cache-line reasoning and measurements — why OOP scene graphs creak at scale. Archetype

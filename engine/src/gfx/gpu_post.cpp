@@ -351,18 +351,67 @@ std::size_t gpu_bloom::texels() const
     return n;
 }
 
+void gpu_bloom::record_stage(SDL_GPUCommandBuffer* cb, SDL_GPURenderPass* pass,
+                             bloom_stage kind,
+                             SDL_GPUTexture* source, Uint32 source_w, Uint32 source_h,
+                             const bloom_settings& s, float exposure) const
+{
+    if (cb == nullptr || pass == nullptr || source == nullptr || !valid()) { return; }
+
+    // ONE STAGE, AND IT DOES NOT KNOW WHERE IT IS WRITING. The destination is the
+    // pass's attachment, which the caller chose — so this function cannot get a
+    // load op wrong, because it never sees one. That is the whole shape of the
+    // split Lesson 6.17 made: a stage knows what it READS and what it COMPUTES;
+    // everything about the target belongs to whoever begins the pass.
+    //
+    // The source's dimensions are a parameter rather than being read off the
+    // texture, because the bright pass's `texel_size` is the SCENE's — one texel
+    // of the thing being sampled, not of the thing being written. That
+    // distinction is invisible until the glow is the wrong size, so the uniform
+    // packing makes it explicit and this signature keeps it explicit.
+    switch (kind)
+    {
+    case bloom_stage::bright:
+    {
+        const bloom_bright_uniforms u = uniforms_of(
+            s, exposure, static_cast<int>(source_w), static_cast<int>(source_h));
+        full_screen_draw(cb, pass, bright_, source, sampler_.handle(), u);
+        break;
+    }
+    case bloom_stage::down:
+    {
+        const bloom_filter_uniforms u = filter_uniforms_of(
+            static_cast<int>(source_w), static_cast<int>(source_h), s.radius);
+        full_screen_draw(cb, pass, down_, source, sampler_.handle(), u);
+        break;
+    }
+    case bloom_stage::up:
+    {
+        const bloom_filter_uniforms u = filter_uniforms_of(
+            static_cast<int>(source_w), static_cast<int>(source_h), s.radius);
+        full_screen_draw(cb, pass, up_, source, sampler_.handle(), u);
+        break;
+    }
+    }
+}
+
 void gpu_bloom::render(SDL_GPUCommandBuffer* cb, SDL_GPUTexture* scene,
                        const bloom_settings& s, float exposure) const
 {
     if (cb == nullptr || scene == nullptr || level_count_ <= 0 || !valid()) { return; }
 
+    // EVERY DRAW BELOW GOES THROUGH `record_stage`, so the hand-written chain and
+    // the frame-graph one cannot drift — which matters more than usual here,
+    // because Lesson 6.17 §9 compares their output bit for bit and a shared bug
+    // would make that comparison pass while proving nothing.
+    //
+    // What is left in this function is exactly the part the frame graph replaces:
+    // eleven `begin`/`end` pairs, and eleven load ops chosen by hand.
+
     // ---- Down: the bright pass, then four halvings --------------------------
     //
     // The bright pass reads the SCENE at full resolution and writes level 0 at
     // half, so it replaces what would otherwise be a separate first downsample.
-    // Its `texel_size` is therefore the scene's, and every downsample's is the
-    // level it reads — a distinction the uniform packing makes explicit precisely
-    // because getting it wrong is invisible until the glow is the wrong size.
     {
         SDL_GPURenderPass* pass = begin_target_pass(cb, levels_[0].handle(),
                                                     SDL_GPU_LOADOP_DONT_CARE);
@@ -371,11 +420,8 @@ void gpu_bloom::render(SDL_GPUCommandBuffer* cb, SDL_GPUTexture* scene,
         // DONT_CARE, not CLEAR: the bright pass writes every texel of its target,
         // so clearing first is a full-target write thrown away. On a tiler that
         // is real bandwidth; on a desktop GPU it is merely free to avoid.
-        const bloom_bright_uniforms u = uniforms_of(
-            s, exposure,
-            static_cast<int>(levels_[0].width() * 2u),
-            static_cast<int>(levels_[0].height() * 2u));
-        full_screen_draw(cb, pass, bright_, scene, sampler_.handle(), u);
+        record_stage(cb, pass, bloom_stage::bright, scene,
+                     levels_[0].width() * 2u, levels_[0].height() * 2u, s, exposure);
         SDL_EndGPURenderPass(pass);
     }
 
@@ -385,10 +431,8 @@ void gpu_bloom::render(SDL_GPUCommandBuffer* cb, SDL_GPUTexture* scene,
                                                     SDL_GPU_LOADOP_DONT_CARE);
         if (pass == nullptr) { return; }
 
-        const bloom_filter_uniforms u = filter_uniforms_of(
-            static_cast<int>(levels_[i - 1].width()),
-            static_cast<int>(levels_[i - 1].height()), s.radius);
-        full_screen_draw(cb, pass, down_, levels_[i - 1].handle(), sampler_.handle(), u);
+        record_stage(cb, pass, bloom_stage::down, levels_[i - 1].handle(),
+                     levels_[i - 1].width(), levels_[i - 1].height(), s, exposure);
         SDL_EndGPURenderPass(pass);
     }
 
@@ -400,16 +444,18 @@ void gpu_bloom::render(SDL_GPUCommandBuffer* cb, SDL_GPUTexture* scene,
     // add to, which turns the pyramid from a sum of every level into just the
     // widest one. The symptom is a bloom that is far too soft and far too dim,
     // and it looks like a tuning problem rather than a load op.
+    //
+    // **Lesson 6.17 deletes this comment's job.** Under the frame graph the
+    // upsample declares `keep` — "my output depends on what was already there" —
+    // and the LOAD follows from that sentence rather than from remembering it.
     for (int i = level_count_ - 1; i > 0; --i)
     {
         SDL_GPURenderPass* pass = begin_target_pass(cb, levels_[i - 1].handle(),
                                                     SDL_GPU_LOADOP_LOAD);
         if (pass == nullptr) { return; }
 
-        const bloom_filter_uniforms u = filter_uniforms_of(
-            static_cast<int>(levels_[i].width()),
-            static_cast<int>(levels_[i].height()), s.radius);
-        full_screen_draw(cb, pass, up_, levels_[i].handle(), sampler_.handle(), u);
+        record_stage(cb, pass, bloom_stage::up, levels_[i].handle(),
+                     levels_[i].width(), levels_[i].height(), s, exposure);
         SDL_EndGPURenderPass(pass);
     }
 }

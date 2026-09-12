@@ -103,6 +103,21 @@ public:
                 const light_camera& cam, frame_log* log = nullptr,
                 int layer = 0) const;
 
+    /// Record the draws into a pass **somebody else** began — Lesson 6.17.
+    ///
+    /// `render` above is now this function with a begin and an end around it, so
+    /// there is one copy of the viewport, the pipeline bind and the draw loop
+    /// rather than two. The split exists because a frame graph derives the
+    /// attachment, the layer and both ops from the passes' declared dataflow, so
+    /// a pass that begins its own attachment is a pass the graph cannot schedule.
+    ///
+    /// **The layer is not a parameter here**, and that is the point: under the
+    /// graph it is part of the write declaration, which is the only place that
+    /// can also know whether the previous cascade's contents must survive.
+    void render_into(SDL_GPUCommandBuffer* cb, SDL_GPURenderPass* pass,
+                     const gpu_draw_item* items, int count,
+                     const light_camera& cam, frame_log* log = nullptr) const;
+
     /// The map, for binding into the scene pass at fragment slot 2.
     [[nodiscard]] SDL_GPUTexture* texture() const { return depth_.handle(); }
 

@@ -71,6 +71,11 @@ add_library(engine STATIC
     # 6.16's frustum culling walks the same list — one place, not two.
     src/gfx/draw_order.cpp
     src/gfx/framebuffer.cpp
+    # Lesson 6.17. The frame, declared instead of assembled. A translation unit
+    # because `compile` is four real passes over two arrays and belongs in one
+    # place, and because nothing that merely *declares* a pass should have to
+    # recompile when the scheduler changes.
+    src/gfx/frame_graph.cpp
     # Lesson 6.16. The six planes, extracted from the view-projection matrix, and
     # the walk that rejects what they exclude. A translation unit for the reason
     # draw_order.cpp gives one line above: `cull_visible` is a real algorithm over

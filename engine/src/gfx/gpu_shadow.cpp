@@ -162,6 +162,21 @@ void gpu_shadow_map::render(SDL_GPUCommandBuffer* cb, const gpu_draw_item* items
         log->record(gpu_event_kind::pass_begin, "depth only (no colour target)");
     }
 
+    render_into(cb, pass, items, count, cam, log);
+
+    if (log != nullptr) { log->record(gpu_event_kind::pass_end, nullptr); }
+    SDL_EndGPURenderPass(pass);
+}
+
+void gpu_shadow_map::render_into(SDL_GPUCommandBuffer* cb, SDL_GPURenderPass* pass,
+                                 const gpu_draw_item* items, int count,
+                                 const light_camera& cam, frame_log* log) const
+{
+    if (!valid() || cb == nullptr || pass == nullptr || items == nullptr || count <= 0)
+    {
+        return;
+    }
+
     // The viewport is the whole map. Set explicitly rather than relying on the
     // default, because the swapchain-sized viewport left behind by a previous
     // pass would silently render the scene into one corner.
@@ -213,9 +228,6 @@ void gpu_shadow_map::render(SDL_GPUCommandBuffer* cb, const gpu_draw_item* items
                                                         : item.mesh->vertex_count() / 3u);
         }
     }
-
-    if (log != nullptr) { log->record(gpu_event_kind::pass_end, nullptr); }
-    SDL_EndGPURenderPass(pass);
 }
 
 void gpu_shadow_map::fill_uniforms(scene_light_uniforms& out, const light_camera& cam,

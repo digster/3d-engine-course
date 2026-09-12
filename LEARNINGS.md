@@ -7379,3 +7379,41 @@ wrong**; that one is now acted on too, by running a clean-tree build before ship
 failed — two empty strings are equal. It was run from the correct directory every time, so it never
 fired. `golden_616.cpp` reports both sizes and a differing-byte count, and fails loudly on an empty
 read.
+
+## A measurement that only works once is worse than one that never works
+
+The frame graph's pool reported how many bytes descriptor-keyed reuse saved. The first
+implementation summed a texture's bytes each time one was **created** — correct on the first frame,
+and a reported saving of 100% on every frame after it, because the pool is then warm and creates
+nothing.
+
+The first run looks right, which is precisely what makes it dangerous: a measurement that is wrong
+from the start gets investigated. This one only fails on the second call, in a number nobody
+re-reads. It was caught because §G of `verify_617` happened to run after three earlier sections had
+already warmed the pool, and printed an implausible `saved 1223296 B`.
+
+Count over the **slots the frame used**, not over the work this call happened to do. The general
+form: if a statistic is derived from a side effect (an allocation, a cache miss, a file write),
+it measures the side effect's *novelty*, not the quantity you meant.
+
+## Before building the thing, check that the reason applies here
+
+Frame graphs are sold on memory aliasing. Measured on this engine's own fourteen-pass frame, the
+saving is **zero** — and for two reasons that had to be separated, because they have different
+futures:
+
+- SDL_GPU 3.4.12 has no placed resource, no heap and no aliasing flag, so the strongest reuse
+  available is handing back a whole texture whose descriptor matches *exactly*. That limit goes away
+  if SDL_GPU ever grows placed resources.
+- The frame is a **chain**: peak live bytes are 85.7% of the sum, because `hdr` spans the whole
+  schedule and all six pyramid levels are alive at the turn. That limit goes away the moment a
+  second post effect lands.
+
+Collapsing the two into "aliasing does not help here" would have been wrong in both directions. The
+graph was still worth building, for reasons that had to be found rather than assumed — the order,
+the load ops, the store ops and the pass culling all stopped being facts a human maintains.
+
+This is now the fifth member of a family: check a measurement **can** produce a non-null result
+(6.14), check a non-null result has **converged** (6.15), check the swept axis **can show** the
+effect (6.16), check a comparison **can report a difference** (6.17 §I) — and check that the
+**reason you are building this is true here**.

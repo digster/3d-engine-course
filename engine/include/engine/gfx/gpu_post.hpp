@@ -150,6 +150,19 @@ private:
 // Lesson 6.13 — the bloom
 // ---------------------------------------------------------------------------
 
+/// Which of the chain's three filters a stage runs — Lesson 6.17.
+///
+/// The chain is `2n - 1` passes and only THREE of them are different: one bright
+/// pass, `n - 1` downsamples, `n - 1` additive upsamples. Naming that was what
+/// made the chain declarable: a frame graph needs one pass object per stage, and
+/// a stage is (this filter, that source, that destination).
+enum class bloom_stage
+{
+    bright,   ///< threshold + knee, scene -> level 0 at half resolution
+    down,     ///< one bilinear tap per output texel, level i-1 -> level i
+    up        ///< the 1-2-1 tent, ADDITIVELY blended into level i-1
+};
+
 /// The pyramid, its three pipelines, and the eleven render passes that fill it.
 ///
 /// **This is the type that owns the bloom's intermediate targets**, and the
@@ -227,6 +240,28 @@ public:
     ///        photographed at different shutter speeds.
     void render(SDL_GPUCommandBuffer* cb, SDL_GPUTexture* scene,
                 const bloom_settings& s, float exposure) const;
+
+    /// Record ONE stage into a pass **somebody else** began — Lesson 6.17.
+    ///
+    /// `render` above is now eleven calls to this function with a begin and an
+    /// end around each, so the hand-written chain and the frame-graph one issue
+    /// byte-identical draws. That is not tidiness: §9 compares the two chains'
+    /// output bit for bit, and a comparison between two copies of the same code
+    /// would pass while proving nothing.
+    ///
+    /// **It does not know its destination.** The target is the pass's attachment,
+    /// so this function never sees a load op and therefore cannot get one wrong.
+    ///
+    /// @param source the texture to sample: the scene for `bright`, level `i-1`
+    ///        for `down`, level `i` for `up`.
+    /// @param source_w,source_h the SOURCE's dimensions, because `texel_size`
+    ///        means one texel of the thing being READ. The bright pass's source
+    ///        is the full-resolution scene while its target is half that, and
+    ///        confusing the two produces a glow of the wrong radius and no error.
+    void record_stage(SDL_GPUCommandBuffer* cb, SDL_GPURenderPass* pass,
+                      bloom_stage kind,
+                      SDL_GPUTexture* source, Uint32 source_w, Uint32 source_h,
+                      const bloom_settings& s, float exposure) const;
 
     /// The finished bloom — pyramid level 0, half the scene's dimensions.
     [[nodiscard]] SDL_GPUTexture* result() const;

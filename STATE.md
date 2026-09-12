@@ -7,9 +7,141 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-09-12 (after Lesson 6.16 — 72 of 107 lessons)
+updated: 2026-09-12 (after Lesson 6.17 — 73 of 107 lessons)
 
 conventions:
+  frame-graph: THE FRAME IS DECLARED, NOT ASSEMBLED. Built in 6.17,
+        engine/include/engine/gfx/frame_graph.{hpp,cpp}.
+        THE WHOLE THING RESTS ON ONE MOVE: a resource is NOT a texture, it is a
+        VARIABLE WITH VALUES OVER TIME. `hdr@1` is what the scene pass produced,
+        `hdr@2` is what the skybox produced from it, and each version has EXACTLY
+        ONE PRODUCER. That is single static assignment applied to render targets,
+        and it is the reason "the bloom reads the HDR target" stops being an
+        ambiguous sentence.
+        ONE STATEMENT, FOUR DERIVED FACTS. A pass says what it does with what was
+        already in a target — `discard_write` (I cover every texel),
+        `clear` (give me a known value), `keep` (my output DEPENDS on the old
+        contents) — and from it fall: the ORDERING edge, the LOAD op, the
+        PRODUCER's STORE op, and the LIFETIME. The third is the one that
+        surprises: it is a consequence for a DIFFERENT PASS than the one that
+        spoke.
+          STORE iff some live pass consumes this version, or the resource is
+          imported. DONT_CARE otherwise.
+        That single rule reproduces 4.7's DONT_CARE on the scene depth and 6.8's
+        STORE on the shadow map — two decisions argued out in comments nine
+        lessons apart. verify_617 §D checks eight attachments and all eight
+        match what the engine chose by hand.
+        THE LOAD OP IS THE ONE THAT STINGS. 6.13 wrote a paragraph warning that
+        the upsample's LOAD is "load-bearing" and that getting it wrong "looks
+        like a tuning problem rather than a load op". Under the graph it is not a
+        decision; it follows from `keep`. NOTE THE HONEST LIMIT: the decision was
+        MOVED, not abolished — `discard_write` is still a promise that the pass
+        covers every texel, and that promise is the one thing the graph cannot
+        check, because it would have to know what the shader covers.
+        CULLING IS BACKWARD REACHABILITY FROM IMPORTED WRITES. An import is the
+        only value observable after the frame ends, so a pass survives iff it
+        transitively feeds one. No present() call, no side-effect flag. Measured:
+        stop sampling the bloom's level 0 and ELEVEN PASSES DISAPPEAR, replacing
+        gpu_post.cpp's `if (!s.enabled) { return; }` with a consequence. Nothing
+        in frame_graph.cpp knows what a bloom is.
+        DETERMINISM IS CORRECTNESS, NOT TIDINESS. Kahn's algorithm picks any
+        ready pass; ties are broken by DECLARATION INDEX, deliberately, with the
+        slowest possible scan. A scheduler that wanders produces a golden that
+        fails one run in five, and by the time anyone sees the pattern the
+        scheduler is the last thing suspected.
+        THE GRAPH ORDERS PASSES, NOT DRAWS, and that boundary is what keeps
+        6.11's back-to-front tail and 6.16's batching structurally out of reach.
+        The general rule: ordering that comes from DATA is safe to hand over;
+        ordering that comes from SEMANTICS must live inside an atom the scheduler
+        cannot open. Here the atom is the render pass.
+  frame-graph-memory: THE USUAL PITCH DOES NOT APPLY HERE AND THE TWO REASONS
+        MUST BE TOLD APART. 6.17 §7. Measured on the engine's own 14-pass frame:
+          no sharing at all        1,223,296 B   100.0%
+          true memory aliasing     1,048,576 B    85.7%   <- the literature
+          descriptor-keyed reuse   1,223,296 B   100.0%   <- what we can express
+        SO THE PRIZE IS 174,720 B (14.3%) AND WE COLLECT NONE OF IT.
+        (1) THE API. SDL_GPU 3.4.12 has NO placed resource, NO heap, NO aliasing
+            flag — checked against SDL_gpu.h, not assumed. The strongest reuse
+            available is handing back a WHOLE texture whose descriptor matches
+            EXACTLY (width, height, format, samples, layers, depth, sampled).
+            `shadow` is 256x256 sampled depth and dies at pass 1; `bloom 0` is
+            128x128 RGBA16F and is born at pass 2. 262,144 dead bytes could hold
+            131,072 live ones and there is no call that asks.
+        (2) THE SHAPE. OUR FRAME IS A CHAIN. `hdr` spans the whole schedule
+            because the resolve samples it last, and all six pyramid levels are
+            live at the turn between the down chain and the up chain — which is
+            what an additive pyramid MEANS. A chain has nothing to alias.
+        AT 1920x1080 WITH A 2048 SHADOW MAP: 45.00 MB unshared, 39.73 MB with
+        perfect aliasing, 5.27 MB unreachable — which, worked out, is EXACTLY the
+        bloom pyramid, which would fit inside the shadow map's memory after the
+        shadow map dies.
+        THE POOL IS BUILT ANYWAY AND SHOWN WORKING: a graph shaped like a TREE
+        (two half-res effects used one after the other) puts both scratch targets
+        on one slot and returns 131,072 B. That is the shape a post stack takes
+        once SSAO, reflections and depth of field arrive.
+        THE GENERAL PROBLEM HAS A NAME AND WE ARE NOT SOLVING IT: interval graph
+        colouring, which for intervals on a line is optimal by a greedy sweep in
+        first-use order (what the pool does). What makes real allocators hard is
+        that TRUE aliasing gives the intervals different SIZES, which is bin
+        packing with lifetimes.
+  frame-graph-cost: FIXED CAPACITIES, AND THE REASON IS MEASURED. 6.17 §8.
+        8.62 us per declare+compile in the steady state (15.83 us on the first,
+        which creates 9 textures), and ZERO HEAP ALLOCATIONS across 200 cycles —
+        measured by REPLACING THE GLOBAL operator new in verify_617, not by
+        asserting it. 0.05% of a 16.67 ms budget, ~1/300th of what 6.16's culling
+        test costs on 45,512 boxes.
+        THAT IS THE ARGUMENT AGAINST std::function, made with a number rather
+        than with taste: it type-erases, so any callable bigger than its small
+        buffer heap-allocates, and the lambdas you would write here (capturing a
+        renderer, a settings block, a draw list) do not fit. One allocation per
+        pass per frame, invisible. A function pointer plus a void* is two words.
+        THE COST OF THAT CHOICE IS REAL AND IS STATED: the context structs must
+        OUTLIVE THE GRAPH, because it points at them. verify_617 keeps them in
+        one `frame_decl` beside the graph.
+        COMPLEXITY IS O(P^2 x A^2) because producer_of is a linear scan called
+        from inside two loops. FINE at 14 passes, not at 200; the fix is an index
+        from (resource, version) to producer, and it is Exercise 3.
+  frame-graph-limits: THE NINETY-PERCENT PICTURE, STATED. NO SUBRESOURCE
+        VERSIONS — a version covers the whole texture, so four cascade passes
+        writing four LAYERS serialise into sm@1->sm@2->sm@3->sm@4 even though
+        they are independent. It costs NOTHING today (a command buffer submits in
+        order anyway) and would cost something on an API with parallel queues.
+        NO ASYNC COMPUTE / QUEUES / SPLIT BARRIERS — SDL_GPU presents one
+        timeline to this API. NO BUFFERS, only textures, because every cross-pass
+        resource in this engine is one. ONE COMMAND BUFFER.
+  pass-recording-split: A FUNCTION THAT NEVER SEES A LOAD OP CANNOT GET ONE
+        WRONG. 6.17 cut two functions in half and the SHAPE of both cuts is the
+        same: the half that draws loses everything about the TARGET.
+          gpu_shadow_map::render_into(cb, pass, items, count, cam, log) — and the
+            `layer` parameter did NOT come with it, because which cascade a pass
+            writes is part of the WRITE DECLARATION, the only place that can also
+            know whether the previous cascade must survive.
+          gpu_bloom::record_stage(cb, pass, bloom_stage, source, sw, sh, s, exp)
+            — no destination at all. bloom_stage is {bright, down, up}. The
+            SOURCE dimensions are parameters rather than read off the texture,
+            because the bright pass's texel_size is the SCENE's while its target
+            is half that, and confusing them gives a glow of the wrong radius and
+            no error.
+        AND THE OLD PATH NOW GOES THROUGH THE NEW ONE. gpu_bloom::render was
+        REWRITTEN to call record_stage eleven times. Not tidiness: §I compares
+        the two chains bit for bit, and two copies of the same draw code would
+        make that comparison pass while proving nothing. Fourth time this engine
+        has paid for the rule (5.1's four harnesses, 6.15's two ARGB spellings,
+        6.16's begin_frame, this).
+  destroy-completeness: A destroy() THAT HAS FALLEN BEHIND ITS MEMBERS IS
+        INVISIBLE. Found in 6.16: gpu_scene_renderer::destroy() had been missing
+        6.15's three members (black_cube_, black_lut_, cube_sampler_) since they
+        were added, and nothing noticed because a leaked GPU resource at shutdown
+        looks exactly like a clean shutdown. THE WAY IT WAS FOUND IS THE
+        TRANSFERABLE PART: add a member, then READ THE DESTROY LIST against the
+        member list. Do that every time a class gains a resource.
+  brace-elision-ambiguity: `aabb::expand({1, 2, 3})` IS AMBIGUOUS. Brace elision
+        makes the braced list a candidate for BOTH the vec3 and the const aabb&
+        overloads, so the call does not compile — and it had never come up
+        because every call site in the engine happened to pass a named variable.
+        Write `expand(vec3{...})`. The general shape: an overload set where one
+        type is constructible from a prefix of another's initialiser is ambiguous
+        under brace elision, and only aggregate-initialised call sites reveal it.
   frustum: SIX PLANES, FROM THE ROWS OF clip_from_world, NEVER FROM A CAMERA.
         Built in 6.16, engine/include/engine/gfx/frustum.{hpp,cpp}.
         THE DERIVATION IS ONE OBSERVATION: a clip coordinate IS a signed distance.
@@ -4017,6 +4149,11 @@ completed:
          `completed:` should be derived from, or verified against, the
          `published` badges rather than maintained by hand. Filed as work, not
          as another note.)
+  - 6.17 A Lightweight Frame Graph
+        (Appended at the time, and check-curriculum.py's badge-vs-hero-stat
+         cross-check was run BEFORE the commit rather than after: it caught the
+         orphan page, then the 4h-vs-5h subtotal drift when the hours moved, then
+         the two dead `next` links on 6.16. Three catches on one lesson.)
   - 6.16 Frustum Culling and Instanced Submission
         (APPENDED AT THE TIME, not two lessons later, and the note above is why.
          The durable fix is still unbuilt — but check-curriculum.py's
@@ -4027,6 +4164,32 @@ completed:
          other half and remains work.)
 
 capabilities:
+  - 6.17 THE FRAME IS A DECLARATION, AND FOUR FACTS STOPPED BEING MAINTAINED.
+    74 -> 75 public headers, 46 -> 47 sources, 24 shaders (unchanged — this
+    lesson added none). 40 checks green, 0 failures (7 CPU-only, 33 needing a
+    GPU). Counts MEASURED against commit 1c83edd, per 6.15's rule: re-measure,
+    do not increment.
+    WHAT IS NEW: frame_graph + fg_texture + fg_texture_desc + fg_init + fg_use +
+    fg_pass_context + fg_execute_fn + dump_frame_graph (frame_graph.{hpp,cpp});
+    gpu_shadow_map::render_into; bloom_stage + gpu_bloom::record_stage, with
+    gpu_bloom::render rewritten to go through it.
+    WHAT IS MEASURED RATHER THAN CLAIMED: the compiled schedule against the
+    hand-written order, name for name, 14 of 14; every derived load and store op
+    against the hand-written one, 8 of 8, including 4.7's DONT_CARE and 6.8's
+    STORE; eleven bloom passes culled by a dependency rather than a flag; five
+    silent mistakes turned into named errors; 8.62 us and ZERO allocations per
+    compile (global operator new replaced to count); and the memory claim, which
+    came out at ZERO saved of a possible 14.3% for two separate reasons — see
+    frame-graph-memory.
+    THE GOLDEN IS BYTE-IDENTICAL AT E917C06C FOR THE TWENTY-SIXTH LESSON, AND IT
+    IS A NULL INSTRUMENT FOR THE THIRD LESSON RUNNING. Confirmed STRUCTURALLY
+    before running it: write_reference_shot renders through soft_renderer.cpp and
+    raster.cpp, neither of which includes frame_graph.*, gpu_shadow.* or
+    gpu_post.*. The real instrument was BUILT — the same frame assembled by hand
+    and compiled from a declaration, 0 of 262,144 channels differing — WITH A
+    CONTROL that reports 196,608 differing on a bloom-less frame, which is 6.16's
+    finding about golden_615 applied rather than quoted.
+    THE CLEAN-TREE BUILD WAS RUN and is green with no warnings at -Wall -Wextra.
   - 6.16 THE ENGINE DECIDES WHAT NOT TO DRAW, AND DRAWS THE REST IN FEWER CALLS.
     72 -> 74 public headers, 44 -> 46 sources, 23 -> 24 shaders, 9 -> 10 scene
     pipelines. 60 checks green, 0 failures (47 CPU-only, 13 needing a GPU).
@@ -6875,6 +7038,7 @@ files:
             antialias.hpp                                                   [6.14]
             cubemap.hpp                                                     [6.15]
             frustum.hpp, instancing.hpp                                     [6.16]
+            frame_graph.hpp                                                 [6.17]
             debug_lines.hpp                                                 [5.11]
             depth_buffer.hpp, framebuffer.hpp, gpu_buffer.hpp, gpu_debug.hpp,
             gpu_device.hpp, gpu_mesh.hpp, gpu_pipeline.hpp, gpu_present.hpp,
@@ -6907,6 +7071,7 @@ files:
             antialias.cpp [6.14],
             cubemap.cpp [6.15],
             frustum.cpp, instancing.cpp [6.16],
+            frame_graph.cpp [6.17],
             clip.cpp, colour.cpp,
             debug_draw.cpp,
             debug_lines.cpp [5.11],
@@ -7511,97 +7676,115 @@ roadmap: RESHAPED 2026-09-08, AFTER TWO EXTERNAL REVIEWS OF THE PUBLISHED OUTLIN
             qualifier too, because a skimmer reads the recap and stops.
 
 
-next: 6.17 — A Frame Graph
-      (planned filename: docs/lessons/06-17-frame-graph.html — 6.16's TWO next
-      links point at the index and BOTH need repointing; scratch/l616_body_a.html
-      holds the top one and build_616.py's TAIL the bottom.
+next: 6.18 — Text and 2D Overlay Rendering
+      (planned filename: docs/lessons/06-18-text-overlay.html — 6.17's TWO next
+      links point at the index and BOTH need repointing; scratch/l617_body_a.html
+      holds the top one and build_617.py's TAIL the bottom. The index row for
+      6.18 is still the unpublished one-liner; check-curriculum.py will flag the
+      orphan the moment the page exists, which is how it caught 6.17.)
 
-      PIN FIRST. build_616.py's LISTING_SOURCE is EMPTY and it lists SIX files
-      whole, FIVE of which are in the repository (verify_616.cpp is gitignored
-      and must be copied from the working tree):
-        for f in engine/include/engine/gfx/frustum.hpp \
-                 engine/src/gfx/frustum.cpp \
-                 engine/include/engine/gfx/instancing.hpp \
-                 engine/src/gfx/instancing.cpp \
-                 shaders/scene_instanced.vert.hlsl; do
-          git show <6.16 commit>:$f > scratch/l616_$(echo $f | tr / _)
+      PIN FIRST. build_617.py's LISTING_SOURCE is EMPTY and it lists EIGHT files
+      whole, SEVEN of which are in the repository (verify_617.cpp is gitignored
+      and can only be pinned from the working tree). The commands are written out
+      in build_617.py's own comment; the short form is:
+
+        for f in engine/include/engine/gfx/frame_graph.hpp \
+                 engine/src/gfx/frame_graph.cpp \
+                 engine/include/engine/gfx/gpu_shadow.hpp \
+                 engine/src/gfx/gpu_shadow.cpp \
+                 engine/include/engine/gfx/gpu_post.hpp \
+                 engine/src/gfx/gpu_post.cpp \
+                 engine/CMakeLists.txt; do
+          git show <6.17 commit>:$f > scratch/l617_$(echo $f | tr / _)
         done
-        cp scratch/verify_616.cpp scratch/l616_scratch_verify_616.cpp   # gitignored
-      Then paste what `python3 scratch/pin_listings.py 616 --dry` prints (it
+        cp scratch/verify_617.cpp scratch/l617_scratch_verify_617.cpp
+
+      Then paste what `python3 scratch/pin_listings.py 617 --dry` prints (it
       verifies every pin by substring against the shipped page — that check is
-      what confirms a gitignored copy has not drifted), re-run build_616.py, and
-      `git diff` the page: SIXTEEN lessons running, the diff has been exactly the
-      nav lines meant to move.
+      what confirms a gitignored copy has not drifted), re-run build_617.py, and
+      `git diff` the page: SEVENTEEN lessons running, the diff has been exactly
+      the nav lines meant to move.
 
-      6.16 IS MORE LIKELY THAN USUAL TO BE REACHED INTO. A frame graph OWNS the
-      render passes, and `render_batched` is a NEW PATH through the scene pass
-      that landed one lesson before the graph arrives to describe it. The control
-      that held this lesson (cubemap.* did not move, exactly as predicted) will
-      not obviously hold for gpu_scene.*.
+      WHICH FILES 6.18 IS LIKELY TO MOVE. `gpu_post.{hpp,cpp}` has now been
+      edited by THREE CONSECUTIVE LESSONS (6.13 built the stack, 6.14 added MSAA,
+      6.17 split record_stage out) and each time the previous lesson had said it
+      was settled. Treat it as hot. `frame_graph.*` is the new one and 6.17's own
+      §17 predicts 6.18 will declare its overlay as a pass, which is the first
+      use of the API by someone other than its author — the usual moment a new
+      API's gaps show. `gpu_scene.*` is possible (an overlay may want a pipeline
+      beside the scene's ten). `gpu_shadow.*` SHOULD NOT MOVE — keep it as the
+      control, the role cubemap.* played for 6.16 and held.
 
-      WHICH FILES 6.17 IS LIKELY TO MOVE. `gpu_post.{hpp,cpp}` is near certain —
-      6.13 already said in its own shipped words that it owns intermediates and
-      named where that stops scaling, with ELEVEN RENDER PASSES FOR ONE EFFECT as
-      the number 6.17 has to justify itself against. `gpu_scene.{hpp,cpp}` is
-      likely (two render entry points now, plus begin_frame, plus a depth target
-      it sizes itself). `gpu_shadow.*` and `cascade.*` are likely: the cascade
-      loop is N passes whose count is data. `frustum.*` and `instancing.*` SHOULD
-      NOT MOVE — keep them as the control.
+      WHAT 6.18 OWES, beyond the obvious:
+        1 DECLARE THE OVERLAY AS A PASS, and report honestly what that cost. It
+          is the first EXTERNAL use of 6.17's API and the specific thing to watch
+          is that an overlay blending over the resolved image wants `keep` on an
+          IMPORTED resource — which works today and HAS NEVER BEEN EXERCISED, so
+          it is untested code reached for the first time by the next lesson. If
+          it needs a verb that does not exist, say so and add it rather than
+          routing around the graph; a pass recorded outside the graph is the
+          exact failure 6.17 was written to stop.
+        2 THE ATLAS IS A MINIFICATION PROBLEM AND 6.10 ALREADY DECIDED IT. Glyphs
+          at a fixed pixel size need NO mip chain, and saying why (a 1:1 blit has
+          a footprint of exactly one texel) is cheaper than discovering the
+          blurry-text bug. But a 3D label that scales does, and then bleeding
+          between atlas cells is the failure — which is 6.10's padding argument
+          in a new place.
+        3 GAMMA. Text is the one place where 6.1's linear-vs-sRGB argument has a
+          visible, famous artefact: an alpha-blended glyph composited in the
+          wrong space has visibly wrong STEM WEIGHT, and it is the single most
+          common gamma bug in shipped software. 6.11's premultiplied alpha and
+          6.12's tonemap both bear on WHERE the overlay composites — before or
+          after the curve — and that is a decision with a right answer, not a
+          preference.
+        4 THE GOLDEN. Null for the fourth lesson running unless the overlay
+          reaches the software rasterizer. CONFIRM THAT STRUCTURALLY as 6.17 did
+          (grep what write_reference_shot's translation units include), and
+          expect to BUILD the instrument again. 6.17's shape — render the same
+          thing two ways, plus a CONTROL that proves the comparison can fail — is
+          the one to copy.
 
-      WHAT 6.17 OWES, beyond the obvious:
-        1 THE PASSES ALREADY EXIST AND MUST BE COUNTED FIRST. Shadow, the cascade
-          loop, the scene pass, bloom's bright/down/up chain, the tonemap
-          resolve, the skybox. 6.13 counted eleven for bloom alone. A frame graph
-          proposed before the passes are enumerated is a framework; proposed
-          after, it is an answer. Enumerate, with the numbers.
-        2 THE SAVING THAT IS NOT SCHEDULING. The reason engines build these is
-          ALIASING — two targets whose lifetimes do not overlap share memory —
-          and that is measurable in megabytes on THIS engine today. Measure it
-          before claiming it; 6.13's chain and 6.12's HDR target are the
-          candidates.
-        3 WHAT A GRAPH CANNOT REORDER. Anything whose order is semantic rather
-          than data-dependent: 6.11's back-to-front tail, and now 6.16's
-          batching, which permutes opaque draws precisely BECAUSE the z-buffer
-          makes their order free. A graph that reorders a blended pass is wrong,
-          and the reason is 3.1's property, not a scheduling rule.
-        4 THE GOLDEN. It is a null instrument for the last two lessons and will
-          be for this one too — the fixture renders through the software
-          rasterizer and a frame graph organises GPU passes. CONFIRM THAT
-          STRUCTURALLY, do not inherit it, and expect to BUILD the instrument
-          again as 6.16 §K had to.
+      CARRY FORWARD from 6.17:
+        - A CONSEQUENCE WRITTEN DOWN BY HAND IS A SECOND COPY OF THE TRUTH. Every
+          win in this lesson is one instance of it: the order, the load ops, the
+          store ops and `if (!s.enabled)` were all facts that already existed
+          somewhere else. Before adding a declaration, ask whether it is a
+          DECISION or a CONSEQUENCE — and if it is a consequence, derive it.
+        - MEASURE THE PITCH BEFORE YOU BUY IT. The literature's reason for frame
+          graphs is memory aliasing; measured here it is worth ZERO, and the
+          lesson is better for saying so than it would have been for quoting
+          somebody else's number. This is the fifth member of the instrument
+          family: 6.14 (can this measurement produce a non-null result?), 6.15
+          (has the non-null result converged?), 6.16 (can this axis show the
+          effect?), 6.17 (can this comparison report a difference?) — and now
+          (is the reason I am building this true HERE?).
+        - TELL TWO REASONS APART WHEN THEY GIVE THE SAME ANSWER. The memory
+          saving is zero because the API cannot express aliasing AND because the
+          frame is a chain. Collapsing those into "aliasing does not help" would
+          have been wrong in both directions: the API limit goes away if SDL_GPU
+          grows placed resources, and the shape limit goes away the moment a
+          second post effect lands.
+        - DETERMINISM IN A SCHEDULER IS CORRECTNESS. Any topological order is
+          legal and that is exactly why the tie-break must be stable — the
+          failure mode is a golden that fails one run in five, which nobody
+          attributes to the scheduler.
+        - A FUNCTION THAT NEVER SEES A SETTING CANNOT GET IT WRONG. Both splits
+          in §10 work this way, and it generalises past render passes: the
+          cheapest way to make a parameter impossible to misuse is to remove it
+          from the signature and derive it at the only site that knows.
 
-      CARRY FORWARD from 6.16:
-        - BEFORE SWEEPING A PARAMETER, ASK WHAT WOULD HAVE TO BE TRUE FOR THE
-          ANSWER TO DEPEND ON IT. The object-count sweep produced six confident
-          data points, a trend and a verdict column, and zero information,
-          because both sides were O(n). This is the third member of a family:
-          6.14 (check a measurement CAN produce a non-null result), 6.15 (check a
-          non-null result has CONVERGED), 6.16 (check the axis can show the
-          effect). Underneath all three: ESTABLISH WHAT YOUR INSTRUMENT CAN SEE
-          BEFORE YOU READ IT.
-        - A LIMIT THAT HAS NEVER BEEN REACHED CANNOT TELL YOU IT IS WRONG. The
-          eight-attribute cap, dropped silently for fifteen lessons. Its sibling
-          from 6.15 was "a build only ever run incrementally cannot tell you it
-          is wrong" — and THAT one was acted on this lesson: a clean-tree build
-          was run and passed.
-        - PREDICT, THEN MEASURE. c/w gave 0.2446% before any sweep existed, and
-          the sweep then bracketed it. A prediction that is confirmed is worth
-          more than six measurements that are not — and it is the only way to
-          know the sweep was looking in the right place.
-        - VERIFY AGAINST FACTS, NOT A REFERENCE — and then check the facts are
-          sufficient. Four zeros followed from "the eye is the apex", and the bug
-          actually made would have passed all four.
-
-      AND THREE THINGS 6.16 FOUND THAT ARE NOT ABOUT CULLING.
-      (1) gpu_scene_renderer::destroy() had been missing 6.15's three members
-          since they were added. Found by ADDING A MEMBER AND READING THE LIST.
-      (2) golden_615.cpp compared two files as strings and printed
-          `identical=YES` when BOTH reads failed — two empty strings are equal.
-          It was always run from the right directory so it never fired. Fixed in
-          golden_616.cpp, which now reports sizes and a differing-byte count.
-          A TEST THAT CAN PASS WITHOUT TESTING ANYTHING IS WORSE THAN NO TEST.
-      (3) `aabb::expand({1, 2, 3})` is AMBIGUOUS — brace elision makes the
-          braced list a candidate for both the vec3 and the const aabb&
-          overloads. Every call site in the engine happened to pass a named
-          variable, so it had never come up. Write `expand(vec3{...})`.
+      AND TWO THINGS 6.17 FOUND THAT ARE NOT ABOUT FRAME GRAPHS.
+      (1) POOLED BYTES MUST BE COUNTED OVER SLOTS, NOT OVER CREATIONS. The first
+          implementation added a texture's bytes each time one was CREATED, which
+          is correct on frame one and reports a 100% saving on every frame after
+          it, because the pool is then warm. A measurement that only works once
+          is worse than one that never works: the first run looks right. Caught
+          because §G ran after §C-§E had already warmed the pool and printed
+          `saved 1223296 B` — an implausible number, which is the only reason it
+          was looked at.
+      (2) THE `.tag` CLASS VOCABULARY IS `new`/`modified`, NOT `mod`. build_617.py
+          inherited 6.16's LISTING_META shape, which had only `new` entries, and
+          the natural abbreviation for the other one renders as an unstyled grey
+          pill that still reads correctly. check-page.js's badge check caught it —
+          it exists because 82 of them once shipped (3.7-5.1).
 ```
