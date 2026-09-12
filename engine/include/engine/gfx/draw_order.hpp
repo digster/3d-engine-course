@@ -38,7 +38,7 @@
 //              exchange for nothing at all — and it is a genuinely common
 //              mistake, because "transparent" reads like one category.
 //
-// Lesson 6.13's frustum culling wants this same traversal — walk the draw list,
+// Lesson 6.16's frustum culling wants this same traversal — walk the draw list,
 // compute a per-object quantity, partition — which is why the bucketing below is
 // a general `span` operation over indices rather than something wired into
 // either renderer.

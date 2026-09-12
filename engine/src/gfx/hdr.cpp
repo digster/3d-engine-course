@@ -5,6 +5,9 @@
 
 #include <engine/gfx/hdr.hpp>
 
+// Lesson 6.13: `resolve` composites the bloom, so it needs the bloom's sampler.
+#include <engine/gfx/bloom.hpp>
+
 #include <engine/gfx/framebuffer.hpp>
 
 #include <algorithm>
@@ -197,7 +200,7 @@ hdr_stats measure(const hdr_buffer& src)
 }
 
 void resolve(const hdr_buffer& src, framebuffer& dst, const tonemap_settings& s,
-             encode_mode mode)
+             encode_mode mode, const hdr_buffer* bloom, float bloom_intensity)
 {
     // Dimensions must agree. A partial resolve is worse than none: it leaves a
     // frame that is half tonemapped and half whatever was in the target, which
@@ -212,9 +215,32 @@ void resolve(const hdr_buffer& src, framebuffer& dst, const tonemap_settings& s,
         {
             // ONE: exposure, in linear light, because light accumulates linearly
             // in time and that is what an exposure models.
-            const linear_rgb lit{in[x].r * s.exposure,
-                                 in[x].g * s.exposure,
-                                 in[x].b * s.exposure};
+            linear_rgb lit{in[x].r * s.exposure,
+                           in[x].g * s.exposure,
+                           in[x].b * s.exposure};
+
+            // ONE AND A HALF (Lesson 6.13): the bloom, added while everything is
+            // still linear light and BEFORE the curve.
+            //
+            // The bloom is half resolution, so this is a bilinear fetch at the
+            // destination pixel's position in bloom-texel space: `(x + 0.5) * 0.5`
+            // is the same destination-to-source mapping `upsample_add` uses, which
+            // is what keeps this last upsample aligned with all the ones before it.
+            //
+            // NO EXPOSURE MULTIPLY HERE. `bright_pass` already applied it, and
+            // applying it twice would photograph the glow at a different shutter
+            // speed from the scene it belongs to — visible as a bloom that grows
+            // quadratically while the image it sits on grows linearly.
+            if (bloom != nullptr && bloom_intensity > 0.0f)
+            {
+                const linear_rgb b = sample_bilinear(
+                    *bloom,
+                    (static_cast<float>(x) + 0.5f) * 0.5f,
+                    (static_cast<float>(y) + 0.5f) * 0.5f);
+                lit.r += b.r * bloom_intensity;
+                lit.g += b.g * bloom_intensity;
+                lit.b += b.b * bloom_intensity;
+            }
 
             // TWO: the curve, still in linear light.
             const linear_rgb mapped = apply_tonemap(lit, s);

@@ -57,16 +57,44 @@ function(engine_use_shaders target)
         add_dependencies(${target} ${shader_targets})
     endif()
 
+    # ---- The copy, and why it is NOT a POST_BUILD command -------------------
+    #
+    # It was one until Lesson 6.13, and the bug that changed it is worth keeping
+    # in front of you because it is silent and it survives a full rebuild.
+    #
+    # A POST_BUILD command runs when ITS TARGET is rebuilt. Edit only a shader and
+    # the shader target recompiles — but no demo has any reason to relink, so the
+    # POST_BUILD never fires and every program keeps the copy of the shader it was
+    # last linked beside. The build reports success, the new HLSL is genuinely
+    # compiled and sitting in build/shaders/, and the running program uses the old
+    # one. 6.13's harness spent an afternoon measuring a bloom composite that the
+    # deployed shader did not contain.
+    #
+    # The fix is the standard CMake shape: a command whose OUTPUT is a stamp file
+    # and whose DEPENDS are the compiled shader FILES, wrapped in a target the
+    # executable depends on. Now a changed shader makes the stamp out of date,
+    # which makes the copy run, which happens BEFORE the executable is considered
+    # built rather than after.
+    #
     # Must not fail when the toolchain was missing and nothing was compiled. It
     # does not, because Shaders.cmake creates the output directory at configure
     # time, BEFORE it decides whether it can compile anything — so the worst case
     # here is copying an empty directory, and the program then reports the
     # absence at startup. A better error, in a course that teaches acquiring the
     # tool, than a build that stops.
-    add_custom_command(TARGET ${target} POST_BUILD
+    get_property(shader_outputs GLOBAL PROPERTY ENGINE_SHADER_OUTPUTS)
+    set(stamp "${CMAKE_CURRENT_BINARY_DIR}/${target}_shaders.stamp")
+
+    add_custom_command(
+        OUTPUT "${stamp}"
         COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:${target}>/shaders"
         COMMAND ${CMAKE_COMMAND} -E copy_directory
                 "${ENGINE_SHADER_OUTPUT_DIR}" "$<TARGET_FILE_DIR:${target}>/shaders"
+        COMMAND ${CMAKE_COMMAND} -E touch "${stamp}"
+        DEPENDS ${shader_outputs}
         COMMENT "Copying compiled shaders next to ${target}"
         VERBATIM)
+
+    add_custom_target(${target}_shaders DEPENDS "${stamp}")
+    add_dependencies(${target} ${target}_shaders)
 endfunction()

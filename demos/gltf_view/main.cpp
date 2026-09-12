@@ -38,6 +38,7 @@
 #include <engine/gfx/scene.hpp>
 #include <engine/gfx/cascade.hpp>
 #include <engine/gfx/draw_order.hpp>
+#include <engine/gfx/bloom.hpp>
 #include <engine/gfx/hdr.hpp>
 #include <engine/gfx/mipmap.hpp>
 #include <engine/gfx/shadow.hpp>
@@ -212,6 +213,40 @@ public:
             else if (SDL_strcmp(argv[i], "--luma") == 0)
             {
                 tone_.per_channel = false;
+            }
+            // LESSON 6.13. `--bloom` turns on the pyramid; the four knobs are the
+            // four numbers `bloom_settings` cannot pick for you. Every one of
+            // them implies `--hdr`, because a bloom over an 8-bit buffer would
+            // have nothing above the threshold to find — the clamp already took
+            // it, which is the whole reason this lesson follows 6.12.
+            else if (SDL_strcmp(argv[i], "--bloom") == 0)
+            {
+                hdr_ = true;
+                bloom_.enabled = true;
+            }
+            else if (SDL_strcmp(argv[i], "--bloom-threshold") == 0 && i + 1 < argc)
+            {
+                hdr_ = true;
+                bloom_.enabled = true;
+                bloom_.threshold = static_cast<float>(SDL_atof(argv[++i]));
+            }
+            else if (SDL_strcmp(argv[i], "--bloom-intensity") == 0 && i + 1 < argc)
+            {
+                hdr_ = true;
+                bloom_.enabled = true;
+                bloom_.intensity = static_cast<float>(SDL_atof(argv[++i]));
+            }
+            else if (SDL_strcmp(argv[i], "--bloom-levels") == 0 && i + 1 < argc)
+            {
+                hdr_ = true;
+                bloom_.enabled = true;
+                bloom_.levels = SDL_atoi(argv[++i]);
+            }
+            else if (SDL_strcmp(argv[i], "--bloom-clamp") == 0 && i + 1 < argc)
+            {
+                hdr_ = true;
+                bloom_.enabled = true;
+                bloom_.clamp_max = static_cast<float>(SDL_atof(argv[++i]));
             }
             // A surface polished enough to blow the lid off. The demo's default
             // roughness is 0.49, which peaks at 0.8676 — just under 1 — and that
@@ -1031,7 +1066,26 @@ public:
         if (hdr_ && hdr_fb_)
         {
             const engine::hdr_stats st = engine::measure(*hdr_fb_);
-            engine::resolve(*hdr_fb_, fb(), tone_, engine::encode_mode::fast);
+
+            // LESSON 6.13. The bloom runs on the HDR buffer BEFORE the resolve,
+            // because it is looking for exactly the values above 1 that 6.12 let
+            // the engine keep — and after the curve those values are all in the
+            // same place. `compute_bloom` sizes the pyramid itself and the
+            // pyramid is a member, so this allocates on the first frame and on a
+            // resize, and never again.
+            //
+            // THE EXPOSURE IS PASSED TO BOTH. `tone_.exposure` goes to the bright
+            // pass here and to the curve inside `resolve` below; they are the
+            // same field of the same struct precisely so they cannot drift.
+            const engine::hdr_buffer* bloom_result = nullptr;
+            if (bloom_.enabled)
+            {
+                engine::compute_bloom(*hdr_fb_, bloom_py_, bloom_, tone_.exposure);
+                bloom_result = &bloom_py_.result();
+            }
+
+            engine::resolve(*hdr_fb_, fb(), tone_, engine::encode_mode::fast,
+                            bloom_result, bloom_.intensity);
 
             if (shot_path_ != nullptr)
             {
@@ -1053,6 +1107,24 @@ public:
                         "specular pixel does to a mean)",
                         static_cast<double>(st.log_mean_luminance),
                         static_cast<double>(st.mean_luminance));
+                if (bloom_.enabled && !bloom_py_.empty())
+                {
+                    SDL_Log("  bloom         : %d levels from %dx%d, %zu texels (%.2f MB as "
+                            "floats), threshold %.2f knee %.2f intensity %.3f clamp %.0f",
+                            bloom_py_.levels(), bloom_py_.level(0).width(),
+                            bloom_py_.level(0).height(), bloom_py_.texels(),
+                            static_cast<double>(bloom_py_.texels() * sizeof(engine::linear_rgb))
+                                / (1024.0 * 1024.0),
+                            static_cast<double>(bloom_.threshold),
+                            static_cast<double>(bloom_.knee),
+                            static_cast<double>(bloom_.intensity),
+                            static_cast<double>(bloom_.clamp_max));
+                    SDL_Log("  bloom energy  : %.1f in level 0 — the chain's gain is about the "
+                            "level count, which is why `intensity` is %.3f and not %.2f",
+                            engine::total_energy(bloom_py_.result()),
+                            static_cast<double>(bloom_.intensity),
+                            static_cast<double>(bloom_.intensity * bloom_py_.levels()));
+                }
             }
         }
 
@@ -1130,6 +1202,8 @@ private:
     float polish_ = -1.0f;                   ///< 6.12: override every roughness
     engine::tonemap_settings tone_{};        ///< 6.12: curve, white point, per-channel
     std::unique_ptr<engine::hdr_buffer> hdr_fb_;   ///< 6.12: allocated on first use
+    engine::bloom_settings bloom_{};         ///< 6.13: threshold, knee, intensity
+    engine::bloom_pyramid bloom_py_;         ///< 6.13: allocated once, reused every frame
     bool alpha_demo_ = false;      ///< 6.11: build the glass and the leaf card
     bool sort_blended_ = true;     ///< 6.11: --no-sort makes the failure reachable
     bool blend_encoded_ = false;   ///< 6.11: composite on stored bytes, wrongly

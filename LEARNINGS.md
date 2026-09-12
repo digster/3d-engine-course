@@ -7022,3 +7022,60 @@ kernel or footprint downstream of it.
   temporary name. Related: an assertion of the form "the substitution changed something" is wrong
   for an identity mapping — 1→1 legitimately changes nothing, and asserting otherwise aborted a
   script halfway through a rename.
+
+---
+
+## From Lesson 6.13 (bloom and the post-processing stack)
+
+- **A `POST_BUILD` command runs only when its own target is rebuilt — so it cannot be trusted to
+  deploy a dependency.** `engine_use_shaders()` copied compiled shaders beside each executable with
+  `add_custom_command(TARGET x POST_BUILD ...)`. Edit only a shader and the shader target
+  recompiles, but no executable has any reason to relink, so the copy never fires and every program
+  keeps the shader it was last linked beside. **The build reports success the whole time**, and the
+  new HLSL really is compiled and sitting in `build/shaders/`. This had been live since Module 4 and
+  hid because nobody had ever edited a shader without also touching C++ in the same build.
+  The fix is the standard shape: a command whose `OUTPUT` is a stamp file and whose `DEPENDS` are
+  the compiled shader **files**, wrapped in a target the executable depends on — so the copy runs
+  *before* the executable is considered built. Note that the `add_dependencies` call already present
+  ordered the **compile** and never the **deploy**; having one is not evidence of the other.
+
+- **A GPU result that is constant across a parameter sweep means the parameter is not reaching the
+  code.** That is what exposed the above: the bloom composited as exactly zero at intensities from
+  0.05 to 50. Reading the bloom target back showed it held exactly the derived value, which
+  relocated the fault from the chain to the composite — and the decisive diagnostic was that the
+  *deployed* `.msl` was a different size from the canonical one. **When a GPU answer disagrees with
+  everything else, check that the binary on disk is the one you think you compiled.**
+
+- **`check-page.js`'s spill check tests text only.** A legend *box* ran 6 px off its viewBox and the
+  page passed. Shapes drawn from computed coordinates can leave the frame exactly as labels can, and
+  nothing is watching.
+
+- **The automated page checks are necessary and not sufficient — look at every figure.** The chain
+  diagram passed every check while its labels were crowded, its arrows did not meet its boxes, and
+  one label sat on a corner. Crowding, dead space and arrows that fail to connect are invisible to a
+  geometric test and obvious in a screenshot.
+
+- **A caption that names another figure by number is a reference the `figOrder` check cannot see.**
+  Renumbering left a caption referring to "figure 2's tail" *while being figure 2*. `figOrder`
+  compares a figure's number to its position and is blind to prose. Grep for `figure [0-9]` after
+  any renumber.
+
+- **The index's hours cell must be an integer.** `check-curriculum.py`'s `ROW_RE` ends
+  `[0-9]+\s*h`, so `4.5 h` makes the whole row invisible: the page reads as an orphan and the module
+  comes up one lesson short. Also note nothing checks the index's hours against the lesson header's
+  own estimate — align them by hand.
+
+- **A null result on a test that cannot vary is not evidence.** The firefly probe compared a bright
+  pixel at `x` and at `x+1`, which fall in the *same* 2×2 block, so the box downsample returned
+  identical output and the test reported a confident 0.000%. Before believing a null, check the
+  measurement is capable of a non-null.
+
+- **Measure a tail in the units the data is stored in.** The same probe sampled radii 1 and 2 of a
+  half-resolution buffer, both of which land on the delta's core rather than its tail, and reported
+  a slope that was an artefact of measuring the spike.
+
+- **A free hardware optimisation can foreclose an option you will want later.** One bilinear tap
+  *is* a 2×2 box average — but the averaging happens inside the fetch, so the four texels are gone
+  before the shader sees anything. Per-texel firefly weighting therefore becomes impossible, at a
+  measured cost of 4× (1.19% drift against 0.30%). That, not kernel width, is the real reason
+  shipping engines use Karis's 13-tap downsample.

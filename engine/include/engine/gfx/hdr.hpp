@@ -329,9 +329,38 @@ struct hdr_stats
 /// into the same place), and tonemapping after the encode compresses *codes*,
 /// which crushes the shadows the encode had carefully spread out.
 ///
+/// **Lesson 6.13 added a fourth step, and put it FIRST.** A bloom is light, so it
+/// is composited into the scene before the curve runs:
+///
+///     (scene * exposure  +  intensity * bloom)  ->  curve  ->  encode
+///
+/// Composite it AFTER the curve instead and the arithmetic tells you why not: the
+/// curve's output is already in [0, 1], so adding anything to it lands above 1
+/// and is clipped by the encode — every glow grows a flat white core, and the
+/// brighter the source the bigger that core. Which is precisely the artefact
+/// bloom was introduced to remove, reintroduced one pass later.
+///
+/// The bloom carries its OWN exposure, applied during the bright pass, which is
+/// why `exposure` is not multiplied into it here. `bloom.hpp`'s `threshold`
+/// comment explains why the bright pass has to be the place that applies it.
+///
 /// @param dst must be the same dimensions as `src`; a mismatch is a no-op rather
 ///        than a partial write, because half a resolved frame is worse than none.
+/// @param bloom half-resolution, from `compute_bloom`; null for no bloom. It is
+///        upsampled with a bilinear fetch per pixel — the same tent the pyramid
+///        used, applied one last time.
+/// @param bloom_intensity see `bloom_settings::intensity`, and note what its doc
+///        comment says about the chain's gain: this is a tuned scalar, not a
+///        percentage.
+///
+/// **Two inputs is the point at which this signature stops scaling**, and that is
+/// worth naming rather than absorbing. A third would need a struct; a fourth
+/// would need something that knows the order. On the GPU side, where the passes
+/// are real and the intermediates are real memory, that something is
+/// `gpu_post_stack` — and the general form, for intermediates whose lifetimes
+/// cross passes, is Lesson 6.17's frame graph.
 void resolve(const hdr_buffer& src, framebuffer& dst, const tonemap_settings& s,
-             encode_mode mode = encode_mode::exact);
+             encode_mode mode = encode_mode::exact,
+             const hdr_buffer* bloom = nullptr, float bloom_intensity = 0.0f);
 
 } // namespace engine

@@ -42,6 +42,11 @@ add_library(engine STATIC
     # alpha MEANS. Below `colour.cpp` in the list and above it in the dependency
     # graph: `blend.hpp` includes `colour.hpp` and nothing includes `blend.cpp`.
     src/gfx/blend.cpp
+    # Lesson 6.13. The bloom's four filters and the chain that orders them. A
+    # translation unit and not a header: every function in it is a loop over
+    # pixels, and inlining a loop over 129,600 texels into six call sites buys
+    # nothing and costs a rebuild of all six whenever a kernel weight changes.
+    src/gfx/bloom.cpp
     src/gfx/clip.cpp
     src/gfx/colour.cpp
     src/gfx/debug_draw.cpp
@@ -52,7 +57,7 @@ add_library(engine STATIC
     src/gfx/depth_buffer.cpp
     # Lesson 6.11. Bucketing and back-to-front sorting. A translation unit rather
     # than a header because `order_draws` is a real algorithm over a span, and
-    # 6.13's frustum culling walks the same list — one place, not two.
+    # 6.16's frustum culling walks the same list — one place, not two.
     src/gfx/draw_order.cpp
     src/gfx/framebuffer.cpp
     src/gfx/gpu_buffer.cpp

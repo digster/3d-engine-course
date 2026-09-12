@@ -19,6 +19,14 @@
 Texture2D<float4> hdr_colour : register(t0, space2);
 SamplerState hdr_sampler     : register(s0, space2);
 
+// LESSON 6.13 — the second input, at HALF the first one's resolution, which is
+// why it gets its own sampler rather than sharing `hdr_sampler`. That one is
+// NEAREST because the resolve is 1:1; this fetch is a genuine magnification and a
+// nearest tap would make every glow blocky at exactly the scale the pyramid
+// worked to smooth away.
+Texture2D<float4> bloom_colour : register(t1, space2);
+SamplerState bloom_sampler     : register(s1, space2);
+
 cbuffer Tonemap : register(b0, space3)
 {
     float exposure;     //  0 — multiplied BEFORE the curve
@@ -27,7 +35,7 @@ cbuffer Tonemap : register(b0, space3)
     float per_channel;  // 12 — 1 = curve each channel, 0 = curve the luminance
 
     float encode;       // 16 — 1 = apply the sRGB transform here; 0 = the target does it
-    float pad_t0;       // 20
+    float bloom_intensity; // 20 — 6.13; zero when there is no bloom
     float pad_t1;       // 24
     float pad_t2;       // 28
 };
@@ -75,7 +83,30 @@ float4 main(float4 position : SV_Position, float2 uv : TEXCOORD0) : SV_Target0
     const float3 hdr = hdr_colour.Sample(hdr_sampler, uv).rgb;
 
     // ONE: exposure, in linear light.
-    const float3 lit = hdr * exposure;
+    float3 lit = hdr * exposure;
+
+    // ONE AND A HALF (Lesson 6.13): the bloom, added while everything is still
+    // linear light and BEFORE the curve.
+    //
+    // THE ORDER IS NOT A PREFERENCE. A bloom is light — it is the light that
+    // scattered on its way to the sensor — so it has to be photographed by the
+    // same curve as the light that did not scatter. Add it AFTER the curve and
+    // the arithmetic says exactly what goes wrong: the curve's output is already
+    // in [0, 1], so anything added lands above 1 and the encode clips it, giving
+    // every glow a flat white core that grows with the source's brightness.
+    // Which is the artefact bloom exists to remove, reintroduced one line later.
+    //
+    // NO `exposure` HERE. The bright pass already applied it, deliberately, so
+    // that the threshold could be a claim about the finished image. Multiplying
+    // again would photograph the glow at a different shutter speed from the
+    // picture it sits on — the glow would grow quadratically while the image grew
+    // linearly, which reads as "the bloom is too strong outdoors".
+    //
+    // UNCONDITIONAL, and `bloom_intensity` is zero when there is no bloom. A
+    // branch here would buy a skipped texture fetch at the cost of divergence
+    // across a whole wavefront (Lesson 4.1), which is the wrong trade for one
+    // bilinear tap.
+    lit += bloom_colour.Sample(bloom_sampler, uv).rgb * bloom_intensity;
 
     // TWO: the curve, still in linear light.
     float3 mapped;

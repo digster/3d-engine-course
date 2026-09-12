@@ -230,6 +230,13 @@ add_hlsl_shader(shadow.vert vertex)          # Lesson 6.8 — the depth pass
 add_hlsl_shader(shadow.frag fragment)
 add_hlsl_shader(fullscreen.vert vertex)      # Lesson 6.12 — no vertex buffer at all
 add_hlsl_shader(tonemap.frag fragment)       # Lesson 6.12 — the resolve
+# Lesson 6.13 — the bloom's three stages. Three fragment shaders and no new vertex
+# shader, which is the clearest evidence that `fullscreen.vert` was the right
+# abstraction: every post pass wants the same three corners, and only the question
+# asked of each pixel differs.
+add_hlsl_shader(bloom_bright.frag fragment)
+add_hlsl_shader(bloom_down.frag fragment)
+add_hlsl_shader(bloom_up.frag fragment)
 
 # ---- The project -----------------------------------------------------------
 # ORDER MATTERS, and it is the dependency direction made visible: engine/ knows

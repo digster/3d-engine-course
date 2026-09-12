@@ -48,6 +48,7 @@
 #pragma once
 
 #include <engine/gfx/hdr.hpp>        // 6.12: tonemap_settings
+#include <engine/gfx/bloom.hpp>      // 6.13: uniforms_of(bloom_settings, ...)
 #include <engine/gfx/material.hpp>   // 6.5: uniforms_of
 #include <engine/math/mat4.hpp>
 #include <engine/math/vec2.hpp>
@@ -483,7 +484,18 @@ struct tonemap_uniforms
     /// `_SRGB` and the hardware encodes on the write.
     float encode = 0.0f;
 
-    float pad_t0 = 0.0f;        ///< 20
+    /// 20 — **Lesson 6.13.** How much of the bloom target is added before the
+    /// curve. Zero means the resolve reads the bloom texture and multiplies it by
+    /// nothing, which is deliberate: a branch would cost a divergent fetch on
+    /// every fragment to save a multiply on some of them, and the binding has to
+    /// be valid either way (SDL_GPU has no "unbind a sampler" — see
+    /// `gpu_post_stack`'s note on the dummy texture).
+    ///
+    /// NOT a percentage. `bloom_settings::intensity` explains why: the upsample
+    /// chain adds every level at full weight, so the pyramid's gain is about
+    /// `levels`, and this scalar absorbs it.
+    float bloom_intensity = 0.0f;
+
     float pad_t1 = 0.0f;        ///< 24
     float pad_t2 = 0.0f;        ///< 28
 };
@@ -494,6 +506,7 @@ static_assert(offsetof(tonemap_uniforms, white) == packed_offset(4, 1), "");
 static_assert(offsetof(tonemap_uniforms, op) == packed_offset(8, 1), "");
 static_assert(offsetof(tonemap_uniforms, per_channel) == packed_offset(12, 1), "");
 static_assert(offsetof(tonemap_uniforms, encode) == packed_offset(16, 1), "");
+static_assert(offsetof(tonemap_uniforms, bloom_intensity) == packed_offset(20, 1), "");
 
 /// Pack `tonemap_settings` into the block the resolve shader reads.
 ///
@@ -502,7 +515,8 @@ static_assert(offsetof(tonemap_uniforms, encode) == packed_offset(16, 1), "");
 /// shader's `op` comparisons happen to agree today, and a `static_cast` would
 /// turn the day somebody reorders the enum into a silent change of curve. The
 /// switch stops compiling instead.
-[[nodiscard]] inline tonemap_uniforms uniforms_of(const tonemap_settings& s, bool shader_encodes)
+[[nodiscard]] inline tonemap_uniforms uniforms_of(const tonemap_settings& s, bool shader_encodes,
+                                                  float bloom_intensity = 0.0f)
 {
     float op = 0.0f;
     switch (s.op)
@@ -516,7 +530,74 @@ static_assert(offsetof(tonemap_uniforms, encode) == packed_offset(16, 1), "");
             .white = s.white,
             .op = op,
             .per_channel = s.per_channel ? 1.0f : 0.0f,
-            .encode = shader_encodes ? 1.0f : 0.0f};
+            .encode = shader_encodes ? 1.0f : 0.0f,
+            .bloom_intensity = bloom_intensity};
+}
+
+// ---- Lesson 6.13: the bloom's two blocks ------------------------------------
+
+/// What `bloom_bright.frag.hlsl` reads.
+///
+/// **`texel_size` is the SOURCE's, not the destination's**, at every stage of the
+/// chain, and it is the single most common way to get a pyramid subtly wrong. The
+/// offsets these shaders compute are positions in the texture being READ; using
+/// the destination's texel size makes every tap land at twice (or half) the
+/// intended spacing, and because the error scales with the level the symptom is a
+/// bloom that is too tight at one end of the pyramid and too loose at the other —
+/// which reads as "the blur radius is wrong" rather than as an addressing bug.
+struct bloom_bright_uniforms
+{
+    float texel_w = 0.0f;       ///<  0 — 1 / source width
+    float texel_h = 0.0f;       ///<  4 — 1 / source height
+    float exposure = 1.0f;      ///<  8 — the SAME number the resolve will use
+    float threshold = 1.0f;     ///< 12 — in exposure-corrected linear light
+
+    float knee = 0.5f;          ///< 16 — half-width of the soft transition
+    float clamp_max = 0.0f;     ///< 20 — the firefly ceiling; <= 0 disables
+    float pad_b0 = 0.0f;        ///< 24
+    float pad_b1 = 0.0f;        ///< 28
+};
+
+static_assert(sizeof(bloom_bright_uniforms) == 32, "two registers, exactly filled");
+static_assert(offsetof(bloom_bright_uniforms, exposure) == packed_offset(8, 1), "");
+static_assert(offsetof(bloom_bright_uniforms, knee) == packed_offset(16, 1), "");
+
+/// What `bloom_down.frag.hlsl` and `bloom_up.frag.hlsl` read.
+///
+/// One block for two shaders, because the downsample's needs are a strict subset
+/// of the upsample's — and `radius` being present-but-unread by the downsample is
+/// cheaper than a second sixteen-byte block and a second `uniforms_of`. Sixteen
+/// bytes is the minimum a uniform push costs anyway.
+struct bloom_filter_uniforms
+{
+    float texel_w = 0.0f;       ///<  0 — 1 / SOURCE width
+    float texel_h = 0.0f;       ///<  4 — 1 / SOURCE height
+    float radius = 1.0f;        ///<  8 — tent spacing in source texels; upsample only
+    float pad_f0 = 0.0f;        ///< 12
+};
+
+static_assert(sizeof(bloom_filter_uniforms) == 16, "one register, exactly filled");
+
+/// Pack the bright pass's block. `src_w/src_h` are the SCENE's dimensions.
+[[nodiscard]] inline bloom_bright_uniforms uniforms_of(const bloom_settings& s,
+                                                       float exposure,
+                                                       int src_w, int src_h)
+{
+    return {.texel_w = (src_w > 0) ? 1.0f / static_cast<float>(src_w) : 0.0f,
+            .texel_h = (src_h > 0) ? 1.0f / static_cast<float>(src_h) : 0.0f,
+            .exposure = exposure,
+            .threshold = s.threshold,
+            .knee = s.knee,
+            .clamp_max = s.clamp_max};
+}
+
+/// Pack a filter block. `src_w/src_h` are the dimensions of the level being READ.
+[[nodiscard]] inline bloom_filter_uniforms filter_uniforms_of(int src_w, int src_h,
+                                                              float radius)
+{
+    return {.texel_w = (src_w > 0) ? 1.0f / static_cast<float>(src_w) : 0.0f,
+            .texel_h = (src_h > 0) ? 1.0f / static_cast<float>(src_h) : 0.0f,
+            .radius = radius};
 }
 
 /// Pack a `material` into the block the fragment shader reads — Lesson 6.5.

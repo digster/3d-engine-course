@@ -436,6 +436,29 @@ pipeline_desc& pipeline_desc::blend(bool premultiplied)
     return *this;
 }
 
+pipeline_desc& pipeline_desc::blend_add()
+{
+    SDL_GPUColorTargetBlendState& b = colour_targets_[0].blend_state;
+
+    // The enable, first, for the reason `blend()` gives at length: without it
+    // every field below is ignored and the picture is silently unchanged.
+    b.enable_blend = true;
+
+    // src*1 + dst*1. Six fields to say "add", and every one of them has to be
+    // filled: a zero-initialised `SDL_GPUColorTargetBlendState` has `INVALID` in
+    // the factors and the ops, and `INVALID` is not a synonym for "the sensible
+    // default".
+    b.src_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+    b.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+    b.color_blend_op = SDL_GPU_BLENDOP_ADD;
+
+    b.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+    b.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+    b.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
+
+    return *this;
+}
+
 pipeline_desc& pipeline_desc::depth_write(bool enabled)
 {
     info_.depth_stencil_state.enable_depth_write = enabled;

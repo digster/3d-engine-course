@@ -7,7 +7,7 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-09-11 (after Lesson 6.12 — 68 of 107 lessons)
+updated: 2026-09-11 (after Lesson 6.13 — 69 of 107 lessons)
 
 conventions:
   ecs-storage: THE ECS IS A SPARSE SET, DECIDED IN 5.7 BY MEASUREMENT, NOT TASTE.
@@ -110,6 +110,45 @@ conventions:
         opposite jobs. The namespace keeps them apart; `using namespace engine;`
         plus `using namespace engine::ecs;` makes bare `pool` ambiguous, which is
         the good kind of breakage. The engine never writes `using namespace`.
+  bloom: LESSON 6.13. THE THRESHOLD IS IN EXPOSURE-CORRECTED LIGHT AND THE
+        COMPOSITE IS BEFORE THE CURVE — both are physics rather than taste, and
+        both are measured (324 vs 32 clipped pixels; 4,064 of 4,096 changed by an
+        exposure mismatch). `bloom_settings::enabled` DEFAULTS TO FALSE, the
+        fourth time this course has made that call (6.7's texel_space, 6.10's
+        opt-in chain, 6.11's mip_options, this): a new capability is a new path,
+        so every prior measurement and the golden survive it.
+        `intensity` IS A TUNED SCALAR, NOT A PERCENTAGE, and the doc comment says
+        so because the alternative is a reader discovering that 0.04 is not four
+        percent. The upsample adds every level at full weight, so a uniform field
+        comes out at exactly `levels x bright` — 4.0, 8.0, 12.0 measured at 2, 4
+        and 6 levels, which is also the harness's analytic check.
+        THE PYRAMID IS ALLOCATED EVEN WHEN THE BLOOM IS OFF, deliberately:
+        toggling mid-frame would otherwise stall on six texture creations, which
+        is exactly when a user is A/B-ing the effect. 1.32 MB at 960x540.
+        LOADOP_LOAD ON THE UPSAMPLE PASSES AND ONLY THOSE. Additive blending makes
+        the destination an OPERAND; DONT_CARE there turns the pyramid from a sum
+        over every level into just the widest one, and the symptom is a bloom
+        that is too soft and too dim — a tuning symptom for an addressing bug.
+  shader-deploy: LESSON 6.13, AND IT IS A BUILD BUG THAT HID FOR A WHOLE LESSON.
+        `engine_use_shaders()` copied compiled shaders beside each executable with
+        `add_custom_command(TARGET x POST_BUILD ...)`. A POST_BUILD COMMAND RUNS
+        ONLY WHEN ITS TARGET IS REBUILT — so editing ONLY a shader recompiles the
+        shader target, gives no demo any reason to relink, and the copy NEVER
+        FIRES. The build reports success, the new HLSL is genuinely compiled and
+        sitting in build/shaders/, and every program keeps the shader it was last
+        linked beside. 6.13's harness measured a bloom composite the deployed
+        shader did not contain, and the only visible symptom was that the GPU
+        answer was constant across a parameter sweep.
+        FIXED with the standard CMake shape: a command whose OUTPUT is a stamp
+        file and whose DEPENDS are the compiled shader FILES (recorded in a new
+        global property ENGINE_SHADER_OUTPUTS), wrapped in a target the executable
+        depends on — so the copy runs BEFORE the executable is considered built
+        rather than after. The `add_dependencies` line that was already there only
+        ever ordered the COMPILE, never the DEPLOY.
+        THE DIAGNOSTIC THAT FOUND IT: build/demos/shaders/tonemap.frag.msl was a
+        DIFFERENT SIZE from build/shaders/tonemap.frag.msl. When a GPU result
+        disagrees with everything else, check that the binary on disk is the one
+        you think you compiled.
   hdr: LESSON 6.12. THE ENGINE HAD NO HDR BUG — IT WAS AVOIDING THE QUESTION BY
         CONSTRUCTION, and the two choices that held the lid on are both on record:
         `k_reference_irradiance` = pi (6.2, so a white surface renders at exactly
@@ -3525,6 +3564,166 @@ completed:
          Both are published and both are in the index; the omission was here.)
 
 capabilities:
+  - 6.13 A BLOOM IN BOTH RENDERERS, AND THE TWO QUESTIONS 6.12 DEFERRED, ANSWERED.
+    70 -> 71 public headers, 41 -> 42 sources, 17 -> 20 shaders. Golden
+    byte-identical at E917C06C for the TWENTY-SECOND lesson.
+    THE FRAMING, WHICH THE HARNESS DECIDED: 6.12 stopped bright values being
+    destroyed by the FRAGMENT SHADER; it did not make them VISIBLE, and the lid
+    only MOVED. Bisected through the engine's own `to_encoded`, the smallest
+    linear value that still resolves to code 255 is 0.9955 (clamp), 3.9556
+    (reinhard_white W=4), 6.3774 (ACES) and 223.4789 (reinhard) — so 6.12's
+    polished metal STILL spends 13.10 stops on one code under the best operator
+    the engine has. ACES's 6.3774 was checked independently against the positive
+    root of 0.090828x^2 - 0.557371x - 0.139376 = 0 (= 6.3773), which is what makes
+    it a measurement rather than a restatement.
+    AND NOTE WHICH OPERATOR HAS THE HIGHEST LID: reinhard, at 223.5, the one
+    everybody agrees looks worst — because it spends its codes creeping toward a
+    white it never reaches. TONEMAPPING IS NOT THE REMOVAL OF CLIPPING, IT IS THE
+    CHOICE OF WHERE TO CLIP. No curve can do better: an 8-bit sRGB display spans
+    code 1 (linear 0.00030353) to code 255, which is 11.69 STOPS TOTAL, fixed by
+    the hardware.
+    SO THE FIX IS A CHANGE OF VARIABLE, and it is a PREDICTION WITH AN EXPONENT
+    rather than a metaphor. A real lens scatters, so a point brighter than white
+    lands as a spike with wide skirts, and the skirts are BELOW the lid even when
+    the source is far above it. If the tail falls as r^-2 then the radius at which
+    the glow crosses any fixed visibility bar goes as sqrt(L) and the AREA goes as
+    L. MEASURED over three decades against a fixed bar (the linear value ACES +
+    sRGB turns into exactly code 128, = 0.14927): area/L = 1.150, 1.238, 1.140 —
+    linear to within 8.6%, radius/sqrt(L) to within 4%. The same three values
+    through a clamp are three identical white dots.
+    WHERE IT STOPS, MEASURED NOT HEDGED: at 55,917 the law wants a radius of ~146
+    texels and the buffer is 128 across, so it saturates at 16,384. Not the law
+    failing — the law running out of room, which is also why exposure has to do
+    some of this work and bloom cannot do all of it.
+  - 6.13 THE PYRAMID IS NOT A CHEAP APPROXIMATION — IT IS A BETTER SHAPE, and
+    that is the claim the usual cost argument crowds out. Adding every level on
+    the way up makes the composite kernel a SUM OF GAUSSIANS WHOSE WIDTHS DOUBLE,
+    and a geometric sum of Gaussians has an approximately power-law envelope.
+    Measured on a delta through the real chain: log-log slope -1.86, -2.01, -2.19
+    over successive octaves — an INVERSE-SQUARE tail, which is roughly what
+    measured glare in a real eye does (Vos & van den Berg's 1/theta^2).
+    THE FAIR COMPARISON IS THE OCTAVE RATIO, because it is normalisation-
+    independent: over r = 32 to 64 the pyramid falls 6.0x and a sigma-16 Gaussian
+    falls 403x. A factor of 67 in TAIL SHAPE that no choice of scale can move.
+    exp(-r^2) does not have a dimmer tail than the pyramid; it does not have one.
+    AND THE POWER LAW ENDS RATHER THAN DECAYING: past the pyramid's reach there is
+    no level left to contribute, so the slope steepens to -2.59 at r = 64. Six
+    levels from half resolution reach 64 half-res texels = 128 full pixels.
+    `k_max_bloom_levels` is 8 for exactly this reason.
+    COST: the whole pyramid is 0.3330 of one full-res target — THE SAME ONE THIRD
+    as a mip chain (6.10), because 1/4 + 1/16 + ... = 1/3 — which is 1.32 MB
+    against the HDR target's 3.96 MB at 960x540. Fragments: 129,600 bright +
+    43,020 down + 172,500 up = 345,120, which is 0.666 OF ONE FULL-SCREEN PASS.
+    One separable sigma-64 Gaussian of comparable reach would be 385 taps per axis
+    and 399 MILLION texel fetches for the same frame.
+  - 6.13 BOTH FILTERS ARE DERIVED, NOT CHOSEN, and each identity buys something
+    specific. ONE BILINEAR TAP AT THE CORNER SHARED BY FOUR TEXELS RETURNS THEIR
+    UNWEIGHTED MEAN (both fractional weights are exactly 1/2, so all four products
+    are 1/4) — checked on real numbers: 1, 2, 4, 8 -> 3.750000. So the downsample
+    is ONE fetch, not four, performed by filtering hardware that was going to run
+    anyway. THAT is why `gpu_bloom`'s sampler is LINEAR where the 6.12 resolve's
+    is deliberately NEAREST: here the filter mode is carrying ARITHMETIC rather
+    than smoothing, and setting it to nearest makes every stage a silent point
+    decimation that still LOOKS blurry because five more levels follow.
+    A BOX CONVOLVED WITH A BOX IS A TENT: [1 1] * [1 1] = [1 2 1]. So a bilinear
+    magnification ALREADY IS a tent filter and the 3x3 kernel is that vector's
+    outer product over 16, summing to exactly 1 — asserted before anything else
+    in §C, because every energy claim in the lesson rests on it.
+    ADDRESSED BY SV_POSITION, NOT BY THE INTERPOLATED uv, in all three shaders.
+    `uv * source_size` equals `2x + 1` only when the source is EXACTLY twice the
+    destination, and integer halving breaks that at every odd level (135 halves to
+    67; 67 doubles to 134). The explicit form is what makes the GPU agree with the
+    CPU to the last BIT rather than to the last EVEN DIMENSION.
+    THE TWO MAPPINGS MUST BE INVERSES: `2*dst + 1` going down, `(dst + 0.5) * 0.5`
+    coming back up. They are why the pyramid does not drift, and a missing
+    half-texel shift compounds across six levels into a bloom that slides
+    diagonally away from what produced it.
+  - 6.13 THE SOFT KNEE HAS EXACTLY ONE FORM, and the artefact it fixes is in the
+    DERIVATIVE. A hard threshold's slope jumps 0 -> 1 at T, so a pixel drifting
+    0.999 -> 1.001 goes from contributing nothing to contributing its full excess,
+    and the set of pixels at exactly T is a CONTOUR that moves with the camera —
+    a crawling edge along every gradient that crosses the threshold, which reads
+    as a sampling bug rather than a thresholding one.
+    THREE CONDITIONS, THREE COEFFICIENTS: value 0 and slope 0 at T-k, slope 1 at
+    T+k. One quadratic fits: f(x) = (x - T + k)^2 / 4k. Checked: f(T-k) = 0,
+    f'(T-k) = 0.0000, f(T) = 0.125 = k/4, f(T+k) = 0.5 = k, f'(T+k) = 1.0002.
+    A PIXEL EXACTLY AT T CONTRIBUTES k/4, NOT NOTHING — that is the whole
+    difference between a soft cut and a hard one.
+    SELECT ON LUMINANCE, SCALE THE COLOUR. Thresholding per channel subtracts a
+    constant from each, which moves a saturated colour TOWARD WHITE — the filter
+    would desaturate the very thing it selects, and a fire would bloom pale.
+    Scaling by a scalar is a move along the ray from black, so hue survives.
+  - 6.13 FIREFLIES, AND THE TRADE THE ONE-TAP DOWNSAMPLE FORCES. One pixel of
+    6.12's polished metal (55,917) dropped into an otherwise ordinary 256x256
+    field over the threshold — 0.00153% of the frame — contributes 62.8% OF THE
+    FINISHED BLOOM'S ENERGY (82,922 of 132,074). It is sub-pixel, so it appears
+    and vanishes as the camera moves by a pixel, and nearly two thirds of the glow
+    blinks with it.
+    A clamp at 100 removes 99.3% of that and leaves the honest bloom within 1.19%.
+    Unusually cheap BECAUSE the firefly is so far out of family that a ceiling
+    sixty times above every legitimate value still catches it.
+    AND THE CLAMP RUNS AFTER THE 2x2 AVERAGE, NOT BY CHOICE: the average happens
+    INSIDE the bilinear fetch, so by the time the shader sees a number the four
+    source texels no longer exist separately. Clamping the TEXELS would leave
+    0.30% instead of 1.19% — a factor of FOUR, measured by pre-clamping the source
+    buffer. THAT GAP IS THE PRICE OF THE FREE BOX FILTER, and it is the real
+    reason shipping engines use Karis's 13-tap kernel: not because it is wider,
+    but because it is THE ONLY SHAPE THAT CAN SEE WHAT IT IS AVERAGING.
+  - 6.13 THE ORDERING IS PHYSICS, NOT POLICY, IN TWO PLACES.
+    (1) THE COMPOSITE GOES BEFORE THE CURVE. Scattering happens in the LENS,
+        before the sensor responds, so a bloom is light and is photographed by the
+        same curve as the light that did not scatter. The arithmetic agrees more
+        bluntly: the curve's output is already in [0,1], so anything added lands
+        above 1 and the encode clips it. MEASURED on one image: 324 of 4,096
+        pixels clip composited after, 32 composited before — TEN TIMES as many.
+        Every glow grows a flat white core that grows with the source, which is
+        exactly the artefact bloom exists to remove, reintroduced one pass later.
+    (2) THE THRESHOLD IS IN EXPOSURE-CORRECTED LIGHT. Its job is to separate "will
+        look bright on the display" from "will not", which is a question about the
+        FINISHED IMAGE, and exposure is what decides it. In scene-referred units
+        instead, a dim room at a high exposure looks bright and blooms nothing:
+        the bug reads as "the bloom turns itself off indoors".
+        SO THE BRIGHT PASS APPLIES THE EXPOSURE AND THE RESOLVE MUST NOT AGAIN.
+        Giving the two different values changes 4,064 of 4,096 pixels.
+    WHICH PRODUCES AN ARCHITECTURAL FACT: EXPOSURE IS NOT A STAGE IN THE STACK, IT
+    IS A PROPERTY OF THE FRAME THAT SEVERAL STAGES MUST AGREE ABOUT.
+    `gpu_post_stack::resolve_into` hands both halves the same struct field for
+    precisely this reason.
+  - 6.13 THE OWNERSHIP ANSWER, WHICH IS THE NARROW ONE ON PURPOSE.
+    `gpu_bloom` OWNS THE PYRAMID, because a pass that knows its own intermediates
+    is the only thing that can know their lifetimes: nothing outside it needs
+    level 3, nothing outside it knows how many levels there are, and every
+    intermediate's life begins and ends inside one `render` call.
+    `gpu_post_stack` OWNS WHAT CROSSES BETWEEN STAGES — the float scene target the
+    scene pass writes and both later stages read, plus the 1x1 black stand-in.
+    ELEVEN RENDER PASSES FOR SIX LEVELS, and `2n-1` is a FLOOR rather than an
+    implementation detail: a pass writes ONE set of colour targets, and no pass
+    may read the texture it writes (a read-after-write with no ordering available
+    inside a pass — which is what forces the ping-pong every post chain has, and
+    which the bloom escapes only because every stage reads one level and writes a
+    different one). At eleven, the bloom issues more render passes than the whole
+    rest of this engine's frame. THAT is the number 6.17's frame graph now has to
+    justify itself against.
+    WHAT THE TYPE CANNOT DO, STATED IN ITS OWN HEADER: you cannot insert a stage
+    without editing it. No list, no registry, no `add_stage`, no declared
+    read/write set. At TWO stages that is right — a registry with two entries is
+    an architecture pretending to be a feature, which is 6.5's argument and the
+    one 6.12 declined to make with one stage. It stops being right at four or
+    five, when intermediates outlive the stage that produced them and two stages
+    want same-sized targets at different times.
+    "NO BLOOM" HAS TO BE SPELLED AS A 1x1 BLACK TEXTURE. SDL_GPU has no way to
+    UNBIND a sampler, and a pipeline whose shader declares `t1` must have
+    something bound on every draw. The alternatives are a second tonemap pipeline
+    compiled without the fetch (doubling this pass's pipeline count to save one
+    texel) or a shader branch (a divergent fetch across a wavefront to save a
+    multiply). One texel wins.
+    THE PIPELINE COUNT IS NOW THIRTEEN: 9 scene (6.11's 3x3) + 1 shadow + 1
+    resolve (6.12) + 3 bloom. Bright and downsample differ in NOTHING but their
+    fragment shader, which is exactly the situation that makes a hash-keyed
+    pipeline cache pay. Still enumerated, because thirteen is countable and
+    `create_ms()` can then say what each one cost — but note where the pressure
+    comes from: not the number of effects, but that every effect MULTIPLIES
+    against every existing axis.
   - 6.12 AN HDR PIPELINE IN BOTH RENDERERS, AND THE LIGHT-UNITS DEBT PAID.
     68 -> 70 public headers, 39 -> 41 sources, 15 -> 17 shaders. Golden
     byte-identical at E917C06C for the TWENTY-FIRST lesson.
@@ -6098,6 +6297,8 @@ files:
             scene.vert.hlsl, scene.frag.hlsl,
             shadow.vert.hlsl, shadow.frag.hlsl                            [6.8]
             fullscreen.vert.hlsl, tonemap.frag.hlsl                       [6.12]
+            bloom_bright.frag.hlsl, bloom_down.frag.hlsl,
+            bloom_up.frag.hlsl                                            [6.13]
             matrix_probe.frag.hlsl
   engine/: CMakeLists.txt
   engine/include/engine/: engine.hpp                      (the umbrella)
@@ -6118,6 +6319,7 @@ files:
             draw_order.hpp                                                  [6.11]
             hdr.hpp                                                         [6.12]
             gpu_post.hpp                                                    [6.12]
+            bloom.hpp                                                       [6.13]
             debug_lines.hpp                                                 [5.11]
             depth_buffer.hpp, framebuffer.hpp, gpu_buffer.hpp, gpu_debug.hpp,
             gpu_device.hpp, gpu_mesh.hpp, gpu_pipeline.hpp, gpu_present.hpp,
@@ -6146,7 +6348,8 @@ files:
             log.cpp, profile.cpp
   engine/src/gfx/: cascade.cpp [6.9], mipmap.cpp [6.10],
             blend.cpp [6.11], draw_order.cpp [6.11],
-            hdr.cpp [6.12], gpu_post.cpp [6.12], clip.cpp, colour.cpp,
+            hdr.cpp [6.12], gpu_post.cpp [6.12], bloom.cpp [6.13],
+            clip.cpp, colour.cpp,
             debug_draw.cpp,
             debug_lines.cpp [5.11],
             depth_buffer.cpp,
@@ -6329,6 +6532,60 @@ files:
            is wider than pinning — ANY GENERATED ARTIFACT NEEDS A
            REGENERATE-AND-DIFF AFTER THE LAST EDIT TO ITS INPUTS, not only when you
            remember to pin.
+  scratch/ (6.13, not shipped with the engine): verify_613.cpp,
+           build_verify_613.sh, figs_613.py, build_613.py,
+           l613_body_{a,b,c}.html, l613_fig{1..7}.svg,
+           probe_613.cpp (a THROWAWAY that decided the lesson's framing, exactly
+           as probe_612 did — and it too was WRONG first, in two ways worth
+           keeping. (1) Its firefly test compared a bright pixel at x and at x+1,
+           which are in the SAME 2x2 block, so the box downsample returned
+           identical results and the test was a structural null reporting 0.000%.
+           A null result on a test that CANNOT vary is not evidence. (2) Its tail
+           measurement sampled full-res radii 1 and 2, both of which land on
+           half-res texel 0 or 1 — i.e. on the CORE, not the tail — and reported a
+           slope of -4.39 that was an artefact of measuring the delta itself.
+           Measure the tail in the units the data is stored in.)
+           SEVEN figures. Figure 2 (the chain) was REDESIGNED after a visual pass:
+           check-page.js passed it, but the labels were crowded, the arrows did
+           not connect to the boxes, and "bright" sat on level 0's corner. THE
+           AUTOMATED CHECKS DO NOT SEE CROWDING — look at every figure.
+           AND check-page.js's SPILL CHECK TESTS TEXT ONLY: figure 3's legend BOX
+           ran 6 px off the right edge of its viewBox and passed. A shape can
+           spill where a label cannot.
+           FIGURE NUMBERS DRIFTED AGAIN (positions 3, 5 and 7 disagreed with their
+           captions) and `figOrder` caught it. Fixed by RENUMBERING plus ONE move:
+           the chain diagram genuinely belonged in §3.2 beside the arithmetic it
+           illustrates rather than in §5.4. One caption then referred to "figure
+           2's tail" while BEING figure 2 — a self-reference the checker cannot
+           see, because it only compares numbers to positions.
+           THE TAG CLASS IS `new` / `modified`, NOT `mod`: check-page.js's
+           `unknownTagClasses` rejects anything else. Note in passing that
+           build_611.py and build_612.py pass ("new", "cpp"), which renders the
+           LANGUAGE in the status pill — a small cosmetic defect in two shipped
+           pages, left alone here because both are pinned and out of scope.
+           HOURS MUST BE AN INTEGER in the index's `hrs` cell: check-curriculum's
+           ROW_RE is `[0-9]+\s*h`, so "4.5 h" made the row invisible and the page
+           read as an orphan with the module one lesson short. The lesson header
+           and the index row were then aligned at 5 h, since nothing checks those
+           two against each other.
+           PINNED BY 6.13, before a line of it was written: l612_hdr.hpp,
+           l612_hdr.cpp, l612_gpu_post.hpp, l612_gpu_post.cpp,
+           l612_fullscreen.vert.hlsl and l612_tonemap.frag.hlsl against commit
+           42f91ac with `git show ... | diff - <pin>`; l612_verify_612.cpp taken
+           as a working-tree copy since it is gitignored. THE REBUILD DIFF WAS
+           EXACTLY THE TWO NAV LINES, twelfth lesson running.
+           AND THE PREDICTION IN build_612.py's NOTE WAS RIGHT ON ALL FOUR COUNTS:
+           gpu_post.{hpp,cpp} moved (they had to — the header promised it),
+           hdr.{hpp,cpp} moved (`resolve` grew the bloom), and
+           fullscreen.vert.hlsl did NOT, which is what made it the useful control.
+           (build_613.py PINS NOTHING YET and lists NINE files whole. 6.14 is
+            ANTIALIASING: MSAA changes `sample_count` on every pipeline and every
+            target, so gpu_post.{hpp,cpp} and the resolve are plausible; a
+            post-process AA would instead ADD A STAGE, which is the first real
+            test of §6's claim that gpu_post_stack stops scaling at four or five.
+            bloom.{hpp,cpp} should NOT move, which makes them the control. Pin all
+            eight repository files first, and take verify_613.cpp early since it
+            is gitignored.)
   scratch/ (6.12, not shipped with the engine): verify_612.cpp,
            build_verify_612.sh, figs_612.py, build_612.py,
            l612_body_{a,b,c}.html, l612_fig{1..6}.svg,
@@ -6600,84 +6857,74 @@ roadmap: RESHAPED 2026-09-08, AFTER TWO EXTERNAL REVIEWS OF THE PUBLISHED OUTLIN
             qualifier too, because a skimmer reads the recap and stops.
 
 
-next: 6.13 — Bloom and the Post-Processing Stack
-      (planned filename: docs/lessons/06-13-bloom-post-stack.html — 6.12's TWO
-      next links point at the index and BOTH need repointing;
-      scratch/l612_body_a.html holds the top one and build_612.py's TAIL the
-      bottom.
-      PIN FIRST. build_612.py's LISTING_SOURCE is EMPTY and correctly so — every
-      file it lists whole, 6.12 created. It lists SEVEN: hdr.hpp, hdr.cpp,
-      gpu_post.hpp, gpu_post.cpp, fullscreen.vert.hlsl, tonemap.frag.hlsl and
-      verify_612.cpp. The command:
-        for f in engine/include/engine/gfx/hdr.hpp \
-                 engine/src/gfx/hdr.cpp \
+next: 6.14 — Antialiasing: Geometric and Shading
+      (planned filename: docs/lessons/06-14-antialiasing.html — 6.13's TWO next
+      links point at the index and BOTH need repointing; scratch/l613_body_a.html
+      holds the top one and build_613.py's TAIL the bottom.
+      PIN FIRST. build_613.py's LISTING_SOURCE is EMPTY and it lists NINE files
+      whole, EIGHT of which are in the repository (the ninth, verify_613.cpp, is
+      gitignored and must be copied from the working tree). The command:
+        for f in engine/include/engine/gfx/bloom.hpp \
+                 engine/src/gfx/bloom.cpp \
+                 shaders/bloom_bright.frag.hlsl \
+                 shaders/bloom_down.frag.hlsl \
+                 shaders/bloom_up.frag.hlsl \
                  engine/include/engine/gfx/gpu_post.hpp \
                  engine/src/gfx/gpu_post.cpp \
-                 shaders/fullscreen.vert.hlsl \
                  shaders/tonemap.frag.hlsl; do
-          git show <6.12 commit>:$f > scratch/l612_$(basename $f)
+          git show <6.13 commit>:$f > scratch/l613_$(basename $f)
         done
-        cp scratch/verify_612.cpp scratch/l612_verify_612.cpp   # gitignored
-      Then re-run build_612.py and `git diff` the page: ELEVEN lessons running,
+        cp scratch/verify_613.cpp scratch/l613_verify_613.cpp   # gitignored
+      Then re-run build_613.py and `git diff` the page: TWELVE lessons running,
       the diff has been exactly the nav lines meant to move.
 
-      WHY gpu_post.{hpp,cpp} ARE CERTAIN TO MOVE. `gpu_post.hpp` says in its own
-      words that it is "deliberately not a post-processing stack", that it is one
-      pass with one input, and that 6.13 is where "how do several of these
-      compose, and who owns the intermediate targets?" gets asked properly. That
-      is a promise on record, in a shipped public header, and 6.13 is where it
-      comes due — the same shape as the mipmap debt 6.10 paid and the alphaMode
-      gap 6.11 closed.
+      WHICH FILES 6.14 IS LIKELY TO MOVE, and why the guess matters more than
+      usual this time. MSAA is not a stage, it is a PROPERTY OF EVERY TARGET AND
+      EVERY PIPELINE — `sample_count` on `SDL_GPUTextureCreateInfo` and on
+      `SDL_GPUGraphicsPipelineCreateInfo` — plus a resolve step that is not the
+      6.12 resolve. So gpu_post.{hpp,cpp}, gpu_texture.{hpp,cpp} and
+      gpu_pipeline.{hpp,cpp} are all plausible, and `k_hdr_format`'s
+      neighbourhood certainly is.
+      A POST-PROCESS AA (FXAA, SMAA) INSTEAD ADDS A STAGE, and that is the more
+      interesting outcome for this course: it is the FIRST REAL TEST of 6.13 §6's
+      claim that `gpu_post_stack` is the right shape at two stages and stops being
+      right at four or five. If adding one stage is comfortable, say so; if it is
+      not, that is 6.17's motivation arriving a lesson early and should be
+      recorded rather than smoothed over.
+      bloom.{hpp,cpp} SHOULD NOT MOVE. Keep them as the control.
 
-      WHAT 6.13 OWES, beyond the obvious:
-        1 THE ORDERING ARGUMENT, WHICH IS THE WHOLE REASON BLOOM IS NEXT. A bloom
-          operates on the PRE-TONEMAP image, because it is looking for exactly
-          the values above 1 that 6.12 finally lets the engine keep. So the stack
-          is not "a list of passes" — it is a list with a constraint, and the
-          constraint comes from physics rather than from taste. Say why a bloom
-          applied after the curve looks wrong (everything bright is already at
-          the same value, so the bloom has nothing to select).
-        2 WHO OWNS THE INTERMEDIATE TARGETS. A bloom is a downsample chain and a
-          blur, so it needs several targets at several sizes, reused across
-          frames. That is the question 6.12 declined to answer with one user, and
-          it is the SAME question 6.17's frame graph answers at a larger scale —
-          so 6.13 should build the small honest version and name the larger one
-          rather than pre-empting it.
-        3 THE PIPELINE COUNT, AGAIN. 6.11 made it nine; 6.12 added a resolve
-          pipeline against a second colour format. Every post pass is another
-          one, and this is where the enumerate-versus-hash argument stops being a
-          curiosity. 6.12 §4.6 set that up deliberately.
-        4 THE GOLDEN. Same structural answer as 6.12's should hold — a bloom is a
-          stage over the HDR target and the fixture has no HDR target — but
-          CHECK IT EARLY rather than assuming, because a stack that generalises
-          the resolve could plausibly reach into the LDR path.
-      CARRY FORWARD: 6.12's habit of opening by measuring what the engine was
-      ALREADY doing wrong (or already avoiding) before proposing anything, and
-      6.11's of naming a technique's ceiling with a number rather than a hedge.
+      WHAT 6.14 OWES, beyond the obvious:
+        1 THE TWO PROBLEMS THAT SHARE A NAME, separated before anything is built.
+          Geometric aliasing is the staircase on a silhouette — undersampling the
+          COVERAGE function. Shading aliasing is the specular sparkle a mip chain
+          cannot reach, because what is undersampled is the LIGHTING, not the
+          texture. MSAA fixes the first and does nothing for the second, and that
+          is the fact that decides which technique to implement.
+        2 THE CONNECTION TO 6.13, WHICH IS EXACT AND WORTH MAKING. This lesson
+          had more RANGE than the display could carry and spent AREA to fix it.
+          That one has more DETAIL than the sample grid can carry. In both, the
+          pixel grid is the thing that cannot be enlarged. 6.13's recap already
+          promises this bridge.
+        3 A NUMBER FOR SHADING ALIASING, since 6.13 established the habit of
+          naming a technique's ceiling with a measurement. The natural one is the
+          roughness at which the specular lobe becomes narrower than a pixel's
+          solid angle — which is where 6.12's 55,917 came from in the first
+          place, and connects the whole module's arc.
+        4 THE GOLDEN. Check it EARLY, as 6.12 and 6.13 both did. The structural
+          answer has held for twenty-two lessons because every new capability was
+          a new path over a buffer the fixture does not have — but MSAA is a
+          property of a target the software rasterizer DOES have an analogue of,
+          so the usual argument may not transfer. Decide before writing code.
+      CARRY FORWARD: 6.13's habit of stating a claim sharply enough to be WRONG
+      before measuring it (the r^-2 tail, then area ∝ L), and of comparing three
+      answers rather than two — CPU, GPU, and a derivation that never ran any
+      code. The third column is what turns "they agree" into "they are right".
 
-      (RESOLVED 2026-09-11, in a follow-up session.) `check-page.js`'s new
-      `figOrder` check found out-of-order figure numbers in THREE published
-      lessons — 02-05-matrices, 03-10-profiling-capstone, 04-01-how-gpus-work —
-      and all three are fixed by RENUMBERING, not by moving figures: in every one
-      the figure already sat in the section that discusses it, so only the numbers
-      were out of step. Whole site now green, 73 pages x 2 widths.
-      WHAT THAT SWEEP UNCOVERED IS BIGGER THAN THE FIGURES, and it is recorded
-      here because it will bite again:
-        1 build_310.py AND build_41.py STILL STAMPED A `STATE` BLOCK, retired
-          from lesson pages at 5.7. Re-running either would have re-added 60% of
-          a file. Amended, as build_57.py was in 5.8.
-        2 BOTH READ THEIR LISTINGS FROM `src/`, the directory Module 5's refactor
-          DELETED. They had been unreproducible since 5.1 and nobody had noticed,
-          because nobody had needed to rebuild them. Now pinned from the commits
-          that shipped each lesson (26cd723, b9bedf0) and byte-identical again.
-        3 THE RENDERED PAGES WERE MORE CORRECT THAN THEIR SOURCES: the 2026-09-08
-          Module 8->9 renumber (3 sites) and 4.1's `next` nav link had been
-          applied to the shipped HTML and never to the body fragments. A rebuild
-          would have reverted all four. THIRD time this drift has been found.
-        4 LESSON 2.5 HAS NO GENERATOR — the build_NN.py pipeline starts at 3.7,
-          so for that page the rendered HTML IS the source. Do not assume a
-          builder exists before looking.
-      THE ORDER THAT MADE THIS SAFE: prove the builder reproduces the shipped
-      page BYTE-IDENTICALLY first, then make the intended change, then diff. Both
-      final diffs were exactly caption numbers and prose references.
+      AND ONE THING 6.13 FOUND THAT IS NOT ABOUT BLOOM AT ALL: the shader-deploy
+      bug in `conventions:shader-deploy` above. It had been live since Module 4
+      and hid because nobody had edited a shader without also editing C++ in the
+      same build. Fixed now — but the transferable half is the diagnostic, which
+      is that a GPU result CONSTANT across a parameter sweep means the parameter
+      is not reaching the code, and the first thing to check is whether the binary
+      on disk is the one you think you compiled.
 ```

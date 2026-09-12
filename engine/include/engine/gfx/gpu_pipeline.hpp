@@ -188,6 +188,32 @@ public:
     /// @param premultiplied  source colours already scaled by their own alpha
     pipeline_desc& blend(bool premultiplied = false);
 
+    /// `src + dst` — additive blending, Lesson 6.13.
+    ///
+    /// **The other classic operator**, and the one `over` is not. `blend()` above
+    /// composites a surface that OCCLUDES what is behind it in proportion to its
+    /// coverage; this one composites light that ARRIVES ALONGSIDE what is behind
+    /// it. Fire, a muzzle flash, a hologram — and the bloom's upsample chain,
+    /// which is what motivates it here.
+    ///
+    /// Three things are worth noticing about how much simpler it is:
+    ///
+    ///   * **Alpha is not in the expression.** `ONE, ONE` on both colour and
+    ///     alpha, so nothing has to agree about whether the source is
+    ///     premultiplied — `blend.hpp`'s whole distinction evaporates, because a
+    ///     source that adds light does not also subtract any.
+    ///   * **It is order-independent.** Addition is commutative and associative,
+    ///     so additive geometry needs no back-to-front sort — which is why 6.11's
+    ///     `order_draws` exists for `over` and not for this. That is a real
+    ///     property to have, and it is the reason particle systems reach for
+    ///     additive so often.
+    ///   * **On a float target it does not clip.** The same add into an 8-bit
+    ///     UNORM target saturates at 1 and the operator stops being associative
+    ///     in practice; on `k_hdr_format` it simply accumulates. The bloom's
+    ///     upsample chain depends on that, and it is a dependency worth stating,
+    ///     because the same pipeline pointed at the swapchain would be wrong.
+    pipeline_desc& blend_add();
+
     /// Test depth but do not write it — Lesson 6.11.
     ///
     /// **One bool, and the absence of a depth write is the entire reason blended

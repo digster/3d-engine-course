@@ -194,4 +194,12 @@ function(add_hlsl_shader name stage)
     string(REPLACE "." "_" safe_name "${name}")
     add_custom_target(shader_${safe_name} DEPENDS ${outputs})
     set_property(GLOBAL APPEND PROPERTY ENGINE_SHADER_TARGETS shader_${safe_name})
+
+    # The output FILES as well as the target — Lesson 6.13. `engine_use_shaders`
+    # needs the files, not just the target, and the reason is a build bug that hid
+    # for a whole lesson: a POST_BUILD copy runs only when its TARGET is rebuilt,
+    # so editing a shader recompiled it and then copied nothing, because no demo
+    # had any reason to relink. The programs beside it kept running the previous
+    # shader, silently. See EngineHelpers.cmake.
+    set_property(GLOBAL APPEND PROPERTY ENGINE_SHADER_OUTPUTS ${outputs})
 endfunction()
