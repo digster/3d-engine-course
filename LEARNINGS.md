@@ -7095,3 +7095,53 @@ kernel or footprint downstream of it.
   that are hand-written in body fragments and must not be touched. The counts reconciling exactly
   (3+3+5+7 = 18 generated; the rest authored) is what made it safe to change one set and leave the
   other.
+
+---
+
+## From Lesson 6.14 (antialiasing)
+
+- **A constant that refuses to vary is a derivation you have not done yet.** The probe bisected the
+  GGX lobe's half-width and the ratio to α came out at 0.6436 at *every* roughness. Empirical
+  constants do not do that. Ten minutes of algebra turned it into
+  `sin t = α√((√2−1)/(1−α²))` — exact rather than a small-angle fit, and it showed that the familiar
+  "the lobe is about α wide" overstates by 55%.
+
+- **Check that a measurement can produce a non-null result before believing a null one.** This bit
+  twice in one lesson, both times as a statistic blind to its own subject:
+  - the supersampling test took the **mean over the whole image** and found it already correct at
+    1×, because errors of opposite sign cancel across pixels whose phases differ. Aliasing is
+    per-pixel, so the statistic has to be.
+  - the specular-AA test averaged each method over 64 sub-pixel phases and compared the means — but
+    **averaging over phases *is* antialiasing**, so it flattered the single sample to a 4.6%
+    "error" at roughness 0.05, where the honest per-phase figure is 230%.
+
+- **"Unchanged" is not "reproduced" when the thing under test can fail without writing.** An audit
+  of every page builder reported 4 failures; the real number was 27, because eleven of them *crash*
+  before writing and the check only compared the file before and after. **Check the exit status as
+  well as the diff.** (This is the same shape as the two items above: a check that cannot observe
+  the failure mode it was written for.)
+
+- **A note in LEARNINGS is not a fix.** 6.13 discovered that `check-page.js`'s spill test only
+  examined `<text>`, so a legend *box* ran off a viewBox and passed. That was written down here —
+  and the very next lesson shipped the identical defect in its own figure. Writing the check took
+  five minutes and it caught the live defect within a minute of existing. **When a note describes a
+  gap in a tool, the note is the interim measure; closing the gap is the fix.**
+
+- **Prefer making an error impossible to detecting it.** Figure 7's boxes were hand-placed at
+  arithmetic offsets and the last one overflowed. Computing the layout from the canvas width removed
+  the failure mode rather than catching it.
+
+- **A design is only tested when something it was not written for arrives.** 6.13's ownership rule —
+  the stack owns what crosses between stages, a pass owns its own intermediates — placed MSAA's
+  multisample target without amendment, and that is worth more evidence than the argument that
+  produced it.
+
+- **Check the capability, do not assume it.** `SDL_GPUTextureSupportsSampleCount` exists because
+  MSAA support is per *format*: on this machine 8× works on neither the float nor the 8-bit target,
+  while 2× and 4× work on both. Falling back with a warning is better behaviour for a quality
+  setting than failing to start.
+
+- **A free hardware optimisation can be the thing that makes a feature impossible.** MSAA's
+  affordability comes from shading once per primitive per pixel — which is exactly why no sample
+  count reaches shading aliasing. The same shape as 6.13's one-tap downsample foreclosing per-texel
+  firefly weighting. **Ask what an optimisation removes access to, not just what it saves.**

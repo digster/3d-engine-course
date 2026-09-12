@@ -445,7 +445,11 @@ struct material_uniforms
     /// 40 -> 48. Named `alpha_pad` and not `pad1`, because HLSL cbuffer members
     /// share ONE global namespace across every buffer in a shader (6.4 found
     /// that out the hard way), so every pad in this file needs its own name.
-    float alpha_pad0;
+    /// 40 — **Lesson 6.14, and it cost zero bytes.** This was `alpha_pad0`, the
+    /// slot 6.11 had to add to fill a register — the same free ride 6.7 got from
+    /// 6.4's padding, three lessons later. Non-zero widens the NDF to cover the
+    /// normal's variation across the pixel; see `antialias.hpp`.
+    float specular_aa;
     float alpha_pad1;
 };
 
@@ -458,6 +462,7 @@ static_assert(offsetof(material_uniforms, textured) == packed_offset(24, 1), "")
 static_assert(offsetof(material_uniforms, normal_mapped) == packed_offset(28, 1), "");
 static_assert(offsetof(material_uniforms, alpha) == packed_offset(32, 1), "");
 static_assert(offsetof(material_uniforms, alpha_cutoff) == packed_offset(36, 1), "");
+static_assert(offsetof(material_uniforms, specular_aa) == packed_offset(40, 1), "");
 
 /// What the resolve pass reads — Lesson 6.12.
 ///
@@ -619,7 +624,8 @@ static_assert(sizeof(bloom_filter_uniforms) == 16, "one register, exactly filled
 /// stores the artist's sRGB `Uint32`, and this is the input edge where it meets
 /// arithmetic. The software path decodes at the same conceptual point, inside
 /// `shade_encoded`.
-[[nodiscard]] inline material_uniforms uniforms_of(const material& m)
+[[nodiscard]] inline material_uniforms uniforms_of(const material& m,
+                                                   bool specular_aa = false)
 {
     const linear_rgb albedo = to_linear(m.tint);
     return {.albedo = vec3{albedo.r, albedo.g, albedo.b},
@@ -642,7 +648,13 @@ static_assert(sizeof(bloom_filter_uniforms) == 16, "one register, exactly filled
             // order the reader did not choose.)
             .alpha = (m.mode == alpha_mode::opaque) ? 1.0f : m.alpha,
             .alpha_cutoff = (m.mode == alpha_mode::mask) ? m.alpha_cutoff : 0.0f,
-            .alpha_pad0 = 0.0f,
+            // 6.14: NOT derived from the material, and that is the interesting
+            // part. Whether to filter the NDF is a property of how the surface is
+            // being VIEWED — a sphere 400 px across needs it and the same sphere
+            // at 4 px needs it far more — so it cannot be a field of `material`
+            // the way `roughness` is. It is a render setting that happens to
+            // arrive through the material's block.
+            .specular_aa = specular_aa ? 1.0f : 0.0f,
             .alpha_pad1 = 0.0f};
 }
 

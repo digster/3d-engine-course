@@ -2565,3 +2565,9 @@ and a new `docs/_template/check-curriculum.py` to stop the index drifting again.
 > next
 
 (Resolved to Lesson 6.13 — Bloom and the Post-Processing Stack, per `STATE.md`'s `next:` block.)
+
+## Session — 2026-09-11 — Lesson 6.14
+
+> next
+
+(Resolved to Lesson 6.14 — Antialiasing: Geometric and Shading, per `STATE.md`'s `next:` block.)

@@ -226,6 +226,25 @@ public:
     /// Has no effect when the pipeline has no depth-stencil target.
     pipeline_desc& depth_write(bool enabled);
 
+    /// Rasterize at `n` samples per pixel — Lesson 6.14.
+    ///
+    /// **This is the whole of MSAA at the pipeline level**, and its brevity is the
+    /// point: one field, and the hardware evaluates coverage and depth at N
+    /// positions inside each pixel while the fragment shader still runs ONCE per
+    /// pixel per primitive. That asymmetry is the optimisation — 4x MSAA costs
+    /// about 1.3x rather than 4x — and it is also, exactly, why MSAA does nothing
+    /// for shading aliasing. You cannot buy shading samples with a coverage
+    /// feature.
+    ///
+    /// **It must match every attachment's sample count.** SDL will not reconcile a
+    /// 4x pipeline with a 1x target; the pass simply fails to begin.
+    ///
+    /// The other two fields of `SDL_GPUMultisampleState` are left alone
+    /// deliberately: the header says `sample_mask` is *"Reserved for future use.
+    /// Must be set to 0"* and `enable_mask` must be false, so writing anything
+    /// there would be inventing behaviour SDL has not defined yet.
+    pipeline_desc& samples(SDL_GPUSampleCount n);
+
     /// Render to something other than the swapchain.
     ///
     /// The constructor takes the format from the device's swapchain, which is

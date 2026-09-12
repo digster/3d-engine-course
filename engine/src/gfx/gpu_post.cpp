@@ -460,17 +460,22 @@ bool gpu_post_stack::create(const gpu_device& dev,
 void gpu_post_stack::destroy()
 {
     no_bloom_.destroy();
+    msaa_.destroy();
     scene_.destroy();
     bloom_.destroy();
     tonemap_.destroy();
 }
 
 bool gpu_post_stack::resize(const gpu_device& dev, Uint32 width, Uint32 height,
-                            const bloom_settings& s)
+                            const bloom_settings& s, SDL_GPUSampleCount samples)
 {
     if (width < 1u) { width = 1u; }
     if (height < 1u) { height = 1u; }
 
+    // THE RESOLVED TARGET, which exists whether or not MSAA does. Everything
+    // downstream reads this one, so its lifetime and its ownership do not change
+    // when the sample count does — which is the property that kept 6.13's
+    // ownership rule from needing a rewrite here.
     if (!scene_.valid() || scene_.width() != width || scene_.height() != height)
     {
         scene_.destroy();
@@ -478,6 +483,42 @@ bool gpu_post_stack::resize(const gpu_device& dev, Uint32 width, Uint32 height,
         {
             ENGINE_LOG_ERROR(engine::log_gpu, "gpu_post_stack: the %ux%u scene target failed", width, height);
             return false;
+        }
+    }
+
+    // ---- Lesson 6.14: the multisample target, when there is one -------------
+    //
+    // Allocated only when asked, because it is the single most expensive texture
+    // in the frame: 4x MSAA at 960x540 on `k_hdr_format` is 4 x 3.96 = 15.84 MB,
+    // four times the resolved target it feeds. That multiplier is the honest
+    // price of MSAA, and it is why the technique is a setting rather than a
+    // default.
+    const bool want_msaa = (samples != SDL_GPU_SAMPLECOUNT_1);
+    if (!want_msaa)
+    {
+        msaa_.destroy();
+    }
+    else if (!msaa_.valid() || msaa_.width() != width || msaa_.height() != height
+             || msaa_.samples() != samples)
+    {
+        msaa_.destroy();
+        if (!msaa_.create_colour_target(dev, k_hdr_format, width, height,
+                                        "hdr scene (multisample)", false, samples))
+        {
+            ENGINE_LOG_ERROR(engine::log_gpu,
+                             "gpu_post_stack: the %ux%u multisample scene target failed",
+                             width, height);
+            return false;
+        }
+        // NOT A FAILURE IF IT FELL BACK. `create_colour_target` drops to 1x when
+        // the format cannot do the requested count, and a 1x "multisample" target
+        // is just a second copy of the scene target — wasteful, and worse, it
+        // would make `scene_target()` hand out a texture with no resolve. Drop it.
+        if (!msaa_.multisampled())
+        {
+            ENGINE_LOG_WARN(engine::log_gpu,
+                            "gpu_post_stack: MSAA unsupported at this format; running at 1x");
+            msaa_.destroy();
         }
     }
 
@@ -490,10 +531,39 @@ bool gpu_post_stack::resize(const gpu_device& dev, Uint32 width, Uint32 height,
     return bloom_.resize(dev, width, height, s.levels);
 }
 
+SDL_GPUColorTargetInfo gpu_post_stack::scene_target_info(SDL_FColor clear) const
+{
+    SDL_GPUColorTargetInfo ci{};
+    ci.texture = scene_target();
+    ci.clear_color = clear;
+    ci.load_op = SDL_GPU_LOADOP_CLEAR;
+    ci.mip_level = 0;
+    ci.layer_or_depth_plane = 0;
+
+    if (msaa_.valid())
+    {
+        // THE TWO FIELDS THAT MAKE MSAA WORK, and forgetting either produces a
+        // frame that renders perfectly into a texture nothing reads.
+        ci.store_op = SDL_GPU_STOREOP_RESOLVE;
+        ci.resolve_texture = scene_.handle();
+        ci.resolve_mip_level = 0;
+        ci.resolve_layer = 0;
+    }
+    else
+    {
+        ci.store_op = SDL_GPU_STOREOP_STORE;
+    }
+    return ci;
+}
+
 void gpu_post_stack::render_bloom(SDL_GPUCommandBuffer* cb, const bloom_settings& s,
                                   float exposure) const
 {
     if (!s.enabled) { return; }
+    // THE RESOLVED TARGET, NOT `scene_target()`. A multisample texture cannot
+    // be sampled at all, and by the time this runs the scene pass has already
+    // resolved into `scene_`. Reading the wrong one here is a validation error
+    // on a debug device and undefined on a release one.
     bloom_.render(cb, scene_.handle(), s, exposure);
 }
 
@@ -506,6 +576,7 @@ void gpu_post_stack::resolve_into(SDL_GPUCommandBuffer* cb, SDL_GPURenderPass* p
     // same field of the same struct precisely so that they cannot drift. If the
     // bloom is off, the stand-in texture is bound and the intensity is zero.
     const bool on = s.enabled && bloom_.result() != nullptr;
+    // `scene_` again, for the same reason `render_bloom` gives.
     tonemap_.render(cb, pass, scene_.handle(), tone, shader_encodes,
                     on ? bloom_.result() : no_bloom_.handle(),
                     on ? s.intensity : 0.0f);

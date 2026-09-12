@@ -7,7 +7,7 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-09-11 (after Lesson 6.13 — 69 of 107 lessons)
+updated: 2026-09-11 (after Lesson 6.14 — 70 of 107 lessons)
 
 conventions:
   ecs-storage: THE ECS IS A SPARSE SET, DECIDED IN 5.7 BY MEASUREMENT, NOT TASTE.
@@ -110,6 +110,96 @@ conventions:
         opposite jobs. The namespace keeps them apart; `using namespace engine;`
         plus `using namespace engine::ecs;` makes bare `pool` ambiguous, which is
         the good kind of breakage. The engine never writes `using namespace`.
+  antialias: LESSON 6.14. TWO PROBLEMS SHARE THE NAME AND THE POPULAR CURE FIXES
+        ONE. Geometric aliasing undersamples COVERAGE (a step function: energy at
+        every frequency, so NO sample rate resolves it). Shading aliasing
+        undersamples the LIGHTING (a lobe narrower than the pixel). MSAA
+        multisamples coverage and shades ONCE per primitive per pixel — the
+        asymmetry that makes 4x cost ~1.3x — so on an INTERIOR pixel its answer IS
+        the single-sample answer, measured 300x from true supersampling at
+        roughness 0.05. YOU CANNOT BUY SHADING SAMPLES WITH A COVERAGE FEATURE.
+        THE GGX LOBE HAS A CLOSED FORM, and it is now in microfacet.hpp because it
+        is a property of the DISTRIBUTION rather than of any technique consulting
+        it (6.15's prefiltered environment maps want the same number):
+            sin t = alpha * sqrt((sqrt2 - 1) / (1 - alpha^2))
+        Exact at every roughness, checked against a bisection of the real NDF to
+        1.6e-8 across 0.02..0.90. THE COEFFICIENT IS sqrt(sqrt2 - 1) = 0.6436, so
+        the folklore "the lobe is about alpha wide" OVERSTATES IT BY 55%.
+        THE CROSSOVER IS COMPUTABLE: compare the lobe to the normal's variation
+        across a pixel ((pi/2)/R on a closed surface R pixels in radius). On a
+        40 px sphere it is ROUGHNESS 0.2468 — the demo's 0.49 safely above, and
+        every polished metal 6.12 introduced (0.20, 0.10, 0.05) below.
+        `aa_settings::factor` DEFAULTS TO 1 and `specular` to false, the sixth
+        time this course has made that call. All three techniques are STRUCTURALLY
+        outside the fixture: supersampling is a resolve between two `framebuffer`s
+        it does not allocate, specular AA is a function producing a ROUGHNESS that
+        the CALLER applies (so `shade()` and `fill_style` never change — both take
+        `microsurface` BY VALUE, which is what made this free), and MSAA is a GPU
+        property in a CPU-only fixture. DECIDED BEFORE ANY CODE, as 6.12 and 6.13
+        both were, and this time the reason was checked rather than assumed
+        because STATE warned the usual argument might not transfer.
+  antialias-thesis: LESSON 6.14, AND IT IS THE RESULT THAT REFRAMES THE SUBJECT.
+        Filtering the NDF improves per-pixel ACCURACY against brute-force ground
+        truth by only 2.4x at roughness 0.05 — and at 0.30 and 0.20 it makes the
+        error THREE TIMES WORSE — while improving STABILITY (the swing as the
+        camera pans by under one pixel) from 3996.5x to 2.0x: A FACTOR OF 2034.
+        ANTIALIASING DOES NOT MAKE A PIXEL CORRECT, IT MAKES IT STABLE. Obvious in
+        hindsight: the artefact was never "this pixel has the wrong value" — a
+        still frame with a slightly wrong specular pixel looks fine and nobody
+        files a bug — it was "this pixel changes violently when nothing in the
+        scene did". Aliasing is not an error in MAGNITUDE, it is an error
+        DISCONTINUOUS IN THE PARAMETERS, which converts smooth camera motion into
+        flashing.
+        SO THE QUESTION TO ASK OF AN AA TECHNIQUE IS NEVER "how accurate is it"
+        but "WHAT FREQUENCIES DOES IT REMOVE, AND CAN THE GRID CARRY WHAT IS
+        LEFT". Both halves of 6.14 answer it identically: supersampling prefilters
+        coverage by integrating over the pixel's area, NDF filtering prefilters
+        the lighting by widening the lobe. Both discard real information on
+        purpose. AND IT IS 6.13's TRADE IN ANOTHER CURRENCY: that lesson had more
+        RANGE than the display could carry and spent AREA; this one has more
+        DETAIL than the grid can carry and spends SHARPNESS.
+        WHAT IS DERIVED AND WHAT IS FITTED, kept separate: the convolution
+        argument (a pixel integrates over a footprint; convolving distributions
+        ADDS VARIANCES, so alpha'^2 = alpha^2 + 2 sigma^2) is real. The factor of
+        2, sigma^2 = 1/(2pi) and kappa = 0.18 are Tokuyoshi & Kaplanyan's FITS.
+        And "alpha behaves as a standard deviation" is an approximation doing real
+        work, because GGX'S VARIANCE IS INFINITE — the same heavy tail 6.13
+        exploited to make bloom look like glare. Marked, then measured.
+        `dot(d, d)` AND NOT `length(d)`: the quantity that adds is the VARIANCE.
+  msaa: LESSON 6.14, AND EVERY FIELD WAS CHECKED AGAINST SDL_gpu.h RATHER THAN
+        ASSUMED. A MULTISAMPLE TEXTURE CANNOT BE SAMPLED AT ALL, so an MSAA frame
+        needs TWO colour targets where a plain one needs one:
+        `gpu_post_stack::scene_target()` is what the scene pass renders into and
+        `resolved_target()` is what everything downstream reads. Getting them
+        backwards is a validation error on debug and undefined on release, which
+        is why `create_colour_target` SILENTLY DROPS the SAMPLER usage above 1x.
+        SUPPORT IS PER FORMAT AND IS ASKED: `SDL_GPUTextureSupportsSampleCount`.
+        On the author's machine 2x and 4x work on both R16G16B16A16_FLOAT and
+        R8G8B8A8_UNORM and 8x WORKS ON NEITHER. An unsupported request falls back
+        to 1x with a warning rather than failing — refusing to start because 8x is
+        unavailable is worse behaviour than running at 4x and saying so.
+        STOREOP_RESOLVE, NOT RESOLVE_AND_STORE: the header says the first lets the
+        driver DISCARD the multisample memory and is "the most performant method",
+        and nothing here reads per-sample data. `scene_target_info()` exists so a
+        caller cannot assemble that struct and forget `resolve_texture` — the
+        failure is a frame that renders perfectly into a texture nobody reads.
+        EVERY ATTACHMENT AND EVERY PIPELINE SHARES ONE SAMPLE COUNT. A 4x colour
+        target beside a 1x depth target is a pass that CANNOT BE BEGUN, and the
+        count is now part of the depth target's IDENTITY in `ensure_depth` —
+        without that, toggling MSAA reuses a same-sized 1x buffer and the pass
+        fails several frames after the setting changed.
+        `SDL_GPUMultisampleState`'s other two fields are LEFT ALONE: the header
+        says `sample_mask` is "Reserved for future use. Must be set to 0" and
+        `enable_mask` must be false.
+        THE PIPELINE COUNT GOES 13 -> 22, because MSAA does not ADD a pipeline, it
+        DOUBLES the scene set — sample count is another axis of baked-in state.
+        6.13 said the enumerate-versus-hash argument would stop being a curiosity;
+        this is where it stops.
+        AND 6.13's OWNERSHIP RULE SURVIVED ITS FIRST REAL TEST WITHOUT AMENDMENT:
+        the RESOLVED target crosses between stages so the stack owns it; the
+        multisample target is an intermediate of the scene pass that nothing
+        downstream sees. Only the allocation changed. A design tested by a case it
+        was not written for, and it held.
   bloom: LESSON 6.13. THE THRESHOLD IS IN EXPOSURE-CORRECTED LIGHT AND THE
         COMPOSITE IS BEFORE THE CURVE — both are physics rather than taste, and
         both are measured (324 vs 32 clipped pixels; 4,064 of 4,096 changed by an
@@ -3564,6 +3654,27 @@ completed:
          Both are published and both are in the index; the omission was here.)
 
 capabilities:
+  - 6.14 ANTIALIASING, BOTH KINDS, AND THE HONEST ACCOUNT OF WHAT EACH REACHES.
+    71 -> 72 public headers, 42 -> 43 sources, 20 shaders (none added). Golden
+    byte-identical at E917C06C for the TWENTY-THIRD lesson.
+    See conventions:antialias, antialias-thesis and msaa above for the substance.
+    The three capabilities: SUPERSAMPLING on the CPU (render at N times the linear
+    resolution, box-filter down IN LINEAR LIGHT), NDF FILTERING in both renderers
+    (widen alpha to cover the pixel's normal variation), and MSAA on the GPU
+    (sample counts on targets and pipelines, plus the resolve).
+    THE RESOLVE IS 6.1's RULE FOR THE FOURTH TIME, after 6.10's mip chains and
+    6.11's compositing: a half-covered edge is code 188 in linear light and code
+    127 in bytes, and the wrong one delivers 21.2% of the light instead of 50%.
+    The symptom is a THIN DARK OUTLINE on every silhouette, usually misdiagnosed
+    as edges being composited twice. `encoded_average` keeps the bug selectable.
+    IT WILL KEEP ARRIVING, because every new way of AVERAGING is a new chance to
+    average the wrong quantity.
+    THE DEMO: 8,599 of 388,800 bytes change between 1x and 4x — 2.2% of the image,
+    and that 2.2% is what everybody notices. Distinct red values 166 -> 184.
+    `--aa-encoded` differs from the correct resolve by up to 30 codes at edges.
+    `--spec-aa` changes 3.6% of the frame with a peak difference of 185 codes, and
+    the still frame looks DIMMER at the highlight — that is the energy being
+    spread, and the payoff is only visible in motion.
   - 6.13 A BLOOM IN BOTH RENDERERS, AND THE TWO QUESTIONS 6.12 DEFERRED, ANSWERED.
     70 -> 71 public headers, 41 -> 42 sources, 17 -> 20 shaders. Golden
     byte-identical at E917C06C for the TWENTY-SECOND lesson.
@@ -6320,6 +6431,7 @@ files:
             hdr.hpp                                                         [6.12]
             gpu_post.hpp                                                    [6.12]
             bloom.hpp                                                       [6.13]
+            antialias.hpp                                                   [6.14]
             debug_lines.hpp                                                 [5.11]
             depth_buffer.hpp, framebuffer.hpp, gpu_buffer.hpp, gpu_debug.hpp,
             gpu_device.hpp, gpu_mesh.hpp, gpu_pipeline.hpp, gpu_present.hpp,
@@ -6349,6 +6461,7 @@ files:
   engine/src/gfx/: cascade.cpp [6.9], mipmap.cpp [6.10],
             blend.cpp [6.11], draw_order.cpp [6.11],
             hdr.cpp [6.12], gpu_post.cpp [6.12], bloom.cpp [6.13],
+            antialias.cpp [6.14],
             clip.cpp, colour.cpp,
             debug_draw.cpp,
             debug_lines.cpp [5.11],
@@ -6532,6 +6645,52 @@ files:
            is wider than pinning — ANY GENERATED ARTIFACT NEEDS A
            REGENERATE-AND-DIFF AFTER THE LAST EDIT TO ITS INPUTS, not only when you
            remember to pin.
+  scratch/ (6.14, not shipped with the engine): verify_614.cpp,
+           build_verify_614.sh, figs_614.py, build_614.py,
+           l614_body_{a,b,c}.html, l614_fig{1..7}.svg,
+           probe_614.cpp (a THROWAWAY that decided the framing, third lesson
+           running — and it found the CLOSED FORM by noticing that a bisected
+           coefficient came out at 0.6436 for every roughness, which is not what
+           an empirical constant does. A number that refuses to vary is a
+           derivation you have not done yet.)
+           TWO MEASUREMENTS WERE WRONG BEFORE THEY WERE RIGHT, both in the same
+           way — the statistic was blind to the thing it was pointed at:
+             (1) §D took the MEAN over the whole image and found it correct at 1x,
+                 because errors of opposite sign cancel across pixels whose phases
+                 differ. Aliasing is PER PIXEL, so the statistic must be.
+             (2) §E averaged each method over 64 sub-pixel phases and compared the
+                 means — but AVERAGING OVER PHASES IS ANTIALIASING, which flattered
+                 the single sample to a 4.6% "error" at roughness 0.05. Fixed by
+                 comparing per phase against that phase's own ground truth.
+           BEFORE BELIEVING A NULL RESULT, CHECK THE MEASUREMENT CAN PRODUCE A
+           NON-NULL ONE.
+           check-page.js GAINED A SHAPE-SPILL CHECK, and it caught a real defect
+           in this lesson's own figure 7 within a minute of being written. 6.13
+           found that the spill test was TEXT-ONLY (its figure 3's legend box ran
+           6 px off the viewBox and passed); 6.14 shipped the same defect again,
+           which is what turned a note in LEARNINGS.md into a check. Strokes are
+           excluded deliberately — a polyline reaching the edge of a plot box is
+           correct — so only rect/circle/ellipse are tested. Whole site re-swept
+           with it: 70 pages x 2 widths, 0 failures.
+           FIGURE 7'S LAYOUT IS NOW COMPUTED FROM THE CANVAS WIDTH rather than
+           hand-placed, which makes the overflow impossible rather than merely
+           detected. That is the better fix when it is available.
+           PINNED BY 6.14, before a line of it was written: l613_bloom.hpp,
+           l613_bloom.cpp, l613_bloom_{bright,down,up}.frag.hlsl,
+           l613_gpu_post.{hpp,cpp} and l613_tonemap.frag.hlsl against commit
+           4637254; l613_verify_613.cpp as a working-tree copy. THE REBUILD DIFF
+           WAS EXACTLY THE TWO NAV LINES, THIRTEENTH LESSON RUNNING.
+           AND THE PREDICTION IN build_613.py's NOTE WAS RIGHT: gpu_post.{hpp,cpp}
+           moved (MSAA needed a second colour target) and bloom.{hpp,cpp} did NOT,
+           which is what made them the useful control.
+           (build_614.py PINS NOTHING YET and lists FIVE files whole. 6.15 is
+            SKYBOX AND IBL: a prefiltered environment map is a mip chain indexed by
+            roughness, so microfacet.hpp — which now owns ggx_lobe_half_angle, and
+            6.15 needs it to decide how much sky a level covers — and mipmap.hpp
+            are both likely; gpu_texture.{hpp,cpp} is near certain, because a cube
+            map is a texture TYPE this engine has never created. antialias.{hpp,cpp}
+            should NOT move, which makes them the control. Pin first, and take
+            verify_614.cpp early since it is gitignored.)
   scratch/ (6.13, not shipped with the engine): verify_613.cpp,
            build_verify_613.sh, figs_613.py, build_613.py,
            l613_body_{a,b,c}.html, l613_fig{1..7}.svg,
@@ -6857,74 +7016,77 @@ roadmap: RESHAPED 2026-09-08, AFTER TWO EXTERNAL REVIEWS OF THE PUBLISHED OUTLIN
             qualifier too, because a skimmer reads the recap and stops.
 
 
-next: 6.14 — Antialiasing: Geometric and Shading
-      (planned filename: docs/lessons/06-14-antialiasing.html — 6.13's TWO next
-      links point at the index and BOTH need repointing; scratch/l613_body_a.html
-      holds the top one and build_613.py's TAIL the bottom.
-      PIN FIRST. build_613.py's LISTING_SOURCE is EMPTY and it lists NINE files
-      whole, EIGHT of which are in the repository (the ninth, verify_613.cpp, is
-      gitignored and must be copied from the working tree). The command:
-        for f in engine/include/engine/gfx/bloom.hpp \
-                 engine/src/gfx/bloom.cpp \
-                 shaders/bloom_bright.frag.hlsl \
-                 shaders/bloom_down.frag.hlsl \
-                 shaders/bloom_up.frag.hlsl \
+next: 6.15 — Skybox and Image-Based Lighting
+      (planned filename: docs/lessons/06-15-skybox-ibl.html — 6.14's TWO next
+      links point at the index and BOTH need repointing; scratch/l614_body_a.html
+      holds the top one and build_614.py's TAIL the bottom.
+      PIN FIRST. build_614.py's LISTING_SOURCE is EMPTY and it lists FIVE files
+      whole, FOUR of which are in the repository (verify_614.cpp is gitignored and
+      must be copied from the working tree):
+        for f in engine/include/engine/gfx/antialias.hpp \
+                 engine/src/gfx/antialias.cpp \
                  engine/include/engine/gfx/gpu_post.hpp \
-                 engine/src/gfx/gpu_post.cpp \
-                 shaders/tonemap.frag.hlsl; do
-          git show <6.13 commit>:$f > scratch/l613_$(basename $f)
+                 engine/src/gfx/gpu_post.cpp; do
+          git show <6.14 commit>:$f > scratch/l614_$(basename $f)
         done
-        cp scratch/verify_613.cpp scratch/l613_verify_613.cpp   # gitignored
-      Then re-run build_613.py and `git diff` the page: TWELVE lessons running,
+        cp scratch/verify_614.cpp scratch/l614_verify_614.cpp   # gitignored
+      Then re-run build_614.py and `git diff` the page: THIRTEEN lessons running,
       the diff has been exactly the nav lines meant to move.
 
-      WHICH FILES 6.14 IS LIKELY TO MOVE, and why the guess matters more than
-      usual this time. MSAA is not a stage, it is a PROPERTY OF EVERY TARGET AND
-      EVERY PIPELINE — `sample_count` on `SDL_GPUTextureCreateInfo` and on
-      `SDL_GPUGraphicsPipelineCreateInfo` — plus a resolve step that is not the
-      6.12 resolve. So gpu_post.{hpp,cpp}, gpu_texture.{hpp,cpp} and
-      gpu_pipeline.{hpp,cpp} are all plausible, and `k_hdr_format`'s
-      neighbourhood certainly is.
-      A POST-PROCESS AA (FXAA, SMAA) INSTEAD ADDS A STAGE, and that is the more
-      interesting outcome for this course: it is the FIRST REAL TEST of 6.13 §6's
-      claim that `gpu_post_stack` is the right shape at two stages and stops being
-      right at four or five. If adding one stage is comfortable, say so; if it is
-      not, that is 6.17's motivation arriving a lesson early and should be
-      recorded rather than smoothed over.
-      bloom.{hpp,cpp} SHOULD NOT MOVE. Keep them as the control.
+      WHICH FILES 6.15 IS LIKELY TO MOVE. `gpu_texture.{hpp,cpp}` is near certain:
+      A CUBE MAP IS A TEXTURE TYPE THIS ENGINE HAS NEVER CREATED, and
+      SDL_GPU_TEXTURETYPE_CUBE brings six faces, a different addressing mode and
+      its own sampler rules. `mipmap.hpp` is likely — a prefiltered environment
+      map IS a mip chain, indexed by roughness rather than by footprint — and
+      `microfacet.hpp` is likely for the same reason 6.14 put
+      `ggx_lobe_half_angle` there: 6.15 has to decide how much of the sky one mip
+      level should cover, and that is the lobe's width.
+      `antialias.{hpp,cpp}` SHOULD NOT MOVE. Keep them as the control.
 
-      WHAT 6.14 OWES, beyond the obvious:
-        1 THE TWO PROBLEMS THAT SHARE A NAME, separated before anything is built.
-          Geometric aliasing is the staircase on a silhouette — undersampling the
-          COVERAGE function. Shading aliasing is the specular sparkle a mip chain
-          cannot reach, because what is undersampled is the LIGHTING, not the
-          texture. MSAA fixes the first and does nothing for the second, and that
-          is the fact that decides which technique to implement.
-        2 THE CONNECTION TO 6.13, WHICH IS EXACT AND WORTH MAKING. This lesson
-          had more RANGE than the display could carry and spent AREA to fix it.
-          That one has more DETAIL than the sample grid can carry. In both, the
-          pixel grid is the thing that cannot be enlarged. 6.13's recap already
-          promises this bridge.
-        3 A NUMBER FOR SHADING ALIASING, since 6.13 established the habit of
-          naming a technique's ceiling with a measurement. The natural one is the
-          roughness at which the specular lobe becomes narrower than a pixel's
-          solid angle — which is where 6.12's 55,917 came from in the first
-          place, and connects the whole module's arc.
-        4 THE GOLDEN. Check it EARLY, as 6.12 and 6.13 both did. The structural
-          answer has held for twenty-two lessons because every new capability was
-          a new path over a buffer the fixture does not have — but MSAA is a
-          property of a target the software rasterizer DOES have an analogue of,
-          so the usual argument may not transfer. Decide before writing code.
-      CARRY FORWARD: 6.13's habit of stating a claim sharply enough to be WRONG
-      before measuring it (the r^-2 tail, then area ∝ L), and of comparing three
-      answers rather than two — CPU, GPU, and a derivation that never ran any
-      code. The third column is what turns "they agree" into "they are right".
+      WHAT 6.15 OWES, beyond the obvious:
+        1 THE SPLIT INTO TWO INTEGRALS, which is the whole reason IBL is tractable.
+          The rendering equation over an environment does not factor, and the
+          split-sum approximation pretends it does — irradiance for the diffuse
+          half, a prefiltered radiance map times a BRDF lookup for the specular.
+          SAY WHICH HALF IS EXACT AND WHICH IS THE APPROXIMATION, and measure the
+          error rather than asserting it is small. 6.14 set the precedent for
+          separating "derived" from "fitted" inside one technique.
+        2 THE DIRECT CONNECTION TO 6.14, WHICH IS NOT A METAPHOR. Prefiltering an
+          environment map by roughness is the SAME OPERATION as filtering the NDF,
+          performed ahead of time instead of per fragment. `ggx_lobe_half_angle`
+          answers "how much sky does level n cover" directly. Make that explicit —
+          it is the third time in this module that the answer has been "prefilter
+          the thing being undersampled" (6.10's mips, 6.14's NDF, now this).
+        3 A NUMBER FOR THE SPLIT-SUM ERROR, since 6.13 and 6.14 both established
+          the habit of naming a technique's ceiling with a measurement rather than
+          a hedge. The natural one is a reference render by brute-force importance
+          sampling against the split-sum result, at several roughnesses.
+        4 THE GOLDEN. Check it EARLY, as 6.12, 6.13 and 6.14 all did — and note
+          that 6.14's argument had THREE independent legs, which is why it was
+          robust. IBL adds a light source the fixture's `lighting` struct does not
+          have, so the structural answer probably holds again; confirm it rather
+          than inheriting it.
+      CARRY FORWARD: 6.14's habit of separating what is DERIVED from what is
+      FITTED inside a single technique and marking the boundary in the code, and
+      its habit of checking that a measurement can produce a non-null result
+      before believing a null one.
 
-      AND ONE THING 6.13 FOUND THAT IS NOT ABOUT BLOOM AT ALL: the shader-deploy
-      bug in `conventions:shader-deploy` above. It had been live since Module 4
-      and hid because nobody had edited a shader without also editing C++ in the
-      same build. Fixed now — but the transferable half is the diagnostic, which
-      is that a GPU result CONSTANT across a parameter sweep means the parameter
-      is not reaching the code, and the first thing to check is whether the binary
-      on disk is the one you think you compiled.
+      AND TWO THINGS 6.14 FOUND THAT ARE NOT ABOUT ANTIALIASING.
+      (1) check-page.js's spill test was TEXT-ONLY and now tests closed SHAPES
+          too — see the scratch/ (6.14) entry. It caught a real defect in 6.14's
+          own figure 7 immediately.
+      (2) **27 OF 37 PAGE BUILDERS CANNOT REPRODUCE THEIR PUBLISHED PAGE.** 11
+          CRASH (build_37..build_49 — they read from `src/`, the directory Module
+          5's refactor deleted) and 16 RUN BUT DIFFER (all of Module 5 plus 61,
+          62, 64, 66, 67), mostly because the 2026-09-08 Module 8->9 renumber was
+          applied to the shipped HTML and never to the body fragments, so a
+          rebuild REVERTS it. This is pre-existing and was filed as its own task
+          rather than fixed inside a lesson.
+          THE METHODOLOGICAL HALF IS THE IMPORTANT ONE: the first audit reported
+          only 4 failures because it compared the page before and after and called
+          "unchanged" a pass — but a CRASHING builder writes nothing, so eleven
+          failures read as successes. CHECK THE EXIT STATUS AS WELL AS THE DIFF.
+          Until that task lands, treat any pre-6.8 builder as unrunnable, and
+          remember that several of them list CMakeLists.txt, scene.frag.hlsl and
+          soft_renderer.hpp LIVE.
 ```

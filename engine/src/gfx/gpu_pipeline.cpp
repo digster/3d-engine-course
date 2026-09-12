@@ -459,6 +459,15 @@ pipeline_desc& pipeline_desc::blend_add()
     return *this;
 }
 
+pipeline_desc& pipeline_desc::samples(SDL_GPUSampleCount n)
+{
+    // ONE FIELD. `sample_mask` and `enable_mask` stay at their zero-initialised
+    // values because SDL3's header reserves both for future use and requires
+    // exactly those values — see the note in the header.
+    info_.multisample_state.sample_count = n;
+    return *this;
+}
+
 pipeline_desc& pipeline_desc::depth_write(bool enabled)
 {
     info_.depth_stencil_state.enable_depth_write = enabled;

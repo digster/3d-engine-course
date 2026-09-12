@@ -41,6 +41,11 @@ add_library(engine STATIC
     # Lesson 6.11. Compositing, and the two enums that say what a surface's
     # alpha MEANS. Below `colour.cpp` in the list and above it in the dependency
     # graph: `blend.hpp` includes `colour.hpp` and nothing includes `blend.cpp`.
+    # Lesson 6.14. Two prefilters that look unrelated and are the same
+    # operation: a linear-light box down for coverage, and a widened NDF for
+    # shading. A translation unit because the first is a loop over pixels and the
+    # second pulls in <cmath>, and neither belongs in every TU that shades.
+    src/gfx/antialias.cpp
     src/gfx/blend.cpp
     # Lesson 6.13. The bloom's four filters and the chain that orders them. A
     # translation unit and not a header: every function in it is a loop over

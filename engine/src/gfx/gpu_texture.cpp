@@ -233,7 +233,7 @@ bool gpu_texture::create_sampled(const gpu_device& dev, SDL_GPUCommandBuffer* cb
 
 bool gpu_texture::create_colour_target(const gpu_device& dev, SDL_GPUTextureFormat format,
                                        Uint32 width, Uint32 height, const char* name,
-                                       bool sampled)
+                                       bool sampled, SDL_GPUSampleCount samples)
 {
     destroy();
 
@@ -242,6 +242,34 @@ bool gpu_texture::create_colour_target(const gpu_device& dev, SDL_GPUTextureForm
     {
         return false;
     }
+
+    // ---- Lesson 6.14: MSAA SUPPORT IS PER FORMAT, AND MUST BE ASKED ----------
+    //
+    // `SDL_GPUTextureSupportsSampleCount` exists because this genuinely varies:
+    // 4x on an 8-bit swapchain format is near universal, 4x on
+    // R16G16B16A16_FLOAT is common but NOT guaranteed, and 8x is a coin toss.
+    // Asking costs one call at startup; not asking costs a texture that fails to
+    // create with an error the caller usually attributes to something else.
+    //
+    // FALLING BACK RATHER THAN FAILING is the right behaviour for a quality
+    // setting: a program that refuses to start because it cannot have 8x MSAA is
+    // worse than one that quietly runs at 4x and says so.
+    if (samples != SDL_GPU_SAMPLECOUNT_1
+        && !SDL_GPUTextureSupportsSampleCount(dev.handle(), format, samples))
+    {
+        ENGINE_LOG_WARN(engine::log_gpu,
+                        "gpu_texture: %s does not support this sample count; falling back to 1x",
+                        name_of(format));
+        samples = SDL_GPU_SAMPLECOUNT_1;
+    }
+
+    // A MULTISAMPLE TEXTURE CANNOT BE SAMPLED. It is resolved into a
+    // single-sample texture first, and that one is what a later pass reads —
+    // which is the whole shape of an MSAA frame and is why `gpu_post_stack` now
+    // owns two colour targets where it owned one. Asking for SAMPLER here would
+    // request a usage the driver cannot provide for this texture.
+    if (samples != SDL_GPU_SAMPLECOUNT_1) { sampled = false; }
+    samples_ = samples;
 
     device_ = dev.handle();
     width_ = width;
@@ -260,7 +288,7 @@ bool gpu_texture::create_colour_target(const gpu_device& dev, SDL_GPUTextureForm
     ti.height = height_;
     ti.layer_count_or_depth = 1;
     ti.num_levels = 1;
-    ti.sample_count = SDL_GPU_SAMPLECOUNT_1;
+    ti.sample_count = samples_;
 
     texture_ = create_named_texture(device_, ti, name);
     if (texture_ == nullptr)
@@ -279,7 +307,7 @@ bool gpu_texture::create_colour_target(const gpu_device& dev, SDL_GPUTextureForm
 
 bool gpu_texture::create_depth(const gpu_device& dev, SDL_GPUTextureFormat format,
                                Uint32 width, Uint32 height, const char* name,
-                               bool sampled)
+                               bool sampled, SDL_GPUSampleCount samples)
 {
     destroy();
 
@@ -308,7 +336,12 @@ bool gpu_texture::create_depth(const gpu_device& dev, SDL_GPUTextureFormat forma
     ti.height = height_;
     ti.layer_count_or_depth = 1;
     ti.num_levels = 1;
-    ti.sample_count = SDL_GPU_SAMPLECOUNT_1;
+    // MUST MATCH THE COLOUR TARGET (6.14): every attachment in a pass is
+    // rasterized at the same sample positions, so a 4x colour target beside a
+    // 1x depth target is a pass that cannot be begun.
+    if (samples != SDL_GPU_SAMPLECOUNT_1) { sampled = false; }
+    samples_ = samples;
+    ti.sample_count = samples_;
 
     texture_ = create_named_texture(device_, ti, name);
     if (texture_ == nullptr)

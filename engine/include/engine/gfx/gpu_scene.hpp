@@ -241,7 +241,8 @@ public:
                               SDL_GPUShader* vertex, SDL_GPUShader* fragment,
                               SDL_GPUTextureFormat depth_format,
                               SDL_GPUTextureFormat colour_format
-                                  = SDL_GPU_TEXTUREFORMAT_INVALID);
+                                  = SDL_GPU_TEXTUREFORMAT_INVALID,
+                              SDL_GPUSampleCount samples = SDL_GPU_SAMPLECOUNT_1);
 
     void destroy();
 
@@ -256,7 +257,11 @@ public:
     ///
     /// @return false when there is no usable depth format, which is not an error
     ///         — the caller then begins its pass without a depth attachment.
-    [[nodiscard]] bool ensure_depth(const gpu_device& dev, Uint32 w, Uint32 h);
+    /// @param samples **Lesson 6.14.** Must match the colour target's count —
+    ///        every attachment in a pass shares its sample positions, so a 4x
+    ///        colour target beside a 1x depth target is a pass that cannot begin.
+    [[nodiscard]] bool ensure_depth(const gpu_device& dev, Uint32 w, Uint32 h,
+                                    SDL_GPUSampleCount samples = SDL_GPU_SAMPLECOUNT_1);
 
     /// Fill in the depth attachment description for a pass. Only valid after a
     /// successful `ensure_depth`.
@@ -357,6 +362,7 @@ private:
     /// map but no sampler of their own.
     gpu_sampler shadow_sampler_;
     SDL_GPUTextureFormat depth_format_ = SDL_GPU_TEXTUREFORMAT_INVALID;
+    SDL_GPUSampleCount samples_ = SDL_GPU_SAMPLECOUNT_1;   ///< 6.14
     Uint32 depth_w_ = 0;
     Uint32 depth_h_ = 0;
     double create_ms_ = 0.0;

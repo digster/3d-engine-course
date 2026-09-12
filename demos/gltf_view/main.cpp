@@ -38,6 +38,7 @@
 #include <engine/gfx/scene.hpp>
 #include <engine/gfx/cascade.hpp>
 #include <engine/gfx/draw_order.hpp>
+#include <engine/gfx/antialias.hpp>
 #include <engine/gfx/bloom.hpp>
 #include <engine/gfx/hdr.hpp>
 #include <engine/gfx/mipmap.hpp>
@@ -247,6 +248,30 @@ public:
                 hdr_ = true;
                 bloom_.enabled = true;
                 bloom_.clamp_max = static_cast<float>(SDL_atof(argv[++i]));
+            }
+            // LESSON 6.14. `--aa N` supersamples the GEOMETRIC half — render at
+            // N times the linear resolution and box-filter down. `--spec-aa`
+            // addresses the SHADING half by widening the NDF, and the two are
+            // independent on purpose: they fix different problems and either one
+            // alone leaves the other's artefact untouched, which is the whole
+            // point of the lesson.
+            else if (SDL_strcmp(argv[i], "--aa") == 0 && i + 1 < argc)
+            {
+                aa_.factor = SDL_atoi(argv[++i]);
+                if (aa_.factor < 1) { aa_.factor = 1; }
+                if (aa_.factor > 4) { aa_.factor = 4; }
+            }
+            else if (SDL_strcmp(argv[i], "--spec-aa") == 0)
+            {
+                aa_.specular = true;
+            }
+            // The bug, selectable — see `resolve_supersampled`. Averaging the
+            // STORED BYTES instead of the light is 6.1's mistake in its fourth
+            // costume, and it is worth being able to switch on and look at.
+            else if (SDL_strcmp(argv[i], "--aa-encoded") == 0)
+            {
+                aa_.factor = (aa_.factor > 1) ? aa_.factor : 2;
+                aa_encoded_ = true;
             }
             // A surface polished enough to blow the lid off. The demo's default
             // roughness is 0.49, which peaks at 0.8676 — just under 1 — and that
@@ -882,8 +907,52 @@ public:
     {
         (void)alpha;
 
-        fb().clear(k_background);
-        depth_.clear();
+        // ---- LESSON 6.14: the supersampled target ---------------------------
+        //
+        // Allocated on first use and only when asked, because the cost is N^2 and
+        // it is the honest price of the technique: 4x4 at 320x240 is 1.22 MB of
+        // colour and 4.92 MB of depth against 0.31 and 1.23 — SIXTEEN times, for
+        // sixteen times the fragments.
+        //
+        // THE VIEWPORT SCALES AND NOTHING ELSE DOES. Same camera, same clip
+        // matrix, more pixels — which is what makes this supersampling rather
+        // than a different rendering.
+        if (aa_.factor != aa_built_)
+        {
+            aa_built_ = aa_.factor;
+            if (aa_.factor > 1)
+            {
+                const int w = k_width * aa_.factor;
+                const int h = k_height * aa_.factor;
+                aa_fb_ = std::make_unique<engine::framebuffer>(w, h);
+                aa_depth_ = std::make_unique<engine::depth_buffer>(w, h);
+                projector_ = engine::projector{
+                    engine::perspective(k_fov_y,
+                                        static_cast<float>(k_width) / static_cast<float>(k_height),
+                                        0.1f, 100.0f),
+                    engine::viewport{0.0f, 0.0f, static_cast<float>(w), static_cast<float>(h),
+                                     0.0f, 1.0f},
+                    engine::near_mode::clip};
+            }
+            else
+            {
+                aa_fb_.reset();
+                aa_depth_.reset();
+                projector_ = engine::projector{
+                    engine::perspective(k_fov_y,
+                                        static_cast<float>(k_width) / static_cast<float>(k_height),
+                                        0.1f, 100.0f),
+                    engine::viewport{0.0f, 0.0f, static_cast<float>(k_width),
+                                     static_cast<float>(k_height), 0.0f, 1.0f},
+                    engine::near_mode::clip};
+            }
+        }
+
+        engine::framebuffer& target = (aa_fb_ != nullptr) ? *aa_fb_ : fb();
+        engine::depth_buffer& target_depth = (aa_depth_ != nullptr) ? *aa_depth_ : depth_;
+
+        target.clear(k_background);
+        target_depth.clear();
 
         // ---- LESSON 6.12: the float target ---------------------------------
         //
@@ -973,7 +1042,35 @@ public:
                 sort_blended_ ? objects_[static_cast<std::size_t>(key.index)]
                               : objects_[static_cast<std::size_t>(&key - order_.data())];
 
-            engine::collect_triangles(triangles_, scratch_, {&obj, 1}, assets_.meshes(),
+            // ---- LESSON 6.14: the shading half ------------------------------
+            //
+            // PER OBJECT, NOT PER PIXEL, and the approximation is worth naming
+            // rather than hiding. The GPU does this per fragment with `ddx(n)` —
+            // fragments are shaded in 2x2 quads (4.1) precisely so a neighbour is
+            // always there to subtract. A scanline rasterizer has no neighbour,
+            // so a correct CPU version would derive the gradients from the
+            // triangle the way Lesson 6.10's `uv_gradients` does.
+            //
+            // What this does instead is estimate the normal's turn per pixel from
+            // the object's PROJECTED SIZE: a closed surface sweeps its normal
+            // through about a quarter turn from the centre of its silhouette to
+            // the rim, so pi/2 over the radius in pixels is the average. Coarser
+            // than the real thing and enough to show the effect.
+            engine::scene_object shaded = obj;
+            if (aa_.specular)
+            {
+                const float radius_px = scene_radius_px();
+                if (radius_px > 0.5f)
+                {
+                    const float turn = 1.5707963f / radius_px;
+                    shaded.mat.surface.roughness = engine::filtered_roughness(
+                        obj.mat.surface.roughness,
+                        engine::vec3{turn, 0.0f, 0.0f},
+                        engine::vec3{0.0f, turn, 0.0f});
+                }
+            }
+
+            engine::collect_triangles(triangles_, scratch_, {&shaded, 1}, assets_.meshes(),
                                       {view, eye}, projector_, lights_,
                                       engine::render_options{
                                           .cull = engine::cull_choice::back});
@@ -1048,7 +1145,7 @@ public:
                 // and is simply never written to.
                 .hdr = hdr_ ? hdr_fb_.get() : nullptr};
 
-            engine::draw_triangles(fb(), &depth_, triangles_, false, style);
+            engine::draw_triangles(target, &target_depth, triangles_, false, style);
             drawn += static_cast<int>(triangles_.size());
         }
 
@@ -1063,6 +1160,18 @@ public:
         // the debug overlay is authored in sRGB and drawn at the codes it was
         // authored in, so tonemapping it would darken text nobody asked to be
         // darkened. Module 9's editor will want exactly the same split.
+        // ---- LESSON 6.14: the resolve --------------------------------------
+        //
+        // AFTER the scene and BEFORE the HDR resolve would be wrong, and the
+        // ordering is the same argument 6.13 made about the bloom: averaging is
+        // linear in LIGHT, and `framebuffer` holds sRGB codes. Here the demo
+        // supersamples the 8-bit path only, so the average happens in
+        // `resolve_supersampled`, which decodes, averages and encodes ONCE.
+        if (aa_fb_ != nullptr)
+        {
+            engine::resolve_supersampled(*aa_fb_, fb(), aa_.factor, aa_encoded_);
+        }
+
         if (hdr_ && hdr_fb_)
         {
             const engine::hdr_stats st = engine::measure(*hdr_fb_);
@@ -1247,13 +1356,42 @@ private:
     engine::vec3 centre_{};
     float distance_ = 4.0f;
 
-    const engine::projector projector_{
+    // LESSON 6.14. The projector is no longer `const`, because supersampling
+    // changes the VIEWPORT and nothing else: the same camera, the same clip
+    // matrix, more pixels. That is worth noticing — supersampling is not a
+    // different projection, it is the same projection sampled more densely, which
+    // is exactly why it fixes aliasing and why it costs N^2.
+    engine::projector projector_{
         engine::perspective(k_fov_y,
                             static_cast<float>(k_width) / static_cast<float>(k_height),
                             0.1f, 100.0f),
         engine::viewport{0.0f, 0.0f, static_cast<float>(k_width),
                          static_cast<float>(k_height), 0.0f, 1.0f},
         engine::near_mode::clip};
+
+    /// How many pixels the SCENE's bounding sphere spans, as a radius.
+    ///
+    /// Used only for the specular-AA estimate above, and deliberately crude: it
+    /// is one number for the whole scene, derived from the bounds the demo
+    /// already tracks for framing. A real implementation is per fragment and the
+    /// lesson says so in as many words.
+    [[nodiscard]] float scene_radius_px() const
+    {
+        const engine::vec3 ext = (bounds_.max - bounds_.min) * 0.5f;
+        const float r = engine::length(ext);
+        if (!(r > 0.0f) || !(distance_ > 1e-4f)) { return 0.0f; }
+
+        // The half-angle the sphere subtends, over the angle one pixel subtends.
+        const float half_angle = std::atan(r / distance_);
+        const float per_pixel = k_fov_y / static_cast<float>(k_height * aa_.factor);
+        return half_angle / per_pixel;
+    }
+
+    engine::aa_settings aa_{};              ///< 6.14: factor and the specular flag
+    bool aa_encoded_ = false;               ///< 6.14: the wrong resolve, selectable
+    int aa_built_ = 0;                      ///< the factor the buffers were built at
+    std::unique_ptr<engine::framebuffer> aa_fb_;    ///< the supersampled target
+    std::unique_ptr<engine::depth_buffer> aa_depth_;
 
     engine::depth_buffer depth_{k_width, k_height};
 

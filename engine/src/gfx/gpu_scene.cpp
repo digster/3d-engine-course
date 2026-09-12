@@ -39,11 +39,13 @@ gpu_scene_renderer::~gpu_scene_renderer()
 bool gpu_scene_renderer::create(const gpu_device& dev,
                                 SDL_GPUShader* vertex, SDL_GPUShader* fragment,
                                 SDL_GPUTextureFormat depth_format,
-                                SDL_GPUTextureFormat colour_format)
+                                SDL_GPUTextureFormat colour_format,
+                                SDL_GPUSampleCount samples)
 {
     if (vertex == nullptr || fragment == nullptr) { return false; }
 
     depth_format_ = depth_format;
+    samples_ = samples;
 
     // ---- The three pipelines ------------------------------------------------
     //
@@ -70,6 +72,12 @@ bool gpu_scene_renderer::create(const gpu_device& dev,
     for (int j = 0; j < k_blends; ++j)
     {
         pipeline_desc desc(dev, vertex, fragment);
+
+            // LESSON 6.14. EVERY pipeline gets the sample count, because a
+            // pipeline's multisample state is baked in at creation exactly as its
+            // colour format is (4.4) — so MSAA is not a different argument to the
+            // same nine pipelines, it is a different nine pipelines.
+            desc.samples(samples_);
 
         // Slot 0, `gpu_vertex_pnu`, three attributes — the layout Lesson 4.5
         // built and 4.7 last touched. Not re-derived here: `describe` is the one
@@ -271,13 +279,25 @@ void gpu_scene_renderer::destroy()
     create_ms_ = 0.0;
 }
 
-bool gpu_scene_renderer::ensure_depth(const gpu_device& dev, Uint32 w, Uint32 h)
+bool gpu_scene_renderer::ensure_depth(const gpu_device& dev, Uint32 w, Uint32 h,
+                                      SDL_GPUSampleCount samples)
 {
     if (depth_format_ == SDL_GPU_TEXTUREFORMAT_INVALID) { return false; }
     if (w == 0 || h == 0) { return false; }
-    if (depth_.valid() && depth_w_ == w && depth_h_ == h) { return true; }
+    // THE SAMPLE COUNT IS PART OF THE IDENTITY (6.14). Without it in this test, a
+    // program that toggles MSAA keeps the depth buffer it already had and the
+    // next pass fails to begin — with an error about the attachment, several
+    // frames after the setting changed.
+    if (depth_.valid() && depth_w_ == w && depth_h_ == h && depth_.samples() == samples)
+    {
+        return true;
+    }
 
-    if (!depth_.create_depth(dev, depth_format_, w, h, "scene depth")) { return false; }
+    depth_.destroy();
+    if (!depth_.create_depth(dev, depth_format_, w, h, "scene depth", false, samples))
+    {
+        return false;
+    }
     depth_w_ = w;
     depth_h_ = h;
     ENGINE_LOG_INFO(engine::log_gpu, "gpu_scene: depth target %ux%u %s", w, h, name_of(depth_format_));

@@ -113,15 +113,38 @@ public:
     /// short version is that a half float's precision is RELATIVE, so the dark
     /// end gets the same accuracy as the bright end, which is exactly what a
     /// fixed-point format cannot do.
+    /// @param samples  **Lesson 6.14.** Above 1 makes this a multisample target:
+    ///        the rasterizer evaluates COVERAGE and DEPTH at `samples` positions
+    ///        per pixel while still shading once per pixel per primitive, which is
+    ///        the optimisation that makes MSAA affordable and the exact reason it
+    ///        does nothing for shading aliasing (`antialias.hpp`).
+    ///
+    ///        **Support is per format and is checked, not assumed** —
+    ///        `SDL_GPUTextureSupportsSampleCount` exists because 4x on a float
+    ///        target is common but not guaranteed. An unsupported request falls
+    ///        back to 1x with a warning rather than failing: refusing to start
+    ///        because 8x is unavailable is worse behaviour than running at 4x.
+    ///
+    ///        **A multisample texture cannot also be SAMPLER**, so `sampled` is
+    ///        forced false when `samples > 1`. It is resolved into a single-sample
+    ///        texture and *that* is what a later pass reads — which is why an MSAA
+    ///        frame needs two colour targets where a plain one needs one.
     [[nodiscard]] bool create_colour_target(const gpu_device& dev,
                                             SDL_GPUTextureFormat format,
                                             Uint32 width, Uint32 height,
                                             const char* name = nullptr,
-                                            bool sampled = true);
+                                            bool sampled = true,
+                                            SDL_GPUSampleCount samples = SDL_GPU_SAMPLECOUNT_1);
 
+    /// @param samples  **Lesson 6.14.** Must MATCH the colour target's sample
+    ///        count, and that is a hard requirement rather than a convention:
+    ///        every attachment in a render pass is rasterized at the same sample
+    ///        positions, so a 4x colour target with a 1x depth target is a pass
+    ///        that cannot be begun.
     [[nodiscard]] bool create_depth(const gpu_device& dev, SDL_GPUTextureFormat format,
                                     Uint32 width, Uint32 height, const char* name = nullptr,
-                                    bool sampled = false);
+                                    bool sampled = false,
+                                    SDL_GPUSampleCount samples = SDL_GPU_SAMPLECOUNT_1);
 
     /// A stack of depth slices addressed as one texture. Lesson 6.9.
     ///
@@ -148,6 +171,10 @@ public:
     [[nodiscard]] SDL_GPUTexture* handle() const { return texture_; }
     [[nodiscard]] Uint32 width() const { return width_; }
     [[nodiscard]] Uint32 height() const { return height_; }
+
+    /// Samples per pixel — Lesson 6.14. 1 for every texture before that lesson.
+    [[nodiscard]] SDL_GPUSampleCount samples() const { return samples_; }
+    [[nodiscard]] bool multisampled() const { return samples_ != SDL_GPU_SAMPLECOUNT_1; }
     [[nodiscard]] SDL_GPUTextureFormat format() const { return format_; }
 
     /// Bytes the upload moved. Zero for a depth target, which is never written
@@ -162,6 +189,7 @@ private:
     Uint32 uploaded_bytes_ = 0;
     int levels_ = 1;
     SDL_GPUTextureFormat format_ = SDL_GPU_TEXTUREFORMAT_INVALID;
+    SDL_GPUSampleCount samples_ = SDL_GPU_SAMPLECOUNT_1;   ///< 6.14
 };
 
 /// Owns an `SDL_GPUSampler` — the *how* of a texture read, frozen into an object.

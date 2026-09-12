@@ -540,6 +540,33 @@ enum class diffuse_coupling
 /// textures, the cull and blend modes, and eventually the shader; Lesson 6.5
 /// builds that, with the arguments for its shape. This is the reflectance half,
 /// and it is the half that had to change now because the constants moved.
+/// The half-angle at which GGX falls to half its peak — **the lobe's width**.
+///
+/// Lesson 6.14, and it is worth having in closed form because every antialiasing
+/// question in this engine turns into "is the lobe wider or narrower than the
+/// thing sampling it?". Three lines of algebra, no fitting:
+///
+///     D(t)/D(0) = alpha^4 / d^2,   d = cos^2(t)(alpha^2 - 1) + 1
+///     set to 1/2  =>  d = sqrt(2) alpha^2
+///     =>  cos^2(t) = (1 - sqrt(2) alpha^2) / (1 - alpha^2)
+///     =>  sin(t)   = alpha * sqrt( (sqrt(2) - 1) / (1 - alpha^2) )
+///
+/// **AND THE FOLKLORE IS WRONG BY 55%.** "The lobe is about alpha wide" is the
+/// usual hand-wave; the actual coefficient is `sqrt(sqrt(2) - 1) = 0.6436`, and
+/// `verify_614` §A checks the closed form against a bisection of the real NDF to
+/// 2.5e-13 across roughness 0.02 to 0.90 — exact, not a small-angle fit.
+///
+/// **This is the HALF-VECTOR lobe.** The reflected lobe is twice as wide, because
+/// rotating the half-vector by `t` rotates the mirror direction by `2t`. Which of
+/// the two you want depends on whether you are asking about the surface or about
+/// the image of a light in it.
+[[nodiscard]] inline float ggx_lobe_half_angle(float alpha)
+{
+    const float a2 = std::clamp(alpha * alpha, 0.0f, 0.999999f);
+    const float s = alpha * std::sqrt(0.41421356f / (1.0f - a2));
+    return std::asin(std::clamp(s, 0.0f, 1.0f));
+}
+
 struct microsurface
 {
     /// Perceptual roughness in [0,1]; `alpha_from_roughness` squares it.

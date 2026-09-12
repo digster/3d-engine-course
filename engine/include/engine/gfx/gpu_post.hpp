@@ -305,11 +305,48 @@ public:
     [[nodiscard]] bool valid() const { return tonemap_.valid() && bloom_.valid(); }
 
     /// Size the scene target and the pyramid. Idempotent; call it every frame.
+    ///
+    /// @param samples **Lesson 6.14.** Above 1 allocates a MULTISAMPLE scene
+    ///        target alongside the single-sample one, and the scene pass then
+    ///        writes the first and resolves into the second. The stack owns both,
+    ///        which is 6.13's ownership rule doing exactly what it was written to
+    ///        do: the resolved target is what crosses between stages, so the stack
+    ///        owns it, and the multisample target is an intermediate of the scene
+    ///        pass that nothing downstream ever sees.
     [[nodiscard]] bool resize(const gpu_device& dev, Uint32 width, Uint32 height,
-                              const bloom_settings& s);
+                              const bloom_settings& s,
+                              SDL_GPUSampleCount samples = SDL_GPU_SAMPLECOUNT_1);
 
-    /// The float target the SCENE PASS should render into.
-    [[nodiscard]] SDL_GPUTexture* scene_target() const { return scene_.handle(); }
+    /// The target the SCENE PASS should render into — multisample when MSAA is on.
+    [[nodiscard]] SDL_GPUTexture* scene_target() const
+    {
+        return msaa_.valid() ? msaa_.handle() : scene_.handle();
+    }
+
+    /// The single-sample target everything downstream reads. With MSAA off this is
+    /// the same texture `scene_target()` returns; with it on, it is the resolve
+    /// destination and `scene_target()` is a texture nothing may sample.
+    [[nodiscard]] SDL_GPUTexture* resolved_target() const { return scene_.handle(); }
+
+    /// Fill in the colour-target info for the scene pass, including the resolve.
+    ///
+    /// **This exists so the caller cannot forget the resolve.** With MSAA on, the
+    /// store op must be `SDL_GPU_STOREOP_RESOLVE` and `resolve_texture` must point
+    /// at the single-sample target; get either wrong and the frame renders
+    /// perfectly into a texture nobody reads, which looks like the scene pass
+    /// failing rather than the resolve missing.
+    ///
+    /// RESOLVE rather than RESOLVE_AND_STORE, deliberately: the SDL3 header says
+    /// the first lets the driver **discard** the multisample memory afterwards and
+    /// is "the most performant method", while the second additionally writes the
+    /// multisample contents out and is "not recommended". Nothing here reads the
+    /// per-sample data, so keeping it would be paying bandwidth for nothing.
+    [[nodiscard]] SDL_GPUColorTargetInfo scene_target_info(SDL_FColor clear) const;
+
+    [[nodiscard]] SDL_GPUSampleCount samples() const
+    {
+        return msaa_.valid() ? msaa_.samples() : SDL_GPU_SAMPLECOUNT_1;
+    }
 
     /// Record bloom + resolve. `pass` must already be begun against the display.
     ///
@@ -327,7 +364,8 @@ public:
     [[nodiscard]] const gpu_bloom& bloom() const { return bloom_; }
 
 private:
-    gpu_texture scene_;      ///< the float target every stage shares
+    gpu_texture scene_;      ///< the RESOLVED float target every stage shares
+    gpu_texture msaa_;       ///< 6.14: the multisample target, when MSAA is on
     gpu_texture no_bloom_;   ///< 1x1 black, for when the bloom is off
     gpu_tonemap_pass tonemap_;
     gpu_bloom bloom_;

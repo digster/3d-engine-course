@@ -22,7 +22,10 @@
 //
 //   3. SVG GEOMETRY, in three flavours, because each misses what the others
 //      catch:
-//        a. spill    — a label outside its own viewBox. MUST use
+//        a. spill    — a label OR A CLOSED SHAPE outside its own viewBox.
+//                      The shape half was added in 6.14 after the text-only
+//                      version passed two figures whose boxes ran off the
+//                      edge (6.13 fig 3, 6.14 fig 7). MUST use
 //                      getBoundingClientRect(): getBBox() is in LOCAL
 //                      coordinates, so anything inside a <g transform> is
 //                      compared against the wrong origin and reports false
@@ -116,7 +119,7 @@
       .map(t => ({ r: t.getBoundingClientRect(), s: t.textContent.trim() }))
       .filter(o => o.r.width > 0 && o.s.length > 0);
 
-    // (a) spill outside the viewBox
+    // (a) spill outside the viewBox — TEXT
     texts.forEach(t => {
       const over = Math.max(t.r.right - svgBox.right, svgBox.left - t.r.left,
                             t.r.bottom - svgBox.bottom, svgBox.top - t.r.top);
@@ -125,7 +128,26 @@
       }
     });
 
-    // (b) text over text
+        // (a2) spill outside the viewBox — SHAPES. Added by Lesson 6.14, after the
+    // same defect shipped TWICE: 6.13's Figure 3 legend box ran 6 px off its
+    // viewBox and 6.14's Figure 7 ran its last stage box off the right edge,
+    // and (a) passed both because it only ever looked at <text>. A rect or a
+    // circle drawn from computed coordinates leaves the frame exactly as a label
+    // does, and until now nothing was watching.
+    //
+    // Strokes are excluded deliberately: a polyline that runs to the very edge
+    // of a plot box is normal and correct, so only CLOSED shapes are tested.
+    [...svg.querySelectorAll('rect, circle, ellipse')].forEach(el => {
+      const r = el.getBoundingClientRect();
+      if (r.width <= 0 || r.height <= 0) { return; }
+      const over = Math.max(r.right - svgBox.right, svgBox.left - r.left,
+                            r.bottom - svgBox.bottom, svgBox.top - r.top);
+      if (over > 0.5) {
+        spill.push({ fig: fi + 1, shape: el.tagName, overPx: +over.toFixed(1) });
+      }
+    });
+
+// (b) text over text
     for (let i = 0; i < texts.length; i++) {
       for (let j = i + 1; j < texts.length; j++) {
         const a = texts[i].r, b = texts[j].r;

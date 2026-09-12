@@ -203,7 +203,11 @@ cbuffer Material : register(b1, space3)
     // across every buffer in a shader.
     float  alpha;         // 32 — the material's opacity; 1 for anything opaque
     float  alpha_cutoff;  // 36 — 0 DISABLES the test; see `main`
-    float  alpha_pad0;    // 40
+    // 40 — Lesson 6.14, and it cost ZERO BYTES: this was `alpha_pad0`, the slot
+    // 6.11 had to add to fill a register. The same free ride 6.7 got from 6.4's
+    // padding, two lessons apart. Non-zero widens the NDF to cover the normal's
+    // variation across this pixel; see below.
+    float  specular_aa;
     float  alpha_pad1;    // 44
 };
 
@@ -586,7 +590,39 @@ float4 main(Input input) : SV_Target0
         const float  n_dot_h = max(0.0f, dot(n, h));
         const float  v_dot_h = max(0.0f, dot(v, h));
 
-        const float alpha = max(k_min_alpha, saturate(roughness) * saturate(roughness));
+        float alpha = max(k_min_alpha, saturate(roughness) * saturate(roughness));
+
+        // ---- SPECULAR ANTIALIASING (Lesson 6.14) ----------------------------
+        //
+        // A pixel does not see ONE normal, it sees a distribution of them spread
+        // across its footprint. What it therefore integrates is this surface's
+        // NDF CONVOLVED with that spread — and convolution ADDS VARIANCES:
+        //
+        //     alpha'^2 = alpha^2 + 2 * sigma^2
+        //
+        // `ddx`/`ddy` give the spread directly, and this is the one place in the
+        // course where the GPU has it easier than the CPU: fragments are shaded
+        // in 2x2 quads (Lesson 4.1) precisely so a neighbour is always available
+        // to subtract, where `engine::filtered_roughness` has to be handed
+        // gradients the rasterizer computed from the triangle.
+        //
+        // `dot(d, d)` and not `length(d)`: the quantity that adds is the
+        // VARIANCE, which is the whole content of the derivation and the easiest
+        // thing to lose by reaching for a length.
+        //
+        // THE CONSTANTS ARE A FIT, from Tokuyoshi & Kaplanyan (2019), and the
+        // clamp is load-bearing rather than defensive: at a silhouette the normal
+        // sweeps most of a hemisphere inside one pixel, and without a ceiling a
+        // chrome bumper would go matte exactly at its own edge.
+        if (specular_aa > 0.5f)
+        {
+            const float3 dndx = ddx(n);
+            const float3 dndy = ddy(n);
+            const float variance = 0.15915494f * (dot(dndx, dndx) + dot(dndy, dndy));
+            const float kernel = min(2.0f * variance, 0.18f);
+            alpha = clamp(alpha * alpha + kernel, 0.0f, 1.0f);
+            alpha = max(k_min_alpha, sqrt(alpha));
+        }
 
         // THE SPECULAR HALF: D * G * F over the derived denominator. The 4 is a
         // Jacobian (the map from light directions to microfacet normals stretches
