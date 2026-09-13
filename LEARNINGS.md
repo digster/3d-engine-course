@@ -7643,3 +7643,32 @@ Two traps in the porting script itself, both about measuring:
 - Folding two fields into a brace **re-indents** the comment block between them, and counting that
   as change credits the API drift with twenty lines of your own tidying. Report the
   whitespace-insensitive diff as the headline and the raw one beside it.
+
+## A label's colour is either semantic or an identity, and they have different fixes
+
+Thirteen inline `fill="…"` attributes on SVG `<text>` shipped in 06-02 and 06-03. `course.css`'s
+`figure.dia svg text { fill: var(--dia-ink); }` is CSS, and CSS always beats a presentation
+attribute, so every one of them was silently ignored: the labels rendered in default ink, nothing
+errored, and both pages looked finished. `apply-shared.py --check` has linted for this since 1.7 —
+these predate the lint being taken seriously, and they sat through fifteen lessons.
+
+The fix is not one fix, because the colour was doing two different jobs:
+
+- **Semantic** (06-02's table: two quantities fell by four, one did not). Use the existing classes —
+  `t-ok`, `t-bad`, `t-hi`, `muted`. In this case the verdict row *fifteen lines below in the same
+  figure* already said exactly that with `t-bad` and `t-ok`, so the values now match the verdicts
+  beneath them and the figure's whole claim reads at a glance.
+- **Series identity** (06-03's curve labels: which curve is this?). There is no class for the figure
+  palette and there should not be one — those five hexes are not the axis colours, and minting
+  `.t-green` invites somebody to colour an axis label with it. The answer is the idiom the same file
+  already uses twice for its legends: **a coloured shape beside plain text.** The `fill` attribute
+  works perfectly on `rect`, `path` and `line`; the rule only targets `text`. In three of the four
+  sites a grey leader dash was already there and only had to stop being grey.
+
+The general shape: when a rule blocks you from colouring a thing, check whether the colour belongs
+on the thing at all, or on something next to it that is allowed to carry it.
+
+**And the drift recurses, so fix the generator.** The page's source is an `.svg` in `scratch/`, and
+the `.svg`'s source is `figs_NN.py`. Editing the HTML leaves the generator able to revert it on the
+next rebuild; `check-builders.py --figures` is the check that closes that loop, and it is the one
+that proves a figure fix actually landed.
