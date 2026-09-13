@@ -133,6 +133,7 @@ add_library(engine STATIC
     src/gfx/mesh.cpp
     src/gfx/obj.cpp
     src/gfx/raster.cpp
+    src/gfx/renderable.cpp                # 5.12 — the ECS -> scene_object bridge
     # Lesson 6.8. The shadow map, and it gets a translation unit rather than a
     # header because it owns buffers and reaches into the whole software
     # pipeline — `collect_triangles` and `draw_triangles` both — which is more
@@ -222,5 +223,64 @@ target_include_directories(engine PRIVATE ${cgltf_SOURCE_DIR})
 # vocabulary inside our public API. What makes it acceptable is that the only
 # code allowed to speak it is TOOLING code.
 target_link_libraries(engine PUBLIC imgui::imgui)
+
+# ---------------------------------------------------------------------------
+# Lesson 5.12 — the umbrella header must list every public header
+# ---------------------------------------------------------------------------
+#
+# `engine/engine.hpp` calls itself "the whole public API, in one include" and "a
+# TABLE OF CONTENTS ... the fastest way to see whether something is public".
+# Lesson 5.12 checked, and it listed 40 of 55 — missing the entire ECS, the asset
+# store, handles, logging, assertions and the action map. Nothing had ever asked.
+#
+# A GLOB USED AS A LINT, NOT AS A SOURCE LIST, and the distinction is the whole
+# justification. The usual objection to `file(GLOB)` is that a NEW FILE does not
+# re-trigger CMake, so the build silently misses it; that objection is about
+# globbing SOURCES. Here a stale glob can only make the check miss a header that
+# was added since the last configure — it can never break the build or drop a
+# translation unit, and the moment anything else re-runs CMake the check catches
+# up. Against that: the failure it replaces is a silent wrong answer that stood
+# for thirteen lessons.
+file(GLOB_RECURSE engine_public_headers
+     RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}/include"
+     CONFIGURE_DEPENDS
+     "${CMAKE_CURRENT_SOURCE_DIR}/include/engine/*/*.hpp")
+
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/include/engine/engine.hpp"
+     engine_umbrella_lines REGEX "^#include <engine/")
+
+set(engine_umbrella_missing "")
+foreach(header IN LISTS engine_public_headers)
+    # The ONE documented exception, and it is an exception for a reason the
+    # umbrella states itself: including <engine/platform/main.hpp> defines a
+    # program's entry point, so an "include everything, it is harmless" header
+    # must not be a way to acquire a main() by accident.
+    if(header STREQUAL "engine/platform/main.hpp")
+        continue()
+    endif()
+
+    # An ANCHORED match, because the first version of this check grepped the
+    # whole file and passed on headers that were only ever MENTIONED IN A
+    # COMMENT — including the one exception above, which the umbrella names in
+    # prose precisely to say it is absent. A check that reads its own excuse as
+    # compliance is worse than no check.
+    list(FIND engine_umbrella_lines "#include <${header}>" found)
+    if(found EQUAL -1)
+        list(APPEND engine_umbrella_missing "${header}")
+    endif()
+endforeach()
+
+list(LENGTH engine_public_headers engine_public_header_count)
+if(engine_umbrella_missing)
+    string(REPLACE ";" "\n    " engine_umbrella_pretty "${engine_umbrella_missing}")
+    message(FATAL_ERROR
+        "engine/include/engine/engine.hpp is missing public header(s):\n"
+        "    ${engine_umbrella_pretty}\n"
+        "It claims to list every public header (Lesson 5.12). Add them, or add "
+        "an exception here with the reason written down.")
+endif()
+math(EXPR engine_umbrella_listed "${engine_public_header_count} - 1")
+message(STATUS "engine: umbrella lists ${engine_umbrella_listed} of "
+               "${engine_public_header_count} public headers (1 documented exception)")
 
 engine_set_warnings(engine)

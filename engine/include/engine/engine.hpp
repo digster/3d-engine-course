@@ -28,13 +28,63 @@
 // <SDL3/SDL_video.h> and forty siblings — and the same advice applies to it for
 // the same reasons. We are in respectable company either way.
 
+// ---- ONE RULE, AND LESSON 5.12 FOUND OUT WHY IT NEEDS A MACHINE ------------
+//
+// **Every public header appears below.** That sentence is the only thing that
+// makes the paragraph above true, and for thirteen lessons it was false.
+//
+// Lesson 5.12 counted: this file listed 40 of the engine's 55 public headers.
+// One of the fifteen absences was correct and is documented below; the other
+// fourteen were not obscure — they were the ENTIRE ECS, the asset
+// store, handles, logging, assertions and the action map, which is to say very
+// nearly everything Module 5 built. Its history explains itself: 5.2 remembered
+// to add `platform/`, 5.11 remembered `debug_lines`, and 5.3, 5.4, 5.5, 5.8,
+// 5.9 and 5.10 did not. A rule kept by memory is kept about half the time.
+//
+// The failure mode is what makes it worth a paragraph. A newcomer does exactly
+// what the comment above tells them to do, writes `#include <engine/engine.hpp>`
+// and then `engine::ecs::registry`, and gets an error saying that name does not
+// exist — which reads as *"this engine has no ECS"* rather than *"the umbrella
+// is stale"*. The one document whose job is to answer "is this public?" was
+// answering "no" about eleven headers that are.
+//
+// So it is now CHECKED rather than remembered, at configure time, in
+// `engine/CMakeLists.txt`: CMake globs `include/engine/**.hpp`, greps this file,
+// and fails the configure listing anything missing. That is a glob used as a
+// LINT and not as a source list, which is the distinction that makes it the
+// right tool here — a missed header is a silent wrong answer, and the check
+// costs 4 ms.
+
 #pragma once
 
-// ---- Core: time, input, and measurement -----------------------------------
+// ---- Core: time, input, diagnostics and storage ----------------------------
+#include <engine/core/actions.hpp>
+#include <engine/core/assert.hpp>
+#include <engine/core/bench.hpp>
 #include <engine/core/clock.hpp>
 #include <engine/core/fixed_step.hpp>
+#include <engine/core/handle.hpp>
 #include <engine/core/input.hpp>
+#include <engine/core/log.hpp>
+#include <engine/core/pool.hpp>
 #include <engine/core/profile.hpp>
+
+// ---- Assets: finding files, and owning what they become --------------------
+#include <engine/asset/asset_store.hpp>
+#include <engine/asset/search_path.hpp>
+
+// ---- Entities: the ECS -----------------------------------------------------
+//
+// Note `ecs/pool.hpp` and `core/pool.hpp` are BOTH here and are two different
+// containers — `engine::ecs::pool<T>` is keyed by entity and `engine::pool<T>`
+// by handle. They are listed together on purpose: the collision is easier to
+// understand from a table of contents that admits it than from a compiler error.
+#include <engine/ecs/camera.hpp>
+#include <engine/ecs/entity.hpp>
+#include <engine/ecs/hierarchy.hpp>
+#include <engine/ecs/pool.hpp>
+#include <engine/ecs/registry.hpp>
+#include <engine/ecs/view.hpp>
 
 // ---- Maths ----------------------------------------------------------------
 #include <engine/math/mat2.hpp>
@@ -46,19 +96,39 @@
 #include <engine/math/vec4.hpp>
 
 // ---- Graphics: the CPU side -----------------------------------------------
+#include <engine/gfx/antialias.hpp>
+#include <engine/gfx/blend.hpp>
+#include <engine/gfx/bloom.hpp>
+#include <engine/gfx/bounds.hpp>
+#include <engine/gfx/cascade.hpp>
 #include <engine/gfx/clip.hpp>
 #include <engine/gfx/colour.hpp>
+#include <engine/gfx/cubemap.hpp>
+#include <engine/gfx/cull.hpp>
 #include <engine/gfx/debug_draw.hpp>
 #include <engine/gfx/debug_lines.hpp>
 #include <engine/gfx/depth_buffer.hpp>
+#include <engine/gfx/draw_order.hpp>
+#include <engine/gfx/font.hpp>
+#include <engine/gfx/frame_graph.hpp>
 #include <engine/gfx/framebuffer.hpp>
+#include <engine/gfx/frustum.hpp>
+#include <engine/gfx/gltf.hpp>
+#include <engine/gfx/hdr.hpp>
 #include <engine/gfx/image.hpp>
+#include <engine/gfx/instancing.hpp>
 #include <engine/gfx/light.hpp>
+#include <engine/gfx/material.hpp>
 #include <engine/gfx/mesh.hpp>
+#include <engine/gfx/microfacet.hpp>
+#include <engine/gfx/mipmap.hpp>
 #include <engine/gfx/obj.hpp>
+#include <engine/gfx/overlay.hpp>
 #include <engine/gfx/projector.hpp>
 #include <engine/gfx/raster.hpp>
+#include <engine/gfx/renderable.hpp>
 #include <engine/gfx/scene.hpp>
+#include <engine/gfx/shadow.hpp>
 #include <engine/gfx/soft_renderer.hpp>
 #include <engine/gfx/texture.hpp>
 #include <engine/gfx/viewport.hpp>
@@ -68,10 +138,13 @@
 #include <engine/gfx/gpu_debug.hpp>
 #include <engine/gfx/gpu_device.hpp>
 #include <engine/gfx/gpu_mesh.hpp>
+#include <engine/gfx/gpu_overlay.hpp>
 #include <engine/gfx/gpu_pipeline.hpp>
+#include <engine/gfx/gpu_post.hpp>
 #include <engine/gfx/gpu_present.hpp>
 #include <engine/gfx/gpu_scene.hpp>
 #include <engine/gfx/gpu_shader.hpp>
+#include <engine/gfx/gpu_shadow.hpp>
 #include <engine/gfx/gpu_texture.hpp>
 #include <engine/gfx/gpu_uniform.hpp>
 

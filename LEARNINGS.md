@@ -7518,3 +7518,128 @@ Two authoring lessons from 6.18's diagrams, both caught by `check-page.js` and n
   on the plotted curve. Three placements before it reached empty space. `check-page.js` has a
   separate check for text-on-text and for text-on-shape, which is the only reason each move was
   caught rather than one hiding behind the other. Budget for the iterations.
+
+## A document nothing compiles is a document nothing can keep correct
+
+`engine/engine.hpp` calls itself "the whole public API, in one include" and "the fastest way to see
+whether something is public". At Lesson 5.11 it listed **40 of the 55 headers it could have** —
+missing the entire ECS, the asset store, handles, pools, the logger, the assertions and the action
+map, which is very nearly everything Module 5 built.
+
+The mechanism is worth more than the bug. `grep -rl "engine/engine.hpp"` over `demos/` and
+`engine/` returns the file *itself* and nothing else. It has never had a consumer, so it has never
+been compiled, so no mistake in it could ever produce a symptom. Its history is three commits: 5.1
+created it, 5.2 remembered `platform/`, 5.11 remembered `debug_lines` — and seven lessons in
+between shipped fourteen public headers and touched it zero times.
+
+That is a rule kept by memory, inside the repository whose Lesson 5.1 insisted the boundary be
+"enforced by the include path, not the style guide". The same reasoning was available three lines
+below and nobody applied it.
+
+Two things follow. **Check anything a compiler does not** — the fix that lasts is the configure-time
+lint, not the fifteen added lines. And **anchor the match**: the first draft grepped the whole file
+for each header's name and passed on headers that were only *mentioned in a comment*, including the
+one documented exception, which the file names in prose precisely to say it is absent. A check that
+reads its own excuse as compliance is worse than no check.
+
+## An incomplete dependency and a cheap one look identical on a stopwatch
+
+Before completing that umbrella, the obvious prediction: it is the expensive way to include the
+engine, an explicit list is the cheap way, and completing it widens the gap. Measured, one
+translation unit, best of five:
+
+```
+nothing at all                        0.01 s
+umbrella as shipped (40 headers)      0.28 s   <- cheaper than explicit
+the game's own 23 explicit includes   0.37 s
+umbrella completed (55 headers)       0.39 s
+```
+
+The broken umbrella was cheap **because** it was broken: the fourteen headers it omitted are the
+templated ones — `registry.hpp`, `view.hpp`, `pool.hpp`, `asset_store.hpp`, `actions.hpp` — which is
+where this engine's compile time actually lives. Completing it costs +39% against the broken version
+and +5.4% against including exactly what you use.
+
+So the single-translation-unit number is *not* the reason to avoid an umbrella. The reason is the
+incremental rebuild Lesson 5.1 measured — editing one public header recompiles everything — and that
+is a property of the dependency graph which no single-file benchmark can see. Put both numbers in
+the header: a reader who finds only the first concludes umbrellas are fine, and a reader who finds
+only the second concludes they are a disaster.
+
+## An assertion is developer-facing control flow, and `--shot` has no developer
+
+A camera parented to a rolling, non-uniformly scaled rover produces a placement that is not rigid.
+`ecs::view_from_camera` asserts exactly that, correctly, on the first frame. The symptom was not a
+diagnostic and not a crash: the headless `--shot` run **hung for ever with no output at all**.
+
+`SDL_assert` expands to a `while` loop so that RETRY genuinely re-tests the condition — which Lesson
+5.3 made a point of, and which is right at a desk with a dialog in front of you. On a build server
+with no display to draw a dialog on and no terminal to prompt at, the default answer keeps arriving
+and the condition cannot change.
+
+Diagnosing it took one command — `sample <pid>` on macOS, `gdb -p` elsewhere — and the assertion's
+own function was the top frame of all 1,538 samples. Reach for the sampler before the debugger when
+a headless run stops producing output; a hang has a stack, and it is the same one every time.
+
+## "Scale" means two things in one header, and it will bite three times
+
+`cube_mesh()` and `quad_mesh()` span ±0.5, so a `transform`'s `scale` is the box's **full size**.
+`icosahedron_mesh()`'s vertices sit at distance 1.0, so its `scale` is a **radius**. At `scale = 1`
+the ball is twice the diameter of the cube. Both are documented; together they are a trap.
+
+And the trap is not the asymmetry — it is that a **half-extent** is what the rest of the program has
+in its hand. A collision test wants one. `debug_lines::box` takes one. So the value you reach for is
+wrong by a factor of two at exactly the moment you reach for it. In one file it bit three times:
+
+- the floor came out a **quarter** of its intended area, with the pillars floating beside it in the
+  void — which reads as a camera bug for a good ten minutes;
+- boxes were half-buried, because the centre height must be `half.y` while the scale is twice that;
+- the debug OBBs were **exactly 2× too big**, because `box(world_from_local, half_extent)` takes the
+  extent in the *matrix's own space* and the matrix already carries the scale.
+
+The third survived longest because it looked plausible: a box slightly too big around a collision
+proxy reads as a deliberate margin. **A plausible margin that is exactly a factor of two is never a
+margin.** The answer is one helper — `box_at(centre, half, rotation)` — whose entire content is the
+doubling, so the convention has to be understood once rather than at every call site.
+
+## The inverse of a product reverses, and the wrong order is not visibly wrong
+
+To make a camera boom cancel its parent's roll and scale:
+
+```
+L = (H · Rz(β) · S)⁻¹ · H = S⁻¹ · Rz(−β)
+```
+
+The unscale comes **first**. The English description of the same intent — "undo the roll, then undo
+the scale" — produces `Rz(−β) · S⁻¹`, and a rotation and a non-uniform scale do not commute.
+
+What makes this expensive is how *close* the wrong answer is. On the rover's actual numbers the two
+products agree on the *x* axis to four decimal places and differ by 36% on *y*. A result that is
+right in one component and wrong in another does not look like an algebra error; it looks like
+something needs tuning. Derive the expression, then let a test assert the property the derivation
+was for — here `is_rigid`, with a *third* chain (no boom at all) as the control, since "the swapped
+one is not rigid" is otherwise equally consistent with the boom doing nothing whatsoever.
+
+## Writing a lesson out of order needs two trees, and the delta is the finding
+
+Lesson 5.12 closes Module 5 and was authored after 6.18, so "every listing compiles at its point in
+the course" and the state of the repository were in direct conflict. The resolution: write, compile
+and run the lesson in a `git archive` checkout of the era commit, and port forward with a script
+that *records* the delta.
+
+The delta is the most interesting number the lesson produced: **26 real source lines out of 1,485**,
+all of them in two named places. Everything structural — the ECS, the hierarchy, the camera, the
+action map, the asset store, the debug lines, the debug UI, the application layer, the whole
+software-renderer call — ported unchanged. And the two builds agree *exactly* on gameplay (`2/12
+orbs, 25 objects, 380 triangles, 889 debug lines`) while **91.9% of pixels differ**, max channel
+delta 128. The structural surface survived eleven lessons; the semantics did not. Module 6 changed
+what "lit" means, not what "draw this" means.
+
+Two traps in the porting script itself, both about measuring:
+
+- It first counted changed lines by comparing the two files **position by position**, so a single
+  inserted line scored every line after it as changed — 1,107 of 1,196 for a file whose real delta
+  is nineteen. Align with `difflib` before you count.
+- Folding two fields into a brace **re-indents** the comment block between them, and counting that
+  as change credits the API drift with twenty lines of your own tidying. Report the
+  whitespace-insensitive diff as the headline and the raw one beside it.

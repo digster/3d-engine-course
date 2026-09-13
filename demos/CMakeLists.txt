@@ -107,3 +107,24 @@ add_executable(ecs_swarm ecs_swarm/main.cpp)
 target_link_libraries(ecs_swarm PRIVATE engine::engine)
 engine_set_warnings(ecs_swarm)
 engine_use_assets(ecs_swarm)
+
+# ---- collector: Lesson 5.12's checkpoint game -----------------------------
+#
+# The first program in this repository written to be a GAME rather than a
+# demonstration, and therefore the first real test of the boundary Lesson 5.1
+# drew. Every other demo was written by the person who had just built the
+# subsystem it shows off; this one was written against the published headers and
+# kept a list of everything it could not find.
+#
+# `engine::engine` directly and NOT `demo_common`, for the reason hello_cube and
+# ecs_swarm give: a program that reaches for the shared demo scene is not proving
+# anything about the public API. Every mesh in it is generated, every component
+# but six is the engine's, and it includes nothing else.
+#
+# No `engine_use_shaders`: it renders on the CPU. That is itself one of the
+# lesson's findings — the ECS produces components, the GPU renderer consumes
+# `gpu_draw_item`, and there is no public path between them (§8).
+add_executable(collector collector/main.cpp)
+target_link_libraries(collector PRIVATE engine::engine)
+engine_set_warnings(collector)
+engine_use_assets(collector)

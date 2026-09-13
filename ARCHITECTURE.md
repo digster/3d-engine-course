@@ -862,7 +862,12 @@ chore. What follows is on disk.
 ├── engine/                 # THE LIBRARY                                        [5.1]
 │   ├── CMakeLists.txt      # produces engine::engine (STATIC)
 │   ├── include/engine/     # ---- THE PUBLIC API. 78 headers. Nothing else. ----
-│   │   ├── engine.hpp      # the umbrella: shipped, documented, used by nothing we ship
+│   │   ├── engine.hpp      # the umbrella. UNTIL 5.12 it listed 40 of the 55 headers
+│   │   │                   #   it could have — missing the whole ECS, the asset
+│   │   │                   #   store, handles, the logger and the action map —
+│   │   │                   #   because NOTHING IN THE TREE INCLUDES IT, so it was
+│   │   │                   #   never compiled and nothing could fail. Now complete,
+│   │   │                   #   and CHECKED at configure time by engine/CMakeLists.txt   [5.12]
 │   │   ├── asset/          # NAMES, ROOTS AND LIFETIMES                       [5.5]
 │   │   │   ├── search_path.hpp # ordered roots; the ONLY caller of
 │   │   │   │                   #   SDL_GetBasePath() in the engine
@@ -907,6 +912,12 @@ chore. What follows is on disk.
 │   │       │                     #   because soft_renderer AND debug_draw need it
 │   │       ├── scene.hpp         # trs_order, model_matrix, scene_object —
 │   │       │                     #   the type BOTH renderers consume
+│   │       ├── renderable.hpp    # the COMPONENT half of scene_object, and
+│   │       │                     #   collect_renderables(). Keeps scene.hpp's
+│   │       │                     #   5.1 promise that "Module 5's ECS replaces the
+│   │       │                     #   struct with components". In gfx/ and not ecs/
+│   │       │                     #   because the arrow points at the more general;
+│   │       │                     #   FORWARD-DECLARES ecs::registry               [5.12]
 │   │       ├── soft_renderer.hpp # the CPU pipeline: raster_triangle,
 │   │       │                     #   projection_scratch, camera_view,
 │   │       │                     #   render_options, collect_stats,
@@ -1038,6 +1049,12 @@ chore. What follows is on disk.
 │   │   │                   #   and write_reference_shot() — the characterization test
 │   │   ├── pong.hpp        # the Module 1 game, finally in a directory for games
 │   │   └── pong.cpp
+│   ├── collector/          # THE CHECKPOINT GAME — the only program here whose
+│   │   └── main.cpp        #   requirements were not chosen to flatter the engine.
+│   │                       #   Links engine::engine and NOT demo_common. Its
+│   │                       #   --shot runs 240 deterministic steps and prints four
+│   │                       #   numbers, which makes it a characterization test for
+│   │                       #   the ECS, the hierarchy and the pools               [5.12]
 │   ├── sandbox/main.cpp    # Lessons 2.1–4.9 on [Tab] and four flags. 5,625 lines.
 │   │                       #   Uses engine::platform; keeps its own main() ON PURPOSE
 │   ├── pong/main.cpp       # Lesson 1.8's game, on engine::app. 87 code lines,
@@ -1131,7 +1148,9 @@ The surface is chosen in `app_config`, before anything exists, because by then i
 `<SDL3/SDL_main.h>`, which emits a *non-inline* `SDL_main()` plus the platform entry point. So:
 one translation unit per program, and that file must not define `main()`. It is why the entry
 point cannot live in `libengine.a` — an entry point is not a library's to own — and why it is the
-one public header deliberately absent from `engine.hpp`.
+one public header deliberately absent from `engine.hpp`. Lesson 5.12's umbrella lint has it as its
+single hard-coded exception, and `verify_512` §F asserts its **absence** — because a completeness
+check with no exceptions would have "fixed" the one thing that was right.
 
 ### 2.2c Diagnostics: logging, assertions, errors (Lesson 5.3)
 

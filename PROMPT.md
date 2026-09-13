@@ -2665,3 +2665,17 @@ next
 ```
 
 Produced Lesson 6.18 — Text and 2D Overlay Rendering, which closes Module 6.
+
+---
+
+## 2026-09-13 — `work on the pending module 5 capstone.`
+
+Answered two scoping questions before starting, both with material consequences:
+
+1. **The era gap.** Lesson 5.12 closes Module 5 but was being authored after 6.18, and 6.5 had
+   removed the very fields a Module-5 program would use. Chosen: publish the 5.11-era program,
+   proved by building it in a checkout of `9be6c96`, with the repository's copy ported forward and
+   the delta recorded. (The alternative — write against today's API and note the continuity error —
+   was declined.)
+2. **Scope of the fixes.** Chosen: audit *and* close the gaps the game proves, leaving everything
+   else named, measured and pointed at the module that owns it.

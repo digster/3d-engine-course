@@ -7,9 +7,186 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-09-12 (after Lesson 6.17 — 73 of 107 lessons)
+updated: 2026-09-13 (after Lesson 5.12 — 75 of 107 lessons; Module 5 CLOSED
+         out of order, eleven lessons after 5.11 and one after 6.18)
 
 conventions:
+  era-split: LESSON 5.12 WAS WRITTEN ELEVEN LESSONS LATE, AND THE FIX IS TWO TREES.
+        It closes Module 5 and was authored after 6.18, so CLAUDE.md §8 ("every
+        listing compiles at its point in the course") and the repository state
+        disagreed. Resolution: the lesson was WRITTEN, COMPILED AND RUN in a
+        checkout of 9be6c96 at scratch/era511 (gitignored), and scratch/port_512.py
+        applies the deltas to produce the files that live in the repository.
+        THE DELTA IS THE MEASUREMENT: 26 real source lines out of 1,485, all of
+        them in TWO named places — 6.2's intensity -> irradiance, and 6.5's
+        tint + specular -> material. Everything structural (ECS, hierarchy,
+        camera, action map, asset store, debug lines, debug UI, app layer, the
+        whole software renderer call) ported UNCHANGED.
+        THE TWO BUILDS AGREE EXACTLY ON GAMEPLAY and not at all on pixels:
+        `2/12 orbs, 25 objects, 380 triangles, 889 debug lines` identical;
+        91.9% OF PIXELS DIFFER, max channel delta 128. That split is the whole
+        story of a public API — the structural surface survived, the SEMANTICS
+        (6.1's linear/sRGB, 6.2's units, 6.5's material) did not. Module 6 changed
+        what "lit" MEANS, not what "draw this" means.
+        THE PAGE'S LISTINGS ARE PINNED TO THE ERA COPIES (scratch/l512_*), not to
+        repository paths. Reading them live would publish Module 6 spellings
+        inside a Module 5 lesson — README §15's Cause A, arriving by a route that
+        pinning-at-the-next-lesson cannot catch because the drift is already
+        there on day one.
+        verify_512.cpp IS DELIBERATELY ERA-NEUTRAL: it names no field Module 6
+        moves, so ONE TEXT compiles and passes 27/27 against both engines. That
+        is not tidiness — it is what lets its claims be checked against both.
+  umbrella-lint: A HEADER NOBODY COMPILES CANNOT BE KEPT CORRECT BY BEING USED.
+        5.12, engine/engine.hpp + engine/CMakeLists.txt. The file calls itself
+        "the whole public API, in one include" and "the fastest way to see whether
+        something is public". IT LISTED 40 OF THE 55 HEADERS IT COULD HAVE —
+        missing the ENTIRE ECS, the asset store, handles, pools, the logger, the
+        assertions and the action map, i.e. very nearly everything Module 5 built.
+        THE MECHANISM, WHICH MATTERS MORE THAN THE BUG: `grep -rl engine/engine.hpp`
+        over demos/ and engine/ returns the file ITSELF and nothing else. It had
+        ZERO consumers, so it was never compiled, so nothing could ever fail.
+        Its history is three commits — 5.1 created it, 5.2 remembered platform/,
+        5.11 remembered debug_lines — and seven lessons in between did not. That
+        is a rule kept by MEMORY inside the repository whose 5.1 insisted the
+        boundary be "enforced by the include path, not the style guide".
+        NOW CHECKED AT CONFIGURE TIME: file(GLOB_RECURSE) + file(STRINGS) +
+        FATAL_ERROR, with platform/main.hpp as the ONE documented exception (an
+        umbrella must not be a way to acquire a main()). A GLOB USED AS A LINT IS
+        NOT THE ANTI-PATTERN — the usual objection is about globbing SOURCES,
+        where a stale glob drops a translation unit; a stale lint can only fail to
+        notice a header added since the last configure. PROVEN TO FAIL: deleting
+        one #include makes the configure abort naming it.
+        THE MATCH IS ANCHORED TO A WHOLE #include LINE, and the first draft was
+        not — an unanchored grep passed on headers only MENTIONED IN A COMMENT,
+        including platform/main.hpp, which the file names in prose precisely to
+        say it is absent. A check that reads its own excuse as compliance is
+        worse than no check.
+        AND THE COST MEASUREMENT CAME OUT BACKWARDS. One TU, best of five:
+          nothing                     0.01 s
+          umbrella as shipped (40)    0.28 s   <- CHEAPER than explicit
+          the game's own 23 includes  0.37 s
+          umbrella completed (55)     0.39 s
+        The broken umbrella was cheap BECAUSE it was incomplete: the fourteen it
+        omitted are the templated ones (registry, view, pool, asset_store,
+        actions). Completing it costs +39% against the broken version and +5.4%
+        against including what you use, so THE SINGLE-FILE NUMBER IS NOT THE
+        REASON TO AVOID AN UMBRELLA. The reason is 5.1's incremental rebuild,
+        which no single-file benchmark can see. Both numbers are in the header,
+        because a reader who finds only one draws the wrong conclusion either way.
+  renderable: THE ENGINE DEFINES A COMPONENT WHEN, AND ONLY WHEN, AN ENGINE
+        SYSTEM READS IT. 5.12, engine/gfx/renderable.{hpp,cpp}. Keeps the promise
+        gfx/scene.hpp has carried since 5.1 — "Module 5's ECS replaces the struct
+        with components" — which Module 5 had not kept and 5.12 is its last chance
+        to. The rule is not a preference: ecs/hierarchy.hpp already defines
+        `parent` and `world_transform` because hierarchy::resolve CANNOT BE
+        COMPILED against "whatever you happen to call parent". So `renderable` is
+        the engine's; `rover`, `collectible`, `spinner`, `bobber`, `carousel` and
+        `pillar` are the game's and nothing under engine/ will ever look at them.
+        HOISTED AT TWO CALLERS, AGAINST OUR OWN THREE-CALLER RULE, and the reason
+        is narrow: what is duplicated is not an IDIOM, it is a known-broken
+        CONVERSION. ecs_swarm's four lines put a mat4's whole linear part into a
+        field named `rotation`, and its own comment predicted "Module 6 gives the
+        renderer a matrix directly and this function loses its last four lines".
+        MODULE 6 HAS BEEN WRITTEN AND scene_object STILL HOLDS A transform
+        (scene.hpp:104), so the prediction did not come true and the trick is
+        still load-bearing. A stable idiom twice is a coincidence; a workaround
+        twice is two places to fix, one of them inside a demo nobody greps.
+        IN gfx/ AND NOT ecs/, because the arrow points at the more general: a
+        registry has no opinion about meshes, and physics, serialization and a
+        future editor all want entities and will never want a mesh_handle.
+        THE REGISTRY IS FORWARD-DECLARED, not included — `namespace engine::ecs
+        { class registry; }` — so a TU that merely STORES a renderable compiles
+        none of the ECS. Same trick gpu_scene.hpp uses for instance_batch.
+        NO `visible` FLAG, DELIBERATELY: 5.8 spent a demo arguing that an entity
+        is invisible because it LACKS a component. remove<renderable>(e) costs
+        one structural change (~4 ns, 5.7) and makes the entity genuinely cheaper
+        rather than merely skipped. NO `name` either — one caller has asked.
+        THE CONVERSION IS EXACT AND IT IS CHECKED. Setting scale to 1 and letting
+        `rotation` absorb the whole linear part performs NO ARITHMETIC: nine
+        numbers copied, three copied, and parent_from_local's multiply is by I.
+        verify_512 §B: max element difference EXACTLY 0, with a control that
+        reports 1.0 on a 1.0 nudge.
+        THE SIGNATURE TAKES A MUTABLE registry AND READS NOTHING, on purpose.
+        registry::view() has no const overload and ecs::view hands out Ts&, so
+        there is no way to spell "I will walk this and change nothing". Reported,
+        not fixed (it changes two published headers); Exercise 4. A comment nobody
+        reads is a worse bug report than a parameter everybody trips over.
+  checkpoint-findings: SEVEN, FROM ONE GAME, AT HOUR 62 INSTEAD OF HOUR 434.
+        5.12. FIXED: the umbrella (above) and the ECS->renderer bridge (above) —
+        and BOTH were promises already on record, which is the pattern worth
+        remembering: the cheapest findings are the ones the codebase already
+        told you about in a comment nobody re-read.
+        REPORTED AND LEFT: (a) view() has no const overload; (b) NO PUBLIC PATH
+        FROM AN ENTITY TO THE GPU RENDERER — gpu_scene_renderer consumes
+        gpu_draw_item, the ECS produces components, and sandbox bridges it in
+        ~700 lines PRIVATELY inside its own main.cpp, which is exactly why nobody
+        noticed: the one program that ever crossed it predates the boundary.
+        So every demo written from OUTSIDE since 5.1 renders on the CPU, and
+        three lessons after moving to the GPU the real renderer is the one a game
+        cannot reach (Module 9's facade); (c) no collision — the arena wall is a
+        six-line position CLAMP and the eight pillars are scenery you drive
+        through, with their OBBs drawn from the world matrix a solver would use,
+        so THE DATA IS PRESENT AND THE SOLVER IS NOT (Module 8); (d) no text —
+        the HUD is SDL_RenderDebugTextFormat, which exists only on
+        surface::renderer, so `--shot` produces a picture of the game with NO
+        SCORE ON IT and the GPU path cannot show a number either (Module 6);
+        (e) no audio, so the only rewarding act in the game is silent (7.8);
+        (f) a program cannot NAME its own log category — log_category_count is
+        the extension point and works, but name_of() returns "?" so --log cannot
+        address it; which is why the --shot summary is a printf and not a log.
+        A log is a DIAGNOSTIC; a tool's result is OUTPUT, and a tool whose result
+        only appears with the right --log spec is a tool with a trapdoor.
+  unit-cube-trap: "SCALE" MEANS TWO DIFFERENT THINGS IN ONE HEADER, AND IT BIT
+        THREE TIMES IN ONE FILE. 5.12. cube_mesh() and quad_mesh() span +/-0.5,
+        so `scale` is the FULL SIZE; icosahedron_mesh()'s vertices are at
+        distance 1.0, so `scale` is a RADIUS. At scale 1 the ball is 2x the
+        diameter of the cube (verify_512 §D pins all three as facts).
+        THE TRAP IS NOT THE ASYMMETRY. It is that a HALF-EXTENT is what the rest
+        of the program has in its hand — a collision test wants one,
+        debug_lines::box takes one — so the value you reach for is wrong by two
+        at exactly the moment you reach for it. The three: the floor came out a
+        QUARTER of its area with the pillars floating beside it (which reads as a
+        camera bug for ten minutes); boxes were half-buried because `half.y` is
+        the centre height and the scale is twice that; and the debug OBBs were
+        EXACTLY 2x too big because box(world_from_local, half) takes the extent in
+        the MATRIX'S OWN SPACE and the matrix already carries the scale — which
+        looks like a deliberate collision margin. A plausible margin that is
+        exactly a factor of two is never a margin.
+        ANSWERED WITH ONE FUNCTION, box_at(centre, half, rotation=I), whose
+        entire content is the doubling.
+  boom: A PARENTED CAMERA IS NOT A FOLLOW CAMERA, AND THE ALGEBRA HAS ONE TRAP.
+        5.12. 5.9 made the camera an entity, so parenting it to the player gives a
+        rigid follow for free — and it inherits the WHOLE basis, including 22
+        degrees of cosmetic roll (read as the WORLD tilting, because the camera is
+        the viewer's inner ear) and the rover's NON-UNIFORM SCALE.
+        The fix is one more link, a boom, and:
+          L = (H * Rz(bank) * S)^-1 * H = S^-1 * Rz(-bank)
+        THE INVERSE OF A PRODUCT REVERSES ITS FACTORS, so the unscale comes
+        FIRST. Writing it the way the English reads — "undo the roll, then undo
+        the scale" — gives Rz(-bank) * S^-1, a different matrix because a rotation
+        and a non-uniform scale do not commute. On the x axis the two agree to
+        FOUR DECIMAL PLACES and on y they differ by 36%, which is what makes it
+        expensive: close enough to look like a tuning problem.
+        AND THE SYMPTOM WAS NOT A TILTED HORIZON. view_from_camera asserts
+        is_rigid (5.9), the assertion fired correctly on frame 1, and the HEADLESS
+        --shot RUN HUNG FOR EVER WITH NO OUTPUT. SDL_assert expands to a `while`
+        loop so RETRY re-tests (5.3 made a point of this); with no display for a
+        dialog and no terminal to prompt at, the default answer keeps arriving and
+        the condition cannot change. AN ASSERTION IS DEVELOPER-FACING CONTROL
+        FLOW, and `--shot` is the one configuration with no developer in front of
+        it. Diagnosed with `sample <pid>`: the assert's own function at the top of
+        1,538 samples. Not changed here; Exercise 5 installs a handler that
+        aborts when SDL_WasInit(SDL_INIT_VIDEO) is false.
+        verify_512 §E builds all three chains — right, swapped, and no boom —
+        and the third is the CONTROL: without it, "the swapped one is not rigid"
+        would be equally consistent with the boom doing nothing at all.
+  golden-ordinal: 5.12 DECLINES TO NUMBER ITS BYTE-IDENTICAL GOLDEN, and this is
+        deliberate. Every lesson since 5.1 numbers the run ("the eleventh", "the
+        twelfth"), and 6.1 — ALREADY PUBLISHED — claims the twelfth. Inserting
+        5.12 before it would either collide or force an off-by-one correction
+        through EIGHTEEN published pages, for a count no reader can check. So the
+        page and golden_512.cpp say "byte-identical, as it has been since 5.1"
+        and claim no position. DO NOT "FIX" THIS LATER.
   frame-graph: THE FRAME IS DECLARED, NOT ASSEMBLED. Built in 6.17,
         engine/include/engine/gfx/frame_graph.{hpp,cpp}.
         THE WHOLE THING RESTS ON ONE MOVE: a resource is NOT a texture, it is a
@@ -4121,7 +4298,13 @@ completed:
          §3.8 forbids truncating. ImGui + debug draw became 5.11. Module 5 is now
          11 lessons, inside its stated 9-11, and the course total is 95.)
   - 5.11 Dear ImGui and the Debug Draw System
-  ===> MODULE 5 COMPLETE <===
+  - 5.12 Checkpoint: A Small 3D Game on the Public API
+        (WRITTEN OUT OF ORDER — authored after 6.18, published between 5.11 and
+         6.1. Added to the curriculum in the 2026-09-08 reshape and left unwritten
+         while Module 6 ran. Everything it publishes had to compile against the
+         5.11 engine, so it was written and run in a checkout of 9be6c96
+         (scratch/era511) and ported forward; see conventions:era-split.)
+  ===> MODULE 5 COMPLETE — 12 lessons, ~62 h <===
   - 6.1  Linear and sRGB: The Gamma Lesson
   - 6.2  Radiometry-Lite: What a BRDF Is
   - 6.3  Microfacet Theory
@@ -5067,6 +5250,21 @@ capabilities:
                           are two places that must agree; add the CSS first.
     MEASURED ON THIS MACHINE: the swapchain was B8G8R8A8_UNORM and is now
     B8G8R8A8_UNORM_SRGB. Linear 0.5 was stored as 128 where 188 was meant.
+  - 5.12 THE ENGINE HAS A GAME BUILT ON IT, BY SOMEBODY STANDING OUTSIDE.
+    56 -> 57 public headers (57th is gfx/renderable.hpp), 32 -> 33 engine sources,
+    and a sixth demo. NOT A RENDERING CHANGE: the golden is byte-identical and
+    the lesson says so structurally rather than hopefully.
+    engine/gfx/renderable.{hpp,cpp}   the COMPONENT the engine's renderer reads,
+                                      and collect_renderables().
+    engine/engine.hpp                 40 -> 55 listed headers. FIRST CHANGE SINCE
+                                      5.11, and the first time anything compiled it.
+    engine/CMakeLists.txt             the umbrella LINT, at configure time.
+    demos/collector/main.cpp          the game. 1,205 lines, 23 engine includes,
+                                      30 entities, 6 game components, 5 systems.
+    API: renderable{mesh, tint, surface, closed} (6.5 folds the middle two into
+    `material mat`), renderable_report{drawn, unresolved, missing_mesh},
+    collect_renderables(registry&, const mesh_pool&, vector<scene_object>&).
+    SEVEN FINDINGS, TWO FIXED — see conventions:checkpoint-findings.
   - 5.11 THE ENGINE CAN DRAW WHAT IT IS THINKING, AND BE ASKED QUESTIONS.
     TWO SUBSYSTEMS, 54 -> 56 public headers, 30 -> 32 engine sources, and the first
     third-party library in the PUBLIC link line.
@@ -7118,6 +7316,7 @@ files:
             frustum.hpp, instancing.hpp                                     [6.16]
             frame_graph.hpp                                                 [6.17]
             font.hpp, overlay.hpp, gpu_overlay.hpp                          [6.18]
+            renderable.hpp                                                  [5.12]
             debug_lines.hpp                                                 [5.11]
             depth_buffer.hpp, framebuffer.hpp, gpu_buffer.hpp, gpu_debug.hpp,
             gpu_device.hpp, gpu_mesh.hpp, gpu_pipeline.hpp, gpu_present.hpp,
@@ -7151,6 +7350,7 @@ files:
             cubemap.cpp [6.15],
             frustum.cpp, instancing.cpp [6.16],
             frame_graph.cpp [6.17],
+            renderable.cpp [5.12],
             clip.cpp, colour.cpp,
             debug_draw.cpp,
             debug_lines.cpp [5.11],
@@ -7174,6 +7374,10 @@ files:
   demos/pong/: main.cpp
   demos/ecs_swarm/: main.cpp                                              [5.8]
   demos/gltf_view/: main.cpp                                              [6.6]
+  demos/collector/: main.cpp                                             [5.12]
+           (THE GAME. Links engine::engine directly and not demo_common, for the
+            reason hello_cube and ecs_swarm give. No engine_use_shaders: it renders
+            on the CPU, which is finding (b) in conventions:checkpoint-findings.)
   assets/: cube.obj, twisted.obj, quirks.obj, torus.obj, uv_grid.png,
            cube.gltf, cube.bin, shapes.glb                              [6.6]
   assets/fonts/: Karla-Regular.ttf, OFL.txt                             [6.18]
@@ -7658,6 +7862,35 @@ files:
             a material from a file needs a name, a cache and an identity that
             survives a reload. Pin before writing a line of 6.6, and take
             verify_65.cpp's copy EARLY since it is gitignored.)
+  scratch/ (5.12, not shipped with the engine): verify_512.cpp,
+           build_verify_512.sh, golden_512.cpp, figs_512.py, build_512.py,
+           l512_body_{a,b,c,d}.html, l512_fig{1..8}.svg,
+           l512_shot.ppm and l512_shot_giz.ppm (THE ERA RENDERS figs_512.py
+           run-length encodes for figure 8 — taken from the era511 build, NOT
+           the live one, because the two differ on 91.9% of pixels),
+           port_512.py (THE ERA->LIVE PORT, and the record of what eleven
+           lessons of drift cost: 26 real lines of 1,485. Its line-counting was
+           WRONG the first time — it compared the files position by position, so
+           an inserted line scored every line after it as changed and it reported
+           1,107 of 1,196 for a file whose real delta is nineteen. difflib
+           aligns first; and a second pass separates a genuine change from a
+           RE-INDENT, because folding two fields into a brace moves a twenty-line
+           comment sideways and crediting Module 6 with that would be dishonest),
+           era511/ (A FULL 9be6c96 CHECKOUT, configured against the main tree's
+           fetched SDL3/stb/imgui via FETCHCONTENT_SOURCE_DIR_*. This is where
+           the lesson was written, compiled and run; see conventions:era-split.
+           Rebuild with:
+             mkdir -p scratch/era511 && git archive 9be6c96 | tar -x -C scratch/era511
+             cmake -S scratch/era511 -B scratch/era511/build \
+               -DFETCHCONTENT_SOURCE_DIR_SDL3=$PWD/build/_deps/sdl3-src \
+               -DFETCHCONTENT_SOURCE_DIR_STB=$PWD/build/_deps/stb-src \
+               -DFETCHCONTENT_SOURCE_DIR_IMGUI=$PWD/build/_deps/imgui-src
+           then re-apply 5.12's six files from the scratch/l512_* pins.)
+           PINNED BY 5.12 ITSELF, before the page was first built, which is
+           earlier than the usual discipline and necessary here: the pins are
+           ERA COPIES, so reading the repository paths live would have published
+           Module 6 spellings on day one. Nine pins, six from era511 and three
+           (the harness) from the working tree, since scratch/ is gitignored.
   scratch/ (5.11, not shipped with the engine): verify_511.cpp,
            build_verify_511.sh, figs_511.py, build_511.py,
            l511_body_{a,b,c}.html, l511_fig{1..7}.svg
@@ -7777,6 +8010,10 @@ roadmap: RESHAPED 2026-09-08, AFTER TWO EXTERNAL REVIEWS OF THE PUBLISHED OUTLIN
 
 
 next: 7.1 — Euler Angles and Their Pathologies
+      (MODULE 5 IS NOW CLOSED TOO — 5.12 landed 2026-09-13, out of order, and
+      the index badge says complete. 75 of 107 published. Nothing below changed
+      because of it except the pin note, which is now discharged.)
+
       (planned filename: docs/lessons/07-01-euler-angles.html — 6.18's TWO next
       links point at the index and BOTH need repointing; scratch/l618_body_a.html
       holds the top one and build_618.py's TAIL the bottom. Module 7's own
@@ -7786,18 +8023,12 @@ next: 7.1 — Euler Angles and Their Pathologies
       MODULE 6 IS COMPLETE — 18 lessons, ~93 h — and its badge in the index now
       says so.)
 
-      PIN FIRST. build_618.py's LISTING_SOURCE is EMPTY and it lists FOURTEEN
-      files whole, thirteen of which are in the repository (verify_618.cpp is
-      gitignored and can only be pinned from the working tree). One command:
-
-        python3 scratch/pin_listings.py 618 --out scratch/_dict618.txt
-
-      It writes every pin from the commit that shipped the page, takes the
-      gitignored one from the working tree and says so, and VERIFIES each by
-      substring against the shipped HTML. Paste the dict into build_618.py's
-      LISTING_SOURCE, re-run it, and `git diff` the page: EIGHTEEN lessons
-      running, the diff has been exactly the nav lines meant to move. It was
-      exactly two lines on 6.17 this session.
+      PINNING IS DONE — 5.12's session did it first, before writing a line,
+      and it was needed: 5.12 edits demos/CMakeLists.txt and both CMakeLists.txt,
+      all of which 6.18 lists whole. `pin_listings.py 618` wrote all fourteen
+      from 725e62a, verified each by substring against the shipped page, and the
+      rebuild diff was ZERO bytes. build_618.py's LISTING_SOURCE is populated.
+      check-builders.py is 43/43.
 
       WHY IT MATTERS MORE THAN USUAL THIS TIME. Rotations look maximally distant
       from a glyph atlas, so the temptation to skip is real. But TWO of the
