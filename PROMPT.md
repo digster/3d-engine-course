@@ -2655,3 +2655,13 @@ next
 
 Produced Lesson 6.17 — A Lightweight Frame Graph. `STATE.md`'s `next:` advances to
 6.18 — Text and 2D Overlay Rendering.
+
+---
+
+## Session — 2026-09-12 (fourth session)
+
+```
+next
+```
+
+Produced Lesson 6.18 — Text and 2D Overlay Rendering, which closes Module 6.

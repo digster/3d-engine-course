@@ -82,6 +82,22 @@ add_library(engine STATIC
     # a span, and the extraction has six sign conventions in it that must have
     # exactly one home.
     src/gfx/frustum.cpp
+    # Lesson 6.18. The three halves of text, kept apart on purpose.
+    #
+    # `font.cpp` is the ONE translation unit that contains stb_truetype — the
+    # same isolation image.cpp and gltf.cpp get, and for the same reason: a
+    # third-party library reaches exactly as far as its types appear in headers,
+    # and this keeps that reach at one .cpp.
+    #
+    # `overlay.cpp` knows nothing about either renderer. It builds quads and it
+    # composites them onto a framebuffer, so the software path and the GPU path
+    # consume the SAME batch — which is what makes Lesson 6.18 §9 able to render
+    # one frame two ways and compare every channel.
+    #
+    # `gpu_overlay.cpp` is the only one of the three that mentions SDL_GPU.
+    src/gfx/font.cpp
+    src/gfx/overlay.cpp
+    src/gfx/gpu_overlay.cpp
     src/gfx/gpu_buffer.cpp
     src/gfx/gpu_debug.cpp
     src/gfx/gpu_device.cpp

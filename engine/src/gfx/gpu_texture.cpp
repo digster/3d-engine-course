@@ -233,6 +233,122 @@ bool gpu_texture::create_sampled(const gpu_device& dev, SDL_GPUCommandBuffer* cb
     return true;
 }
 
+bool gpu_texture::create_coverage(const gpu_device& dev, SDL_GPUCommandBuffer* cb,
+                                  const std::uint8_t* texels, int width, int height,
+                                  const char* name, bool mips)
+{
+    destroy();
+
+    if (!dev.valid() || cb == nullptr || texels == nullptr || width <= 0 || height <= 0)
+    {
+        return false;
+    }
+
+    device_ = dev.handle();
+    width_ = static_cast<Uint32>(width);
+    height_ = static_cast<Uint32>(height);
+
+    // ONE CHANNEL, AND NEVER `_SRGB`. There is no `R8_UNORM_SRGB` in SDL_GPU to
+    // choose by mistake, which is a small mercy — but the reason matters more
+    // than the availability: coverage is an area fraction and a transfer
+    // function encodes a light intensity. Putting one through the other is a
+    // category error whose symptom is text of the wrong weight, not text that
+    // looks broken.
+    format_ = SDL_GPU_TEXTUREFORMAT_R8_UNORM;
+
+    SDL_GPUTextureCreateInfo ti{};
+    ti.type = SDL_GPU_TEXTURETYPE_2D;
+    ti.format = format_;
+    ti.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER
+             | (mips ? SDL_GPU_TEXTUREUSAGE_COLOR_TARGET : 0u);
+    ti.width = width_;
+    ti.height = height_;
+    ti.layer_count_or_depth = 1;
+    levels_ = 1;
+    if (mips)
+    {
+        Uint32 side = (width_ > height_) ? width_ : height_;
+        while (side > 1u) { side >>= 1; ++levels_; }
+    }
+    ti.num_levels = static_cast<Uint32>(levels_);
+    ti.sample_count = SDL_GPU_SAMPLECOUNT_1;
+
+    texture_ = create_named_texture(device_, ti, name);
+    if (texture_ == nullptr)
+    {
+        ENGINE_LOG_ERROR(engine::log_gpu, "SDL_CreateGPUTexture(%ux%u %s) failed: %s",
+                width_, height_, name_of(format_), SDL_GetError());
+        destroy();
+        return false;
+    }
+
+    // ONE BYTE PER TEXEL, so the whole upload is width*height bytes. Compare the
+    // `* 4u` two functions up: that factor is the entire memory argument, and on
+    // a 256x256 atlas it is 65,536 bytes against 262,144.
+    const Uint32 bytes = width_ * height_;
+
+    SDL_GPUTransferBufferCreateInfo tb{};
+    tb.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+    tb.size = bytes;
+
+    SDL_GPUTransferBuffer* staging =
+        create_named_transfer_buffer(device_, tb, "staging (coverage upload)");
+    if (staging == nullptr)
+    {
+        ENGINE_LOG_ERROR(engine::log_gpu, "SDL_CreateGPUTransferBuffer(%u) failed: %s",
+                         bytes, SDL_GetError());
+        destroy();
+        return false;
+    }
+
+    void* mapped = SDL_MapGPUTransferBuffer(device_, staging, false);
+    if (mapped == nullptr)
+    {
+        ENGINE_LOG_ERROR(engine::log_gpu, "SDL_MapGPUTransferBuffer failed: %s", SDL_GetError());
+        SDL_ReleaseGPUTransferBuffer(device_, staging);
+        destroy();
+        return false;
+    }
+    std::memcpy(mapped, texels, bytes);
+    SDL_UnmapGPUTransferBuffer(device_, staging);
+
+    SDL_GPUCopyPass* copy = SDL_BeginGPUCopyPass(cb);
+
+    SDL_GPUTextureTransferInfo source{};
+    source.transfer_buffer = staging;
+    source.offset = 0;
+    // PIXELS per row, not bytes — and for this format they happen to be the same
+    // number, which is exactly why the field is worth re-reading here. Anybody
+    // who learned the `* 4` from `create_sampled` and carried it over shears the
+    // atlas by a factor of four.
+    source.pixels_per_row = width_;
+    source.rows_per_layer = height_;
+
+    SDL_GPUTextureRegion dest{};
+    dest.texture = texture_;
+    dest.w = width_;
+    dest.h = height_;
+    dest.d = 1;
+
+    SDL_UploadToGPUTexture(copy, &source, &dest, false);
+
+    SDL_EndGPUCopyPass(copy);
+    SDL_ReleaseGPUTransferBuffer(device_, staging);
+
+    // The chain, if asked for — and unlike `create_sampled`'s, this one averages
+    // RAW BYTES, because there is no transfer function on an R8_UNORM texture to
+    // decode. That is the correct arithmetic for coverage and it is the same
+    // choice `mipmap.hpp` (6.10) makes for an alpha channel: colour is averaged
+    // through the curve, coverage is averaged directly.
+    if (mips && levels_ > 1)
+    {
+        SDL_GenerateMipmapsForGPUTexture(cb, texture_);
+    }
+
+    uploaded_bytes_ = bytes;
+    return true;
+}
+
 bool gpu_texture::create_colour_target(const gpu_device& dev, SDL_GPUTextureFormat format,
                                        Uint32 width, Uint32 height, const char* name,
                                        bool sampled, SDL_GPUSampleCount samples)

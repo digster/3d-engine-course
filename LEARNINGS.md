@@ -7417,3 +7417,104 @@ This is now the fifth member of a family: check a measurement **can** produce a 
 (6.14), check a non-null result has **converged** (6.15), check the swept axis **can show** the
 effect (6.16), check a comparison **can report a difference** (6.17 §I) — and check that the
 **reason you are building this is true here**.
+
+## Does the denominator move when the code does?
+
+The obvious way to judge the glyph packer was "what fraction of the atlas is glyphs": 7,145 texels
+over 128 × 128 = **43.6%**. That number is not about the packer. The denominator is a power of two
+decided *before* the packer runs, by the observation that 7,145 will not fit in 64 × 64; the
+numerator is the total area of the glyphs plus their padding, a property of the font at that size.
+A perfect packer and a hopeless one both score 43.6%.
+
+The honest quantity is glyph area over the rows the packer **actually touched** — 7,145 over
+128 × 67 = **83.3%** — and now both halves move when the algorithm does. Put every glyph on its own
+shelf and the denominator explodes.
+
+Sixth member of the instrument family: can this measurement produce a non-null result (6.14); has a
+non-null result converged (6.15); can the swept axis show the effect (6.16); can this comparison
+report a difference (6.17 §I); is the reason I am building this true here (6.17 §G) — and now,
+**does my denominator move when the code does?**
+
+## A check whose degenerate case is a pass is not a check
+
+`check(efficiency > 80.0, ...)` shipped in a first draft against a stale library where the packer's
+`used_height` was still zero. The division produced `inf`, and `inf > 80.0` is **true**. The harness
+printed `shelf efficiency = inf%` and reported a PASS.
+
+This is the second time in three lessons. Lesson 6.16 found `golden_615.cpp` printing
+`identical=YES` when **both** of its file reads failed, because two empty strings compare equal.
+Both times the only tell was an implausible printed **number**, not the verdict.
+
+Two habits follow. Assert the *inputs* are plausible before deriving anything from them —
+`used_height > 0 && used_height <= height` costs one line and cannot pass on a degenerate state.
+And print the inputs beside the verdict, always: a harness that prints only PASS/FAIL has thrown
+away the only evidence that would have caught either of these.
+
+## Two bugs in two files can be the same function
+
+Compositing a glyph by lerping sRGB codes gives 62.2% of the correct ink on a dark background.
+Uploading the coverage atlas as an `_SRGB` texture — a *texture format* mistake, in a different
+file, made by different code on a different day — gives **62.1%**. They agree to four significant
+figures, and it is not a coincidence:
+
+    lerping codes:   code = 255a, so light = srgb_to_linear(a)
+    _SRGB atlas:     a' = srgb_to_linear(a), and the linear blend emits a'
+
+The same function, applied at two points in the pipeline. So the obvious measurement cannot tell
+them apart, and "I checked the blend space and it was fine" is not evidence that the atlas is.
+
+When two independent explanations predict the same measurement, do not pick one — **find the
+measurement that separates them**. Here it took one line: render the text black-on-white as well.
+A blend-space bug is directional and *fattens* dark-on-light (137.8%); a coverage bug corrupts the
+input to the lerp and thins it either way (62.1%).
+
+## Make a bug impossible rather than catchable
+
+Lesson 6.15 shipped an ARGB/RGBA byte-order bug in a BRDF lookup table, which survived review
+because green occupies bits 8–15 in both layouts, so half the data read correctly and the result
+was merely *dim*. Lesson 6.18 had the identical hazard: `SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4_NORM`
+hands the shader four bytes in **memory order**, so a packed ARGB `Uint32` arrives as (B, G, R, A)
+on a little-endian machine.
+
+The fix was not a test. `overlay_vertex` names its four colour bytes `r, g, b, a`, and
+`set_colour(Uint32 argb)` is the single place the packed convention is unpacked. There is nothing
+left to get wrong, so there is nothing to check.
+
+Prefer this whenever the type system can carry it. A test proves the bug is absent today; a type
+proves it is unrepresentable.
+
+## Return the quantity a caller would need to judge you
+
+`shelf_pack` knew exactly how many rows it had used and threw the number away, so the honest
+occupancy figure could not be computed from outside — which is *why* the misleading one got
+written. Four lines of plumbing (`used_height`, out-parameter, field, log line) turned a
+measurement that meant nothing into one that means something.
+
+The general form: if a routine computes a quantity a caller would need in order to judge the
+routine, returning it is not instrumentation, it is part of the interface.
+
+## A tool that relocates a claim has not verified it
+
+The frame graph derives four facts — the order, the load op, the producer's store op, the lifetime
+— from one word per pass. Lesson 6.18 was its first user from outside, and declared the overlay
+`keep`, which is correct: an alpha blend reads its destination.
+
+Declare the same pass `discard_write` instead and the graph compiles it happily, derives
+`DONT_CARE`, and erases the entire frame under the text. The graph cannot know the claim is false.
+
+What it *does* buy is that the claim moved: a load op buried in a struct three files away became a
+sentence about arithmetic at the call site, which a pass author can answer without knowing what a
+render pass is. That is a real improvement and it is a different one from correctness. Say which
+you have; a tool oversold is a tool trusted in the one case it does not cover.
+
+## Figure numbers follow page order, and a moved label lands on the next obstacle
+
+Two authoring lessons from 6.18's diagrams, both caught by `check-page.js` and neither by reading:
+
+- The figures were numbered as they were **written** — the architecture diagram was figure 7 and
+  appeared first — and the `figOrder` check reported all seven. A reader counts figures as they
+  meet them.
+- An annotation moved off a dashed leader landed on the x-axis tick row; moved off that, it landed
+  on the plotted curve. Three placements before it reached empty space. `check-page.js` has a
+  separate check for text-on-text and for text-on-shape, which is the only reason each move was
+  caught rather than one hiding behind the other. Budget for the iterations.

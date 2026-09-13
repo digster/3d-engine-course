@@ -861,7 +861,7 @@ chore. What follows is on disk.
 │   └── Shaders.cmake       # add_hlsl_shader(name stage) -> a GLOBAL PROPERTY   [4.3, reshaped 5.1]
 ├── engine/                 # THE LIBRARY                                        [5.1]
 │   ├── CMakeLists.txt      # produces engine::engine (STATIC)
-│   ├── include/engine/     # ---- THE PUBLIC API. 56 headers. Nothing else. ----
+│   ├── include/engine/     # ---- THE PUBLIC API. 78 headers. Nothing else. ----
 │   │   ├── engine.hpp      # the umbrella: shipped, documented, used by nothing we ship
 │   │   ├── asset/          # NAMES, ROOTS AND LIFETIMES                       [5.5]
 │   │   │   ├── search_path.hpp # ordered roots; the ONLY caller of
@@ -966,6 +966,29 @@ chore. What follows is on disk.
 │   │       │                     #   nothing about a bloom, a shadow or a scene
 │   │       │                     #   reaches this file, which is why culling the
 │   │       │                     #   bloom needs no flag in it
+│   │       ├── font.hpp          # glyph, kern_pair, font_atlas,               [6.18]
+│   │       │                     #   font_bake_options, font_status, bake_font,
+│   │       │                     #   load_font, next_codepoint, glyph_quad,
+│   │       │                     #   text_layout_options, text_metrics,
+│   │       │                     #   layout_text, measure_text. A GLYPH IS A
+│   │       │                     #   COVERAGE MASK, not a picture — one byte per
+│   │       │                     #   texel, never _SRGB, averaged with no
+│   │       │                     #   transfer function. Names NO third-party type
+│   │       ├── overlay.hpp       # overlay_vertex, overlay_batch,              [6.18]
+│   │       │                     #   overlay_blend, composite_overlay,
+│   │       │                     #   apply_stem_darkening. 2D quads in PIXEL
+│   │       │                     #   SPACE (origin top-left, +y down) plus the
+│   │       │                     #   software compositor. MENTIONS NEITHER
+│   │       │                     #   RENDERER, which is what lets hello_cube have
+│   │       │                     #   text with no GPU device and what lets one
+│   │       │                     #   batch be rendered both ways and compared
+│   │       ├── gpu_overlay.hpp   # gpu_overlay + its two uniform blocks.       [6.18]
+│   │       │                     #   THE ONLY ONE OF THE THREE THAT NAMES
+│   │       │                     #   SDL_GPU. Handed a render pass rather than
+│   │       │                     #   beginning one — gpu_post_stack's split, for
+│   │       │                     #   the same reason: the target is the
+│   │       │                     #   swapchain and the swapchain's pass belongs
+│   │       │                     #   to the frame
 │   │       ├── shadow.hpp        # light_camera, fit_directional, shadow_bias,  [6.8]
 │   │       │                     #   shadow_settings, slope_from_cosine,
 │   │       │                     #   pcf_reach_texels, slope_scaled_bias,
@@ -978,7 +1001,7 @@ chore. What follows is on disk.
 │   │                             #   texture, a comparison sampler, its own
 │   │                             #   render pass, and fill_uniforms() so the two
 │   │                             #   renderers cannot disagree about a bias
-│   └── src/                # ---- PRIVATE. 47 sources; no demo can name this path ----
+│   └── src/                # ---- PRIVATE. 50 sources; no demo can name this path ----
 │       ├── core/           # actions [5.10], clock, fixed_step, input, log, profile
 │       ├── platform/       # platform.cpp, app.cpp                            [5.2]
 │       ├── ui/             # debug_ui.cpp — THE ONLY engine TU that          [5.11]
@@ -997,7 +1020,16 @@ chore. What follows is on disk.
 │                           #   frame_graph.cpp [6.17] is a TU because `compile`
 │                           #   is four real passes over two arrays and nothing
 │                           #   that merely DECLARES a pass should recompile when
-│                           #   the scheduler changes
+│                           #   the scheduler changes.
+│                           #   font.cpp [6.18] is the ONE unit that contains
+│                           #   stb_truetype — the third instance of the same
+│                           #   containment rule, after image.cpp and gltf.cpp.
+│                           #   overlay.cpp + gpu_overlay.cpp [6.18] are separate
+│                           #   TUs because the FIRST knows nothing about either
+│                           #   renderer and the second is entirely SDL_GPU:
+│                           #   collapsing them would put an SDL_GPU dependency
+│                           #   on the software path and end the two-renderer
+│                           #   comparison that 6.18 §11 rests on
 ├── demos/                  # executables; link engine, include ONLY public headers
 │   ├── CMakeLists.txt
 │   ├── common/             # demo_common: CONTENT, shared so nothing is transcribed

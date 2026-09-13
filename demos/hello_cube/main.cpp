@@ -16,16 +16,26 @@
 // What it gained is a shape: five overrides on `engine::app`, each of which is
 // one phase of the loop Lesson 1.4 derived. The engine calls them.
 //
+// LESSON 6.18 GAVE IT A VOICE. Until this lesson every number this engine
+// measured went to a terminal and every picture went to a window, and the two
+// were never on the same surface. Ninety lines of cube now carry a HUD — a
+// panel, a label and a live triangle count — composited by the SOFTWARE
+// compositor, because this program has no GPU device at all. That is the whole
+// argument for `overlay.hpp` knowing nothing about either renderer.
+//
 //     cmake --build build --target hello_cube
 //     ./build/demos/hello_cube                       a window, spinning
 //     ./build/demos/hello_cube --shot cube.ppm       one frame, no window, no display
+//     ./build/demos/hello_cube --no-hud              the cube, without the overlay
 
 #include <engine/asset/asset_store.hpp>
 #include <engine/gfx/colour.hpp>
 #include <engine/gfx/depth_buffer.hpp>
+#include <engine/gfx/font.hpp>
 #include <engine/gfx/image.hpp>
 #include <engine/gfx/light.hpp>
 #include <engine/gfx/mesh.hpp>
+#include <engine/gfx/overlay.hpp>
 #include <engine/gfx/projector.hpp>
 #include <engine/gfx/raster.hpp>
 #include <engine/gfx/scene.hpp>
@@ -41,6 +51,8 @@
 #include <engine/platform/main.hpp>
 
 #include <cmath>
+#include <cstdio>
+#include <string>
 #include <vector>
 
 namespace {
@@ -61,6 +73,7 @@ public:
         for (int i = 1; i < argc; ++i)
         {
             if (SDL_strcmp(argv[i], "--shot") == 0 && i + 1 < argc) { shot_path_ = argv[++i]; }
+            if (SDL_strcmp(argv[i], "--no-hud") == 0) { hud_ = false; }
         }
 
         return {.title = "hello_cube — built on engine::engine",
@@ -115,6 +128,31 @@ public:
         // written down here. Same picture, stated honestly.
         lights_.key.irradiance = engine::k_reference_irradiance;
 
+        // LESSON 6.18 — the font. Resolved through the SAME search path the
+        // cube's geometry would use if it came from a file (5.5), because a font
+        // is an asset and giving it a private notion of where files live is how
+        // an asset resolves in the editor and not in the shipped game.
+        //
+        // A FAILURE HERE IS NOT FATAL, DELIBERATELY. A missing font means no HUD;
+        // it does not mean no cube. That is the whole reason `load_font` returns
+        // a status instead of throwing — Lesson 5.3's argument, and the case it
+        // was written for is exactly this one, where the asset is decoration.
+        {
+            engine::font_bake_options opts{};
+            opts.pixel_height = 13.0f;   // small: this framebuffer is 320x180
+            const std::string path =
+                assets_.paths().resolve("fonts/Karla-Regular.ttf").path;
+            const engine::font_status status =
+                path.empty() ? engine::font_status::cannot_open
+                             : engine::load_font(path.c_str(), opts, font_);
+            if (status != engine::font_status::ok)
+            {
+                SDL_Log("hello_cube: no font (%s) — drawing without a HUD",
+                        engine::name_of(status));
+                hud_ = false;
+            }
+        }
+
         // A pose that does not depend on the clock, so the shot is reproducible.
         if (shot_path_ != nullptr) { t_ = 1.0f; }
         return true;
@@ -151,6 +189,44 @@ public:
                                        .eye = k_eye};
         engine::draw_triangles(fb(), &depth_, triangles_, false, style);
 
+        // ---- LESSON 6.18: the overlay, last and on top ----------------------
+        //
+        // AFTER the 3D, with no depth test, in declaration order. All three are
+        // the same statement: an overlay is not in the scene, so nothing in the
+        // scene can occlude it and nothing about it needs sorting. The panel is
+        // asked for before the text and therefore lands under it.
+        if (hud_ && font_.valid())
+        {
+            overlay_.begin(fb().width(), fb().height());
+
+            // MEASURE, THEN DRAW THE BOX, THEN DRAW THE TEXT. Sizing the panel
+            // from the string rather than from a guess is what stops a longer
+            // label overflowing it — and `measure_text` is the same arithmetic
+            // `text()` performs, so the two cannot disagree.
+            char line[64];
+            std::snprintf(line, sizeof(line), "%d triangles",
+                          static_cast<int>(triangles_.size()));
+
+            engine::text_layout_options layout{};
+            layout.tabular_digits = true;   // the count changes every frame
+            const engine::text_metrics m = engine::measure_text(font_, line, layout);
+
+            constexpr float pad = 4.0f;
+            const float x = 6.0f;
+            const float y = 6.0f;
+            const float w = m.width + 2.0f * pad;
+            const float h = font_.line_height() + 2.0f * pad;
+            overlay_.rect(font_, x, y, x + w, y + h, engine::pack_argb(10, 12, 18, 200));
+            (void)overlay_.text_top_left(font_, line, {x + pad, y + pad},
+                                         engine::pack_argb(235, 240, 250), layout);
+
+            // LINEAR blending, which on a CPU framebuffer is not free — it is a
+            // decode and a re-encode per covered pixel. `overlay_blend::encoded`
+            // is one enum away and is what a great many renderers do; Lesson
+            // 6.18 §7 measures what it costs in stem weight.
+            engine::composite_overlay(fb(), font_, overlay_, engine::overlay_blend::linear);
+        }
+
         if (shot_path_ != nullptr)
         {
             SDL_Log("hello_cube: %d triangles", static_cast<int>(triangles_.size()));
@@ -162,7 +238,15 @@ private:
     static constexpr engine::vec3 k_eye{2.6f, 1.9f, 3.4f};
 
     const char* shot_path_ = nullptr;
+    bool hud_ = true;
     float t_ = 0.0f;
+
+    /// Lesson 6.18. One font, baked once, at one size — and both of the objects
+    /// the overlay needs are members for the same reason `triangles_` is: they
+    /// keep their storage across frames, so a steady-state frame of text touches
+    /// no allocator.
+    engine::font_atlas font_;
+    engine::overlay_batch overlay_;
 
     /// Where the cube's arrays actually live — Lesson 5.4, promoted in 5.5.
     ///

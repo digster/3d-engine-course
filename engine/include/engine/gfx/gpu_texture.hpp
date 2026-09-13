@@ -36,6 +36,8 @@
 
 #include <SDL3/SDL.h>
 
+#include <cstdint>
+
 namespace engine {
 
 /// Lesson 6.15, **forward-declared rather than included**, and the reason is
@@ -85,6 +87,40 @@ public:
                                       const image_data& src, bool srgb,
                                       const char* name = nullptr,
                                       bool mips = false);
+
+    /// Create a **single-channel coverage texture** and record its upload —
+    /// Lesson 6.18.
+    ///
+    /// **Why this is not `create_sampled` with a flag.** Every argument
+    /// `create_sampled` makes is about colour: four channels because a picture
+    /// has three plus alpha, and an `_SRGB` option because a colour is stored
+    /// through a transfer function. A glyph atlas is neither. It is one byte of
+    /// COVERAGE per texel — an area fraction, linear by construction — so it
+    /// wants one channel and it must never be `_SRGB`.
+    ///
+    /// That is not a memory micro-optimisation, though it is 4x. It is a
+    /// correctness boundary, and there is no flag combination on the four-channel
+    /// path that expresses it: `create_sampled(..., srgb=false)` would store the
+    /// right numbers in four times the memory and leave the next reader unable to
+    /// tell whether the choice was considered. A distinct entry point with
+    /// "coverage" in its name is the documentation.
+    ///
+    /// `R8_UNORM` is one of SDL_GPU's guaranteed formats, so no capability query
+    /// is needed — unlike the depth formats above, where only `D16_UNORM` is
+    /// promised.
+    ///
+    /// **Row padding is the caller's problem and there is none here.** SDL's
+    /// transfer info is in PIXELS per row, and for a one-byte format a row of
+    /// `width` pixels is `width` bytes with no alignment requirement at this
+    /// level — which is exactly the case that trips people coming from APIs where
+    /// a texture row is padded to 4 bytes.
+    ///
+    /// @param texels `width * height` bytes, row-major, top row first.
+    /// @param mips   build a chain. Safe only to `1 << padding` levels on an
+    ///               atlas — see `font_bake_options::padding`.
+    [[nodiscard]] bool create_coverage(const gpu_device& dev, SDL_GPUCommandBuffer* cb,
+                                       const std::uint8_t* texels, int width, int height,
+                                       const char* name = nullptr, bool mips = false);
 
     /// How many mip levels this texture has. 1 unless `mips` was asked for.
     [[nodiscard]] int levels() const { return levels_; }

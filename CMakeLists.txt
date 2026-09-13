@@ -253,6 +253,13 @@ add_hlsl_shader(skybox.frag fragment)
 # modes, IBL) is reused byte-for-byte by binding `scene.frag` beside it.
 add_hlsl_shader(scene_instanced.vert vertex)
 
+# Lesson 6.18 — the 2D overlay. The first vertex shader in the course that is
+# not about a camera: it converts pixels to clip space with two multiplies, and
+# it is a shader rather than CPU arithmetic so that a window resize pushes four
+# bytes instead of rewriting every vertex.
+add_hlsl_shader(overlay.vert vertex)
+add_hlsl_shader(overlay.frag fragment)
+
 # ---- The project -----------------------------------------------------------
 # ORDER MATTERS, and it is the dependency direction made visible: engine/ knows
 # nothing of demos/ and is added first; demos/ links the engine and is added

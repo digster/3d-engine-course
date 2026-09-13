@@ -4149,11 +4149,6 @@ completed:
          `completed:` should be derived from, or verified against, the
          `published` badges rather than maintained by hand. Filed as work, not
          as another note.)
-  - 6.17 A Lightweight Frame Graph
-        (Appended at the time, and check-curriculum.py's badge-vs-hero-stat
-         cross-check was run BEFORE the commit rather than after: it caught the
-         orphan page, then the 4h-vs-5h subtotal drift when the hours moved, then
-         the two dead `next` links on 6.16. Three catches on one lesson.)
   - 6.16 Frustum Culling and Instanced Submission
         (APPENDED AT THE TIME, not two lessons later, and the note above is why.
          The durable fix is still unbuilt — but check-curriculum.py's
@@ -4162,8 +4157,90 @@ completed:
          corrected. So one half of the drift this section has suffered twice is
          now caught by a tool; deriving `completed:` from the same source is the
          other half and remains work.)
+  - 6.17 A Lightweight Frame Graph
+        (Appended at the time, and check-curriculum.py's badge-vs-hero-stat
+         cross-check was run BEFORE the commit rather than after: it caught the
+         orphan page, then the 4h-vs-5h subtotal drift when the hours moved, then
+         the two dead `next` links on 6.16. Three catches on one lesson.)
+        (ORDER FIXED BY 6.18: 6.17 was appended ABOVE 6.16 rather than after it,
+         so the list read …6.15, 6.17, 6.16. Harmless to a reader and not
+         harmless to the tool this section has twice asked for — anything that
+         DERIVES this list from the index's badges will also want it ordered,
+         and a hand-maintained list drifts in ordering as readily as in
+         membership. Same root cause as the two omissions above, third instance.)
+  - 6.18 Text and 2D Overlay Rendering
+        (Appended at the time. check-curriculum.py caught five things on this
+         lesson before the commit: the Module 6 subtotal (92 h vs 93), the hero
+         hours (511 vs 512), the prose total, the Module 6 badge still reading
+         `in progress` with all 18 lessons published, and a dead prereq link
+         (`06-01-linear-srgb.html` — the file is `06-01-linear-and-srgb.html`).
+         Five catches on one lesson, which is the most it has ever found.)
+  ===> MODULE 6 COMPLETE — 18 lessons, ~93 h, the longest module in the course.
+       The renderer is modern: linear light, PBR, materials, glTF, normal maps,
+       shadows and cascades, mipmaps, transparency, HDR + tonemapping, bloom,
+       antialiasing, IBL, culling + instancing, a frame graph, and text. <===
 
 capabilities:
+  - 6.18 THE ENGINE CAN SAY SOMETHING. 75 -> 78 public headers, 47 -> 50 sources,
+    24 -> 26 shaders. 98 checks green, 0 failures (CPU sections run without a
+    GPU; §I and §J need one, driver `metal`). Counts MEASURED against commit
+    422d414, per 6.15's rule: re-measure, do not increment.
+    WHAT IS NEW: glyph + kern_pair + font_atlas + font_bake_options +
+    font_status + bake_font + load_font + next_codepoint + glyph_quad +
+    text_layout_options + text_metrics + layout_text + measure_text
+    (font.{hpp,cpp}, the ONE translation unit containing stb_truetype);
+    overlay_vertex + overlay_batch + overlay_blend + composite_overlay +
+    apply_stem_darkening (overlay.{hpp,cpp}, which mentions NEITHER renderer);
+    gpu_overlay + overlay_viewport_uniforms + overlay_shading_uniforms
+    (gpu_overlay.{hpp,cpp}); overlay.vert.hlsl + overlay.frag.hlsl;
+    gpu_texture::create_coverage (R8_UNORM, never _SRGB);
+    assets/fonts/Karla-Regular.ttf (16,848 B, SIL OFL 1.1, provenance and
+    licence in assets/fonts/OFL.txt).
+    - THE THREE-FILE SPLIT IS THE LOAD-BEARING DECISION. `font.hpp` and
+      `overlay.hpp` name no SDL_GPU type, so `hello_cube` — no GPU device —
+      gets a HUD in twenty lines, and §J can render one `overlay_batch` through
+      BOTH renderers and compare every channel. 68 of 16,384 pixels differ, by
+      at most ONE sRGB code. The claim is deliberately weaker than 6.17's
+      bit-equality, because the two sides are not the same code: the CPU
+      re-encodes with `engine::linear_to_srgb` and the GPU's ROP uses
+      fixed-function hardware of unspecified intermediate precision. The
+      instrument reports the DISTRIBUTION, not a yes/no. Control: 934 differing.
+    - 6.11's 43% ARRIVED AS AN ARTEFACT WITH A NAME. Ink mass (total light added,
+      in linear light) over "Handgloves 0123" at 16 px: encoded blending gives
+      62.2% of correct on black, 137.8% on white. SAME ERROR, OPPOSITE
+      DIRECTIONS — which is why the bug survives review. The error is worst at
+      LOW coverage (10.3% at a tenth), and a 16 px glyph is mostly edge, so it
+      presents as STEM WEIGHT rather than as a colour shift.
+    - TWO BUGS IN TWO FILES ARE THE SAME FUNCTION. An `_SRGB` coverage atlas
+      gives 62.1% — indistinguishable from encoded blending on a dark ground,
+      because both are `srgb_to_linear` applied to the coverage at different
+      points. The separating test is in the lesson: invert the contrast. A
+      blend-space bug is directional (137.8%); a coverage bug is not (62.1%).
+    - THE UNORM FALLBACK IS `blend_over_encoded` IN SILICON, measured: the same
+      draw at a plain UNORM target with `encode = 1` differs from the CPU's
+      deliberately-wrong function on **0 pixels** and from the right one on 933.
+      6.1 predicted this in a comment; it is now an equality.
+    - COMPOSITE AFTER THE TONEMAP. ACES(1.0) = 0.803797 = sRGB code 232, and it
+      moves with exposure (165 at x0.25, 252 at x4). A UI colour is
+      display-referred. Diegetic UI is the deliberate exception.
+    - SNAP THE POSITION, NEVER THE ADVANCE. Worst error 0.4765 px, bounded at
+      0.5 forever, against 5.26 px worst and 4.32 px still out at the end of a
+      45-glyph line. The pen is never rounded; the quad is.
+    - KERNING LIVES IN GPOS. The shipped font has NO legacy `kern` table. 186
+      non-zero pairs of 9,025 (2.06%), stored sparse: 2,232 B against 36,100.
+    - A "16 PX" FONT HAS A 13.6869 PX EM. `ScaleForPixelHeight` maps
+      ascent−descent, and Karla's is 1.169 em. Its `line_gap` is ZERO.
+    - DIGITS ARE NOT TABULAR (4.530 px for '1', 8.418 for '8'), so "11.1 ms" and
+      "88.8 ms" differ by 11.66 px and a readout breathes.
+      `text_layout_options::tabular_digits` fixes it exactly.
+    - ONE PIPELINE, ONE TEXTURE, ONE DRAW CALL for text AND panels, bought with a
+      2x2 fully-covered block in the atlas. A steady-state frame of text performs
+      ZERO heap allocations (200 rebuilds, global `operator new` replaced).
+    - FIRST EXTERNAL USE OF 6.17'S API, and the branch it named as untested —
+      `keep` on an IMPORTED resource at version 0 — works and now has four
+      checks. And the honest half: `discard_write` on a blended target compiles
+      happily and derives DONT_CARE. **A frame graph relocates a dataflow claim;
+      it does not verify it.**
   - 6.17 THE FRAME IS A DECLARATION, AND FOUR FACTS STOPPED BEING MAINTAINED.
     74 -> 75 public headers, 46 -> 47 sources, 24 shaders (unchanged — this
     lesson added none). 40 checks green, 0 failures (7 CPU-only, 33 needing a
@@ -7014,6 +7091,7 @@ files:
             bloom_up.frag.hlsl                                            [6.13]
             skybox.vert.hlsl, skybox.frag.hlsl                            [6.15]
             scene_instanced.vert.hlsl                                     [6.16]
+            overlay.vert.hlsl, overlay.frag.hlsl                          [6.18]
             matrix_probe.frag.hlsl
   engine/: CMakeLists.txt
   engine/include/engine/: engine.hpp                      (the umbrella)
@@ -7039,6 +7117,7 @@ files:
             cubemap.hpp                                                     [6.15]
             frustum.hpp, instancing.hpp                                     [6.16]
             frame_graph.hpp                                                 [6.17]
+            font.hpp, overlay.hpp, gpu_overlay.hpp                          [6.18]
             debug_lines.hpp                                                 [5.11]
             depth_buffer.hpp, framebuffer.hpp, gpu_buffer.hpp, gpu_debug.hpp,
             gpu_device.hpp, gpu_mesh.hpp, gpu_pipeline.hpp, gpu_present.hpp,
@@ -7097,6 +7176,17 @@ files:
   demos/gltf_view/: main.cpp                                              [6.6]
   assets/: cube.obj, twisted.obj, quirks.obj, torus.obj, uv_grid.png,
            cube.gltf, cube.bin, shapes.glb                              [6.6]
+  assets/fonts/: Karla-Regular.ttf, OFL.txt                             [6.18]
+           (THE FIRST BINARY ASSET THE COURSE DID NOT GENERATE. 16,848 bytes,
+            SIL Open Font License 1.1, copied byte for byte from Dear ImGui's
+            misc/fonts/ — a dependency this repository already vendors. Chosen
+            for size (Roboto is 162 kB, DroidSans 190 kB), for being a real
+            OUTLINE font with a `glyf` table so stb_truetype actually rasterizes
+            curves, for being proportional so 6.18 §4's advance arithmetic is
+            not trivially uniform, and for carrying GPOS with no `kern` table —
+            which is what makes 6.18 §3.2's kerning finding real rather than
+            hypothetical. `.ttf` is not in .gitignore and does not need an
+            exception, unlike `.obj` and `.bin`.)
            (GENERATED by scratch/make_gltf_assets.py — the course ships no
             third-party geometry, 3.5's rule, and the cube's positions are
             transcribed from k_cube_vertices so verify_66 §A is a real
@@ -7151,12 +7241,22 @@ files:
                  06-12-hdr-tonemapping.html,
                  06-13-bloom-post-stack.html,
                  06-14-antialiasing.html,
-                 06-15-skybox-ibl.html
+                 06-15-skybox-ibl.html,
+                 06-16-frustum-culling.html,
+                 06-17-frame-graph.html,
+                 06-18-text-overlay.html
                  (6.9 THROUGH 6.14 WERE ALL MISSING when 6.15 came to append —
                   the same half-followed append-and-merge the `completed:` list
                   above records twice. check-curriculum.py verifies the INDEX
                   against the filesystem; nothing verifies this list, which is
-                  why it is the one that rots.)
+                  why it is the one that rots. 6.16 AND 6.17 WERE MISSING TOO
+                  when 6.18 came to append, which is the FOURTH instance across
+                  three sections of this file. The lists are not the problem;
+                  hand-maintaining three parallel copies of the same fact is.
+                  `check-curriculum.py` already knows the true set — it walks
+                  docs/lessons/ — so the durable fix is to have it verify these
+                  three sections too, and that is now the highest-value piece of
+                  bookkeeping work outstanding.)
   docs/shared/: course.css, course.js      (THE stylesheet + page script; one copy each)
   docs/_template/: lesson-template.html, README.md, apply-shared.py, check-page.js
   scratch/ (5.7, not shipped with the engine): ecs_probe.hpp, bench_57.cpp,
@@ -7676,115 +7776,120 @@ roadmap: RESHAPED 2026-09-08, AFTER TWO EXTERNAL REVIEWS OF THE PUBLISHED OUTLIN
             qualifier too, because a skimmer reads the recap and stops.
 
 
-next: 6.18 — Text and 2D Overlay Rendering
-      (planned filename: docs/lessons/06-18-text-overlay.html — 6.17's TWO next
-      links point at the index and BOTH need repointing; scratch/l617_body_a.html
-      holds the top one and build_617.py's TAIL the bottom. The index row for
-      6.18 is still the unpublished one-liner; check-curriculum.py will flag the
-      orphan the moment the page exists, which is how it caught 6.17.)
+next: 7.1 — Euler Angles and Their Pathologies
+      (planned filename: docs/lessons/07-01-euler-angles.html — 6.18's TWO next
+      links point at the index and BOTH need repointing; scratch/l618_body_a.html
+      holds the top one and build_618.py's TAIL the bottom. Module 7's own
+      <details> block in docs/index.html is still the unpublished outline; its
+      badge says `upcoming` and its rows have no hrefs. check-curriculum.py will
+      flag the orphan page the moment it exists, which is how it caught 6.17.
+      MODULE 6 IS COMPLETE — 18 lessons, ~93 h — and its badge in the index now
+      says so.)
 
-      PIN FIRST. build_617.py's LISTING_SOURCE is EMPTY and it lists EIGHT files
-      whole, SEVEN of which are in the repository (verify_617.cpp is gitignored
-      and can only be pinned from the working tree). The commands are written out
-      in build_617.py's own comment; the short form is:
+      PIN FIRST. build_618.py's LISTING_SOURCE is EMPTY and it lists FOURTEEN
+      files whole, thirteen of which are in the repository (verify_618.cpp is
+      gitignored and can only be pinned from the working tree). One command:
 
-        for f in engine/include/engine/gfx/frame_graph.hpp \
-                 engine/src/gfx/frame_graph.cpp \
-                 engine/include/engine/gfx/gpu_shadow.hpp \
-                 engine/src/gfx/gpu_shadow.cpp \
-                 engine/include/engine/gfx/gpu_post.hpp \
-                 engine/src/gfx/gpu_post.cpp \
-                 engine/CMakeLists.txt; do
-          git show <6.17 commit>:$f > scratch/l617_$(echo $f | tr / _)
-        done
-        cp scratch/verify_617.cpp scratch/l617_scratch_verify_617.cpp
+        python3 scratch/pin_listings.py 618 --out scratch/_dict618.txt
 
-      Then paste what `python3 scratch/pin_listings.py 617 --dry` prints (it
-      verifies every pin by substring against the shipped page — that check is
-      what confirms a gitignored copy has not drifted), re-run build_617.py, and
-      `git diff` the page: SEVENTEEN lessons running, the diff has been exactly
-      the nav lines meant to move.
+      It writes every pin from the commit that shipped the page, takes the
+      gitignored one from the working tree and says so, and VERIFIES each by
+      substring against the shipped HTML. Paste the dict into build_618.py's
+      LISTING_SOURCE, re-run it, and `git diff` the page: EIGHTEEN lessons
+      running, the diff has been exactly the nav lines meant to move. It was
+      exactly two lines on 6.17 this session.
 
-      WHICH FILES 6.18 IS LIKELY TO MOVE. `gpu_post.{hpp,cpp}` has now been
-      edited by THREE CONSECUTIVE LESSONS (6.13 built the stack, 6.14 added MSAA,
-      6.17 split record_stage out) and each time the previous lesson had said it
-      was settled. Treat it as hot. `frame_graph.*` is the new one and 6.17's own
-      §17 predicts 6.18 will declare its overlay as a pass, which is the first
-      use of the API by someone other than its author — the usual moment a new
-      API's gaps show. `gpu_scene.*` is possible (an overlay may want a pipeline
-      beside the scene's ten). `gpu_shadow.*` SHOULD NOT MOVE — keep it as the
-      control, the role cubemap.* played for 6.16 and held.
+      WHY IT MATTERS MORE THAN USUAL THIS TIME. Rotations look maximally distant
+      from a glyph atlas, so the temptation to skip is real. But TWO of the
+      fourteen are `CMakeLists.txt` and `engine/CMakeLists.txt`, which EVERY
+      lesson edits, and a third is `demos/hello_cube/main.cpp`, the course's
+      acceptance test for the public API, which is edited whenever the API grows
+      — and Module 7 grows it. These three are not unlikely to move; they are
+      certain to.
 
-      WHAT 6.18 OWES, beyond the obvious:
-        1 DECLARE THE OVERLAY AS A PASS, and report honestly what that cost. It
-          is the first EXTERNAL use of 6.17's API and the specific thing to watch
-          is that an overlay blending over the resolved image wants `keep` on an
-          IMPORTED resource — which works today and HAS NEVER BEEN EXERCISED, so
-          it is untested code reached for the first time by the next lesson. If
-          it needs a verb that does not exist, say so and add it rather than
-          routing around the graph; a pass recorded outside the graph is the
-          exact failure 6.17 was written to stop.
-        2 THE ATLAS IS A MINIFICATION PROBLEM AND 6.10 ALREADY DECIDED IT. Glyphs
-          at a fixed pixel size need NO mip chain, and saying why (a 1:1 blit has
-          a footprint of exactly one texel) is cheaper than discovering the
-          blurry-text bug. But a 3D label that scales does, and then bleeding
-          between atlas cells is the failure — which is 6.10's padding argument
-          in a new place.
-        3 GAMMA. Text is the one place where 6.1's linear-vs-sRGB argument has a
-          visible, famous artefact: an alpha-blended glyph composited in the
-          wrong space has visibly wrong STEM WEIGHT, and it is the single most
-          common gamma bug in shipped software. 6.11's premultiplied alpha and
-          6.12's tonemap both bear on WHERE the overlay composites — before or
-          after the curve — and that is a decision with a right answer, not a
-          preference.
-        4 THE GOLDEN. Null for the fourth lesson running unless the overlay
-          reaches the software rasterizer. CONFIRM THAT STRUCTURALLY as 6.17 did
-          (grep what write_reference_shot's translation units include), and
-          expect to BUILD the instrument again. 6.17's shape — render the same
-          thing two ways, plus a CONTROL that proves the comparison can fail — is
-          the one to copy.
+      WHICH FILES 7.1 IS LIKELY TO MOVE. `engine/include/engine/math/` is the
+      obvious one and it has been almost untouched since Module 2: `mat3.hpp`
+      gained outer-product operators in the physics planning notes and nothing
+      else has changed. Expect `quat.hpp` to be CREATED (7.2 or 7.3, not 7.1 —
+      7.1 is Euler angles and their failure modes, and quaternions are motivated
+      by that failure). `transform.hpp` is the one to watch: it currently stores
+      a rotation as a `mat3`, and the whole arc is about replacing that.
+      `mat4.hpp`/`mat3.hpp` SHOULD NOT MOVE in 7.1 — keep them as the control,
+      the role `gpu_shadow.*` played for 6.18 and held.
 
-      CARRY FORWARD from 6.17:
-        - A CONSEQUENCE WRITTEN DOWN BY HAND IS A SECOND COPY OF THE TRUTH. Every
-          win in this lesson is one instance of it: the order, the load ops, the
-          store ops and `if (!s.enabled)` were all facts that already existed
-          somewhere else. Before adding a declaration, ask whether it is a
-          DECISION or a CONSEQUENCE — and if it is a consequence, derive it.
-        - MEASURE THE PITCH BEFORE YOU BUY IT. The literature's reason for frame
-          graphs is memory aliasing; measured here it is worth ZERO, and the
-          lesson is better for saying so than it would have been for quoting
-          somebody else's number. This is the fifth member of the instrument
-          family: 6.14 (can this measurement produce a non-null result?), 6.15
-          (has the non-null result converged?), 6.16 (can this axis show the
-          effect?), 6.17 (can this comparison report a difference?) — and now
-          (is the reason I am building this true HERE?).
-        - TELL TWO REASONS APART WHEN THEY GIVE THE SAME ANSWER. The memory
-          saving is zero because the API cannot express aliasing AND because the
-          frame is a chain. Collapsing those into "aliasing does not help" would
-          have been wrong in both directions: the API limit goes away if SDL_GPU
-          grows placed resources, and the shape limit goes away the moment a
-          second post effect lands.
-        - DETERMINISM IN A SCHEDULER IS CORRECTNESS. Any topological order is
-          legal and that is exactly why the tie-break must be stable — the
-          failure mode is a golden that fails one run in five, which nobody
-          attributes to the scheduler.
-        - A FUNCTION THAT NEVER SEES A SETTING CANNOT GET IT WRONG. Both splits
-          in §10 work this way, and it generalises past render passes: the
-          cheapest way to make a parameter impossible to misuse is to remove it
-          from the signature and derive it at the only site that knows.
+      WHAT 7.1 OWES, beyond the obvious:
+        1 GIMBAL LOCK AS A MEASUREMENT, NOT A METAPHOR. Every treatment shows
+          the gimbals; very few show the NUMBER. The honest version is a rank
+          deficiency: at pitch = 90 degrees the Jacobian of the Euler-to-matrix
+          map loses a dimension, and you can print its singular values
+          approaching it. That is the 6.16 lesson — extract the fact from the
+          matrix the renderer actually uses, not from a picture.
+        2 ORDER IS A CONVENTION AND THERE ARE TWENTY-FOUR OF THEM. Six axis
+          orders x two (intrinsic/extrinsic) x two (active/passive). The
+          conventions page fixes one; 7.1 must say WHICH and show that reading
+          somebody else's Euler angles with the wrong one is not a small error.
+        3 INTERPOLATION IS THE REAL INDICTMENT. Lerping Euler angles does not
+          lerp the rotation, and the failure is visible rather than subtle: a
+          path that wobbles off the geodesic. Measure the angular deviation.
+          That is the motivation slerp will answer in 7.3.
+        4 THE GOLDEN. It has been null for FOUR lessons and would be null again
+          unless 7.1 changes something the software rasterizer's reference shot
+          touches. `write_reference_shot` builds its camera with `look_at` and
+          poses nothing by Euler angles, so CONFIRM STRUCTURALLY as 6.17 and
+          6.18 did (grep what its translation units include) and expect to BUILD
+          the instrument. 6.18's shape — the same thing rendered two ways plus a
+          CONTROL that proves the comparison can fail — is the one to copy; it
+          worked, and its control fired at 934 pixels.
 
-      AND TWO THINGS 6.17 FOUND THAT ARE NOT ABOUT FRAME GRAPHS.
-      (1) POOLED BYTES MUST BE COUNTED OVER SLOTS, NOT OVER CREATIONS. The first
-          implementation added a texture's bytes each time one was CREATED, which
-          is correct on frame one and reports a 100% saving on every frame after
-          it, because the pool is then warm. A measurement that only works once
-          is worse than one that never works: the first run looks right. Caught
-          because §G ran after §C-§E had already warmed the pool and printed
-          `saved 1223296 B` — an implausible number, which is the only reason it
-          was looked at.
-      (2) THE `.tag` CLASS VOCABULARY IS `new`/`modified`, NOT `mod`. build_617.py
-          inherited 6.16's LISTING_META shape, which had only `new` entries, and
-          the natural abbreviation for the other one renders as an unstyled grey
-          pill that still reads correctly. check-page.js's badge check caught it —
-          it exists because 82 of them once shipped (3.7-5.1).
-```
+      CARRY FORWARD from 6.18:
+        - DOES MY DENOMINATOR MOVE WHEN THE CODE DOES? "What fraction of the
+          atlas is glyphs" has a power-of-two denominator fixed before the packer
+          runs and a numerator that is the font's own area, so it measures
+          neither. This is the SIXTH member of the instrument family: 6.14 (can
+          this measurement produce a non-null result?), 6.15 (has the non-null
+          result converged?), 6.16 (can this axis show the effect?), 6.17 (can
+          this comparison report a difference?), 6.17 again (is the reason I am
+          building this true HERE?) — and now this one.
+        - A CHECK WHOSE DEGENERATE CASE IS A PASS IS NOT A CHECK. `inf > 80.0`
+          is true. Shipped in a first draft against a stale library, printed
+          "shelf efficiency = inf%", and reported PASS. Second time in three
+          lessons that a degenerate input produced a green tick (6.16 found
+          `identical=YES` on two failed file reads), and both times the only
+          tell was an implausible printed NUMBER. Print the inputs, not just
+          the verdict.
+        - TWO BUGS IN TWO FILES CAN BE THE SAME FUNCTION. An `_SRGB` coverage
+          atlas and an sRGB-space blend agree to four significant figures. When
+          two independent explanations predict the same measurement, do not pick
+          one — find the measurement that separates them. Here it was inverting
+          the contrast, and it took one line.
+        - MAKE A BUG IMPOSSIBLE RATHER THAN CATCHABLE. Naming four colour bytes
+          `r, g, b, a` removes the endianness question that cost 6.15 a debugging
+          session. There is no test to write because there is nothing left to get
+          wrong. Prefer this to a test whenever the type system can carry it.
+        - A DISTINCT ENTRY POINT IS THE DOCUMENTATION. `create_coverage` rather
+          than `create_sampled(..., srgb=false)`: the second stores the right
+          numbers and leaves the next reader unable to tell whether the choice
+          was considered. The 4x memory saving is the smaller half of that
+          argument.
+        - A TOOL OVERSOLD IS A TOOL TRUSTED IN THE CASE IT DOES NOT COVER. 6.17's
+          graph derives four facts from `keep` and cannot tell you that `keep`
+          was the right word. Saying so in the lesson that first uses it from
+          outside is worth more than another paragraph about what it does catch.
+
+      AND THREE THINGS 6.18 FOUND THAT ARE NOT ABOUT TEXT.
+      (1) FIGURE NUMBERS FOLLOW PAGE ORDER, NOT WRITING ORDER. The first draft
+          numbered the figures as they were written — the architecture diagram
+          was fig 7 and appeared first — and check-page.js's `figOrder` check
+          reported all seven. A reader counts figures as they meet them.
+      (2) A LABEL MOVED OFF ONE OBSTACLE LANDS ON THE NEXT. The 10%-coverage
+          annotation in figure 5 was moved off a dashed leader, onto the x-axis
+          tick row, then onto the green curve, before landing in empty space.
+          check-page.js has a SEPARATE check for text-on-text and text-on-shape,
+          which is the only reason each move was caught rather than one hiding
+          behind the other. Three iterations is normal; budget for it.
+      (3) THE SHELVES' OWN PARAMETER WAS UNREADABLE UNTIL IT WAS STORED. The
+          packer knew its own footprint and threw it away, so the honest
+          occupancy figure could not be computed from outside. `used_height` is
+          four lines and it is the difference between a measurement that means
+          something and one that does not. If a routine computes a quantity a
+          caller would need to judge it, RETURN IT.
