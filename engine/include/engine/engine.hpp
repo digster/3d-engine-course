@@ -91,11 +91,16 @@
 // remembered: the configure-time lint below `add_library` in engine/CMakeLists.txt
 // refused to configure the build until this line existed. That check was written
 // in 5.12 and proved to fail by deleting an include; this is the first time it
-// fired on a header somebody had actually just written.
+// fired on a header somebody had actually just written. **It then fired twice
+// more on the very next lesson**, for `axis_angle.hpp` and `rotation.hpp` — which
+// is three catches in two lessons, against fourteen misses in the thirteen
+// lessons before the check existed.
+#include <engine/math/axis_angle.hpp>
 #include <engine/math/euler.hpp>
 #include <engine/math/mat2.hpp>
 #include <engine/math/mat3.hpp>
 #include <engine/math/mat4.hpp>
+#include <engine/math/rotation.hpp>
 #include <engine/math/transform.hpp>
 #include <engine/math/vec2.hpp>
 #include <engine/math/vec3.hpp>

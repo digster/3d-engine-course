@@ -80,7 +80,14 @@ untangled was the one file that had never been given a home: `src/main.cpp`, at 
 │   ├── math/               # vec2/3/4, mat2/3/4, transform, quaternion — hand-rolled, no GLM
 │   │   ├── vec2.hpp        # header-only; dot, normalise, reflect     [EXISTS from 1.7]
 │   │   ├── vec3/4.hpp, mat2/3/4.hpp  # header-only 3-D maths          [EXISTS from 2.5–2.6]
-│   │   └── transform.hpp   # position/rotation/scale → model matrix   [EXISTS from 2.8]
+│   │   ├── transform.hpp   # position/rotation/scale → model matrix   [EXISTS from 2.8]
+│   │   ├── rotation.hpp    # what is true of a rotation whatever you  [EXISTS from 7.2]
+│   │   │                   #   store it in: the metric on rotations.
+│   │   │                   #   SITS ABOVE the two below — both include
+│   │   │                   #   it, neither includes the other.
+│   │   ├── euler.hpp       # three angles ⇄ mat3, one convention of   [EXISTS from 7.1]
+│   │   │                   #   twenty-four. An INTERFACE, not storage.
+│   │   └── axis_angle.hpp  # Rodrigues, the exp/log maps, and slerp   [EXISTS from 7.2]
 │   ├── gfx/                # framebuffer, software rasterizer → later SDL_GPU renderer
 │   │   ├── clip.hpp        # near-plane clipping, in CLIP space     [EXISTS from 3.3]
 │   │   ├── clip.cpp        # Sutherland–Hodgman; segments and polygons
@@ -679,6 +686,26 @@ otherwise look like arbitrary jargon:
   the viewport/ortho machinery. Both projections run the *same* `perspective_divide` (ortho keeps
   `w = 1`, so it divides by one) — which is what makes the on-screen comparison honest: the only thing
   that differs is whether the matrix put depth into `w`.
+
+**Rotation gets a layer, as of Lesson 7.2.** `math/` now has an internal shape rather than a flat
+pile of headers. `rotation.hpp` holds what is true of a rotation *whatever you store it in* — today
+the metric, `angle_between_rotations`, which answers "how far apart are these two orientations?"
+without caring how either was written down. `euler.hpp` and `axis_angle.hpp` both include it and
+**neither includes the other**, which is the dependency shape to preserve as 7.3 and 7.4 add two
+more representations.
+
+The rule that produced it is worth stating, because it is the opposite of the usual advice: the
+metric was written in 7.1 and deliberately left in the wrong file, with a doc comment saying so and
+naming the lesson that should move it. **A header earns its existence when a second inhabitant
+justifies the shelf** — a `rotation.hpp` created in 7.1 would have held one function and been
+indistinguishable from premature organisation. When the move happened, `euler.hpp` was left
+including the new header so that not one call site had to change; a refactor that makes its callers
+edit is a refactor that keeps being postponed.
+
+Note what is still *not* here: no rotation type is the engine's storage format. `transform::rotation`
+is a `mat3` and stays one until Lesson 7.4's quaternion. Euler angles are an interface for humans and
+file formats; axis-angle is an interface and an interpolator — 7.2 measured that it has no usable
+composition formula at all, which makes it a *worse* storage format than the matrix it would replace.
 
 **The transform, and the first scene, as of Lesson 2.8.** `src/math/transform.hpp` adds the first
 type in the library that knows what a *scene* is: a `transform` holds a `position`, a `rotation`

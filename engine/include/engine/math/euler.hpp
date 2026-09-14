@@ -49,6 +49,7 @@
 #pragma once
 
 #include <engine/math/mat3.hpp>
+#include <engine/math/rotation.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -316,79 +317,18 @@ struct euler_extraction
     return wrap_angle(to - from);
 }
 
-// ---- The instrument every claim in Lesson 7.1 is measured with ------------------
-
-/// The angle, in radians, of the shortest rotation carrying `a` onto `b`.
-///
-/// This is the distance function on rotations — the length of the geodesic
-/// between two orientations — and it is what lets a sentence like "that
-/// interpolation wanders off course" be replaced by a number of degrees. Every
-/// measurement in Lesson 7.1 §5 and §6 is taken with it.
-///
-/// **The derivation, and then the reason the code does not follow it.** Any
-/// rotation is a turn of some angle θ about some axis. In a basis whose first
-/// axis IS that axis, the matrix is block-diagonal with a 2x2 rotation in the
-/// corner, so its trace is 1 + 2cos(θ); trace survives a change of basis, so that
-/// holds in every basis. With R = Aᵀ·B — undo `a`, then do `b` — the textbook
-/// formula falls straight out:
-///
-///     θ = acos( (tr(R) − 1) / 2 )
-///
-/// **It is correct and it cannot measure a small angle.** Near θ = 0 the trace is
-/// 3 − θ², so a turn of 0.004 rad moves the trace by 1.6e-5 — an eighth of a
-/// `float`'s resolution at 3.0. The information is gone before `acos` is called,
-/// and `acos` then amplifies whatever is left by its infinite slope at 1. The
-/// measured relative error at 0.004 rad is **1.5%**, and a path length is a sum of
-/// several thousand such steps, so that error is the answer.
-///
-/// So we take the sine as well. The antisymmetric part of a rotation is
-/// R − Rᵀ = 2·sin(θ)·[n]ₓ, whose three distinct entries are a vector of length
-/// 2|sin(θ)| — computed as differences of matrix entries, which stay proportional
-/// to θ instead of hiding inside a 3. Feed both to `atan2` and the result is
-/// accurate at both ends, where each half alone is accurate at one:
-///
-///     θ = atan2( |R − Rᵀ| / 2 , (tr(R) − 1) / 2 )
-///
-/// `atan2`'s first argument is a magnitude, so the answer is in [0, π] — which is
-/// what "the SHORTEST rotation" means, and why no sign is returned. §6.4 measures
-/// both forms against a known answer; this one is exact to 1e-6 across the range.
-///
-/// **This function is not about Euler angles and it knows it.** It is here
-/// because Lesson 7.1 is the first thing that needs it, and because a maths
-/// library grows one justified function at a time (`transform.hpp`). Lesson 7.2
-/// builds axis-angle, at which point the θ below stops being an implementation
-/// detail and becomes half of a representation — and *that* is the lesson that
-/// should move this function and rename the file it lives in. Moving it now, to a
-/// `rotation.hpp` with one function in it, would be building a cupboard for a
-/// thing we own one of.
-[[nodiscard]] inline float angle_between_rotations(const mat3& a, const mat3& b)
-{
-    const mat3 r = transpose(a) * b;
-
-    // Written-notation (r21 − r12, r02 − r20, r10 − r01). Reading those out of
-    // column storage is exactly the trap mat3.hpp §3.3 warns about, so they are
-    // spelled with `at(row, col)` rather than with member names: six index pairs
-    // a reader can check against the formula above, and no mental transpose.
-    const vec3 skew{r.at(2, 1) - r.at(1, 2),
-                    r.at(0, 2) - r.at(2, 0),
-                    r.at(1, 0) - r.at(0, 1)};
-    const float trace = r.at(0, 0) + r.at(1, 1) + r.at(2, 2);
-
-    return std::atan2(length(skew) * 0.5f, (trace - 1.0f) * 0.5f);
-}
-
-/// The same distance, computed the way every reference states it.
-///
-/// Kept **only** so that Lesson 7.1 §6.4 can measure the two against each other,
-/// and kept in the engine rather than in the harness so that the comparison is
-/// against the real thing. It is the right formula to have in your head and the
-/// wrong one to call: see `angle_between_rotations` above for the measurement.
-/// Nothing in the engine calls this.
-[[nodiscard]] inline float angle_between_rotations_by_trace(const mat3& a, const mat3& b)
-{
-    const mat3 r = transpose(a) * b;
-    const float trace = r.at(0, 0) + r.at(1, 1) + r.at(2, 2);
-    return std::acos(std::clamp((trace - 1.0f) * 0.5f, -1.0f, 1.0f));
-}
+// ---- Where the instrument went ------------------------------------------------
+//
+// `angle_between_rotations` — the angle of the shortest turn carrying one
+// orientation onto another, with which every claim in Lesson 7.1 was measured —
+// **used to be defined here, and Lesson 7.2 moved it to
+// `math/rotation.hpp`.** The doc comment it carried said it did not belong in
+// this file and named 7.2 as the lesson that should move it; 7.2 arrived with a
+// second thing that needs it, which is what a shared header waits for.
+//
+// Nothing has to change at a call site: this header includes that one, so a
+// translation unit that includes `math/euler.hpp` still sees the function. The
+// note is here so that a reader following Lesson 7.1's listing does not conclude
+// the function was deleted.
 
 } // namespace engine

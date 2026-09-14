@@ -2564,6 +2564,97 @@
   </div>
 
   <!-- ===================================================================== -->
+  <h2 id="axis-angle"><span class="num">8c</span>Axis-angle &mdash; one convention, and two honest ambiguities</h2>
+
+  <p>
+    Settled in <a href="lessons/07-02-axis-angle.html">Lesson 7.2</a>. Unlike &sect;8b there is
+    nothing arbitrary to choose here &mdash; a rotation has one axis and one angle, and Euler&rsquo;s
+    rotation theorem guarantees it exists. What does need writing down is the <em>canonical
+    range</em>, and what the engine returns in the two cases where the answer genuinely is not
+    unique.
+  </p>
+
+  <div class="callout ok">
+    <span class="label">Unit axis, angle in [0, &pi;], right-hand rule</span>
+    <p class="mono">
+      axis_angle_from_rotation(R).value &rarr; { axis (unit), angle &isin; [0, &pi;] }<br>
+      rotation_from_axis_angle({n, &theta;}) == Rodrigues(n, &theta;)
+    </p>
+  </div>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>Decision</th><th>Ours</th><th>What fixes it</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>Angle range</strong></td>
+          <td><code>[0, &pi;]</code></td>
+          <td>A turn of 200&deg; about <code>n</code> is a turn of 160&deg; about <code>&minus;n</code>,
+              so capping at a half-turn loses nothing &mdash; and gains the property that
+              <strong>the angle IS the distance</strong> between the two orientations. It also
+              arrives for free: <code>atan2</code> of a magnitude and the trace lands in
+              <code>[0, &pi;]</code> with no clamp.</td>
+        </tr>
+        <tr>
+          <td><strong>Axis length</strong></td>
+          <td>Unit, and <em>not</em> enforced on input</td>
+          <td>A non-unit axis does not give a slightly wrong rotation, it gives a <em>shear</em> &mdash;
+              Rodrigues scales the in-plane part by <code>|n|</code> and the along-axis part by
+              <code>|n|&sup2;</code>. Silently normalising would hide a real mistake. If your
+              direction is not unit you are holding a <strong>rotation vector</strong>; use
+              <code>rotation_from_rotation_vector</code>, which has no such requirement.</td>
+        </tr>
+        <tr>
+          <td><strong>&theta; = 0</strong></td>
+          <td>Axis is a placeholder <code>+X</code>; <code>route == no_axis</code></td>
+          <td>Every axis is correct at the identity, which is the same sentence as "no axis is
+              determined". The flag says so rather than leaving the caller to find out. It costs
+              nothing: an axis error is multiplied by <code>2 sin(&theta;/2)</code> on its way into
+              the orientation, which is <strong>zero</strong> here. Measured &mdash; an axis
+              78&deg; wrong at <code>&theta; = 1e-6</code> misplaces the object by 7.3e-05&deg;.</td>
+        </tr>
+        <tr>
+          <td><strong>&theta; = &pi;</strong></td>
+          <td>Either sign; <code>route == reversal</code></td>
+          <td><code>(n, 180&deg;)</code> and <code>(&minus;n, 180&deg;)</code> are the
+              <em>same rotation</em> &mdash; measured 1.0e-05&deg; apart, which is float noise.
+              No implementation can prefer one. <strong>Never compare two recovered axes for
+              equality</strong>; compare rotations with <code>angle_between_rotations</code>.
+              One degree away the ambiguity is gone and the two differ by 2.000&deg;.</td>
+        </tr>
+        <tr>
+          <td><strong>Extraction route</strong></td>
+          <td>Antisymmetric part below 120&deg;, symmetric part above</td>
+          <td>Derived from <code>tan(&theta;/2) = &radic;3</code>, where the two routes&rsquo;
+              conditionings <code>1/(2sin&theta;)</code> and
+              <code>&radic;3/(2(1&minus;cos&theta;))</code> are equal. Measured, the two run within
+              25% of each other from about 95&deg; to 140&deg;, so 120&deg; sits in the middle of a
+              band where the choice does not matter &mdash; rather than at a compromise between two
+              bad options.</td>
+        </tr>
+        <tr>
+          <td><strong>Rotation vector</strong></td>
+          <td><code>r = &theta;n</code>, unique on <code>|r| &le; &pi;</code></td>
+          <td>Three numbers, no constraint, and <strong>no singularity at the identity</strong> &mdash;
+              <code>r = 0</code> and nothing else. This is what angular velocity is (<code>&omega;&middot;dt</code>
+              is one step&rsquo;s rotation vector) and what Module 8 integrates. The seam at
+              <code>|r| = &pi;</code>, where <code>r</code> and <code>&minus;r</code> agree, is the
+              half-turn ambiguity arriving by another route.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    <strong>What axis-angle is for, and what it is not.</strong> It is the right thing to
+    <em>interpolate</em> with &mdash; <code>rotation_slerp</code> traces the exact geodesic, 0.00%
+    excess turning at every pose &mdash; and the right thing to state a rotation in when two
+    programs have to agree. It is the wrong thing to <em>store</em> and the wrong thing to
+    <em>compose</em>: there is no usable closed form for the single turn of "do this, then that",
+    so every composition goes out to a matrix and back. Lesson 7.4&rsquo;s quaternion is what the
+    engine will store.
+  </p>
+
   <h2 id="simulation"><span class="num">9</span>The simulation contract</h2>
 
   <p>

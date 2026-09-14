@@ -7749,3 +7749,101 @@ viewport.
 The fix is also worth the note: the labels were correct and the *shape* was too big. Shrinking the
 ground square inside every label's radius fixed four placements at once, where moving four labels
 would have been four chances to create a new overlap.
+
+## A path in a doc comment is indistinguishable from a path in an `#include`
+
+Lesson 7.1 landed the rule *"grep the include path, not the name"*, after `grep -rn euler` found
+the Euler characteristic. Lesson 7.2 found the next rung: `grep -rln "math/euler.hpp"` reports
+`math/transform.hpp` and `math/rotation.hpp` as includers, and **neither one includes it**. Both
+mention the path inside a doc comment — this codebase's comments are dense enough that half the
+hits for any header path are prose.
+
+Two fixes, and take the second:
+
+1. Match the directive: `grep -rln "^#include <engine/math/euler\.hpp>"`.
+2. **Walk the graph transitively** from the actual roots. Fifteen lines of Python, and it also
+   catches a header reached through two others, which a one-level grep cannot see at all — the
+   more dangerous of the two errors, because it produces a *false negative* on a real dependency.
+
+The golden's structural argument is now computed rather than asserted: from the six engine headers
+`demos/common/demo_scene.cpp` includes, the reachable math headers are exactly `mat3`, `mat4`,
+`transform`, `vec2`, `vec3`, `vec4`. Anything else in `math/` cannot move the reference render, by
+construction.
+
+## Build the golden into `build/demos/`, not `build/`
+
+`golden_72` reported `identical=NO` **with the correct byte count**, because the binary sat one
+directory higher than the other harnesses, the asset search path failed to find `torus.obj`, and
+two of the eight shots drew nothing at all. The output was the right size and the wrong picture, so
+a size check passes and only the byte comparison catches it.
+
+**The working directory is part of the instrument.** A golden that fails because an asset did not
+load looks exactly like a regression, and the log line that explains it (`mesh 'torus.obj' is in
+none of the 1 root(s)`) scrolls past above the verdict. Read the whole output, not the last line.
+
+## A timing loop measures the compiler unless you stop it twice
+
+One lesson, two independent eliminations, both producing *plausible* numbers:
+
+- **Partial dead-code elimination.** Reading `.c1.y` of a returned `mat3` let the compiler compute
+  one element of nine. A 3×3 product "timed" at **0.41 ns** — about one cycle for 27 multiplies and
+  18 adds. Cure: consume the whole result (sum all nine entries).
+- **Loop-invariant hoisting.** A fixed input array meant every repetition asked the identical
+  question, so the compiler computed 256 answers once and replayed them 4,000 times. A `volatile`
+  sink stops the work being *deleted*; it does not stop it being *cached*. Cure: index the inputs
+  with the repetition counter so the million calls are a million different questions.
+
+The sanity test is free: **divide the reported time by the operation count and ask whether the
+answer is physically possible.** And take the *minimum* of several passes, never the mean — a
+timing is a lower bound contaminated by interruptions that can only slow it down. Before that
+change the same spelling measured 4.20 ns and 9.87 ns in two runs.
+
+## Not every catastrophic cancellation is a bug — measure what reaches the output
+
+Lesson 7.1's rule: *if a formula's job is to report something near zero, look at what it computes
+just before it returns and ask whether that is ever small.* Lesson 7.2 found the other half.
+
+The coefficient `(1 − cos θ)/θ²` has exactly 7.1's shape and is destroyed exactly as predicted —
+relative error **1.000** at θ ≤ 1e-4, returning zero where the answer is one half. The matrix it
+builds is wrong by **one float ULP**, at every angle, because the term it scales shrinks as `θ²`
+precisely as fast as the coefficient's error grows.
+
+The pattern is identical in the bug case and the benign case. Only the measurement separates them,
+so **track the error to the number the caller actually receives**. (Keep the well-conditioned
+spelling anyway: "the error cancels downstream" is a property of today's call sites, not of the
+function.)
+
+## Print the ratio, not the verdict
+
+Comparing two algorithms across nine probes with a "winner" column produced the summary *"the
+crossover is between 120° and 110°"*, which is not an interval. The two were **tied** across a wide
+band and the winner was flipping on noise; a ratio column says that immediately and a verdict
+column cannot say it at all.
+
+Related: **the engine cannot make this measurement about itself.** It runs one of the two routes
+per call, chosen by a threshold, so the harness has to carry its own copy of both. You cannot find
+where two curves cross by plotting one of them — and duplicating engine code in a harness, normally
+a smell, is here the only way the question can be asked.
+
+## The figure sampler keeps the brightest pixel, so a thin feature over a bright surface vanishes
+
+`peak_sample` takes each 3×3 block's brightest pixel — right for thin bright lines on a dark ground
+(which is what it was written for) and wrong when a pale one-pixel trail crosses a white fuselage:
+the fuselage wins every block and the trail disappears from the figure while being perfectly
+visible in the PPM.
+
+Two consequences worth keeping:
+
+- **Do not draw anything solid in a panel whose subject is thin lines.** Removing the opaque
+  aircraft from the blend figure fixed it, and made the better picture — nothing in it is not the
+  comparison.
+- **Dashing does not survive the 3× downsample.** The sampler fills a two-pixel gap straight back
+  in. *Width* survives where dash does not: draw the line three times at small offsets.
+
+## Figure filenames follow page order, and nothing checks it
+
+`check-page.js` verifies geometry, `check-builders.py` verifies reproduction, `check-curriculum.py`
+verifies links — and **none of them can catch a figure numbered wrong**, because every figure still
+renders and the page is still valid. Lesson 7.2's figures 8 and 9 were written in the opposite
+order to the page and had to be swapped by hand. Check the placeholder order against the generator's
+filename list before building.

@@ -2702,3 +2702,52 @@ than merely different:
 3. **Nothing in the engine stores a Euler angle.** `transform::rotation` stays a `mat3`. That was
    the outcome the measurements argued for, and the lesson says so as its conclusion rather than
    leaving it as an omission.
+
+---
+
+## 2026-09-14 — `next`
+
+Produce Lesson 7.2 in full, per CLAUDE.md §6's twelve sections: the page, the engine code, the
+figures, the harness, and the STATE merge. Resumed from `STATE.md`, whose `next:` read
+**7.2 — Axis-Angle**.
+
+### What the lesson turned out to be
+
+Euler's rotation theorem proved from `det(R − I) = 0`, with the one line that mentions the
+dimension (`(−1)³`) identified as the whole content — and the theorem then shown *false* in 4-D
+with a measured counterexample, `det(R − I) = 0.25840`. Rodrigues derived from a picture and
+verified against a separately transcribed closed form. The inverse, with both degenerate ends, a
+threshold derived from `tan(θ/2) = √3` and then measured. And `rotation_slerp`, which answers 7.1's
+worst finding on 7.1's own pairs with 7.1's own instrument: **0.00% excess turning** against
++14.10% and +209.5%.
+
+**42 checks, eleven controls, nine figures, 45/45 builders reproducing, golden byte-identical
+(`E917C06C`) for the sixth lesson running.**
+
+### Three things the measurements changed about the code
+
+1. **A hand-hoisted `sin`/`cos` was written, measured, and reverted.** It came out 11% faster in
+   one harness and 3% slower in another, which is to say identical — CSE hoists pure functions
+   whether or not you ask. An optimisation whose sign flips between measurements is not one, and
+   paying for it in readability is a straight loss.
+2. **The "3× slower" claim in the header was a guess and was wrong.** Measured 1.3–1.6×, because
+   one `sin` plus one `cos` is half to two thirds of the cheaper spelling's entire runtime and both
+   spellings pay it exactly once. Counting multiplies predicts nothing when a transcendental is in
+   the loop.
+3. **`k_axis_angle_identity_angle`'s justification was an estimate and the measurement moved it.**
+   Predicted one degree of axis error at θ ≈ 2.9e-6; measured 5.2e-6, scaling as `1/θ` exactly.
+
+### One finding that is the opposite of the previous lesson's
+
+7.1 found the same cancellation bug three times. 7.2 found a fourth instance of the *identical*
+pattern that is **benign**: `(1 − cos θ)/θ²` is destroyed in `float` — relative error 1.000 — and
+the matrix it builds is wrong by one ULP, because the term it scales shrinks as `θ²` exactly as
+fast as the error grows. The pattern cannot distinguish the two cases; only measuring what reaches
+the output can.
+
+### Flagged, not decided
+
+The index still lists **7.5 as "Slerp"**. 7.2 has now built and measured `rotation_slerp` on
+`mat3`. 7.5 is not redundant — quaternion slerp, the double cover and the shortest-arc sign choice,
+nlerp vs slerp — but its one-line description is stale and its scope needs a decision that was not
+taken unilaterally.

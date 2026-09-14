@@ -3109,6 +3109,108 @@ The singular values are sqrt(1 + |sin p|), 1, sqrt(1 - |sin p|).</span>
     </p>
   </div>
 
+  <div class="card">
+    <h3>Euler&rsquo;s rotation theorem <span class="from">Lesson 7.2</span></h3>
+    <p>
+      Every rotation of 3-space about a fixed origin <em>is</em> a turn about a single axis &mdash;
+      not "can be decomposed into". "There is an axis" means some direction does not move, which
+      means <code>(R &minus; I)n = 0</code>, which means <code>R &minus; I</code> collapses space:
+    </p>
+    <div class="eq">
+      \[ \det(R-I) = \det(R^{\mathsf T})\det(R-I) = \det(I - R^{\mathsf T}) = \det(I-R) = (-1)^3\det(R-I) \]
+      <span class="eq-plain">det(R - I) = det(R^T) det(R - I) = det(I - R^T) = det(I - R) = (-1)^3 det(R - I)</span>
+    </div>
+    <p>
+      So <code>x = &minus;x</code>, so <code>det(R &minus; I) = 0</code>. <strong>Exactly one line
+      mentions the dimension</strong>, and it is <code>(&minus;1)&sup3;</code>. In 4-D it would be
+      <code>+1</code>, the argument would prove nothing, and the theorem is in fact false there:
+      a 4-D rotation can turn in two independent planes and fix nothing. Measured &mdash; a
+      (35&deg;, 50&deg;) double rotation has <code>det(R &minus; I) = 0.25840</code>.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>Rodrigues&rsquo; rotation formula <span class="from">Lesson 7.2</span></h3>
+    <p>
+      Split <code>v</code> along and across the axis. The along part cannot move. The across part
+      turns in a plane for which <code>v&#8869;</code> and <code>n &times; v</code> are a pair of
+      axes &mdash; perpendicular, and the same length, because <code>|n &times; v| = |v|sin&alpha; =
+      |v&#8869;|</code>. So it is Lesson 1.7&rsquo;s 2-D rotation:
+    </p>
+    <div class="eq">
+      \[ \mathbf{v}' = \mathbf{v}\cos\theta + (\mathbf{n}\times\mathbf{v})\sin\theta + \mathbf{n}(\mathbf{n}\cdot\mathbf{v})(1-\cos\theta) \]
+      <span class="eq-plain">v' = v cos(theta) + (n x v) sin(theta) + n (n . v) (1 - cos(theta))</span>
+    </div>
+    <p>
+      Three readings rather than three symbols: <em>most of it leans over</em>; <em>and swings
+      sideways</em>; <em>restoring the along-axis part the cosine took away</em>. Check it once with
+      <code>v = n</code> and it returns <code>n</code>. The matrix is the formula applied to the
+      three basis vectors &mdash; Lesson 2.5&rsquo;s definition, not a shortcut.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>The exponential map <span class="from">Lesson 7.2</span></h3>
+    <p>
+      Spinning at <code>n</code> rad/s moves <code>v</code> at <code>n &times; v</code>, so one
+      small step is <code>(I + [n]&times;dt)</code>. Compose <code>N</code> of them:
+    </p>
+    <div class="eq">
+      \[ R(\mathbf{n},\theta) = \exp\big(\theta[\mathbf{n}]_\times\big) = I + \sin\theta\,[\mathbf{n}]_\times + (1-\cos\theta)[\mathbf{n}]_\times^2 \]
+      <span class="eq-plain">R(n, theta) = exp(theta [n]_x) = I + sin(theta) [n]_x + (1 - cos(theta)) [n]_x^2</span>
+    </div>
+    <p>
+      The series collapses because <code>[n]&times;&sup3; = &minus;[n]&times;</code> &mdash; every
+      third power returns with a sign flip, so only two distinct matrices ever appear, and the odd
+      and even terms assemble into a sine and a cosine. Substituting
+      <code>[n]&times;&sup2; = nn&#7488; &minus; I</code> gives Rodrigues, from a completely
+      different argument. <strong>The rotation vector <code>r = &theta;n</code></strong> is this
+      map&rsquo;s input: three numbers, no constraint, and no singularity at the identity, which is
+      why an integrator stores it and axis-angle does not.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>What an axis error costs <span class="from">Lesson 7.2</span></h3>
+    <p>
+      Two turns of the same angle <code>&theta;</code> about axes <code>&phi;</code> apart differ
+      by <code>&Theta;</code>, where <code>cos(&Theta;/2) = cos&sup2;(&theta;/2) +
+      sin&sup2;(&theta;/2)cos&phi;</code>. For small <code>&phi;</code>:
+    </p>
+    <div class="eq">
+      \[ \Theta \approx 2\sin(\theta/2)\,\varphi \]
+      <span class="eq-plain">Theta is about 2 sin(theta/2) times phi</span>
+    </div>
+    <p>
+      <strong>This one factor settles the design of an entire extraction.</strong> It is
+      <em>zero</em> at <code>&theta; = 0</code>, where the axis is unrecoverable &mdash; so that
+      hole costs nothing &mdash; and <em>two</em> at a half-turn, where the axis is hardest to
+      find. A library that gives the two ends the same epsilon and the same fallback has
+      misunderstood its own problem. Measured against a brute-force sweep to 2.3e-05 relative.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>The geodesic between two orientations <span class="from">Lesson 7.2</span></h3>
+    <p>
+      Turning steadily about one fixed axis is what "straight line" means in the space of
+      rotations. So the shortest blend from <code>A</code> to <code>B</code> is: find the single
+      turn separating them, and perform <code>t</code> of it.
+    </p>
+    <div class="eq">
+      \[ \operatorname{slerp}(A,B,t) = A\cdot R(\mathbf{n}, t\theta), \qquad (\mathbf{n},\theta) = \text{axis-angle of } A^{\mathsf T}B \]
+      <span class="eq-plain">slerp(A, B, t) = A * R(n, t theta), where (n, theta) is the axis-angle of A^T B</span>
+    </div>
+    <p>
+      Exact at both ends by construction, and it takes the short way round for free because the
+      extracted angle is already in <code>[0, &pi;]</code>. Measured against Lesson 7.1&rsquo;s own
+      pairs with 7.1&rsquo;s own instrument: <strong>0.00% excess turning</strong> where an Euler
+      lerp costs +14.10% generically and +209.5% near gimbal lock. The catch is the bill &mdash;
+      82% of the call is trigonometry recovering what the representation declined to store, and
+      that is Lesson 7.4&rsquo;s reason to exist.
+    </p>
+  </div>
+
   <h2 id="coming"><span class="num">9</span>Coming as the course proceeds</h2>
 
   <p>

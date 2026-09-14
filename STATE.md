@@ -7,7 +7,10 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-09-13 (after Lesson 7.1 — 76 of 107 lessons; Module 7 OPEN.
+updated: 2026-09-14 (after Lesson 7.2 — 77 of 107 lessons; Module 7 OPEN,
+         2 of 8. Module 7 is now 8 lessons / ~40 h and the course ~514 h: 7.2
+         was planned at 3 h and shipped at 5.
+         2026-09-13 (after Lesson 7.1 — 76 of 107 lessons; Module 7 OPEN.
          Earlier the same day, after Lesson 5.12 — 75 of 107; Module 5 CLOSED
          out of order, eleven lessons after 5.11 and one after 6.18)
 
@@ -102,6 +105,100 @@ conventions:
         NOT A TRUE INVERSE, and cannot be: asin's range is ±90°, so pitch 100°
         comes back as (-170, 80, 180) — a different triple, the same rotation to
         1.5e-5°. DO NOT ROUND-TRIP THROUGH EULER ANGLES IN A LOOP.
+  axis-angle: ONE CONVENTION, TWO HONEST AMBIGUITIES. 7.2,
+        engine/include/engine/math/axis_angle.hpp + docs/conventions.html §8c.
+        CANONICAL: axis unit, angle in [0, pi]. The range is not a clamp — it
+        arrives free, because atan2(magnitude, trace) lands there — and it buys
+        the property THE ANGLE IS THE DISTANCE, which is the instrument 7.1 had
+        to build separately.
+        THE AXIS IS NOT NORMALISED FOR YOU, deliberately: a non-unit axis does
+        not give a slightly wrong rotation, it gives a SHEAR (in-plane scales by
+        |n|, along-axis by |n|^2). A caller holding a non-unit direction is
+        holding a ROTATION VECTOR; rotation_from_rotation_vector takes exactly
+        that and has no requirement to violate. The API's shape says so.
+        THE TWO AMBIGUITIES ARE REAL AND NEITHER IS NUMERICAL. theta = 0: every
+        axis is correct, which is the same sentence as none is determined; we
+        return placeholder +X and say so via axis_route::no_axis. theta = pi:
+        (n, pi) and (-n, pi) are THE SAME ROTATION, measured 1.0e-05° apart, and
+        no implementation can prefer one. NEVER COMPARE TWO RECOVERED AXES FOR
+        EQUALITY; compare rotations. Control: at 179° the same pair is 2.000°
+        apart, so the ambiguity exists at exactly one point and nowhere near it.
+  axis-angle-amplify: ONE FACTOR SETTLES THE WHOLE EXTRACTION, AND IT IS THE
+        SINGLE MOST USEFUL FACT IN THE FILE. 7.2 §8.3.
+          orientation error  =  2 sin(theta/2)  x  axis error
+        From cos(Theta/2) = cos^2(theta/2) + sin^2(theta/2) cos(phi). ZERO at
+        theta = 0 and TWO at theta = pi. So THE TWO HOLES ARE NOT EQUALLY
+        DANGEROUS: the axis becomes unrecoverable at the identity and it costs
+        nothing, because whatever nonsense comes back is multiplied by ~0; it
+        becomes hard to find at a half-turn, which is exactly where the
+        multiplier peaks. A library giving both ends the same epsilon and the
+        same fallback has misunderstood its own problem.
+        MEASURED against a brute-force sweep, worst relative error 2.3e-05, and
+        1.41420 at 90° which is sqrt(2). THE STRONGEST FORM: the placeholder
+        axis at theta = 1e-6 is 78.30° wrong and costs 7.280e-05° of
+        orientation; the law predicts 7.830e-05°. Harmless is arithmetic, not
+        hope.
+        COMPOSED WITH THE SKEW ROUTE'S OWN CONDITIONING eps/(2 sin theta), the
+        round-trip orientation error is eps/(2 cos(theta/2)) — finite at 0,
+        unbounded at pi. One expression, both ends.
+  axis-angle-routes: A CROSSOVER IS A BAND, NOT A POINT, AND MEASURING SAID SO
+        BETTER THAN THE DERIVATION DID. 7.2 §8.4.
+        Skew route divides by 2 sin(theta); symmetric route by (1 - cos theta)
+        with the pivot >= 1/sqrt(3). Setting the errors equal gives
+        sqrt(3) sin theta = 1 - cos theta, i.e. tan(theta/2) = sqrt(3), i.e.
+        k_axis_angle_reversal_angle = 2pi/3 = 120°.
+        MEASURED on matrices carrying 1e-7 ABSOLUTE error, 4,000 axes/probe:
+        the two run WITHIN 25% OF EACH OTHER FROM ~95° TO ~140° and the winner
+        FLIPS from probe to probe. Outside it is decisive: skew 6.8x better at
+        30°, symmetric 569x better at 179.9°. 120° is in the middle of a band
+        where the choice does not matter — the best place for a threshold, not a
+        compromise between two bad options.
+        FIRST DRAFT PRINTED A WINNER COLUMN and summarised "crossover between
+        120° and 110°", which is not an interval. A ratio says "they are tied";
+        a winner cannot. PRINT THE RATIO, NOT THE VERDICT.
+        CHEAPEST CHECK THAT A THRESHOLD IS NOT ARBITRARY: at the switch the two
+        routes must AGREE. Measured 1.354e-05° apart over 20,000 axes.
+        THE HARNESS HAS ITS OWN COPY OF BOTH ROUTES, and must: the engine runs
+        one per call, so THE ENGINE CANNOT MAKE THIS MEASUREMENT ABOUT ITSELF.
+        You cannot find where two curves cross by plotting one of them.
+        k_axis_angle_identity_angle = 1e-5, set where the axis stops being a
+        usable DIRECTION (measured 0.5150° error there, scaling exactly as
+        1/theta) rather than where it stops being computable.
+  axis-angle-slerp: THE GEODESIC, AND 7.1'S INDICTMENT ANSWERED ON 7.1'S OWN
+        PAIRS. 7.2 §9. slerp(A,B,t) = A * R(n, t*theta) with (n,theta) the
+        axis-angle of A^T B. Exact at both ends by construction; the geodesic
+        between, because turning steadily about one fixed axis is what "straight
+        line" means here. TAKES THE SHORT WAY FOR FREE (angle already in
+        [0, pi]) where 7.1 needed shortest_angle_delta per angle, three times:
+        yaw 170 -> -170 is 340.0° raw and 20.0° slerped.
+        MEASURED, same instrument, same pairs 7.1 published:
+          generic pair   Euler 204.29° / 179.05° = +14.10%, speed 1.556x
+                         slerp 179.05° / 179.05° = -0.00%,  speed 1.000x
+          four bands     Euler +209.5 / +62.5 / +22.5 / +26.7 %
+                         slerp   -0.00 / +0.00 / +0.00 / -0.00 %
+        THE EULER COLUMN IS THE CONTROL and reproduces 7.1 to the digit. A claim
+        of zero excess is worth nothing unless the instrument producing it can
+        still produce 14.10% for the thing that genuinely detours.
+        THE SLERP COLUMN CANNOT VARY, and that is the word: a geodesic performs
+        the turning required and there is NO OTHER NUMBER it could report. The
+        four rows check the code, not the claim.
+        THE BILL, and it is 7.4's reason to exist: 31.46 ns/call, of which 82%
+        is the two trig-bearing stages. AND AXIS-ANGLE DOES NOT COMPOSE AT ALL —
+        no usable closed form for "do this then that", so every composition goes
+        out to a matrix and back. Fine interface, fine interpolator, bad storage.
+  eulers-theorem: DET(R - I) = 0, AND THE ONLY LINE THAT MENTIONS THE DIMENSION
+        IS (-1)^3. 7.2 §4. det(R-I) = det(R^T)det(R-I) = det(I - R^T)
+        = det(I - R) = (-1)^3 det(R-I), so x = -x, so it is zero, so R - I
+        collapses a direction, so an axis exists. IN 4-D THE SAME LINE READS
+        (-1)^4 = +1 and proves NOTHING — and the theorem is genuinely FALSE
+        there: a double rotation (35°, 50°) fixes nothing, measured
+        det(R - I) = 0.25840, matching the eigenvalue prediction
+        (2-2cos a)(2-2cos b) to five decimals. The harness carries its own 4x4
+        determinant because mat3 cannot hold a disproof of a claim about mat3.
+        THE HONEST GENERAL STATEMENT: rotation happens in a PLANE. In n
+        dimensions it decomposes into floor(n/2) perpendicular planes; 3-D is
+        where that is ONE plane AND a plane has a unique normal. Two
+        coincidences, both needed, both gone in 4-D.
   euler-interp: A ONE-KNOB EULER LERP IS ALREADY A GEODESIC, WHICH IS WHY THE
         OBVIOUS TEST MEASURES NOTHING. 7.1 §7. The first draft swept the yaw
         alone at pitch 88° and correctly reported 0.00% excess: turning one
@@ -4486,8 +4583,39 @@ completed:
          reproduces. check-page.js caught three text-on-shape defects, one of
          which appeared at 1280 and NOT at 390: SVG labels scale with the
          viewport, so a collision can open at one width and not the other.)
+  - 7.2  Axis-Angle and Rodrigues' Rotation Formula
+        (7.1's TWO dead `next` links were repointed in the SOURCES —
+         scratch/l71_body_a.html and build_71.py's TAIL — and build_71 rebuilt,
+         so page and generator still agree. Planned at 3 h, shipped at 5, so
+         Module 7 went ~38 -> ~40 h and the course ~512 -> ~514 h; index prose,
+         hero stat and module subtotal all moved together and
+         check-curriculum.py confirms.
+         NOTE FOR 7.5: the index still lists 7.5 as "Slerp". 7.2 has now built
+         rotation_slerp on mat3 and measured it. 7.5 is NOT thereby redundant —
+         it is quaternion slerp, the double cover / shortest-arc sign choice,
+         and nlerp-vs-slerp — but its one-line description is stale and its
+         scope needs a decision. NOT TAKEN UNILATERALLY; flagged for the user.)
 
 capabilities:
+  - 7.2 THE ENGINE CAN NAME THE SINGLE TURN A ROTATION IS, AND TRAVEL IT.
+    79 -> 81 public headers (math/rotation.hpp and math/axis_angle.hpp; the
+    umbrella lists 80, one documented exception). Header-only again: the harness
+    links nothing. 42 checks green, ELEVEN of them controls.
+    WHAT IS NEW: axis_angle + rotate_about_axis + rotation_from_axis_angle +
+    axis_route + axis_angle_extraction + axis_angle_from_rotation +
+    k_axis_angle_reversal_angle + k_axis_angle_identity_angle +
+    rotation_from_rotation_vector + rotation_vector_from_rotation +
+    rotation_slerp. Plus demos/gimbal's [A] and [B] modes and --blend/--axis-angle.
+    WHAT MOVED: angle_between_rotations and its by-trace twin left
+    math/euler.hpp for math/rotation.hpp, as euler.hpp's own doc comment asked
+    in 7.1. euler.hpp INCLUDES rotation.hpp, so NOT ONE CALL SITE CHANGED — a
+    refactor that makes its callers edit is one that keeps being postponed.
+    WHAT IS STILL NOT: no storage change. transform::rotation is a mat3 until
+    7.4, and 7.2 strengthens rather than weakens that: axis-angle has no usable
+    composition formula at all, so it is a worse storage format than the matrix
+    it would replace.
+    THE ENGINE CAN NOW BLEND TWO ORIENTATIONS CORRECTLY, which it could not
+    before at any price: rotation_slerp, 0.00% excess turning at every pose.
   - 7.1 THE ENGINE CAN BE TOLD AN ORIENTATION IN THREE NUMBERS. 78 -> 79 public
     headers (the 79th is math/euler.hpp; the umbrella lists 78, one documented
     exception), sources and shaders unchanged — the whole lesson is header-only
@@ -7479,6 +7607,10 @@ files:
   engine/include/engine/math/: mat2.hpp, mat3.hpp, mat4.hpp, transform.hpp,
             vec2.hpp, vec3.hpp, vec4.hpp,
             euler.hpp                                                        [7.1]
+            rotation.hpp, axis_angle.hpp                                     [7.2]
+              (rotation.hpp is the representation-INDEPENDENT layer — the metric
+               moved into it from euler.hpp, which now includes it so no call
+               site changed. 7.3 and 7.4 both have reason to add to it.)
   engine/include/engine/platform/: platform.hpp, app.hpp,
             main.hpp   (NOT in engine.hpp — it defines the entry point)
   engine/include/engine/ui/: debug_ui.hpp                                   [5.11]
@@ -8154,86 +8286,114 @@ roadmap: RESHAPED 2026-09-08, AFTER TWO EXTERNAL REVIEWS OF THE PUBLISHED OUTLIN
             qualifier too, because a skimmer reads the recap and stops.
 
 
-next: 7.2 — Axis-Angle
-      (76 of 107 published. Module 7 is OPEN — 1 of 8 lessons, ~5 h of ~38 —
-      and its index badge now says `in progress`. Modules 0-6 complete.)
+next: 7.3 — Complex Numbers Rotate the Plane
+      (77 of 107 published. Module 7 is OPEN — 2 of 8 lessons, ~10 h of ~40 —
+       and its index badge says `in progress`. Modules 0-6 complete.)
 
-      (planned filename: docs/lessons/07-02-axis-angle.html. 7.1's TWO next
-      links point at the index and BOTH need repointing — scratch/l71_body_a.html
-      holds the top one and build_71.py's TAIL the bottom, the same pair 6.18
-      had, and check-curriculum.py reports it the moment the page exists.)
+      (planned filename: docs/lessons/07-03-complex-numbers.html. 7.2's TWO next
+       links point at the index and BOTH need repointing — scratch/l72_body_a.html
+       holds the top one and build_72.py's TAIL the bottom, the same pair 7.1 and
+       6.18 had. check-curriculum.py reports it the moment the page exists, which
+       it did for 7.1 on the first run after 7.2 landed.)
 
-      PINNING IS DONE. build_71.py's LISTING_SOURCE is populated from copies
-      taken at writing time, and check-builders.py is 44/44. It matters here for
-      a reason peculiar to what 7.2 will touch: `math/transform.hpp` is pinned,
-      and 7.4 is the lesson that replaces its stored `mat3`; `demos/CMakeLists.txt`
-      is pinned, and every lesson that adds a target edits it; `engine.hpp` is
-      pinned, and the configure-time lint now GUARANTEES that every lesson adding
-      a public header edits it too. Three files certain to move.
+      PINNING IS DONE. build_72.py's LISTING_SOURCE is populated from copies
+      taken at writing time, and check-builders.py is 45/45. The three pinned
+      files most likely to move next are `math/rotation.hpp` (7.3 and 7.4 both
+      have reason to add to it), `engine.hpp` (forced by the configure-time
+      lint, which has now fired three times in two lessons) and
+      `demos/gimbal/main.cpp` (this module's demo, still growing).
 
-      WHAT 7.2 INHERITS, and should not re-derive:
-        - `angle_between_rotations` ALREADY COMPUTES HALF OF AXIS-ANGLE. It takes
-          atan2(|R - Rᵀ|/2, (tr R - 1)/2) and THROWS AWAY the vector whose length
-          is sin(theta) — which is the axis, scaled. 7.2's opening move is to
-          stop throwing it away, and the lesson should say so rather than
-          starting from a blank page: the file already contains three of the four
-          lines it needs.
-        - AND THE FILE NAME IS ALREADY WRONG. euler.hpp's own doc comment says
-          `angle_between_rotations` "is not about Euler angles and it knows it",
-          and names 7.2 as the lesson that should move it. Moving it to a
-          `math/rotation.hpp` is the right call ONCE 7.2 has a second inhabitant
-          for that file. Do it in 7.2, not before — a cupboard for one thing.
-        - THE CLAMP AT theta NEAR pi IS THE ONE TRAP 7.1 DID NOT HIT. Extracting
-          the AXIS from the antisymmetric part fails at theta = pi, where
-          sin(theta) = 0 and R is symmetric — the axis is still well defined and
-          that route cannot find it. 7.1's metric does not care (atan2 gets pi
-          from the cosine alone) but 7.2's extraction will. Expect to need the
-          diagonal-of-(R + I) branch, and expect it to be the lesson's §6.
-        - THE CONTROL DISCIPLINE HELD AND SHOULD CONTINUE. Six controls in 34
-          checks, one of which failed on the first run at 65.51° against a
-          threshold of 80 and was RIGHT to. Budget one control per claim.
+      WHAT 7.3 INHERITS, and should not re-derive:
+        - THE QUESTION IS ALREADY POSED. 7.2 §10 states, in the lesson text, what
+          a better representation must do: compose WITHOUT trigonometry,
+          interpolate along the geodesic as rotation_slerp does, store in four
+          floats or fewer, and renormalise cheaply. 7.3 does not need to motivate
+          itself from scratch; it needs to answer a question already asked.
+        - THE HALF-ANGLE IS ALREADY ON THE PAGE AND UNEXPLAINED. §8.3's
+          amplification factor is 2 sin(theta/2), and §8.4's threshold comes out
+          of tan(theta/2) = sqrt(3). Both are half-angle quantities, arrived at
+          for unrelated reasons, and 7.2 deliberately does NOT say why. That is
+          the hook: a quaternion stores exactly cos(theta/2) and sin(theta/2)n.
+          7.4 should collect the debt; 7.3 should make the reader expect it.
+        - `rotation.hpp` IS THE RIGHT HOME for anything representation-neutral
+          7.3 adds, and it now has two inhabitants rather than one.
+        - THE METRIC IS THE INSTRUMENT, unchanged since 7.1, and every
+          interpolation claim in Module 7 is measured with it. Do not build a
+          second one.
 
-      WHAT 7.2 IS LIKELY TO MOVE. `math/euler.hpp` (the metric leaves), a new
-      `math/axis_angle.hpp` or `math/rotation.hpp`, `engine.hpp` (forced),
-      `demos/CMakeLists.txt` if it wants its own demo — and it probably does not:
-      `demos/gimbal` already has three rings, a live readout and a --shot, and
-      Rodrigues' formula is most convincingly shown BY REPLACING the rig's
-      composition with a single axis-angle turn and measuring that the picture
-      does not move. mat3.hpp/mat4.hpp SHOULD NOT MOVE — they held as the control
-      through 7.1 and are the reason the golden argument is structural.
+      WHAT 7.3 IS LIKELY TO MOVE. A new `math/complex.hpp` (or, better, teach it
+      inside the lesson and add nothing to the engine until 7.4 — a 2-D complex
+      type has exactly one caller and would be a cupboard for one thing, which is
+      the rule 7.1 wrote and 7.2 executed). `engine.hpp` only if a header lands.
+      `demos/` — a 2-D demo is genuinely useful here and the framebuffer path
+      from Modules 1-3 still exists; note that anything touching
+      soft_renderer/raster/framebuffer or demos/common BREAKS THE GOLDEN'S
+      STRUCTURAL ARGUMENT and the golden must then be RUN as a real instrument.
 
       THE GOLDEN IS NULL AND WILL REMAIN SO until something touches
-      soft_renderer/raster/framebuffer or demos/common. Five lessons running now
-      (E917C06C). CONFIRM STRUCTURALLY as 6.17, 6.18, 5.12 and 7.1 did — grep
-      the include path, not the name, because `grep -rn euler demos/common`
-      returns two hits and both are the EULER CHARACTERISTIC from 3.5's mesh
-      validator. Build the real instrument instead.
+      soft_renderer/raster/framebuffer or demos/common. Six lessons running now
+      (E917C06C). 7.2 UPGRADED THE ARGUMENT AND 7.3 SHOULD USE THE NEW FORM:
+      compute the transitive include closure from demo_scene.cpp's six engine
+      headers, do not grep. See `grep-finds-prose` below.
+      AND BUILD IT INTO build/demos/, NOT build/. The golden's first run this
+      lesson reported `identical=NO` with the CORRECT BYTE COUNT, because the
+      binary sat one directory higher, the asset search path missed
+      `torus.obj`, and two of the eight shots drew nothing. A size check would
+      have passed it. The working directory is part of the instrument.
 
-      CARRY FORWARD from 7.1:
-        - IF A FORMULA'S JOB IS TO REPORT SOMETHING NEAR ZERO, look at what it
-          computes just before it returns and ask whether THAT is ever small.
-          Three instances in one lesson, all cured the same way.
-        - A CHECK WHOSE DEGENERATE CASE IS A PASS IS NOT A CHECK — seventh member
-          of the instrument family (6.14, 6.15, 6.16, 6.17 twice, 6.18, now this).
-          7.1's §D.3 nearly shipped a table whose best-looking cell was its worst
-          pose, because every perturbed trial below the threshold was SKIPPED and
-          the running worst stayed at its initial 0.0. Count what you measured;
-          print a dash when the count is zero.
-        - EVERY ARTIFACT ON DISK BEING CORRECT IS NOT EVIDENCE THE PROGRAM
-          SUCCEEDED. `gimbal --shot` wrote a correct PPM, printed its receipt,
-          and exited 139. Same three-independent-axes rule check-builders.py
-          learned on 2026-09-12, met from the other side.
-        - RUN check-page.js AT BOTH WIDTHS, EVERY TIME. One of figure 1's three
-          label collisions appeared at 1280 and not at 390. SVG labels scale with
-          the viewport, so "it looked fine" is a statement about one viewport.
-        - WHEN LABELS COLLIDE WITH A SHAPE, CONSIDER MOVING THE SHAPE. Shrinking
-          figure 1's ground square inside every label's radius fixed four
-          placements at once; moving four labels would have been four chances to
-          open a new overlap.
-        - GREP THE INCLUDE PATH, NOT THE NAME (above). Two unrelated things named
-          after the same man, in the one directory the argument was about.
-        - THE MEASUREMENT MAY NEED NO NEW API. `|det(euler_rate_jacobian(e))|` is
-          "how far from gimbal lock am I" and `determinant` has been in mat3.hpp
-          since 2.6. When a phenomenon feels un-measurable the first question is
-          not "what function do I need" but "what is it the determinant, the norm
-          or the trace of".
+      CARRY FORWARD from 7.2:
+        - GREP FINDS PROSE. 7.1's rule was "grep the include path, not the name".
+          Not enough: `grep -rln "math/euler.hpp"` reports transform.hpp and
+          rotation.hpp as includers and NEITHER INCLUDES IT — both mention the
+          path in a doc comment. In a codebase this heavily commented, a path in
+          prose is indistinguishable from a path in a directive. Match
+          `^#include <...>`, and better, WALK THE GRAPH TRANSITIVELY: fifteen
+          lines of Python, and it also catches a header reached through two
+          others, which a one-level grep cannot.
+        - A TIMING LOOP MUST CONSUME ITS WHOLE RESULT AND VARY ITS INPUT. Two
+          independent eliminations, both hit in one lesson: reading `.c1.y` of a
+          returned mat3 let the compiler compute one element of nine (a 3x3
+          product "timed" at 0.41 ns), and a fixed input array let it compute 256
+          answers once and replay them across 4,000 repetitions. Cure: sum all
+          nine entries, and index with the repetition counter. SANITY TEST:
+          divide the time by the operation count and ask if it is physically
+          possible.
+        - BEST OF THREE, NEVER THE MEAN. A timing is a lower bound contaminated
+          by interruptions that can only slow it down. The first draft reported
+          the same spelling at 4.20 ns and 9.87 ns in two runs.
+        - AN OPTIMISATION WHOSE SIGN FLIPS BETWEEN MEASUREMENTS IS NOT ONE.
+          Hoisting sin/cos out of rotation_from_axis_angle's three columns
+          measured 11% faster in one harness and 3% slower in another. Reverted,
+          and the readable spelling shipped. Paying for it in readability would
+          have been a straight loss.
+        - THE MULTIPLY COUNT PREDICTS NOTHING when a transcendental is involved.
+          Predicted 3x, measured 1.3-1.6x, because one sin + one cos is half to
+          two thirds of the cheaper spelling's entire runtime and BOTH pay it.
+        - PRINT THE RATIO, NOT THE VERDICT. A "winner" column across nine probes
+          produced a summary claiming the crossover was "between 120° and 110°",
+          which is not an interval. The two routes were tied, and a ratio says so.
+        - NOT EVERY INSTANCE OF 7.1'S CANCELLATION PATTERN IS A BUG. The
+          coefficient (1-cos t)/t^2 is destroyed in float — relative error 1.000
+          at t <= 1e-4 — and the matrix it builds is wrong by ONE ULP, because
+          the term it scales shrinks as t^2 exactly as fast as the error grows.
+          7.1's rule ("is the quantity it returns ever small?") needs its other
+          half: ASK WHAT HAPPENS TO THE DAMAGED QUANTITY ON ITS WAY TO THE
+          OUTPUT. The pattern is identical in both cases; only the measurement
+          separates them. (We keep the half-angle spelling anyway: "the error
+          cancels downstream" is a property of today's call sites.)
+        - MARK THE ROWS THAT ARE NOT MEASUREMENTS. §C.5's table mixes a measured
+          degradation with a placeholder the routine returns after giving up; a
+          max over both columns would have reported the placeholder as the worst
+          case of a degradation it is not part of. Same family as 7.1's
+          "a zero from a skipped loop is not a zero error".
+        - THE FIGURE PIPELINE'S SAMPLER TAKES EACH BLOCK'S BRIGHTEST PIXEL, so a
+          thin feature drawn OVER a brighter surface disappears. The blend
+          figure lost its pale trail wherever it crossed the white fuselage; the
+          fix was to draw no solid craft at all, which is also the better
+          picture. Dashing the trails was tried and DID NOT SURVIVE the 3x
+          downsample — the sampler fills a two-pixel gap straight back in.
+          Line WIDTH survives where dash does not: three offset copies.
+        - FIGURE FILENAMES FOLLOW PAGE ORDER, and this is the one numbering
+          mistake nothing in the pipeline catches for itself — every figure still
+          renders, just under the wrong number. Figures 8 and 9 were written in
+          the opposite order to the page and had to be swapped.

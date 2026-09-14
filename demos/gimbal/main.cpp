@@ -7,10 +7,23 @@
 // you exactly how close you are. This program puts the picture and the number on
 // screen at the same time, so that neither has to be taken on trust.
 //
+// LESSON 7.2 ADDED THE OTHER HALF, and it is the same rig answering a different
+// question. Euler's rotation theorem says the pose the three knobs just built is
+// ALSO a single turn about a single line; [A] poses the craft that way instead
+// and shows the two agree to six decimals, and the teal line through the
+// fuselage is that axis — the one direction the whole rotation leaves alone.
+// [B] then runs the blend 7.1 indicted: two ghost craft travel from the same
+// start to the same end, one interpolating three angles and one turning steadily
+// about that single axis. **Watch what stays still.** The slerp ghost rotates
+// rigidly about one fixed teal line for the entire blend; the Euler ghost does
+// not, and the difference between the two trails is the 25.24° of detour §9
+// measures.
+//
 //     cmake --build build --target gimbal
 //     ./build/demos/gimbal                                play with it
 //     ./build/demos/gimbal --pose 40 89 -25               start at a pose
 //     ./build/demos/gimbal --shot scratch/l71_shot.ppm    headless, deterministic
+//     ./build/demos/gimbal --blend 0.5 --shot out.ppm     the blend, frozen at t
 //
 // WHAT TO DO WITH IT, in the order that makes the point:
 //
@@ -47,9 +60,11 @@
 #include <engine/gfx/scene.hpp>
 #include <engine/gfx/soft_renderer.hpp>
 #include <engine/gfx/viewport.hpp>
+#include <engine/math/axis_angle.hpp>
 #include <engine/math/euler.hpp>
 #include <engine/math/mat3.hpp>
 #include <engine/math/mat4.hpp>
+#include <engine/math/rotation.hpp>
 #include <engine/math/transform.hpp>
 #include <engine/platform/app.hpp>
 #include <engine/ui/debug_ui.hpp>
@@ -94,6 +109,21 @@ constexpr Uint32 k_trail      = engine::pack_argb(120, 132, 168);
 // convention violation as well as a legibility bug. Magenta is used nowhere else
 // in the engine's debug palette.
 constexpr Uint32 k_dead       = engine::pack_argb(214, 118, 226);
+
+// LESSON 7.2's THREE. The same constraint applies as to `k_dead` above: red,
+// green and blue MEAN x, y and z course-wide (Conventions §10) and the three
+// rings already use them, so nothing new may be any of those.
+//
+// Teal for the rotation axis, which is the one line a rotation leaves alone. It
+// is the only cool colour on screen that is not the blue roll ring, and the two
+// are never drawn together — [B] hides the rings, and outside a blend the axis
+// passes through the fuselage rather than round it.
+constexpr Uint32 k_axis         = engine::pack_argb(96, 222, 208);
+// The two blend ghosts, deliberately the SAME two colours Lesson 7.1's figure 7
+// used for the same two paths: amber is the Euler lerp, pale blue the geodesic.
+// A reader who has seen the figure should not have to relearn the code.
+constexpr Uint32 k_ghost_euler  = engine::pack_argb(236, 168, 86);
+constexpr Uint32 k_ghost_slerp  = engine::pack_argb(126, 188, 248);
 
 // ---------------------------------------------------------------------------
 // §RING — the one thing the public API cannot do, done here in the open
@@ -180,6 +210,65 @@ conditioning measure(euler_angles e)
 }
 
 // ---------------------------------------------------------------------------
+// Lesson 7.2 — the single turn, and the two ways to travel it
+// ---------------------------------------------------------------------------
+
+/// The two poses the blend runs between, which are **Lesson 7.1's generic pair**,
+/// unchanged, so that the numbers on screen are the numbers on the page.
+constexpr euler_angles k_blend_from{-70.0f * k_rad, -35.0f * k_rad, 20.0f * k_rad};
+constexpr euler_angles k_blend_to{85.0f * k_rad, 55.0f * k_rad, -60.0f * k_rad};
+
+/// Total turning performed along a path, and the minimum it could have been.
+///
+/// `angle_between_rotations` is the metric (`math/rotation.hpp`), so this is a
+/// sum of geodesic steps — the length of the route actually driven. The geodesic
+/// between the endpoints is one call to the same function, and the ratio is the
+/// detour. Computed ONCE when a blend starts, at a fixed step count, rather than
+/// accumulated per frame: a per-frame sum measures the frame rate as much as the
+/// path, and two runs of the same demo would print different numbers.
+struct blend_cost
+{
+    float euler_path = 0.0f;
+    float slerp_path = 0.0f;
+    float geodesic = 0.0f;
+};
+
+template <typename Fn>
+float path_length(Fn orientation_at, int steps)
+{
+    float total = 0.0f;
+    mat3 previous = orientation_at(0.0f);
+    for (int i = 1; i <= steps; ++i)
+    {
+        const mat3 current = orientation_at(static_cast<float>(i) / static_cast<float>(steps));
+        total += engine::angle_between_rotations(previous, current);
+        previous = current;
+    }
+    return total;
+}
+
+euler_angles lerp_angles(euler_angles a, euler_angles b, float t)
+{
+    return {a.yaw + (b.yaw - a.yaw) * t,
+            a.pitch + (b.pitch - a.pitch) * t,
+            a.roll + (b.roll - a.roll) * t};
+}
+
+blend_cost measure_blend()
+{
+    const mat3 from = engine::rotation_from_euler(k_blend_from);
+    const mat3 to = engine::rotation_from_euler(k_blend_to);
+    blend_cost c;
+    c.euler_path = path_length(
+        [&](float t) { return engine::rotation_from_euler(lerp_angles(k_blend_from, k_blend_to, t)); },
+        2048);
+    c.slerp_path = path_length(
+        [&](float t) { return engine::rotation_slerp(from, to, t); }, 2048);
+    c.geodesic = engine::angle_between_rotations(from, to);
+    return c;
+}
+
+// ---------------------------------------------------------------------------
 // The app
 // ---------------------------------------------------------------------------
 
@@ -198,6 +287,28 @@ public:
                 pose_.roll = static_cast<float>(SDL_atof(argv[++i])) * k_rad;
             }
             else if (SDL_strcmp(argv[i], "--no-rings") == 0) { rings_ = false; }
+            else if (SDL_strcmp(argv[i], "--axis-angle") == 0) { single_turn_ = true; }
+            else if (SDL_strcmp(argv[i], "--blend") == 0 && i + 1 < argc)
+            {
+                // FROZEN at the given t rather than started, so that a `--shot`
+                // of a blend is reproducible. A running blend advances in
+                // `on_fixed_step`, which a headless run never calls.
+                blending_ = true;
+                rings_ = false;
+                blend_t_ = std::clamp(static_cast<float>(SDL_atof(argv[++i])), 0.0f, 1.0f);
+                cost_ = measure_blend();
+                // AND THE TRAILS ARE WALKED IN, not left empty. A headless run
+                // never calls `on_fixed_step`, so a frozen blend would otherwise
+                // draw two aircraft and no history — a picture of a moment rather
+                // than of a journey, and the journey is the entire point. Same
+                // step count either way, so the still and the live view agree.
+                for (int k = 0; k <= 600; ++k)
+                {
+                    const float t = blend_t_ * static_cast<float>(k) / 600.0f;
+                    record_nose(ghost_euler_, euler_at(t));
+                    record_nose(ghost_slerp_, slerp_at(t));
+                }
+            }
         }
 
         return {.title = "gimbal — watch a degree of freedom die",
@@ -246,11 +357,27 @@ public:
         }
         if (actions_.pressed(a_rings_)) { rings_ = !rings_; }
         if (actions_.pressed(a_trail_)) { trail_on_ = !trail_on_; trail_.clear(); }
+        if (actions_.pressed(a_single_)) { single_turn_ = !single_turn_; }
+        if (actions_.pressed(a_blend_))
+        {
+            blending_ = !blending_;
+            blend_t_ = 0.0f;
+            blend_phase_ = 0.0f;
+            ghost_euler_.clear();
+            ghost_slerp_.clear();
+            // The rings belong to the three-knob story and only clutter this one.
+            if (blending_) { cost_ = measure_blend(); rings_ = false; }
+            if (engine::transform* eye = world_.get<engine::transform>(camera_))
+            {
+                *eye = camera_placement();
+            }
+        }
     }
 
     void on_fixed_step(float h) override
     {
         if (shot_path_ != nullptr) { return; }
+        if (blending_) { drive_blend(h); return; }
         drive_knobs(h);
     }
 
@@ -270,7 +397,14 @@ public:
         // else in this file is a way of looking at what that line just did.
         if (engine::transform* body = world_.get<engine::transform>(craft_))
         {
-            body->rotation = engine::rotation_from_euler(pose_);
+            // LESSON 7.2's ONE LINE, next to Lesson 7.1's. The two build the same
+            // matrix by completely different routes — three elementary turns
+            // composed, against one turn about one axis — and the panel prints
+            // the angle between them, which is how you know rather than hope.
+            // During a blend the craft is the slerp ghost's solid twin.
+            body->rotation = blending_ ? slerp_pose()
+                           : single_turn_ ? engine::rotation_from_axis_angle(single_turn().value)
+                                          : engine::rotation_from_euler(pose_);
         }
         (void)tree_.rebuild_and_resolve(world_);
 
@@ -288,7 +422,16 @@ public:
                              static_cast<float>(k_height), 0.0f, 1.0f},
             engine::near_mode::clip};
 
-        collect_ = engine::collect_renderables(world_, meshes_, objects_);
+        // NOTHING SOLID DURING A BLEND, and it is not a performance choice. The
+        // blend's content is two nose TRAILS a pixel wide, and a solid aircraft
+        // sitting between them and the camera hides the part of each trail that
+        // passes behind it — including, at t = 1, most of the gap that is the
+        // whole measurement. Two wireframes and two trails on an empty ground is
+        // also simply the better picture: there is nothing in it that is not the
+        // comparison.
+        objects_.clear();
+        collect_ = blending_ ? engine::renderable_report{}
+                             : engine::collect_renderables(world_, meshes_, objects_);
 
         const engine::render_options opts{.cull = engine::cull_choice::back,
                                           .normals = engine::normal_source::vertex,
@@ -302,9 +445,14 @@ public:
         engine::draw_triangles(fb(), &depth_, triangles_, false, style);
 
         debug_.clear();
-        if (rings_) { queue_rings(); }
-        queue_nose_and_axis();
-        if (trail_on_) { queue_trail(); }
+        if (blending_) { queue_blend(); }
+        else
+        {
+            if (rings_) { queue_rings(); }
+            queue_nose_and_axis();
+            queue_axis(single_turn(), 2.9f);
+            if (trail_on_) { queue_trail(); }
+        }
         debug_drawn_ = engine::draw_debug_lines(fb(), view, proj, debug_);
         debug_.advance(time().dt());
 
@@ -339,6 +487,8 @@ private:
         a_reset_ = actions_.declare("reset");
         a_rings_ = actions_.declare("rings");
         a_trail_ = actions_.declare("trail");
+        a_single_ = actions_.declare("single_turn");
+        a_blend_ = actions_.declare("blend");
         a_quit_  = actions_.declare("quit");
 
         (void)actions_.bind_key(a_yaw_, SDL_SCANCODE_LEFT, +1.0f);
@@ -352,6 +502,8 @@ private:
         (void)actions_.bind_key(a_reset_, SDL_SCANCODE_R);
         (void)actions_.bind_key(a_rings_, SDL_SCANCODE_G);
         (void)actions_.bind_key(a_trail_, SDL_SCANCODE_T);
+        (void)actions_.bind_key(a_single_, SDL_SCANCODE_A);
+        (void)actions_.bind_key(a_blend_, SDL_SCANCODE_B);
         (void)actions_.bind_key(a_quit_, SDL_SCANCODE_ESCAPE);
     }
 
@@ -391,10 +543,21 @@ private:
     void build_camera()
     {
         camera_ = world_.create();
-        engine::ecs::add_hierarchy_components(
-            world_, camera_,
-            engine::ecs::look_along({5.0f, 3.4f, 6.6f}, {0.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f}));
+        engine::ecs::add_hierarchy_components(world_, camera_, camera_placement());
         world_.add<engine::ecs::camera>(camera_, engine::ecs::camera{.fovy = 42.0f * k_rad});
+    }
+
+    /// Where the eye sits, which depends on what is being looked at.
+    ///
+    /// The knob view has to frame the outermost ring at radius 3.05; the blend
+    /// view hides the rings and the widest thing in it is a nose trail at 2.05.
+    /// Keeping the far distance for both would waste a third of the frame on
+    /// background — and the blend's whole content is the GAP between two trails,
+    /// which is the first thing a too-small picture loses.
+    [[nodiscard]] engine::transform camera_placement() const
+    {
+        const vec3 eye = blending_ ? vec3{3.55f, 2.45f, 4.70f} : vec3{5.0f, 3.4f, 6.6f};
+        return engine::ecs::look_along(eye, {0.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f});
     }
 
     // ---- Simulation --------------------------------------------------------
@@ -440,6 +603,74 @@ private:
         }
     }
 
+    /// Advance the blend, wrap it, and record where each ghost's nose has been.
+    ///
+    /// The last quarter of the cycle holds at t = 1 rather than snapping straight
+    /// back to t = 0, so that the finished pair is on screen long enough to look
+    /// at. Both ghosts reach it; only one of them took the short way.
+    void drive_blend(float h)
+    {
+        constexpr float k_cycle = 5.0f;      ///< seconds, including the hold
+        constexpr float k_travel = 4.0f;     ///< of which this much is moving
+
+        blend_phase_ += h;
+        if (blend_phase_ >= k_cycle)
+        {
+            blend_phase_ = 0.0f;
+            ghost_euler_.clear();
+            ghost_slerp_.clear();
+        }
+        blend_t_ = std::clamp(blend_phase_ / k_travel, 0.0f, 1.0f);
+
+        record_nose(ghost_euler_, euler_pose());
+        record_nose(ghost_slerp_, slerp_pose());
+    }
+
+    static void record_nose(std::vector<vec3>& trail, const mat3& r)
+    {
+        const vec3 nose = r * vec3{0.0f, 0.0f, -1.0f};
+        if (trail.empty() || engine::distance(trail.back(), nose) > 0.006f)
+        {
+            trail.push_back(nose);
+            if (trail.size() > 900) { trail.erase(trail.begin()); }
+        }
+    }
+
+    /// The Euler lerp at `t`. Three angles, interpolated independently.
+    [[nodiscard]] static mat3 euler_at(float t)
+    {
+        return engine::rotation_from_euler(lerp_angles(k_blend_from, k_blend_to, t));
+    }
+
+    /// The geodesic at `t`. One axis, one angle, scaled.
+    [[nodiscard]] static mat3 slerp_at(float t)
+    {
+        return engine::rotation_slerp(engine::rotation_from_euler(k_blend_from),
+                                      engine::rotation_from_euler(k_blend_to), t);
+    }
+
+    [[nodiscard]] mat3 euler_pose() const { return euler_at(blend_t_); }
+    [[nodiscard]] mat3 slerp_pose() const { return slerp_at(blend_t_); }
+
+    /// The single turn the current pose IS — Euler's rotation theorem, applied.
+    [[nodiscard]] engine::axis_angle_extraction single_turn() const
+    {
+        return engine::axis_angle_from_rotation(engine::rotation_from_euler(pose_));
+    }
+
+    /// The single turn that separates the blend's two endpoints.
+    ///
+    /// **Constant for the whole blend**, which is the entire visual argument of
+    /// [B]: the slerp ghost turns about this one line from start to finish, and
+    /// the line never moves. Nothing the Euler ghost does can be described that
+    /// way at any instant, let alone throughout.
+    [[nodiscard]] engine::axis_angle_extraction blend_turn() const
+    {
+        return engine::axis_angle_from_rotation(
+            engine::transpose(engine::rotation_from_euler(k_blend_from))
+            * engine::rotation_from_euler(k_blend_to));
+    }
+
     // ---- The debug layer ---------------------------------------------------
 
     /// The three rings, each in the frame its own knob acts in.
@@ -475,6 +706,84 @@ private:
         // at the exact moment the claim is that it points nowhere.
         const conditioning c = measure(pose_);
         debug_.ray({0.0f, 0.0f, 0.0f}, c.dead_axis * 2.6f, k_dead);
+    }
+
+    /// The line the rotation leaves alone, drawn through the craft.
+    ///
+    /// Both ways from the origin, because an axis is a LINE and not a direction:
+    /// (n, θ) and (−n, −θ) are the same turn, and at θ = 180° the sign is not
+    /// determined at all (§8.6). Drawing only the +n half would be asserting a
+    /// choice the mathematics does not make.
+    ///
+    /// It is drawn at a length that scales with the ANGLE, from nothing at the
+    /// identity to full length at a half-turn. That is not decoration: near the
+    /// identity the axis is genuinely undetermined (the routine says so, with
+    /// `axis_route::no_axis`), and a full-length line pointing confidently at the
+    /// placeholder +X would be the picture lying. Same discipline as the magenta
+    /// arrow above, which is drawn at the true length of the turn it names.
+    void queue_axis(const engine::axis_angle_extraction& turn, float base)
+    {
+        const float reach = base * turn.value.angle / k_pi;
+        debug_.line(turn.value.axis * -reach, turn.value.axis * reach, k_axis);
+    }
+
+    /// One ghost craft, in wire, at the given orientation.
+    ///
+    /// Four lines — fuselage, wing, fin — chosen to match the three solid parts
+    /// `build_craft` makes, so that the wire ghost and the solid craft read as
+    /// the same object. A ghost drawn as a single nose ray would show the
+    /// direction and hide the roll, and roll is half of what an Euler lerp gets
+    /// wrong.
+    /// **Drawn three times, offset**, which is how a line gets a width here.
+    ///
+    /// `debug_lines` emits one-pixel lines and has no stroke width, deliberately
+    /// (5.11). Both craft and both trails are therefore one pixel in the same two
+    /// colours, and the first version of this panel was a tangle in which you
+    /// could not tell an aircraft from its own history. Dashing the trails was
+    /// tried first and did not survive the figure's 3x downsample — the sampler
+    /// takes each block's brightest pixel, which fills a two-pixel gap straight
+    /// back in. Three copies offset by 25 thousandths along two world axes is
+    /// about three pixels at this camera, in every orientation, and downsampling
+    /// cannot thin it.
+    void queue_ghost(const mat3& r, Uint32 colour)
+    {
+        const vec3 spread[3] = {{0.0f, 0.0f, 0.0f}, {0.025f, 0.0f, 0.0f}, {0.0f, 0.025f, 0.0f}};
+        for (const vec3& d : spread)
+        {
+            debug_.line(r * vec3{0.0f, 0.0f, 1.15f} + d, r * vec3{0.0f, 0.0f, -1.15f} + d, colour);
+            debug_.line(r * vec3{-1.25f, 0.0f, 0.22f} + d, r * vec3{1.25f, 0.0f, 0.22f} + d, colour);
+            debug_.line(r * vec3{0.0f, 0.09f, 0.92f} + d, r * vec3{0.0f, 0.91f, 0.92f} + d, colour);
+            debug_.line(r * vec3{0.0f, 0.91f, 0.92f} + d, r * vec3{0.0f, 0.09f, 1.15f} + d, colour);
+        }
+    }
+
+    /// Both blend paths at once, with their trails and the axis one of them uses.
+    void queue_blend()
+    {
+        // The axis is the blend's, not the pose's, and it is expressed in the
+        // START frame — which is where the turn happens, since slerp is
+        // `A · R(n, tθ)`. Carrying it into world space is one multiply and it is
+        // the difference between a line that sits still and one that does not.
+        const engine::axis_angle_extraction turn = blend_turn();
+        const mat3 from = engine::rotation_from_euler(k_blend_from);
+        const vec3 world_axis = from * turn.value.axis;
+        debug_.line(world_axis * -3.0f, world_axis * 3.0f, k_axis);
+
+        queue_ghost(euler_pose(), k_ghost_euler);
+        queue_ghost(slerp_pose(), k_ghost_slerp);
+
+        queue_path(ghost_euler_, k_ghost_euler);
+        queue_path(ghost_slerp_, k_ghost_slerp);
+    }
+
+    /// Where a nose has been, at one pixel — thinner than the craft above, on
+    /// purpose, so that the two read as "now" and "was".
+    void queue_path(const std::vector<vec3>& trail, Uint32 colour)
+    {
+        for (std::size_t i = 1; i < trail.size(); ++i)
+        {
+            debug_.line(trail[i - 1] * 2.05f, trail[i] * 2.05f, colour);
+        }
     }
 
     void queue_trail()
@@ -544,9 +853,56 @@ private:
             ImGui::Text("cos_pitch %.3e   %s", static_cast<double>(back.cos_pitch),
                         back.degenerate ? "DEGENERATE - roll folded into yaw" : "separable");
 
+            // ---- Lesson 7.2 ------------------------------------------------
+            ImGui::Separator();
+            const engine::axis_angle_extraction turn = single_turn();
+            const char* route = (turn.route == engine::axis_route::no_axis)  ? "no_axis"
+                              : (turn.route == engine::axis_route::general)  ? "general"
+                                                                            : "reversal";
+            ImGui::Text("single turn: %.4f deg about (%+.4f, %+.4f, %+.4f)",
+                        static_cast<double>(turn.value.angle * k_deg),
+                        static_cast<double>(turn.value.axis.x),
+                        static_cast<double>(turn.value.axis.y),
+                        static_cast<double>(turn.value.axis.z));
+            ImGui::Text("sin(angle) %.3e   route %s", static_cast<double>(turn.sin_angle), route);
+
+            // THE AGREEMENT, PRINTED. Two entirely different constructions of the
+            // same orientation — three composed elementary turns, and one
+            // Rodrigues turn about a recovered axis — with the metric between
+            // them. This is Euler's rotation theorem as a live number rather than
+            // a claim, and it is never worse than a few millionths of a degree.
+            const float disagreement = engine::angle_between_rotations(
+                engine::rotation_from_euler(pose_),
+                engine::rotation_from_axis_angle(turn.value));
+            ImGui::Text("Euler product vs Rodrigues: %.6f deg apart   %s",
+                        static_cast<double>(disagreement * k_deg),
+                        single_turn_ ? "[A] posing by AXIS-ANGLE" : "[A] posing by EULER");
+
+            if (blending_)
+            {
+                ImGui::Separator();
+                const float euler_excess =
+                    100.0f * (cost_.euler_path / cost_.geodesic - 1.0f);
+                const float slerp_excess =
+                    100.0f * (cost_.slerp_path / cost_.geodesic - 1.0f);
+                ImGui::Text("blend t = %.3f", static_cast<double>(blend_t_));
+                ImGui::Text("geodesic         %8.2f deg",
+                            static_cast<double>(cost_.geodesic * k_deg));
+                ImGui::TextColored(ImVec4(0.93f, 0.66f, 0.34f, 1.0f),
+                                   "Euler lerp path  %8.2f deg   %+.2f%%",
+                                   static_cast<double>(cost_.euler_path * k_deg),
+                                   static_cast<double>(euler_excess));
+                ImGui::TextColored(ImVec4(0.49f, 0.74f, 0.97f, 1.0f),
+                                   "slerp path       %8.2f deg   %+.2f%%",
+                                   static_cast<double>(cost_.slerp_path * k_deg),
+                                   static_cast<double>(slerp_excess));
+                ImGui::TextUnformatted("the teal line is the slerp's axis, and it never moves");
+            }
+
             ImGui::Separator();
             ImGui::TextUnformatted("arrows yaw/pitch  Q/W roll  [E] joint knob");
             ImGui::TextUnformatted("[K] snap to lock  [T] nose trail  [G] rings  [R] reset");
+            ImGui::TextUnformatted("[A] pose by axis-angle  [B] blend: Euler lerp vs slerp");
         }
         ImGui::End();
     }
@@ -556,6 +912,7 @@ private:
         const conditioning c = measure(pose_);
         // The shot's receipt. Two runs with the same `--pose` print the same
         // numbers or the picture is not reproducible, whatever it looks like.
+        const engine::axis_angle_extraction turn = single_turn();
         std::printf("gimbal: pose %.2f %.2f %.2f deg, |det J| %.6f, sigma_min %.6f, "
                     "%zu objects, %zu triangles, %d debug lines\n",
                     static_cast<double>(pose_.yaw * k_deg),
@@ -563,6 +920,19 @@ private:
                     static_cast<double>(pose_.roll * k_deg),
                     static_cast<double>(std::fabs(c.det_j)), static_cast<double>(c.sigma_min),
                     collect_.drawn, triangles_.size(), debug_drawn_);
+        // The 7.2 half of the receipt. The last field is the one that matters:
+        // two runs agreeing on a picture prove nothing if the picture was built
+        // from a rotation that disagrees with itself.
+        std::printf("gimbal: single turn %.4f deg about (%+.5f, %+.5f, %+.5f), route %d, "
+                    "blend t %.3f, Euler-vs-Rodrigues %.6f deg\n",
+                    static_cast<double>(turn.value.angle * k_deg),
+                    static_cast<double>(turn.value.axis.x),
+                    static_cast<double>(turn.value.axis.y),
+                    static_cast<double>(turn.value.axis.z),
+                    static_cast<int>(turn.route), static_cast<double>(blend_t_),
+                    static_cast<double>(k_deg * engine::angle_between_rotations(
+                        engine::rotation_from_euler(pose_),
+                        engine::rotation_from_axis_angle(turn.value))));
         request_quit(engine::save_ppm(fb(), shot_path_));
     }
 
@@ -581,10 +951,20 @@ private:
     bool rings_ = true;
     const char* shot_path_ = nullptr;
 
+    // Lesson 7.2.
+    bool single_turn_ = false;        ///< [A]: pose by Rodrigues instead of Euler
+    bool blending_ = false;           ///< [B]: the two-path comparison is running
+    float blend_t_ = 0.0f;            ///< where along it, in [0, 1]
+    float blend_phase_ = 0.0f;        ///< seconds into the cycle, including the hold
+    blend_cost cost_{};               ///< measured once per blend, never per frame
+    std::vector<vec3> ghost_euler_;
+    std::vector<vec3> ghost_slerp_;
+
     engine::action_map actions_;
     engine::masked_input<engine::input> gate_;
     engine::action_id a_yaw_{}, a_pitch_{}, a_roll_{}, a_joint_{};
     engine::action_id a_lock_{}, a_reset_{}, a_rings_{}, a_trail_{}, a_quit_{};
+    engine::action_id a_single_{}, a_blend_{};
 
     engine::depth_buffer depth_{k_width, k_height};
     engine::lighting lights_;
