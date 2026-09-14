@@ -7,10 +7,126 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-09-13 (after Lesson 5.12 — 75 of 107 lessons; Module 5 CLOSED
+updated: 2026-09-13 (after Lesson 7.1 — 76 of 107 lessons; Module 7 OPEN.
+         Earlier the same day, after Lesson 5.12 — 75 of 107; Module 5 CLOSED
          out of order, eleven lessons after 5.11 and one after 6.18)
 
 conventions:
+  euler: INTRINSIC Y-X-Z, ACTIVE, RIGHT-HANDED, RADIANS — and the whole point
+        is that this line exists. 7.1, engine/include/engine/math/euler.hpp
+        + docs/conventions.html §8b. `rotation_from_euler({yaw, pitch, roll})`
+        == `rotation_y(yaw) * rotation_x(pitch) * rotation_z(roll)`.
+        THE COUNT IS TWENTY-FOUR: twelve axis orders (3 x 2 x 2 — consecutive
+        axes must differ) times two frames, intrinsic and extrinsic. Shoemake,
+        Graphics Gems IV, encodes exactly these in four bits. MEASURED: the
+        triple (30, 40, 50) read under all 24 lands between 16.03° and 83.48°
+        from ours, and EXACTLY ONE is zero. The dangerous one is not the worst —
+        it is `yzx` extrinsic at 16°, which reads as a tuning problem.
+        THE AXIS ORDER IS A CHOICE OF WHERE TO PUT THE HOLE, not whether to have
+        one. For a three-distinct-axis order the singularity sits on the MIDDLE
+        angle at ±90°, so y-x-z puts it at pitch ±90° — nose vertical, which
+        every first-person camera already clamps away from for non-mathematical
+        reasons. x-y-z would put it on the heading. The repeated-axis families
+        (zxz etc.) put theirs at middle angle 0°, which is the rest pose.
+        INTRINSIC == EXTRINSIC REVERSED, ANGLES REVERSED TOO: ours is also
+        extrinsic z-x-y read (roll, pitch, yaw). Proof is one line — intrinsic
+        composition multiplies on the RIGHT because (F R Fᵀ) F = F R, the
+        step-in and step-out cancelling. Checked: worst element diff 0.000e+00,
+        because it is literally the same sequence of float operations.
+        NOTHING IN THE ENGINE STORES ONE. `transform::rotation` is still a
+        `mat3` and becomes a quaternion at 7.4. Euler angles are an INTERFACE.
+  euler-lock: GIMBAL LOCK IS A RANK DEFICIENCY YOU CAN PRINT, AND IT NEEDED NO
+        NEW API. 7.1. `euler_rate_jacobian(e)` has the three knob axes as its
+        columns (world +Y; Ry(yaw)·x̂; Ry(yaw)Rx(pitch)·ẑ) and
+        `determinant` has been in mat3.hpp since 2.6:
+          det J = -cos(pitch)      (yaw cancels — it must, since turning the
+                                    whole craft cannot change its controls)
+          JᵀJ  = I with -sin(pitch) in two corners  <- THE WHOLE PATHOLOGY
+          sigma = { sqrt(1+|sin p|), 1, sqrt(1-|sin p|) }
+        Read JᵀJ and it says: THE YAW AXIS AND THE ROLL AXIS ARE NOT
+        PERPENDICULAR, AND HOW FAR FROM PERPENDICULAR IS EXACTLY THE PITCH.
+        MEASURED, closed form vs a brute-force sweep of a million unit rate
+        vectors per pose: worst |error| 1.788e-07. At 0.01° from vertical the
+        weakest gain is 1.235e-4, so 8,100 rad/s of knob buys 1 rad/s of craft —
+        464,000 deg/s. That is what "the control loop saturates and lurches"
+        means in numbers.
+        ALGEBRAIC TWIN, same fact by another route: at pitch +90 the composite
+        matrix contains yaw and roll ONLY as (yaw - roll), so an entire diagonal
+        of the (yaw, roll) square is one orientation. At -90 it is the sum.
+        Measured: both knobs +47° at pitch 90 gives 0.0000° of motion; CONTROL
+        at pitch 0 gives 65.51°, against 47*sqrt(2) = 66.47 for two orthogonal
+        turns. The control's threshold was WRONG at 80 on the first run and the
+        control is what found that out.
+  cancellation-against-one: THE SAME NUMERICAL BUG, THREE TIMES IN ONE LESSON,
+        AND THE THIRD IS WHAT MADE IT VISIBLE. 7.1.
+          sqrt(1 - sin*sin)   for cos(pitch)  -> exactly 0 at pitch 89.99°
+          sqrt(1 - |sin p|)   for sigma_min   -> exactly 0, prints inf
+          acos((tr R - 1)/2)  for the angle   -> exactly 0 at 0.004°, rel err 1.00
+        A float cannot hold a change of 1.5e-8 at 1.0 or 1.6e-5 at 3.0, so a
+        quantity obtained by subtracting two nearly-equal numbers near 1 is gone
+        before the sqrt or the acos sees it — and acos/asin then amplify the
+        remains, having infinite slope at ±1.
+        THE CURE IS ONE SHAPE: get the small quantity from something that IS
+        small. cos_pitch = hypot(r02, r22), because those entries ARE
+        sin(yaw)cos(pitch) and cos(yaw)cos(pitch) — so THE CONDITIONING OF THE
+        YAW EXTRACTION IS THE LENGTH OF THE VECTOR WHOSE ANGLE IT TAKES.
+        sigma_min = |cos| / sqrt(1 + |sin|), from 1-s = c²/(1+s). The angle from
+        atan2(|R - Rᵀ|/2, (tr R - 1)/2), whose first argument is built from
+        DIFFERENCES of entries and stays proportional to theta.
+        AND WATCH THE DRIFT BEFORE THE CLIFF: the naive sigma reads 0.0012449
+        against a true 0.0012340 at 89.9° — 0.9% wrong and entirely plausible.
+        The cliff is what you notice; the drift is what ships.
+        DIAGNOSTIC TO CARRY: if a formula's job is to report something near
+        zero, look at what it computes just before it returns and ask whether
+        THAT is ever small.
+  euler-extraction: THE EXTRACTION RETURNS ITS OWN CONFIDENCE. 7.1,
+        `euler_extraction { angles, cos_pitch, degenerate }`. Entry (1,2) of the
+        composite is -sin(pitch) ALONE — the middle axis of any Euler sequence
+        is the one no other rotation conjugates, so it always leaves exactly one
+        clean entry; change the order and it moves, it does not disappear.
+        AT LOCK THE MATRIX SURVIVES AND THE SPLIT DOES NOT. In: (20, 90, -35).
+        Out: (55, 90, 0) — 55 is 20-(-35), the difference and the whole of the
+        recoverable information. Round-tripped the matrix is back to 6.5e-6°.
+        `degenerate` says so rather than leaving the caller to find out. This is
+        6.18's `used_height` rule again: IF A ROUTINE COMPUTES A QUANTITY A
+        CALLER WOULD NEED TO JUDGE IT, RETURN IT.
+        THE THRESHOLD'S FIRST JUSTIFICATION WAS WRONG AND MEASURING FOUND IT.
+        The claim was "float error / cos(pitch) reaches the recovered yaw"; on a
+        freshly-built matrix there is NO amplification at any pitch, because
+        FLOAT ERROR IS RELATIVE and the two entries atan2 reads are themselves
+        proportional to cos(pitch). The amplification is real only for a matrix
+        carrying ABSOLUTE error — one that came down a hierarchy, or out of a
+        file. Measured with ±1e-7 per entry: 0.00041° at cos_pitch 1.7e-2,
+        0.02029° at 3.5e-4, i.e. 1.2e-7 rad / cos_pitch. k_euler_lock_epsilon =
+        1e-4 bounds it at 0.07° and corresponds to 0.0057° from vertical.
+        NOT A TRUE INVERSE, and cannot be: asin's range is ±90°, so pitch 100°
+        comes back as (-170, 80, 180) — a different triple, the same rotation to
+        1.5e-5°. DO NOT ROUND-TRIP THROUGH EULER ANGLES IN A LOOP.
+  euler-interp: A ONE-KNOB EULER LERP IS ALREADY A GEODESIC, WHICH IS WHY THE
+        OBVIOUS TEST MEASURES NOTHING. 7.1 §7. The first draft swept the yaw
+        alone at pitch 88° and correctly reported 0.00% excess: turning one
+        angle is a steady rotation about one fixed axis, at any pitch.
+        WITH TWO OR MORE MOVING: generic pair, 204.29° of turning performed for
+        a 179.05° journey — 25.24° of detour, +14.10%, and the RATE varies by
+        1.56x, which is the part a player sees. The same three deltas at four
+        pitch bands: +209.5% (87->30, near lock), +62.5%, +22.5%, +26.7%. The
+        control is the LAST row, not a different move — change the pose, never
+        the deltas, or the comparison measures the move.
+        NOT MONOTONE AT THE BOTTOM, and that is real: the endpoints differ
+        between bands so the geodesic differs too, and excess is a ratio. The
+        claim the table supports is "near lock is catastrophically worse".
+        THE WRAP BUG IS SEPARATE AND HAS A SEPARATE FIX. Yaw 170 -> -170 is a
+        20° turn; a raw lerp performs 340° backwards. `shortest_angle_delta`
+        fixes THAT and does nothing about the detour above. std::remainder, not
+        std::fmod — remainder rounds to nearest and lands in [-pi, pi].
+  rotation-metric: THE TEXTBOOK FORMULA CANNOT MEASURE THE THING EVERY CLAIM IN
+        MODULE 7 IS MEASURED WITH. 7.1, `angle_between_rotations`. Both
+        spellings ship; the acos one is called by nothing and exists so §F can
+        compare against the real thing rather than a copy of it. Measured
+        relative error at a true 0.004°: atan2 form 1.24e-04, acos form 1.00
+        (it returns zero). A 2,048-step path across 120° takes 0.059° steps.
+        Unbiased over a long sum: 2,048 steps of a known 120.00° measure
+        120.0003°.
   era-split: LESSON 5.12 WAS WRITTEN ELEVEN LESSONS LATE, AND THE FIX IS TWO TREES.
         It closes Module 5 and was authored after 6.18, so CLAUDE.md §8 ("every
         listing compiles at its point in the course") and the repository state
@@ -4362,8 +4478,35 @@ completed:
        The renderer is modern: linear light, PBR, materials, glTF, normal maps,
        shadows and cascades, mipmaps, transparency, HDR + tonemapping, bloom,
        antialiasing, IBL, culling + instancing, a frame graph, and text. <===
+  - 7.1  Euler Angles and Their Pathologies
+        (Appended at the time. check-curriculum.py caught 6.18's TWO dead `next`
+         links the moment the page existed — exactly what STATE predicted, and
+         both were ported into the SOURCES (scratch/l618_body_a.html and
+         build_618.py's TAIL) rather than into the HTML, so build_618 still
+         reproduces. check-page.js caught three text-on-shape defects, one of
+         which appeared at 1280 and NOT at 390: SVG labels scale with the
+         viewport, so a collision can open at one width and not the other.)
 
 capabilities:
+  - 7.1 THE ENGINE CAN BE TOLD AN ORIENTATION IN THREE NUMBERS. 78 -> 79 public
+    headers (the 79th is math/euler.hpp; the umbrella lists 78, one documented
+    exception), sources and shaders unchanged — the whole lesson is header-only
+    and links nothing. 34 checks green, six of them CONTROLS.
+    WHAT IS NEW: euler_angles + rotation_from_euler + euler_extraction +
+    euler_from_rotation + k_euler_lock_epsilon + euler_rate_jacobian +
+    wrap_angle + shortest_angle_delta + angle_between_rotations +
+    angle_between_rotations_by_trace (kept, called by nothing, for §F's
+    comparison). Plus demos/gimbal.
+    WHAT IS NOT: no storage change. transform::rotation is a mat3 until 7.4.
+    THE ONE PUBLIC-API GAP THE DEMO FOUND: debug_lines has no ellipse/circle in
+    an arbitrary plane. `sphere()` is three great circles but they are
+    axis-aligned in WORLD space, and a gimbal ring's plane has been carried by
+    every rotation outside it. Demo has a 15-line private ring(); an
+    `ellipse(centre, u, v, colour)` would cover rings, orbits, cones and camera
+    FOV arcs. FILED FOR 9.7, where the editor's gizmos need exactly this.
+    5.12's CONFIGURE-TIME UMBRELLA LINT FIRED FOR REAL, on the first lesson
+    after it existed, on a header written ten minutes earlier. That is the
+    evidence 5.12 could not produce for itself.
   - 6.18 THE ENGINE CAN SAY SOMETHING. 75 -> 78 public headers, 47 -> 50 sources,
     24 -> 26 shaders. 98 checks green, 0 failures (CPU sections run without a
     GPU; §I and §J need one, driver `metal`). Counts MEASURED against commit
@@ -7334,7 +7477,8 @@ files:
             shadow.hpp                                                       [6.8]
             soft_renderer.hpp, texture.hpp, viewport.hpp
   engine/include/engine/math/: mat2.hpp, mat3.hpp, mat4.hpp, transform.hpp,
-            vec2.hpp, vec3.hpp, vec4.hpp
+            vec2.hpp, vec3.hpp, vec4.hpp,
+            euler.hpp                                                        [7.1]
   engine/include/engine/platform/: platform.hpp, app.hpp,
             main.hpp   (NOT in engine.hpp — it defines the entry point)
   engine/include/engine/ui/: debug_ui.hpp                                   [5.11]
@@ -7375,6 +7519,7 @@ files:
   demos/ecs_swarm/: main.cpp                                              [5.8]
   demos/gltf_view/: main.cpp                                              [6.6]
   demos/collector/: main.cpp                                             [5.12]
+  demos/gimbal/: main.cpp                                                 [7.1]
            (THE GAME. Links engine::engine directly and not demo_common, for the
             reason hello_cube and ecs_swarm give. No engine_use_shaders: it renders
             on the CPU, which is finding (b) in conventions:checkpoint-findings.)
@@ -8009,118 +8154,86 @@ roadmap: RESHAPED 2026-09-08, AFTER TWO EXTERNAL REVIEWS OF THE PUBLISHED OUTLIN
             qualifier too, because a skimmer reads the recap and stops.
 
 
-next: 7.1 — Euler Angles and Their Pathologies
-      (MODULE 5 IS NOW CLOSED TOO — 5.12 landed 2026-09-13, out of order, and
-      the index badge says complete. 75 of 107 published. Nothing below changed
-      because of it except the pin note, which is now discharged.)
+next: 7.2 — Axis-Angle
+      (76 of 107 published. Module 7 is OPEN — 1 of 8 lessons, ~5 h of ~38 —
+      and its index badge now says `in progress`. Modules 0-6 complete.)
 
-      (planned filename: docs/lessons/07-01-euler-angles.html — 6.18's TWO next
-      links point at the index and BOTH need repointing; scratch/l618_body_a.html
-      holds the top one and build_618.py's TAIL the bottom. Module 7's own
-      <details> block in docs/index.html is still the unpublished outline; its
-      badge says `upcoming` and its rows have no hrefs. check-curriculum.py will
-      flag the orphan page the moment it exists, which is how it caught 6.17.
-      MODULE 6 IS COMPLETE — 18 lessons, ~93 h — and its badge in the index now
-      says so.)
+      (planned filename: docs/lessons/07-02-axis-angle.html. 7.1's TWO next
+      links point at the index and BOTH need repointing — scratch/l71_body_a.html
+      holds the top one and build_71.py's TAIL the bottom, the same pair 6.18
+      had, and check-curriculum.py reports it the moment the page exists.)
 
-      PINNING IS DONE — 5.12's session did it first, before writing a line,
-      and it was needed: 5.12 edits demos/CMakeLists.txt and both CMakeLists.txt,
-      all of which 6.18 lists whole. `pin_listings.py 618` wrote all fourteen
-      from 725e62a, verified each by substring against the shipped page, and the
-      rebuild diff was ZERO bytes. build_618.py's LISTING_SOURCE is populated.
-      check-builders.py is 43/43.
+      PINNING IS DONE. build_71.py's LISTING_SOURCE is populated from copies
+      taken at writing time, and check-builders.py is 44/44. It matters here for
+      a reason peculiar to what 7.2 will touch: `math/transform.hpp` is pinned,
+      and 7.4 is the lesson that replaces its stored `mat3`; `demos/CMakeLists.txt`
+      is pinned, and every lesson that adds a target edits it; `engine.hpp` is
+      pinned, and the configure-time lint now GUARANTEES that every lesson adding
+      a public header edits it too. Three files certain to move.
 
-      WHY IT MATTERS MORE THAN USUAL THIS TIME. Rotations look maximally distant
-      from a glyph atlas, so the temptation to skip is real. But TWO of the
-      fourteen are `CMakeLists.txt` and `engine/CMakeLists.txt`, which EVERY
-      lesson edits, and a third is `demos/hello_cube/main.cpp`, the course's
-      acceptance test for the public API, which is edited whenever the API grows
-      — and Module 7 grows it. These three are not unlikely to move; they are
-      certain to.
+      WHAT 7.2 INHERITS, and should not re-derive:
+        - `angle_between_rotations` ALREADY COMPUTES HALF OF AXIS-ANGLE. It takes
+          atan2(|R - Rᵀ|/2, (tr R - 1)/2) and THROWS AWAY the vector whose length
+          is sin(theta) — which is the axis, scaled. 7.2's opening move is to
+          stop throwing it away, and the lesson should say so rather than
+          starting from a blank page: the file already contains three of the four
+          lines it needs.
+        - AND THE FILE NAME IS ALREADY WRONG. euler.hpp's own doc comment says
+          `angle_between_rotations` "is not about Euler angles and it knows it",
+          and names 7.2 as the lesson that should move it. Moving it to a
+          `math/rotation.hpp` is the right call ONCE 7.2 has a second inhabitant
+          for that file. Do it in 7.2, not before — a cupboard for one thing.
+        - THE CLAMP AT theta NEAR pi IS THE ONE TRAP 7.1 DID NOT HIT. Extracting
+          the AXIS from the antisymmetric part fails at theta = pi, where
+          sin(theta) = 0 and R is symmetric — the axis is still well defined and
+          that route cannot find it. 7.1's metric does not care (atan2 gets pi
+          from the cosine alone) but 7.2's extraction will. Expect to need the
+          diagonal-of-(R + I) branch, and expect it to be the lesson's §6.
+        - THE CONTROL DISCIPLINE HELD AND SHOULD CONTINUE. Six controls in 34
+          checks, one of which failed on the first run at 65.51° against a
+          threshold of 80 and was RIGHT to. Budget one control per claim.
 
-      WHICH FILES 7.1 IS LIKELY TO MOVE. `engine/include/engine/math/` is the
-      obvious one and it has been almost untouched since Module 2: `mat3.hpp`
-      gained outer-product operators in the physics planning notes and nothing
-      else has changed. Expect `quat.hpp` to be CREATED (7.2 or 7.3, not 7.1 —
-      7.1 is Euler angles and their failure modes, and quaternions are motivated
-      by that failure). `transform.hpp` is the one to watch: it currently stores
-      a rotation as a `mat3`, and the whole arc is about replacing that.
-      `mat4.hpp`/`mat3.hpp` SHOULD NOT MOVE in 7.1 — keep them as the control,
-      the role `gpu_shadow.*` played for 6.18 and held.
+      WHAT 7.2 IS LIKELY TO MOVE. `math/euler.hpp` (the metric leaves), a new
+      `math/axis_angle.hpp` or `math/rotation.hpp`, `engine.hpp` (forced),
+      `demos/CMakeLists.txt` if it wants its own demo — and it probably does not:
+      `demos/gimbal` already has three rings, a live readout and a --shot, and
+      Rodrigues' formula is most convincingly shown BY REPLACING the rig's
+      composition with a single axis-angle turn and measuring that the picture
+      does not move. mat3.hpp/mat4.hpp SHOULD NOT MOVE — they held as the control
+      through 7.1 and are the reason the golden argument is structural.
 
-      WHAT 7.1 OWES, beyond the obvious:
-        1 GIMBAL LOCK AS A MEASUREMENT, NOT A METAPHOR. Every treatment shows
-          the gimbals; very few show the NUMBER. The honest version is a rank
-          deficiency: at pitch = 90 degrees the Jacobian of the Euler-to-matrix
-          map loses a dimension, and you can print its singular values
-          approaching it. That is the 6.16 lesson — extract the fact from the
-          matrix the renderer actually uses, not from a picture.
-        2 ORDER IS A CONVENTION AND THERE ARE TWENTY-FOUR OF THEM. Six axis
-          orders x two (intrinsic/extrinsic) x two (active/passive). The
-          conventions page fixes one; 7.1 must say WHICH and show that reading
-          somebody else's Euler angles with the wrong one is not a small error.
-        3 INTERPOLATION IS THE REAL INDICTMENT. Lerping Euler angles does not
-          lerp the rotation, and the failure is visible rather than subtle: a
-          path that wobbles off the geodesic. Measure the angular deviation.
-          That is the motivation slerp will answer in 7.3.
-        4 THE GOLDEN. It has been null for FOUR lessons and would be null again
-          unless 7.1 changes something the software rasterizer's reference shot
-          touches. `write_reference_shot` builds its camera with `look_at` and
-          poses nothing by Euler angles, so CONFIRM STRUCTURALLY as 6.17 and
-          6.18 did (grep what its translation units include) and expect to BUILD
-          the instrument. 6.18's shape — the same thing rendered two ways plus a
-          CONTROL that proves the comparison can fail — is the one to copy; it
-          worked, and its control fired at 934 pixels.
+      THE GOLDEN IS NULL AND WILL REMAIN SO until something touches
+      soft_renderer/raster/framebuffer or demos/common. Five lessons running now
+      (E917C06C). CONFIRM STRUCTURALLY as 6.17, 6.18, 5.12 and 7.1 did — grep
+      the include path, not the name, because `grep -rn euler demos/common`
+      returns two hits and both are the EULER CHARACTERISTIC from 3.5's mesh
+      validator. Build the real instrument instead.
 
-      CARRY FORWARD from 6.18:
-        - DOES MY DENOMINATOR MOVE WHEN THE CODE DOES? "What fraction of the
-          atlas is glyphs" has a power-of-two denominator fixed before the packer
-          runs and a numerator that is the font's own area, so it measures
-          neither. This is the SIXTH member of the instrument family: 6.14 (can
-          this measurement produce a non-null result?), 6.15 (has the non-null
-          result converged?), 6.16 (can this axis show the effect?), 6.17 (can
-          this comparison report a difference?), 6.17 again (is the reason I am
-          building this true HERE?) — and now this one.
-        - A CHECK WHOSE DEGENERATE CASE IS A PASS IS NOT A CHECK. `inf > 80.0`
-          is true. Shipped in a first draft against a stale library, printed
-          "shelf efficiency = inf%", and reported PASS. Second time in three
-          lessons that a degenerate input produced a green tick (6.16 found
-          `identical=YES` on two failed file reads), and both times the only
-          tell was an implausible printed NUMBER. Print the inputs, not just
-          the verdict.
-        - TWO BUGS IN TWO FILES CAN BE THE SAME FUNCTION. An `_SRGB` coverage
-          atlas and an sRGB-space blend agree to four significant figures. When
-          two independent explanations predict the same measurement, do not pick
-          one — find the measurement that separates them. Here it was inverting
-          the contrast, and it took one line.
-        - MAKE A BUG IMPOSSIBLE RATHER THAN CATCHABLE. Naming four colour bytes
-          `r, g, b, a` removes the endianness question that cost 6.15 a debugging
-          session. There is no test to write because there is nothing left to get
-          wrong. Prefer this to a test whenever the type system can carry it.
-        - A DISTINCT ENTRY POINT IS THE DOCUMENTATION. `create_coverage` rather
-          than `create_sampled(..., srgb=false)`: the second stores the right
-          numbers and leaves the next reader unable to tell whether the choice
-          was considered. The 4x memory saving is the smaller half of that
-          argument.
-        - A TOOL OVERSOLD IS A TOOL TRUSTED IN THE CASE IT DOES NOT COVER. 6.17's
-          graph derives four facts from `keep` and cannot tell you that `keep`
-          was the right word. Saying so in the lesson that first uses it from
-          outside is worth more than another paragraph about what it does catch.
-
-      AND THREE THINGS 6.18 FOUND THAT ARE NOT ABOUT TEXT.
-      (1) FIGURE NUMBERS FOLLOW PAGE ORDER, NOT WRITING ORDER. The first draft
-          numbered the figures as they were written — the architecture diagram
-          was fig 7 and appeared first — and check-page.js's `figOrder` check
-          reported all seven. A reader counts figures as they meet them.
-      (2) A LABEL MOVED OFF ONE OBSTACLE LANDS ON THE NEXT. The 10%-coverage
-          annotation in figure 5 was moved off a dashed leader, onto the x-axis
-          tick row, then onto the green curve, before landing in empty space.
-          check-page.js has a SEPARATE check for text-on-text and text-on-shape,
-          which is the only reason each move was caught rather than one hiding
-          behind the other. Three iterations is normal; budget for it.
-      (3) THE SHELVES' OWN PARAMETER WAS UNREADABLE UNTIL IT WAS STORED. The
-          packer knew its own footprint and threw it away, so the honest
-          occupancy figure could not be computed from outside. `used_height` is
-          four lines and it is the difference between a measurement that means
-          something and one that does not. If a routine computes a quantity a
-          caller would need to judge it, RETURN IT.
+      CARRY FORWARD from 7.1:
+        - IF A FORMULA'S JOB IS TO REPORT SOMETHING NEAR ZERO, look at what it
+          computes just before it returns and ask whether THAT is ever small.
+          Three instances in one lesson, all cured the same way.
+        - A CHECK WHOSE DEGENERATE CASE IS A PASS IS NOT A CHECK — seventh member
+          of the instrument family (6.14, 6.15, 6.16, 6.17 twice, 6.18, now this).
+          7.1's §D.3 nearly shipped a table whose best-looking cell was its worst
+          pose, because every perturbed trial below the threshold was SKIPPED and
+          the running worst stayed at its initial 0.0. Count what you measured;
+          print a dash when the count is zero.
+        - EVERY ARTIFACT ON DISK BEING CORRECT IS NOT EVIDENCE THE PROGRAM
+          SUCCEEDED. `gimbal --shot` wrote a correct PPM, printed its receipt,
+          and exited 139. Same three-independent-axes rule check-builders.py
+          learned on 2026-09-12, met from the other side.
+        - RUN check-page.js AT BOTH WIDTHS, EVERY TIME. One of figure 1's three
+          label collisions appeared at 1280 and not at 390. SVG labels scale with
+          the viewport, so "it looked fine" is a statement about one viewport.
+        - WHEN LABELS COLLIDE WITH A SHAPE, CONSIDER MOVING THE SHAPE. Shrinking
+          figure 1's ground square inside every label's radius fixed four
+          placements at once; moving four labels would have been four chances to
+          open a new overlap.
+        - GREP THE INCLUDE PATH, NOT THE NAME (above). Two unrelated things named
+          after the same man, in the one directory the argument was about.
+        - THE MEASUREMENT MAY NEED NO NEW API. `|det(euler_rate_jacobian(e))|` is
+          "how far from gimbal lock am I" and `determinant` has been in mat3.hpp
+          since 2.6. When a phenomenon feels un-measurable the first question is
+          not "what function do I need" but "what is it the determinant, the norm
+          or the trace of".

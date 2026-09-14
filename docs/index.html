@@ -117,7 +117,7 @@ table.lessons .d { color: var(--text-muted); font-size: 0.95em; line-height: 1.4
     <div class="stat"><span class="n">107</span><span class="l">lessons</span></div>
     <div class="stat"><span class="n">10</span><span class="l">modules</span></div>
     <div class="stat"><span class="n">~512</span><span class="l">hours</span></div>
-    <div class="stat"><span class="n">75</span><span class="l">published</span></div>
+    <div class="stat"><span class="n">76</span><span class="l">published</span></div>
   </div>
 
   <p>
@@ -561,7 +561,7 @@ table.lessons .d { color: var(--text-muted); font-size: 0.95em; line-height: 1.4
   <details class="module">
     <summary>
       <span class="m-num">Module 7</span>
-      <span class="m-name">Motion: Rotation, Animation, Audio <span class="stage-tag b">GPU</span></span>
+      <span class="m-name">Motion: Rotation, Animation, Audio <span class="stage-tag b">GPU</span> <span class="badge wip">in progress</span></span>
       <span class="m-meta">8 lessons · ~38 h</span>
     </summary>
     <div class="m-body">
@@ -574,7 +574,7 @@ table.lessons .d { color: var(--text-muted); font-size: 0.95em; line-height: 1.4
       <div class="tbl-scroll">
         <table class="lessons">
           <tbody>
-            <tr><td class="id">7.1</td><td><span class="t">Euler Angles and Their Pathologies</span><span class="d">Gimbal lock demonstrated on screen, not described. Watch a degree of freedom die.</span></td><td class="hrs">5 h</td></tr>
+            <tr><td class="id">7.1</td><td><span class="t"><a href="lessons/07-01-euler-angles.html">Euler Angles and Their Pathologies</a> <span class="badge done">published</span></span><span class="d">Twenty-six calls to <code>rotation_x/y/z</code> across the demos, four of which compose two of them &mdash; and every one of those four invented a private convention on the spot. There are <strong>twenty-four</strong> self-consistent ones, and reading <code>(30, 40, 50)</code> under the wrong one lands up to <strong>83.48&deg;</strong> away; the dangerous case is the 16&deg; one, which reads as a tuning problem. We fix one, write it into the Conventions page, and derive its matrix. Then gimbal lock &mdash; not as brass rings but as a <em>rank deficiency you can print</em>: the rate Jacobian&rsquo;s determinant is <code>&minus;cos(pitch)</code>, needing no new API because <code>determinant</code> has been in <code>mat3.hpp</code> since 2.6, and at 0.01&deg; from vertical a knob must turn at <strong>464,000&deg;/s</strong> for 1&deg;/s of aircraft. The indictment is interpolation: lerping three angles costs <strong>+14%</strong> of extra turning on a generic pair and <strong>+209%</strong> near lock &mdash; while a <em>one</em>-knob lerp is exactly a geodesic, which is why the first version of that measurement reported nothing. And one numerical trap, met three times in one lesson: <code>acos((tr R &minus; 1)/2)</code> returns <strong>exactly zero</strong> for a 0.004&deg; turn, which is the step size every measurement here uses.</span></td><td class="hrs">5 h</td></tr>
             <tr><td class="id">7.2</td><td><span class="t">Axis-Angle</span><span class="d">A better idea that still cannot interpolate well. Rodrigues' formula, derived.</span></td><td class="hrs">3 h</td></tr>
             <tr><td class="id">7.3</td><td><span class="t">Complex Numbers Rotate the Plane</span><span class="d">The whole trick, in 2D, where you can see it. Multiplying by <em>i</em> is a 90° turn — everything else follows.</span></td><td class="hrs">5 h</td></tr>
             <tr><td class="id">7.4</td><td><span class="t">Quaternions, Derived</span><span class="d">The 2D insight extended, honestly — including where the intuition strains and why the half-angle appears. No "just trust the formula".</span></td><td class="hrs">6 h</td></tr>

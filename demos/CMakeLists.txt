@@ -127,4 +127,19 @@ engine_use_assets(ecs_swarm)
 add_executable(collector collector/main.cpp)
 target_link_libraries(collector PRIVATE engine::engine)
 engine_set_warnings(collector)
+
+# ---- gimbal: three rings and a number -------------------------------------
+#
+# Lesson 7.1. The smallest demo since `pong`, and deliberately so: it draws one
+# object and three circles, and everything else on screen is a measurement of the
+# pose that object is in. A bigger scene would have made the picture prettier and
+# the claim harder to check.
+#
+# It links `engine::engine` and NOT `demo_common`, which is the same statement
+# `collector` makes — a program built to test the public API does not get to
+# reach for the shared demo scene. What it needs is a cube, and `mesh.hpp`
+# generates one.
+add_executable(gimbal gimbal/main.cpp)
+target_link_libraries(gimbal PRIVATE engine::engine)
+engine_set_warnings(gimbal)
 engine_use_assets(collector)

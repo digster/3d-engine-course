@@ -47,11 +47,26 @@ namespace engine {
 /// The rotation is a `mat3` for now, which is honest but not final. A matrix is
 /// a poor thing to *store* a rotation in — nine floats for three degrees of
 /// freedom, no natural way to interpolate between two of them, and it drifts out
-/// of being a rotation as you accumulate updates. Lesson 7.1 replaces it with a
-/// quaternion, and this struct is where that replacement will land. Everything
+/// of being a rotation as you accumulate updates. **Lesson 7.4 replaces it with a
+/// quaternion**, and this struct is where that replacement will land. Everything
 /// downstream asks for a matrix, so the swap touches one line of
 /// `parent_from_local()` and nothing else — which is the argument for having a
 /// named type here at all rather than passing three loose variables around.
+///
+/// LESSON 7.1 CORRECTED THE LESSON NUMBER IN THE PARAGRAPH ABOVE, which said
+/// 7.1 for five modules. It was written in Module 2, before Module 7 had a
+/// lesson breakdown, and the arc that arrived is Euler angles (7.1), axis-angle
+/// (7.2), complex numbers (7.3), quaternions (7.4). 7.1 is the lesson that
+/// explains *why* the replacement is needed and does not perform it.
+///
+/// **And note what 7.1 deliberately did NOT do**: it added
+/// `math/euler.hpp`, and it did not put a `euler_angles` in this struct. Three
+/// angles are the smallest possible storage and they are still the wrong one —
+/// they cannot be composed without converting to a matrix, they cannot be
+/// interpolated without leaving the geodesic (measured: 14% of extra turning on
+/// a generic pair, 209% near lock), and they have a singularity. Euler angles
+/// are an INTERFACE, for a human and for somebody else's file format. The
+/// `mat3` stays.
 struct transform
 {
     /// Where the object's origin sits, in parent space. A POSITION (Lesson 2.7).

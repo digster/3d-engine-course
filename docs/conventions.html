@@ -91,6 +91,7 @@
       <li><a href="#transparency">Transparency &mdash; six decisions, four of which draw a picture either way</a></li>
       <li><a href="#hdr">HDR &mdash; where the range lives, and where it stops</a></li>
       <li><a href="#units">Units and angles</a></li>
+      <li><a href="#euler">Euler angles &mdash; one of twenty-four</a></li>
       <li><a href="#simulation">The simulation contract</a></li>
       <li><a href="#rotational">Rotational quantities &mdash; torque, spin, inertia</a></li>
       <li><a href="#colour">Colour and diagram conventions</a></li>
@@ -2472,6 +2473,97 @@
   </p>
 
   <!-- ===================================================================== -->
+  <h2 id="euler"><span class="num">8b</span>Euler angles &mdash; one convention out of twenty-four</h2>
+
+  <p>
+    Settled in <a href="lessons/07-01-euler-angles.html">Lesson 7.1</a>. Three angles are not an
+    orientation until you also fix which axes they turn about, in what order, and whether each later
+    turn is about a world axis or about the axis the earlier turns just moved. There are
+    <strong>twenty-four</strong> self-consistent answers &mdash; twelve axis orders times two frames
+    &mdash; and they are all in use. This is ours.
+  </p>
+
+  <div class="callout ok">
+    <span class="label">Intrinsic Y-X-Z, active, right-handed, radians</span>
+    <p class="mono">
+      rotation_from_euler({yaw, pitch, roll})<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;== rotation_y(yaw) * rotation_x(pitch) * rotation_z(roll)
+    </p>
+  </div>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>Decision</th><th>Ours</th><th>What fixes it</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>Axis order</strong></td>
+          <td><code>y &rarr; x &rarr; z</code> &mdash; yaw, then pitch, then roll</td>
+          <td>Every three-angle parameterisation is singular somewhere; the order decides
+              <em>where</em>. For a three-distinct-axis order the singularity sits on the
+              <strong>middle</strong> angle at &plusmn;90&deg;, so this one puts it at pitch
+              &plusmn;90&deg; &mdash; nose vertical, which a camera already clamps away from. An
+              <code>x-y-z</code> order would put it on the heading, which you sweep all day.</td>
+        </tr>
+        <tr>
+          <td><strong>Frame</strong></td>
+          <td><strong>Intrinsic</strong>: each turn about an axis the previous turns moved</td>
+          <td>Equivalent to <em>extrinsic</em> <code>z-x-y</code> read (roll, pitch, yaw) &mdash;
+              an intrinsic sequence is the reversed extrinsic one with the angles reversed too.
+              Intrinsic composition multiplies on the <strong>right</strong>, which is why the
+              product reads in knob order left to right.</td>
+        </tr>
+        <tr>
+          <td><strong>Active or passive</strong></td>
+          <td><strong>Active</strong>: the matrix turns the object, not the frame</td>
+          <td>&sect;6 already settled it without using the word &mdash; matrices act on column
+              vectors and <code>parent_from_local</code> carries vertices into the parent's space.
+              The passive reading is the inverse, so getting this wrong is a transpose.</td>
+        </tr>
+        <tr>
+          <td><strong>Sense</strong></td>
+          <td>Right-hand rule about each axis</td>
+          <td>Same rule as &sect;9b's torque and angular velocity, and as &sect;7's CCW-is-front
+              winding. Positive yaw turns the nose from &minus;Z toward &minus;X &mdash; to the
+              <strong>left</strong>, since &minus;Z is forward and +X is right (&sect;2).</td>
+        </tr>
+        <tr>
+          <td><strong>Units</strong></td>
+          <td><strong>Radians</strong></td>
+          <td>&sect;8. Degrees appear only where a human reads or types a number.</td>
+        </tr>
+        <tr>
+          <td><strong>Storage</strong></td>
+          <td><strong>Never.</strong> <code>transform::rotation</code> is a <code>mat3</code>, and a
+              quaternion from Lesson 7.4</td>
+          <td>Euler angles are an <em>interface</em> &mdash; for a human, a slider, or somebody
+              else's file. Lerping them leaves the geodesic by 14% on a generic pair and 209% near
+              lock (7.1 &sect;7), and they have a hole in them.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    The extraction, <code>euler_from_rotation</code>, is a true inverse only on the strip
+    <span class="eq-plain">|pitch| &le; 90&deg;</span> &mdash; <code>std::asin</code> cannot return
+    anything else &mdash; and it returns <code>cos_pitch</code> and a <code>degenerate</code> flag
+    alongside the angles, because at lock the yaw and roll are not separably recoverable and a
+    caller has to be told rather than left to find out.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">Reading somebody else's angles is not a small error</span>
+    <p>
+      The triple <code>(30&deg;, 40&deg;, 50&deg;)</code> read under each of the twenty-four
+      conventions lands between <strong>16.03&deg;</strong> and <strong>83.48&deg;</strong> away
+      from where ours puts it. Exactly one of the twenty-four is zero. If you have to consume
+      another tool's angles, convert in a function whose <em>name</em> says whose convention it is
+      &mdash; <code>rotation_from_aerospace_zyx</code> &mdash; so the choice is visible at the call
+      site. glTF sidesteps the whole question by storing node rotations as quaternions.
+    </p>
+  </div>
+
+  <!-- ===================================================================== -->
   <h2 id="simulation"><span class="num">9</span>The simulation contract</h2>
 
   <p>
@@ -2806,6 +2898,7 @@
           <tr><td><strong>Matrices</strong></td><td>Column vectors <code>v' = M·v</code>, stored column-major</td></tr>
           <tr><td><strong>Winding</strong></td><td>CCW = front, cull back — set explicitly on every pipeline</td></tr>
           <tr><td><strong>Units</strong></td><td>metres, radians, seconds, kilograms; linear colour internally</td></tr>
+          <tr><td><strong>Euler angles</strong></td><td>Intrinsic <code>y-x-z</code> (yaw, pitch, roll), active, right-handed — an interface, never storage</td></tr>
           <tr><td><strong>Axis colours</strong></td><td>x/y/z = red/green/blue, always</td></tr>
         </tbody>
       </table>

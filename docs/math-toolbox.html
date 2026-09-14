@@ -102,6 +102,7 @@
       <li><a href="#shadows">Shadows, and the size of a sampling error</a></li>
       <li><a href="#performance">Reasoning about cost</a></li>
       <li><a href="#pipelining">Two processors, overlapped</a></li>
+      <li><a href="#rotation">Parameterising a rotation</a></li>
       <li><a href="#coming">Coming as the course proceeds</a></li>
     </ol>
   </details>
@@ -2991,6 +2992,123 @@
     </p>
   </div>
 
+  <h2 id="rotation"><span class="num">8c</span>Parameterising a rotation</h2>
+
+  <div class="card">
+    <h3>The composite Euler matrix <span class="from">Lesson 7.1</span></h3>
+    <p>
+      Under this course's convention &mdash; intrinsic <code>y-x-z</code>, active, right-handed
+      (<a href="conventions.html#euler">Conventions &sect;8b</a>) &mdash; three angles become one
+      matrix by multiplying three elementary rotations, in knob order, left to right:
+    </p>
+    <div class="eq">
+      \[ R(\psi,\theta,\phi) = R_y(\psi)R_x(\theta)R_z(\phi) = \begin{bmatrix} c_yc_r + s_ys_ps_r & s_ys_pc_r - c_ys_r & s_yc_p \\ c_ps_r & c_pc_r & -s_p \\ c_ys_ps_r - s_yc_r & s_ys_r + c_ys_pc_r & c_yc_p \end{bmatrix} \]
+      <span class="eq-plain">Row 0: cy*cr + sy*sp*sr,  sy*sp*cr - cy*sr,  sy*cp
+Row 1: cp*sr,            cp*cr,             -sp
+Row 2: cy*sp*sr - sy*cr, sy*sr + cy*sp*cr,  cy*cp</span>
+    </div>
+    <p>
+      <strong>The one entry worth memorising is (1, 2) = &minus;sin(pitch).</strong> Eight of the
+      nine mix at least two angles; the middle axis of any Euler sequence is the one no other
+      rotation conjugates, so it always leaves exactly one clean entry behind. That entry is where
+      the extraction starts. Change the axis order and it moves; it does not disappear.
+    </p>
+    <p>
+      Worked: yaw 30&deg;, pitch 40&deg;, roll 50&deg; gives
+      <code>(0,0) = 0.866025&times;0.642788 + 0.5&times;0.642788&times;0.766044 = 0.802872</code>,
+      <code>(0,2) = 0.5&times;0.766044 = 0.383022</code>, and
+      <code>(1,2) = &minus;0.642788</code>.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>Intrinsic rotation as conjugation <span class="from">Lesson 7.1</span></h3>
+    <p>
+      To rotate about an axis that a frame <em>F</em> has already moved, do the turn where it is
+      easy: step into <em>F</em>, turn, step back. That is <code>F R F&#7488;</code>. Applied to a
+      frame that is already <em>F</em>, the step-in and step-out cancel:
+    </p>
+    <div class="eq">
+      \[ \big(F R F^{\mathsf T}\big) F = F R \big(F^{\mathsf T}F\big) = FR \]
+      <span class="eq-plain">(F * R * F^T) * F = F * R * (F^T * F) = F * R</span>
+    </div>
+    <p>
+      So <strong>intrinsic turns multiply on the right</strong> and extrinsic ones on the left,
+      which is the whole of the difference between the two frames &mdash; and why an intrinsic
+      sequence <em>A-B-C</em> with angles (&alpha;, &beta;, &gamma;) is the same rotation as the
+      extrinsic sequence <em>C-B-A</em> with (&gamma;, &beta;, &alpha;). Conjugation is a general
+      tool, not a rotation trick: the same shape carries an inertia tensor into world space in
+      Module 8 (<code>R I R&#7488;</code>).
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>The rate Jacobian, and gimbal lock as a determinant <span class="from">Lesson 7.1</span></h3>
+    <p>
+      Angular velocities about a common point add as vectors, so turning the three knobs at rates
+      (&psi;&#775;, &theta;&#775;, &phi;&#775;) spins the body at <strong>&omega; = J&#183;(rates)</strong>
+      where <em>J</em>'s columns are simply the three axes the three knobs turn about, in world
+      space. Its determinant is the volume those axes enclose:
+    </p>
+    <div class="eq">
+      \[ \det J = -\cos\theta, \qquad J^{\mathsf T}J = \begin{bmatrix} 1 & 0 & -s_p \\ 0 & 1 & 0 \\ -s_p & 0 & 1 \end{bmatrix}, \qquad \sigma = \big\{\sqrt{1{+}|s_p|},\,1,\,\sqrt{1{-}|s_p|}\big\} \]
+      <span class="eq-plain">det J = -cos(pitch). J^T J is the identity with -sin(pitch) in two corners.
+The singular values are sqrt(1 + |sin p|), 1, sqrt(1 - |sin p|).</span>
+    </div>
+    <p>
+      Read <code>J&#7488;J</code> and the pathology is one number in two corners: <strong>the yaw
+      axis and the roll axis are not perpendicular, and how far from perpendicular is exactly the
+      pitch.</strong> The smallest singular value is what a unit of knob buys in the worst
+      direction &mdash; 0.0123 at pitch 89&deg;, so 81 rad/s of knob for 1 rad/s of body.
+    </p>
+    <p>
+      <strong>Compute it as <code>|cos p| / &radic;(1 + |sin p|)</code>, never as
+      <code>&radic;(1 &minus; |sin p|)</code></strong>, though the two are equal. The second
+      subtracts two nearly-equal numbers and returns exactly zero in <code>float</code> a full
+      0.01&deg; before the pose is actually singular.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>The angle between two rotations <span class="from">Lesson 7.1</span></h3>
+    <p>
+      In a basis whose first vector is the rotation's own axis, the matrix is block-diagonal &mdash;
+      a 1 for the axis and a 2&times;2 turn for the plane &mdash; so its trace is
+      <code>1 + 2cos&theta;</code>. Trace survives a change of basis, so that holds everywhere. The
+      antisymmetric part gives the sine: <code>R &minus; R&#7488; = 2sin(&theta;)[n]&times;</code>.
+    </p>
+    <div class="eq">
+      \[ \theta = \operatorname{atan2}\!\Big(\tfrac{1}{2}\|R - R^{\mathsf T}\|,\; \tfrac{1}{2}\big(\operatorname{tr}R - 1\big)\Big), \qquad R = A^{\mathsf T}B \]
+      <span class="eq-plain">theta = atan2( |R - R^T| / 2 , (trace(R) - 1) / 2 ), with R = A^T B</span>
+    </div>
+    <p>
+      <strong>Not <code>acos((tr R &minus; 1)/2)</code></strong>, which every reference gives and
+      which returns <em>exactly zero</em> for a turn of 0.004&deg;: near &theta; = 0 the trace is
+      <code>3 &minus; &theta;&sup2;</code>, and a <code>float</code> cannot hold a change of 1.6e-5
+      at 3.0. This is the distance function on rotations &mdash; it is what turns "that
+      interpolation wanders" into a number of degrees, and it is the instrument the rest of
+      Module 7 is measured with.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>Cancellation against one <span class="from">Lesson 7.1</span></h3>
+    <p>
+      Three separate formulas in one lesson &mdash; <code>&radic;(1 &minus; sin&sup2;)</code>,
+      <code>&radic;(1 &minus; |sin|)</code> and <code>acos((tr &minus; 1)/2)</code> &mdash; are
+      algebraically perfect and numerically useless, for the same reason and with the same cure.
+      The pattern, worth carrying:
+    </p>
+    <p>
+      <strong>If a formula's job is to report something near zero, look at what it computes just
+      before it returns, and ask whether that thing is ever small.</strong> If the answer is "no,
+      it is a difference of two things near 1", get the small quantity from something that
+      <em>is</em> small instead &mdash; a <code>hypot</code> of two entries already proportional to
+      it, or an antisymmetric part whose entries are proportional to the angle. The algebra that
+      does it is usually one line: <code>1 &minus; s = (1 &minus; s&sup2;)/(1 + s) = c&sup2;/(1+s)</code>.
+    </p>
+  </div>
+
   <h2 id="coming"><span class="num">9</span>Coming as the course proceeds</h2>
 
   <p>
@@ -3048,9 +3166,13 @@
   </div>
 
   <div class="pending">
-    <b>Module 7 — Rotation and motion.</b> Euler angles and gimbal lock · axis-angle and
+    <b>Module 7 — Rotation and motion.</b> <strong>The composite Euler matrix</strong> ·
+    <strong>intrinsic rotation as conjugation</strong> · <strong>the rate Jacobian, and gimbal
+    lock as a determinant</strong> · <strong>the angle between two rotations</strong> ·
+    <strong>cancellation against one</strong> (§8c above, all five from 7.1) · axis-angle and
     Rodrigues' formula · <strong>complex numbers as 2D rotation</strong> · quaternions ·
-    slerp · numerical integration · impulse and restitution · the Separating Axis Theorem.
+    slerp · the skinning sum. (Integration, impulses and the Separating Axis Theorem moved to
+    Module 8 with the physics.)
   </div>
 
   <div class="recap">

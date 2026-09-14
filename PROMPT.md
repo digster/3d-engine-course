@@ -2679,3 +2679,26 @@ Answered two scoping questions before starting, both with material consequences:
    was declined.)
 2. **Scope of the fixes.** Chosen: audit *and* close the gaps the game proves, leaving everything
    else named, measured and pointed at the module that owns it.
+
+## 2026-09-13 — `next`
+
+Resumed from `STATE.md`'s `next:` with no scoping questions — Lesson 7.1, **Euler Angles and Their
+Pathologies**, the first lesson of Module 7. The planning notes in STATE named four things the
+lesson owed (gimbal lock as a measurement rather than a metaphor; the twenty-four conventions; the
+interpolation indictment; a golden that is structurally null and must be confirmed as such), and
+all four were delivered.
+
+Three decisions taken without asking, each because the alternative would have been worse rather
+than merely different:
+
+1. **`angle_between_rotations` ships the `atan2` form, not the textbook `acos` one**, with the
+   textbook one kept beside it and called by nothing. Measuring the two was not in the plan; it
+   became necessary once the path-length instrument needed accuracy at 0.004° steps, where the
+   textbook form returns exactly zero.
+2. **The header's first threshold justification was wrong and was rewritten rather than quietly
+   kept.** Float error is relative, so on a freshly-built matrix there is no amplification at all;
+   the argument only holds for a matrix carrying absolute error. Both are now measured, in two
+   columns.
+3. **Nothing in the engine stores a Euler angle.** `transform::rotation` stays a `mat3`. That was
+   the outcome the measurements argued for, and the lesson says so as its conclusion rather than
+   leaving it as an omission.

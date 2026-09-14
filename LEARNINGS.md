@@ -7672,3 +7672,80 @@ on the thing at all, or on something next to it that is allowed to carry it.
 the `.svg`'s source is `figs_NN.py`. Editing the HTML leaves the generator able to revert it on the
 next rebuild; `check-builders.py --figures` is the check that closes that loop, and it is the one
 that proves a figure fix actually landed.
+
+## Cancellation against 1.0: the same bug three times in one lesson
+
+Lesson 7.1 shipped three formulas that are algebraically exact and numerically useless, and it took
+meeting the third one to see they were the same bug:
+
+| Formula | Job | What it does instead |
+|---|---|---|
+| `sqrt(1 - sin*sin)` | `cos(pitch)` in `euler_from_rotation` | returns **exactly 0** at pitch 89.99°, so the gimbal-lock flag fires 0.01° early |
+| `sqrt(1 - fabs(sin))` | smallest singular value of the rate Jacobian | same, and the reciprocal prints `inf` at a pose that is fine |
+| `acos((trace(R) - 1) / 2)` | angle between two rotations | **1.00 relative error** at 0.004°, i.e. returns zero — and NaN on identical inputs, unclamped |
+
+The mechanism is one sentence: **a `float` cannot hold a change of 1.6e-5 at 3.0, or of 1.5e-8 at
+1.0**, so a quantity computed by subtracting two nearly-equal numbers near 1 is gone before the
+`sqrt` or the `acos` sees it. Then the outer function amplifies whatever noise is left, because
+`acos` and `asin` both have infinite slope at ±1.
+
+The cure is always the same shape: **get the small quantity from something that is itself small.**
+
+- `cos(pitch)` = `hypot(r02, r22)`, because those two entries *are* `sin(yaw)·cos(pitch)` and
+  `cos(yaw)·cos(pitch)` — their length is what you want, and no subtraction happens. The pairing is
+  worth remembering on its own: **the conditioning of the yaw extraction is the length of the vector
+  whose angle the yaw extraction takes.**
+- `sqrt(1 - s)` = `|c| / sqrt(1 + s)`, from `1 - s = (1 - s²)/(1 + s) = c²/(1 + s)`.
+- The rotation angle comes from `atan2(|R - Rᵀ|/2, (tr R - 1)/2)`: the antisymmetric part's entries
+  are *differences of matrix entries*, so they stay proportional to θ instead of hiding inside a 3.
+
+**The diagnostic to carry:** if a formula's job is to report something near zero, look at what it
+computes just before it returns and ask whether *that* is ever small. If it is a difference of two
+things near 1, the formula cannot do its job and no amount of `double` will save you at the limit —
+it only moves the cliff.
+
+**And watch the drift before the cliff.** The naive singular value reads 0.0012449 against a true
+0.0012340 at pitch 89.9° — 0.9% wrong while still entirely plausible. The cliff is what you notice;
+the drift is what ships.
+
+## A one-knob Euler interpolation is a geodesic, so the obvious test measures nothing
+
+The first version of 7.1's interpolation check swept the yaw alone at pitch 88° — as close to the
+singularity as it could get — and correctly reported **0.00% excess turning**. Turning one Euler
+angle and leaving the others fixed is a steady rotation about one fixed axis, which is the
+definition of a geodesic, whatever the pitch. The pathology needs **at least two** angles moving.
+
+Two things follow. Aim a demonstration at two or three knobs, and control it by running *the same
+deltas* at four distances from lock (7.1 measured 209.5%, 62.5%, 22.5%, 26.7%) rather than by
+changing the deltas, or the comparison is measuring the move rather than the pose.
+
+## `grep` a name, get somebody else's Euler
+
+`grep -rn euler demos/common` returns two hits and neither is Lesson 7.1: they are the **Euler
+characteristic**, V − E + F, printed by Lesson 3.5's mesh validator. Two unrelated things named
+after the same man, in the one directory a structural argument was about. A dependency claim made
+by grepping a *name* rather than an *include path* would have invented a dependency that is not
+there. Grep the include, then confirm it by what the translation unit actually compiles.
+
+## A headless run can write the right file and then crash
+
+`demos/gimbal --shot` exited 139 (SIGSEGV) *after* printing its receipt and writing a correct PPM.
+Cause: a `--shot` run has no window, so ImGui has no context, and `ImGui::Begin` on no context
+segfaults. `debug_ui`'s own entry points are all safe when it never started — 5.11 made them so
+deliberately — but a panel built by hand *between* those calls is not covered by that guard.
+
+The general point is about evidence: **every artifact on disk being correct is not evidence that
+the program succeeded.** Check exit status separately, in scripts and by eye. This is the same
+three-independent-axes rule `check-builders.py` learned on 2026-09-12 (exit status, output
+existence, output equality), met from the other side.
+
+## A figure defect can be invisible at the width you authored it
+
+Figure 1 of 7.1 had two labels sitting on the dashed ground square. `check-page.js` reported them at
+1280 and **not** at 390, because SVG labels scale with the viewport and the collision only opened at
+the wider one. Run the checker at both widths every time; "it looked fine" is a statement about one
+viewport.
+
+The fix is also worth the note: the labels were correct and the *shape* was too big. Shrinking the
+ground square inside every label's radius fixed four placements at once, where moving four labels
+would have been four chances to create a new overlap.

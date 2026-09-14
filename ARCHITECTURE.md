@@ -893,7 +893,11 @@ chore. What follows is on disk.
 │   │   │   │               #   set_parent (refuses cycles), destroy_subtree
 │   │   │   └── camera.hpp  # camera + active_camera (a TAG); look_along;      [5.9]
 │   │   │                   #   view_from_camera = rigid_inverse(placement)
-│   │   ├── math/           # vec2/3/4, mat2/3/4, transform  (header-only)
+│   │   ├── math/           # vec2/3/4, mat2/3/4, transform, euler  (header-only)
+│   │   │   └── euler.hpp   # euler_angles + rotation_from_euler + the inverse,   [7.1]
+│   │   │                   #   euler_rate_jacobian (det = -cos pitch: gimbal lock
+│   │   │                   #   as a number), wrap_angle, angle_between_rotations.
+│   │   │                   #   AN INTERFACE, NOT STORAGE — transform keeps a mat3
 │   │   ├── platform/       # HOW A PROGRAM STARTS                          [5.2]
 │   │   │   ├── platform.hpp  # surface, app_config, platform — SDL's lifecycle,
 │   │   │   │                 #   owned once. YOU keep the loop
@@ -1055,6 +1059,12 @@ chore. What follows is on disk.
 │   │                       #   --shot runs 240 deterministic steps and prints four
 │   │                       #   numbers, which makes it a characterization test for
 │   │                       #   the ECS, the hierarchy and the pools               [5.12]
+│   ├── gimbal/main.cpp     # THREE RINGS AND A NUMBER. One aircraft, three hoops  [7.1]
+│   │                       #   whose planes contain their own pivot axles, and a
+│   │                       #   live |det J| beside them. [E] drives the weakest
+│   │                       #   knob combination so the response can be watched
+│   │                       #   dying. Its one API finding: debug_lines has no
+│   │                       #   ellipse(), so the rings are built from line()
 │   ├── sandbox/main.cpp    # Lessons 2.1–4.9 on [Tab] and four flags. 5,625 lines.
 │   │                       #   Uses engine::platform; keeps its own main() ON PURPOSE
 │   ├── pong/main.cpp       # Lesson 1.8's game, on engine::app. 87 code lines,

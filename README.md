@@ -127,6 +127,10 @@ demo of anything:
 ./build/demos/collector --gizmos --shot arena.ppm   # one deterministic frame, with the gizmos
 ./build/demos/collector --no-boom         # the camera inheriting the rover's roll
 
+./build/demos/gimbal                      # Lesson 7.1: three rings and a number
+./build/demos/gimbal --pose 0 89 20       # one degree from gimbal lock
+./build/demos/gimbal --shot rig.ppm --pose 0 90 20   # headless, deterministic
+
 ./build/demos/gltf_view                   # shapes.glb, orbiting
 ./build/demos/gltf_view --model cube.gltf # the textured cube
 ./build/demos/gltf_view --pose 1.7 --shot out.ppm
@@ -147,6 +151,8 @@ header under `<engine/…>`, so **if a picture cannot be made from outside the l
 does not have an API.**
 
 `collector` is **Lesson 5.12's** checkpoint: a small game built against the public API and nothing else, and the only program here whose requirements were not chosen to flatter the engine. Its `--shot` mode runs 240 deterministic simulation steps before drawing and prints four numbers derived from them, which makes it a characterization test for the ECS, the hierarchy and the pools — better than the golden image for anything they touch.
+
+`gimbal` is **Lesson 7.1's** instrument, and the smallest program here: one aircraft, three hoops, and a live readout of `|det J|` — the determinant of the map from knob rates to angular velocity, which is `cos(pitch)` and which goes to zero at gimbal lock. Hold <kbd>E</kbd> to drive yaw and roll together (the weakest combination), climb toward pitch 90°, and watch the knobs keep turning while the aircraft stops. Press <kbd>T</kbd> first and the nose leaves a trail, so the stopping is a mark on the screen rather than something you have to notice.
 
 `gltf_view` is **Lesson 6.6's** acceptance test for the *asset system*, and it is `hello_cube`'s
 successor in one specific sense: that program proved a picture could be made from outside the

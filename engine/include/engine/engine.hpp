@@ -87,6 +87,12 @@
 #include <engine/ecs/view.hpp>
 
 // ---- Maths ----------------------------------------------------------------
+// Lesson 7.1 added the first line here since Module 2, and it did not have to be
+// remembered: the configure-time lint below `add_library` in engine/CMakeLists.txt
+// refused to configure the build until this line existed. That check was written
+// in 5.12 and proved to fail by deleting an include; this is the first time it
+// fired on a header somebody had actually just written.
+#include <engine/math/euler.hpp>
 #include <engine/math/mat2.hpp>
 #include <engine/math/mat3.hpp>
 #include <engine/math/mat4.hpp>
