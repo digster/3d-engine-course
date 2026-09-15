@@ -7,7 +7,14 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-09-15 (after Lesson 7.4 — 79 of 107 lessons; Module 7 OPEN,
+updated: 2026-09-15 (after Lesson 7.5 — 80 of 107 lessons; Module 7 OPEN,
+         5 of 8, ~29 h of ~44. Planned at 4 h, shipped at 7, so Module 7 went
+         ~41 -> ~44 h and the course ~515 -> ~518 h. THE LESSON WAS ALSO
+         RETITLED, from "Slerp" to "Slerp, and the Storage Swap" — the question
+         7.2, 7.3 and 7.4 each flagged, answered by doing the work. Index prose,
+         hero stats (80 published) and the Module 7 subtotal all moved together;
+         check-curriculum.py confirms.
+         Earlier, after Lesson 7.4 — 79 of 107 lessons; Module 7 OPEN,
          4 of 8, ~22 h of ~41. Planned at 6 h, shipped at 7, so Module 7 went
          ~40 -> ~41 h and the course ~514 -> ~515 h. Index prose, hero stats
          (79 published) and the module subtotal all moved together;
@@ -59,6 +66,94 @@ conventions:
         quaternion. So the sandwich was NOT CHOSEN. Then q = n1n0 =
         -(cos phi + sin phi n_hat), and NOTHING IN THE DERIVATION DETERMINES
         THAT SIGN — the double cover, arriving before it is named.
+  slerp: THE FORMULA IS a (a^-1 b)^t AND IT IS NOT ABOUT QUATERNIONS. 7.5,
+        engine/include/engine/math/quat.hpp + docs/conventions.html §8f.
+        It is the definition of a geodesic on any group with an inverse, a
+        product and a real power — which is why 7.2's rotation_slerp (mat3),
+        7.3's complex_slerp (plane) and 7.5's quat_slerp are the SAME THREE
+        STEPS and agree to float resolution on one journey while sharing no
+        code: 4.172e-07 of a matrix entry, 2.384e-07 rad.
+        EVERY BLEND CALLS nearest(a, b) FIRST. q and -q are the same
+        orientation and OPPOSITE POINTS, so every pair has two arcs summing to
+        2pi and 49.6% of uniformly sampled pairs name the long one (measured,
+        9923 of 20000). Two keyframes 1 deg apart signed oppositely become a
+        359 DEGREE SPIN. nlerp's version is worse: the raw chord passes within
+        0.00436 of the ORIGIN.
+        NLERP'S PATH IS EXACT AND ITS SCHEDULE IS NOT, by exactly
+        sec^2(Omega/2) — 7.3 derived it in the plane and nothing in that
+        argument mentions dimension. Excess turning 0.00%; departure from the
+        a-b plane 1.605e-07.
+        *** THE DOUBLE COVER BOUNDS THE ERROR, AND THE BOUND IS EXACT. ***
+        nearest forces the four-component dot non-negative, so the SPHERE arc
+        Omega <= 90 deg, so sec^2(Omega/2) <= sec^2(45) = 2 EXACTLY and the
+        pose gap <= 8.1491 deg. In the plane, with no double cover to exploit,
+        the same function reaches 13,131x and 26.34 deg. Measured over 20,000
+        pairs: largest arc 89.9969, largest gap 8.1345; control without
+        nearest, 176.3020. THE COST AND THE GUARANTEE ARE THE SAME FACT.
+        THRESHOLD: nlerp within 0.5 deg up to an arc of 73.50 deg. Under that,
+        use it (3.42x cheaper: 4.763 ns against 16.288; 7.2's mat3 slerp is
+        45.752). Over it, or for any pose a designer chose, use slerp.
+        DO NOT SHIP THE TEXTBOOK TRIG FORM. It divides by sin(Omega) and Omega
+        comes from an acos that returns exactly 0 below an arc of
+        2*sqrt(eps/2) = 0.0280 deg — measured 0.0279. NaN, and a NaN pose
+        propagates down a whole skeleton. Ours divides by sin(theta/2) and the
+        thing it divides IS sin(t theta/2), so the ratio tends to t: continuous
+        through the identity, no epsilon, no branch, no "lerp if small".
+        A TEST MUST NOT SAMPLE ONLY t = 0, 0.5, 1. Those are EXACTLY the three
+        values at which nlerp and slerp are the same function (the midpoint is
+        exact by symmetry, measured 6.664e-08 over seven arcs). Sample 0.229
+        and 0.771.
+  quat-metric: 2 atan2(|v|, |w|), NEVER 2 acos|a.b|. 7.5 REWROTE 7.4's
+        angle_between, and the old form is kept as angle_between_by_cosine so
+        the two can be measured rather than argued about — exactly the
+        arrangement angle_between_rotations_by_trace has had since 7.1.
+        THE COSINE IS QUADRATIC AT 1 AND THE SINE IS LINEAR, so the acos form
+        has a noise floor of 2*sqrt(2*eps) = 0.0560 deg AND A BIASED ERROR.
+        A path integral over 4,096 steps of a 150 deg arc summed slerp's own
+        geodesic to 88.3437 deg — -41.10% — i.e. the metric failed slerp for
+        not walking the path it was walking. The atan2 form gives -0.00%, and
+        the Euler control then lands on +14.10%, which is Lesson 7.1's
+        published +14% arrived at from a different representation.
+        THE GENERAL RULE, which is not about acos: 7.4 wrote the metric for a
+        SEPARATION (large answer) and 7.5 asked it for a STEP (tiny answer).
+        The function did not change; the question did, and nothing in the name,
+        the type or the doc comment marks the difference. Re-derive a numerical
+        routine's conditioning at every scale you reuse it at.
+        Cost: ~12 multiplies against 4. Right side of the trade for a metric.
+  transform-storage: transform::rotation IS A quat, SINCE 7.5. Five modules as
+        a mat3, promised away in Module 2, moved to 7.1, then to 7.4, then done
+        here. parent_from_local gained ONE LINE (mat3_from_quat) and the
+        arithmetic below it did not move a character — which is the argument
+        for a named type rather than three loose variables.
+        THE CONVERSION IS ENGINE POLICY, not a detail: 7.4 §10.3 measured the
+        crossover at ~8 vectors, a mesh has thousands, so the engine STORES
+        quaternions and converts ONCE PER OBJECT PER FRAME, right there, then
+        multiplies vertices by a matrix.
+        A STEPPED rotation gets renormalised_fast; a REBUILT one gets nothing.
+        The distinction is whether the field is an ACCUMULATOR — whether the
+        previous frame's answer is an input. collector's carousel and spinner
+        are the first two in the engine's history that are.
+        transform_from_affine (math/transform.hpp) IS THE DECOMPOSITION, and it
+        exists because THREE call sites were doing it and TWO were doing it
+        wrong. Returns transform_extraction {value, out_of_square, mirrored} —
+        the same shape as axis_angle_extraction (7.2) and euler_extraction
+        (7.1), for the same reason.
+        NEGATIVE DETERMINANT IS A MIRROR AND MUST BE HANDED BACK DELIBERATELY;
+        column lengths are non-negative, so skipping it turns a mirrored object
+        into an unmirrored ROTATED one.
+        A ZERO COLUMN IS REBUILT AS A CROSS PRODUCT OF THE SURVIVING PAIR, not
+        as the parent's axis. gltf_view's inherited version did the latter and
+        its comment said, correctly, that it "keeps the matrix finite instead of
+        producing NaNs" — and a non-orthonormal basis makes quat_from_rotation
+        wrong in EVERY column, measured 0.399 on a flattened object whose other
+        two axes were perfectly recoverable. FINITE IS NOT RIGHT.
+        SHEAR CANNOT BE HELD AT ALL and is COUNTED, in
+        renderable_report::skewed. A non-uniformly scaled parent with a rotated
+        child produces it; out_of_square 0.5941, residual 0.3922 after the best
+        repair either route can make.
+        T*R*S PER NODE IS A RESTRICTION, NOT A REPRESENTATION. The fix for a
+        matrix outside it is usually ANOTHER NODE, not a wider field — see
+        `boom-two-nodes` under `decisions:`.
   quat-cover: q AND -q ARE THE SAME ROTATION, BITWISE. 7.4. The sandwich is
         QUADRATIC in q, so a global sign cannot survive it: measured
         |M(q) - M(-q)| = 0.000e+00 over 20,000 rotations, not a tolerance.
@@ -4768,8 +4863,57 @@ completed:
          sites across ten files with a decomposition decision inside one of
          them. 7.5 is now comfortably a lesson. STILL THE USER'S CALL to ratify
          the retitling; the work is scoped either way.)
+  - 7.5  Slerp, and the Storage Swap
+        (RETITLED from "Slerp" — the question 7.2, 7.3 and 7.4 each flagged,
+         and 7.4 scoped. No lesson NUMBER moved, so §9's "approved lessons are
+         never renumbered" is untouched; the index row was unpublished.
+         Planned at 4 h, shipped at 7. 7.4's TWO dead `next` links were
+         repointed in the SOURCES — scratch/l74_body_a.html and build_74.py's
+         TAIL — and build_74 rebuilt, so page and generator still agree.
+         FIFTEEN LISTINGS, TWELVE OF THEM MODIFIED, and the page is 774 KB —
+         the largest in the corpus, past 04-08's 731 KB. That is the honest cost
+         of narrowing a type fifteen files touch, and §8 forbids eliding it. If
+         a lesson ever needs to list MORE than this, split it per §9 rather
+         than trimming a listing.
+         THE GOLDEN WAS A REAL INSTRUMENT AND CAME BACK IDENTICAL. Four edited
+         files are in demo_scene.cpp's include closure, so the structural
+         argument did not apply; hash E917C06C, ninth consecutive byte-identical
+         run. The reason is measured rather than hoped: the mat3 -> quat -> mat3
+         round trip's worst entry over 20,000 poses is 5.960e-07, which at three
+         units out in a 960 px frame is 0.00014 PIXELS.
+         verify_74 AND verify_73 WERE RE-RUN BECAUSE angle_between CHANGED
+         UNDER THEM: 42/42 and 43/43, unmoved.)
 
 capabilities:
+  - 7.5 THE ENGINE CAN BLEND TWO ORIENTATIONS, AND IT STORES THEM AS FOUR
+    FLOATS. That second clause is the one Lessons 7.6 and 7.7 are built on: a
+    skeleton is a hundred of these per character per frame.
+    NO NEW HEADER (still 83 public, umbrella lists 82, one documented
+    exception), so the configure-time lint had nothing to say — the first
+    Module 7 lesson where it did not fire. NO NEW DEMO TARGET; `gimbal` gained
+    [S] and is now the instrument for the whole rotation arc (7.1 rings +
+    det J, 7.2 single turn + blend, 7.4 commutation + double cover, 7.5
+    schedule + the long way round). 42 checks green, TWELVE of them controls.
+    WHAT IS NEW IN math/quat.hpp: nearest + quat_pow_unit + quat_slerp +
+    quat_nlerp + angle_between_by_cosine, and angle_between REWRITTEN with
+    atan2 (see `quat-metric` under `conventions:`).
+    WHAT IS NEW IN math/transform.hpp: transform::rotation is a `quat`;
+    transform_extraction + transform_from_affine + k_transform_square_tolerance.
+    WHAT IS NEW IN gfx/renderable.hpp: renderable_report::skewed.
+    WHAT MOVED: ~25 call sites across ten files. ecs/camera.hpp (look_along),
+    gfx/scene.hpp (model_matrix), gfx/renderable.cpp, demos/common/demo_scene.cpp,
+    demos/hello_cube, demos/gltf_view (transform_of loses its body to the
+    engine), demos/ecs_swarm (its local copy deleted), demos/collector (the boom
+    becomes TWO entities; the carousel and spinner gain renormalised_fast),
+    demos/gimbal ([S]).
+    WHAT IS STILL NOT: scene_object STILL HOLDS A transform RATHER THAN A mat4,
+    so two functions now take a matrix apart only to hand the pieces to
+    parent_from_local, which puts it back together. That round trip IS the
+    argument for the change, and it is a published struct with a dozen callers,
+    so 7.5 NAMES IT AND DOES NOT MAKE IT — same discipline as 5.12's
+    view<const T>. NO transform_slerp: nothing has asked for one; 7.7 will, and
+    will also have to decide whether scale lerps or interpolates geometrically.
+    NO ANIMATION: 7.6 is the skeleton, 7.7 the sampling and blending.
   - 7.4 THE ENGINE CAN WRITE DOWN A ROTATION OF SPACE IN FOUR FLOATS.
     82 -> 83 public headers (math/quat.hpp; the umbrella lists 82, one
     documented exception). Header-only again: the harness links nothing, which
@@ -8020,7 +8164,8 @@ files:
                  07-01-euler-angles.html,
                  07-02-axis-angle.html,
                  07-03-complex-numbers.html,
-                 07-04-quaternions.html
+                 07-04-quaternions.html,
+                 07-05-slerp.html
                  (5.12 IS OUT OF SEQUENCE ON PURPOSE — Module 5 closed eleven
                   lessons after 5.11 and one after 6.18, and the list is
                   append-ordered rather than sorted so that the history is
@@ -8597,124 +8742,104 @@ roadmap: RESHAPED 2026-09-08, AFTER TWO EXTERNAL REVIEWS OF THE PUBLISHED OUTLIN
             qualifier too, because a skimmer reads the recap and stops.
 
 
-next: 7.5 — Slerp, and the Storage Swap
-      (79 of 107 published. Module 7 is OPEN — 4 of 8 lessons, ~22 h of ~41 —
-       and its index badge says `in progress`. Modules 0-6 complete.)
 
-      (planned filename: docs/lessons/07-05-slerp.html. 7.4's TWO next links
-       point at the index and BOTH need repointing — scratch/l74_body_a.html
-       holds the top one and build_74.py's TAIL the bottom, the same pair 7.4,
-       7.3, 7.2, 7.1 and 6.18 had. check-curriculum.py reports it the moment
-       the page exists. ALSO: docs/conventions.html §8e's last paragraph says
-       "until Lesson 7.5" with the reference DELIBERATELY UNLINKED, because
-       check 7 caught it as a dead link the day it was written. Make it a link
-       when the page lands.)
+next: 7.6 — Skeletal Animation: The Skinning Math
 
-      THE TITLE IS A DECISION THE USER HAS NOW BEEN ASKED TWICE TO RATIFY, and
-      7.4 has made it easy. 7.2 and 7.3 both flagged that "Slerp" was thinning
-      out: rotation_slerp exists on mat3, complex_slerp and complex_nlerp exist
-      in the plane, the sec^2(Omega/2) schedule is derived and measured at seven
-      arcs, and the double cover is derived from mirrors. 7.4 hands 7.5 a second
-      half to replace what those three took: **THE STORAGE SWAP**. Scope:
-        - quat_slerp + quat_nlerp, three lines each, the same three steps as
-          7.3's a(a^-1 b)^t — which is not specific to the plane OR to complex
-          numbers; it is the definition of a geodesic on any group with those
-          three operations.
-        - THE SHORTEST-ARC SIGN, which the double cover forces and which 7.4
-          only names. Negate b when dot(a, b) < 0. This is the half that has no
-          analogue in 7.3, because the plane's antipodal case is a measure-zero
-          annoyance and here it is half of every pair.
-        - THE SWAP: transform::rotation becomes a quat. ~25 call sites, ten
-          files, and one of them needs the decomposition of 7.4 §11.3.
+      (planned filename: docs/lessons/07-06-skeletal-animation.html. 7.5's TWO
+       next links point at the index and BOTH need repointing — scratch/
+       l75_body_a.html holds the top one and build_75.py's TAIL the bottom, the
+       same pair 7.5, 7.4, 7.3, 7.2, 7.1 and 6.18 had. check-curriculum.py
+       reports it the moment the page exists. ALSO: docs/conventions.html §8f
+       is new and is fully linked — nothing is left as deliberately-unlinked
+       plain text this time.)
 
-      WHAT 7.5 INHERITS, AND MUST NOT RE-DERIVE:
-        - THE SLERP FORMULA IS ALREADY DERIVED, TWICE. 7.2 §9 for mat3 and 7.3
-          §10.1 for complex, and 7.3 says in as many words that the three steps
-          are the same three steps. 7.5 substitutes `quat` and moves on.
-        - NLERP'S CHARACTER IS ALREADY MEASURED. Right path (0.00% excess
-          turning, and it CANNOT leave the geodesic — the chord stays in the
-          plane the endpoints span and normalising changes a modulus, never an
-          argument), wrong schedule, by exactly sec^2(Omega/2). The gap in
-          degrees at the same t: 0.13 at 30 deg, 4.07 at 90, 26.34 at 150. That
-          turns "slerp or nlerp?" into a threshold on the arc. All of it
-          generalises; 7.5 should CHECK it in 4-D rather than re-derive it.
-        - THE DOUBLE COVER IS PROVED AND MEASURED. 7.4 §8: M(q) = M(-q) at
-          0.000e+00 over 20,000 rotations, bitwise, because the sandwich is
-          quadratic. And angle_between already takes |dot| — the control that
-          shows what happens without it prints 360.0000 deg.
-        - angle_between(quat, quat) ALREADY EXISTS and is the metric slerp
-          needs. 7.4 put it in deliberately (a metric, not an interpolation).
-        - quat_pow_unit DOES NOT EXIST. 7.3's complex_pow_unit is the shape.
+      WHAT 7.6 INHERITS, AND MUST NOT RE-DERIVE:
+        - A PLACE TO PUT A POSE. `transform` is (vec3, quat, vec3) = 40 bytes,
+          and a hundred joints is 4 KB per character per frame. That is the
+          whole reason 7.5 did the swap before 7.6 rather than after.
+        - A WAY TO BE BETWEEN TWO POSES. quat_slerp / quat_nlerp, with the
+          threshold already derived: under 73.50 deg of arc nlerp is within
+          0.5 deg and is 3.42x cheaper. A CLIP'S ADJACENT KEYFRAMES ARE FAR
+          BELOW THAT, so 7.6/7.7 should default to nlerp and say why.
+        - A HIERARCHY. Lesson 5.9's transform hierarchy IS a skeleton with six
+          joints instead of a hundred; hierarchy::resolve already does the
+          parent-first walk. 7.6 adds the bind pose and the inverse bind
+          matrix, NOT a new tree.
+        - THE NAMING CONVENTION. 2.8's parent_from_local reading. The inverse
+          bind matrix is `bind_from_model`, and writing the space names down is
+          most of why skinning stops being confusing.
+        - T*R*S PER NODE IS A RESTRICTION (7.5 §8.4). If a rig needs a matrix
+          outside it, the answer is another joint, not a wider field.
 
-      WHAT 7.5 IS LIKELY TO MOVE. `math/quat.hpp` (slerp lands there);
-      `math/transform.hpp` (the swap, by definition); `engine.hpp` (only if a
-      new header appears — the swap alone adds none); and then the ten call-site
-      files: engine/src/gfx/renderable.cpp, engine/include/engine/ecs/camera.hpp,
-      engine/include/engine/gfx/scene.hpp, demos/common/demo_scene.cpp,
-      demos/hello_cube/main.cpp, demos/gltf_view/main.cpp,
-      demos/ecs_swarm/main.cpp, demos/collector/main.cpp, demos/gimbal/main.cpp.
-      THAT IS A LOT OF LISTING. Consider splitting 7.5 into Part 1/2 per
-      CLAUDE.md §9 rather than trimming the derivation.
+      WHAT 7.6 IS LIKELY TO MOVE. A new header under engine/include/engine/anim/
+      (which means engine.hpp's configure-time lint WILL fire — it has caught
+      five headers in four lessons, every one written by somebody who knew about
+      it); demos/, for a rig to look at; and possibly gfx/ if skinned vertices
+      need a second vertex path. `math/transform.hpp` should NOT need to move.
 
-      THE GOLDEN IS BACK IN PLAY AND WILL STAY THERE. 7.4 ran it as a real
-      instrument for the first time in seven lessons (transform.hpp is IN the
-      closure) and it came back identical=YES, hash E917C06C — the eighth
-      consecutive byte-identical run, and the twenty-third lesson not to move a
-      pixel. 7.5 changes transform.hpp's CODE rather than its comments and
-      changes demo_scene.cpp as well, so the golden WILL be exercised and MAY
-      legitimately move: quat_from_rotation(rotation_y(a)) does not reproduce
-      rotation_y(a) bit for bit. IF IT MOVES, MEASURE THE DIFFERENCE RATHER
-      THAN ACCEPTING IT — a representation change should move pixels by at most
-      one code, and anything larger is a bug, not a rounding.
-      The tool is `python3 scratch/closure_74.py <paths...>`; rename and reuse.
+      A DECISION 7.6 OR 7.7 HAS TO MAKE AND 7.5 DELIBERATELY DID NOT.
+      `transform_slerp` does not exist. 7.5 §12 Exercise 4 asks for it and names
+      the open question inside it: position lerps, rotation slerps, and SCALE
+      could go either way — a lerp from 1 to 8 passes through 4.5 at the midpoint
+      where the geometric interpolation a·(b/a)^t passes through 2.83, and only
+      one of those looks like smooth growth. Decide it with a picture, not a
+      preference.
 
-      CARRY FORWARD from 7.4:
-        - MEASURE THE AXIS ERROR AS A CHORD, NEVER WITH acos. §G.3's first
-          draft compared two recovered axes with acos(|a.b|) and printed
-          0.000e+00 in EVERY row — a blind instrument, not a pass. An axis error
-          of 5.7e-05 rad puts the dot product at 1 - 1.6e-09, which rounds to
-          exactly 1.0f, and acos of exactly 1 is exactly 0. That is 7.1 §6.4's
-          finding arriving from a THIRD direction. Use |a - b| and turn it back
-          into an angle with 2 asin(chord/2).
-        - A TIMED LOOP THAT OVERWRITES ITS ACCUMULATOR MEASURES NOTHING. F.1's
-          first draft wrote `acc = qs[i] * qs[j]` and reported 0.000 ns, because
-          only the last iteration is needed. Third distinct way to lose a timing
-          in this course, after 7.2's "read one element of nine" and "hoist the
-          loop". Exactly zero is at least LOUD; the dangerous version leaves a
-          plausible small number.
-        - CONSUMING THE WHOLE RESULT IS ITSELF A BIAS, so state it. A quat is 4
-          adds and a mat3 is 9, so the compose row carries five extra adds the
-          matrix would not pay in a real caller. The apply row has no such bias
-          (3 adds both sides) and is the calibration.
-        - A DEMO'S PRINTF WIDTH IS A PAGE-LAYOUT DECISION. 7.3 learned this for
-          a verify harness; it applies to a DEMO RECEIPT too. gimbal's commute
-          row was 80 characters and the two CONTROL numbers fell past the fold.
-          Split into four printfs, max 52. `scratch/tools/prefit.py` is the
-          tool; 7.4's page went from 8 overflowing blocks to 0, and the four
-          that remained after fixing the output blocks were C++ SNIPPETS, which
-          the corpus accepts (7.3 ships 13 of them).
-        - STALE IS WORSE THAN WIDE, and it bit again. Narrowing the demo's
-          printf left figure 4's receipt quoting output the program no longer
-          produced. Both render figures now quote VERBATIM.
-        - A FORWARD LINK TO AN UNWRITTEN LESSON IS A DEAD LINK. conventions.html
-          §8e linked lessons/07-05-slerp.html and check-curriculum.py check 7
-          caught it the same hour. Write the reference as plain text and link it
-          when the page lands.
-        - A RENDER FIGURE ON THE PAGE'S PALE PANEL LOSES THE PROGRAM'S COLOURS.
-          New CSS class `.fill-shot` — see `fill-shot` under `decisions:`. The
-          gold dial hand, which IS figure 5, was at 1.8:1 before it.
-        - A DIAL DRAWN IN A FIXED WORLD PLANE IS AN ELLIPSE. [D]'s first version
-          drew its circle in x-y and the camera saw it obliquely, so its angles
-          could not be read with a protractor — which is the entire point of
-          putting one next to an object whose rotation you cannot measure by
-          eye. Build it in the plane facing the camera. And get the basis
-          handedness right: `cross(up, toward)` points LEFT, so the first
-          version had every angle mirrored AND upside down, at 135 deg instead
-          of 45 — a picture that looked entirely plausible. THE RECEIPT CAUGHT
-          IT, not the eye.
-        - NEVER PUT A SIDE EFFECT IN A C MACRO'S ARGUMENT (7.3, still true).
-          `SDL_clamp` expands its first argument THREE TIMES. One named local
-          per argument; gimbal's new flags follow it.
+      THE GOLDEN IS IN PLAY AND STAYED NULL BY MEASUREMENT RATHER THAN BY
+      ARGUMENT. 7.5 edited four files inside demo_scene.cpp's closure and the
+      render came back identical=YES, hash E917C06C — the ninth consecutive
+      byte-identical run and the twenty-fourth lesson not to move a pixel. If
+      7.6 touches demo_scene.cpp or anything under it, run
+      `python3 scratch/closure_75.py <paths...>` (rename and reuse) and then run
+      the golden for real.
+
+      CARRY FORWARD from 7.5:
+        - A NUMERICAL ROUTINE HAS A SCALE, AND THE NAME DOES NOT SAY SO. 7.4
+          wrote angle_between for a SEPARATION; 7.5 asked it for a STEP, and it
+          scored slerp's own geodesic at -41.10%. Re-derive conditioning at
+          every scale you reuse a routine at. Fourth appearance in Module 7 and
+          the first INSIDE THE ENGINE.
+        - A NaN NEVER WINS A MAXIMUM. `std::max(x, NaN)` returns `x`, because
+          every NaN comparison is false — so a worst-case table accumulated with
+          std::max printed a clean 0.0000e+00 for a function that was returning
+          NaN in 404 of 505 samples, AND the one row it printed correctly made
+          the broken function look BETTER. Count non-finite results; never let
+          one into a maximum. Fifth blind instrument in Module 7 and the first
+          in a harness rather than in engine code.
+        - "FINITE" IS NOT "RIGHT". gltf_view's zero-column guard kept the matrix
+          finite and made the extraction wrong in every column. A guard that
+          returns a plausible wrong answer is harder to find than the NaN it
+          prevented, because a NaN spreads and announces itself.
+        - A NARROWER TYPE FINDS EXISTING BUGS, NOT JUST FUTURE ONES. Three this
+          time: gfx/renderable.cpp (shipping since 5.11), demos/ecs_swarm, and
+          demos/collector's camera boom (a SHEARED basis in a field called
+          `rotation`, shipping since 5.12). 7.4 found the first and predicted
+          one; there were three.
+        - CHECK A PREDICTION TO THREE FIGURES WHEN YOU CAN. The textbook slerp's
+          NaN cliff was predicted at 2*sqrt(eps/2) = 0.0280 deg from
+          round-to-nearest and measured at 0.0279. The first draft predicted
+          2*sqrt(eps) = 0.0396 and called a 30% miss agreement; the exact
+          version is a better teaching object AND a better test.
+        - A DEMO FIGURE'S GEOMETRY IS A PEDAGOGICAL DECISION. [S]'s rotation
+          axis points AT THE CAMERA so the nose's path is a circle rather than
+          an ellipse — an ellipse's arc lengths are not proportional to its
+          angles, so the tick spacing that IS the argument would have been
+          compressed by perspective and not by nlerp. 7.4 learned the same thing
+          for its dial. The teal axis is consequently a DOT, which the page has
+          to say out loud or it reads as a missing line.
+        - BOTH ROWS OF TICKS MUST TOUCH THE SAME CIRCLE. Drawing the second row
+          on a smaller circle would have said the two paths differ, which is the
+          exact misconception the mode exists to kill. A layout choice can
+          contradict the caption.
+        - THE FIRST FRAMING OF A NEW MODE IS USUALLY WRONG. [S]'s first version
+          drew the solid craft (which swamped everything), put the ticks inside
+          the aircraft, and used a tilted world axis. Three iterations, each
+          checked by looking at the actual PPM.
+        - MEASURE THE AXIS ERROR AS A CHORD, NEVER WITH acos (7.4, still true),
+          and REPORT WHAT AN ERROR COSTS rather than its raw size: B.2's
+          2.027e-05 of axis wobble is entirely at t < 0.05 and costs 2.309e-07
+          rad of pose, because 7.2 §8's 2 sin(theta/2) factor vanishes exactly
+          where the axis becomes unrecoverable.
         - THE SCRATCHPAD VANISHES BETWEEN TURNS. Playwright helpers live in
           scratch/tools/ and scratch/ is gitignored. PLAYWRIGHT IS NOT IN ANY
           SYSTEM PYTHON ON THIS MACHINE: run them with

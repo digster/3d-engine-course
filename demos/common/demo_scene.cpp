@@ -8,6 +8,7 @@
 #include <engine/gfx/depth_buffer.hpp>
 #include <engine/gfx/raster.hpp>
 #include <engine/gfx/soft_renderer.hpp>
+#include <engine/math/quat.hpp>
 
 #include <SDL3/SDL.h>
 
@@ -45,7 +46,14 @@ namespace demo {
     const engine::vec3 axis_z = engine::cross(axis_x, axis_y);           // model +z
 
     engine::transform t;
-    t.rotation = engine::mat3{axis_x, axis_y, axis_z};
+    // LESSON 7.5. The three axes are still how the orientation is *derived* — a
+    // plank's frame is "along the rail, across it, and up" and there is no way to
+    // write that as four floats directly. So the basis is built exactly as before
+    // and `quat_from_rotation` narrows it, which is the shape almost every call
+    // site in this repository took when `transform::rotation` became a `quat`:
+    // construct in whatever notation the geometry speaks, store in the one the
+    // engine does.
+    t.rotation = engine::quat_from_rotation(engine::mat3{axis_x, axis_y, axis_z});
     t.scale    = {width, engine::length(along) + 2.0f * overhang, 1.0f};
     t.position = (end_a + end_b) * 0.5f;
     return t;
@@ -286,7 +294,7 @@ int build_scene(engine::scene_object (&out)[k_max_objects], scene_kind kind, spi
         const float s = display_scale(model.choice);
         out[0].xform.scale = {s, s, s};
         out[0].xform.position = {0.0f, 1.0f, 0.0f};
-        out[0].xform.rotation = spinning * engine::rotation_x(0.35f);
+        out[0].xform.rotation = engine::quat_from_rotation(spinning * engine::rotation_x(0.35f));
         out[0].geometry = model.geometry;
         out[0].name = name_of(model.choice);
         out[0].mat.tint = k_amber;
@@ -317,7 +325,7 @@ int build_scene(engine::scene_object (&out)[k_max_objects], scene_kind kind, spi
         // symmetry is never accidentally axis-aligned.
         out[0].xform.scale    = {0.9f, 0.9f, 0.9f};
         out[0].xform.position = {0.0f, 1.0f, 0.0f};
-        out[0].xform.rotation = spinning * engine::rotation_x(0.5f);
+        out[0].xform.rotation = engine::quat_from_rotation(spinning * engine::rotation_x(0.5f));
         out[0].geometry       = assets.icosahedron;
         out[0].name           = "icosahedron (uniform, spinning)";
         out[0].mat.tint           = k_amber;
@@ -332,7 +340,7 @@ int build_scene(engine::scene_object (&out)[k_max_objects], scene_kind kind, spi
 
         out[1].xform.scale    = {1.8f, 0.35f, 0.9f};
         out[1].xform.position = {-1.6f, 0.5f, 0.4f};
-        out[1].xform.rotation = spinning;
+        out[1].xform.rotation = engine::quat_from_rotation(spinning);
         out[1].geometry       = assets.cube;
         out[1].name           = "slab   (non-uniform, spinning)";
         out[1].mat.tint           = k_teal;
@@ -354,7 +362,7 @@ int build_scene(engine::scene_object (&out)[k_max_objects], scene_kind kind, spi
 
         out[2].xform.scale    = {1.2f, 0.25f, 1.2f};
         out[2].xform.position = {1.4f, 0.125f, 0.9f};
-        out[2].xform.rotation = engine::mat3::identity();
+        out[2].xform.rotation = engine::quat::identity();
         out[2].geometry       = assets.cube;
         out[2].name           = "plinth (non-uniform, still)";
         out[2].mat.tint           = k_violet;
@@ -432,7 +440,7 @@ int build_scene(engine::scene_object (&out)[k_max_objects], scene_kind kind, spi
         // question "which triangle is in front" has no single answer.
         out[0].xform.scale    = {2.6f, 2.0f, 1.0f};
         out[0].xform.position = {0.0f, 1.1f, +0.1f};
-        out[0].xform.rotation = engine::rotation_y(+0.7f);
+        out[0].xform.rotation = engine::quat_y(+0.7f);
         out[0].geometry       = assets.quad;
         out[0].name           = "quad A (nearer centre)";
         out[0].mat.tint           = k_amber;
@@ -440,7 +448,7 @@ int build_scene(engine::scene_object (&out)[k_max_objects], scene_kind kind, spi
 
         out[1].xform.scale    = {2.6f, 2.0f, 1.0f};
         out[1].xform.position = {0.0f, 1.1f, -0.1f};
-        out[1].xform.rotation = engine::rotation_y(-0.7f);
+        out[1].xform.rotation = engine::quat_y(-0.7f);
         out[1].geometry       = assets.quad;
         out[1].name           = "quad B (further centre)";
         out[1].mat.tint           = k_teal;
@@ -458,7 +466,7 @@ int build_scene(engine::scene_object (&out)[k_max_objects], scene_kind kind, spi
     // watch D16_UNORM fail to. Lesson 3.1 §3.6.
     out[0].xform.scale    = {3.0f, 2.4f, 1.0f};
     out[0].xform.position = {0.0f, 1.1f, 0.0f};
-    out[0].xform.rotation = engine::rotation_y(0.9f);
+    out[0].xform.rotation = engine::quat_y(0.9f);
     out[0].geometry       = assets.quad;
     out[0].name           = "panel A (behind)";
     out[0].mat.tint           = k_amber;
@@ -466,7 +474,7 @@ int build_scene(engine::scene_object (&out)[k_max_objects], scene_kind kind, spi
 
     out[1].xform.scale    = {3.0f, 2.4f, 1.0f};
     out[1].xform.position = {0.0f, 1.1f, 0.001f};   // one millimetre nearer. That is all.
-    out[1].xform.rotation = engine::rotation_y(0.9f);
+    out[1].xform.rotation = engine::quat_y(0.9f);
     out[1].geometry       = assets.quad;
     out[1].name           = "panel B (1 mm in front)";
     out[1].mat.tint           = k_teal;

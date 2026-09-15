@@ -81,6 +81,13 @@ untangled was the one file that had never been given a home: `src/main.cpp`, at 
 │   │   ├── vec2.hpp        # header-only; dot, normalise, reflect     [EXISTS from 1.7]
 │   │   ├── vec3/4.hpp, mat2/3/4.hpp  # header-only 3-D maths          [EXISTS from 2.5–2.6]
 │   │   ├── transform.hpp   # position/rotation/scale → model matrix   [EXISTS from 2.8]
+│   │   │                   #   `rotation` IS A quat SINCE 7.5 (was a
+│   │   │                   #   mat3 for five modules). Also holds
+│   │   │                   #   transform_from_affine, the decomposition
+│   │   │                   #   THREE call sites were doing and TWO were
+│   │   │                   #   doing wrong. INCLUDES quat.hpp, which
+│   │   │                   #   makes it the only file in math/ that
+│   │   │                   #   depends on the TOP of the rotation layer.
 │   │   ├── rotation.hpp    # what is true of a rotation whatever you  [EXISTS from 7.2]
 │   │   │                   #   store it in: the metric on rotations.
 │   │   │                   #   SITS ABOVE the two below — both include
@@ -91,6 +98,8 @@ untangled was the one file that had never been given a home: `src/main.cpp`, at 
 │   │   ├── quat.hpp        # the TOP of the rotation layer: four      [EXISTS from 7.4]
 │   │   │                   #   floats, the Hamilton product, the
 │   │   │                   #   sandwich, and Shepperd extraction.
+│   │   │                   #   7.5 ADDED THE INTERPOLATION BLOCK and
+│   │   │                   #   rewrote `angle_between` with atan2.
 │   │   │                   #   Includes axis_angle.hpp (it REUSES
 │   │   │                   #   `axis_angle_extraction` rather than
 │   │   │                   #   growing a twin), euler.hpp, mat3, vec3.
@@ -737,17 +746,54 @@ vocabulary is shared. It also includes `euler.hpp`, for `quat_from_euler`, which
 agreeing to 5.96e-07 is the check that this file's product and `mat3`'s describe the same
 composition.
 
-**What `quat.hpp` does not yet do is get stored.** `transform::rotation` is still a `mat3`, and
-Lesson 7.4 §11 is the reason it is not a one-line change: `gfx/renderable.cpp` assigns
-`linear_of(w.matrix)` to a field named `rotation`, which for an ECS `world_transform` carries the
-**scale** that came down the hierarchy — and that is why its recomposition reproduces the original
-affine matrix "to the bit". A `mat3` will hold anything; a quaternion will not, so narrowing the
-type turns that line into a compile error and the repair is a decomposition (column lengths off
-first, then extract) rather than a rename. Lesson 7.5 performs the swap. The honest limit of the
-repaired form is worth recording here because it is an engine-wide constraint rather than a lesson
-detail: **a `position + quat + vec3` transform can represent translation, rotation and axis-aligned
-scale, and cannot represent shear**, because column lengths do not change under a shear — they
-change the angles between the columns.
+**The engine stores orientations as quaternions, as of Lesson 7.5.**
+`transform::rotation` was a `mat3` for five modules and is now a `quat`, and
+`parent_from_local` converts it back with `mat3_from_quat` — one line, and the arithmetic below it
+did not move a character. **That conversion is engine policy rather than a detail.** Lesson 7.4
+§10.3 measured the crossover: a quaternion is 1.57× *dearer* than a matrix at rotating a vector and
+converting costs 4.619 ns, so the matrix pays for itself after about eight vectors. A mesh has
+thousands. So: store four floats, convert exactly once per object per frame, multiply vertices by a
+matrix. Anything that steps a rotation incrementally (an accumulator — `collector`'s carousel and
+spinner are the first two in this repository) calls `renormalised_fast` on the result; anything that
+rebuilds from an angle each frame does not.
+
+**The swap was not a rename, and the reason is an engine-wide constraint.** Three call sites were
+assigning something that was not a rotation to a field named `rotation` — `gfx/renderable.cpp`
+(shipping since 5.11), `demos/ecs_swarm`, and `demos/collector`'s camera boom (shipping since 5.12).
+The first two put `linear_of(w.matrix)` there, which for an ECS `world_transform` carries the
+**scale** that came down the hierarchy, and that is why their recomposition reproduced the original
+affine matrix "to the bit": **a `mat3` will hold anything**. A quaternion will not, so narrowing the
+type turned those lines into compile errors.
+
+`math/transform.hpp` grew **`transform_from_affine`** as the repair, because three places were doing
+that job and two were doing it wrong. It returns a `transform_extraction` — value plus
+`out_of_square` plus `mirrored` — the same shape as `axis_angle_extraction` (7.2) and
+`euler_extraction` (7.1), for the same reason: a recovery that can lose information should hand back
+what it lost in the same breath. Two details in it are load-bearing. A **negative determinant** is a
+mirror, and since column lengths are non-negative the sign has to be handed back deliberately or a
+mirrored object silently becomes an unmirrored *rotated* one. A **zero-length column** is rebuilt as
+the cross product of the surviving pair, not as the parent's axis: the inherited `gltf_view` version
+did the latter, its comment correctly said this "keeps the matrix finite instead of producing NaNs",
+and a non-orthonormal basis makes `quat_from_rotation` wrong in *every* column — 0.399 of entry
+error on a flattened object whose other two axes were perfectly recoverable. **Finite is not right.**
+
+**The limit is shear, and it is now counted rather than hidden.** A `position + quat + vec3`
+transform can represent translation, rotation and axis-aligned scale, and **cannot represent
+shear** — which a non-uniformly scaled parent with a rotated child produces. Column lengths cannot
+see it (a shear changes the *angles* between columns, not their lengths), so `out_of_square`
+measures the angles and `renderable_report::skewed` counts the objects.
+
+**`T · R · S` per node is a restriction, not a representation**, and the fix for a matrix outside it
+is usually another node rather than a wider field. `collector`'s boom needed
+`S⁻¹ · Rz(−bank)` — scale *first* — which a single `transform` cannot express because its scale is
+innermost. Two entities in a chain express it exactly, parent-first, and reproduce the old basis to
+0.000e+00. Real engines split nodes for exactly this reason.
+
+**What is still owed:** `scene_object` holds a `transform` where it should hold a `mat4`. Two
+functions now take a matrix apart only to hand the pieces to `parent_from_local`, which puts it back
+together; the GPU path (`gpu_draw_item::world_from_model`) and Lesson 5.9's hierarchy both already
+carry the matrix. Lesson 7.5 names that and does not make it, on the same grounds 5.12 named
+`view<const T>`: it is a published struct with a dozen callers.
 
 **Rotation gets a layer, as of Lesson 7.2.** `math/` now has an internal shape rather than a flat
 pile of headers. `rotation.hpp` holds what is true of a rotation *whatever you store it in* — today

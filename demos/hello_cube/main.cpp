@@ -42,6 +42,7 @@
 #include <engine/gfx/soft_renderer.hpp>
 #include <engine/gfx/viewport.hpp>
 #include <engine/math/mat4.hpp>
+#include <engine/math/quat.hpp>
 #include <engine/math/transform.hpp>
 #include <engine/platform/app.hpp>
 
@@ -172,7 +173,10 @@ public:
     void on_frame(float alpha) override
     {
         (void)alpha;
-        object_.xform.rotation = engine::rotation_y(t_) * engine::rotation_x(0.5f);
+        // LESSON 7.5: the same two turns, composed in the representation the
+        // engine now stores. `quat_y * quat_x` is 16 multiplies where the two
+        // matrices were 27, and `parent_from_local` converts the result once.
+        object_.xform.rotation = engine::quat_y(t_) * engine::quat_x(0.5f);
 
         fb().clear(k_background);
         depth_.clear();

@@ -65,7 +65,9 @@ enum class trs_order
     if (order == trs_order::trs) { return parent_from_local(t); }
 
     const mat4 T = translation(t.position);
-    const mat4 R = to_mat4(t.rotation);
+    // Lesson 7.5: `rotation` is a `quat` now, so the R factor is built the same
+    // way `parent_from_local` builds it — one conversion, then matrix algebra.
+    const mat4 R = to_mat4(mat3_from_quat(t.rotation));
     const mat4 S = to_mat4(scale(t.scale.x, t.scale.y, t.scale.z));
 
     // Spelled out as three separate 4x4 factors rather than folded, so the source

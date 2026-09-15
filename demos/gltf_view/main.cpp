@@ -47,12 +47,14 @@
 #include <engine/gfx/soft_renderer.hpp>
 #include <engine/gfx/viewport.hpp>
 #include <engine/math/mat4.hpp>
+#include <engine/math/quat.hpp>
 #include <engine/math/transform.hpp>
 #include <engine/platform/app.hpp>
 
 #include <engine/platform/main.hpp>
 
 #include <memory>
+#include <numbers>
 #include <vector>
 
 namespace {
@@ -61,43 +63,39 @@ constexpr int k_width = 480;
 constexpr int k_height = 270;
 constexpr Uint32 k_background = 0xFF0C0E14u;
 
-/// Pull a `transform` out of a glTF node's world matrix.
+/// Pull a `transform` out of a glTF node's world matrix, and report the seam.
+///
+/// **LESSON 7.5 DELETED THIS FUNCTION'S BODY AND KEPT ITS COMMENT**, which is a
+/// happier outcome than it sounds. The twenty lines that used to live here —
+/// column lengths as the scale, columns divided by them as the rotation, the
+/// parent's own axis kept when a column is zero — are now
+/// `engine::transform_from_affine`, because when `transform::rotation` became a
+/// `quat` the compiler found two OTHER places in this repository doing the same
+/// job badly, and the honest repair for all three was one derived function in
+/// `math/transform.hpp`. This one was the version that was already right.
 ///
 /// **AND SAY WHAT IT CANNOT DO, because this is a real seam and not a helper.**
-/// `engine::transform` is T * R * S with a `mat3` rotation; a glTF node may
-/// carry an arbitrary 4x4 `matrix`, and not every 4x4 is a TRS — a sheared or
+/// `engine::transform` is T * R * S; a glTF node may carry an arbitrary 4x4
+/// `matrix`, and not every 4x4 is a TRS — a sheared or
 /// non-uniformly-scaled-then-rotated node is perfectly legal glTF and cannot be
-/// expressed here at all. What comes back is the translation, the scale
-/// recovered as the length of each basis column, and the rotation recovered by
-/// dividing those lengths out.
+/// expressed here at all. The decomposition is exact for every node built from
+/// `translation`/`rotation`/`scale` properties, which is what an exporter writes
+/// and what both of this course's assets use.
 ///
-/// That is exact for every node built from `translation`/`rotation`/`scale`
-/// properties, which is what an exporter writes and what both of this course's
-/// assets use. It silently drops shear. The honest fix is for `scene_object` to
-/// hold a `mat4` — which is what an engine eventually does, and which Lesson
-/// 5.9's hierarchy already computes — and it is not this lesson's to make.
+/// It no longer drops shear SILENTLY, which is the other thing 7.5 changed:
+/// `out_of_square` says how far out the recovered basis is, and this function
+/// warns once per load rather than per node. The honest fix is unchanged and
+/// unmade — `scene_object` should hold a `mat4`, which is what Lesson 5.9's
+/// hierarchy already computes.
 [[nodiscard]] engine::transform transform_of(const engine::mat4& m)
 {
-    engine::transform t;
-    t.position = {m.c3.x, m.c3.y, m.c3.z};
-
-    const engine::vec3 cx{m.c0.x, m.c0.y, m.c0.z};
-    const engine::vec3 cy{m.c1.x, m.c1.y, m.c1.z};
-    const engine::vec3 cz{m.c2.x, m.c2.y, m.c2.z};
-
-    t.scale = {engine::length(cx), engine::length(cy), engine::length(cz)};
-
-    // A zero-length column means a degenerate node (scale 0 on an axis). Leaving
-    // the rotation column as the basis vector keeps the matrix finite instead of
-    // producing NaNs that spread through every subsequent frame.
-    const engine::vec3 rx = (t.scale.x > 0.0f) ? cx * (1.0f / t.scale.x)
-                                               : engine::vec3{1.0f, 0.0f, 0.0f};
-    const engine::vec3 ry = (t.scale.y > 0.0f) ? cy * (1.0f / t.scale.y)
-                                               : engine::vec3{0.0f, 1.0f, 0.0f};
-    const engine::vec3 rz = (t.scale.z > 0.0f) ? cz * (1.0f / t.scale.z)
-                                               : engine::vec3{0.0f, 0.0f, 1.0f};
-    t.rotation = engine::mat3{rx, ry, rz};
-    return t;
+    const engine::transform_extraction got = engine::transform_from_affine(m);
+    if (got.out_of_square > engine::k_transform_square_tolerance)
+    {
+        SDL_Log("gltf_view: node basis is %.4f out of square - shear dropped",
+                static_cast<double>(got.out_of_square));
+    }
+    return got.value;
 }
 
 class gltf_app final : public engine::app
@@ -613,9 +611,11 @@ public:
             g.geometry = quad;
             g.name = "ground";
             g.xform.position = {centre_.x, bounds_.min.y, centre_.z};
-            g.xform.rotation = engine::mat3{{1.0f, 0.0f, 0.0f},
-                                            {0.0f, 0.0f, -1.0f},
-                                            {0.0f, 1.0f, 0.0f}};
+            // The quad's own +z becomes world −y: a quarter turn about +x, which
+            // is what the three columns below spell. Written as `quat_x` rather
+            // than as the basis it replaces, because −π/2 about x IS the thing
+            // being said and the matrix was a longer way of saying it.
+            g.xform.rotation = engine::quat_x(-0.5f * std::numbers::pi_v<float>);
             g.xform.scale = {side, side, 1.0f};
             g.mat.tint = 0xFF9A9AA2u;
             g.mat.surface = {.roughness = 0.85f};
@@ -700,6 +700,11 @@ public:
                                              0.86f * SDL_sinf(pose_));
                 const float cy = SDL_cosf(yaw);
                 const float sy = SDL_sinf(yaw);
+                // Kept as a matrix and narrowed at the two call sites below
+                // (Lesson 7.5). The three columns say "+z goes there, +y stays
+                // up, +x follows", which is the sentence the panes need; the
+                // quaternion that means the same thing would have to be read
+                // rather than seen.
                 const engine::mat3 facing{{cy, 0.0f, sy},
                                           {0.0f, 1.0f, 0.0f},
                                           {-sy, 0.0f, cy}};
@@ -740,7 +745,7 @@ public:
                 card.xform.position = {centre_.x + dir.x * span * 1.4f - side.x * span * 1.1f,
                                        centre_.y,
                                        centre_.z + dir.z * span * 1.4f - side.z * span * 1.1f};
-                card.xform.rotation = facing;
+                card.xform.rotation = engine::quat_from_rotation(facing);
                 card.xform.scale = {span * 1.5f, span * 1.5f, 1.0f};
                 card.mat.albedo_map = assets_.insert_texture("leaf", std::move(leaf));
                 card.mat.tint = 0xFFFFFFFFu;
@@ -773,7 +778,7 @@ public:
                         centre_.x + dir.x * span * along[k] + side.x * span * across[k],
                         centre_.y,
                         centre_.z + dir.z * span * along[k] + side.z * span * across[k]};
-                    pane.xform.rotation = facing;
+                    pane.xform.rotation = engine::quat_from_rotation(facing);
                     pane.xform.scale = {span * 1.6f, span * 1.9f, 1.0f};
                     pane.mat.tint = tints[k];
                     pane.mat.surface = {.roughness = 0.25f};

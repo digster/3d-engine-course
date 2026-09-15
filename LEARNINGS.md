@@ -8024,3 +8024,70 @@ Then get the basis handedness right, because this one is invisible: `cross(up, t
 **left**, so the first version had every angle mirrored *and* upside down — 135° where the answer is
 45°. The picture looked entirely plausible. **The printed receipt caught it, not the eye**, which is
 the argument for a demo printing its own numbers even when it draws them.
+
+## A numerical routine has a scale, and its name does not say so
+
+Lesson 7.4 wrote `angle_between(quat, quat)` as `2·acos|a·b|` — the formula every reference gives,
+correct, and fine for the question it was written for: *how far apart are these two poses?*
+
+Lesson 7.5 asked the same function a different question: *how far apart are these two poses that are
+one four-thousandth of an arc apart?* — four thousand times, and summed the answers. The cosine is
+**quadratic** at its maximum where the sine is linear, so every step landed inside the `float` ulp
+below 1, every reading was quantised **downward**, and the sum came out at **−41.10%** of the
+straight-line distance between the endpoints. The metric failed slerp for not walking the path it
+was walking.
+
+The function did not change. **The question did**, and nothing in the name, the signature or the doc
+comment marked the difference. The repair is the form `axis_angle_from_quat` — eleven lines above it
+in the same file — already used *and explained*: `2·atan2(|v|, |w|)`.
+
+Re-derive a routine's conditioning at every scale you reuse it at. Fourth appearance of this trap in
+Module 7 and the first one inside the engine rather than in a harness.
+
+## A NaN never wins a maximum
+
+`std::max(x, NaN)` returns `x`. Every comparison against a NaN is false, so `a < b ? b : a` hands
+back `a`. A table of worst-case errors accumulated with `std::max` therefore printed a clean
+`0.0000e+00` for a function that was returning NaN in **404 of 505 samples** — and the one row it
+printed correctly made the broken function look *better* than the working one.
+
+**Count non-finite results; never let one into a maximum.** The same applies to `std::min`, to a
+running sum (which at least goes NaN and announces itself), and to any comparison-based reduction.
+
+## "Finite" is not "right"
+
+`gltf_view`'s decomposition replaced a zero-length basis column with the *parent's* axis, and its
+comment said — correctly — that this "keeps the matrix finite instead of producing NaNs". It does.
+It also leaves a basis whose columns are not perpendicular, and `quat_from_rotation` of a
+non-orthonormal basis is wrong in **every** column, not just the bad one: 0.399 of absolute entry
+error on a flattened object whose other two axes were perfectly recoverable.
+
+A guard that returns a plausible wrong answer is harder to find than the NaN it prevented, because a
+NaN spreads and announces itself and a wrong basis just looks like the artist scaled something
+oddly. When you write a guard, say what the *right* answer is at that input — here, the cross
+product of the two surviving columns, six multiplies.
+
+## `T · R · S` per node is a restriction, not a representation
+
+A `transform` composes `translate · rotate · scale` with the scale **innermost**, so a single node
+can express "rotate then scale" and cannot express "scale then rotate". Those are different matrices
+whenever the scale is non-uniform, and the difference is a **shear**.
+
+`demos/collector`'s camera boom needed exactly the second one — `S⁻¹ · Rz(−bank)`, because the
+inverse of a product reverses its order — and stored it in a field called `rotation`, which a `mat3`
+accepted without complaint from Lesson 5.12 until the field became a `quat`.
+
+**The fix for a matrix outside the set is another node, not a wider field.** Put the unscale in one
+entity and the unroll in its child; the hierarchy multiplies them parent-first, which is the order
+the derivation asked for, and the result is identical to 0.000e+00. Real engines split nodes for
+exactly this reason, and this is it.
+
+## A figure's number is the page's, not the file's
+
+Two of Lesson 7.5's figures were drafted in the opposite order to the page, so their *filenames* had
+to be swapped to match the numbers a reader sees. One cross-reference written **inside** a figure
+still pointed at the old number, and nothing in the pipeline can catch that: every figure still
+renders, the reference still reads as a sentence, and it points at the wrong picture.
+
+`check-page.js` catches spill, overlap and text-on-shape. It cannot read. Grep the figure sources
+for `[Ff]igure \d` whenever a number moves.

@@ -157,7 +157,7 @@ constexpr float k_shot_steer = 0.55f;
 /// "unit" means. Lesson 5.12 §7.1 reports it; this function is why the game only
 /// had to find out once.
 [[nodiscard]] engine::transform box_at(engine::vec3 centre, engine::vec3 half,
-                                       engine::mat3 rotation = engine::mat3::identity())
+                                       engine::quat rotation = engine::quat::identity())
 {
     return engine::transform{.position = centre,
                              .rotation = rotation,
@@ -276,8 +276,15 @@ void drive_system(engine::ecs::registry& world, float drive, float steer,
             const float bank_target = -steer * k_bank_max * authority;
             r.bank += (bank_target - r.bank) * std::fmin(1.0f, 6.0f * h);
 
-            const engine::mat3 heading = engine::rotation_y(r.yaw);
-            t.rotation = heading * engine::rotation_z(r.bank);
+            // LESSON 7.5. `heading` is used two ways on the next two lines and
+            // the quaternion is the right storage for exactly one of them:
+            // composing with the bank (16 multiplies, and the result is what the
+            // transform holds), and rotating a single vector (where a quaternion
+            // is 1.57× DEARER than a matrix — 7.4 §10.3). One vector is far below
+            // the eight-vector crossover, so it stays a quaternion and the
+            // sandwich is paid for once per rover per step.
+            const engine::quat heading = engine::quat_y(r.yaw);
+            t.rotation = heading * engine::quat_z(r.bank);
             t.position = t.position + heading * engine::vec3{0.0f, 0.0f, r.speed * h};
 
             // ---- FINDING 1: there is no collision, so the wall is a clamp ----
@@ -302,7 +309,17 @@ void carousel_system(engine::ecs::registry& world, float h)
 {
     world.view<engine::transform, carousel>().each(
         [h](engine::transform& t, carousel& c) {
-            t.rotation = t.rotation * engine::rotation_y(c.rate * h);
+            // **THE FIRST PLACE IN THIS ENGINE WHERE DRIFT IS A REAL PROBLEM**,
+            // and Lesson 7.5 is why the third line is here. This field is
+            // *stepped*: every frame multiplies the stored rotation by a small
+            // one, so rounding accumulates for as long as the program runs. The
+            // `mat3` this replaced had the same disease and a dearer cure —
+            // Gram-Schmidt, three normalisations and two projections. One
+            // `renormalised_fast` is a subtract and five multiplies, has no
+            // `sqrt` and no divide, and Lesson 7.4 §10.4 measured it holding a
+            // million compositions at 6e−8 where the unrepaired walk reached
+            // 1e−3.
+            t.rotation = engine::renormalised_fast(t.rotation * engine::quat_y(c.rate * h));
         });
 }
 
@@ -311,7 +328,7 @@ void spin_system(engine::ecs::registry& world, float h)
 {
     world.view<engine::transform, spinner>().each(
         [h](engine::transform& t, spinner& s) {
-            t.rotation = t.rotation * engine::rotation_y(s.rate * h);
+            t.rotation = engine::renormalised_fast(t.rotation * engine::quat_y(s.rate * h));
         });
 }
 
@@ -794,7 +811,7 @@ private:
             engine::ecs::add_hierarchy_components(
                 world_, e,
                 box_at({5.0f * std::cos(a), half.y, 5.0f * std::sin(a)}, half,
-                       engine::rotation_y(a)));
+                       engine::quat_y(a)));
             world_.add<engine::renderable>(
                 e, engine::renderable{.mesh = mesh_box_,
                                       .mat = {.tint = engine::pack_argb(158, 126, 92),
@@ -878,7 +895,7 @@ private:
             // pickup test uses are therefore the same number, which is the only
             // reason the gizmo in §8.1 can be trusted.
             engine::transform{.position = where,
-                              .rotation = engine::rotation_y(spin_phase),
+                              .rotation = engine::quat_y(spin_phase),
                               .scale = {k_orb_radius, k_orb_radius, k_orb_radius}});
         world_.add<engine::renderable>(
             e, engine::renderable{.mesh = mesh_orb_,
@@ -895,9 +912,32 @@ private:
         // THE BOOM. An entity with a transform and nothing else — not even a
         // component of its own — whose only job is to be a place in the chain
         // where the rover's ROLL can be cancelled. See `step_world`.
+        // **LESSON 7.5 SPLIT THIS INTO TWO ENTITIES, AND THE COMPILER IS WHY.**
+        // `update_boom` used to write `S⁻¹ · Rz(−bank)` into a field called
+        // `rotation`, which a `mat3` accepted without comment. A `quat` does not,
+        // and it is right not to: that product is not a rotation. Its columns are
+        // not even perpendicular when the scale is non-uniform, which the rover's
+        // is — it is a SHEARED basis, and it had been living in this field since
+        // Lesson 5.12.
+        //
+        // The fix is not a wider type, it is one more link. A `transform` is
+        // `T · R · S` — scale innermost — so a single node can express
+        // "rotate then scale" and cannot express "scale then rotate". A CHAIN
+        // can: put the unscale in one node and the unroll in its child, and the
+        // hierarchy multiplies them in the order the algebra asked for.
+        //
+        //     rover  world      = H · Rz(bank) · S
+        //     unscale node local =                   S⁻¹      -> H · Rz(bank)
+        //     pivot   node local =                        Rz(−bank) -> H
+        //
+        // Two entities, no shear anywhere, and the same camera basis to the bit.
+        boom_scale_ = world_.create();
+        engine::ecs::add_hierarchy_components(world_, boom_scale_, engine::transform{});
+        (void)engine::ecs::set_parent(world_, boom_scale_, rover_);
+
         boom_pivot_ = world_.create();
         engine::ecs::add_hierarchy_components(world_, boom_pivot_, engine::transform{});
-        (void)engine::ecs::set_parent(world_, boom_pivot_, rover_);
+        (void)engine::ecs::set_parent(world_, boom_pivot_, boom_scale_);
 
         camera_ = world_.create();
 
@@ -969,13 +1009,15 @@ private:
     /// on x. Inheriting scale is right for a nose and wrong for a camera.
     void update_boom()
     {
-        engine::transform* t = world_.get<engine::transform>(boom_pivot_);
+        engine::transform* unscale = world_.get<engine::transform>(boom_scale_);
+        engine::transform* unroll = world_.get<engine::transform>(boom_pivot_);
         const rover* r = world_.get<rover>(rover_);
-        if (t == nullptr || r == nullptr) { return; }
+        if (unscale == nullptr || unroll == nullptr || r == nullptr) { return; }
 
         if (!boom_)
         {
-            t->rotation = engine::mat3::identity();
+            unscale->scale = {1.0f, 1.0f, 1.0f};
+            unroll->rotation = engine::quat::identity();
             return;
         }
 
@@ -989,15 +1031,22 @@ private:
         //           = S^-1 * Rz(-bank)
         //
         // — the inverse of a product reverses its order, so the UNSCALE comes
-        // first. Writing `unroll * unscale` instead (which reads more naturally
+        // FIRST. Writing `unroll * unscale` instead (which reads more naturally
         // in English: "undo the roll, then undo the scale") produces
         // `Rz(-bank) * S^-1`, and since a rotation and a non-uniform scale do
         // not commute, the product is a basis that is neither rigid nor visibly
         // wrong. It cost this file its first crash; see Lesson 5.12 §6.1.
-        const engine::mat3 unscale{{1.0f / (2.0f * k_rover_half.x), 0.0f, 0.0f},
-                                   {0.0f, 1.0f / (2.0f * k_rover_half.y), 0.0f},
-                                   {0.0f, 0.0f, 1.0f / (2.0f * k_rover_half.z)}};
-        t->rotation = unscale * engine::rotation_z(-r->bank);
+        //
+        // **LESSON 7.5 IS WHY THAT IS NOW TWO ASSIGNMENTS TO TWO ENTITIES.** The
+        // product above is `diagonal × rotation`, and a `transform` builds
+        // `rotation × diagonal`. They are not the same matrix and the difference
+        // is a SHEAR. One node could only pretend to hold it, which is exactly
+        // what it did while the field was a `mat3`. Two nodes hold it honestly,
+        // in the order the derivation above wrote it down — parent first.
+        unscale->scale = {1.0f / (2.0f * k_rover_half.x),
+                          1.0f / (2.0f * k_rover_half.y),
+                          1.0f / (2.0f * k_rover_half.z)};
+        unroll->rotation = engine::quat_z(-r->bank);
     }
 
     /// The `--shot` opening: a fixed number of steps with two constant inputs.
@@ -1164,6 +1213,7 @@ private:
     entity rover_{};
     entity nose_{};
     entity carousel_{};
+    entity boom_scale_{};
     entity boom_pivot_{};
     entity camera_{};
 

@@ -2779,3 +2779,11 @@ it. Conventions gained §8e; Math Toolbox gained seven cards; `docs/shared/cours
 found five missing entries on its first run. The storage swap of `transform::rotation` was
 **deferred to 7.5 with a measured reason**, recorded in `transform.hpp`, STATE and the page.
 ARCHITECTURE.md, README.md, STATE.md, LEARNINGS.md and `memory/2026-09-15.md` updated.
+
+---
+
+## 2026-09-15 (session 3)
+
+```
+next
+```

@@ -95,6 +95,7 @@
       <li><a href="#axis-angle">Axis-angle &mdash; one convention, two ambiguities</a></li>
       <li><a href="#plane">Plane rotations &mdash; complex numbers, and the rotor</a></li>
       <li><a href="#quat">Quaternions &mdash; storage order, the sandwich, and the double cover</a></li>
+      <li><a href="#slerp">Interpolating rotations &mdash; which function, and when</a></li>
       <li><a href="#simulation">The simulation contract</a></li>
       <li><a href="#rotational">Rotational quantities &mdash; torque, spin, inertia</a></li>
       <li><a href="#colour">Colour and diagram conventions</a></li>
@@ -2848,13 +2849,97 @@
   </p>
 
   <p>
-    <strong>What still stores a <code>mat3</code>.</strong> <code>transform::rotation</code>, until
-    Lesson 7.5. 7.4 &sect;11 explains why that is not a
-    rename: one caller in the engine assigns a rotation-<em>and-scale</em> to a field named
-    <code>rotation</code>, which a <code>mat3</code> accepts and a quaternion cannot, and the
-    repair is a decomposition. A <code>position + quat + vec3</code> transform can represent
-    translation, rotation and axis-aligned scale, and <strong>cannot represent shear</strong>.
+    <strong>What stores a <code>quat</code>, and since when.</strong>
+    <code>transform::rotation</code>, since
+    <a href="lessons/07-05-slerp.html">Lesson 7.5</a> &mdash; it was a <code>mat3</code> for five
+    modules. 7.4 &sect;11 explained why that was not a rename and 7.5 &sect;8 carried it out: three
+    callers were assigning a rotation-<em>and-scale</em> to a field named <code>rotation</code>,
+    which a <code>mat3</code> accepts and a quaternion cannot, and the repair is a decomposition
+    (<code>transform_from_affine</code>). A <code>position + quat + vec3</code> transform can
+    represent translation, rotation and axis-aligned scale, and <strong>cannot represent
+    shear</strong> &mdash; <code>renderable_report::skewed</code> counts the objects where that
+    bites, and &sect;8f says what to do about it.
   </p>
+
+  <h2 id="slerp"><span class="num">8f</span>Interpolating rotations &mdash; which function, and when</h2>
+
+  <p>
+    Settled in <a href="lessons/07-05-slerp.html">Lesson 7.5</a>, and binding for the animation
+    system Module 7 finishes with. The formula is the same three steps
+    <a href="lessons/07-02-axis-angle.html">7.2</a> wrote for <code>mat3</code> and
+    <a href="lessons/07-03-complex-numbers.html">7.3</a> wrote for the plane &mdash;
+    <code>a&thinsp;&middot;&thinsp;(a&#8315;&sup1;b)&#7511;</code> &mdash; so what is worth fixing
+    here is the <em>choice</em> and the <em>sign</em>.
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>Rule</th><th>Why, measured</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>Every blend applies <code>nearest(a,&nbsp;b)</code> first.</strong> Both
+              <code>quat_slerp</code> and <code>quat_nlerp</code> do it internally; anything that
+              hand-rolls an interpolation must do it too.</td>
+          <td><code>q</code> and <code>&minus;q</code> are the same orientation and opposite
+              <em>points</em>, so every pair has two arcs. <strong>49.6%</strong> of uniformly
+              sampled pairs name the long one. Two keyframes 1&deg; apart, signed oppositely,
+              become a <strong>359&deg;</strong> spin.</td>
+        </tr>
+        <tr>
+          <td><strong>Under 73.50&deg; of arc, use <code>quat_nlerp</code>.</strong> Over it, or
+              for any pose a designer chose rather than a clip recorded, use
+              <code>quat_slerp</code>.</td>
+          <td>nlerp&rsquo;s <em>path</em> is exactly the geodesic (0.00% excess turning); its
+              <em>schedule</em> is wrong by <code>sec&sup2;(&Omega;/2)</code>. 73.50&deg; is where
+              the pose gap reaches half a degree. nlerp is <strong>3.42&times;</strong> cheaper
+              (4.763&nbsp;ns against 16.288).</td>
+        </tr>
+        <tr>
+          <td><strong>nlerp&rsquo;s worst case is bounded, and the bound is exact.</strong> Speed
+              ratio &le; 2; pose gap &le; 8.1491&deg;.</td>
+          <td><code>nearest</code> forces the sphere arc &le; 90&deg;, so
+              <code>sec&sup2;(&Omega;/2) &le; sec&sup2;(45&deg;) = 2</code>. In the plane, with no
+              double cover to exploit, the same function reaches <strong>13,131&times;</strong> and
+              26.34&deg;. <strong>The cost and the guarantee are the same fact.</strong></td>
+        </tr>
+        <tr>
+          <td><strong>Do not ship the textbook trig form</strong>
+              <code>(sin((1&minus;t)&Omega;)a + sin(t&Omega;)b) / sin&thinsp;&Omega;</code>.</td>
+          <td>It divides by <code>sin&thinsp;&Omega;</code>, and <code>&Omega;</code> comes from an
+              <code>acos</code> that returns exactly 0 below an arc of
+              <strong>0.0280&deg;</strong> &mdash; measured 0.0279. It returns <em>NaN</em> there,
+              and a NaN pose propagates down a whole skeleton. The
+              <code>a&thinsp;&middot;&thinsp;(a&#8315;&sup1;b)&#7511;</code> form&rsquo;s ratio
+              tends to <code>t</code> and needs no guard.</td>
+        </tr>
+        <tr>
+          <td><strong>The metric on rotations is
+              <code>2&thinsp;atan2(|v|,&nbsp;|w|)</code>, never
+              <code>2&thinsp;acos|a&middot;b|</code>.</strong> <code>angle_between</code> is the
+              first; <code>angle_between_by_cosine</code> is kept only so the two can be
+              compared.</td>
+          <td>The cosine is quadratic at 1 and the sine is linear, so the <code>acos</code> form
+              has a noise floor of <code>2&radic;(2&middot;eps) = 0.0560&deg;</code> and a
+              <em>biased</em> error. Summing slerp&rsquo;s own geodesic with it scores
+              <strong>&minus;41.10%</strong>. Same rule as <code>angle_between_rotations</code>
+              for matrices (&sect;8b).</td>
+        </tr>
+        <tr>
+          <td><strong>A stepped rotation gets one <code>renormalised_fast</code> per step.</strong>
+              A rebuilt one gets nothing.</td>
+          <td>The distinction is whether the field is an <em>accumulator</em> &mdash; whether the
+              previous frame&rsquo;s answer is an input. One subtract and five multiplies holds a
+              million compositions at <code>6e&minus;08</code>.</td>
+        </tr>
+        <tr>
+          <td><strong>A test must not sample only <code>t</code> = 0, 0.5 and 1.</strong></td>
+          <td>Those are exactly the three values at which nlerp and slerp are the
+              <em>same function</em>. Sample <code>t</code> = 0.229 and 0.771, where the gap is
+              maximal.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
 
   <h2 id="simulation"><span class="num">9</span>The simulation contract</h2>
 

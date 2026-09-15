@@ -45,14 +45,30 @@ renderable_report collect_renderables(ecs::registry& world, const mesh_pool& mes
                 return;
             }
 
+            // SHEAR IS COUNTED AND NOT REPAIRED, because there is no repair. A
+            // non-uniformly scaled parent with a rotated child produces a world
+            // matrix whose columns are not perpendicular, and that is not
+            // (rotation x scale) under any decomposition. The object still draws,
+            // in the nearest placement a `transform` can express; this counter is
+            // what turns "the crate looks subtly wrong and I cannot see why" into
+            // a number in a warning line.
+            const transform_extraction placement = transform_from_affine(w.matrix);
+            if (placement.out_of_square > k_transform_square_tolerance) { ++report.skewed; }
+
             out.push_back(scene_object{
-                // The exact matrix -> transform conversion the header explains.
-                // `linear_of` is the upper-left 3x3 and `translation_of` the
-                // fourth column, so the recomposition `T * R * S` with S = 1
-                // reproduces the original affine matrix to the bit.
-                .xform = {.position = translation_of(w.matrix),
-                          .rotation = linear_of(w.matrix),
-                          .scale = {1.0f, 1.0f, 1.0f}},
+                // The matrix -> transform conversion the header explains, and as
+                // of Lesson 7.5 a real decomposition rather than the one-line
+                // trick a `mat3` field allowed. See `placement_of` above.
+                // **THE DECOMPOSITION, AND IT IS ONE CALL BECAUSE LESSON 7.5
+                // PUT IT IN `math/transform.hpp`.** Until that lesson this was
+                // `rotation = linear_of(w.matrix)` with `scale = {1,1,1}`, which
+                // reproduced any affine matrix to the bit — because a `mat3` will
+                // hold anything, including the scale that came down the
+                // hierarchy from a parent. A `quat` will not, so the line stopped
+                // compiling and the trick had to become the decomposition it was
+                // always standing in for. See `transform_from_affine` for the
+                // derivation and for what it cannot do.
+                .xform = placement.value,
                 .geometry = r.mesh,
                 // A CONSTANT, AND THE HEADER ARGUES FOR WHY. Naming entities is
                 // a separate concern with three future customers and one present
@@ -89,12 +105,14 @@ renderable_report collect_renderables(ecs::registry& world, const mesh_pool& mes
     // the category says the graphics subsystem is speaking, the level says this
     // is survivable. A frame that draws everything says nothing at all, which is
     // the property that makes the message worth reading when it does appear.
-    if (report.unresolved != 0 || report.missing_mesh != 0)
+    if (report.unresolved != 0 || report.missing_mesh != 0 || report.skewed != 0)
     {
         ENGINE_LOG_WARN(log_gfx,
                         "collect_renderables: %zu drawn, %zu unresolved "
-                        "(no world_transform), %zu with a dead mesh handle",
-                        report.drawn, report.unresolved, report.missing_mesh);
+                        "(no world_transform), %zu with a dead mesh handle, "
+                        "%zu sheared beyond what a transform can hold",
+                        report.drawn, report.unresolved, report.missing_mesh,
+                        report.skewed);
     }
 
     return report;

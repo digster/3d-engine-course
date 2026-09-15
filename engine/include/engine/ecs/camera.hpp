@@ -41,6 +41,7 @@
 #include <engine/ecs/hierarchy.hpp>
 #include <engine/ecs/registry.hpp>
 #include <engine/math/mat4.hpp>
+#include <engine/math/quat.hpp>
 #include <engine/math/transform.hpp>
 #include <engine/math/vec3.hpp>
 
@@ -110,6 +111,15 @@ struct active_camera
 /// harder: we know where we want the axes to point, so we write them down as
 /// columns and we are finished.
 ///
+/// **Lesson 7.5 added one function call and no arithmetic.** `transform::rotation`
+/// is a `quat` now, and the three columns are still how the answer is *derived* —
+/// there is no way to write "look at that" directly as four floats, and pretending
+/// otherwise would be building the matrix in your head. So the basis is built
+/// exactly as before and `quat_from_rotation` extracts it, which Lesson 7.4 §9
+/// showed has no bad case anywhere: four candidates that sum to 4 leave the pivot
+/// at least 1, so there is no threshold to be near and no camera angle at which
+/// this call is less accurate than another.
+///
 /// The identity worth remembering, and the one verify_59 §D checks:
 /// `rigid_inverse(parent_from_local(look_along(e, t, u))) == look_at(e, t, u)`,
 /// element for element.
@@ -121,7 +131,7 @@ struct active_camera
 
     transform t;
     t.position = eye;
-    t.rotation = mat3{right, up, backward};
+    t.rotation = quat_from_rotation(mat3{right, up, backward});
     t.scale = {1.0f, 1.0f, 1.0f};
     return t;
 }

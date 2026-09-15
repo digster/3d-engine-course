@@ -166,6 +166,25 @@ struct renderable_report
     /// Entities whose `mesh` handle did not resolve — unloaded, or never loaded.
     /// Lesson 5.5 made this survivable; this makes it *countable*.
     std::size_t missing_mesh = 0;
+
+    /// Entities whose world matrix carries **shear**, and whose placement in
+    /// `out` is therefore an approximation rather than the matrix.
+    ///
+    /// **Lesson 7.5, and this counter exists because a type got narrower.** A
+    /// `transform` is (position, rotation, scale) and a rotation is now a `quat`,
+    /// so the set of matrices it can hold is exactly {rotate, then scale along the
+    /// object's own axes, then translate}. Shear is outside it, and the hierarchy
+    /// can produce shear from perfectly reasonable inputs: give a parent a
+    /// non-uniform scale and rotate the child, and the product of the two
+    /// matrices has columns that are no longer perpendicular.
+    ///
+    /// Nothing is dropped and nothing goes NaN — the object still draws, in the
+    /// nearest placement the struct can express. What this counter buys is that
+    /// "the crate looks subtly wrong and I cannot see why" becomes a number in a
+    /// warning line. Before the swap the same scenes had the same defect and
+    /// there was nothing to count, because `rotation` was a `mat3` and a `mat3`
+    /// holds shear without comment.
+    std::size_t skewed = 0;
 };
 
 /// Walk the registry and produce the `scene_object` list both renderers consume.
@@ -174,16 +193,29 @@ struct renderable_report
 /// capacity, so a steady-state frame allocates nothing — the same reason every
 /// demo in this course owns its `std::vector<raster_triangle>` as a member.
 ///
-/// **The conversion from `mat4` back to a `transform` is exact, and it is a trick
-/// rather than a design.** `parent_from_local` builds `affine(columns scaled by
-/// scale, position)`, and `transform::rotation` is a general `mat3` with no
-/// orthonormality requirement — so putting the matrix's whole linear part in
-/// `rotation` and leaving `scale` at 1 reproduces any affine matrix bit for bit.
-/// It works because the field is *named* `rotation` and *typed* `mat3`. The
-/// honest fix is for `scene_object` to hold a matrix, which is what Module 6's
-/// GPU path already does with `gpu_draw_item::world_from_model`; until the
-/// software renderer follows, this function is where the seam is hidden, and
-/// hiding it in one place is most of the value of hoisting it here.
+/// **The conversion from `mat4` back to a `transform` used to be exact, and it
+/// was a trick rather than a design.** Until Lesson 7.5 this function put the
+/// matrix's whole linear part into `transform::rotation` and left `scale` at 1,
+/// which reproduced any affine matrix bit for bit — because the field was *named*
+/// `rotation` and *typed* `mat3`, and a `mat3` will hold anything, including the
+/// scale that came down the hierarchy from a parent.
+///
+/// `rotation` is a `quat` now. A quaternion will not hold a scale, so that line
+/// stopped compiling and the trick had to become the decomposition it was always
+/// pretending to be: scale off as the three column lengths, sign of the
+/// determinant handed back so a mirrored object stays mirrored, then extract.
+/// `renderable.cpp`'s `placement_of` is the whole of it and carries the
+/// derivation.
+///
+/// **One case is genuinely outside the struct now, and `skewed` counts it.** A
+/// non-uniformly scaled parent with a rotated child produces a world matrix with
+/// shear, which is not (rotation × scale) in any decomposition. The object still
+/// draws, in the nearest placement a `transform` can express, and the count says
+/// how many frames are being approximated. The honest fix is unchanged and
+/// unmade: `scene_object` should hold a matrix, which is what Module 6's GPU path
+/// already does with `gpu_draw_item::world_from_model`. Until the software
+/// renderer follows, this function is where the seam is, and having exactly one
+/// seam is most of the value of hoisting the loop here.
 ///
 /// @param meshes the pool to resolve handles against — normally
 ///        `store.meshes()`. It is a parameter rather than something fetched

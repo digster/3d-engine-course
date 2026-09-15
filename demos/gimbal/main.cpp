@@ -30,6 +30,15 @@
 // double cover, and it is the same picture Lesson 7.3's plane demo drew for the
 // rotor, one dimension up.
 //
+// LESSON 7.5 ADDED [S], WHICH IS A DIAL WITH TWO ROWS OF TICKS ON IT. Both rows
+// mark the same eleven values of `t` on the same arc: slerp outward, nlerp
+// inward. Slerp's are evenly spaced and nlerp's bunch at both ends, which is the
+// whole of the difference between them made visible rather than described — the
+// PATH is identical and only the SCHEDULE is wrong. A third aircraft, in
+// magenta, goes the other way round the same circle: that is the same pair of
+// orientations blended without the one comparison `nearest` makes, 210 degrees
+// instead of 150. Watch which of the three is the bug you would actually ship.
+//
 //     cmake --build build --target gimbal
 //     ./build/demos/gimbal                                play with it
 //     ./build/demos/gimbal --pose 40 89 -25               start at a pose
@@ -37,6 +46,7 @@
 //     ./build/demos/gimbal --blend 0.5 --shot out.ppm     the blend, frozen at t
 //     ./build/demos/gimbal --commute 90 --shot out.ppm    both orders, frozen
 //     ./build/demos/gimbal --cover 405 --shot out.ppm     past the first return
+//     ./build/demos/gimbal --schedule 0.23 --shot out.ppm  slerp vs nlerp, frozen
 //
 // WHAT TO DO WITH IT, in the order that makes the point:
 //
@@ -183,6 +193,67 @@ constexpr vec3 k_cover_eye{3.10f, 2.70f, 6.95f};
 /// mode's claim would be unfalsifiable. Tilted, every pose in the lap is
 /// visibly distinct and "it is home again" is something you can see.
 const vec3 k_cover_axis = engine::normalised(vec3{0.32f, 0.86f, 0.40f});
+
+// LESSON 7.5 — [S]: the schedule, and the sign.
+//
+// **150 DEGREES, AND THE NUMBER IS CHOSEN RATHER THAN PICKED.** The gap between
+// nlerp and slerp grows with the arc, and the shortest-arc rule caps a rotation
+// arc at 180 — so 150 is near the worst case this mode can honestly show while
+// leaving 30 degrees of headroom to make clear that the cap is a cap and not the
+// end of the axis. The long way round is then 210, which is visibly the long way
+// rather than ambiguously so.
+constexpr float k_sched_arc = 150.0f * k_rad;
+
+/// The axis both interpolations turn about — **pointed at the camera**.
+///
+/// This is the same drawing rule Lesson 7.4's dial had to learn the hard way. A
+/// circle drawn in a fixed world plane is seen obliquely and renders as an
+/// ELLIPSE, and an ellipse's arc lengths are not proportional to its angles — so
+/// the eleven ticks that are this mode's entire argument would be compressed at
+/// the ends by perspective and not by nlerp, and no reader could tell which. Put
+/// the rotation axis along the view direction and the nose's path is a circle on
+/// screen, where equal angles really are equal distances and the spacing can be
+/// checked against a ruler.
+///
+/// The value is `k_sched_eye` normalised, and the two must move together.
+const vec3 k_sched_axis = engine::normalised(vec3{2.55f, 2.10f, 3.45f});
+
+/// How many evenly spaced ticks are laid along the arc.
+///
+/// **THE TICKS ARE THE MODE.** Two aircraft 4.5 degrees apart is a difference you
+/// have to be told about; eleven marks at equal `t`, bunched at the ends under
+/// one rule and evenly spread under the other, is a difference you can see from
+/// across the room. It is the same trick a speedometer uses.
+constexpr int k_sched_ticks = 11;
+
+/// The radius the nose direction is plotted at.
+///
+/// The craft is 2.5 units across, so anything under about 2 puts the arc inside
+/// the aircraft and the whole picture becomes a thicket — which is what the first
+/// version of this mode looked like, and it read as a bug rather than as a
+/// framing mistake.
+constexpr float k_sched_reach = 2.45f;
+
+/// How long a tick is, in world units.
+///
+/// **BOTH ROWS TOUCH THE SAME CIRCLE**, one pointing out and one pointing in, and
+/// that is a claim rather than a layout. Slerp and nlerp trace the *same path*;
+/// drawing the second row on a smaller circle would say they do not, which is the
+/// single most common misconception about nlerp and the one this mode exists to
+/// kill. One road, two rulers.
+constexpr float k_sched_tick = 0.32f;
+
+/// The craft's nose in its own frame. Lesson 2.9's convention: a camera and a
+/// craft both look down their own −z.
+constexpr vec3 k_nose_dir{0.0f, 0.0f, -1.0f};
+
+/// Where [S] puts the eye. `k_sched_axis` is this, normalised; see there.
+constexpr vec3 k_sched_eye{2.55f, 2.10f, 3.45f};
+
+/// The third craft: the same two poses, blended the way round that `nearest`
+/// exists to avoid. Magenta, because `k_dead` already means "this is the failure"
+/// in this program and it is not drawn in any mode [S] can be in.
+constexpr Uint32 k_ghost_long = k_dead;
 
 // ---------------------------------------------------------------------------
 // §RING — the one thing the public API cannot do, done here in the open
@@ -442,6 +513,24 @@ public:
                 rings_ = false;
                 cover_turn_ = std::clamp(degrees, 0.0f, 720.0f) * k_rad;
             }
+            // LESSON 7.5. Frozen at `t`, and the trails walked in, for exactly
+            // the reasons `--blend` gives above: `on_fixed_step` never runs in a
+            // headless capture, so a still would otherwise show three aircraft
+            // and no journey.
+            else if (SDL_strcmp(argv[i], "--schedule") == 0 && i + 1 < argc)
+            {
+                const double given = SDL_atof(argv[++i]);
+                scheduling_ = true;
+                rings_ = false;
+                schedule_t_ = std::clamp(static_cast<float>(given), 0.0f, 1.0f);
+                for (int k = 0; k <= 600; ++k)
+                {
+                    const float t = schedule_t_ * static_cast<float>(k) / 600.0f;
+                    record_nose(ghost_nlerp_, engine::quat_nlerp(sched_from(), sched_to(), t));
+                    record_nose(ghost_sched_, engine::quat_slerp(sched_from(), sched_to(), t));
+                    record_nose(ghost_long_, sched_long_at(t));
+                }
+            }
         }
 
         return {.title = "gimbal — watch a degree of freedom die",
@@ -500,7 +589,7 @@ public:
             ghost_slerp_.clear();
             // The rings belong to the three-knob story and only clutter this one.
             if (blending_) { cost_ = measure_blend(); rings_ = false; commuting_ = false;
-                             covering_ = false; }
+                             covering_ = false; scheduling_ = false; }
             reframe();
         }
 
@@ -515,7 +604,8 @@ public:
         {
             commuting_ = !commuting_;
             commute_phase_ = 0.0f;
-            if (commuting_) { blending_ = false; covering_ = false; rings_ = false; }
+            if (commuting_) { blending_ = false; covering_ = false; scheduling_ = false;
+                              rings_ = false; }
             reframe();
         }
         if (actions_.pressed(a_cover_))
@@ -523,7 +613,26 @@ public:
             covering_ = !covering_;
             cover_phase_ = 0.0f;
             cover_turn_ = 0.0f;
-            if (covering_) { blending_ = false; commuting_ = false; rings_ = false; }
+            if (covering_) { blending_ = false; commuting_ = false; scheduling_ = false;
+                             rings_ = false; }
+            reframe();
+        }
+
+        // LESSON 7.5. The fourth comparison mode, and the note above about not
+        // factoring these into an enum now has one more repetition arguing
+        // against it. It is still the right call at four and it would not be at
+        // six; the line is somewhere around five, and saying so is more useful
+        // than pretending there is a rule.
+        if (actions_.pressed(a_sched_))
+        {
+            scheduling_ = !scheduling_;
+            schedule_phase_ = 0.0f;
+            schedule_t_ = 0.0f;
+            ghost_sched_.clear();
+            ghost_nlerp_.clear();
+            ghost_long_.clear();
+            if (scheduling_) { blending_ = false; commuting_ = false; covering_ = false;
+                               rings_ = false; }
             reframe();
         }
     }
@@ -548,6 +657,7 @@ public:
         if (blending_) { drive_blend(h); return; }
         if (commuting_) { drive_commute(h); return; }
         if (covering_) { drive_cover(h); return; }
+        if (scheduling_) { drive_schedule(h); return; }
         drive_knobs(h);
     }
 
@@ -578,10 +688,17 @@ public:
             // — so the solid aircraft on screen during the double-cover mode is
             // drawn by this lesson's code and not by 7.1's or 7.2's. Three
             // representations, one renderer, and the renderer cannot tell.
-            body->rotation = blending_ ? slerp_pose()
-                           : covering_ ? engine::mat3_from_quat(cover_quat())
-                           : single_turn_ ? engine::rotation_from_axis_angle(single_turn().value)
-                                          : engine::rotation_from_euler(pose_);
+            // **LESSON 7.5: ALL FIVE ROUTES NOW END IN THE SAME FOUR FLOATS.**
+            // `transform::rotation` is a `quat`, so the two that were built as
+            // matrices are narrowed here rather than handed over whole — which is
+            // not a loss, because `quat_from_rotation` has no bad case (7.4 §9)
+            // and because `parent_from_local` was going to build a matrix again
+            // anyway. The renderer still cannot tell which route drew it.
+            body->rotation = scheduling_ ? schedule_pose()
+                           : blending_ ? engine::quat_from_rotation(slerp_pose())
+                           : covering_ ? cover_quat()
+                           : single_turn_ ? engine::quat_from_axis_angle(single_turn().value)
+                                          : engine::quat_from_euler(pose_);
         }
         (void)tree_.rebuild_and_resolve(world_);
 
@@ -607,7 +724,7 @@ public:
         // also simply the better picture: there is nothing in it that is not the
         // comparison.
         objects_.clear();
-        collect_ = (blending_ || commuting_) ? engine::renderable_report{}
+        collect_ = (blending_ || commuting_ || scheduling_) ? engine::renderable_report{}
                              : engine::collect_renderables(world_, meshes_, objects_);
 
         const engine::render_options opts{.cull = engine::cull_choice::back,
@@ -625,6 +742,7 @@ public:
         if (blending_) { queue_blend(); }
         else if (commuting_) { queue_commute(); }
         else if (covering_) { queue_cover(); }
+        else if (scheduling_) { queue_schedule(); }
         else
         {
             if (rings_) { queue_rings(); }
@@ -670,6 +788,7 @@ private:
         a_blend_ = actions_.declare("blend");
         a_commute_ = actions_.declare("commute");
         a_cover_ = actions_.declare("double_cover");
+        a_sched_ = actions_.declare("schedule");
         a_quit_  = actions_.declare("quit");
 
         (void)actions_.bind_key(a_yaw_, SDL_SCANCODE_LEFT, +1.0f);
@@ -687,6 +806,7 @@ private:
         (void)actions_.bind_key(a_blend_, SDL_SCANCODE_B);
         (void)actions_.bind_key(a_commute_, SDL_SCANCODE_C);
         (void)actions_.bind_key(a_cover_, SDL_SCANCODE_D);
+        (void)actions_.bind_key(a_sched_, SDL_SCANCODE_S);
         (void)actions_.bind_key(a_quit_, SDL_SCANCODE_ESCAPE);
     }
 
@@ -761,6 +881,15 @@ private:
             return engine::ecs::look_along({3.20f, 2.05f, 4.95f}, {0.0f, 0.62f, 0.0f},
                                            {0.0f, 1.0f, 0.0f});
         }
+        if (scheduling_)
+        {
+            // Pulled back and raised, because [S] draws a 210-degree arc and two
+            // extra aircraft on it. The first framing reused [B]'s eye and the
+            // long-way ghost spent half the cycle outside the frame, which looks
+            // exactly like a ghost that has stopped being drawn.
+            return engine::ecs::look_along(k_sched_eye, {0.0f, 0.0f, 0.0f},
+                                           {0.0f, 1.0f, 0.0f});
+        }
         const vec3 eye = blending_ ? vec3{3.55f, 2.45f, 4.70f} : vec3{5.0f, 3.4f, 6.6f};
         return engine::ecs::look_along(eye, {0.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f});
     }
@@ -831,9 +960,21 @@ private:
         record_nose(ghost_slerp_, slerp_pose());
     }
 
+    /// Lesson 7.5's overload. A quaternion rotates a vector directly (the
+    /// sandwich), so no matrix is built for a single nose — one vector is far
+    /// below 7.4 §10.3's eight-vector crossover.
+    static void record_nose(std::vector<vec3>& trail, quat q)
+    {
+        record_nose_at(trail, q * vec3{0.0f, 0.0f, -1.0f});
+    }
+
     static void record_nose(std::vector<vec3>& trail, const mat3& r)
     {
-        const vec3 nose = r * vec3{0.0f, 0.0f, -1.0f};
+        record_nose_at(trail, r * vec3{0.0f, 0.0f, -1.0f});
+    }
+
+    static void record_nose_at(std::vector<vec3>& trail, vec3 nose)
+    {
         if (trail.empty() || engine::distance(trail.back(), nose) > 0.006f)
         {
             trail.push_back(nose);
@@ -1033,6 +1174,165 @@ private:
     {
         return engine::quat_from_axis_angle(k_cover_axis, cover_turn_);
     }
+
+    // ---- Lesson 7.5 --------------------------------------------------------
+
+    /// The blend's two endpoints. Held as functions rather than as constants
+    /// because `quat_from_axis_angle` calls `sin` and `cos` and is therefore not
+    /// `constexpr`; both are cheap and neither is on a hot path.
+    [[nodiscard]] static quat sched_from() { return quat::identity(); }
+    [[nodiscard]] static quat sched_to()
+    {
+        return engine::quat_from_axis_angle(k_sched_axis, k_sched_arc);
+    }
+
+    /// The same two poses, blended **the wrong way round the sphere**.
+    ///
+    /// **This is `quat_slerp` with `nearest` deleted, and nothing else.** The
+    /// endpoint handed in is `−b`, which is the same orientation as `b` (the
+    /// double cover — 7.4 §8, measured bitwise), so the destination is identical
+    /// and only the route differs: 210 degrees the other way instead of 150.
+    ///
+    /// It is drawn because the failure is not subtle and is not rare. Half of all
+    /// pairs of quaternions naming two given orientations are signed this way, an
+    /// exporter has no reason to make them consistent, and the symptom is a
+    /// character spinning most of the way round between two keyframes that are
+    /// nearly identical.
+    [[nodiscard]] static quat sched_long_at(float t)
+    {
+        const quat a = sched_from();
+        const quat b = -sched_to();
+        return a * engine::quat_pow_unit(engine::conjugate(a) * b, t);
+    }
+
+    [[nodiscard]] quat schedule_pose() const
+    {
+        return engine::quat_slerp(sched_from(), sched_to(), schedule_t_);
+    }
+
+    /// Sweep `t` out and hold, exactly as [B] does, so the arrival is on screen.
+    void drive_schedule(float h)
+    {
+        constexpr float k_cycle = 6.0f;      ///< seconds, including the hold
+        constexpr float k_travel = 4.6f;     ///< of which this much is moving
+
+        schedule_phase_ += h;
+        if (schedule_phase_ >= k_cycle)
+        {
+            schedule_phase_ = 0.0f;
+            ghost_sched_.clear();
+            ghost_nlerp_.clear();
+            ghost_long_.clear();
+        }
+        schedule_t_ = std::clamp(schedule_phase_ / k_travel, 0.0f, 1.0f);
+
+        record_nose(ghost_sched_, schedule_pose());
+        record_nose(ghost_nlerp_, engine::quat_nlerp(sched_from(), sched_to(), schedule_t_));
+        record_nose(ghost_long_, sched_long_at(schedule_t_));
+    }
+
+    /// Three craft strung along one arc, and the eleven ticks that are the
+    /// argument.
+    ///
+    /// **THE DRAWING IS THE CLAIM, so it is worth saying what each mark means.**
+    ///
+    ///   THE ARC is where the craft's nose direction goes. Slerp and nlerp trace
+    ///   the SAME curve — that is the half of nlerp that is exactly right, proved
+    ///   in Lesson 7.3 §10.3 by an argument that never mentions dimension: the
+    ///   chord between two points of a sphere lies in the plane they span with
+    ///   the centre, and normalising moves a point along its own radius, which
+    ///   cannot leave that plane. So one curve is drawn, not two.
+    ///
+    ///   THE TICKS are eleven equally spaced values of `t`. The outer row is
+    ///   slerp and it is evenly spaced, because the angle covered is `t·Ω` and
+    ///   nothing else in the expression depends on `t`. The inner row is nlerp
+    ///   and it bunches at both ends. That is the whole of what nlerp gets wrong,
+    ///   and it is a picture rather than a paragraph.
+    ///
+    ///   THE MAGENTA ARC is the same two orientations blended the other way
+    ///   round: 210 degrees instead of 150, for want of one comparison.
+    void queue_schedule()
+    {
+        const quat a = sched_from();
+        const quat b = sched_to();
+
+        debug_.line(k_sched_axis * -2.9f, k_sched_axis * 2.9f, k_axis);
+
+        // The two arcs, sampled. 48 segments is enough that the polyline reads as
+        // a curve at this radius and few enough that the debug budget is untouched.
+        constexpr int k_arc_steps = 48;
+        vec3 prev_short = nose_at(engine::quat_slerp(a, b, 0.0f));
+        vec3 prev_long = nose_at(sched_long_at(0.0f));
+        for (int i = 1; i <= k_arc_steps; ++i)
+        {
+            const float t = static_cast<float>(i) / static_cast<float>(k_arc_steps);
+            const vec3 s_now = nose_at(engine::quat_slerp(a, b, t));
+            const vec3 l_now = nose_at(sched_long_at(t));
+            debug_.line(prev_short, s_now, k_trail);
+            debug_.line(prev_long, l_now, k_ghost_long);
+            prev_short = s_now;
+            prev_long = l_now;
+        }
+
+        // The ticks are radial stubs rather than dots: a dot at this distance is
+        // one pixel, and eleven pixels is not a measurement anybody can read.
+        for (int i = 0; i < k_sched_ticks; ++i)
+        {
+            const float t = static_cast<float>(i) / static_cast<float>(k_sched_ticks - 1);
+            const vec3 s_dir = engine::quat_slerp(a, b, t) * k_nose_dir;
+            const vec3 n_dir = engine::quat_nlerp(a, b, t) * k_nose_dir;
+            debug_.line(s_dir * k_sched_reach, s_dir * (k_sched_reach + k_sched_tick),
+                        k_ghost_slerp);
+            debug_.line(n_dir * (k_sched_reach - k_sched_tick), n_dir * k_sched_reach,
+                        k_ghost_euler);
+        }
+
+        // The three aircraft, each at its own place on its own arc. Drawn small,
+        // because at this radius a full-size one is a third of the frame.
+        const quat now_slerp = schedule_pose();
+        const quat now_nlerp = engine::quat_nlerp(a, b, schedule_t_);
+        const quat now_long = sched_long_at(schedule_t_);
+        // THE SAME GLYPH [C] USES, and for the same reason it was invented: the
+        // blue and amber poses are at most 8 degrees apart (§7.6), which at this
+        // radius is a third of a unit, and two wireframe aircraft that close
+        // interpenetrate into a thicket in which neither is an aeroplane. A wing
+        // bar and a fin say everything the mode needs — where the pose is, and
+        // which way up it is, which is the part a bare dot on an arc cannot show.
+        pose_glyph(now_long, k_ghost_long);
+        pose_glyph(now_nlerp, k_ghost_euler);
+        pose_glyph(now_slerp, k_ghost_slerp);
+
+        // THE GAP, drawn as the one line joining the two — gold, which means "the
+        // nose" everywhere else in this program and means "the measurement" here.
+        //
+        // **IT IS A SHORT LINE AND THAT IS THE ANSWER, not a framing failure.**
+        // The worst this gap can ever be is 8.15 degrees (§7.6), which at this
+        // radius is a third of a unit. Two aircraft that close cannot be told
+        // apart by eye, which is exactly why the ticks carry the argument and the
+        // aircraft only say which way each pose faces.
+        debug_.line(nose_at(now_slerp), nose_at(now_nlerp), k_nose);
+    }
+
+    /// Where a pose puts the craft's nose, at the radius this mode draws on.
+    [[nodiscard]] static vec3 nose_at(quat q) { return (q * k_nose_dir) * k_sched_reach; }
+
+    /// A pose, marked on the arc: a wing bar and a fin at its nose.
+    void pose_glyph(quat q, Uint32 colour)
+    {
+        const vec3 at = nose_at(q);
+        const vec3 wing = (q * vec3{1.0f, 0.0f, 0.0f}) * 0.42f;
+        const vec3 fin = (q * vec3{0.0f, 1.0f, 0.0f}) * 0.34f;
+        debug_.line(at - wing, at + wing, colour);
+        debug_.line(at, at + fin, colour);
+    }
+
+    /// How far `q` has turned from `a`, in `[0, 2pi)` — distance travelled, not
+    /// separation. See the receipt in `write_shot` for why the difference matters.
+    [[nodiscard]] static float travelled(quat a, quat q)
+    {
+        return engine::axis_angle_from_quat(engine::conjugate(a) * q).value.angle;
+    }
+
 
     /// Both orders, drawn, with the axes each of them turns about.
     void queue_commute()
@@ -1360,11 +1660,38 @@ private:
                 ImGui::TextUnformatted("gold hand is the rotor: it turns at half the rate");
             }
 
+            if (scheduling_)
+            {
+                ImGui::Separator();
+                const quat a = sched_from();
+                const quat b = sched_to();
+                const quat s_sl = engine::quat_slerp(a, b, schedule_t_);
+                const quat s_nl = engine::quat_nlerp(a, b, schedule_t_);
+                const float arc = engine::angle_between(a, b);
+                ImGui::Text("arc %.2f deg   sphere arc %.2f deg   t %.3f",
+                            static_cast<double>(arc * k_deg),
+                            static_cast<double>(arc * k_deg * 0.5f),
+                            static_cast<double>(schedule_t_));
+                ImGui::Text("slerp has turned %.4f deg   (= t x arc, exactly)",
+                            static_cast<double>(travelled(a, s_sl) * k_deg));
+                ImGui::Text("nlerp has turned %.4f deg",
+                            static_cast<double>(travelled(a, s_nl) * k_deg));
+                ImGui::TextColored(ImVec4(0.97f, 0.84f, 0.47f, 1.0f),
+                                   "the gold line is %.4f deg long",
+                                   static_cast<double>(
+                                       engine::angle_between(s_sl, s_nl) * k_deg));
+                ImGui::Text("worst speed ratio sec2(sphere arc / 2) = %.4f",
+                            static_cast<double>(
+                                1.0f / (std::cos(arc * 0.25f) * std::cos(arc * 0.25f))));
+                ImGui::TextUnformatted("long way round (magenta): 210 deg, for want of one sign");
+            }
+
             ImGui::Separator();
             ImGui::TextUnformatted("arrows yaw/pitch  Q/W roll  [E] joint knob");
             ImGui::TextUnformatted("[K] snap to lock  [T] nose trail  [G] rings  [R] reset");
             ImGui::TextUnformatted("[A] pose by axis-angle  [B] blend: Euler lerp vs slerp");
             ImGui::TextUnformatted("[C] both orders of two turns  [D] the double cover");
+            ImGui::TextUnformatted("[S] slerp vs nlerp, and the long way round");
         }
         ImGui::End();
     }
@@ -1425,6 +1752,30 @@ private:
         std::printf("gimbal:   q (%+.5f, %+.5f, %+.5f, %+.5f)\n",
                     static_cast<double>(cq.w), static_cast<double>(cq.v.x),
                     static_cast<double>(cq.v.y), static_cast<double>(cq.v.z));
+
+        // The 7.5 half, and the same width rule: nothing past 66 characters.
+        const quat sa = sched_from();
+        const quat sb = sched_to();
+        const quat s_sl = engine::quat_slerp(sa, sb, schedule_t_);
+        const quat s_nl = engine::quat_nlerp(sa, sb, schedule_t_);
+        const quat s_lg = sched_long_at(schedule_t_);
+        std::printf("gimbal: sched t %.3f  arc %.2f deg\n",
+                    static_cast<double>(schedule_t_),
+                    static_cast<double>(k_deg * engine::angle_between(sa, sb)));
+        // TRAVELLED, NOT SEPARATION, for the first three — and the two are not
+        // the same instrument. `angle_between` takes an absolute value and
+        // therefore caps at 180, which is right for "how far apart are these two
+        // poses" and wrong for "how far has this one turned": the long-way ghost
+        // passes 180 at t = 0.857 and a capped reading would show it coming BACK.
+        // `axis_angle_from_quat` returns [0, 2pi) precisely so this question has
+        // an answer (7.4 §9.2), which is the double cover being useful.
+        std::printf("gimbal:   slerp %.4f, nlerp %.4f deg turned\n",
+                    static_cast<double>(k_deg * travelled(sa, s_sl)),
+                    static_cast<double>(k_deg * travelled(sa, s_nl)));
+        std::printf("gimbal:   nlerp lag %.4f deg\n",
+                    static_cast<double>(k_deg * engine::angle_between(s_sl, s_nl)));
+        std::printf("gimbal:   long way %.4f deg turned\n",
+                    static_cast<double>(k_deg * travelled(sa, s_lg)));
         request_quit(engine::save_ppm(fb(), shot_path_));
     }
 
@@ -1460,12 +1811,20 @@ private:
     float cover_turn_ = 0.0f;         ///< how far the craft has turned, radians
     float cover_phase_ = 0.0f;        ///< seconds into the cycle
 
+    // Lesson 7.5.
+    bool scheduling_ = false;         ///< [S]: slerp, nlerp and the long way round
+    float schedule_t_ = 0.0f;         ///< where along the blend, in [0, 1]
+    float schedule_phase_ = 0.0f;     ///< seconds into the cycle, including the hold
+    std::vector<vec3> ghost_sched_;   ///< the slerp nose's history
+    std::vector<vec3> ghost_nlerp_;   ///< the nlerp nose's — the SAME curve
+    std::vector<vec3> ghost_long_;    ///< the one that went the other way
+
     engine::action_map actions_;
     engine::masked_input<engine::input> gate_;
     engine::action_id a_yaw_{}, a_pitch_{}, a_roll_{}, a_joint_{};
     engine::action_id a_lock_{}, a_reset_{}, a_rings_{}, a_trail_{}, a_quit_{};
     engine::action_id a_single_{}, a_blend_{};
-    engine::action_id a_commute_{}, a_cover_{};
+    engine::action_id a_commute_{}, a_cover_{}, a_sched_{};
 
     engine::depth_buffer depth_{k_width, k_height};
     engine::lighting lights_;

@@ -238,7 +238,11 @@ void spin_system(engine::ecs::registry& world, float h)
 {
     world.view<placement, spin>().each([h](placement& p, spin& s) {
         s.angle += s.rate * h;
-        p.rotation = engine::rotation_y(s.angle) * engine::rotation_x(s.wobble * s.angle);
+        // LESSON 7.5: composed as quaternions now. Note that this one is NOT a
+        // stepped rotation — it is rebuilt from `s.angle` every frame — so it
+        // needs no `renormalised_fast`, where `collector`'s carousel does. The
+        // difference is whether the previous frame's answer is an INPUT.
+        p.rotation = engine::quat_y(s.angle) * engine::quat_x(s.wobble * s.angle);
     });
 }
 
@@ -286,14 +290,20 @@ void camera_orbit_system(engine::ecs::registry& world)
 /// composed 4x4 — and has to get that matrix into a `scene_object`, which holds a
 /// `transform`.
 ///
-/// The conversion below is EXACT and is a trick worth understanding rather than
-/// copying. `parent_from_local` builds `affine(columns scaled by `scale`,
-/// position)`, and `transform::rotation` is a general `mat3` with no orthonormality
-/// requirement — so setting the rotation to the matrix's whole linear part and the
-/// scale to 1 reproduces any affine matrix bit for bit. It abuses the fact that
-/// the field is named `rotation` and typed `mat3`, which is precisely why it is a
-/// bridge and not a design. Module 6 gives the renderer a matrix directly and
-/// this function loses its last four lines.
+/// **LESSON 7.5 TURNED FOUR LINES INTO ONE CALL, and the four lines were a
+/// trick.** Until the swap this wrote the matrix's whole linear part into
+/// `transform::rotation` and `{1,1,1}` into `scale`, which reproduced any affine
+/// matrix bit for bit — because the field was a `mat3` and a `mat3` will hold
+/// anything, including the scale that came down the hierarchy. It is a `quat`
+/// now, which will not, so the trick stopped compiling. The engine grew
+/// `transform_from_affine` in the same lesson, because **three places in this
+/// repository were doing this job and two of them were doing it wrong**, and this
+/// was one of the two.
+///
+/// The extraction also reports shear, which this demo ignores on purpose: every
+/// scale in the swarm is positive and uniform, so no product of them can shear
+/// and the rebuild is exact. `collect_renderables` does not ignore it, because it
+/// does not know what its caller built.
 void render_system(engine::ecs::registry& world, const engine::material_pool& materials,
                    std::vector<engine::scene_object>& out)
 {
@@ -308,9 +318,7 @@ void render_system(engine::ecs::registry& world, const engine::material_pool& ma
             // asking a pool instead of dereferencing a pointer.
             const engine::material* found = materials.get(m.mat);
             out.push_back(engine::scene_object{
-                .xform = {.position = engine::translation_of(w.matrix),
-                          .rotation = engine::linear_of(w.matrix),
-                          .scale = {1.0f, 1.0f, 1.0f}},
+                .xform = engine::transform_from_affine(w.matrix).value,
                 .geometry = g.mesh,
                 .name = "entity",
                 .mat = (found != nullptr) ? *found : engine::material{},
@@ -1012,7 +1020,7 @@ private:
         engine::ecs::add_hierarchy_components(
             world_, sun_,
             placement{.position = {0.0f, 0.0f, 0.0f},
-                      .rotation = engine::mat3::identity(),
+                      .rotation = engine::quat::identity(),
                       .scale = {0.9f, 0.9f, 0.9f}});
         world_.add<geometry>(sun_, geometry{.mesh = torus_, .closed = true});
         sun_material_ = materials_.insert(

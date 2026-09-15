@@ -3467,6 +3467,106 @@ The singular values are sqrt(1 + |sin p|), 1, sqrt(1 - |sin p|).</span>
     </p>
   </div>
 
+  <div class="card">
+    <h3>A geodesic is three steps, in any algebra <span class="from">Lesson 7.5</span></h3>
+    <div class="eq">
+      \[ \operatorname{slerp}(a, b, t) \;=\; a \cdot \big(a^{-1} b\big)^{t} \]
+      <span class="eq-plain">slerp(a, b, t) = a times (a inverse times b) raised to the power t</span>
+    </div>
+    <p>
+      <strong>Undo <code>a</code>, take <code>t</code> of the difference, redo <code>a</code>.</strong>
+      Nothing in that sentence names a dimension or a representation: it needs an inverse, a
+      product and a real power, and that is all. Lesson 7.2 wrote it for <code>mat3</code>, 7.3 for
+      complex numbers, 7.5 for <code>quat</code> &mdash; and the three agree to float resolution
+      (4.172e&minus;07 of a matrix entry; 2.384e&minus;07 rad) on the same journey, sharing no code.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>The power of a unit quaternion <span class="from">Lesson 7.5</span></h3>
+    <div class="eq">
+      \[ q^{t} \;=\; \cos(t\theta/2) + \sin(t\theta/2)\,\hat n,
+         \qquad \theta/2 = \operatorname{atan2}\big(|v|,\, w\big) \]
+      <span class="eq-plain">q^t = cos(t theta / 2) + sin(t theta / 2) n-hat, where theta/2 = atan2(|v|, w)</span>
+    </div>
+    <p>
+      Same axis, <code>t</code> times the angle. <strong>The division by <code>|v|</code> is safe at
+      every angle including zero</strong>, because what the code computes is
+      <code>sin(t&theta;/2)/sin(&theta;/2)</code>, which tends to <code>t</code>. So there is no
+      epsilon, no branch, and no &ldquo;lerp if the angle is small&rdquo; &mdash; and the textbook
+      trig form, which divides by <code>sin&thinsp;&Omega;</code>, returns <em>NaN</em> below an
+      arc of 0.0280&deg;.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>nlerp: right path, wrong schedule <span class="from">Lesson 7.5</span></h3>
+    <div class="eq">
+      \[ \varphi(t) = \arctan\!\left(\frac{t\sin\Omega}{(1-t) + t\cos\Omega}\right),
+         \qquad \frac{\varphi'(1/2)}{\varphi'(0)} = \sec^{2}(\Omega/2) \]
+      <span class="eq-plain">phi(t) = arctan(t sin Omega / ((1 - t) + t cos Omega)); the ratio of the midpoint speed to the endpoint speed is sec squared of Omega over 2</span>
+    </div>
+    <p>
+      The chord between two points of a sphere stays in the plane they span with the centre, and
+      normalising moves a point along its own radius &mdash; so nlerp <em>cannot</em> leave the
+      geodesic (measured departure 1.605e&minus;07; excess turning 0.00%). What it gets wrong is
+      <em>when</em>: it runs fastest through the middle, by exactly <code>sec&sup2;(&Omega;/2)</code>.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>The double cover as a <em>bound</em> <span class="from">Lesson 7.5</span></h3>
+    <div class="eq">
+      \[ a \cdot b \ge 0 \;\Longrightarrow\; \Omega \le 90^\circ
+         \;\Longrightarrow\; \sec^{2}(\Omega/2) \le \sec^{2}(45^\circ) = 2 \]
+      <span class="eq-plain">If the four-component dot product is non-negative then Omega is at most 90 degrees, so sec squared of Omega over 2 is at most sec squared of 45 degrees, which is exactly 2</span>
+    </div>
+    <p>
+      Choosing the nearer of <code>b</code> and <code>&minus;b</code> is what makes the arc short
+      &mdash; and it is also what <strong>caps nlerp&rsquo;s error at a factor of exactly 2 in
+      speed and 8.1491&deg; in pose</strong>, over every pair of orientations that exists. In the
+      plane, with no double cover, the same function reaches 13,131&times; and 26.34&deg;.
+      <strong>The cost and the guarantee are the same fact.</strong>
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>Why <code>acos</code> is the wrong metric for a step <span class="from">Lesson 7.5</span></h3>
+    <div class="eq">
+      \[ \cos\Omega = 1 - \tfrac{\Omega^{2}}{2} + \dots
+         \qquad\text{so}\qquad
+         \theta_{\text{floor}} \approx 2\sqrt{2\varepsilon} = 0.0560^\circ \]
+      <span class="eq-plain">cos Omega is 1 minus Omega squared over 2, so the noise floor of an acos metric is about 2 times the square root of 2 epsilon, which is 0.0560 degrees</span>
+    </div>
+    <p>
+      The cosine is <em>quadratic</em> at its maximum and the sine is <em>linear</em>, so a small
+      separation is gone before <code>acos</code> is called &mdash; and the error is biased, not
+      noisy. A path integral over 4,096 steps of a 150&deg; arc scored slerp&rsquo;s own geodesic at
+      <strong>&minus;41.10%</strong>. Use <code>2&thinsp;atan2(|v|,&nbsp;|w|)</code>, or a chord.
+      Same rule as <code>angle_between_rotations</code> for matrices (Lesson 7.1).
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>Decomposing an affine matrix <span class="from">Lesson 7.5</span></h3>
+    <div class="eq">
+      \[ s_k = |\mathbf{c}_k|, \qquad
+         s_x \leftarrow -s_x \text{ when } \det M &lt; 0, \qquad
+         R = \big[\,\mathbf{c}_0/s_x \;\; \mathbf{c}_1/s_y \;\; \mathbf{c}_2/s_z\,\big] \]
+      <span class="eq-plain">Each scale is the length of the matching column; negate the x scale when the determinant is negative; the rotation is the columns divided by those lengths.</span>
+    </div>
+    <p>
+      The scale is the column lengths because that is what the <em>construction</em> did &mdash; so
+      reading them back is its inverse, not an estimate. <strong>The determinant&rsquo;s sign has to
+      be handed back deliberately</strong>, or a mirrored object silently becomes an unmirrored,
+      rotated one. A zero column is rebuilt as the cross product of the surviving pair, not as the
+      parent&rsquo;s axis: &ldquo;finite&rdquo; is not &ldquo;right&rdquo;, and the wrong repair is
+      wrong in <em>every</em> column. <strong>Shear cannot be recovered at all</strong> &mdash; it
+      changes the angles between columns, not their lengths &mdash; so measure the angles and report
+      it.
+    </p>
+  </div>
+
   <h2 id="coming"><span class="num">9</span>Coming as the course proceeds</h2>
 
   <p>

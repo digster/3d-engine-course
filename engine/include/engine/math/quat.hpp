@@ -44,7 +44,9 @@
 //   - **Renormalisation is a division**, or with `renormalised_fast` not even
 //     that. A `mat3` that has drifted needs Gram-Schmidt.
 //   - **It can be interpolated.** Averaging two rotation matrices entrywise gives
-//     something that is not a rotation. Lesson 7.5 is that whole subject.
+//     something that is not a rotation. Lesson 7.5 added the bottom section of
+//     this file, and it is three lines long because 7.2 and 7.3 had already done
+//     the derivation twice in two other notations.
 //
 // And the honest entry, which is a cost rather than a saving and is worse here
 // than it was in the plane: **applying a quaternion to a vector is more expensive
@@ -55,11 +57,11 @@
 // renderer handed quaternions converts them to matrices before it draws
 // anything, and why `mat3_from_quat` below is not an afterthought.
 //
-// WHAT IS DELIBERATELY NOT HERE: `slerp`. Lesson 7.5 builds it, and it needs the
-// shortest-arc sign choice that the double cover (§8 below) forces — a decision
-// with enough content to be a section rather than a line. `angle_between` is
-// here, because it is a metric and not an interpolation, and because this file's
-// own tests need it.
+// WHAT LESSON 7.5 ADDED, at the bottom: `nearest`, `quat_pow_unit`, `quat_slerp`
+// and `quat_nlerp`. 7.4 left them out on purpose — the shortest-arc sign choice
+// that the double cover (§8 below) forces has enough content to be a section
+// rather than a line — and `angle_between` stayed, because it is a metric and not
+// an interpolation, and because this file's own tests needed it before slerp did.
 //
 // Header-only, like the rest of `math/`: small, hot, stable code that every
 // caller wants inlined.
@@ -581,24 +583,63 @@ struct quat
 
 /// The angle between two orientations, in `[0, π]` — the metric on rotations.
 ///
-/// `conj(a)·b` is the single turn carrying one onto the other, and its angle is
-/// how far apart they are. Written with `dot` rather than by forming the product,
-/// because the real part of `conj(a)·b` is exactly the four-component dot product
-/// of `a` and `b` — one of the small miracles of this algebra, and the reason
-/// every slerp implementation starts with a dot product.
+/// `conj(a)·b` is the single turn carrying one onto the other, and its angle is how
+/// far apart they are. Its scalar part is exactly the four-component dot product
+/// of `a` and `b` — one of the small miracles of this algebra, and the reason every
+/// slerp implementation starts with a dot product — and its vector part is
+/// `sin(θ/2)·n̂`, which is the half this function used to throw away.
 ///
-/// **The `fabs` is the double cover, and leaving it out is the single most common
-/// quaternion bug.** `a` and `−a` are the same orientation, so the angle between
-/// them must be 0 and not 2π; without the absolute value this function reports a
-/// pair of identical poses as a full turn apart, and an animation system built on
-/// it makes the character spin all the way round between two adjacent keyframes.
-/// Lesson 7.5 pays for this properly — the same sign choice, made once, is what
-/// makes slerp take the short way.
+/// **LESSON 7.5 REWROTE THIS, AND THE OLD VERSION WAS NOT MERELY LESS TIDY.**
+/// 7.4 wrote it as `2·acos|a·b|`, which is the formula every reference gives and is
+/// a *blind instrument near zero* — the same defect `axis_angle_from_quat`, eleven
+/// lines above, already refuses in as many words. The cosine is flat at 1
+/// (`cos(Ω) = 1 − Ω²/2`), so for a small separation the dot product lands within a
+/// few `float` ulps of 1 and `acos` reads the angle off a quantity that has
+/// already lost most of it. At `float` the noise floor is about 0.04°, and the
+/// error is *biased*, not random.
 ///
-/// Both arguments must be unit. `clamp` guards `acos` against a dot product that
-/// float error has pushed a hair past 1, the same one-instruction defence
-/// `euler_from_rotation` puts in front of `asin`.
+/// That matters because a path integral asks this question thousands of times
+/// with a small answer each time. **Lesson 7.5 §7.3 measured the old form summing
+/// slerp's own geodesic to 8.01% SHORT of its endpoints' separation** over 4,096
+/// steps — an instrument that fails a function for walking the path it is walking.
+/// The `atan2` form below reports 0.00% on the same walk, because `|v|` is
+/// *linear* in the angle where the cosine is quadratic.
+///
+/// Lesson 7.1 §6.4 reached the identical conclusion for matrices and
+/// `angle_between_rotations` has used `atan2` since the day it was written. The
+/// quaternion metric shipping the `acos` form for one lesson is the fourth
+/// appearance of this trap in Module 7 and the first one inside the engine.
+///
+/// **`fabs` on the scalar part is the double cover, and leaving it out is the
+/// single most common quaternion bug.** `a` and `−a` are the same orientation, so
+/// the angle between them must be 0 and not 2π; without it, a pair of identical
+/// poses reads as a full turn apart and an animation system built on it spins the
+/// character all the way round between two adjacent keyframes. `quat_slerp` pays
+/// for the same fact with the same one comparison, in `nearest`.
+///
+/// Both arguments must be unit. `atan2` needs no clamp: it takes a ratio of two
+/// numbers rather than a cosine that float error can push past 1.
+///
+/// The cost is the honest part. `conj(a)·b`'s vector part is
+/// `a.w·b.v − b.w·a.v − a.v×b.v`, so this is about twelve multiplies where the old
+/// form was four. For a metric — called in tests, editors and path integrals, and
+/// not per vertex — that is the right side of the trade, and `angle_between_by_cosine`
+/// below is kept so the two can be measured against each other rather than argued about.
 [[nodiscard]] inline float angle_between(quat a, quat b)
+{
+    const float scalar = a.w * b.w + dot(a.v, b.v);
+    const vec3 imaginary = a.w * b.v - b.w * a.v - cross(a.v, b.v);
+    return 2.0f * std::atan2(length(imaginary), std::fabs(scalar));
+}
+
+/// The same distance, computed the way every reference states it.
+///
+/// Kept **only** so that Lesson 7.5 §7.3 can measure the two against each other,
+/// and kept in the engine rather than in a harness so that the comparison is
+/// against the real thing. It is the right formula to have in your head and the
+/// wrong one to call, exactly as `angle_between_rotations_by_trace` is for
+/// matrices (`math/rotation.hpp`, Lesson 7.1). Nothing in the engine calls it.
+[[nodiscard]] inline float angle_between_by_cosine(quat a, quat b)
 {
     const float d = a.w * b.w + dot(a.v, b.v);
     return 2.0f * std::acos(std::clamp(std::fabs(d), 0.0f, 1.0f));
@@ -726,6 +767,212 @@ struct quat
     case 2:  return {d02 * scale, {s10 * scale, root * 0.5f, s21 * scale}};
     default: return {d10 * scale, {s02 * scale, s21 * scale, root * 0.5f}};
     }
+}
+
+// ---- Interpolation: the geodesic -------------------------------------------
+//
+// Lesson 7.5, and almost nothing here is new — which is the finding, not an
+// apology. Lesson 7.2 built `rotation_slerp` for `mat3` and measured that
+// scaling the angle of a single turn traces the shortest path. Lesson 7.3 built
+// `complex_slerp` in the plane and observed that the three steps it takes are
+// not about the plane and are not about complex numbers:
+//
+//     slerp(a, b, t) = a · (a⁻¹ b)^t          undo a, take t of the difference,
+//                                             redo a
+//
+// That is the definition of a geodesic on any group that has an inverse, a
+// product and a power, and a unit quaternion has all three. So the body below is
+// `complex_slerp`'s body with `quat` substituted, and the interesting content of
+// this section is entirely in the two things that DID change.
+//
+//   THE POWER NEEDS AN AXIS, AND THE PLANE'S DID NOT. `complex_pow_unit` is
+//   `complex_from_angle(t · arg z)` — two trig calls and no division, because in
+//   the plane the axis is the same one every time. Here the axis has to be
+//   recovered from `v` before the angle can be scaled, which is a divide by
+//   `|v| = sin(θ/2)`, and §6.3 of the lesson asks the obvious question about
+//   `θ → 0`. The answer is better than "guard it": the ratio the division feeds
+//   is `sin(t·θ/2)/sin(θ/2)`, which tends to `t`, so the formula is CONTINUOUS
+//   through the identity. The textbook form of slerp is not, and §6.4 measures
+//   the difference.
+//
+//   THE DOUBLE COVER IS NOW HALF OF EVERY PAIR. In the plane `−z` is a rotation
+//   by `θ + π` and is genuinely a different rotation; antipodal endpoints are a
+//   measure-zero nuisance. Here `−q` IS `q` (§8 of Lesson 7.4, measured at
+//   0.000e+00), so every pair of poses has TWO arcs between it whose lengths sum
+//   to 2π, and one of them is the wrong one. `nearest` below is the entire fix
+//   and it is one comparison — but it is not optional, and leaving it out is the
+//   most common quaternion bug in shipped animation code.
+
+/// Whichever of `q` and `−q` lies on the same half of the sphere as `reference`.
+///
+/// **This is the double cover being paid for, once, in one comparison.** `q` and
+/// `−q` name the same orientation (Lesson 7.4 §8 — the sandwich is quadratic in
+/// `q`, so a global sign cannot survive it, measured bitwise over 20,000
+/// rotations). But they are not the same *point* on the 4-sphere, and every
+/// interpolation in this file walks between points. Two poses therefore have two
+/// arcs between them — one through `b` and one through `−b` — whose angles sum to
+/// 2π, and exactly one of them is the short way.
+///
+/// The test is the four-component dot product, which is the cosine of the angle
+/// between the two points and is the real part of `conj(a)·b`. Negative means the
+/// half-angle exceeds 90°, which means the turn exceeds 180°, which means going
+/// round the other way is shorter.
+///
+/// **The bug this prevents is worth naming precisely**, because it does not look
+/// like a sign error when you meet it. An exporter writes keyframes as
+/// quaternions and has no reason to keep their signs consistent; two adjacent
+/// frames a degree apart can perfectly well be stored as `q` and `−q'`. Blend
+/// them without this and the character takes the 359° route between two poses
+/// that were a degree apart — a whole-body spin lasting exactly one keyframe
+/// interval, in the middle of a walk cycle, which reads as "the animation is
+/// corrupt" rather than as "someone forgot a dot product".
+///
+/// Both arguments should be unit; the comparison only cares about the sign, so a
+/// positive scale on either cannot change the answer.
+[[nodiscard]] constexpr quat nearest(quat reference, quat q)
+{
+    return (reference.w * q.w + dot(reference.v, q.v) < 0.0f) ? -q : q;
+}
+
+/// A **unit** quaternion raised to a real power: the rotation `q` performs,
+/// scaled by `t`.
+///
+/// `t = 0.5` is the halfway rotation, `t = 2` the doubled one, `t = −1` the
+/// inverse. The twin of `complex_pow_unit`, and the function `quat_slerp` is
+/// built out of.
+///
+/// **Derivation, in one line each.** A unit `q` is `cos(θ/2) + sin(θ/2) n̂`
+/// (Lesson 7.4 §5, from two reflections). Scaling the rotation by `t` means
+/// scaling its angle, so the answer is `cos(tθ/2) + sin(tθ/2) n̂` — the same axis,
+/// a fraction of the turn. Everything below is recovering `θ/2` and `n̂` from the
+/// four floats and putting them back:
+///
+///     sin(θ/2) = |v|                    the vector part's length
+///     θ/2      = atan2(|v|, w)          quadrant-correct, so θ ∈ [0, 2π)
+///     n̂        = v / |v|                the axis
+///
+/// **`atan2` and not `acos(w)`, for the reason this course has now met three
+/// times.** Near `θ = 0` the cosine is flat — `w = 1 − θ²/8` — so `acos` of a
+/// float near 1 throws away most of the angle's significant digits, while
+/// `atan2` reads the angle off a length that is *linear* in it. Lesson 7.1 §6.4
+/// found this in a metric, 7.2 in an extraction, and 7.4 §G.3 in a test that
+/// printed `0.000e+00` in every row because of it.
+///
+/// **The division by `|v|` is where the plane's version had nothing, and it is
+/// safe for a reason rather than by a guard.** What the code actually computes is
+/// `v · sin(tθ/2)/|v|`, and since `|v| = sin(θ/2)` the factor is
+/// `sin(tθ/2)/sin(θ/2)`, which tends to `t` as `θ → 0` — finite, and exactly what
+/// the limit should be, since a tiny rotation scaled by `t` is `t` times as tiny
+/// about the same axis. So the formula is continuous through the identity and
+/// needs no epsilon, no branch and no "if the angle is small, lerp instead". The
+/// `sin_half <= 0` test below is there for the one input where the axis genuinely
+/// does not exist, not for the small-angle case.
+///
+/// **The exact identity and its negative are the two inputs with no axis.** For
+/// `q = 1` every axis is right, `θ = 0`, and the identity is the answer for every
+/// `t`. For `q = −1` — a full turn about *something* — `θ = 2π`, and `q^t` is a
+/// rotation of `2πt` about an axis nobody recorded; there is no continuous answer
+/// and this returns the identity, which is correct only at `t = 0` and `t = 1`.
+/// That is a placeholder on the same terms as `normalised(0)`, and the caller who
+/// can produce it is the caller who has to say what it wants. `quat_slerp` cannot
+/// reach either case with a `b` it has already passed through `nearest`.
+[[nodiscard]] inline quat quat_pow_unit(quat q, float t)
+{
+    const float sin_half = length(q.v);
+    if (sin_half <= 0.0f)
+    {
+        return quat::identity();
+    }
+
+    const float half_angle = std::atan2(sin_half, q.w);
+    const float scaled = t * half_angle;
+    return {std::cos(scaled), q.v * (std::sin(scaled) / sin_half)};
+}
+
+/// Spherical linear interpolation between two **unit** orientations: the shortest
+/// path, at constant angular speed.
+///
+/// **Three lines, and they are Lesson 7.3's three lines.** `conj(a)·b` is the
+/// single turn carrying `a` onto `b`; `quat_pow_unit(·, t)` is a fraction of it;
+/// multiplying back onto `a` starts the journey where it should start. Read
+/// aloud: *undo a, take t of the difference, redo a.*
+///
+///     slerp(a, b, t) = a · (a⁻¹ b)^t
+///
+/// `a⁻¹` is `conj(a)` because `a` is unit (Lesson 7.4's `inverse`), so the whole
+/// function is a conjugate, a power and two products.
+///
+/// **`nearest` is the only thing here that the plane did not need**, and it is
+/// what makes this the SHORT way. Without it the arc taken is whichever one the
+/// signs of the inputs happen to name, and half of all input pairs name the long
+/// one. See `nearest` for the bug that produces.
+///
+/// **Constant angular speed, exactly.** The angle covered by time `t` is
+/// `t · angle_between(a, b)`, linear in `t` by construction rather than by
+/// accident: the power scales an angle, and nothing else in the expression
+/// depends on `t`. §7.2 of the lesson measures it against a sweep and finds no
+/// variation beyond rounding.
+///
+/// **The path is a great circle on the unit 4-sphere, which is the definition of
+/// the geodesic** — and Lesson 7.2 already measured what that buys on `mat3`
+/// (0.00% of excess turning, against Euler interpolation's +14% on a generic pair
+/// and +209% near lock). Nothing about that argument mentioned dimension, so it
+/// carries here unchanged, and §7.3 checks it rather than re-deriving it.
+///
+/// **Not clamped.** `t` outside `[0, 1]` extrapolates along the same great
+/// circle, which is occasionally exactly what a caller wants (overshoot on an
+/// ease-out, a one-frame prediction) and is never what it wants by accident.
+/// Clamping here would make the useful case impossible and hide the accidental
+/// one; the engine's convention, since `lerp` in Lesson 1.6, is that the caller
+/// owns its parameter.
+///
+/// Both inputs must be unit. Non-unit inputs do not fail loudly — `quat_pow_unit`
+/// reads an angle off a direction and ignores the modulus, so the answer is a
+/// rotation, just not between the two you meant.
+[[nodiscard]] inline quat quat_slerp(quat a, quat b, float t)
+{
+    return a * quat_pow_unit(conjugate(a) * nearest(a, b), t);
+}
+
+/// Normalised linear interpolation: the straight chord between them, pushed back
+/// onto the sphere.
+///
+/// **The right path on the wrong schedule, and both halves of that were proved in
+/// the plane** (Lesson 7.3 §10.3) by an argument that never mentions dimension.
+///
+///   THE PATH IS EXACT. The chord from `a` to `b` lies in the 2-plane those two
+///   points span, normalising moves a point along its own radius, and a radius
+///   through a point of that 2-plane stays in it. So every point this function
+///   returns is on the great circle through `a` and `b` — the same curve
+///   `quat_slerp` walks. Excess turning: 0.00%, measured in §7.3 on the same
+///   pairs and with the same instrument as the slerp row.
+///
+///   THE SCHEDULE IS WRONG BY EXACTLY `sec²(Ω/2)`, the ratio between its speed at
+///   the midpoint and at the ends for an arc of `Ω`. It moves fastest through the
+///   middle and slows at both ends, because equal steps along a chord subtend
+///   unequal angles at the centre.
+///
+/// **The number to design with is the gap in degrees at the same `t`**, which
+/// §7.4 measures for quaternion arcs: 0.13° at 30°, 4.07° at 90°, 26.34° at 150°.
+/// Under about 30° of arc — which is where a 30 Hz animation clip's adjacent
+/// keyframes live — nlerp is indistinguishable from slerp and costs no
+/// trigonometry at all, which is why a great deal of shipped animation code uses
+/// it and is right to. Over about 90° it lurches visibly through its middle.
+///
+/// `nearest` applies here for the identical reason it applies to `quat_slerp`,
+/// and its absence is louder: the chord between antipodal representatives passes
+/// through the *origin*, where `normalised` has nothing to return.
+///
+/// Truly antipodal inputs (`b == −a` after `nearest`, i.e. `a` blended with the
+/// same pose reached the long way) have no shortest arc and no defined midpoint;
+/// `normalised` returns the identity rather than a NaN, which is a placeholder and
+/// not an answer. `nearest` makes this unreachable from any pair of distinct
+/// orientations.
+[[nodiscard]] inline quat quat_nlerp(quat a, quat b, float t)
+{
+    const quat to = nearest(a, b);
+    return normalised(quat{a.w + (to.w - a.w) * t,
+                           a.v + (to.v - a.v) * t});
 }
 
 } // namespace engine
