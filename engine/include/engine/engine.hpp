@@ -94,8 +94,11 @@
 // fired on a header somebody had actually just written. **It then fired twice
 // more on the very next lesson**, for `axis_angle.hpp` and `rotation.hpp` — which
 // is three catches in two lessons, against fourteen misses in the thirteen
-// lessons before the check existed.
+// lessons before the check existed. **Four in three**, as of 7.3's
+// `complex.hpp`: the lint fired again, on a header written twenty minutes
+// earlier by somebody who knew about the lint.
 #include <engine/math/axis_angle.hpp>
+#include <engine/math/complex.hpp>
 #include <engine/math/euler.hpp>
 #include <engine/math/mat2.hpp>
 #include <engine/math/mat3.hpp>

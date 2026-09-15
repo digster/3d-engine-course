@@ -2751,3 +2751,15 @@ The index still lists **7.5 as "Slerp"**. 7.2 has now built and measured `rotati
 `mat3`. 7.5 is not redundant — quaternion slerp, the double cover and the shortest-arc sign choice,
 nlerp vs slerp — but its one-line description is stale and its scope needs a decision that was not
 taken unilaterally.
+
+---
+
+## 2026-09-15 — `next` (Lesson 7.3 — Complex Numbers Rotate the Plane)
+
+> next
+
+Produced Lesson 7.3 in full: `engine/include/engine/math/complex.hpp` (new), the `plane` demo
+(new), `scratch/verify_73.cpp` (43 checks, 12 controls), eleven figures, and the published page at
+`docs/lessons/07-03-complex-numbers.html`. Repointed 7.2's two forward links in the sources and
+rebuilt it. Conventions gained §8d (and the §8c TOC entry 7.2 had omitted); Math Toolbox gained six
+cards; ARCHITECTURE.md, STATE.md, LEARNINGS.md and `memory/2026-09-15.md` updated.

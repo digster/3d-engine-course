@@ -143,3 +143,18 @@ add_executable(gimbal gimbal/main.cpp)
 target_link_libraries(gimbal PRIVATE engine::engine)
 engine_set_warnings(gimbal)
 engine_use_assets(collector)
+
+# ---- plane: the complex plane, drawn ---------------------------------------
+#
+# Lesson 7.3, and the smallest demo in the repository — smaller than `pong`,
+# which held that title from 5.2. It draws in two dimensions with nothing but a
+# `framebuffer`, `draw_line` and `math/complex.hpp`, and that is the argument
+# rather than an economy: the whole of a plane rotation is two floats and a
+# multiplication rule, and a target with no assets, no shaders and no
+# `demo_common` says so more plainly than the lesson's prose can.
+#
+# No `engine_use_assets` and no `engine_use_shaders`. It loads nothing and
+# compiles nothing; everything on screen it computes.
+add_executable(plane plane/main.cpp)
+target_link_libraries(plane PRIVATE engine::engine)
+engine_set_warnings(plane)

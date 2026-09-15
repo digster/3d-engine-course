@@ -3211,6 +3211,131 @@ The singular values are sqrt(1 + |sin p|), 1, sqrt(1 - |sin p|).</span>
     </p>
   </div>
 
+  <div class="card">
+    <h3>Multiplication in the plane is rotation <span class="from">Lesson 7.3</span></h3>
+    <p>
+      A quarter turn applied twice sends <code>(1,0)</code> to <code>(&minus;1,0)</code>, which is
+      multiplication by <code>&minus;1</code>. Call the quarter turn <code>i</code> and
+      <code>i&sup2; = &minus;1</code> is a <em>measurement of the plane</em>, not a definition.
+      Everything else follows by multiplying brackets out and using it once:
+    </p>
+    <div class="eq">
+      \[ (a + bi)(c + di) = (ac - bd) + (ad + bc)i \]
+      <span class="eq-plain">(a + bi)(c + di) = (ac - bd) + (ad + bc) i</span>
+    </div>
+    <p>
+      Geometrically: <strong>moduli multiply, arguments add.</strong> So composing two plane
+      rotations is one multiplication &mdash; four multiplies, two adds, no trigonometry &mdash;
+      and it is <strong>1.88&times;</strong> cheaper than a <code>mat2</code> product. Proof in
+      four steps: the map is linear, it sends <code>1&rarr;z</code> and <code>i&rarr;zi</code>,
+      that image pair is perpendicular and of equal length <code>|z|</code>, so it is a similarity;
+      and <code>1&rarr;z</code> fixes the angle at <code>arg&nbsp;z</code>.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>Complex numbers <em>are</em> 2&times;2 matrices <span class="from">Lesson 7.3</span></h3>
+    <p>
+      The columns of a matrix are where the basis vectors land, and multiplying by
+      <code>a + bi</code> sends <code>1</code> to <code>a + bi</code> and <code>i</code> to
+      <code>&minus;b + ai</code>:
+    </p>
+    <div class="eq">
+      \[ M(a+bi) = \begin{pmatrix} a &amp; -b \\ b &amp; a \end{pmatrix}, \qquad M(z)M(w) = M(zw) \]
+      <span class="eq-plain">M(a+bi) = [[a, -b], [b, a]], and M(z) M(w) = M(zw)</span>
+    </div>
+    <p>
+      Setting <code>a = cos&thinsp;&theta;</code>, <code>b = sin&thinsp;&theta;</code> recovers
+      <code>mat2</code>&rsquo;s <code>rotation</code> character for character &mdash; so
+      <strong>a rotation matrix stores cosine and sine twice</strong>, once with a sign flipped.
+      The second operation agreeing is what makes this an isomorphism rather than a coincidence of
+      shape.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>Euler&rsquo;s formula, from a velocity <span class="from">Lesson 7.3</span></h3>
+    <p>
+      A point circling at unit speed has velocity perpendicular to its position and of the same
+      length &mdash; and &ldquo;perpendicular, same length&rdquo; <em>is</em> multiplication by
+      <code>i</code>. So the position obeys a differential equation, and the function whose
+      derivative is itself times a constant is the exponential:
+    </p>
+    <div class="eq">
+      \[ z'(\theta) = i\,z(\theta),\; z(0)=1 \quad\Longrightarrow\quad z(\theta) = e^{i\theta} = \cos\theta + i\sin\theta \]
+      <span class="eq-plain">z'(theta) = i z(theta) with z(0) = 1, so z(theta) = exp(i theta) = cos theta + i sin theta</span>
+    </div>
+    <p>
+      Three lines and no power series. It also hands you the angle-addition formulas for free:
+      <code>e^{i&alpha;}e^{i&beta;} = e^{i(&alpha;+&beta;)}</code> written out in components
+      <em>is</em> <code>cos(&alpha;+&beta;) = cos&alpha;cos&beta; &minus; sin&alpha;sin&beta;</code>,
+      with the minus sign being the same <code>i&sup2;</code> as ever.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>Two mirrors make a turn of twice the angle <span class="from">Lesson 7.3</span></h3>
+    <p>
+      Reflecting in the line along unit <code>m</code> is <code>v &rarr; m&sup2; conj(v)</code>
+      &mdash; rotate the mirror onto the real axis, conjugate, rotate back &mdash; so the mirror&rsquo;s
+      own angle enters <strong>doubled</strong>. Composing two of them collects into a single
+      square:
+    </p>
+    <div class="eq">
+      \[ v \longmapsto \left(m_1 \overline{m_0}\right)^2 v, \qquad R = m_1\overline{m_0} = e^{i(\beta-\alpha)} \]
+      <span class="eq-plain">v -> (m1 conj(m0))^2 v, where R = m1 conj(m0) = exp(i(beta - alpha))</span>
+    </div>
+    <p>
+      <strong>This is where the <code>&theta;/2</code> in every quaternion comes from</strong>, and
+      it is a plane fact you can check with a protractor. The <em>rotor</em> <code>R</code> carries
+      half the angle of the rotation <code>R&sup2;</code> it generates, so applying it once turns
+      things half as far as intended. And <code>(&minus;R)&sup2; = R&sup2;</code> exactly, which is
+      the double cover &mdash; two rotors per rotation, because a rotation remembers the angle
+      between its mirrors and not which mirrors.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>The right path at the wrong speed <span class="from">Lesson 7.3</span></h3>
+    <p>
+      Normalised lerp cannot leave the geodesic: the chord between two unit vectors stays in the
+      plane they span, and normalising changes a modulus and never an argument. So its excess
+      turning is <strong>0.00%</strong>. What it gets wrong is the schedule, and by exactly:
+    </p>
+    <div class="eq">
+      \[ \frac{\text{fastest}}{\text{slowest}} = \frac{2\tan\frac{\Omega}{2}}{\sin\Omega} = \sec^2\tfrac{\Omega}{2} \]
+      <span class="eq-plain">fastest / slowest = 2 tan(Omega/2) / sin(Omega) = sec^2(Omega/2)</span>
+    </div>
+    <p>
+      A factor of 2 at a 90&deg; arc and over 13,000 at 179&deg;, measured against the closed form
+      at seven arcs. The number to design with is the gap in degrees at a given <code>t</code>:
+      <strong>0.13&deg; at a 30&deg; arc, 4.07&deg; at 90&deg;, 26.3&deg; at 150&deg;</strong>
+      &mdash; which turns &ldquo;slerp or nlerp?&rdquo; into a threshold on the arc rather than a
+      preference. Meanwhile <code>slerp(a,b,t) = a(a&#8315;&sup1;b)^t</code> is right on both
+      counts and is the same three steps in every representation this course will meet.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>Why there is no 3-D number system <span class="from">Lesson 7.3</span></h3>
+    <p>
+      Assume one spanned by <code>1, i, j</code> with <code>i&sup2; = j&sup2; = &minus;1</code> and
+      an associative product. Then <code>ij</code> must lie in the span, so write
+      <code>ij = a + bi + cj</code> and multiply on the left by <code>i</code>:
+    </p>
+    <div class="eq">
+      \[ i(ij) = (ii)j = -j, \qquad i(a+bi+cj) = (-b+ca) + (a+cb)i + c^2 j \]
+      <span class="eq-plain">i(ij) = (ii)j = -j, while i(a + bi + cj) = (-b + ca) + (a + cb) i + c^2 j</span>
+    </div>
+    <p>
+      Matching the <code>j</code> coefficient gives <code>c&sup2; = &minus;1</code> with
+      <code>c</code> real, and there is no such <code>c</code>. <strong>A fourth basis element is
+      forced</strong>, not chosen. The other casualty is commutativity, and the plane could never
+      have warned us: the sandwich <code>z v conj(z)</code> is exactly the identity here,
+      <em>because</em> this algebra commutes.
+    </p>
+  </div>
+
   <h2 id="coming"><span class="num">9</span>Coming as the course proceeds</h2>
 
   <p>

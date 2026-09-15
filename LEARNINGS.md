@@ -7847,3 +7847,96 @@ verifies links — and **none of them can catch a figure numbered wrong**, becau
 renders and the page is still valid. Lesson 7.2's figures 8 and 9 were written in the opposite
 order to the page and had to be swapped by hand. Check the placeholder order against the generator's
 filename list before building.
+
+## A wide equation is scrollable, not clipped — so nothing reports it
+
+`.eq` is `overflow-x: auto`. A rendered KaTeX display that is too wide gets its own scrollbar, so
+`check-page.js` passes, `pageScrollsX` is false, and the reader sees a formula that stops
+mid-symbol with **no visible affordance** — macOS hides overlay scrollbars until you scroll. Two of
+Lesson 7.3's equations were over-wide at 1280 and only a screenshot found them.
+
+`scratch/tools/eqfit.py` measures `scrollWidth` against `clientWidth` on every `.eq`. The fix is to
+split the equation with `\begin{aligned}`, not to widen anything. **At 1280 nothing should
+overflow; at 390 the whole corpus does** (7.2 has 15, 7.3 has 12) and that is the accepted mobile
+behaviour, matching tables and listings.
+
+## A preview page that does not load the stylesheet lies about everything
+
+`scratch/_preview73.html` linked `docs/shared/course.css` from inside `scratch/`, which resolves to
+`scratch/docs/shared/course.css` and 404s. Every figure in Lesson 7.3 was reviewed **unstyled** —
+16px serif instead of 9.5px — and `check-page.js` duly reported 37 text overlaps that did not
+exist, which sent a fixing pass after imaginary bugs.
+
+It says so in its own output: **`sharedCssLoaded: False`**. Read that line before reading the
+findings. From `scratch/`, the link is `../docs/shared/course.css`.
+
+## Never put a side effect in a C macro's argument
+
+`SDL_clamp(x, a, b)` expands to `(((x) < (a)) ? (a) : (((x) > (b)) ? (b) : (x)))` — **three
+evaluations of `x`**. Written as `SDL_clamp(SDL_atof(argv[++i]), 0.0f, 1.0f)` in the plane demo's
+argument parser it advanced `i` three times, swallowed `--shot` and its path, and a headless run
+opened a real window and hung forever. It had also been running in the wrong mode for two captures
+before anyone noticed.
+
+`std::clamp` is a function and evaluates once. One named local per argument, always — and note
+that `demos/gimbal` used `std::clamp` and never had this bug.
+
+## Choose the quantity your check looks at before you choose the threshold
+
+`renormalised_fast(z)` is `z * (3 − |z|²)/2`. At `|z| = 2` the factor is `−0.5`, which produces a
+result of modulus **exactly 1.000000** — a perfect score on the obvious test — while turning the
+rotation **180° the wrong way**. A unit test on `|z|` certifies a function that reverses the object.
+
+A rotation is not its modulus. This is not a tolerance that was too loose; it is the wrong
+*observable*. Related: a percentage that cannot physically be negative deserves an assertion saying
+so — comparing radians against degrees reported "−98.25% excess turning", a journey shorter than
+the shortest journey, and a four-character check would have caught it before the figure was drawn.
+
+## A serial dependency chain can eat an entire optimisation
+
+Replacing `cos`/`sin` per point with one complex multiply per point should be ~6× by operation
+count. Measured: **1.21×**. `z = z * step` makes each multiply wait for the previous one to retire,
+so the loop measures **latency**, while the trig loop computes every point from its own index and
+measures **throughput**. Four interleaved chains: **3.52×**.
+
+Counting operations cannot see this and neither can reading the code. Two corollaries: inherited
+performance advice is a hypothesis (a `float` `sin`+`cos` pair is ~1.85 ns of throughput on an M4,
+not the hundred cycles the folklore assumes), and a timing harness needs a **warm-up pass** — the
+first measurement of a freshly built binary reads 15–30% slow from cold caches and first-touch page
+faults.
+
+## The figure palette must contain the demo's own colours
+
+`rle_rects` snaps every sampled pixel to the nearest palette entry. A colour the palette does not
+contain comes back as whichever entry is nearest — Lesson 7.3's first render turned the demo's light
+blue mirror grey and its amber ticks khaki, so the figure disagreed with its own caption.
+Transcribe the constants from the demo rather than approximating them.
+
+And the demo's **grid** must sit below `figs_511.peak_sample`'s floor of luminance 30,000. Graph
+paper at `(38, 42, 52)` clears it, survives the 3:1 downsample, and buries the construction inside
+a strong grid. `demos/plane` draws its grid at `(24, 26, 32)`: still legible on a screen, gone from
+a capture.
+
+## Nothing checks a documentation page's own table of contents
+
+`docs/conventions.html` has listed §8b since Lesson 7.1 and never listed §8c, because 7.2 added the
+section and not the link. `check-curriculum.py` verifies that every href **resolves** — it has no
+idea that a heading exists with no entry pointing at it. Found by hand, eleven days later.
+
+## The page quotes the program, so narrow the program
+
+Transcript `<pre>` blocks scroll and never wrap, and the fold at 1280px is about **66 characters**.
+Fourteen of Lesson 7.3's quoted lines lost a *number* past it — including `C.1`'s
+`worst element diff 0.000e+00`, which is the exactly-zero claim the section is about.
+
+Fix it in the harness's `printf` widths, not in the prose: the program is then also readable in an
+80-column terminal, which is the reason that matters to anyone not writing the page.
+
+Two tools now enforce it. `scratch/tools/prefit.py` reports transcript blocks wider than their box.
+`scratch/tools/retranscribe.py` rewrites each quoted block from `verify_NN.log`, **matching on the
+stable `[PASS] X.N` check ids** rather than on a printed line — because narrowing the `printf`s left
+fourteen blocks quoting output the program no longer produced, and **stale is worse than wide**.
+
+Related: `pre class="output"` has no rule anywhere in `course.css`. Lesson 7.3 invented it and was
+the only page using it; it rendered identically to a plain `<pre>`. `check-page.js`'s
+`unknownTagClasses` check only covers `.listing figcaption .tag`, so nothing caught the dead class.

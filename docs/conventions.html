@@ -92,6 +92,8 @@
       <li><a href="#hdr">HDR &mdash; where the range lives, and where it stops</a></li>
       <li><a href="#units">Units and angles</a></li>
       <li><a href="#euler">Euler angles &mdash; one of twenty-four</a></li>
+      <li><a href="#axis-angle">Axis-angle &mdash; one convention, two ambiguities</a></li>
+      <li><a href="#plane">Plane rotations &mdash; complex numbers, and the rotor</a></li>
       <li><a href="#simulation">The simulation contract</a></li>
       <li><a href="#rotational">Rotational quantities &mdash; torque, spin, inertia</a></li>
       <li><a href="#colour">Colour and diagram conventions</a></li>
@@ -2653,6 +2655,89 @@
     <em>compose</em>: there is no usable closed form for the single turn of "do this, then that",
     so every composition goes out to a matrix and back. Lesson 7.4&rsquo;s quaternion is what the
     engine will store.
+  </p>
+
+  <h2 id="plane"><span class="num">8d</span>Plane rotations &mdash; complex numbers, and the rotor</h2>
+
+  <p>
+    Settled in <a href="lessons/07-03-complex-numbers.html">Lesson 7.3</a>. The engine represents a
+    rotation of the <em>plane</em> as a unit <code>complex</code> &mdash; two floats &mdash; and
+    <code>mat2</code> remains available for the cases that also shear or scale non-uniformly. Three
+    things need pinning down, and the third is the one that will matter most later.
+  </p>
+
+  <div class="callout ok">
+    <span class="label">Unit complex, anticlockwise in a y-up plane, signed angle</span>
+    <p class="mono">
+      complex_from_angle(&theta;) == { cos &theta;, sin &theta; }<br>
+      mat2_from_complex(z) == rotation(&theta;)&nbsp;&nbsp;exactly, for z = complex_from_angle(&theta;)<br>
+      angle_from_complex(z) &rarr; (&minus;&pi;, &pi;]&nbsp;&nbsp;SIGNED<br>
+      angle_between(a, b) &rarr; (&minus;&pi;, &pi;]&nbsp;&nbsp;SIGNED
+    </p>
+  </div>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>Decision</th><th>Ours</th><th>What fixes it</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>Sense of rotation</strong></td>
+          <td>Anticlockwise for positive <code>&theta;</code>, in a <strong>y-up</strong> plane</td>
+          <td>The same convention <code>mat2</code>&rsquo;s <code>rotation</code> has carried since
+              Lesson 2.5, and it is the same numbers &mdash; &sect;5 of 7.3 proves the two types
+              are the same object. <strong>In framebuffer coordinates, where +y points down, the
+              identical numbers turn clockwise on screen.</strong> Nothing changed; the picture is
+              flipped. Flip once, in the view mapping, never at the call site.</td>
+        </tr>
+        <tr>
+          <td><strong>Angle sign</strong></td>
+          <td><strong>Signed</strong>, in <code>(&minus;&pi;, &pi;]</code></td>
+          <td>Deliberately different from &sect;8c&rsquo;s unsigned <code>[0, &pi;]</code>, and the
+              difference is real. The plane is <em>oriented</em>, so &ldquo;30&deg;
+              clockwise&rdquo; and &ldquo;30&deg; anticlockwise&rdquo; are different rotations and
+              one number can say which. Space is not: negating both the axis and the angle gives
+              the same rotation, so the angle alone carries no sign to report. That is why
+              <code>angle_between(complex, complex)</code> is <em>not</em> an overload of
+              <code>angle_between_rotations(mat3, mat3)</code>.</td>
+        </tr>
+        <tr>
+          <td><strong>A rotor is not a rotation</strong></td>
+          <td><code>R</code> generates the rotation <code>R&sup2;</code></td>
+          <td><strong>The one that causes bugs.</strong> <code>rotor_from_mirrors(m0, m1)</code>
+              returns the object built from two mirrors, and it carries <em>half</em> the angle of
+              the rotation it generates &mdash; apply it once and everything turns half as far as
+              it should. Use <code>apply_rotor</code>, whose name is the warning. This is the same
+              <code>&theta;/2</code> that a quaternion stores, and the same bug as writing
+              <code>q v</code> instead of <code>q v conj(q)</code>.</td>
+        </tr>
+        <tr>
+          <td><strong>Two rotors per rotation</strong></td>
+          <td><code>R</code> and <code>&minus;R</code> are the same rotation</td>
+          <td><code>(&minus;R)&sup2; = R&sup2;</code>, exactly &mdash; the same products of the
+              same floats. A rotation remembers the <em>angle between</em> its two mirrors and not
+              which mirrors, so there are always exactly two. This is the double cover, and it is
+              a plane fact before it is a quaternion fact.</td>
+        </tr>
+        <tr>
+          <td><strong>Renormalisation</strong></td>
+          <td><code>renormalised_fast</code> for near-unit input; <code>normalised</code>
+              otherwise</td>
+          <td>The cheap form is a Taylor series about <code>|z|&sup2; = 1</code> and is exact to
+              <code>O(&epsilon;&sup2;)</code>. Far from unit length it fails <em>silently in the
+              modulus</em>: at <code>|z| = 2</code> it returns a number of modulus exactly 1 that
+              is turned 180&deg; the wrong way. <strong>Test the rotation, never the
+              modulus.</strong></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    <strong>What the plane representation is for.</strong> Composing (4 multiplies and 2 adds,
+    1.88&times; a <code>mat2</code>), storing (8 bytes against 16), and interpolating &mdash; which
+    a matrix cannot do at all. It is <em>not</em> cheaper to apply to a point: <code>z &times; v</code>
+    and <code>M &times; v</code> are the same four multiplies, measured at 1.05&times;. The same
+    trade, with different numbers, governs quaternions against matrices one dimension up.
   </p>
 
   <h2 id="simulation"><span class="num">9</span>The simulation contract</h2>

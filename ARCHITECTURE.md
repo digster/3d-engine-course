@@ -87,7 +87,13 @@ untangled was the one file that had never been given a home: `src/main.cpp`, at 
 │   │   │                   #   it, neither includes the other.
 │   │   ├── euler.hpp       # three angles ⇄ mat3, one convention of   [EXISTS from 7.1]
 │   │   │                   #   twenty-four. An INTERFACE, not storage.
-│   │   └── axis_angle.hpp  # Rodrigues, the exp/log maps, and slerp   [EXISTS from 7.2]
+│   │   ├── axis_angle.hpp  # Rodrigues, the exp/log maps, and slerp   [EXISTS from 7.2]
+│   │   └── complex.hpp     # plane rotations as a NUMBER: the product [EXISTS from 7.3]
+│   │                       #   the rotor (half-angle), both blends.
+│   │                       #   Includes mat2/vec2 only — it is one
+│   │                       #   dimension down and shares no code with
+│   │                       #   the three above. The TEMPLATE for 7.4's
+│   │                       #   quat.hpp, function for function.
 │   ├── gfx/                # framebuffer, software rasterizer → later SDL_GPU renderer
 │   │   ├── clip.hpp        # near-plane clipping, in CLIP space     [EXISTS from 3.3]
 │   │   ├── clip.cpp        # Sutherland–Hodgman; segments and polygons
@@ -687,6 +693,22 @@ otherwise look like arbitrary jargon:
   `w = 1`, so it divides by one) — which is what makes the on-screen comparison honest: the only thing
   that differs is whether the matrix put depth into `w`.
 
+**The plane is its own corner, as of Lesson 7.3.** `complex.hpp` breaks the layering described
+below on purpose, and the reason is worth stating so it is not "fixed" later. `rotation.hpp` sits
+above `euler.hpp` and `axis_angle.hpp` because all three are about rotations of **space** and share
+a metric. `complex.hpp` is about rotations of the **plane**: it includes `mat2.hpp` and `vec2.hpp`
+and nothing else in the rotation layer, and its `angle_between` is deliberately *not* an overload of
+`rotation.hpp`'s `angle_between_rotations` because the plane's answer is **signed** and space's
+cannot be. Two files that look like they should share an abstraction and do not, with the reason
+written down, beats an abstraction that forces a signed and an unsigned answer to be the same
+function.
+
+Its real role is pedagogical and is a deliberate piece of sequencing: **7.4's `quat.hpp` is written
+as a diff against it**. `conjugate`, `length_squared`, `normalised`, `inverse`, `operator*`,
+`renormalised_fast` and `complex_slerp` each acquire a quaternion twin with the same body, one more
+imaginary unit, and one loss — the product stops commuting. The names in `complex.hpp` are slightly
+more formal than a two-float type needs, and that mapping is why.
+
 **Rotation gets a layer, as of Lesson 7.2.** `math/` now has an internal shape rather than a flat
 pile of headers. `rotation.hpp` holds what is true of a rotation *whatever you store it in* — today
 the metric, `angle_between_rotations`, which answers "how far apart are these two orientations?"
@@ -703,7 +725,8 @@ including the new header so that not one call site had to change; a refactor tha
 edit is a refactor that keeps being postponed.
 
 Note what is still *not* here: no rotation type is the engine's storage format. `transform::rotation`
-is a `mat3` and stays one until Lesson 7.4's quaternion. Euler angles are an interface for humans and
+is a `mat3` and stays one until Lesson 7.4's quaternion. 7.3 did not change that either — a
+`complex` rotates the plane, and nothing in this engine's scene graph is two-dimensional. Euler angles are an interface for humans and
 file formats; axis-angle is an interface and an interpolator — 7.2 measured that it has no usable
 composition formula at all, which makes it a *worse* storage format than the matrix it would replace.
 

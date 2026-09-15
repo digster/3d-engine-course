@@ -7,7 +7,11 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-09-14 (after Lesson 7.2 — 77 of 107 lessons; Module 7 OPEN,
+updated: 2026-09-15 (after Lesson 7.3 — 78 of 107 lessons; Module 7 OPEN,
+         3 of 8, ~15 h of ~40. FIRST LESSON OF MODULE 7 TO LAND ON ITS
+         ESTIMATE, so no module or course total moved: still 107 lessons,
+         ~514 h.
+         2026-09-14 (after Lesson 7.2 — 77 of 107 lessons; Module 7 OPEN,
          2 of 8. Module 7 is now 8 lessons / ~40 h and the course ~514 h: 7.2
          was planned at 3 h and shipped at 5.
          2026-09-13 (after Lesson 7.1 — 76 of 107 lessons; Module 7 OPEN.
@@ -123,6 +127,67 @@ conventions:
         no implementation can prefer one. NEVER COMPARE TWO RECOVERED AXES FOR
         EQUALITY; compare rotations. Control: at 179° the same pair is 2.000°
         apart, so the ambiguity exists at exactly one point and nowhere near it.
+  plane: COMPLEX NUMBERS ARE THE PLANE'S ROTATIONS, AND THE ROTOR IS NOT ONE.
+        7.3, engine/include/engine/math/complex.hpp + docs/conventions.html §8d.
+        CANONICAL: unit complex, ANTICLOCKWISE for positive theta in a y-up
+        plane — the same numbers mat2::rotation has had since 2.5, because §5
+        PROVES the two types are the same object (worst element diff 0.000e+00
+        over 721 angles; M(z)M(w) = M(zw) to 1.9e-06 over 2,000 pairs).
+        In framebuffer coordinates, where +y is DOWN, the identical numbers turn
+        clockwise on screen. Flip once in the view mapping, never at a call site.
+        THE ANGLE IS SIGNED, (-pi, pi], and this is a DELIBERATE DIFFERENCE from
+        §8c's unsigned [0, pi]. The plane is oriented so one number can say which
+        way; space is not, because negating axis and angle together gives the
+        same rotation. THAT IS WHY `angle_between(complex, complex)` IS NOT AN
+        OVERLOAD of `angle_between_rotations(mat3, mat3)`.
+        A ROTOR IS NOT A ROTATION — IT IS A SQUARE ROOT OF ONE. This is the one
+        that causes bugs. rotor_from_mirrors(m0, m1) = m1 * conj(m0) carries
+        HALF the angle of the rotation R^2 it generates; apply it once and
+        everything turns half as far as intended. Use apply_rotor, whose name is
+        the warning. Same bug as `q v` instead of `q v conj(q)` one dimension up.
+        TWO ROTORS PER ROTATION, EXACTLY: (-R)^2 = R^2, bit for bit, the same
+        products of the same floats. A rotation remembers the ANGLE BETWEEN its
+        mirrors and not WHICH mirrors. That is the double cover, and it is a
+        plane fact before it is a quaternion fact.
+  plane-halfangle: WHERE THE theta/2 IN EVERY QUATERNION COMES FROM, AND IT IS
+        VISIBLE WITH A PROTRACTOR. 7.3 §7, and it collects a debt 7.2 left open
+        (§8.3's 2 sin(theta/2) and §8.4's tan(theta/2) = sqrt(3) were both
+        half-angle quantities arrived at for unrelated reasons).
+        Reflect in the line along unit m:  v -> m^2 conj(v)  — rotate the mirror
+        onto the real axis, conjugate, rotate back. NOTE THE m^2: the mirror's
+        own angle enters DOUBLED, and nothing was halved on purpose.
+        Compose two:  v -> (m1 conj(m0))^2 v.  So mirrors phi apart generate a
+        rotation of 2 phi, and the object built from them carries phi.
+        MEASURED: 4,000 mirror pairs, 3.844e-06 against rotation by 2(beta-alpha)
+        and 1.450e-06 against apply_rotor. Worked example 20°/50° -> probe walks
+        0° -> 40° -> 60°.
+        THE CONTROL IS THE SHARP ONE: mirrors in the other order give -60°, not
+        60°. REFLECTIONS DO NOT COMMUTE EVEN THOUGH C DOES, because a reflection
+        is a multiplication AND a conjugation and the bar falls on a different
+        factor. The non-commutativity 7.4 has to live with is ALREADY HERE, in
+        the plane, in the operation rotations are made of.
+  plane-schedule: A BLEND CAN TAKE THE RIGHT PATH ON THE WRONG SCHEDULE, AND
+        THAT IS A THIRD CATEGORY 7.1 AND 7.2 DID NOT HAVE. 7.3 §10.
+        nlerp CANNOT leave the geodesic — the chord stays in the plane the
+        endpoints span, and normalising changes a modulus and never an argument
+        — so its excess turning is 0.00%, the same number 7.2's geodesic gives.
+        What it gets wrong is WHEN:
+          fastest/slowest = 2 tan(Omega/2) / sin(Omega) = sec^2(Omega/2)
+        Derived from phi(t) = arctan(u tan(Omega/2)) with u = 2t-1 (the chord is
+        a VERTICAL LINE when the endpoints are put symmetric about the real
+        axis, which is what makes the algebra one line). MEASURED at seven arcs,
+        worst relative 2.3e-03, including 13134.350 vs 13131.480 at 179°.
+        THE NUMBER TO DESIGN WITH is the gap in degrees at the same t:
+        0.005° at 10°, 0.13° at 30°, 4.07° at 90°, 26.34° at 150°, 76.65° at
+        179°. Peak at t = 0.2386 for a 90° arc. That turns "slerp or nlerp?"
+        into A THRESHOLD ON THE ARC rather than a preference.
+        SLERP IS THE SAME THREE LINES IN EVERY REPRESENTATION:
+        slerp(a,b,t) = a (a^-1 b)^t. 7.2's rotation_slerp on mat3 is this in
+        another notation, and 7.5's quaternion slerp will be this verbatim.
+        THE CONTROL 7.1 ALREADY WARNED ABOUT: in the plane a rotation has ONE
+        parameter, so lerping the angle IS the geodesic and the instrument reads
+        0.00% for a trivial reason. The wasteful control is the LONG WAY ROUND,
+        checked against the exact 360 - Omega rather than a guessed threshold.
   axis-angle-amplify: ONE FACTOR SETTLES THE WHOLE EXTRACTION, AND IT IS THE
         SINGLE MOST USEFUL FACT IN THE FILE. 7.2 §8.3.
           orientation error  =  2 sin(theta/2)  x  axis error
@@ -4583,6 +4648,17 @@ completed:
          reproduces. check-page.js caught three text-on-shape defects, one of
          which appeared at 1280 and NOT at 390: SVG labels scale with the
          viewport, so a collision can open at one width and not the other.)
+  - 7.3  Complex Numbers Rotate the Plane
+        (7.2's TWO dead `next` links repointed in the SOURCES —
+         scratch/l72_body_a.html and build_72.py's TAIL — and build_72 rebuilt,
+         so page and generator still agree. Planned at 5 h, shipped at 5; no
+         module or course total moved, which is the first time in Module 7.
+         FIXED IN PASSING: the Conventions page's own table of contents never
+         listed §8c (axis-angle) — 7.2 added the section and not the link, and
+         nothing checks a page's internal TOC against its own headings.
+         check-curriculum.py verifies hrefs RESOLVE, not that every section is
+         listed. Both 8c and 8d are in the TOC now; the missing check is a
+         candidate for 9.10's documentation pass.)
   - 7.2  Axis-Angle and Rodrigues' Rotation Formula
         (7.1's TWO dead `next` links were repointed in the SOURCES —
          scratch/l71_body_a.html and build_71.py's TAIL — and build_71 rebuilt,
@@ -4594,9 +4670,42 @@ completed:
          rotation_slerp on mat3 and measured it. 7.5 is NOT thereby redundant —
          it is quaternion slerp, the double cover / shortest-arc sign choice,
          and nlerp-vs-slerp — but its one-line description is stale and its
-         scope needs a decision. NOT TAKEN UNILATERALLY; flagged for the user.)
+         scope needs a decision. NOT TAKEN UNILATERALLY; flagged for the user.
+         7.3 MAKES THIS MORE PRESSING, NOT LESS: it has now built complex_slerp
+         AND complex_nlerp, derived the sec^2(Omega/2) schedule, measured the
+         nlerp-vs-slerp gap at seven arcs, and turned the choice into a
+         threshold on the arc. The double cover is derived too, in §7.5, from
+         mirrors. What is genuinely left for 7.5 is the QUATERNION versions and
+         the shortest-arc sign choice that the double cover forces — which is a
+         real lesson, and a smaller one than "Slerp" suggests. STILL THE USER'S
+         CALL; still not taken.)
 
 capabilities:
+  - 7.3 THE ENGINE CAN COMPOSE A ROTATION BY MULTIPLYING, AND INTERPOLATE ONE.
+    81 -> 82 public headers (math/complex.hpp; the umbrella lists 81, one
+    documented exception). Header-only again: the harness links nothing, and
+    for this lesson the empty link line is HALF THE ARGUMENT. 43 checks green,
+    TWELVE of them controls. One new demo target, `plane` — the smallest in the
+    repository, smaller than pong, and the first 2-D one since 5.2.
+    WHAT IS NEW: complex + complex::i + operator*(complex,complex) +
+    operator*(complex,vec2) + conjugate + length_squared + length + normalised +
+    normalised_or + renormalised_fast + inverse + complex_from_angle +
+    angle_from_complex + angle_between + complex_pow_unit + reflect_in_line +
+    rotor_from_mirrors + apply_rotor + mat2_from_complex + complex_from_mat2 +
+    vec2_from_complex + complex_from_vec2 + complex_slerp + complex_nlerp.
+    WHAT IS STILL NOT: no storage change, and 7.3 does not even argue for one —
+    a complex rotates the PLANE and nothing in this scene graph is 2-D.
+    transform::rotation is a mat3 until 7.4.
+    THE LAYERING IS DELIBERATELY BROKEN. rotation.hpp sits above euler.hpp and
+    axis_angle.hpp because all three are about rotations of SPACE. complex.hpp
+    includes mat2.hpp and vec2.hpp and nothing in that layer, and its
+    `angle_between` is NOT an overload of `angle_between_rotations` because the
+    plane's answer is SIGNED and space's cannot be. Written up in
+    ARCHITECTURE.md so it is not "fixed" later.
+    ITS REAL ROLE IS SEQUENCING: 7.4's quat.hpp is written as a DIFF against
+    this file, function for function — conjugate, length_squared, normalised,
+    inverse, operator*, renormalised_fast, complex_slerp each get a twin with
+    the same body, one more imaginary unit, and one loss (commutativity).
   - 7.2 THE ENGINE CAN NAME THE SINGLE TURN A ROTATION IS, AND TRAVEL IT.
     79 -> 81 public headers (math/rotation.hpp and math/axis_angle.hpp; the
     umbrella lists 80, one documented exception). Header-only again: the harness
@@ -7608,6 +7717,14 @@ files:
             vec2.hpp, vec3.hpp, vec4.hpp,
             euler.hpp                                                        [7.1]
             rotation.hpp, axis_angle.hpp                                     [7.2]
+            complex.hpp                                                      [7.3]
+              (THE PLANE'S CORNER, and deliberately outside the layering below.
+               It includes mat2.hpp and vec2.hpp and nothing in the rotation
+               layer, because it is one dimension down: `angle_between` here is
+               SIGNED and `angle_between_rotations` there cannot be, so they are
+               not overloads of each other. Written up in ARCHITECTURE.md so the
+               split is not tidied away. It is also the TEMPLATE 7.4 writes
+               quat.hpp against, function for function.)
               (rotation.hpp is the representation-INDEPENDENT layer — the metric
                moved into it from euler.hpp, which now includes it so no call
                site changed. 7.3 and 7.4 both have reason to add to it.)
@@ -7652,6 +7769,13 @@ files:
   demos/gltf_view/: main.cpp                                              [6.6]
   demos/collector/: main.cpp                                             [5.12]
   demos/gimbal/: main.cpp                                                 [7.1]
+  demos/plane/: main.cpp                                                  [7.3]
+           (2-D, framebuffer only, no assets and no shaders. Four modes on
+            [1..4]; mode 3 is the two-mirror construction and is the one worth
+            running. It draws its grid at (24, 26, 32) ON PURPOSE — figs_511's
+            peak sampler floors below luminance 30,000, so graph paper any
+            brighter survives the 3:1 downsample and buries the construction
+            inside it in the published figure.)
            (THE GAME. Links engine::engine directly and not demo_common, for the
             reason hello_cube and ecs_swarm give. No engine_use_shaders: it renders
             on the CPU, which is finding (b) in conventions:checkpoint-findings.)
@@ -8286,114 +8410,162 @@ roadmap: RESHAPED 2026-09-08, AFTER TWO EXTERNAL REVIEWS OF THE PUBLISHED OUTLIN
             qualifier too, because a skimmer reads the recap and stops.
 
 
-next: 7.3 — Complex Numbers Rotate the Plane
-      (77 of 107 published. Module 7 is OPEN — 2 of 8 lessons, ~10 h of ~40 —
+next: 7.4 — Quaternions, Derived
+      (78 of 107 published. Module 7 is OPEN — 3 of 8 lessons, ~15 h of ~40 —
        and its index badge says `in progress`. Modules 0-6 complete.)
 
-      (planned filename: docs/lessons/07-03-complex-numbers.html. 7.2's TWO next
-       links point at the index and BOTH need repointing — scratch/l72_body_a.html
-       holds the top one and build_72.py's TAIL the bottom, the same pair 7.1 and
-       6.18 had. check-curriculum.py reports it the moment the page exists, which
-       it did for 7.1 on the first run after 7.2 landed.)
+      (planned filename: docs/lessons/07-04-quaternions.html. 7.3's TWO next
+       links point at the index and BOTH need repointing — scratch/l73_body_a.html
+       holds the top one and build_73.py's TAIL the bottom, the same pair 7.3,
+       7.2, 7.1 and 6.18 had. check-curriculum.py reports it the moment the page
+       exists.)
 
-      PINNING IS DONE. build_72.py's LISTING_SOURCE is populated from copies
-      taken at writing time, and check-builders.py is 45/45. The three pinned
-      files most likely to move next are `math/rotation.hpp` (7.3 and 7.4 both
-      have reason to add to it), `engine.hpp` (forced by the configure-time
-      lint, which has now fired three times in two lessons) and
-      `demos/gimbal/main.cpp` (this module's demo, still growing).
+      PINNING IS DONE. build_73.py's LISTING_SOURCE is populated from copies
+      taken at writing time, and check-builders.py is 46/46. The pins most
+      likely to move next are `engine.hpp` (forced by the configure-time lint,
+      which has now fired four times in three lessons) and `math/complex.hpp`
+      itself — 7.4 writes quat.hpp BY ANALOGY with it, and "by analogy" is
+      exactly how a header acquires a shared helper without anyone deciding to
+      change it.
 
-      WHAT 7.3 INHERITS, and should not re-derive:
-        - THE QUESTION IS ALREADY POSED. 7.2 §10 states, in the lesson text, what
-          a better representation must do: compose WITHOUT trigonometry,
-          interpolate along the geodesic as rotation_slerp does, store in four
-          floats or fewer, and renormalise cheaply. 7.3 does not need to motivate
-          itself from scratch; it needs to answer a question already asked.
-        - THE HALF-ANGLE IS ALREADY ON THE PAGE AND UNEXPLAINED. §8.3's
-          amplification factor is 2 sin(theta/2), and §8.4's threshold comes out
-          of tan(theta/2) = sqrt(3). Both are half-angle quantities, arrived at
-          for unrelated reasons, and 7.2 deliberately does NOT say why. That is
-          the hook: a quaternion stores exactly cos(theta/2) and sin(theta/2)n.
-          7.4 should collect the debt; 7.3 should make the reader expect it.
-        - `rotation.hpp` IS THE RIGHT HOME for anything representation-neutral
-          7.3 adds, and it now has two inhabitants rather than one.
-        - THE METRIC IS THE INSTRUMENT, unchanged since 7.1, and every
-          interpolation claim in Module 7 is measured with it. Do not build a
-          second one.
+      WHAT 7.4 INHERITS, AND MUST NOT RE-DERIVE:
+        - THE FOURTH DIMENSION IS ALREADY PROVED FORCED. 7.3 §12.1 runs
+          Hamilton's argument in full: assume 1, i, j with i^2 = j^2 = -1 and an
+          associative product, write ij = a + bi + cj, multiply on the left by
+          i, and match the j coefficient to get c^2 = -1 with c real. 7.4 opens
+          where that finishes; it does not repeat it.
+        - FOUR PREDICTIONS ARE ON THE PAGE, in a callout, stated so they can be
+          CHECKED rather than re-motivated: four components; the product will
+          not commute; cos(theta/2) + sin(theta/2) n; and the double cover.
+          Each is already derived in the plane (§7.2, §7.5, §4.4, §12.2).
+          7.4's job is to carry them up and pay the one price.
+        - THE SANDWICH IS ALREADY EXPLAINED. z v conj(z) = |z|^2 v EXACTLY in
+          the plane (measured 9.611e-07 over 4,000 cases) BECAUSE the algebra
+          commutes; the working 2-D two-sided form is the UN-conjugated z v z.
+          In 3-D it is the other way round for the same reason read backwards.
+          That is the honest answer to "why q v conj(q)" and 7.3 gives it.
+        - complex.hpp IS THE TEMPLATE. Write quat.hpp as a diff: conjugate,
+          length_squared, length, normalised, normalised_or, renormalised_fast,
+          inverse, operator*, and complex_slerp all have twins. The names in
+          complex.hpp are slightly more formal than a two-float type needs
+          PRECISELY so that mapping works.
+        - renormalised_fast GENERALISES UNCHANGED: z * (3 - |z|^2)/2 is a Taylor
+          series about |z|^2 = 1 and cares nothing about the dimension. So does
+          its failure mode, and 7.4 should keep the test on the ROTATION.
 
-      WHAT 7.3 IS LIKELY TO MOVE. A new `math/complex.hpp` (or, better, teach it
-      inside the lesson and add nothing to the engine until 7.4 — a 2-D complex
-      type has exactly one caller and would be a cupboard for one thing, which is
-      the rule 7.1 wrote and 7.2 executed). `engine.hpp` only if a header lands.
-      `demos/` — a 2-D demo is genuinely useful here and the framebuffer path
-      from Modules 1-3 still exists; note that anything touching
-      soft_renderer/raster/framebuffer or demos/common BREAKS THE GOLDEN'S
-      STRUCTURAL ARGUMENT and the golden must then be RUN as a real instrument.
+      WHAT 7.4 IS LIKELY TO MOVE. A new `math/quat.hpp`; `engine.hpp` (the lint
+      will insist); `math/transform.hpp` IF the storage change happens there —
+      and it is 7.4's to decide, since every lesson since 7.1 has said
+      "transform::rotation is a mat3 until 7.4". Note that changing
+      transform.hpp DOES put the golden back in play: transform.hpp is reachable
+      from demo_scene.cpp, so the structural argument would no longer hold and
+      the golden must be RUN.
 
       THE GOLDEN IS NULL AND WILL REMAIN SO until something touches
-      soft_renderer/raster/framebuffer or demos/common. Six lessons running now
-      (E917C06C). 7.2 UPGRADED THE ARGUMENT AND 7.3 SHOULD USE THE NEW FORM:
-      compute the transitive include closure from demo_scene.cpp's six engine
-      headers, do not grep. See `grep-finds-prose` below.
-      AND BUILD IT INTO build/demos/, NOT build/. The golden's first run this
-      lesson reported `identical=NO` with the CORRECT BYTE COUNT, because the
-      binary sat one directory higher, the asset search path missed
-      `torus.obj`, and two of the eight shots drew nothing. A size check would
-      have passed it. The working directory is part of the instrument.
+      soft_renderer/raster/framebuffer or demos/common — or, as above,
+      transform.hpp. Seven lessons running now (E917C06C). 7.3 used 7.2's
+      computed form and the tool is now a file rather than a paragraph:
+      `python3 scratch/closure_73.py <paths...>` walks the transitive include
+      closure from demo_scene.cpp plus the software render path (66 files) and
+      prints a verdict per path. Rename and reuse it.
 
-      CARRY FORWARD from 7.2:
-        - GREP FINDS PROSE. 7.1's rule was "grep the include path, not the name".
-          Not enough: `grep -rln "math/euler.hpp"` reports transform.hpp and
-          rotation.hpp as includers and NEITHER INCLUDES IT — both mention the
-          path in a doc comment. In a codebase this heavily commented, a path in
-          prose is indistinguishable from a path in a directive. Match
-          `^#include <...>`, and better, WALK THE GRAPH TRANSITIVELY: fifteen
-          lines of Python, and it also catches a header reached through two
-          others, which a one-level grep cannot.
-        - A TIMING LOOP MUST CONSUME ITS WHOLE RESULT AND VARY ITS INPUT. Two
-          independent eliminations, both hit in one lesson: reading `.c1.y` of a
-          returned mat3 let the compiler compute one element of nine (a 3x3
-          product "timed" at 0.41 ns), and a fixed input array let it compute 256
-          answers once and replay them across 4,000 repetitions. Cure: sum all
-          nine entries, and index with the repetition counter. SANITY TEST:
-          divide the time by the operation count and ask if it is physically
-          possible.
-        - BEST OF THREE, NEVER THE MEAN. A timing is a lower bound contaminated
-          by interruptions that can only slow it down. The first draft reported
-          the same spelling at 4.20 ns and 9.87 ns in two runs.
-        - AN OPTIMISATION WHOSE SIGN FLIPS BETWEEN MEASUREMENTS IS NOT ONE.
-          Hoisting sin/cos out of rotation_from_axis_angle's three columns
-          measured 11% faster in one harness and 3% slower in another. Reverted,
-          and the readable spelling shipped. Paying for it in readability would
-          have been a straight loss.
-        - THE MULTIPLY COUNT PREDICTS NOTHING when a transcendental is involved.
-          Predicted 3x, measured 1.3-1.6x, because one sin + one cos is half to
-          two thirds of the cheaper spelling's entire runtime and BOTH pay it.
-        - PRINT THE RATIO, NOT THE VERDICT. A "winner" column across nine probes
-          produced a summary claiming the crossover was "between 120° and 110°",
-          which is not an interval. The two routes were tied, and a ratio says so.
-        - NOT EVERY INSTANCE OF 7.1'S CANCELLATION PATTERN IS A BUG. The
-          coefficient (1-cos t)/t^2 is destroyed in float — relative error 1.000
-          at t <= 1e-4 — and the matrix it builds is wrong by ONE ULP, because
-          the term it scales shrinks as t^2 exactly as fast as the error grows.
-          7.1's rule ("is the quantity it returns ever small?") needs its other
-          half: ASK WHAT HAPPENS TO THE DAMAGED QUANTITY ON ITS WAY TO THE
-          OUTPUT. The pattern is identical in both cases; only the measurement
-          separates them. (We keep the half-angle spelling anyway: "the error
-          cancels downstream" is a property of today's call sites.)
-        - MARK THE ROWS THAT ARE NOT MEASUREMENTS. §C.5's table mixes a measured
-          degradation with a placeholder the routine returns after giving up; a
-          max over both columns would have reported the placeholder as the worst
-          case of a degradation it is not part of. Same family as 7.1's
-          "a zero from a skipped loop is not a zero error".
-        - THE FIGURE PIPELINE'S SAMPLER TAKES EACH BLOCK'S BRIGHTEST PIXEL, so a
-          thin feature drawn OVER a brighter surface disappears. The blend
-          figure lost its pale trail wherever it crossed the white fuselage; the
-          fix was to draw no solid craft at all, which is also the better
-          picture. Dashing the trails was tried and DID NOT SURVIVE the 3x
-          downsample — the sampler fills a two-pixel gap straight back in.
-          Line WIDTH survives where dash does not: three offset copies.
-        - FIGURE FILENAMES FOLLOW PAGE ORDER, and this is the one numbering
-          mistake nothing in the pipeline catches for itself — every figure still
-          renders, just under the wrong number. Figures 8 and 9 were written in
-          the opposite order to the page and had to be swapped.
+      CARRY FORWARD from 7.3:
+        - NEVER PUT A SIDE EFFECT IN A C MACRO'S ARGUMENT. `SDL_clamp` expands
+          its first argument THREE TIMES, so
+          `SDL_clamp(SDL_atof(argv[++i]), 0.0f, 1.0f)` advanced `i` three times,
+          swallowed `--shot` and its path, and a headless run opened a window and
+          hung forever. It also silently ran in the wrong mode. `std::clamp` is a
+          function and evaluates once; the gimbal demo used it and never had this.
+          One named local per argument, always.
+        - CHOOSE THE QUANTITY BEFORE THE THRESHOLD. renormalised_fast at |z| = 2
+          returns modulus EXACTLY 1.000000 — a perfect score — and turns the
+          object 180 degrees. A test on |z| certified it. A rotation is not its
+          modulus. Same family as 7.2's "mark the rows that are not
+          measurements", one level up: it is not the tolerance that was wrong,
+          it is the observable.
+        - A PERCENTAGE THAT CANNOT BE NEGATIVE DESERVES AN ASSERT. Radians
+          compared against degrees reported "-98.25% excess turning" — a journey
+          shorter than the shortest journey. F.8 is four characters and would
+          have caught it before the figure was drawn.
+        - CHECK AGAINST THE EXACT ANSWER, NOT A GUESSED BAR. F.7's first draft
+          asked for "more than 50% excess" from the long way round and got
+          48.3%, which is the RIGHT ANSWER failing an arbitrary threshold. The
+          long way round is exactly 360 - Omega; check that.
+        - TIMING NEEDS A WARM-UP as well as 7.2's four rules. Without one, the
+          FIRST measurement of a freshly-built binary reads 15-30% slow (cold
+          i-cache, cold predictors, first-touch page faults): 0.820 ns once and
+          0.610-0.628 ns on the next four runs, the outlier always first. Since
+          time_ns takes the minimum of three, one cold attempt out of three is
+          harmless — but the first row of the first section is one out of one.
+        - A SERIAL DEPENDENCY CHAIN CAN EAT AN ENTIRE OPTIMISATION. The classic
+          trig-free circle predicted 6x and measured 1.21x, because
+          `z = z * step` makes each multiply wait for the last and the loop
+          measures LATENCY while the trig loop — every point independent —
+          measures THROUGHPUT. Four interleaved chains: 3.52x. Counting
+          multiplies cannot see this. Neither can any amount of reading.
+        - FOLKLORE HAS A SHELF LIFE. "Replace the trig with a recurrence" is
+          advice from when a sin cost a hundred cycles; a float sin+cos pair is
+          ~1.85 ns of THROUGHPUT on this machine. Inherited performance advice
+          is a hypothesis.
+        - A RENORMALISE FIXES THE MODULUS AND NOTHING ELSE. Over 16.7M steps it
+          holds |z|-1 at 5.96e-08 against the plain walk's 3.7e-03 — and makes
+          the ANGLE worse, 1.276° against 0.7165°, because it is one more
+          rounding operation per step on a quantity it cannot correct.
+        - THE PAGE QUOTES THE PROGRAM, SO NARROW THE PROGRAM. Transcript <pre>
+          blocks scroll and do not wrap, and the fold is at ~66 characters at
+          1280. Fourteen of 7.3's quoted lines lost a NUMBER past it, including
+          C.1's "worst element diff 0.000e+00" — the exactly-zero claim. Fixed
+          in verify_73's and demos/plane's printf widths rather than in the
+          prose, so the harness is also readable in an 80-column terminal. Max
+          line is now 68. NEW TOOLS: scratch/tools/prefit.py reports overflowing
+          transcript blocks; scratch/tools/retranscribe.py REWRITES each quoted
+          block from scratch/verify_73.log, matching on the stable `[PASS] X.N`
+          check ids rather than on a printed line. That second tool exists
+          because narrowing the printfs left fourteen blocks quoting output the
+          program no longer produced — STALE IS WORSE THAN WIDE.
+        - `pre class="output"` HAS NO RULE IN course.css. 7.3 invented it and
+          was the only page in the corpus using it; it was styled by the bare
+          `pre` rule exactly like every other transcript. check-page.js's
+          unknownTagClasses check only covers `.listing figcaption .tag`, so
+          nothing caught it. Removed — use a plain <pre>.
+        - `.eq` IS overflow-x: auto, SO A WIDE EQUATION IS SCROLLABLE RATHER
+          THAN CLIPPED — which means check-page.js passes, pageScrollsX is
+          false, and the reader sees a formula that stops mid-symbol with no
+          visible affordance (macOS hides overlay scrollbars). NEW TOOL:
+          scratch/tools/eqfit.py measures scrollWidth vs clientWidth on every
+          `.eq`. Two of 7.3's equations were too wide at 1280 and were split
+          with \begin{aligned}. At 390 the corpus overflows everywhere (7.2 has
+          15, 7.3 has 12) and that is the accepted mobile behaviour; 1280 is the
+          bar. math-toolbox.html has 5 pre-existing, none of them 7.3's.
+        - MEASURE THE GLYPH WIDTHS, DO NOT INHERIT THEM. figs_73 carries an
+          overflow check that estimates each label's box from its anchor and
+          character count; the "~5.2 units per character" carried forward since
+          5.1 was never checked. Measured with getComputedTextLength: mono is
+          exact (5.72 xs, 6.63 sm) and the proportional face ranges from 4.36
+          for prose to 8.45 for twenty capital Ms. The Python check is a cheap
+          FIRST PASS; check-page.js §4a in a real browser is authoritative.
+        - A PREVIEW PAGE THAT DOES NOT LOAD THE STYLESHEET LIES ABOUT
+          EVERYTHING. scratch/_preview73.html linked `docs/shared/course.css`
+          from inside scratch/, which resolves to scratch/docs/... and 404s.
+          Every figure was reviewed unstyled — 16px serif instead of 9.5px — and
+          check-page.js reported 37 text overlaps that did not exist. It says so
+          in its own output: sharedCssLoaded: False. READ THAT LINE FIRST.
+        - THE FIGURE PALETTE MUST CONTAIN THE DEMO'S OWN COLOURS. rle_rects
+          SNAPS each sampled pixel to the nearest palette entry, so a colour the
+          palette lacks comes out as whichever is nearest: the demo's light blue
+          mirror rendered grey and its amber ticks khaki, and the render then
+          disagreed with its own caption. Transcribe the constants.
+        - AND THE DEMO'S GRID MUST SIT BELOW THE SAMPLER'S FLOOR. figs_511's
+          peak_sample floors below luminance 30,000. Graph paper at (38, 42, 52)
+          clears it and survives the 3:1 downsample, so the first published
+          figure was a strong grid with the construction faint inside it. The
+          plane demo draws its grid at (24, 26, 32), which still reads on a
+          screen and drops out of a capture.
+        - A DOC PAGE'S OWN TOC IS NOT CHECKED BY ANYTHING. conventions.html has
+          listed §8b since 7.1 and never listed §8c, because 7.2 added the
+          section and not the link. check-curriculum.py verifies that hrefs
+          RESOLVE, not that every heading is listed. Both are in now; the
+          missing check is a candidate for 9.10.
+        - THE SCRATCHPAD VANISHES BETWEEN TURNS. Playwright helpers now live in
+          scratch/tools/ (checkpage.py, eqfit.py, shot.py, page_shot.py) rather
+          than the session temp directory, and scratch/ is gitignored.
