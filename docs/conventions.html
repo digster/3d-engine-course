@@ -94,6 +94,7 @@
       <li><a href="#euler">Euler angles &mdash; one of twenty-four</a></li>
       <li><a href="#axis-angle">Axis-angle &mdash; one convention, two ambiguities</a></li>
       <li><a href="#plane">Plane rotations &mdash; complex numbers, and the rotor</a></li>
+      <li><a href="#quat">Quaternions &mdash; storage order, the sandwich, and the double cover</a></li>
       <li><a href="#simulation">The simulation contract</a></li>
       <li><a href="#rotational">Rotational quantities &mdash; torque, spin, inertia</a></li>
       <li><a href="#colour">Colour and diagram conventions</a></li>
@@ -2738,6 +2739,121 @@
     a matrix cannot do at all. It is <em>not</em> cheaper to apply to a point: <code>z &times; v</code>
     and <code>M &times; v</code> are the same four multiplies, measured at 1.05&times;. The same
     trade, with different numbers, governs quaternions against matrices one dimension up.
+  </p>
+
+  <h2 id="quat"><span class="num">8e</span>Quaternions &mdash; storage order, the sandwich, and the double cover</h2>
+
+  <p>
+    Settled in <a href="lessons/07-04-quaternions.html">Lesson 7.4</a>. The engine represents a
+    rotation of <em>space</em> as a unit <code>quat</code> &mdash; four floats &mdash; and
+    <code>mat3</code> remains what the renderer multiplies by. Five things need pinning down, and
+    the first two are the ones that cost people a day.
+  </p>
+
+  <div class="callout ok">
+    <span class="label">w first, w = cos(&theta;/2), q v conj(q), q&nbsp;p means &ldquo;do p, then q&rdquo;</span>
+    <p class="mono">
+      struct quat { float w; vec3 v; }&nbsp;&nbsp;&rarr; in memory: w, x, y, z<br>
+      quat_from_axis_angle(n&#770;, &theta;) == { cos(&theta;/2), n&#770;&nbsp;sin(&theta;/2) }<br>
+      rotate(q, v) == q v conj(q)&nbsp;&nbsp;(two-sided)<br>
+      mat3_from_quat(q&nbsp;p) == mat3_from_quat(q) * mat3_from_quat(p)<br>
+      axis_angle_from_quat(q).angle &rarr; [0, 2&pi;)&nbsp;&nbsp;UNSIGNED, FULL TURN
+    </p>
+  </div>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>Decision</th><th>Ours</th><th>What fixes it</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>Component order</strong></td>
+          <td><code>w, x, y, z</code> &mdash; the <strong>real part first</strong></td>
+          <td><strong>Nothing fixes this; it is a choice, and the other one is at least as
+              common.</strong> Most GPU-side packing and a great deal of published code use
+              <code>x, y, z, w</code>. The two are incompatible and a blind <code>memcpy</code>
+              across the boundary rotates <code>w</code> into <code>x</code>, which presents as a
+              180&deg; error about a diagonal axis. Ours follows the derivation
+              (<code>q = w + v</code>) and the struct is <code>{float w; vec3 v;}</code> so that
+              <code>operator*</code> reads as the formula it implements. <strong>Convert
+              explicitly at every boundary and never reinterpret.</strong></td>
+        </tr>
+        <tr>
+          <td><strong>The half-angle</strong></td>
+          <td><code>w = cos(&theta;/2)</code>, <code>v = sin(&theta;/2)&nbsp;n&#770;</code></td>
+          <td>Not a convention &mdash; <em>derived</em>, from the fact that a rotation is two
+              reflections and two mirror planes <code>&phi;</code> apart generate a turn of
+              <code>2&phi;</code> (7.4 &sect;5, and 7.3 &sect;7 for the same fact in the plane with
+              a protractor). The practical consequence: <strong><code>quat::i()</code> is a HALF
+              turn, not a quarter turn</strong>, which catches everyone arriving from
+              <code>complex</code>.</td>
+        </tr>
+        <tr>
+          <td><strong>Which sandwich</strong></td>
+          <td><code>q v conj(q)</code>, never <code>conj(q) v q</code></td>
+          <td>The other one is also a rotation and also looks right on a single object. It is an
+              <em>anti</em>-homomorphism, so it reverses every composition: a parent-child
+              hierarchy applies its transforms backwards while each object in isolation is fine.
+              Our choice is what makes <code>mat3_from_quat(q&nbsp;p)</code> equal
+              <code>mat3_from_quat(q) * mat3_from_quat(p)</code>, so <strong><code>q * p</code>
+              reads right-to-left exactly like <code>A * B * v</code></strong>. Measured both ways
+              in 7.4 &sect;C.6.</td>
+        </tr>
+        <tr>
+          <td><strong>Two quaternions per rotation</strong></td>
+          <td><code>q</code> and <code>&minus;q</code> are the same rotation, <strong>bitwise</strong></td>
+          <td>The sandwich is quadratic in <code>q</code>, so a global sign cannot survive it &mdash;
+              measured at <code>0.000e+00</code> over 20,000 rotations, not a tolerance. The double
+              cover. <strong>Every metric and every blend must therefore take
+              <code>fabs</code> of the dot product</strong>, or negate one input when it is
+              negative; omitting it reports two identical poses as a full turn apart and makes a
+              character spin between adjacent keyframes. Extraction returns whichever branch has a
+              positive pivot, which is stable and is <em>not</em> canonical.</td>
+        </tr>
+        <tr>
+          <td><strong>Recovered angle range</strong></td>
+          <td><code>[0, 2&pi;)</code> &mdash; a <strong>full</strong> turn, unsigned</td>
+          <td>Deliberately wider than &sect;8c&rsquo;s <code>[0, &pi;]</code> for
+              <code>mat3</code>, and the difference is information rather than inconsistency: a
+              quaternion genuinely distinguishes &ldquo;350&deg; about <code>n&#770;</code>&rdquo;
+              from &ldquo;10&deg; about <code>&minus;n&#770;</code>&rdquo;, which a matrix cannot,
+              and that is exactly what an animation system needs to take the long way round on
+              purpose. Callers wanting the canonical short form negate when
+              <code>q.w &lt; 0</code> first.</td>
+        </tr>
+        <tr>
+          <td><strong>Renormalisation</strong></td>
+          <td><code>renormalised_fast</code> for near-unit input; <code>normalised</code>
+              otherwise</td>
+          <td>Same Taylor series as &sect;8d, one dimension up, and <strong>its failure mode does
+              NOT carry up</strong>. At <code>|q| = 2</code> it returns <code>&minus;q</code>,
+              which is the same rotation, so the plane&rsquo;s worst input is perfect here; the
+              damage is <em>between</em> 1 and 2, peaking near 50&deg; of pose error. The failure
+              is not monotonic, so a test sampling <code>|q| = 1</code> and <code>|q| = 2</code>
+              certifies a broken function. And note where it lands: <code>rotate</code>&rsquo;s
+              two-cross form equals <code>q v conj(q)</code> <em>only on the unit sphere</em>, so a
+              norm error becomes a POSE error rather than a scale error.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    <strong>What the quaternion is for, and what it is not for.</strong> Storing (16 bytes against
+    36), composing (16 multiplies against 27, measured 1.57&times;), repairing (one Taylor step
+    against Gram-Schmidt, 3.25&times;), interpolating &mdash; which a matrix cannot do at all &mdash;
+    and extracting, which has <strong>no bad case anywhere</strong> because its four candidates sum
+    to 4. It is <em>not</em> cheaper to apply: 18 multiplies against a matrix&rsquo;s 9, measured
+    1.57&times; slower, <strong>crossing over at 7.6 vectors</strong>. Rotate a point with the
+    quaternion; rotate a mesh by building the matrix first.
+  </p>
+
+  <p>
+    <strong>What still stores a <code>mat3</code>.</strong> <code>transform::rotation</code>, until
+    Lesson 7.5. 7.4 &sect;11 explains why that is not a
+    rename: one caller in the engine assigns a rotation-<em>and-scale</em> to a field named
+    <code>rotation</code>, which a <code>mat3</code> accepts and a quaternion cannot, and the
+    repair is a decomposition. A <code>position + quat + vec3</code> transform can represent
+    translation, rotation and axis-aligned scale, and <strong>cannot represent shear</strong>.
   </p>
 
   <h2 id="simulation"><span class="num">9</span>The simulation contract</h2>

@@ -3336,6 +3336,137 @@ The singular values are sqrt(1 + |sin p|), 1, sqrt(1 - |sin p|).</span>
     </p>
   </div>
 
+  <div class="card">
+    <h3>Isotropy forces the quaternion table <span class="from">Lesson 7.4</span></h3>
+    <p>
+      One demand: <strong>space has no preferred direction</strong>, so every unit imaginary
+      squares to &minus;1, not just the three basis ones. Then <code>(i+j)/&radic;2</code> is a
+      unit imaginary, so
+    </p>
+    <div class="eq">
+      \[ (i+j)^2 = 2u^2 = -2, \qquad\text{while}\qquad (i+j)^2 = i^2 + ij + ji + j^2 = -2 + (ij+ji) \]
+      <span class="eq-plain">(i+j)^2 = 2u^2 = -2, while expanding gives -2 + (ij + ji)</span>
+    </div>
+    <p>
+      so <code>ij + ji = 0</code>. <strong>Anticommutativity is not assumed &mdash; it is what
+      isotropy costs.</strong> Associativity then gives every remaining entry, and
+      <code>ijk = (ij)k = k&sup2; = &minus;1</code> falls out as a consequence rather than as
+      Hamilton&rsquo;s definition.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>The dot and cross products are inside one product <span class="from">Lesson 7.4</span></h3>
+    <p>
+      Write a quaternion as a scalar plus a vector. Distributing and using the table gives, for
+      two <em>pure</em> quaternions,
+    </p>
+    <div class="eq">
+      \[ v_1 v_2 = -(v_1\cdot v_2) + (v_1 \times v_2), \qquad
+         q\,p = \big(w_1w_2 - v_1\!\cdot\!v_2,\; w_1v_2 + w_2v_1 + v_1\times v_2\big) \]
+      <span class="eq-plain">v1 v2 = -(v1 . v2) + (v1 x v2); and qp = (w1w2 - v1.v2, w1v2 + w2v1 + v1 x v2)</span>
+    </div>
+    <p>
+      Gibbs and Heaviside cut the two vector operations out of exactly this expression in the
+      1880s. Swap the operands and only the cross term changes sign, so
+      <code>qp &minus; pq = (0, 2 v&#8321;&times;v&#8322;)</code>: <strong>&ldquo;quaternions do not
+      commute&rdquo; and &ldquo;rotations of space do not commute&rdquo; are one sentence.</strong>
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>Two mirror <em>planes</em>, and the sandwich <span class="from">Lesson 7.4</span></h3>
+    <p>
+      Reflection in the plane with unit normal <code>n</code> is <code>n v n</code>, which expands
+      to <code>v &minus; 2(n&middot;v)n</code> &mdash; the Householder reflection this engine has
+      had since Lesson 1.8. Do it twice and move the brackets:
+    </p>
+    <div class="eq">
+      \[ v \;\mapsto\; n_1(n_0 v n_0)n_1 = (n_1n_0)\,v\,(n_0n_1) = q\,v\,\bar q,
+         \qquad q = n_1 n_0 \]
+      <span class="eq-plain">v maps to n1 (n0 v n0) n1 = (n1 n0) v (n0 n1) = q v conj(q), with q = n1 n0</span>
+    </div>
+    <p>
+      because conjugation reverses a product and negates a pure quaternion, so the two minus signs
+      cancel. <strong>The sandwich was not chosen; it is what &ldquo;do two reflections&rdquo;
+      looks like.</strong>
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>Where <code>cos(&theta;/2)</code> comes from, in space <span class="from">Lesson 7.4</span></h3>
+    <p>
+      Work out the <code>q</code> above, with <code>&phi;</code> the angle between the normals and
+      <code>n&#770;</code> along <code>n&#8320; &times; n&#8321;</code>:
+    </p>
+    <div class="eq">
+      \[ q = n_1 n_0 = -(n_1\cdot n_0) + (n_1 \times n_0) = -\big(\cos\varphi + \sin\varphi\,\hat n\big) \]
+      <span class="eq-plain">q = n1 n0 = -(n1 . n0) + (n1 x n0) = -(cos phi + sin phi times the unit axis)</span>
+    </div>
+    <p>
+      The two mirrors generate a turn of <code>&theta; = 2&phi;</code>, so negating gives
+      <code>q = cos(&theta;/2) + sin(&theta;/2)&#8202;n&#770;</code>. <strong>And nothing in the
+      derivation determines that sign</strong> &mdash; which is the double cover appearing before
+      anyone has named it.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>The double cover, and the <code>fabs</code> it forces <span class="from">Lesson 7.4</span></h3>
+    <p>
+      Replace <code>q</code> by <code>&minus;q</code> in the sandwich: the conjugate picks up the
+      same sign, and the two multiply to <code>+1</code>.
+    </p>
+    <div class="eq">
+      \[ (-q)\,v\,\overline{(-q)} = (-1)(-1)\,q\,v\,\bar q = q\,v\,\bar q \]
+      <span class="eq-plain">(-q) v conj(-q) = (-1)(-1) q v conj(q) = q v conj(q)</span>
+    </div>
+    <p>
+      Bitwise identical, measured at <code>0.000e+00</code> over 20,000 rotations. So every metric
+      and every blend must take <code>|a&middot;b|</code>; omitting it reports two identical poses
+      as <strong>360&deg;</strong> apart. A turn of 360&deg; sends <code>q</code> to
+      <code>&minus;1</code>, and it takes <strong>720&deg;</strong> to bring both home.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>Four candidates that sum to 4 <span class="from">Lesson 7.4</span></h3>
+    <p>
+      Shepperd&rsquo;s extraction. Each squared component is a trace-like combination of the
+      diagonal, and the four of them add up with every off-diagonal cancelling:
+    </p>
+    <div class="eq">
+      \[ 4w^2 = 1 + r_{00} + r_{11} + r_{22}, \;\; 4x^2 = 1 + r_{00} - r_{11} - r_{22}, \;\dots
+         \;\Longrightarrow\; \textstyle\sum = 4 \]
+      <span class="eq-plain">4w^2 = 1 + r00 + r11 + r22, 4x^2 = 1 + r00 - r11 - r22, and so on; the four sum to 4</span>
+    </div>
+    <p>
+      So the largest is <strong>always at least 1</strong> and the divisor at least 2: pivot on it
+      and there is <em>no bad case anywhere</em>. Compare Lesson 7.2, whose three candidates summed
+      to 1, guaranteed only <code>1/3</code>, and needed a crossover derived at
+      <code>tan(&theta;/2) = &radic;3</code>. <strong>The fourth component is what removes the
+      threshold.</strong>
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>The crossover: when to build the matrix <span class="from">Lesson 7.4</span></h3>
+    <p>
+      A quaternion is cheaper to compose (16 multiplies against 27) and dearer to apply (18
+      against 9). Converting once amortises the difference:
+    </p>
+    <div class="eq">
+      \[ N^{*} = \frac{t_{\text{convert}}}{t_{\text{quat}\cdot v} - t_{\text{mat}\cdot v}}
+               = \frac{4.619}{1.679 - 1.070} \approx 7.6 \]
+      <span class="eq-plain">N* = t_convert / (t_quat_times_v - t_mat_times_v) = 4.619 / (1.679 - 1.070), about 7.6</span>
+    </div>
+    <p>
+      <strong>Rotate a point with the quaternion; rotate a mesh by building the matrix.</strong>
+      Eight is small enough that one skinned vertex with four bone influences is already past it,
+      which is why every renderer handed quaternions converts before it draws.
+    </p>
+  </div>
+
   <h2 id="coming"><span class="num">9</span>Coming as the course proceeds</h2>
 
   <p>

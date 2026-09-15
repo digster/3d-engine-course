@@ -7940,3 +7940,87 @@ fourteen blocks quoting output the program no longer produced, and **stale is wo
 Related: `pre class="output"` has no rule anywhere in `course.css`. Lesson 7.3 invented it and was
 the only page using it; it rendered identically to a plain `<pre>`. `check-page.js`'s
 `unknownTagClasses` check only covers `.listing figcaption .tag`, so nothing caught the dead class.
+
+## A failure mode does not carry up a dimension — it is a hypothesis about the new one
+
+Lesson 7.3 found `renormalised_fast` at `|z| = 2` returning `−z`: modulus *exactly* 1.000000, and
+the object turned **180° the wrong way**. Its conclusion — *test the rotation, never the modulus* —
+was right and is still right.
+
+The same function, one dimension up, is **exact at `|q| = 1` and exact again at `|q| = 2`**, because
+it returns `−q` there and `−q` *is* `q` as a rotation. The damage is in the middle: 34.7° of pose
+error at `|q| = 1.5`, 49.9° at 1.75. **The failure is not monotonic**, so a test sampling the two
+obvious points certifies a broken function completely.
+
+One level up from 7.3's lesson: that one said *choose the observable*. This one says *choose the
+sample points* — and says that a failure mode inherited from a simpler case is something to
+**re-measure**, not something to carry.
+
+## `acos` of a near-unit dot product is a blind instrument
+
+Third time in this course, and the third disguise. Lesson 7.1 §6.4 found
+`acos((tr R − 1)/2)` returning **exactly zero** for a 0.004° turn. Lesson 7.2 found the axis
+extraction dividing by a difference of near-equal entries. Lesson 7.4 found a *test* doing it:
+comparing two recovered axes with `acos(|a·b|)` printed `0.000e+00` in **every row**, which reads
+as a pass and is a broken measurement.
+
+An axis error of `5.7×10⁻⁵` rad puts the dot product at `1 − 1.6×10⁻⁹`, which rounds to exactly
+`1.0f`. Measure the **chord** `|a − b|`, which is of the size of the answer, and turn it back into
+an angle with `2 asin(chord/2)`.
+
+**The general shape:** a quantity obtained by subtracting near-equal numbers at 1 is gone before the
+inverse trig function sees it, and `acos`/`asin` then amplify what is left, having infinite slope at
+±1. It applies to instruments as much as to engine code, and an instrument that fails this way
+reports success.
+
+## A timed loop that overwrites its accumulator measures nothing
+
+`acc = qs[i] * qs[j]` inside a loop reported **0.000 ns**: only the last iteration's product is
+needed and the compiler knows it. Third distinct way to lose a timing here, after Lesson 7.2's
+"read one element of nine" and "hoist the whole loop out".
+
+Exactly zero is at least **loud**. The dangerous version of this mistake is the one that leaves a
+plausible small number behind, which is why the rule is *accumulate every component of every
+result*, not *use the result somewhere*.
+
+And state the bias that rule creates: accumulating a `quat` is 4 adds and a `mat3` is 9, so a
+compose comparison carries five extra adds on the matrix side. Pair it with a row where both sides
+accumulate the same number of floats, and use that row as the calibration.
+
+## A narrower type finds existing bugs, not only future ones
+
+`transform::rotation` is a `mat3`. `gfx/renderable.cpp` assigns `linear_of(w.matrix)` to it — the
+upper-left 3×3 of an ECS world matrix, which carries the **scale** that came down the hierarchy —
+and writes `1` into the field named `scale`. Its comment says the recomposition reproduces the
+original affine matrix *to the bit*, and it does, **because a `mat3` will hold anything**.
+
+That line has been correct, tested and shipping since Lesson 5.11. Narrowing the field to a
+quaternion turns it into a compile error.
+
+The tell was in the comment all along: a "to the bit" guarantee on a conversion that *narrows* is a
+guarantee that nothing was narrowed. Read exactness claims on lossy conversions as symptoms.
+
+## A render figure on the page's own panel loses the program's colours
+
+Every screenshot figure in `docs/` sat on `.fill-soft`, which is `--dia-fill` — near-**white** in
+light mode. That is fine for a lit solid and destroys a thin bright line, and the demos draw gold
+and teal on near-black because that is where those colours read. Lesson 7.4's double-cover figure
+had its gold dial hand — *the entire content of the figure* — at about **1.8:1** against the panel.
+
+The fix is a CSS class, `.fill-shot`, with **one** value rather than a light and a dark: it is a
+photograph of a program, and the program's background does not change when the reader flips themes.
+
+The alternative — darkening the demo's palette to suit the page — was rejected, and the reason is
+7.3's "transcribe the constants" rule one level up: **the figure must not disagree with the
+program**, in either direction.
+
+## A dial drawn in a fixed world plane is an ellipse
+
+And an ellipse cannot be read with a protractor held against the screen, which is the whole point of
+putting one next to an object whose rotation you cannot measure by eye. Build it in the plane facing
+the camera.
+
+Then get the basis handedness right, because this one is invisible: `cross(up, toward)` points
+**left**, so the first version had every angle mirrored *and* upside down — 135° where the answer is
+45°. The picture looked entirely plausible. **The printed receipt caught it, not the eye**, which is
+the argument for a demo printing its own numbers even when it draws them.

@@ -2763,3 +2763,19 @@ Produced Lesson 7.3 in full: `engine/include/engine/math/complex.hpp` (new), the
 `docs/lessons/07-03-complex-numbers.html`. Repointed 7.2's two forward links in the sources and
 rebuilt it. Conventions gained §8d (and the §8c TOC entry 7.2 had omitted); Math Toolbox gained six
 cards; ARCHITECTURE.md, STATE.md, LEARNINGS.md and `memory/2026-09-15.md` updated.
+
+---
+
+## 2026-09-15 (session 2)
+
+> next
+
+Produced Lesson 7.4 in full: `engine/include/engine/math/quat.hpp` (new, 719 lines), two new
+`gimbal` modes (<kbd>C</kbd> commutation, <kbd>D</kbd> the double cover), `scratch/verify_74.cpp`
+(42 checks, 10 controls), `scratch/golden_74.cpp`, ten figures, and the published page at
+`docs/lessons/07-04-quaternions.html`. Repointed 7.3's two forward links in the sources and rebuilt
+it. Conventions gained §8e; Math Toolbox gained seven cards; `docs/shared/course.css` gained
+`.fill-shot`; `check-curriculum.py` gained check 8, which verifies STATE.md's lesson manifest and
+found five missing entries on its first run. The storage swap of `transform::rotation` was
+**deferred to 7.5 with a measured reason**, recorded in `transform.hpp`, STATE and the page.
+ARCHITECTURE.md, README.md, STATE.md, LEARNINGS.md and `memory/2026-09-15.md` updated.

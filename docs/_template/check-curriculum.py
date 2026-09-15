@@ -30,6 +30,16 @@ WHAT IT CHECKS
   6. Nav chains: each lesson page's prev/next hrefs and titles agree with the
      index's order, and its <title> and .eyebrow carry its own id and module.
   7. Every href pointing inside docs/ resolves to a file that exists.
+  8. STATE.md's `docs/lessons/:` manifest lists every published page.
+
+CHECK 8 WAS ADDED BY LESSON 7.4, AND STATE.md ASKED FOR IT BY NAME. That file's
+own note beside the list reads: "check-curriculum.py verifies the INDEX against
+the filesystem; nothing verifies this list, which is why it is the one that
+rots... the durable fix is to have it verify these three sections too, and that
+is now the highest-value piece of bookkeeping work outstanding." It had rotted
+four times across three sections by 6.18 and was missing FIVE entries — 5.12,
+7.1, 7.2, 7.3 — when 7.4 came to append. The list is not the problem;
+hand-maintaining a second copy of a fact the filesystem already knows is.
 
 Check 7 is why this tool caught three dead prerequisite links in 6.8 that had
 been shipped and read for a week: `02-10-perspective-projection.html` when the
@@ -60,6 +70,7 @@ from pathlib import Path
 DOCS = Path(__file__).parent.parent
 INDEX = DOCS / "index.html"
 LESSONS = DOCS / "lessons"
+STATE = DOCS.parent / "STATE.md"
 
 # One lesson row. The table is hand-written on one line per row, which is what
 # makes a line-oriented regex the right tool here rather than an HTML parser:
@@ -378,6 +389,46 @@ def check_links(report: Report) -> None:
         report.ok("every internal href resolves")
 
 
+def check_state_manifest(report: "Report") -> None:
+    """STATE.md's `docs/lessons/:` list must name every published page.
+
+    A one-way check, deliberately. It reports pages the manifest is MISSING and
+    says nothing about entries the manifest has and the filesystem does not,
+    because that second case is a deleted lesson — which has never happened and
+    which, if it ever does, deserves a human rather than a green tick.
+    """
+    if not STATE.exists():
+        report.fail("STATE manifest", "STATE.md not found")
+        return
+
+    text = STATE.read_text(encoding="utf-8")
+    marker = "docs/lessons/:"
+    at = text.find(marker)
+    if at < 0:
+        report.fail("STATE manifest", "no `docs/lessons/:` block found")
+        return
+
+    # The manifest is an indented block: take everything up to the next line
+    # that starts a new top-level key at the same indentation. `docs/shared/:`
+    # is what follows it today; matching on "two spaces then a word then a
+    # colon" is what makes this survive the block growing.
+    tail = text[at:]
+    end = re.search(r"\n  [A-Za-z0-9_/.]+:", tail[len(marker):])
+    block = tail[: len(marker) + end.start()] if end else tail
+
+    listed = set(re.findall(r"\b(\d\d-\d\d[a-z]?-[a-z0-9-]+\.html)", block))
+    on_disk = {p.name for p in sorted(LESSONS.glob("*.html"))}
+    missing = sorted(on_disk - listed)
+
+    if missing:
+        report.fail(
+            "STATE manifest",
+            f"`docs/lessons/:` is missing {len(missing)}: {', '.join(missing)}",
+        )
+    else:
+        report.ok(f"STATE.md lists all {len(on_disk)} published pages")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--quiet", action="store_true", help="print failures only")
@@ -398,6 +449,7 @@ def main() -> int:
     ordered = check_files_and_badges(modules, report)
     check_navigation(ordered, report)
     check_links(report)
+    check_state_manifest(report)
 
     if report.failures:
         print(f"\n{len(report.failures)} problem(s):")

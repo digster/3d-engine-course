@@ -727,6 +727,22 @@ figure.dia svg .ink       { stroke: var(--dia-ink); }
 figure.dia svg .ink-soft  { stroke: var(--dia-ink-soft); }
 figure.dia svg .grid      { stroke: var(--dia-grid); }
 figure.dia svg .fill-soft { fill: var(--dia-fill); }
+
+/* A render panel that keeps the PROGRAM's own background, rather than the
+   page's. Added by Lesson 7.4.
+
+   Every screenshot figure before this one sat on `.fill-soft`, which is the
+   page's diagram fill — near-white in light mode. That is fine for a render
+   whose subject is a lit solid, and it quietly destroys one whose subject is a
+   thin bright line: the demos in Module 7 draw gold and teal on a near-black
+   background because that is where those colours read, and 7.4's double-cover
+   figure put a gold hand at 1.8:1 against a near-white panel. The hand is the
+   entire content of that figure.
+
+   One value, not two, and deliberately: this is a photograph of a program, and
+   the program's background does not change when the reader flips the page
+   theme. */
+figure.dia svg .fill-shot { fill: #14161c; }
 figure.dia svg .hi        { stroke: var(--dia-hi); }
 figure.dia svg .mono      { font-family: var(--font-mono); }
 figure.dia svg .sm        { font-size: 11px; }

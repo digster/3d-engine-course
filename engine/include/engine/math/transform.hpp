@@ -47,17 +47,52 @@ namespace engine {
 /// The rotation is a `mat3` for now, which is honest but not final. A matrix is
 /// a poor thing to *store* a rotation in — nine floats for three degrees of
 /// freedom, no natural way to interpolate between two of them, and it drifts out
-/// of being a rotation as you accumulate updates. **Lesson 7.4 replaces it with a
-/// quaternion**, and this struct is where that replacement will land. Everything
-/// downstream asks for a matrix, so the swap touches one line of
-/// `parent_from_local()` and nothing else — which is the argument for having a
-/// named type here at all rather than passing three loose variables around.
+/// of being a rotation as you accumulate updates. **A quaternion replaces it**,
+/// and this struct is where that replacement lands.
+///
+/// **LESSON 7.4 BUILT THE QUATERNION AND DID NOT MAKE THE SWAP**, and the reason
+/// is a finding rather than a schedule. This paragraph used to end "the swap
+/// touches one line of `parent_from_local()` and nothing else", which was
+/// written in Module 2 and was wrong by Module 5. It is wrong for an
+/// interesting reason:
+///
+///   **The field is called `rotation` and one caller in the engine does not put
+///   a rotation in it.** `gfx/renderable.cpp` builds a `transform` from an ECS
+///   `world_transform` by assigning `linear_of(w.matrix)` here and `{1,1,1}` to
+///   `scale`, and its comment says — correctly, today — that the recomposition
+///   "reproduces the original affine matrix to the bit". It reproduces it
+///   because a `mat3` will hold anything, including the scale that came down
+///   the hierarchy from the parent. A quaternion will not. Narrowing the type
+///   turns that line into a compile error, which is the type doing exactly the
+///   job it is here to do, and the repair is a decomposition rather than a
+///   rename: take the scale off as the three column lengths, then extract.
+///   Lesson 7.4 §11 measures all of it — a uniform scale of 2 extracts to
+///   something whose determinant is 1.65 rather than to either 8 or 1, a
+///   non-uniform one also *rotates* the result by 1.21°, the decomposition
+///   recovers the pose exactly, and a **shear** defeats both routes because
+///   column lengths cannot see one.
+///
+/// So the swap is a change with a design decision inside it and roughly
+/// twenty-five call sites around it, and **Lesson 7.5 makes it**, with
+/// `quat_slerp` in hand so that the call sites that move get something in
+/// return. What 7.4 leaves behind is the type, fully derived and fully
+/// measured, in `math/quat.hpp`.
+///
+/// Everything downstream of this struct asks for a matrix, so the swap is still
+/// one line of `parent_from_local()` — which is the argument for having a named
+/// type here at all rather than passing three loose variables around. What the
+/// Module 2 comment got wrong was assuming nothing UPSTREAM would ever write to
+/// the field with something wider in its hand.
 ///
 /// LESSON 7.1 CORRECTED THE LESSON NUMBER IN THE PARAGRAPH ABOVE, which said
 /// 7.1 for five modules. It was written in Module 2, before Module 7 had a
 /// lesson breakdown, and the arc that arrived is Euler angles (7.1), axis-angle
 /// (7.2), complex numbers (7.3), quaternions (7.4). 7.1 is the lesson that
-/// explains *why* the replacement is needed and does not perform it.
+/// explains *why* the replacement is needed and does not perform it. **Lesson
+/// 7.4 then corrected it a second time**, to 7.5, and for once the correction
+/// carries its own evidence rather than a new estimate — see the paragraph
+/// above. A promise that has moved twice is worth stating with a reason
+/// attached, so that the next reader can judge whether the reason still holds.
 ///
 /// **And note what 7.1 deliberately did NOT do**: it added
 /// `math/euler.hpp`, and it did not put a `euler_angles` in this struct. Three

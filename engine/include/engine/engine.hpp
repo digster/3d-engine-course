@@ -96,13 +96,19 @@
 // is three catches in two lessons, against fourteen misses in the thirteen
 // lessons before the check existed. **Four in three**, as of 7.3's
 // `complex.hpp`: the lint fired again, on a header written twenty minutes
-// earlier by somebody who knew about the lint.
+// earlier by somebody who knew about the lint. **Five in four** with 7.4's
+// `quat.hpp`, and by now the interesting question is no longer whether the
+// check earns its 4 ms. It is why knowing about a rule does not make anyone
+// keep it: the header is written, it compiles, its harness passes, and the
+// umbrella is a file you have no reason to open. A check that fires on people
+// who know about it is doing the only job worth doing.
 #include <engine/math/axis_angle.hpp>
 #include <engine/math/complex.hpp>
 #include <engine/math/euler.hpp>
 #include <engine/math/mat2.hpp>
 #include <engine/math/mat3.hpp>
 #include <engine/math/mat4.hpp>
+#include <engine/math/quat.hpp>
 #include <engine/math/rotation.hpp>
 #include <engine/math/transform.hpp>
 #include <engine/math/vec2.hpp>

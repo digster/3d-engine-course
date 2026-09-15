@@ -88,6 +88,13 @@ untangled was the one file that had never been given a home: `src/main.cpp`, at 
 │   │   ├── euler.hpp       # three angles ⇄ mat3, one convention of   [EXISTS from 7.1]
 │   │   │                   #   twenty-four. An INTERFACE, not storage.
 │   │   ├── axis_angle.hpp  # Rodrigues, the exp/log maps, and slerp   [EXISTS from 7.2]
+│   │   ├── quat.hpp        # the TOP of the rotation layer: four      [EXISTS from 7.4]
+│   │   │                   #   floats, the Hamilton product, the
+│   │   │                   #   sandwich, and Shepperd extraction.
+│   │   │                   #   Includes axis_angle.hpp (it REUSES
+│   │   │                   #   `axis_angle_extraction` rather than
+│   │   │                   #   growing a twin), euler.hpp, mat3, vec3.
+│   │   │                   #   NOT complex.hpp — same shape, no code.
 │   │   └── complex.hpp     # plane rotations as a NUMBER: the product [EXISTS from 7.3]
 │   │                       #   the rotor (half-angle), both blends.
 │   │                       #   Includes mat2/vec2 only — it is one
@@ -708,6 +715,39 @@ as a diff against it**. `conjugate`, `length_squared`, `normalised`, `inverse`, 
 `renormalised_fast` and `complex_slerp` each acquire a quaternion twin with the same body, one more
 imaginary unit, and one loss — the product stops commuting. The names in `complex.hpp` are slightly
 more formal than a two-float type needs, and that mapping is why.
+
+**That diff was written, as of Lesson 7.4, and one line of it did not survive.** Every twin's *body*
+carried up unchanged, because none of those proofs used commutativity — the things that broke are
+exactly the things that mentioned the **order** of a product, and none of `conjugate`,
+`length_squared`, `normalised` or `inverse` does. What did not carry is `renormalised_fast`'s
+*failure mode*, and that is the more useful half of the exercise. In the plane it returns `−z` at
+`|z| = 2`: a perfect modulus wearing a 180° error, which is why 7.3 said to test the rotation and
+never the modulus. In space it returns `−q`, and `−q` **is** `q` as a rotation, so the plane's worst
+input is a bit-for-bit perfect one here and the damage is in the middle of the range. A failure mode
+carried from one dimension to another is a hypothesis about the new dimension, not a fact about it.
+
+**`quat.hpp` is the top of the rotation layer, as of Lesson 7.4**, and its include list is the
+claim. It includes `axis_angle.hpp` — not for Rodrigues, which it does not call, but for
+`axis_angle` and `axis_angle_extraction`, which `axis_angle_from_quat` **returns**. That is a
+deliberate refusal to grow a parallel `quat_extraction` struct with the same three fields and the
+same `axis_route` enum: the question "which route produced this axis, and how far can I trust it?"
+is a question about the *answer*, not about the representation it was recovered from, so the
+vocabulary is shared. It also includes `euler.hpp`, for `quat_from_euler`, which is
+`rotation_from_euler` with `rotation_*` swapped for `quat_*` and nothing else touched — the two
+agreeing to 5.96e-07 is the check that this file's product and `mat3`'s describe the same
+composition.
+
+**What `quat.hpp` does not yet do is get stored.** `transform::rotation` is still a `mat3`, and
+Lesson 7.4 §11 is the reason it is not a one-line change: `gfx/renderable.cpp` assigns
+`linear_of(w.matrix)` to a field named `rotation`, which for an ECS `world_transform` carries the
+**scale** that came down the hierarchy — and that is why its recomposition reproduces the original
+affine matrix "to the bit". A `mat3` will hold anything; a quaternion will not, so narrowing the
+type turns that line into a compile error and the repair is a decomposition (column lengths off
+first, then extract) rather than a rename. Lesson 7.5 performs the swap. The honest limit of the
+repaired form is worth recording here because it is an engine-wide constraint rather than a lesson
+detail: **a `position + quat + vec3` transform can represent translation, rotation and axis-aligned
+scale, and cannot represent shear**, because column lengths do not change under a shear — they
+change the angles between the columns.
 
 **Rotation gets a layer, as of Lesson 7.2.** `math/` now has an internal shape rather than a flat
 pile of headers. `rotation.hpp` holds what is true of a rotation *whatever you store it in* — today
