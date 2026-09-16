@@ -171,6 +171,19 @@ add_library(engine STATIC
     src/gfx/shadow.cpp
     src/gfx/soft_renderer.cpp
     src/gfx/texture.cpp
+    # Lesson 8.1. The FIFTH new directory since the refactor, and the second
+    # (after audio/) whose contents never touch a pixel. It is also the smallest
+    # a subsystem has ever started: one translation unit, holding the parts of an
+    # integrator that are not templates.
+    #
+    # NOT under `math/`, although every line of it is arithmetic on vectors. The
+    # test is what the file KNOWS: `math/` knows about numbers and nothing else,
+    # which is why it has no .cpp files at all, while `integrate.cpp` knows that
+    # a velocity is measured in metres per second and that a step size has a
+    # stability limit. Those are statements about a simulation, not about a
+    # vector space. Modules 8.2 onward fill this directory with bodies, shapes,
+    # contacts and a solver, none of which would fit under `math/` either.
+    src/phys/integrate.cpp
     # Lesson 5.2. Note what is NOT here: platform/main.hpp, which carries
     # ENGINE_MAIN. It is header-only and deliberately so — including it emits a
     # real `main`, and an entry point is not a library's to own. See the comment

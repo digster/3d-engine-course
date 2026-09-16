@@ -206,3 +206,21 @@ engine_set_warnings(plane)
 add_executable(audio audio/main.cpp)
 target_link_libraries(audio PRIVATE engine::engine)
 engine_set_warnings(audio)
+
+# ---- integrate: three rules on one spring, in phase space ------------------
+#
+# Lesson 8.1. The picture is a PHASE PLOT rather than a scene, for the reason
+# the file's own header gives: watched as a bouncing dot, all three integrators
+# look like a spring for the first few seconds, which is exactly why the bug in
+# one of them ships. Plotted as position against velocity the difference is the
+# first thing you see — one curve spirals outward and two close on themselves.
+#
+# `engine::engine` directly and NOT `demo_common`, the same statement `gimbal`,
+# `rig`, `plane`, `collector`, `ecs_swarm` and `audio` make. It loads nothing
+# and computes everything on screen, so a `--shot` run is byte-for-byte
+# reproducible on any machine.
+#
+# No `engine_use_assets` and no `engine_use_shaders`.
+add_executable(integrate integrate/main.cpp)
+target_link_libraries(integrate PRIVATE engine::engine)
+engine_set_warnings(integrate)

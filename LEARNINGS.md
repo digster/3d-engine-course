@@ -8318,3 +8318,129 @@ the file's entire job — would have been told to write 7.7 again.
 when one fact is recorded in *n* places, the probability that all *n* are updated is not high, and
 "be careful" has never once been the answer in this repository. Count the places, then write the
 check that compares them.
+
+## …and the fourth place is the one nobody can see
+
+Lesson 8.1 found the sequel to the entry above, one lesson after it was written. `docs/index.html`
+states the course's size in four places: the hero stats, the curriculum prose sentence, the module
+subtotals — and `<meta name="description">` in the `<head>`. Checks 1 and 2 verified the first three,
+because those are what a human looking at the rendered page can see. The fourth said
+**"A 94-lesson course"** for eight days and nine published lessons after the reshape to 107.
+
+It is the one number on the page that is not *on* the page: it is what a search engine indexes, what
+a link preview shows, and what anybody sharing the course sees before they open it. Nothing renders
+it, so nothing about reading the page could ever have caught it.
+
+`check_meta_description` is now check 10, and it was proved by editing the number back to 94 and
+watching it fail — the only way to learn anything from a check that stays quiet. The rule 7.8 wrote
+("assume there is a fourth place") was right, and the correction to it is sharper: **enumerate the
+places by grepping for the value, not by remembering where you put it.**
+
+## Order of accuracy is the `h → 0` question; a game asks the `t → ∞` one
+
+The standard yardstick for an integrator — halve the step, see how much the error at a fixed
+simulated time shrinks — reports explicit Euler and semi-implicit Euler as *comparable*, and on a
+harmonic oscillator it reports semi-implicit Euler as **second order** (measured slope 2.002 against
+explicit's 1.089). Neither number can see that one of them multiplies its error by 1.9 every second
+while the other adds a constant.
+
+Two separate traps, both worth carrying:
+
+- **The question is wrong for the application.** Order describes behaviour as `h → 0` at fixed `t`.
+  A game fixes `h` at 1/60 forever and runs for an hour. Measuring error against *time* at fixed `h`
+  shows the difference immediately: 2.883e-3, 5.766e-3, 1.442e-2, 2.884e-2 in exact proportion to
+  `t` for one rule, and 0.388 → 4.8e5 for the other.
+- **A good number can be an accident of the test problem.** Semi-implicit Euler is a first-order
+  method. It reads second order *here* because its amplitude error on this particular system is
+  exactly zero — which is the property being investigated — leaving only a frequency shift, which is
+  `O(h²)`. Reporting that as "second order" without the qualifier would be a confidently wrong
+  statement that generalises to nothing.
+
+The instrument that *could* see it was the determinant of the update matrix: `1 + h²ω²` against
+exactly `1`. When a metric says two things are equivalent and you can see that they are not, the
+metric is answering a different question — find out which one.
+
+## A search with a fixed budget returns an answer even when the answer is "none"
+
+Bisecting for the largest stable step size works beautifully for semi-implicit Euler (measured
+0.3182939 against a predicted `2/ω = 0.3183099`). Run the identical bisection on explicit Euler,
+which has **no** stable step size, and it returns `3.424e-3` — a number that looks exactly like a
+stability limit and is nothing of the kind. What it found was the largest step at which the energy
+had not yet doubled *within the 20,000 steps the test happened to run*. Run 200,000 and the "limit"
+moves; the number is a property of the test's patience.
+
+The same shape appears wherever a bounded search is asked an unbounded question. State the budget in
+the output, and make the honest case visible: `max_stable_step()` returns **0.0** for explicit Euler
+rather than a small positive number, because a caller who writes `h = 0.5f * max_stable_step(...)`
+then gets a simulation that does not move — which is a far better bug report than one that quietly
+explodes twenty seconds into a playtest.
+
+## A microbenchmark can measure the optimiser's mood
+
+Timing three integrator variants with the rule passed as a **runtime** `enum` made explicit Euler 15%
+faster than semi-implicit in one run and 30% slower in the next, because whether the compiler hoists
+a `switch` out of the loop (loop unswitching) is not stable across builds or data. The measurement
+was real; it just was not a measurement of the code.
+
+Making the rule a template non-type parameter — `timed.template operator()<R>()`, one monomorphic
+function per variant — dropped the run-to-run spread to 0.3%, which is what let the actual finding
+stand: the two Euler rules cost the same (0.994 ns against 0.963 ns per body per step), so choosing
+the correct one is free.
+
+Related, and the opposite of the intuition: the **non-template** overload that lives in
+`integrate.cpp` measured **slower** than the header template (1.222 ns against 0.963), because it is
+a real call into `libengine.a` and cannot inline across the static archive. "Just put it in the .cpp"
+is not always tidying up.
+
+## check-page.js walks a path's stroke, so a text-on-shape hit is real
+
+When `svgTextOnShape` fires it is not a bounding-box false positive — the check samples points along
+the actual stroke of each path and the perimeter of each hollow rect. Lesson 8.1's first build
+produced five hits, and all five were labels genuinely lying on the curve they named.
+
+The fix that works is the rule `figs_78.py`'s docstring already stated: **legends and annotations go
+outside the plot.** Nudging a label a few pixels inside a panel that contains a long curve just moves
+it onto a different part of the same curve. Moving it under the frame, or into the panel's strapline,
+resolves it permanently and reads better.
+
+## A figure can be broken by the renderer rather than by the data
+
+Lesson 8.1's demo screenshot came out as a *dashed* spiral, which looked like a bug in the RLE
+encoder. It was not: a scanline through the grid had nine red cells, contiguous in pairs, exactly as
+it should. The gaps were browser rounding — a 1-unit `<rect>` in a 900-unit `viewBox` is about 0.7
+device pixels once the figure scales down to a phone, and single-cell runs along a thin arc simply
+vanish.
+
+Resampling at `cell=3, px=1.5` gives the same size on the page with cells large enough to survive,
+and halves the file. The general rule is the one the SVG-text learnings already state in another
+form: **check what the renderer did before concluding something is wrong with the data.**
+
+## `figs_NN.py` can end up mixing `\uXXXX` escapes with literal Unicode
+
+Successive patch scripts wrote both forms into `scratch/figs_81.py`: some label strings contain the
+six characters `×` and others contain a literal `×`. A `str.replace` written against one form
+fails **silently** against the other, and three label fixes were lost that way — noticed only because
+`check-page.js` kept reporting the same collisions after they had supposedly been fixed.
+
+Two defences, both cheap: match on a distinctive ASCII substring rather than on a line containing the
+character, and **assert the replacement count** in every patch script. A `replace` that matches
+nothing is the most common silent failure in this repository's authoring pipeline.
+
+## The second copy of a number is the one a reader actually sees
+
+Twenty minutes after check 10 landed, the same fault line produced a second instance. A lesson's hour
+estimate is written twice: in the index row's `<td class="hrs">` and in the page's own `<dt>Time</dt>`
+block. They are edited at *different moments* — the page when the lesson is drafted and the estimate
+is a guess, the row when it lands and the real cost is known. Lesson 8.1 shipped at 6 h, the index row
+and both module subtotals and the course total all moved together, and the page went on saying 5.
+
+Checks 1 and 2 could not see it, because they only ever read the index, where all four numbers agreed
+with each other perfectly. **Self-consistency is not correctness when the fact has a copy elsewhere.**
+
+`check_page_hours` is check 11, and on its first run it found two *pre-existing* drifts: Lessons 3.2
+and 3.3 said "3–4 hours" against index rows of 5. It is deliberately a **range** test rather than an
+equality, and that is a fact about the corpus rather than a softening — pages spell that field at
+least four ways (`≈ 4 hours`, `≈ 4–5 hours`, `&asymp; 4&ndash;5 hours`, and one with a parenthetical
+after it), so the honest question is whether the index's single number falls inside what the page
+claims. An equality test would have flagged fourteen pages that are wrong about nothing, and a check
+with fourteen false positives is a check nobody runs.

@@ -1041,6 +1041,32 @@ chore. What follows is on disk.
 │   │   │   │                 #   (the 4 SDL callbacks) — the engine keeps the loop
 │   │   │   └── main.hpp      # ENGINE_MAIN. ONE .cpp per program; no main() in it.
 │   │   │                     #   NOT in engine.hpp, deliberately
+│   │   ├── phys/           # HOW A VELOCITY BECOMES A POSITION               [8.1]
+│   │   │                   #   THE FIFTH NEW DIRECTORY SINCE THE REFACTOR, and
+│   │   │                   #   the second (after audio/) that never touches a
+│   │   │                   #   pixel. NOT under math/: the test is what a file
+│   │   │                   #   KNOWS. math/ knows about numbers, which is why it
+│   │   │                   #   has no .cpp at all; this knows that a velocity is
+│   │   │                   #   metres per second and that a step size has a
+│   │   │                   #   STABILITY LIMIT. Those are claims about a
+│   │   │                   #   simulation, not about a vector space.
+│   │   │   └── integrate.hpp # motion (position + velocity, and nothing else),
+│   │   │                     #   integrator (explicit_euler, semi_implicit_euler,
+│   │   │                     #   velocity_verlet), integrate() x2, apply_drag,
+│   │   │                     #   damping_factor, natural_frequency,
+│   │   │                     #   max_stable_step, spring_energy, shadow_energy,
+│   │   │                     #   area_factor, name_of.
+│   │   │                     #   THE GENERAL STEPPER IS A TEMPLATE over the
+│   │   │                     #   acceleration callable and stays in the header on
+│   │   │                     #   purpose: std::function costs +65% and the
+│   │   │                     #   non-template overload in the .cpp is SLOWER than
+│   │   │                     #   the template, because it cannot inline across
+│   │   │                     #   libengine.a. POSITION-ONLY accel, because the
+│   │   │                     #   area-preserving property is about forces from a
+│   │   │                     #   potential; drag gets apply_drag instead.
+│   │   │                     #   NO implicit_euler ENUMERATOR, and the enum says
+│   │   │                     #   why: a root find per step, det = 1/(1 + h^2 w^2),
+│   │   │                     #   so costly AND lossy.
 │   │   ├── audio/          # THE FIRST SUBSYSTEM WHOSE OUTPUT YOU CANNOT     [7.8]
 │   │   │                   #   LOOK AT, and the first with a thread the engine
 │   │   │                   #   does not own. Three headers, ~1,000 lines.
@@ -1191,7 +1217,14 @@ chore. What follows is on disk.
 │   │                             #   texture, a comparison sampler, its own
 │   │                             #   render pass, and fill_uniforms() so the two
 │   │                             #   renderers cannot disagree about a bias
-│   └── src/                # ---- PRIVATE. 57 sources; no demo can name this path ----
+│   └── src/                # ---- PRIVATE. 58 sources; no demo can name this path ----
+│       ├── phys/           # integrate.cpp                                   [8.1]
+│       │                   #   Everything that is NOT a template: the constant-
+│       │                   #   acceleration overload (the gravity path), the two
+│       │                   #   drag helpers, and the four diagnostics. Nothing in
+│       │                   #   it is hot, and 8.1 section I.4 measures what
+│       │                   #   crossing the archive boundary costs — 1.222 ns
+│       │                   #   against the header template's 0.963
 │       ├── audio/          # mixer.cpp, sound.cpp, spatial.cpp                [7.8]
 │       │                   #   THE FOURTH NEW DIRECTORY SINCE THE REFACTOR and
 │       │                   #   the first whose contents never touch a pixel. NOT
@@ -1258,6 +1291,25 @@ chore. What follows is on disk.
 │   │                       #   --shot runs 240 deterministic steps and prints four
 │   │                       #   numbers, which makes it a characterization test for
 │   │                       #   the ECS, the hierarchy and the pools               [5.12]
+│   ├── integrate/main.cpp  # THREE RULES, ONE SPRING, DRAWN IN PHASE SPACE   [8.1]
+│   │                       #   — position across, velocity up — because watched
+│   │                       #   as a bouncing dot all three look correct for the
+│   │                       #   first few seconds, which is exactly why the bug in
+│   │                       #   one of them ships. Red spirals out and leaves;
+│   │                       #   green and violet trace one closed curve.
+│   │                       #   RUNS fixed_step NESTED INSIDE THE APP'S OWN: the
+│   │                       #   app's rate is a platform decision and the
+│   │                       #   simulation's rate is the variable under study, so
+│   │                       #   [Up]/[Down] change what physics does without
+│   │                       #   changing how often the screen updates.
+│   │                       #   Carries a 20-line Cohen-Sutherland clip, because
+│   │                       #   engine::draw_line deliberately does not clip (2.1
+│   │                       #   says so in a comment) and a diverging red spiral
+│   │                       #   would otherwise be drawn across the energy chart
+│   │                       #   next door. That exercise came due 70 lessons later.
+│   │                       #   VIEW SCALE IS CAPPED at three amplitudes: without
+│   │                       #   the cap the camera follows the broken curve out and
+│   │                       #   every correct one collapses to a dot
 │   ├── audio/main.cpp      # A LISTENER, THREE EMITTERS, AND A MAP OF WHY   [7.8]
 │   │                       #   IT SOUNDS LIKE THAT. The first demo here whose
 │   │                       #   OUTPUT IS NOT THE PICTURE: the map is an

@@ -205,6 +205,22 @@
 #include <engine/gfx/gpu_texture.hpp>
 #include <engine/gfx/gpu_uniform.hpp>
 
+// ---- Physics: how a velocity becomes a position ---------------------------
+//
+// Lesson 8.1, and the lint fired AGAIN — seven catches in seven lessons, on a
+// directory this time, from somebody who had read 7.8's note above about the
+// shape of the miss and then reproduced it exactly. It is worth recording that
+// reading the warning does not prevent the mistake, because the mistake is not
+// a failure of memory: you write the header, the build compiles it, the harness
+// links it and passes, and at no point does anything make you open THIS file.
+// A check at configure time is what makes you open it, and that is the entire
+// argument for having written it.
+//
+// One header today. By the end of the module this section is bodies, shapes,
+// a broadphase, contact manifolds and a solver, and it will be the second
+// longest block in this file.
+#include <engine/phys/integrate.hpp>
+
 // ---- Platform: how a program starts ---------------------------------------
 //
 // Lesson 5.2. `platform.hpp` and `app.hpp` are here; `platform/main.hpp` is

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Build a Professional 3D Game Engine · SDL3 + C++20</title>
-<meta name="description" content="A 94-lesson course that takes you from 'can program a little' to 'can design, build and ship a 3D game engine' — by building one in C++20 on SDL3.">
+<meta name="description" content="A 107-lesson course that takes you from 'can program a little' to 'can design, build and ship a 3D game engine' — by building one in C++20 on SDL3.">
 <!-- SHARED-CSS:BEGIN -->
 <!-- The shared course stylesheet, linked rather than inlined. Single source of
      truth: docs/shared/course.css. Edit that file; this page carries no copy.
@@ -116,8 +116,8 @@ table.lessons .d { color: var(--text-muted); font-size: 0.95em; line-height: 1.4
   <div class="stats">
     <div class="stat"><span class="n">107</span><span class="l">lessons</span></div>
     <div class="stat"><span class="n">10</span><span class="l">modules</span></div>
-    <div class="stat"><span class="n">~521</span><span class="l">hours</span></div>
-    <div class="stat"><span class="n">83</span><span class="l">published</span></div>
+    <div class="stat"><span class="n">~522</span><span class="l">hours</span></div>
+    <div class="stat"><span class="n">84</span><span class="l">published</span></div>
   </div>
 
   <p>
@@ -317,7 +317,7 @@ table.lessons .d { color: var(--text-muted); font-size: 0.95em; line-height: 1.4
   <h2 id="curriculum"><span class="num">4</span>The curriculum</h2>
 
   <p>
-    107 lessons, ~521 hours. Stage A lessons are marked
+    107 lessons, ~522 hours. Stage A lessons are marked
     <span class="stage-tag a">CPU</span> and Stage B <span class="stage-tag b">GPU</span>.
     Expand a module to see its lessons.
   </p>
@@ -593,8 +593,8 @@ table.lessons .d { color: var(--text-muted); font-size: 0.95em; line-height: 1.4
   <details class="module">
     <summary>
       <span class="m-num">Module 8</span>
-      <span class="m-name">Physics <span class="stage-tag b">GPU</span></span>
-      <span class="m-meta">13 lessons · ~68 h</span>
+      <span class="m-name">Physics <span class="stage-tag b">GPU</span> <span class="badge new">in progress</span></span>
+      <span class="m-meta">13 lessons · ~69 h</span>
     </summary>
     <div class="m-body">
       <p class="m-intro">
@@ -607,7 +607,7 @@ table.lessons .d { color: var(--text-muted); font-size: 0.95em; line-height: 1.4
       <div class="tbl-scroll">
         <table class="lessons">
           <tbody>
-            <tr><td class="id">8.1</td><td><span class="t">Integrators: Why One Explodes</span><span class="d">Explicit vs semi-implicit Euler, shown numerically until you can see the divergence in a table of numbers. One character&rsquo;s difference in code. Lesson 1.4 already derived why frame rate must not be an input to physics; this is what runs inside that fixed step.</span></td><td class="hrs">5 h</td></tr>
+            <tr><td class="id">8.1</td><td><span class="t"><a href="lessons/08-01-integrators.html">Integrators: Why One Explodes</a> <span class="badge done">published</span></span><span class="d">Eighty-three lessons in, <em>nothing in this engine moves on its own</em> &mdash; every position in every demo was authored, by a sine of the clock or a keyframe or a slider. Module 8 is the subsystem that computes where things are from how they are <em>moving</em>, and one question is in the way of all of it: you have a position, a velocity and an acceleration, advance them by <code>h</code> seconds. The answer that occurs to everybody first is <strong>unconditionally unstable</strong> &mdash; not inaccurate, not needs-a-smaller-step, but wrong at every step size there is. The whole lesson turns on one number. For a linear restoring force every step is a <strong>2&times;2 matrix</strong>, and a determinant is the factor a matrix scales area by: explicit Euler&rsquo;s is <code>1 + h&sup2;&omega;&sup2;</code>, greater than one always, and semi-implicit Euler&rsquo;s is <strong>exactly 1</strong> because moving one line above another makes two terms cancel algebraically. On a 1&nbsp;Hz spring at 60&nbsp;Hz that surplus is <strong>1.0966% per step</strong> &mdash; &times;1.92 energy per second, <strong>&times;1.13&nbsp;&times;&nbsp;10&sup1;&#8311; in a minute</strong>, a one-centimetre overlap becoming 3,357&nbsp;km &mdash; and the fix is measured at <strong>0.994&nbsp;ns against 0.963&nbsp;ns</strong> per body per step, a difference smaller than the run-to-run noise. A free lunch, which is the rarest thing in engineering. Along the way: why <em>order of accuracy is blind to all of it</em>, because order asks about <code>h&nbsp;&rarr;&nbsp;0</code> at fixed time while a game asks about <code>t&nbsp;&rarr;&nbsp;&infin;</code> at fixed <code>h</code>, and both Euler rules measure respectably on the first question while one multiplies its error by 1.9 every second on the second; what semi-implicit Euler <em>actually</em> conserves, which is not energy but a sheared cousin of it held to <strong>4.6&nbsp;&times;&nbsp;10&#8315;&#8310;</strong> over 3,600 float steps while the true energy wobbles by exactly <code>h&omega;</code>; why that shadow quantity being an ellipse rather than a hyperbola <em>is</em> the stability limit <code>h&omega;&nbsp;&lt;&nbsp;2</code>, found by bisection at <strong>0.3182939 against 0.3183099</strong>; and why <strong>bounded is not the same as right</strong> &mdash; at <code>h&omega;&nbsp;=&nbsp;1.95</code> the orbit is perfectly stable and swings by a factor of forty. Also: why gravity forgives every integrator (all three err by <code>&plusmn;&frac12;&middot;a&middot;h&middot;t</code>, <em>linearly</em>, so your first falling-cube demo is fine) and a contact forgives none, which is the argument &mdash; made before meeting the machinery &mdash; for why Lesson 8.10 solves impulses instead of penalty springs; why <code>v *= 0.99f</code> makes four different games on four different monitors, and the control that proves the fix <em>preserves</em> the tuned feel rather than changing it; a drag step that reverses the velocity every frame and, past <code>hk&nbsp;=&nbsp;2</code>, accelerates things; a <code>max_stable_step</code> that returns <strong>zero</strong>, because that zero is the lesson; and a benchmark that had to be rewritten because its first version was measuring whether the optimiser felt like unswitching a loop. Nine measured sections, twelve controls, and a demo that draws all three rules in <em>phase space</em>, where one spirals out of the panel and two trace a single closed curve.</span></td><td class="hrs">6 h</td></tr>
             <tr><td class="id">8.2</td><td><span class="t">Forces, Gravity, and Linear Rigid Bodies</span><span class="d">From <code>F = ma</code> to something that falls convincingly. Where &ldquo;1 unit = 1 metre&rdquo; stops being pedantry, and where a scaled parent quietly stops meaning it.</span></td><td class="hrs">4 h</td></tr>
             <tr><td class="id">8.3</td><td><span class="t">Angular Dynamics: Torque and the Inertia Tensor</span><span class="d">Why a thrown box tumbles and a thrown ball does not. Torque as <code>r &times; F</code> &mdash; whose sign is fixed by our right-handed convention, not by taste &mdash; then the inertia tensor built from the parallel-axis theorem, and the basis change <code>R I R&#7488;</code> that carries it into world space. <code>mat3</code> gains the three operators an outer product needs. A zero inverse tensor turns out to be exactly what an immovable body wants.</span></td><td class="hrs">6 h</td></tr>
             <tr><td class="id">8.4</td><td><span class="t">Collision Primitives: Spheres, AABBs, OBBs, and the SAT</span><span class="d">The Separating Axis Theorem with real diagrams &mdash; it is one genuinely beautiful idea and it deserves the space. <code>aabb</code> has been a fitting type since 6.8; here it learns to answer questions.</span></td><td class="hrs">6 h</td></tr>

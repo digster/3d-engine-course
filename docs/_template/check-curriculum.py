@@ -32,6 +32,9 @@ WHAT IT CHECKS
   7. Every href pointing inside docs/ resolves to a file that exists.
   8. STATE.md's `docs/lessons/:` manifest lists every published page.
   9. STATE.md's `completed:` roll names every published lesson number.
+ 10. index.html's <meta name="description"> states the same lesson count the
+     table does.
+ 11. Each published lesson page's own "Time: ~ N hours" matches its index row.
 
 CHECK 8 WAS ADDED BY LESSON 7.4, AND STATE.md ASKED FOR IT BY NAME. That file's
 own note beside the list reads: "check-curriculum.py verifies the INDEX against
@@ -253,6 +256,33 @@ def check_totals(modules: list[Module], stats: dict[str, int],
         report.ok(f"prose and hero stats agree: {total_lessons} lessons, ~{total_hours} h")
 
 
+META_COUNT_RE = re.compile(r'<meta name="description" content="A (?P<n>[0-9]+)-lesson course')
+
+
+def check_meta_description(text: str, total_lessons: int, report: Report) -> None:
+    """Check 10 — the one number on this page that is not on this page.
+
+    CHECK 10 WAS ADDED BY LESSON 8.1, AND IT HAD BEEN WRONG SINCE THE RESHAPE.
+    `<meta name="description">` said "A 94-lesson course" for eight days and nine
+    published lessons after the course became 107 lessons, because checks 1 and 2
+    read the HERO STATS and the CURRICULUM PROSE — the two places a human looking
+    at the rendered page can see — and the description is in the <head>, where
+    nobody looks and every search result and link preview does.
+
+    The shape of the miss is worth naming because it is the same one check 9 was
+    written for: a fact was recorded in N places, a rule was written to verify
+    N-1 of them, and the unverified one was the one that could not be seen.
+    ASSUME THERE IS ONE MORE PLACE."""
+    match = META_COUNT_RE.search(text)
+    if match is None:
+        report.fail("meta", 'no \'<meta name="description" content="A N-lesson course...\'')
+    elif int(match.group("n")) != total_lessons:
+        report.fail("meta", f"description says {match.group('n')} lessons, "
+                            f"table says {total_lessons}")
+    else:
+        report.ok(f"meta description agrees: {total_lessons} lessons")
+
+
 def check_files_and_badges(modules: list[Module], report: Report) -> list[Lesson]:
     """Checks 3, 4 and 5 — badges, files, ordering, and module grouping."""
     ordered: list[Lesson] = []
@@ -296,6 +326,58 @@ def check_files_and_badges(modules: list[Module], report: Report) -> list[Lesson
         if rel not in linked:
             report.fail("orphan", f"{rel} exists but no index row links it")
     return ordered
+
+
+PAGE_TIME_RE = re.compile(r"<dt>Time</dt>\s*<dd>(?P<dd>.*?)</dd>", re.S)
+
+
+def check_page_hours(ordered: list[Lesson], report: Report) -> None:
+    """Check 11 — the estimate, which is written twice and agreed once.
+
+    CHECK 11 WAS ADDED BY LESSON 8.1, AS THE SECOND INSTANCE OF CHECK 10'S CLASS
+    IN A SINGLE SESSION. A lesson's hour estimate is written in the index row's
+    <td class="hrs"> and again in the page's own <dt>Time</dt> block, and the two
+    are edited at different moments: the page when the lesson is drafted, the row
+    when it lands and the real cost is known. 8.1 shipped at 6 h, the index and
+    every module subtotal moved with it, and the page went on saying 5. Checks 1
+    and 2 could not see it — they only ever read the index, where all four numbers
+    agreed with each other. The page is the second copy, and the second copy is
+    what a reader looks at before deciding to start.
+
+    IT IS A RANGE TEST, NOT AN EQUALITY, and that is a fact about the corpus
+    rather than a softening. Pages spell this field at least four ways —
+    "≈ 4 hours", "≈ 4–5 hours", "&asymp; 4&ndash;5 hours", and one with a
+    parenthetical after it — so the honest question is whether the index's single
+    number falls inside what the page claims. An equality test would have flagged
+    fourteen published pages that are not wrong about anything.
+    """
+    problems = 0
+    checked = 0
+    for row in ordered:
+        if not (row.published and row.href):
+            continue
+        path = DOCS / row.href
+        if not path.exists():
+            continue
+        match = PAGE_TIME_RE.search(path.read_text(encoding="utf-8"))
+        if match is None:
+            report.fail("page hours", f"{row.lesson_id} has no '<dt>Time</dt><dd>…</dd>' block")
+            problems += 1
+            continue
+        # Everything up to the word "hours"; a trailing parenthetical is prose.
+        head = unentity(match.group("dd")).split("hour")[0]
+        stated = [int(n) for n in re.findall(r"[0-9]+", head)]
+        checked += 1
+        if not stated:
+            report.fail("page hours", f"{row.lesson_id} states no number before 'hours'")
+            problems += 1
+        elif not (min(stated) <= row.hours <= max(stated)):
+            span = f"{min(stated)}" if len(set(stated)) == 1 else f"{min(stated)}-{max(stated)}"
+            report.fail("page hours", f"{row.lesson_id} says {span} h, "
+                                      f"the index row says {row.hours} h")
+            problems += 1
+    if problems == 0:
+        report.ok(f"{checked} pages agree with their index row's hours")
 
 
 def check_navigation(ordered: list[Lesson], report: Report) -> None:
@@ -504,8 +586,10 @@ def main() -> int:
 
     report = Report(args.quiet)
     check_totals(modules, stats, prose, report)
+    check_meta_description(text, sum(len(m.rows) for m in modules), report)
     ordered = check_files_and_badges(modules, report)
     check_navigation(ordered, report)
+    check_page_hours(ordered, report)
     check_links(report)
     check_state_manifest(report)
     check_state_completed(report)

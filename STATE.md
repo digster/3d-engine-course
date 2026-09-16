@@ -7,7 +7,30 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-09-15 (after Lesson 7.7 — 82 of 107 lessons; Module 7 OPEN,
+updated: 2026-09-16 (after Lesson 8.1 — 84 of 107 lessons; MODULE 8 OPEN, 1 of
+         13, ~6 h of ~69. Planned at 5 h, shipped at 6, so Module 8 went
+         68 -> 69 h and the course total 521 -> 522. Module 8's index badge went
+         from nothing to `in progress`, the mirror of the edit 7.8 made to
+         Module 7's; index prose, both hero stats and the module subtotal all
+         moved together and check-curriculum.py confirms.
+         AND IT FOUND A STALE NUMBER NOTHING HAD EVER CHECKED: index.html's
+         <meta name="description"> still said "A 94-lesson course", eight days
+         after the reshape to 107 and through nine published lessons, because
+         check-curriculum read the PROSE and the HERO STATS and not the head.
+         Fixed, and now CHECK 10. AND THEN THE SAME CLASS AGAIN, TWENTY MINUTES
+         LATER: the lesson PAGE said 5 hours while the index row said 6, because
+         a page's estimate is written when it is drafted and the row's when it
+         lands. CHECK 11 compares them, and on its first run it found TWO
+         PRE-EXISTING DRIFTS — 3.2 and 3.3 said "3-4 hours" against index rows of
+         5. Neither page has a builder, so both were corrected in place; the
+         index drives every subtotal and was left alone. It is a RANGE test, not
+         an equality: pages spell that field at least four ways and an equality
+         would have flagged fourteen pages that are wrong about nothing.
+         NOTE THE HEADER BELOW WAS ITSELF STALE: 7.8 shipped and updated
+         `completed:`, `capabilities:` and the manifest, and left this line
+         saying 7.7 / 82. That is the FOURTH place 7.8's own note predicted
+         ("assume there is a fourth place"), found one lesson later.
+         Earlier, after Lesson 7.7 — 82 of 107 lessons; Module 7 OPEN,
          7 of 8, ~41 h of ~46. Planned at 5 h, shipped at 6, so Module 7 went
          ~45 -> ~46 h and the course ~519 -> ~520 h. Index prose, hero stats
          (82 published) and the Module 7 subtotal all moved together;
@@ -126,6 +149,51 @@ conventions:
         fmod(-0.1, 1.0) is -0.1. And AND std::fmod IS NOT CONSTANT TIME — its
         cost grows with the quotient, 1.603 ns on a bounded clock against 5.901
         after the clock has run to 6,666 s. WRAP THE PLAYHEAD EVERY STEP.
+  integrator: *** SEMI-IMPLICIT (SYMPLECTIC) EULER IS THE DEFAULT, AND EXPLICIT
+        EULER IS NEVER CORRECT. *** 8.1, engine/include/engine/phys/integrate.hpp.
+        `position += velocity * h` BEFORE the velocity update is explicit Euler
+        and is UNCONDITIONALLY UNSTABLE on any position-dependent force — not
+        inaccurate, not needs-a-smaller-step: wrong at every h there is. The two
+        lines in the other order preserve phase-space area EXACTLY and cost the
+        same (0.994 ns vs 0.963 ns per body per step, a 3% gap against a 3%
+        run-to-run spread). THE WHOLE ARGUMENT IS ONE DETERMINANT: for a linear
+        restoring force a step is a 2x2 matrix, det(explicit) = 1 + h^2 w^2 > 1
+        always, det(semi-implicit) = 1 exactly, det(backward) = 1/(1 + h^2 w^2).
+        Measured at 1.010966377 against a predicted 1.010966182.
+        AREA IS ENERGY. An orbit encloses 2*pi*E/w, so a determinant applied N
+        times IS the energy ratio: (1.010966229)^3600 = 1.1270e17, which is what
+        the harness measures. A 1 m spring reaches 3.36e8 m in a simulated
+        minute; the first ten seconds look normal.
+        ORDER OF ACCURACY CANNOT SEE ANY OF IT. Order is the h -> 0 question at
+        fixed t; a game asks the t -> infinity question at fixed h. Both Euler
+        rules read respectably on the first (explicit 1.089, semi-implicit 2.002
+        — and that 2 is a FACT ABOUT THE OSCILLATOR, not a promotion, because
+        the amplitude error is exactly zero and only a frequency shift is left).
+        WHAT IS CONSERVED IS NOT ENERGY. Semi-implicit Euler holds
+        (v^2 + w^2 x^2 - h w^2 x v)/2 — the SHADOW energy — to 4.6e-6 over 3,600
+        float steps, while the true energy wobbles by exactly h*w peak to peak
+        (predicted 0.104720, measured 0.104723). The orbit is a level set of the
+        shadow quantity, which is why the wobble never becomes a trend.
+        STABILITY IS THAT SAME STATEMENT. The shadow form is positive-definite —
+        an ellipse rather than a hyperbola — iff h*w < 2, which IS the stability
+        limit. Bisected at 0.3182939 against 2/w = 0.3183099. BOUNDED IS NOT
+        RIGHT: at h*w = 1.95 the orbit is stable and swings x40. Budget h*w <=
+        0.4, which at 60 Hz admits w <= 24 rad/s — a spring of 3.8 Hz.
+        AND THAT IS WHY CONTACTS ARE NOT SPRINGS. A contact stiff enough not to
+        let a box sink is hundreds of Hz and would need thousands of steps a
+        second. 8.9/8.10 use impulses, and this is the number that says so.
+        GRAVITY FORGIVES EVERYTHING: under constant acceleration all three rules
+        agree on velocity to the last bit and err in position by exactly
+        -/+ 0.5*a*h*t, LINEARLY (8.2 cm after 1 s at 60 Hz), with velocity
+        Verlet exact. Your first falling-cube demo is fine. That is why the bug
+        ships.
+        DRAG IS NOT A POSITION FORCE, so the reordering buys nothing: use
+        apply_drag (exact, std::exp) and damping_factor (pow(r, h)) instead.
+        `v *= 0.99f` per step keeps 74% of the velocity per second at 30 Hz and
+        24% at 144 Hz — same constant, four different games.
+        max_stable_step(explicit_euler, w) RETURNS 0, deliberately: there is no
+        stable step, so a caller who scales it gets a simulation that does not
+        move rather than one that explodes in a playtest.
   audio: *** ENERGY ADDS, AMPLITUDES DO NOT. *** 7.8,
         engine/include/engine/audio/ + docs/conventions.html §8i +
         math-toolbox.html §8d. Almost every rule below is that sentence wearing
@@ -5199,8 +5267,64 @@ completed:
          the only edited file anything else includes, and the edit is one
          enumerator plus comments.)
   ===> MODULE 7 COMPLETE <===
+  - 8.1  Integrators: Why One Explodes
+        (OPENS MODULE 8. 7.8's TWO dead `next` links repointed in the SOURCES —
+         scratch/l78_body_a.html and build_78.py's TAIL — and build_78 rebuilt,
+         so page and generator still agree; the diff was those four lines and
+         nothing else. Planned at 5 h, shipped at 6, so Module 8 went 68 -> 69 h
+         and the course total 521 -> 522.
+         THE FIFTH NEW PUBLIC DIRECTORY SINCE 5.11: engine/phys/, and the second
+         (after audio/) whose contents never touch a pixel. NOT under math/: the
+         test is what a file KNOWS, and math/ knows about numbers — which is why
+         it has no .cpp at all — while integrate.cpp knows that a velocity is
+         metres per second and that a step size has a stability limit.
+         THE UMBRELLA LINT FIRED AGAIN: SEVEN CATCHES IN SEVEN LESSONS, this
+         time from somebody who had just read 7.8's note about the shape of the
+         miss and reproduced it exactly. Reading the warning does not prevent it;
+         a configure-time check does. 89 -> 90 public headers.
+         NO REISSUE PASS AND NO conventions/math-toolbox EDIT: nothing here
+         changes a course-wide convention or adds a reusable identity — the
+         determinant argument is the lesson's own and lives on its page. The
+         `integrator:` block above is the resume-key version.
+         NO GOLDEN RUN: the include-closure graph was asked rather than assumed
+         and nothing this lesson touched is in demo_scene.cpp's closure.
+         TWO NEW CHECKS, both from the same fault line: check 10 (the index's
+         <meta name="description">, stale at "94-lesson" since the reshape) and
+         check 11 (each page's own Time block against its index row). Both were
+         proved by breaking them on purpose.
+         Ten figures. check-page.js green at 1280 AND 390 — it caught five
+         labels sitting on their own curves' strokes, all moved OUTSIDE the plot
+         at the source, which is figs_78.py's standing rule arriving with
+         evidence.)
 
 capabilities:
+  - 8.1 THE ENGINE CAN ADVANCE A STATE THROUGH TIME, and can say whether the step
+    size you chose is one that works. `engine::phys` is one header and one source
+    file: three rules over a `motion` of two vec3s (explicit Euler, semi-implicit
+    Euler, velocity Verlet), exact linear drag, a frame-rate-independent damping
+    factor, and four diagnostics — spring_energy, shadow_energy, area_factor and
+    max_stable_step.
+    THE STEPPER IS A TEMPLATE over the acceleration callable, and the measurement
+    is the argument: std::function costs 1.591 ns against 0.963, +65% on top of
+    the step itself. The non-template constant-acceleration overload — the gravity
+    path, the one that looks simpler — is 1.222 ns, SLOWER than the template,
+    because it is a real call into libengine.a that cannot inline across the
+    archive.
+    WHAT IS MISSING, and 8.1 §11 lists it rather than implying it: no mass and no
+    forces (8.2), no rotation (8.3, and it needs 7.4's quat), no collision and no
+    constraints (8.4-8.10), no adaptive step EVER (1.4's argument: a variable step
+    makes replays and lockstep impossible), no RK4 (four force evaluations, and
+    its determinant is 1 - u^3/72 — backward Euler's disease in fifth-order
+    clothing), and no velocity-dependent force in the symplectic path.
+    THE DEMO IS demos/integrate, and it draws PHASE SPACE rather than a scene,
+    because all three rules look like a spring for the first few seconds. It runs
+    1.4's `fixed_step` NESTED INSIDE the application's own — the app's rate is a
+    platform decision and the simulation's rate is the variable under study — and
+    it carries a 20-line Cohen-Sutherland clip, because engine::draw_line
+    deliberately does not clip (2.1 says so in a comment) and a diverging red
+    spiral would otherwise be drawn across the energy chart next door. That
+    exercise from 2.1 came due seventy lessons later for a reason nobody
+    predicted.
   - 7.8 THE ENGINE CAN HEAR. `engine::audio` is three headers and about a
     thousand lines: a WAV loader with format conversion and linear resampling, a
     float mixer with a voice table behind generational handles, and a spatial
@@ -8474,9 +8598,27 @@ files:
              alphabetically, so they will not keep agreeing.)
   engine/include/engine/platform/: platform.hpp, app.hpp,
             main.hpp   (NOT in engine.hpp — it defines the entry point)
+  engine/include/engine/phys/: integrate.hpp                                 [8.1]
+            (THE FIFTH NEW DIRECTORY SINCE THE REFACTOR. NOT math/: math/ knows
+             about numbers and has no .cpp at all; this knows that a velocity is
+             metres per second and that a step size has a stability limit.
+             `motion` is deliberately TWO VECTORS — no mass, no orientation, no
+             handle — which is what let 8.1 §5 be an argument about a 2x2 matrix
+             rather than about an engine, and what makes it reusable for a
+             spring-damper camera or a smoothed UI value. 8.2 gives a
+             `rigid_body` a `motion`; it does not widen this.
+             THERE IS NO implicit_euler ENUMERATOR, and the enum says why: the
+             solve is a root find for anything non-linear, and its determinant is
+             1/(1 + h^2 w^2), so it is costly AND lossy.)
   engine/include/engine/ui/: debug_ui.hpp                                   [5.11]
             (a new directory, same argument asset/ made in 5.5: tooling UI is not a
              graphics subsystem. Does NOT include <imgui.h> — see debug-ui.)
+  engine/src/phys/: integrate.cpp                                          [8.1]
+            (Everything that is NOT a template: the constant-acceleration
+             overload, apply_drag/damping_factor, and the four diagnostics.
+             Nothing in it is hot — the general stepper stayed in the header
+             precisely so it could inline, and I.4 measures what crossing the
+             archive boundary costs.)
   engine/src/audio/: mixer.cpp, sound.cpp, spatial.cpp                    [7.8]
             (mixer.cpp is the only file in this library that runs on a thread SDL
              owns, and every strange thing in it comes from that: no allocation,
@@ -8536,6 +8678,17 @@ files:
             treats a pixel as background — and emits nothing for it — only when
             EVERY channel is below 14. The obvious (12, 13, 17) has 17 on blue
             and came back as a mid-grey slab at (79, 84, 98).)
+  demos/integrate/: main.cpp                                              [8.1]
+           (PHASE SPACE, not a scene: watched as a bouncing dot all three rules
+            look like a spring for the first few seconds, which is exactly why
+            the bug in one of them ships. Runs `fixed_step` nested inside the
+            app's own, so [Up]/[Down] change what physics does without changing
+            how often the screen updates. Carries a Cohen-Sutherland clip (2.1's
+            exercise, due seventy lessons later) and a CEILING on the view scale
+            at three amplitudes — without it a diverging explicit Euler pulls the
+            camera back without limit and every correct curve collapses to a dot.
+            Its clear colour is (16, 18, 24), and figs_81.py's palette lists the
+            demo's own constants because rle_rects SNAPS.)
   demos/audio/: main.cpp                                                  [7.8]
            (The first demo here whose OUTPUT IS NOT THE PICTURE. The map is an
             EXPLANATION of the result — where each source is and what two gains
@@ -8637,7 +8790,7 @@ files:
                  07-05-slerp.html,
                  07-06-skeletal-animation.html,
                  07-07-sampling-blending.html
-                 07-08-audio.html
+                 07-08-audio.html, 08-01-integrators.html
                  (5.12 IS OUT OF SEQUENCE ON PURPOSE — Module 5 closed eleven
                   lessons after 5.11 and one after 6.18, and the list is
                   append-ordered rather than sorted so that the history is
@@ -8668,6 +8821,14 @@ files:
                   directly. Candidate for 9.10.)
   docs/shared/: course.css, course.js      (THE stylesheet + page script; one copy each)
   docs/_template/: lesson-template.html, README.md, apply-shared.py, check-page.js
+  scratch/ (8.1, not shipped with the engine): verify_81.cpp, build_verify_81.sh,
+           figs_81.py, build_81.py, l81_body_{a..e}.html, l81_fig{1..10}.svg,
+           l81_demo.ppm, verify_81.log, and the LISTING PINS l81_<path>.
+           (tools/figview81.sh is figview78.sh renamed. build_verify_81.sh still
+            REFUSES an unoptimised libengine.a, and it matters more here than
+            anywhere: section I's claim is that two rules cost the SAME, and a
+            debug build's per-call overhead swamps the difference the claim is
+            about.)
   scratch/ (7.7, not shipped with the engine): verify_77.cpp, build_verify_77.sh,
            golden_77.cpp, closure_77.py, figs_77.py, build_77.py,
            l77_body_{a,b,c,d,e}.html, l77_fig{1..10}.svg,
@@ -9235,86 +9396,72 @@ roadmap: RESHAPED 2026-09-08, AFTER TWO EXTERNAL REVIEWS OF THE PUBLISHED OUTLIN
 
 
 
-next: 8.1 — Integrators: Why One Explodes
+next: 8.2 — Forces, Gravity, and Linear Rigid Bodies
 
-      (planned filename: docs/lessons/08-01-integrators.html. 7.8's TWO next
-       links point at the index and BOTH need repointing —
-       scratch/l78_body_a.html holds the top one and build_78.py's TAIL the
-       bottom, the same pair every Module 7 lesson has had, and
-       check-curriculum.py has now caught that pair three lessons running.
-       8.1 OPENS MODULE 8, so docs/index.html's Module 8 badge goes from
-       `planned` to `wip`/"in progress" — the mirror of the edit 7.8 just made to
-       Module 7's. Check it with check-curriculum.py rather than by eye.
-       MODULE 7 CLOSED WITHOUT A REISSUE PASS, on purpose: conventions.html and
-       math-toolbox.html were updated WITH the lesson (§8i and §8d, each with its
-       TOC entry) rather than deferred to the boundary, which is 7.3's rule and
-       is the only version of §7's reissue requirement that has ever actually
-       happened. index.html was reissued — badge, meta, hero stats and the row.)
+      (planned filename: docs/lessons/08-02-forces-rigid-bodies.html. 8.1's TWO
+       next links point at the index and BOTH need repointing —
+       scratch/l81_body_a.html holds the top one and build_81.py's TAIL the
+       bottom, the same pair every lesson since 7.1 has had, and
+       check-curriculum.py has now caught that pair four lessons running.
+       MODULE 8's INDEX BADGE IS ALREADY `in progress`; it does not move again
+       until 8.13.)
 
-      WHAT 8.1 INHERITS, AND MUST NOT RE-DERIVE:
-        - 1.4's ACCUMULATOR, which was built for exactly this and has been
-          waiting eight modules. `fixed_step` already hands out a constant `h`;
-          8.1's whole subject is what to do with it, and the lesson should open
-          by pointing at code that already exists rather than by building a loop.
-        - THE HARNESS SHAPE. Nine sections, every one with a control, and the
-          control chosen by asking WHAT IT WOULD SAY IF THE THING WERE COMPLETELY
-          BROKEN. 7.8 added a second question to that: what would it say if the
-          thing were completely FINE? Its dropout counter answered "starved" on a
-          healthy run, and would have gone on doing so forever.
-        - `scratch/build_verify_NN.sh` REFUSES an unoptimised libengine.a. Copy
-          it; do not re-derive the 16.9x.
+      WHAT 8.2 INHERITS, AND MUST NOT RE-DERIVE:
+        - `integrate(motion&, ...)` AND THE CHOICE OF RULE. 8.1 settled that
+          semi-implicit Euler is the default and why; 8.2 supplies the
+          acceleration and must not re-litigate the stepper. `motion` stays two
+          vectors — a `rigid_body` HAS one.
+        - THE UNITS ARGUMENT IS ALREADY HALF MADE. conventions.html §3 has said
+          metres and seconds since Module 2 and 8.1 restated it as a physics
+          claim; 8.2 is where 9.81 makes it non-negotiable, and where a SCALED
+          PARENT in the transform hierarchy quietly stops meaning what it says.
+          That is the interesting half of the lesson and it is not in 8.1.
+        - THE HARNESS SHAPE. Nine sections, every one with a control, chosen by
+          asking what it would say if the thing were completely BROKEN and what
+          it would say if the thing were completely FINE.
+        - `scratch/build_verify_NN.sh` REFUSES an unoptimised libengine.a.
         - A LESSON PAGE ENDS AT FURTHER READING. STATE.md is the sole resume key.
 
-      WHAT 8.1 IS LIKELY TO MOVE. A new directory, engine/include/engine/phys/
-      — and if so, THE UMBRELLA LINT WILL FIRE at configure time, which is the
-      fifth new directory it has seen and the sixth catch in six lessons.
-      engine/CMakeLists.txt, and demos/CMakeLists.txt for a new target. It is
-      unlikely to touch anything under demo_scene.cpp's closure, but run
-      `python3 scratch/closure_77.py <paths...>` (rename and reuse) and let the
-      graph say so rather than assuming it.
+      WHAT 8.2 IS LIKELY TO MOVE. `engine/include/engine/phys/rigid_body.hpp`
+      and its .cpp, which means engine/CMakeLists.txt and — THE LINT WILL FIRE
+      AGAIN, for the eighth lesson running — engine.hpp. The `phys/` section in
+      the umbrella already exists, so this is one line in a block that is there.
+      A demo target is likely. Run the closure graph rather than assuming.
 
-      CARRY FORWARD from 7.8:
-        - ENERGY ADDS, AMPLITUDES DO NOT, and this generalises straight into
-          Module 8: kinetic energy is the square of a velocity, so every
-          "combine two independent things" question in the solver has the same
-          shape as §5's sqrt(N). Whenever the quantity that adds is the square,
-          the thing you can see grows as the root.
-        - A PEAK IS NOT A BOUND. The peak of 16 uncorrelated voices kept growing
-          with the observation window — 6.98x at 10 ms, 10.46x at 8 s — because
-          it is the largest coincidence that happened rather than a property of
-          the signals. Physics has the identical trap: the worst-case penetration
-          depth in a stack is a statistic about how long you watched.
-        - A CONTROL THAT FIRES ON THE HEALTHY CASE IS NOT A CONTROL. `starved`
-          reported 28 of 58 on a mix at 0.2% load, because it measured SDL3's
-          pull model working. It was replaced by `late`, which compares the
-          subsystem's own time against its own deadline and needs nothing from
-          anybody else. Prefer counters computed entirely from quantities you
-          own.
-        - EVERY SAMPLED QUANTITY HAS A RECONSTRUCTION, AND CHOOSING IT BY
-          ACCIDENT CHOOSES THE WORST ONE. 7.7 found this in keyframes and thought
-          it was about animation; 7.8 found the same structure in a GAIN sampled
-          at 60 Hz and reconstructed at 48 kHz. Module 8's integrator IS a
-          reconstruction of a continuous trajectory from a sampled derivative,
-          which is the third instance and the one the rule was really about.
-        - REAL-TIME CODE YOU CANNOT CALL FROM A TEST IS UNDEBUGGABLE. Making
-          `mix_into` a pure function with a public offline entry point cost one
-          method and bought every number in the lesson. A physics `step()` that
-          can be driven from a harness with no window buys the same thing.
-        - THE RESUME KEY CARRIES THE SAME FACT IN THREE PLACES AND ONE OF THEM
-          WILL BE MISSED. 7.7 updated `capabilities:` and the file manifest and
-          not `completed:`, and nothing noticed for a whole lesson because check 8
-          watches FILENAMES. check 9 now watches lesson NUMBERS. Assume there is
-          a fourth place.
-        - AND A CHECK CAN BE BROKEN BY WRITING ABOUT IT. Check 8 anchored on the
-          bare string `docs/lessons/:`, so a `completed:` note that MENTIONED the
-          key moved the block it parsed a thousand lines up the file and it
-          reported all 82 pages missing. Anchored on the indented key now. Any
-          check that greps its own corpus has this failure mode.
+      CARRY FORWARD from 8.1:
+        - A DETERMINANT IS AN INSTRUMENT, and reaching for the standard one
+          (order of accuracy) measured the wrong thing entirely. When a metric
+          says two things are equivalent and you can see that they are not, the
+          metric is answering a different question — find out which.
+        - AREA IS ENERGY, and this generalises: any conserved quadratic form is
+          an area in the right coordinates. The inertia tensor in 8.3 is another
+          quadratic form, and the question "what does this step do to it" is the
+          same question asked again.
+        - A CONTROL THAT ALWAYS RETURNS SOMETHING RETURNS SOMETHING WHEN THE
+          ANSWER IS `NONE`. F.3's bisection found a "stability limit" for
+          explicit Euler — 3.4 ms — which is a fact about how long the test ran.
+          Any search with a fixed budget has this shape.
+        - A BENCHMARK CAN MEASURE THE OPTIMISER. Timing the three rules with the
+          rule as a RUNTIME value made explicit 15% faster in one run and 30%
+          slower in the next, because loop unswitching is a mood. A template
+          non-type parameter made each loop monomorphic and the two Euler rules
+          then agreed to 0.3% run over run.
+        - CHECK-PAGE.JS WALKS A PATH'S ACTUAL STROKE, not its bounding box, so a
+          hit is real. It found five labels lying on the curves they named. The
+          fix that works is figs_78.py's standing rule: ANNOTATIONS GO OUTSIDE
+          THE PLOT.
+        - AND A FIGURE CAN BE BROKEN BY THE RENDERER RATHER THAN THE DATA. The
+          demo screenshot came out as a DASHED spiral; the grid was correct and
+          a 1-unit rect in a 900-unit viewBox is 0.7 device pixels once the
+          figure scales to a phone, so single-cell runs vanished. cell=3 at
+          px=1.5 is the same size on the page and survives. Check the renderer
+          before blaming the data.
         - THE SCRATCHPAD VANISHES BETWEEN TURNS. Playwright helpers live in
           scratch/tools/ and scratch/ is gitignored. PLAYWRIGHT IS NOT IN ANY
           SYSTEM PYTHON ON THIS MACHINE: run them with
-          `uv run --with playwright python scratch/tools/<tool>.py ...`, and
-          `uv run --with playwright playwright install chromium` once.
-          scratch/tools/figview78.sh is the pattern worth copying: it rebuilds
-          the SVGs AND reassembles the preview page, because the SVGs are inlined
-          into it and regenerating one alone changes nothing Playwright can see.
+          `uv run --with playwright python scratch/tools/<tool>.py ...`.
+        - AND: figs_81.py NOW MIXES `\uXXXX` ESCAPES WITH LITERAL UNICODE,
+          because successive patch scripts wrote both. A search-and-replace that
+          assumes one form silently fails against the other — three label fixes
+          were lost that way and only check-page.js noticed. Match on a
+          distinctive ASCII substring, or assert the replacement count.

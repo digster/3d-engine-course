@@ -2809,3 +2809,11 @@ next
 ```
 
 (Lesson 7.8 — SDL3 Audio: Streams, Mixing, and 3D Sound. Closes Module 7.)
+
+## Session — 2026-09-16 (session 2)
+
+```
+next
+```
+
+(Lesson 8.1 — Integrators: Why One Explodes. Opens Module 8.)
