@@ -101,6 +101,7 @@
       <li><a href="#audio">Audio &mdash; format, listener, panning and distance</a></li>
       <li><a href="#simulation">The simulation contract</a></li>
       <li><a href="#rotational">Rotational quantities &mdash; torque, spin, inertia</a></li>
+      <li><a href="#bodies">Bodies &mdash; mass, forces, and which space they live in</a></li>
       <li><a href="#colour">Colour and diagram conventions</a></li>
       <li><a href="#code">Code organization &mdash; the boundary</a></li>
       <li><a href="#verified">The verified-facts table</a></li>
@@ -3434,6 +3435,94 @@
     </p>
   </div>
 
+  <h2 id="bodies"><span class="num">9c</span>Bodies &mdash; mass, forces, and which space they live in</h2>
+
+  <p>
+    Settled in Lesson 8.2 and binding for the rest of Module 8 and the capstone. Every one of these
+    is a decision the engine makes rather than a fact about physics, and every one of them is
+    measured on that page.
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>Rule</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>A body's position and velocity are in <em>world space</em>.</strong>
+              <code>body_world</code> has no concept of a parent, a hierarchy or a transform, and
+              there is no way to express anything else.</td>
+          <td>A frame with a uniform scale of 2 makes a body fall at <strong>2&nbsp;g</strong>; a
+              non-uniform one changes the <em>direction</em> of gravity (measured: 1.5811&nbsp;g at
+              <strong>63.435&deg;</strong> off vertical for a body merely turned 45&deg;); and a
+              <em>spinning</em> one is non-inertial in a way no matrix can report, putting a
+              force-free body <strong>3.7963&nbsp;m</strong> off a straight line in one second.
+              <code>place_in_parent</code> converts at the boundary; <code>inspect_frame</code>
+              measures what a frame would have done.</td>
+        </tr>
+        <tr>
+          <td><strong>Forces accumulate, and the accumulator is cleared <em>after</em> the step.</strong>
+              Systems call <code>add_force</code> in any order and never assign.</td>
+          <td>Newton's second law is linear in <code>F</code>, so four independent systems need no
+              interface between them. Clearing first would leave every debug overlay, assertion and
+              solver that looks at a body between two steps reading zero.</td>
+        </tr>
+        <tr>
+          <td><strong>A body stores <code>inv_mass</code>, not mass. Zero means immovable.</strong></td>
+          <td>Immovable is the common case in a real level and is an exact representable zero;
+              <code>mass_of(a) &minus; mass_of(b)</code> for two immovable bodies is <strong>NaN</strong>
+              where the inverse masses subtract to 0; and the effective mass of a colliding pair is
+              literally <code>1/(w_a + w_b)</code>.</td>
+        </tr>
+        <tr>
+          <td><strong><code>inv_mass</code> and <code>body_kind</code> answer different questions</strong>
+              &mdash; &ldquo;can a force move it&rdquo; and &ldquo;does it move at all&rdquo;.</td>
+          <td>A lift is immovable by forces <em>and</em> moves. Conflating them gives a lift that sags
+              under load, or one that leaves its passengers behind.</td>
+        </tr>
+        <tr>
+          <td><strong>Gravity is added as an <em>acceleration</em>, after the division</strong> &mdash;
+              so <code>rigid_body::force</code> does <em>not</em> contain the body's weight.</td>
+          <td>Routing weight through the accumulator needs a float divide per body per step to recover
+              a mass the body does not store: measured at <strong>15%</strong> of the whole update,
+              more than an entire integrator step. Draw weight as
+              <code>mass_of(b) * world.gravity()</code>.</td>
+        </tr>
+        <tr>
+          <td><strong>A change in momentum is an <em>impulse</em>, never a one-step force.</strong></td>
+          <td><code>&Delta;v = J/m</code> has no <code>h</code> in it. The same jump written as a
+              one-step force spans <strong>23&times;</strong> between 30 and 144&nbsp;Hz. Every contact
+              and constraint response in this module is an impulse for this reason.</td>
+        </tr>
+        <tr>
+          <td><strong><code>rigid_body::damping</code> is a feel knob, not air.</strong> Real drag is a
+              force applied through the accumulator.</td>
+          <td>Damping acts on the velocity with no mass in it, so terminal speed is <code>g/k</code>
+              for every body; a drag force gives <code>mg/b</code>. Three masses 1000&times; apart
+              trace one curve under the first and three under the second.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout warn">
+    <span class="label">9.81 is in metres, and that is what &sect;8's &ldquo;one unit is one metre&rdquo; is for</span>
+    <p>
+      Multiply every length in a world by <code>s</code> and leave gravity alone, and every
+      <em>duration</em> in it is multiplied by <strong>&radic;s</strong> &mdash; because
+      <code>t = &radic;(2d/g)</code>. That is why a 1/8 scale model runs <strong>2.83&times;</strong>
+      too fast and gets overcranked, and why &ldquo;the jumping feels floaty&rdquo; is a measurement
+      rather than an opinion: time the fall, divide by <code>free_fall_time(d, 9.81)</code>, and the
+      ratio is <code>1/&radic;s</code>.
+    </p>
+    <p>
+      Scaling <code>g</code> by <code>1/s</code> restores free fall <em>exactly</em> &mdash; it is a
+      change of units, not a fudge. What it does not carry with it is every <strong>absolute
+      length</strong> that never went through the rescale: contact slop, sleep thresholds, penetration
+      limits, broadphase cell sizes, step-up heights. That is the half nobody mentions, and it is why
+      the unit is fixed once here rather than per project.
+    </p>
+  </div>
+
   <h2 id="colour"><span class="num">10</span>Colour and diagram conventions</h2>
 
   <p>
@@ -3565,6 +3654,13 @@
     <table>
       <thead><tr><th>Fact</th><th>Value</th><th>Source</th></tr></thead>
       <tbody>
+        <tr><td>Standard gravity</td><td><strong>9.80665 m/s&sup2;</strong> exactly &mdash; a <em>defined</em> constant, not a measurement; local values run ~9.764 to ~9.834. This engine uses <strong>9.81</strong>.</td><td>CGPM, 3rd conference (1901)</td></tr>
+        <tr><td>Newton's second law</td><td><code>F = ma</code>, and it is <strong>linear in F</strong> &mdash; which is the property the force accumulator depends on</td><td><em>Principia</em>, Law II</td></tr>
+        <tr><td>Impulse</td><td><code>J = &int;F dt = m&Delta;v</code>, so <code>&Delta;v = J&middot;(1/m)</code> with <strong>no step size in it</strong></td><td>Definition; verified in 8.2 &sect;7</td></tr>
+        <tr><td>Reduced mass of a pair</td><td><code>1/(w_a + w_b)</code> where <code>w = 1/m</code>; equals <code>m_a m_b/(m_a + m_b)</code>, and an immovable body contributes <strong>0</strong> to the sum</td><td>Standard; the form 8.9's solver uses</td></tr>
+        <tr><td>Terminal speed, velocity damping</td><td><code>g/k</code> &mdash; <strong>no mass in it</strong>; the discrete fixed point of our step is <code>gh&middot;e^(&minus;kh)/(1&minus;e^(&minus;kh))</code>, 0.42% lower at 60&nbsp;Hz</td><td>Derived and measured, 8.2 &sect;6</td></tr>
+        <tr><td>Terminal speed, linear drag force</td><td><code>mg/b</code> &mdash; <strong>proportional to mass</strong>; time constant <code>m/b</code></td><td>Derived and measured, 8.2 &sect;6</td></tr>
+        <tr><td>Length-scale law</td><td>scale every length by <code>s</code> with <code>g</code> fixed &rarr; every duration scales by <strong>&radic;s</strong></td><td>Derived from <code>d = &frac12;gt&sup2;</code>, 8.2 &sect;8</td></tr>
         <tr><td>NDC extents</td><td>lower-left <code>(−1,−1)</code>, upper-right <code>(1,1)</code> → <strong>+Y up</strong></td><td>SDL3 wiki, CategoryGPU</td></tr>
         <tr><td>NDC depth</td><td><strong><code>z ∈ [0,1]</code></strong>, 0 = near</td><td>SDL3 wiki, CategoryGPU</td></tr>
         <tr><td>Depth attachment</td><td>separate parameter to <code>SDL_BeginGPURenderPass</code>; <em>may be NULL</em></td><td><code>SDL3/SDL_gpu.h</code></td></tr>

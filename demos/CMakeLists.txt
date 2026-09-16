@@ -224,3 +224,24 @@ engine_set_warnings(audio)
 add_executable(integrate integrate/main.cpp)
 target_link_libraries(integrate PRIVATE engine::engine)
 engine_set_warnings(integrate)
+
+# ---- bodies: three masses, three ways to fall ------------------------------
+#
+# Lesson 8.2, and the picture is a WORLD-SPACE TRAJECTORY rather than a phase
+# plot, because the claim it settles is one a player could see: two of the three
+# resistance models produce identical trails for three very different masses and
+# the third does not. The right-hand panel is the other half of the lesson —
+# four bodies dropped in four different parent frames, drawn where they actually
+# end up — and it is the only place in this repository where something is
+# integrated in a space that is not world space, on purpose, so that the result
+# can be looked at.
+#
+# `engine::engine` directly and NOT `demo_common`, the same statement `gimbal`,
+# `rig`, `plane`, `collector`, `ecs_swarm`, `audio` and `integrate` make. It
+# loads nothing and computes everything on screen, so a `--shot` run is
+# byte-for-byte reproducible on any machine.
+#
+# No `engine_use_assets` and no `engine_use_shaders`.
+add_executable(bodies bodies/main.cpp)
+target_link_libraries(bodies PRIVATE engine::engine)
+engine_set_warnings(bodies)

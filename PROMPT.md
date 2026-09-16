@@ -2817,3 +2817,11 @@ next
 ```
 
 (Lesson 8.1 — Integrators: Why One Explodes. Opens Module 8.)
+
+---
+
+## 2026-09-16 (session 3)
+
+```
+next
+```

@@ -8444,3 +8444,83 @@ least four ways (`≈ 4 hours`, `≈ 4–5 hours`, `&asymp; 4&ndash;5 hours`, an
 after it), so the honest question is whether the index's single number falls inside what the page
 claims. An equality test would have flagged fourteen pages that are wrong about nothing, and a check
 with fourteen false positives is a check nobody runs.
+
+## Hand-picked test data agrees with the code by construction
+
+Lesson 8.2 checked whether `(g / inv_mass) * inv_mass` recovers `g` in `float`, using seven masses:
+0.001, 0.1, 1, 7, 100, 1000 and 1,000,000 kg. All seven were exact. That looked like a proof and was
+nothing of the kind — those are the masses *a person picks*, and a person picks powers of ten.
+
+A log-uniform sweep of a million masses over the same range found **15.9937% that are not exact**,
+worst error one ulp. The first failing mass is not exotic either: **1.000145 kg**.
+
+The general shape is worth keeping: when a check passes on every value you thought of, the next move
+is not to conclude the property holds. It is to try values nobody would think of, in bulk, and to
+report the *rate* rather than a verdict. The follow-up measurement matters too — through the force
+route two such bodies differ by 1 ulp after one step, 1 ulp after sixty and are **identical again**
+after six hundred. The error wanders rather than accumulating, which is invisible in a fall and fatal
+to a replay, a lockstep session or a golden test.
+
+## A control can have a bug and not fail — it produces a third number
+
+Lesson 8.2 §7 compares a jump applied as an impulse against the same jump as a one-step force, and
+controls it by applying the force for however many whole steps fit in a fixed *duration* — which
+should recover the impulse behaviour, because that is what an impulse is.
+
+The first version held it for `round(rate / 60)` steps. At 144 Hz that is two steps = 13.9 ms, not
+16.7, so the control delivered a different impulse and reported a value matching neither arm. It did
+not fail; it invited an explanation. A control that disagrees with both arms is not evidence of
+anything, and the reflex when one appears should be to audit the control before the finding.
+
+## Alternate the arms, or you are timing the machine
+
+The first draft of Lesson 8.2 §11 timed four variants of a loop one after another and reported the
+*same* arrangement at **2.625, 1.758, 1.476 and 1.459 ns/body** on four consecutive runs of one
+binary. The machine was still settling from a cold start, and whichever arm ran first always lost —
+which would have produced a confident, reproducible, entirely fabricated finding about whichever
+design happened to be listed second.
+
+`engine/core/bench.hpp`'s `bench_compare` (Lesson 5.6) exists for exactly this: one rep of each arm,
+alternately, so both see the same thermal state within microseconds. The **ratio of medians** then
+repeats to three decimal places across separate runs, and that ratio is the thing to quote.
+
+Two follow-ons. `bench_result::spread()` over 2000 reps is dominated by a handful of scheduler
+outliers and reads as 1–4 on a machine behaving perfectly — so print `min` beside `median` and do not
+treat a large spread as a reason to distrust a stable ratio. And `bench_ab::agree` is only meaningful
+when the two arms are two spellings of the *same* arithmetic; printing "agree no" for two arms that
+answer different questions looks like a failure and is a category error.
+
+## Print the discrete prediction, not only the continuous one
+
+Velocity damping's terminal speed is `g/k` — 19.6200 m/s at the values Lesson 8.2 uses — and the
+simulation settles at **19.5383**. A 0.42% gap, far too consistent to be noise.
+
+There is no bug. `g/k` is the fixed point of the *continuous* system and we run a loop that applies
+gravity and then damps, whose fixed point is `g·h·e^(−kh) / (1 − e^(−kh))` = **19.5384**. It tends to
+`g/k` as `h → 0`, which is the sense in which the textbook formula is right.
+
+A harness that printed only the continuous form would have sent somebody looking for a bug in
+`apply_drag`. Whenever a closed form and a discrete loop differ by more than the effect being
+measured, print both and name which is which.
+
+## Coincident curves look like one curve, and the proof looks like the bug
+
+Two of the three resistance models in `demos/bodies` make three bodies of very different mass follow
+the *same* trajectory to the pixel. Drawn as three solid curves on top of one another, the picture
+that proves they agree is indistinguishable from a picture of a renderer that lost two of them.
+
+The fix is interleaved dashes: each body draws one run in three, so a single line cycling amber,
+green, blue is three trajectories in exact agreement, and three separate dashed lines are three that
+parted company. `demos/bodies/main.cpp` does it in pixels and `scratch/figs_82.py`'s `opoly` does it
+in SVG with the same phases. Whenever a result *is* that several things agree, the drawing has to
+make the agreement visible rather than rely on the reader's trust.
+
+## `check-page.js` at 390 catches what 1280 cannot
+
+Lesson 8.2's manifest table has one path — `engine/include/engine/phys/rigid_body.hpp` — that is two
+characters longer than 8.1's. Inside `<code>` it cannot wrap, so at phone width the table forced the
+whole **page** to scroll horizontally (`pageScrollsX: true`), which is completely invisible at
+desktop width and which no amount of reading the HTML would reveal.
+
+`.tbl-scroll` around the table fixes it. Two rules follow: run `check-page.js` at **both** widths
+before shipping a page, and wrap any table whose first column can hold a long unbreakable token.

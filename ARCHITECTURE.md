@@ -997,7 +997,7 @@ chore. What follows is on disk.
 │   └── Shaders.cmake       # add_hlsl_shader(name stage) -> a GLOBAL PROPERTY   [4.3, reshaped 5.1]
 ├── engine/                 # THE LIBRARY                                        [5.1]
 │   ├── CMakeLists.txt      # produces engine::engine (STATIC)
-│   ├── include/engine/     # ---- THE PUBLIC API. 78 headers. Nothing else. ----
+│   ├── include/engine/     # ---- THE PUBLIC API. 91 headers. Nothing else. ----
 │   │   ├── engine.hpp      # the umbrella. UNTIL 5.12 it listed 40 of the 55 headers
 │   │   │                   #   it could have — missing the whole ECS, the asset
 │   │   │                   #   store, handles, the logger and the action map —
@@ -1041,7 +1041,7 @@ chore. What follows is on disk.
 │   │   │   │                 #   (the 4 SDL callbacks) — the engine keeps the loop
 │   │   │   └── main.hpp      # ENGINE_MAIN. ONE .cpp per program; no main() in it.
 │   │   │                     #   NOT in engine.hpp, deliberately
-│   │   ├── phys/           # HOW A VELOCITY BECOMES A POSITION               [8.1]
+│   │   ├── phys/           # HOW A VELOCITY BECOMES A POSITION, AND WHAT MOVES IT [8.1, 8.2]
 │   │   │                   #   THE FIFTH NEW DIRECTORY SINCE THE REFACTOR, and
 │   │   │                   #   the second (after audio/) that never touches a
 │   │   │                   #   pixel. NOT under math/: the test is what a file
@@ -1056,6 +1056,24 @@ chore. What follows is on disk.
 │   │   │                     #   damping_factor, natural_frequency,
 │   │   │                     #   max_stable_step, spring_energy, shadow_energy,
 │   │   │                     #   area_factor, name_of.
+│   │   │   └── rigid_body.hpp # rigid_body (HAS a motion, does not BE one),
+│   │   │                     #   body_kind (dynamic/kinematic/FIXED — `static` is
+│   │   │                     #   a keyword), body_id, mass_of/set_mass,
+│   │   │                     #   add_force/add_impulse/add_acceleration,
+│   │   │                     #   terminal_speed_damped/_dragged, free_fall_time,
+│   │   │                     #   time_scale_for_length_scale, frame_report/
+│   │   │                     #   inspect_frame, place_in_parent, step_report,
+│   │   │                     #   body_world, make_dynamic/_fixed/_kinematic.
+│   │   │                     #   THE ACCUMULATOR IS THE DESIGN and it shows up as
+│   │   │                     #   an ABSENCE: no force-generator list, no visitor,
+│   │   │                     #   no registry. Forces add because F = ma is linear
+│   │   │                     #   in F, so anything that wants to push does `+=`.
+│   │   │                     #   BODIES ARE WORLD SPACE, FULL STOP. body_world has
+│   │   │                     #   no concept of a parent; inspect_frame exists so
+│   │   │                     #   that rule is a MEASURABLE claim and is called by
+│   │   │                     #   nothing. A parent scaled by 2 makes a body fall
+│   │   │                     #   at 2 g, and a spinning one is non-inertial in a
+│   │   │                     #   way no matrix can report.                  [8.2]
 │   │   │                     #   THE GENERAL STEPPER IS A TEMPLATE over the
 │   │   │                     #   acceleration callable and stays in the header on
 │   │   │                     #   purpose: std::function costs +65% and the
@@ -1217,8 +1235,8 @@ chore. What follows is on disk.
 │   │                             #   texture, a comparison sampler, its own
 │   │                             #   render pass, and fill_uniforms() so the two
 │   │                             #   renderers cannot disagree about a bias
-│   └── src/                # ---- PRIVATE. 58 sources; no demo can name this path ----
-│       ├── phys/           # integrate.cpp                                   [8.1]
+│   └── src/                # ---- PRIVATE. 59 sources; no demo can name this path ----
+│       ├── phys/           # integrate.cpp [8.1], rigid_body.cpp             [8.2]
 │       │                   #   Everything that is NOT a template: the constant-
 │       │                   #   acceleration overload (the gravity path), the two
 │       │                   #   drag helpers, and the four diagnostics. Nothing in
@@ -1291,6 +1309,19 @@ chore. What follows is on disk.
 │   │                       #   --shot runs 240 deterministic steps and prints four
 │   │                       #   numbers, which makes it a characterization test for
 │   │                       #   the ECS, the hierarchy and the pools               [5.12]
+│   ├── bodies/main.cpp     # THREE MASSES, THREE WAYS TO FALL                [8.2]
+│   │                       #   World-space trajectories, not phase space, because
+│   │                       #   the claim it settles is one a player could see:
+│   │                       #   [M] cycles none / damping / drag and the first TWO
+│   │                       #   produce the same picture. EACH BODY DRAWS ONE DASH
+│   │                       #   IN THREE — three solid curves on top of one another
+│   │                       #   are indistinguishable from one, so the picture that
+│   │                       #   proves they agree would look exactly like a bug
+│   │                       #   that lost two bodies.
+│   │                       #   Its right panel is the only place in this repo that
+│   │                       #   integrates OUTSIDE world space, on purpose: four
+│   │                       #   bodies dropped from the SAME WORLD POINT in four
+│   │                       #   parent frames, of which one is falling.
 │   ├── integrate/main.cpp  # THREE RULES, ONE SPRING, DRAWN IN PHASE SPACE   [8.1]
 │   │                       #   — position across, velocity up — because watched
 │   │                       #   as a bouncing dot all three look correct for the

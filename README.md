@@ -7,7 +7,29 @@ There is no engine to download here and no framework doing the interesting parts
 write the math library, the rasterizer, the ECS, the renderer, the physics, and the editor. By
 the end you have a real engine and a game built on its public API.
 
-**Status:** curriculum and conventions published; lessons in progress — **Modules 0–4 are complete**, **Module 5 is complete** — all 12 lessons, ~62 h, closed out of order by its checkpoint game — and **Module 6 is complete** — all 18 lessons, ~93 h, the longest module in the course — **Module 7 is complete** — all 8 lessons, ~47 h — and **Module 8 is under way** (**84 of 107**).
+**Status:** curriculum and conventions published; lessons in progress — **Modules 0–4 are complete**, **Module 5 is complete** — all 12 lessons, ~62 h, closed out of order by its checkpoint game — and **Module 6 is complete** — all 18 lessons, ~93 h, the longest module in the course — **Module 7 is complete** — all 8 lessons, ~47 h — and **Module 8 is under way** (**85 of 107**).
+The newest lesson is [8.2 — Forces, Gravity, and Linear Rigid Bodies](docs/lessons/08-02-forces-and-bodies.html),
+which gives the engine **bodies**. 8.1 taught it to advance a state through time and left it unable
+to tell a crate from a pebble: an acceleration *cannot be added up*, so four systems that each want
+to push the same body overwrite one another silently, and it does not know what anything weighs. The
+fix is `F = ma`, and the interesting part is everything the engine has to decide to make it usable —
+an **accumulator** rather than a setter (licensed by exactly one property: the law is linear in `F`,
+so four independent systems need no interface between them); the **reciprocal** of the mass rather
+than the mass, because *immovable* is the common case in a real level and is a clean exact zero where
+the alternative is an infinity whose difference with itself is a **NaN** on its way to the screen;
+and an **impulse** as its own entry point, because `Δv = J/m` has no `h` in it and the same jump
+written as a one-step force spans **23×** between 30 and 144 Hz. Two questions then stop being
+pedantry: **units**, where multiplying every length by `s` multiplies every *duration* by `√s` —
+which is why a 1/8 scale model ship runs **2.83×** too fast and why "the jumping feels floaty" is a
+measurement rather than an opinion — and **frames**, where a body integrated under a parent scaled
+by 2 falls at **2 g**, one merely *turned* under a non-uniformly scaled parent falls at **1.5811 g,
+63.435° off vertical**, and a *spinning* parent passes every test a matrix can answer while putting a
+force-free body **3.7963 m** off the straight line Newton obliges it to travel. Two measurements paid
+for the harness on their own: a sweep of **a million masses** found **16%** that fail a round trip
+seven hand-picked ones all passed, and of two candidate optimisations the famous one — avoid a
+`sqrt` per body — was a **tie**, while declining to compute a mass in order to cancel it was worth
+**15% of the whole update**.
+
 Module 8 is physics, and it opens with [Lesson 8.1](docs/lessons/08-01-integrators.html), which is
 about the two lines everybody writes first. Eighty-three lessons in, *nothing in this engine moves
 on its own*: every position in every demo was authored, by a sine of the clock or a keyframe or a

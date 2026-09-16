@@ -184,6 +184,13 @@ add_library(engine STATIC
     # vector space. Modules 8.2 onward fill this directory with bodies, shapes,
     # contacts and a solver, none of which would fit under `math/` either.
     src/phys/integrate.cpp
+    # Lesson 8.2. The second file, and the directory's shape is now visible: the
+    # stepper knows nothing about bodies and the bodies know nothing about how
+    # they are stepped. `rigid_body.cpp` includes `integrate.hpp` and not the
+    # other way round, which is the dependency direction the rest of the module
+    # inherits — shapes will know about bodies, the broadphase about shapes, the
+    # solver about contacts, and nothing will ever point back up the chain.
+    src/phys/rigid_body.cpp
     # Lesson 5.2. Note what is NOT here: platform/main.hpp, which carries
     # ENGINE_MAIN. It is header-only and deliberately so — including it emits a
     # real `main`, and an entry point is not a library's to own. See the comment

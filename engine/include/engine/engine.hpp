@@ -219,7 +219,16 @@
 // One header today. By the end of the module this section is bodies, shapes,
 // a broadphase, contact manifolds and a solver, and it will be the second
 // longest block in this file.
+//
+// Lesson 8.2 added the second, and — for the first time in EIGHT lessons — the
+// lint did not have to find it. The line below was written in the same edit as
+// the header it names, because the note above was read as a checklist rather
+// than as a story about somebody else. That is worth recording precisely
+// because it is not evidence that the habit has taken: seven of the last eight
+// lessons missed this file, and the streak broke on the lesson immediately
+// after the one that wrote a paragraph about missing it.
 #include <engine/phys/integrate.hpp>
+#include <engine/phys/rigid_body.hpp>
 
 // ---- Platform: how a program starts ---------------------------------------
 //

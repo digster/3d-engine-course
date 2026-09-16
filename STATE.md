@@ -7,7 +7,42 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-09-16 (after Lesson 8.1 — 84 of 107 lessons; MODULE 8 OPEN, 1 of
+updated: 2026-09-16 (after Lesson 8.2 — 85 of 107 lessons; MODULE 8 OPEN, 2 of
+         13, ~11 h of ~70. Planned at 4 h, shipped at 5, so Module 8 went
+         69 -> 70 h and the course total 522 -> 523. Index prose, both hero
+         stats and the module subtotal all moved together; check-curriculum.py
+         confirms, and its checks 1, 2, 10 and 11 were all green on the first
+         run for the first time since check 11 existed.
+         THE ENGINE CHANGED ITS MIND ABOUT GRAVITY, WITH A MEASUREMENT.
+         `step()` first put weight into the force accumulator as m*g — the
+         honest reading, and the one the header was written around — which
+         needs a FLOAT DIVIDE per body per step to recover a mass the body
+         deliberately does not store. §11 measured that at 15% of the whole
+         update (b/a = 0.845, 0.848, 0.847 over three runs), which is more than
+         8.1's ENTIRE semi-implicit step (0.963 ns). Gravity is now added AFTER
+         the division, as the acceleration it already is, which is also exact by
+         construction where the other route is exact only by luck. Box2D makes
+         the same choice in the same place. WHAT IT COST IS NAMED IN §12:
+         `rigid_body::force` no longer contains the body's weight, so a force
+         overlay draws every push EXCEPT the one that is always there.
+         AND THE OPPOSITE RESULT, KEPT: comparing squared speeds to avoid a
+         sqrt per body measured 1.036, 0.968, 0.969 — a tie, once a loss. The
+         sqrt stays, because when a measurement is a wash the version that reads
+         as what it means wins by default. TWO OPTIMISATIONS, AND THE FAMOUS ONE
+         WAS THE TIE.
+         NO NEW LOG CATEGORY, and that is the FIRST TEST OF 7.8'S PREDICTION.
+         log.hpp says the test for a category is "would somebody want to turn
+         exactly this off" and predicted that Modules 8 and 9 would not qualify.
+         phys/ has one thing to say — that a caller passed something which is
+         not a mass — and a programmer error is the last line anybody wants a
+         switch for. It goes to log_core, with the reasoning written at the call
+         site. Six categories, unchanged since 7.8.
+         AND THE UMBRELLA LINT DID NOT FIRE, for the first time in EIGHT
+         lessons: the engine.hpp line went in during the same edit as the header
+         it names. Recorded rather than celebrated — seven of the previous eight
+         missed it, and the streak broke on the lesson immediately after the one
+         that wrote a paragraph about missing it.
+         Earlier, after Lesson 8.1 — 84 of 107 lessons; MODULE 8 OPEN, 1 of
          13, ~6 h of ~69. Planned at 5 h, shipped at 6, so Module 8 went
          68 -> 69 h and the course total 521 -> 522. Module 8's index badge went
          from nothing to `in progress`, the mirror of the edit 7.8 made to
@@ -5268,6 +5303,7 @@ completed:
          enumerator plus comments.)
   ===> MODULE 7 COMPLETE <===
   - 8.1  Integrators: Why One Explodes
+  - 8.2  Forces, Gravity, and Linear Rigid Bodies
         (OPENS MODULE 8. 7.8's TWO dead `next` links repointed in the SOURCES —
          scratch/l78_body_a.html and build_78.py's TAIL — and build_78 rebuilt,
          so page and generator still agree; the diff was those four lines and
@@ -5298,6 +5334,69 @@ completed:
          evidence.)
 
 capabilities:
+  - 8.2 THE ENGINE HAS BODIES, and can be told what is pushing on what.
+    `engine::phys::body_world` is a `pool<rigid_body>` and about eight lines of
+    policy: gravity, a choice of integrator, and a walk that turns a force
+    accumulator into a step. A `rigid_body` HAS 8.1's `motion` rather than being
+    one — which is what lets §3's harness step a bare `motion` beside a body and
+    compare them bit for bit — plus a force accumulator, an inverse mass, a
+    velocity-space damping coefficient, a gravity_scale and a body_kind.
+    WHAT IS NEW: rigid_body + body_kind (dynamic/kinematic/FIXED — `static` is a
+    keyword and cannot be an enumerator, so the doc comment carries the other
+    word for searchers) + body_id + mass_of/set_mass + add_force/add_impulse/
+    add_acceleration/clear_force + terminal_speed_damped/terminal_speed_dragged
+    + free_fall_time/time_scale_for_length_scale + frame_report/inspect_frame +
+    place_in_parent + step_report + body_world + make_dynamic/make_fixed/
+    make_kinematic + k_gravity/k_gravity_down.
+    THE THREE DECISIONS, each with a number behind it:
+      1. AN ACCUMULATOR, NOT A SETTER, because F = ma is linear in F. Four
+         systems then need no interface, no registry and no visitor. The failure
+         mode is silent: four `=` instead of four `+=` and gravity, wind and drag
+         are simply gone.
+      2. INVERSE MASS, and the divide is the LEAST of the three reasons.
+         Immovable is the common case in a real level and is an exact zero;
+         mass_of(floor) - mass_of(wall) is NaN where inv_a - inv_b is 0; and
+         8.9's effective mass is LITERALLY 1/(w_a + w_b), so the storage was
+         chosen to match a hot loop that does not exist yet.
+      3. AN IMPULSE HAS NO h IN IT. Same 70 kg jump: as a one-step force it is
+         3.8528 m at 30 Hz and 0.1672 m at 144 — 23.0x — and as an impulse it
+         spans 6.16%, whose residue is 8.1's v0*h/2 and is predicted to four
+         decimals. Every contact response from 8.9 is an impulse for this reason.
+    THE NUMBERS, MEASURED, NINE SECTIONS AND THIRTEEN CONTROLS:
+      a is proportional to 1/m      m*a = 50.0000 N at 1, 10 and 1000 kg
+      forces, 24 orderings, spread  3.7000e-03 = THE SMALLEST OF THE FOUR
+      CONTROL, exact powers of two  0.0000e+00 across all 24
+      (g/inv_mass)*inv_mass sweep   159,937 of 1,000,001 inexact = 15.9937%
+      ...worst, and the first bad m 1.00 ulp; 1.000145 kg
+      force route, 1 vs 1.000145 kg 1 ulp at step 1 and 60, ZERO at 600
+      acceleration route, same pair  0 at every step count
+      damping terminal, 3 masses    19.5383 m/s, all of them
+      ...g/k says 19.6200; DISCRETE  19.5384  (g h e^-kh / (1 - e^-kh))
+      drag-force terminal, 3 masses 1.9607 / 19.6026 / 1960.1298 m/s
+      ...and their time constants   m/b = 0.2 s, 2 s, 200 s
+      jump as impulse, 4 rates      0.9275 .. 0.9846 m   (6.16%)
+      jump as one-step force        0.1672 .. 3.8528 m   (23.0x)
+      1e6 kg DYNAMIC vs 10 g pebble -4.986749 m BOTH
+      fixed body, 10 s + 10 kN      exactly 0.0
+      fall time ratio vs 1/sqrt(s)  2.0000 1.4142 1.0000 0.7071 0.5000
+      g scaled by 1/s, simulated    36 steps at EVERY scale
+      uniform parent scale 2        gain 2.0000, and the fall ratio is 2.0000
+      scale(2,1,1) with gravity //y gain 1.0000 tilt 0.000 — THE TRAP
+      ...same frame, body turned 45 gain 1.5811, tilt 63.435 deg, square 0.6000
+      spinning parent, no forces    3.7963 m off a straight line after 1 s
+      body_world::step              2.706 ns/body (damped 4.222, fixed 0.712)
+    THE FRAME RULE IS ABSOLUTE AND THE ABSENCE IS THE DESIGN: a rigid_body's
+    position and velocity are WORLD SPACE and body_world has no way to express
+    anything else — no parent, no hierarchy, no transform. `place_in_parent` is
+    the only bridge and it converts rather than integrating; `inspect_frame` is
+    called by NOTHING and exists so the rule is a measurable claim.
+    `frame_report::out_of_square` is 7.5's number, built to report what a quat
+    could not hold and uncalled for three lessons — it is the exact diagnostic a
+    physics frame needs, because both questions are "does this preserve angles".
+    THE DEMO IS demos/bodies, and it is built around the one claim a picture
+    settles faster than a table: MASS IS INVISIBLE UNTIL SOMETHING RESISTS.
+    Three masses 100x apart, identical launch, three resistance modes — and two
+    of the three pictures are identical.
   - 8.1 THE ENGINE CAN ADVANCE A STATE THROUGH TIME, and can say whether the step
     size you chose is one that works. `engine::phys` is one header and one source
     file: three rules over a `motion` of two vec3s (explicit Euler, semi-implicit
@@ -8598,7 +8697,7 @@ files:
              alphabetically, so they will not keep agreeing.)
   engine/include/engine/platform/: platform.hpp, app.hpp,
             main.hpp   (NOT in engine.hpp — it defines the entry point)
-  engine/include/engine/phys/: integrate.hpp                                 [8.1]
+  engine/include/engine/phys/: integrate.hpp [8.1], rigid_body.hpp          [8.2]
             (THE FIFTH NEW DIRECTORY SINCE THE REFACTOR. NOT math/: math/ knows
              about numbers and has no .cpp at all; this knows that a velocity is
              metres per second and that a step size has a stability limit.
@@ -8613,7 +8712,7 @@ files:
   engine/include/engine/ui/: debug_ui.hpp                                   [5.11]
             (a new directory, same argument asset/ made in 5.5: tooling UI is not a
              graphics subsystem. Does NOT include <imgui.h> — see debug-ui.)
-  engine/src/phys/: integrate.cpp                                          [8.1]
+  engine/src/phys/: integrate.cpp [8.1], rigid_body.cpp                    [8.2]
             (Everything that is NOT a template: the constant-acceleration
              overload, apply_drag/damping_factor, and the four diagnostics.
              Nothing in it is hot — the general stepper stayed in the header
@@ -8689,6 +8788,22 @@ files:
             camera back without limit and every correct curve collapses to a dot.
             Its clear colour is (16, 18, 24), and figs_81.py's palette lists the
             demo's own constants because rle_rects SNAPS.)
+  demos/bodies/: main.cpp                                                 [8.2]
+           (WORLD-SPACE TRAJECTORIES, not phase space, because the claim it
+            settles is one a player could see. Three masses (0.1, 1, 10 kg) on
+            identical launches, and [M] cycles none / damping / drag: the first
+            TWO produce the same picture and the third does not. EACH BODY DRAWS
+            ONE DASH IN THREE — three solid curves on top of one another are
+            indistinguishable from one, so the picture proving they agree would
+            look exactly like a bug that lost two bodies. figs_82.py's `opoly`
+            does the same thing in SVG with the same phases.
+            The right panel is the frame half: four bodies dropped from the SAME
+            WORLD POINT — via `place_in_parent`, because giving them all the same
+            LOCAL position would compare four different drops — in four parent
+            frames, of which only one is falling. It is the only place in this
+            repository that integrates outside world space, on purpose, so the
+            result can be looked at. Clear colour (16, 18, 24), and figs_82.py's
+            palette lists the demo's own constants because rle_rects SNAPS.)
   demos/audio/: main.cpp                                                  [7.8]
            (The first demo here whose OUTPUT IS NOT THE PICTURE. The map is an
             EXPLANATION of the result — where each source is and what two gains
@@ -8790,7 +8905,8 @@ files:
                  07-05-slerp.html,
                  07-06-skeletal-animation.html,
                  07-07-sampling-blending.html
-                 07-08-audio.html, 08-01-integrators.html
+                 07-08-audio.html, 08-01-integrators.html,
+                 08-02-forces-and-bodies.html
                  (5.12 IS OUT OF SEQUENCE ON PURPOSE — Module 5 closed eleven
                   lessons after 5.11 and one after 6.18, and the list is
                   append-ordered rather than sorted so that the history is
@@ -9396,72 +9512,79 @@ roadmap: RESHAPED 2026-09-08, AFTER TWO EXTERNAL REVIEWS OF THE PUBLISHED OUTLIN
 
 
 
-next: 8.2 — Forces, Gravity, and Linear Rigid Bodies
+next: 8.3 — Angular Dynamics: Torque and the Inertia Tensor
 
-      (planned filename: docs/lessons/08-02-forces-rigid-bodies.html. 8.1's TWO
-       next links point at the index and BOTH need repointing —
-       scratch/l81_body_a.html holds the top one and build_81.py's TAIL the
-       bottom, the same pair every lesson since 7.1 has had, and
-       check-curriculum.py has now caught that pair four lessons running.
-       MODULE 8's INDEX BADGE IS ALREADY `in progress`; it does not move again
-       until 8.13.)
-
-      WHAT 8.2 INHERITS, AND MUST NOT RE-DERIVE:
-        - `integrate(motion&, ...)` AND THE CHOICE OF RULE. 8.1 settled that
-          semi-implicit Euler is the default and why; 8.2 supplies the
-          acceleration and must not re-litigate the stepper. `motion` stays two
-          vectors — a `rigid_body` HAS one.
-        - THE UNITS ARGUMENT IS ALREADY HALF MADE. conventions.html §3 has said
-          metres and seconds since Module 2 and 8.1 restated it as a physics
-          claim; 8.2 is where 9.81 makes it non-negotiable, and where a SCALED
-          PARENT in the transform hierarchy quietly stops meaning what it says.
-          That is the interesting half of the lesson and it is not in 8.1.
-        - THE HARNESS SHAPE. Nine sections, every one with a control, chosen by
+      WHAT 8.3 INHERITS, AND MUST NOT RE-DERIVE:
+        - `rigid_body`, `body_world`, `body_id` AND THE ACCUMULATOR. 8.3 adds
+          orientation, angular velocity, a torque accumulator and an inverse
+          inertia tensor to the SAME struct and the SAME walk. It does not
+          reopen why there is an accumulator (linearity of F = ma) or why the
+          mass is stored inverted — and the second of those pays off a second
+          time: A ZERO INVERSE INERTIA TENSOR IS EXACTLY WHAT AN IMMOVABLE BODY
+          WANTS, for the same three reasons §4 gave for inv_mass.
+        - GRAVITY IS ADDED AFTER THE DIVISION and `force` does NOT contain
+          weight. 8.3's torque accumulator has the mirror decision to make and
+          should make it the same way — but note the asymmetry: gravity acting
+          at the CENTRE OF MASS produces no torque at all, which is why a
+          uniform body falls without tumbling and why 8.3's `add_force_at` is
+          the first function in the module that can.
+        - BODIES ARE WORLD SPACE, FULL STOP. inspect_frame/place_in_parent are
+          the bridge, and 8.3 inherits a new reason: R I R^T is a BASIS CHANGE,
+          so a non-uniformly scaled parent does not merely tilt gravity, it
+          turns a sphere into an ellipsoid and an inertia tensor into something
+          that is not one.
+        - THE HARNESS SHAPE. Nine sections, EVERY one with a control, chosen by
           asking what it would say if the thing were completely BROKEN and what
           it would say if the thing were completely FINE.
         - `scratch/build_verify_NN.sh` REFUSES an unoptimised libengine.a.
         - A LESSON PAGE ENDS AT FURTHER READING. STATE.md is the sole resume key.
 
-      WHAT 8.2 IS LIKELY TO MOVE. `engine/include/engine/phys/rigid_body.hpp`
-      and its .cpp, which means engine/CMakeLists.txt and — THE LINT WILL FIRE
-      AGAIN, for the eighth lesson running — engine.hpp. The `phys/` section in
-      the umbrella already exists, so this is one line in a block that is there.
-      A demo target is likely. Run the closure graph rather than assuming.
+      WHAT 8.3 IS LIKELY TO MOVE. `engine/include/engine/math/mat3.hpp` — the
+      roadmap has said since the reshape that mat3 NEEDS operator+/-, scalar
+      multiply and an OUTER PRODUCT before an inertia tensor can be written;
+      inverse/transpose/multiply already exist. Then rigid_body.hpp and its .cpp,
+      engine/CMakeLists.txt if a file is added, and engine.hpp if a header is.
+      8.2's listings are PINNED at scratch/l82_*, so editing rigid_body.hpp does
+      not disturb the published page — but if 8.3 CORRECTS something 8.2 got
+      wrong, the fix goes into the pin AND the live file, or the page and the
+      repo disagree invisibly (6.6 §10's three copies).
 
-      CARRY FORWARD from 8.1:
-        - A DETERMINANT IS AN INSTRUMENT, and reaching for the standard one
-          (order of accuracy) measured the wrong thing entirely. When a metric
-          says two things are equivalent and you can see that they are not, the
-          metric is answering a different question — find out which.
-        - AREA IS ENERGY, and this generalises: any conserved quadratic form is
-          an area in the right coordinates. The inertia tensor in 8.3 is another
-          quadratic form, and the question "what does this step do to it" is the
-          same question asked again.
-        - A CONTROL THAT ALWAYS RETURNS SOMETHING RETURNS SOMETHING WHEN THE
-          ANSWER IS `NONE`. F.3's bisection found a "stability limit" for
-          explicit Euler — 3.4 ms — which is a fact about how long the test ran.
-          Any search with a fixed budget has this shape.
-        - A BENCHMARK CAN MEASURE THE OPTIMISER. Timing the three rules with the
-          rule as a RUNTIME value made explicit 15% faster in one run and 30%
-          slower in the next, because loop unswitching is a mood. A template
-          non-type parameter made each loop monomorphic and the two Euler rules
-          then agreed to 0.3% run over run.
-        - CHECK-PAGE.JS WALKS A PATH'S ACTUAL STROKE, not its bounding box, so a
-          hit is real. It found five labels lying on the curves they named. The
-          fix that works is figs_78.py's standing rule: ANNOTATIONS GO OUTSIDE
-          THE PLOT.
-        - AND A FIGURE CAN BE BROKEN BY THE RENDERER RATHER THAN THE DATA. The
-          demo screenshot came out as a DASHED spiral; the grid was correct and
-          a 1-unit rect in a 900-unit viewBox is 0.7 device pixels once the
-          figure scales to a phone, so single-cell runs vanished. cell=3 at
-          px=1.5 is the same size on the page and survives. Check the renderer
-          before blaming the data.
-        - THE SCRATCHPAD VANISHES BETWEEN TURNS. Playwright helpers live in
-          scratch/tools/ and scratch/ is gitignored. PLAYWRIGHT IS NOT IN ANY
-          SYSTEM PYTHON ON THIS MACHINE: run them with
-          `uv run --with playwright python scratch/tools/<tool>.py ...`.
-        - AND: figs_81.py NOW MIXES `\uXXXX` ESCAPES WITH LITERAL UNICODE,
-          because successive patch scripts wrote both. A search-and-replace that
-          assumes one form silently fails against the other — three label fixes
-          were lost that way and only check-page.js noticed. Match on a
-          distinctive ASCII substring, or assert the replacement count.
+      CARRY FORWARD from 8.2:
+        - HAND-PICKED TEST DATA AGREES WITH THE CODE BY CONSTRUCTION. Seven
+          masses chosen by a person all survived the round trip (g/w)*w; a sweep
+          of a million found 15.9937% that do not, the first at 1.000145 kg.
+          When a check passes on every value you thought of, the next move is to
+          try values nobody would think of, in bulk.
+        - AND THE OPPOSITE FAILURE: A CONTROL CAN HAVE A BUG AND NOT FAIL. E.4
+          held a force for `round(rate/60)` steps, which at 144 Hz is 13.9 ms
+          rather than 16.7 — so the control produced a THIRD number and invited
+          an explanation. Rescaling the force to the duration actually held
+          fixed it. A control that disagrees with both arms is not evidence.
+        - ALTERNATE THE ARMS OR MEASURE THE MACHINE. §11's first draft timed
+          four loops one after another and reported the same arrangement at
+          2.625, 1.758, 1.476 and 1.459 ns/body on four runs of one binary —
+          whichever arm ran first always lost. 5.6's `bench_compare` runs them
+          one rep each, alternately, and the RATIO then repeats to three
+          decimals. Quote the ratio of medians, and print min beside it: spread()
+          over 2000 reps is dominated by scheduler outliers and reads as 1-4 on a
+          machine that is behaving perfectly.
+        - THE FAMOUS OPTIMISATION WAS THE TIE. Avoiding a sqrt per body: 1.036,
+          0.968, 0.969. Declining to compute a mass in order to cancel it: 0.845,
+          0.848, 0.847. A pipelined sqrtss off the critical path is free; a divss
+          is not. Measure both before believing either.
+        - PRINT THE DISCRETE PREDICTION, NOT ONLY THE CONTINUOUS ONE. Damping's
+          terminal speed is g/k in the limit and g*h*e^-kh/(1-e^-kh) in the loop
+          we actually run — 19.6200 against 19.5384, a 0.42% offset that is far
+          too consistent to be noise and would have sent somebody bug-hunting.
+        - THREE CURVES ON TOP OF ONE ANOTHER LOOK LIKE ONE CURVE, and the
+          picture that proves they agree then looks exactly like a bug that lost
+          two of them. Both demos/bodies and figs_82.py draw one dash in three,
+          with the same phases.
+        - CHECK-PAGE.JS AT 390 FOUND WHAT 1280 COULD NOT: a `manifest` table
+          whose longest path (engine/include/engine/phys/rigid_body.hpp, two
+          characters longer than 8.1's) cannot wrap inside <code>, forcing the
+          whole PAGE to scroll horizontally. `.tbl-scroll` around it. Run BOTH
+          widths; pageScrollsX is invisible at desktop.
+        - AND figs_82.py IS LITERAL UNICODE THROUGHOUT, never \uXXXX, which is
+          8.1's flagged debt not repeated. Every patch script against it asserts
+          its replacement count.

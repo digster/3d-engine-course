@@ -104,6 +104,7 @@
       <li><a href="#pipelining">Two processors, overlapped</a></li>
       <li><a href="#rotation">Parameterising a rotation</a></li>
       <li><a href="#sound">Sound: energy, gain and distance</a></li>
+      <li><a href="#dynamics">Forces, impulses and mass</a></li>
       <li><a href="#coming">Coming as the course proceeds</a></li>
     </ol>
   </details>
@@ -3826,6 +3827,101 @@ The singular values are sqrt(1 + |sin p|), 1, sqrt(1 - |sin p|).</span>
       audible, why a sound that starts on a peak clicks, and why a voice cut off mid-sample clicks.
       <strong>Compare every injected step against the signal&rsquo;s own slope</strong>,
       <code>A&middot;2&pi;f/f_s</code>, which is the only honest yardstick.
+    </p>
+  </div>
+
+  <h2 id="dynamics"><span class="num">8e</span>Forces, impulses and mass</h2>
+
+  <p>
+    Lesson 8.2, and the linear half of rigid-body dynamics is smaller than its reputation: one law,
+    its time integral, and two reciprocals. What makes it worth a section is that three of the five
+    cards below are about <em>which of two equivalent forms to store</em>, and in each case the
+    answer is the one the arithmetic downstream will actually ask for.
+  </p>
+
+  <div class="card">
+    <h3>Newton's second law, and the property the engine depends on <span class="from">Lesson 8.2</span></h3>
+    <div class="eq">
+      \[ \mathbf{F} = m\,\mathbf{a} \qquad\Longrightarrow\qquad
+         \mathbf{a} = \Big(\textstyle\sum_i \mathbf{F}_i\Big)\cdot\frac{1}{m} \]
+      <span class="eq-plain">Acceleration is the sum of all the forces, multiplied by the inverse mass — with the sum taken first and the division done once.</span>
+    </div>
+    <p>
+      The content is the <strong>linearity in F</strong>, not the equation. Because forces add, four
+      systems that know nothing about each other can push the same body with no interface between
+      them; because the division is once, the summing has to happen in a shared accumulator rather
+      than at each call site. Both halves of the engine's design follow from that one word.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>Impulse: the same law integrated, with no step size in it <span class="from">Lesson 8.2</span></h3>
+    <div class="eq">
+      \[ \mathbf{J} = \int \mathbf{F}\,dt = \Delta(m\mathbf{v}) = m\,\Delta\mathbf{v}
+         \qquad\Longrightarrow\qquad \Delta\mathbf{v} = \mathbf{J}\cdot\frac{1}{m} \]
+      <span class="eq-plain">An impulse is a force integrated over time, equal to the change in momentum; the change in velocity it produces is the impulse times the inverse mass.</span>
+    </div>
+    <p>
+      <strong>There is no <code>h</code> on the right.</strong> A bat, a bullet and a jump act for
+      less than one step and nobody knows the force; what is well defined is the momentum change.
+      Written as a force held for one step instead, the velocity is <code>F&middot;h/m</code> and the
+      jump height goes as <code>h&sup2;</code> &mdash; measured at <strong>23&times;</strong> between
+      30 and 144&nbsp;Hz. Every contact and constraint response from Lesson 8.9 is an impulse.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>Inverse mass, and the reduced mass of a pair <span class="from">Lesson 8.2</span></h3>
+    <div class="eq">
+      \[ w = \frac{1}{m}, \qquad
+         m_{\text{eff}} = \frac{1}{w_a + w_b} = \frac{m_a m_b}{m_a + m_b} \]
+      <span class="eq-plain">Store the reciprocal of the mass; the effective mass of a colliding pair is one over the sum of the two inverse masses, which is also the product of the masses over their sum.</span>
+    </div>
+    <p>
+      Three reasons to store <code>w</code>, and the divide is the least of them.
+      <strong>Immovable is <code>w = 0</code></strong>, an exact float, and it is the common case in a
+      real level. <strong>The solver wants this exact quantity</strong> &mdash; a fixed body
+      contributes nothing to the sum, which correctly makes a crate bounce off a wall as though only
+      the crate had a mass. And <strong>the degenerate case stops dividing</strong>: a massless body
+      is <code>w = &infin;</code> rather than a divide by zero. In masses, <code>&infin; &minus;
+      &infin;</code> is NaN; in inverse masses it is 0.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>Terminal speed: the two models, and the discrete one <span class="from">Lesson 8.2</span></h3>
+    <div class="eq">
+      \[ v_\infty^{\text{damping}} = \frac{g}{k}, \qquad
+         v_\infty^{\text{drag}} = \frac{m\,g}{b}, \qquad
+         v_\infty^{\text{step}} = \frac{g\,h\,e^{-kh}}{1 - e^{-kh}} \]
+      <span class="eq-plain">Velocity damping settles at g over k with no mass in it; a drag force settles at mass times g over b; and the loop we actually run settles slightly below the first of those.</span>
+    </div>
+    <p>
+      The first two differ by <em>a whole mass</em>, and that is the difference between a feather and
+      a cannonball: damping acts on the velocity directly, a drag force goes through the accumulator
+      and gets divided. The third is the reminder that <strong>a continuous formula is not a
+      prediction for a discrete loop</strong> &mdash; our step applies gravity and then damps, so its
+      fixed point is 0.42% below <code>g/k</code> at 60&nbsp;Hz, a gap far too consistent to be noise
+      and easily mistaken for a bug. Time constants: <code>1/k</code> and <code>m/b</code>.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>The length-scale law: why miniatures look like miniatures <span class="from">Lesson 8.2</span></h3>
+    <div class="eq">
+      \[ d = \tfrac{1}{2}g t^{2} \;\Rightarrow\; t = \sqrt{\frac{2d}{g}}
+         \qquad\Longrightarrow\qquad
+         d \mapsto s\,d \;\Rightarrow\; t \mapsto \sqrt{s}\,t \]
+      <span class="eq-plain">Time to fall goes as the square root of distance, so multiplying every length by s and leaving gravity alone multiplies every duration by the square root of s.</span>
+    </div>
+    <p>
+      It applies to anything driven by a fixed acceleration, not just free fall &mdash; splashes,
+      tumbling, collapse, the settling of a stack. A 1/8 scale model runs <strong>&radic;8 =
+      2.83&times;</strong> too fast, which is why it is filmed at 67.9&nbsp;fps and played back at 24.
+      A game world modelled twice as large as it depicts runs <strong>1.41&times;</strong> too slow,
+      which is the complaint &ldquo;the jumping feels floaty&rdquo; with a number attached. Scaling
+      <code>g</code> by <code>1/s</code> fixes it exactly &mdash; it is a change of units &mdash; and
+      carries no <em>absolute</em> length with it, which is where it stops working.
     </p>
   </div>
 
