@@ -8181,3 +8181,74 @@ and at browser scale that shared edge is antialiased from both sides, so a solid
 picks up a hairline of the panel behind it every row or two. It reads as quantisation banding and is
 a rasterisation seam. Wrap the panel in `<g shape-rendering="crispEdges">` **in the lesson's own
 `figs_NN.py`**, never in `rle_rects`, which every render figure since Lesson 4.5 depends on.
+
+## A benchmark with two variables in it has none — and fixing one confound proves nothing
+
+Lesson 7.7 tried to measure what a clip's loop wrap costs a sampling cursor. The first attempt
+varied the wrap period by changing **the driver's step size**, so each lookup on the "more wraps"
+row also crossed ten key intervals instead of one — two variables, one number, and it confidently
+reported 43% for the wrong cause. The fix is to hold everything but the one thing: advance
+**exactly one key interval per lookup** and let only the track length differ.
+
+The second half is the part worth remembering. A separate timing in the same lesson reported a
+301-key clip as **faster to sample than a 31-key one**, which contradicts arithmetic. The first
+cause found was a playback clock that climbed to 666 seconds (see below). Fixing it left the
+inversion in place, because there was a *second*, independent cause: the benchmark was the first
+timing in the process and a laptop's first hundred milliseconds run about **30% slower** than
+everything after them. `best_of_three` cannot see past that — all three attempts are inside the
+ramp — so the harness now spins for 150 ms before it measures anything.
+
+Two independent reasons for one wrong number is the normal case, not the unlucky one. And neither
+was found by suspecting the instrument: both were found by **believing arithmetic over a
+measurement**.
+
+## `std::fmod` is not constant time
+
+Its cost grows with the **quotient**, not with the operands' magnitude alone. Measured on this
+machine, with nothing else in the loop:
+
+| duration | clock bounded | clock at 6,666 s |
+|---|---|---|
+| 1.0 s  | 3.798 ns | 7.726 ns |
+| 10.0 s | 1.603 ns | 5.901 ns |
+
+So a one-second animation played by a clock that just accumulates `dt` pays a growing tax on every
+sample, forever, and a program left running overnight pays a large one. **Wrap the playhead every
+step** rather than wrapping at the point of use. It also means a clip's *duration* affects its
+sampling cost, which is not a relationship anyone would think to look for.
+
+## Fit a lossy transformation with its consumer's exact reconstruction
+
+Keyframe reduction removes keys whose value the sampler can rebuild within a tolerance. Its whole
+job is to replace many small steps with one large one — which **manufactures** exactly the long
+arcs on which `quat_nlerp` and `quat_slerp` disagree. Fit against slerp, play back with nlerp, and
+the error exceeds the budget you asked for by more the *better* the reduction worked: measured at
+**4.5×** on a 120° constant-rate turn with a half-degree tolerance, and nothing anywhere reports it.
+The reducer believes it succeeded and the sampler believes it is doing its job.
+
+The rule generalises well past quaternions. Whatever you throw data away against, the thing that
+reads it back is the thing you owe the tolerance to.
+
+## An instrument that cannot tell a defect from the feature reports every correct case as broken
+
+`clip_report` measures a loop's seam by sampling at `t = 0` and `t = duration` and comparing the
+poses. The first version included every joint and reported a **1.200-unit** seam on a walk cycle
+that is perfect — because the root carries the character forward, so it is *supposed* to end the
+cycle a stride from where it started. A walk with zero there moonwalks on the spot.
+
+The fix is not a threshold; it is splitting the measurement. `root_travel` for joints with no
+parent, `loop_gap_position` for everything else, and two facts where there was one confused one.
+Before adding a tolerance to silence an instrument, check whether it is measuring two things.
+
+## Say which degrees. A doc comment is not exempt
+
+`quat_nlerp`'s shipped doc comment carried an error table — *0.13° at 30°, 4.07° at 90°* — and then
+argued from it that "under about 30° of arc … is where a 30 Hz animation clip's adjacent keyframes
+live". Both halves are true and they are in **different units**: the table is in *sphere* arcs and
+sphere degrees, the sentence is thinking in rotation angles, and the two differ by the factor of two
+the half-angle puts everywhere. Read as written, the sentence claims a clip's keys are 60° of
+rotation apart, which is 1,800°/s and nothing a limb does.
+
+A quantity with a factor of two in it needs its unit stated every single time it appears, including
+in prose, including in a comment, including when the surrounding paragraph "obviously" means the
+other one.

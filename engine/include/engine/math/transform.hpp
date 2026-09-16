@@ -402,4 +402,114 @@ inline constexpr float k_transform_square_tolerance = 1e-3f;
     return affine(linear, -(linear * t.position));
 }
 
+// ---------------------------------------------------------------------------
+// Lesson 7.7 — being BETWEEN two placements
+// ---------------------------------------------------------------------------
+//
+// Everything above this line answers "where is it". An animation asks a harder
+// question — "where is it a third of the way from here to there" — and the
+// answer is not one rule applied three times. A `transform` holds three fields
+// that live in three different kinds of space, and each one needs its own
+// argument for what "between" means.
+//
+// *** THE NAME IS DELIBERATE, AND IT CORRECTS AN EXERCISE. *** Lesson 7.5 §12
+// asked the reader to write `transform_slerp`, and that name is wrong: exactly
+// one of the three fields slerps. Calling the whole function after the rule that
+// governs a third of it is the kind of name that makes a caller believe the
+// position is travelling on an arc. `transform_blend` claims nothing, and the
+// two paragraphs below are what it actually does.
+//
+//   POSITION — LERP, and there is no case to answer. Positions live in an affine
+//   space: the only structure a point has is the straight line to another point,
+//   and a straight line at constant speed is the unique path that invents no
+//   information. Anything curved would be a claim about a trajectory that the two
+//   endpoints do not contain.
+//
+//   ROTATION — NLERP, and this one is a judgement with a number behind it.
+//   Lesson 7.5 measured the whole tradeoff: nlerp walks the same great circle as
+//   slerp (excess turning 0.00%) on a schedule that is wrong by `sec^2(W/2)`,
+//   which is 0.13 degrees at a 30-degree arc, 4.07 at 90 and 26.34 at 150 — and
+//   it is 3.42x cheaper. THE ARCS THIS FUNCTION ACTUALLY SEES ARE SMALL: two
+//   adjacent keyframes of a 30 Hz clip are a few degrees apart even on a limb
+//   moving fast, which is three orders inside the threshold. The glTF 2.0
+//   specification says slerp **SHOULD** be used for rotations and then says, in
+//   the same appendix, that "implementations **MAY** approximate these equations
+//   to reach application-specific accuracy and/or performance targets" — and
+//   notes that "when `a` is close to zero, spherical linear interpolation turns
+//   into regular linear interpolation", which is the same observation from the
+//   other end. `transform_blend_slerp` is one line below for the caller whose
+//   arcs are NOT small, and Lesson 7.7 §7 is about how to know which you are.
+//
+//   SCALE — LERP, and this is the decision Lesson 7.5 left open, so it gets a
+//   paragraph rather than a clause. The alternative is GEOMETRIC interpolation,
+//   `a*(b/a)^t`, which is the one that gives equal RATIOS in equal times where
+//   the lerp gives equal DIFFERENCES. On a growth from 1 to 8 they disagree
+//   loudly: the lerp's midpoint is 4.5 and the geometric one's is
+//   `sqrt(8) = 2.828`, and only the second of those looks like steady growth,
+//   because scale composes by multiplication all the way down a hierarchy and
+//   because perceived size is closer to logarithmic than to linear.
+//
+//   THREE THINGS SETTLE IT FOR THE LERP ANYWAY, in increasing order of how hard
+//   they are to argue with.
+//
+//     1. THE GAP IS INVISIBLE OVER THE RANGE CONTENT USES. The two rules differ
+//        at the midpoint by exactly the arithmetic-mean-minus-geometric-mean gap,
+//        `(a+b)/2 - sqrt(ab)`. Squash and stretch lives between about 0.8 and
+//        1.25, where that is 0.62%; at a full doubling it is 6.07%; it only
+//        reaches the 59% of the 1-to-8 example at ratios no rig animates.
+//     2. A SCALE OF ZERO IS LEGAL, COMMON, AND HAS NO LOGARITHM. Scaling an
+//        object to 0 is how animators make it vanish, and mirrored rigs carry
+//        negative scale on one side. `ln(0)` and `ln(-1)` end the geometric rule
+//        outright — not with a wrong answer but with no answer — and a rule that
+//        needs a special case for its most common extreme value is not the rule.
+//     3. THE FILE FORMAT SAYS LINEAR. glTF 2.0's `LINEAR` mode is defined as
+//        `v_t = (1 - t) * v_k + t * v_{k+1}`, componentwise, for every animated
+//        property that is not a rotation. An importer that log-lerps scale plays
+//        the file differently from every other viewer on earth, which is a
+//        correctness bug wearing a mathematician's coat.
+//
+//   AND THE REAL ANSWER TO SOMEONE WHO WANTS GEOMETRIC GROWTH IS NOT A RUNTIME
+//   RULE. It is another keyframe. Splitting a 1-to-8 growth into six segments of
+//   ratio `sqrt(2)` drops the per-segment gap from 59% to 1.5%, and the animator
+//   already has the tool for it. A policy the content pipeline can express does
+//   not belong in the sampler.
+//
+// **`t` IS NOT CLAMPED**, for the reason `lerp` and `quat_slerp` are not: the
+// engine's convention since Lesson 1.6 is that the caller owns its parameter.
+// Values outside [0, 1] extrapolate, which an ease-out overshoot genuinely wants
+// and an accident never does silently.
+
+/// The placement `t` of the way from `a` to `b`: lerp, nlerp, lerp.
+///
+/// The default blend for poses, keyframes and cross-fades. See the block comment
+/// above for why each field gets the rule it gets; the short version is that
+/// positions have only straight lines, rotations have a sphere, and scale is
+/// linear because zero is a legal scale and the file format says so.
+[[nodiscard]] inline transform transform_blend(const transform& a, const transform& b, float t)
+{
+    return {.position = lerp(a.position, b.position, t),
+            .rotation = quat_nlerp(a.rotation, b.rotation, t),
+            .scale    = lerp(a.scale, b.scale, t)};
+}
+
+/// The same blend with the rotation on an exact constant-speed schedule.
+///
+/// Identical in every respect but one: `quat_slerp` instead of `quat_nlerp`.
+/// Reach for it when the two orientations are far apart — a cross-fade between
+/// two unrelated poses, a 90-degree turn held on two keys, a camera orbit
+/// interpolated over a whole second — and the timing of the middle of the move
+/// is something a viewer can see. Lesson 7.5's table is the whole decision
+/// procedure: under about 30 degrees of arc the two are within 0.13 degrees of
+/// each other, over about 90 the difference is a visible lurch, and
+/// `pose_blend_report::worst_arc` (in `anim/clip.hpp`) is how you find out which
+/// regime your content is actually in rather than guessing.
+[[nodiscard]] inline transform transform_blend_slerp(const transform& a, const transform& b,
+                                                     float t)
+{
+    return {.position = lerp(a.position, b.position, t),
+            .rotation = quat_slerp(a.rotation, b.rotation, t),
+            .scale    = lerp(a.scale, b.scale, t)};
+}
+
+
 } // namespace engine

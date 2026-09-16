@@ -952,12 +952,26 @@ struct quat
 ///   middle and slows at both ends, because equal steps along a chord subtend
 ///   unequal angles at the centre.
 ///
-/// **The number to design with is the gap in degrees at the same `t`**, which
-/// §7.4 measures for quaternion arcs: 0.13° at 30°, 4.07° at 90°, 26.34° at 150°.
-/// Under about 30° of arc — which is where a 30 Hz animation clip's adjacent
-/// keyframes live — nlerp is indistinguishable from slerp and costs no
-/// trigonometry at all, which is why a great deal of shipped animation code uses
-/// it and is right to. Over about 90° it lurches visibly through its middle.
+/// **The number to design with is the gap in degrees at the same `t`** — and
+/// *** SAY WHICH DEGREES, BECAUSE THERE ARE TWO KINDS AND THEY DIFFER BY A
+/// FACTOR OF TWO. *** Lesson 7.7 found this comment quoting one convention and
+/// then arguing in the other, so both are written out now. `Ω` is the arc on the
+/// 4-sphere, which is HALF the rotation angle `θ` the eye sees (Lesson 7.4 §5):
+///
+///     sphere arc Ω     30°      90°     150°      (Ω, gap both on the sphere)
+///     gap            0.1337°  4.0746°  26.3423°
+///
+///     rotation θ       30°    73.50°     90°     150°   (both as the eye sees)
+///     gap            0.0331°  0.4952°  0.9188°  4.5140°
+///
+/// The second table is the one to design with, because a rotation angle is what
+/// content and animators talk about. **73.50° of rotation is the threshold**:
+/// below it nlerp stays within half a degree of slerp, costs no trigonometry, and
+/// is 3.42× cheaper — which is why a great deal of shipped animation code uses it
+/// and is right to. A 30 Hz clip's adjacent keyframes are three orders inside
+/// that (Lesson 7.7 §5 measures 0.0169° even for a limb turning at 720°/s). A
+/// blend between two poses chosen by gameplay is not, and over about 150° of
+/// rotation it lurches visibly through its middle.
 ///
 /// `nearest` applies here for the identical reason it applies to `quat_slerp`,
 /// and its absence is louder: the chord between antipodal representatives passes

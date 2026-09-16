@@ -7,6 +7,18 @@
 // shared between joints, so that no assignment of whole objects to whole matrices
 // can bend it.
 //
+// *** LESSON 7.7 ADDED A SECOND HALF, AND THE INTERESTING PART IS WHAT IT DID
+// NOT HAVE TO TOUCH. *** 7.6's `build_pose` carried a prediction in its doc
+// comment: "Lesson 7.7 replaces it with a clip sampler and nothing else in this
+// file changes, because everything downstream takes `std::span<const transform>`
+// and does not care where the transforms came from." That held — `build_pose` now
+// samples two clips and cross-fades them, and every line between it and the
+// screen is the same. What 7.7 DID add is a second path that deliberately breaks
+// the rule, `[M]`, which blends the composed matrices instead of the poses and
+// shortens the limb; and that one could not be hidden behind the span, because it
+// is a different operation on a different type. The seam held where it was drawn
+// and did not pretend to cover what it never covered.
+//
 // WHAT TO DO WITH IT, in the order that makes the point:
 //
 //   1. Hold [Left] / [Right] and watch the tube CURL. The skeleton drawn through
@@ -30,6 +42,22 @@
 //   5. Press [W] to see the weighting itself: each ring drawn in the blend of its
 //      two joints' colours. The pinch always lands where the two are equal.
 //
+// AND THEN LESSON 7.7, which is the same tube driven by recorded motion:
+//
+//   6. Press [P]. The sliders go away and two CLIPS start playing — a curl and a
+//      twist, each baked at 30 Hz and then reduced to the keys that carry
+//      information. [Space] pauses, [Left]/[Right] scrub. The panel shows where
+//      the sampler's cursor is in each track, which is the whole of §4 made
+//      visible: watch it sit still for two frames and then step once.
+//   7. Hold [Up] to cross-fade from the curl into the twist. `blend_poses` is
+//      doing one `transform_blend` per joint and nothing else, and the chain
+//      length on the panel stays at 5.000 the entire way across.
+//   8. Now press [M] and do it again. Identical inputs, identical weights — but
+//      the two poses are composed FIRST and the matrices blended afterwards, and
+//      the limb gets shorter. That is Lesson 7.6's candy wrapper one level up,
+//      with the accumulated whole-chain angle in place of the per-joint one, and
+//      the panel puts a number on it.
+//
 //     cmake --build build --target rig
 //     ./build/demos/rig                                      play with it
 //     ./build/demos/rig --bend 70                            start curled
@@ -37,6 +65,9 @@
 //     ./build/demos/rig --twist 180 --segments 4             …and the fix
 //     ./build/demos/rig --no-bind --shot scratch/x.ppm       the classic bug
 //     ./build/demos/rig --weights --shot scratch/x.ppm       headless, deterministic
+//     ./build/demos/rig --clip --time 0.6                     playing a clip
+//     ./build/demos/rig --clip --fade 0.5 --shot scratch/x.ppm      a cross-fade
+//     ./build/demos/rig --clip --fade 0.5 --matrix-blend --shot ...  …done wrong
 //
 // THE RULES ARE 5.1'S. Nothing here includes an engine internal. Note in
 // particular that the deformation is `engine::anim::skin_into` writing into a
@@ -45,6 +76,7 @@
 // immediately" contract `core/pool.hpp` documents, and nothing here needed a new
 // public function to do it.
 
+#include <engine/anim/clip.hpp>
 #include <engine/anim/skeleton.hpp>
 #include <engine/anim/skin.hpp>
 #include <engine/core/actions.hpp>
@@ -243,6 +275,110 @@ const Uint32 k_joint_colour[k_joints] = {
     return m;
 }
 
+// ---- The clips (Lesson 7.7) -------------------------------------------------
+
+/// How long each clip runs, and how densely it is baked before reduction.
+///
+/// Two seconds and 30 Hz, so the numbers on the panel are the ones §9 of the
+/// lesson quotes: 61 keys per channel baked, and rather fewer afterwards.
+constexpr float k_clip_seconds = 2.0f;
+constexpr float k_bake_hz = 30.0f;
+
+/// Bake a per-joint pose function into a clip, then throw away the keys that
+/// carried nothing.
+///
+/// **THE LAST KEY LANDS EXACTLY ON `duration`**, which is what closes the loop:
+/// `frames + 1` samples over `frames` intervals. A baker that wrote `frames`
+/// samples would put its last key at 1.9667 s on a 2-second clip, and the cycle
+/// would restart one frame early — the seam Lesson 7.7 §6 measures at 5.82
+/// degrees on a walk.
+template <typename Fn>
+[[nodiscard]] engine::anim::clip bake_clip(const engine::anim::skeleton& sk,
+                                           const char* name, Fn pose_at)
+{
+    engine::anim::clip c;
+    c.name = name;
+    c.duration = k_clip_seconds;
+    c.loops = true;
+    c.tracks.resize(sk.size());
+
+    const int frames = static_cast<int>(k_clip_seconds * k_bake_hz);
+    for (int f = 0; f <= frames; ++f)
+    {
+        const float t = static_cast<float>(f) / k_bake_hz;
+        for (std::size_t j = 0; j < sk.size(); ++j)
+        {
+            const transform p = pose_at(j, t / k_clip_seconds);
+            c.tracks[j].position.push_back({t, p.position});
+            c.tracks[j].rotation.push_back({t, p.rotation});
+            c.tracks[j].scale.push_back({t, p.scale});
+        }
+    }
+
+    // Every scale channel and every position channel is constant here, so this
+    // deletes two thirds of the clip outright — and the panel says by how much.
+    (void)engine::anim::reduce(c, sk, engine::anim::reduction_limits{});
+    (void)engine::anim::canonicalise_rotations(c);
+    return c;
+}
+
+/// Clip A: the same curl the sliders drive, swung through a full cycle.
+[[nodiscard]] transform curl_at(const engine::anim::skeleton& sk, std::size_t j, float phase)
+{
+    transform t = sk.joints[j].local_bind;
+    if (j == 0) { return t; }
+    const float total = 90.0f * k_rad * std::sin(2.0f * k_pi * phase);
+    t.rotation = engine::quat_from_axis_angle({0.0f, 0.0f, 1.0f},
+                                              total / static_cast<float>(k_joints - 1));
+    return t;
+}
+
+/// Clip B: the twist, about the limb's own axis, on the upper joints only.
+[[nodiscard]] transform twist_at(const engine::anim::skeleton& sk, std::size_t j, float phase)
+{
+    transform t = sk.joints[j].local_bind;
+    const int n = k_joints - k_twist_first;
+    if (static_cast<int>(j) < k_twist_first) { return t; }
+    const float total = 180.0f * k_rad * 0.5f * (1.0f - std::cos(2.0f * k_pi * phase));
+    t.rotation = engine::quat_from_axis_angle({0.0f, 1.0f, 0.0f},
+                                              total / static_cast<float>(n));
+    return t;
+}
+
+/// Blend two affine matrices entry by entry: **the wrong way to cross-fade**,
+/// written here rather than in the engine because the engine should not offer it.
+///
+/// Sixteen independent lerps. It is exactly what "just blend the matrices" means,
+/// and it is linear blend skinning one level up — the linear part is the average
+/// of two rotations, which is not a rotation, so the bones shorten by the cosine
+/// of half the angle between them. `[M]` is this function.
+[[nodiscard]] mat4 matrix_lerp(const mat4& a, const mat4& b, float t)
+{
+    auto mix = [&](engine::vec4 x, engine::vec4 y) {
+        return engine::vec4{x.x + (y.x - x.x) * t, x.y + (y.y - x.y) * t,
+                            x.z + (y.z - x.z) * t, x.w + (y.w - x.w) * t};
+    };
+    return mat4{mix(a.c0, b.c0), mix(a.c1, b.c1), mix(a.c2, b.c2), mix(a.c3, b.c3)};
+}
+
+/// The sum of the bone lengths of a composed pose.
+///
+/// **The one number that separates the two blends**, and it is deliberately the
+/// SUM of the segments rather than the straight-line distance from root to tip.
+/// A chord shortens when the limb bends, which is the pose doing its job; the sum
+/// of the bones cannot change under any rotation at all, so any drop in it is the
+/// blend inventing a shorter skeleton.
+[[nodiscard]] float chain_length(const std::vector<mat4>& model)
+{
+    float total = 0.0f;
+    for (std::size_t j = 1; j < model.size(); ++j)
+    {
+        total += engine::length(engine::translation_of(model[j])
+                                - engine::translation_of(model[j - 1u]));
+    }
+    return total;
+}
+
 /// What a ring of the deformed tube looks like: its centre, and the SMALLEST
 /// distance of its vertices from that centre.
 ///
@@ -336,6 +472,20 @@ public:
                 const int given = SDL_atoi(argv[++i]);
                 segments_ = std::clamp(given, 1, k_joints - k_twist_first);
             }
+            else if (SDL_strcmp(argv[i], "--clip") == 0) { clip_mode_ = true; }
+            else if (SDL_strcmp(argv[i], "--time") == 0 && i + 1 < argc)
+            {
+                const double given = SDL_atof(argv[++i]);
+                clip_mode_ = true;
+                time_ = static_cast<float>(given);
+            }
+            else if (SDL_strcmp(argv[i], "--fade") == 0 && i + 1 < argc)
+            {
+                const double given = SDL_atof(argv[++i]);
+                clip_mode_ = true;
+                fade_ = std::clamp(static_cast<float>(given), 0.0f, 1.0f);
+            }
+            else if (SDL_strcmp(argv[i], "--matrix-blend") == 0) { matrix_blend_ = true; }
             else if (SDL_strcmp(argv[i], "--no-bind") == 0) { use_inverse_binds_ = false; }
             else if (SDL_strcmp(argv[i], "--weights") == 0) { weight_view_ = true; }
             else if (SDL_strcmp(argv[i], "--ghost") == 0) { ghost_ = true; }
@@ -356,6 +506,16 @@ public:
         tube_ = build_tube();
         report_ = engine::anim::validate(skeleton_);
         skin_report_ = engine::anim::validate(tube_, skeleton_.size());
+
+        // Lesson 7.7. Two clips, baked from the same functions the sliders drive,
+        // then reduced. `validate` is run once here and never again: everything
+        // it reports is a property of the data, and the data does not change.
+        curl_ = bake_clip(skeleton_, "curl",
+                          [&](std::size_t j, float p) { return curl_at(skeleton_, j, p); });
+        twist_clip_ = bake_clip(skeleton_, "twist",
+                                [&](std::size_t j, float p) { return twist_at(skeleton_, j, p); });
+        curl_report_ = engine::anim::validate(curl_, skeleton_);
+        twist_report_ = engine::anim::validate(twist_clip_, skeleton_);
 
         // The deformed copy lives in the engine's own mesh pool, and it starts
         // as the bind mesh so that the very first frame — before any pose has
@@ -398,6 +558,9 @@ public:
         if (actions_.pressed(a_bind_))  { use_inverse_binds_ = !use_inverse_binds_; }
         if (actions_.pressed(a_weights_)) { weight_view_ = !weight_view_; }
         if (actions_.pressed(a_ghost_)) { ghost_ = !ghost_; }
+        if (actions_.pressed(a_clip_)) { clip_mode_ = !clip_mode_; }
+        if (actions_.pressed(a_play_)) { playing_ = !playing_; }
+        if (actions_.pressed(a_matrix_)) { matrix_blend_ = !matrix_blend_; }
         for (int n = 0; n < 4; ++n)
         {
             if (actions_.pressed(a_seg_[n])) { segments_ = std::min(n + 1, k_joints - k_twist_first); }
@@ -412,8 +575,25 @@ public:
         // program can draw.
         if (shot_path_ != nullptr) { return; }
 
-        const float rate = 45.0f * k_rad * h;
         const float dir = actions_.value(a_angle_);
+
+        if (clip_mode_)
+        {
+            // *** THE CLOCK IS WRAPPED EVERY STEP, NOT ALLOWED TO ACCUMULATE. ***
+            // `wrap_time` would give the right answer either way — but `std::fmod`
+            // is not constant time, and its cost grows with the quotient: the
+            // harness measures 1.60 ns on a bounded clock against 5.90 ns after
+            // the clock has run to 6,666 seconds, on the same clip. A program left
+            // running overnight would pay for every hour of it, on every sample,
+            // forever.
+            if (playing_) { time_ += h; }
+            time_ += dir * h * 0.6f;                       // scrub with left/right
+            time_ = engine::anim::wrap_time(curl_, time_);
+            fade_ = std::clamp(fade_ + actions_.value(a_fade_) * h * 1.2f, 0.0f, 1.0f);
+            return;
+        }
+
+        const float rate = 45.0f * k_rad * h;
         if (twisting_) { twist_ = std::clamp(twist_ + rate * dir, 0.0f, k_pi); }
         else { bend_ = std::clamp(bend_ + rate * dir, -120.0f * k_rad, 120.0f * k_rad); }
     }
@@ -431,7 +611,26 @@ public:
         // matrices, and deform. Everything else in this file is a way of looking
         // at what these four calls just did.
         build_pose();
-        engine::anim::skinning_palette(skeleton_, pose_, posed_, palette_);
+
+        if (clip_mode_ && matrix_blend_)
+        {
+            // [M] — the same two poses, blended one step later in the pipeline.
+            // Compose each, then lerp the MATRICES. Nothing about this is a
+            // different weighting; it is a different thing being weighted.
+            engine::anim::compose_pose(skeleton_, pose_a_, posed_a_);
+            engine::anim::compose_pose(skeleton_, pose_b_, posed_b_);
+            posed_.resize(posed_a_.size());
+            for (std::size_t j = 0; j < posed_.size(); ++j)
+            {
+                posed_[j] = matrix_lerp(posed_a_[j], posed_b_[j], fade_);
+            }
+            engine::anim::build_palette(skeleton_, posed_, palette_);
+        }
+        else
+        {
+            engine::anim::skinning_palette(skeleton_, pose_, posed_, palette_);
+        }
+        chain_ = chain_length(posed_);
 
         // [N] — the whole of the classic bug, expressed as one substitution. The
         // posed joint matrices ARE `model_from_joint`; using them as if they were
@@ -514,6 +713,10 @@ private:
         a_bind_ = actions_.declare("bind");
         a_weights_ = actions_.declare("weights");
         a_ghost_ = actions_.declare("ghost");
+        a_clip_ = actions_.declare("clip");
+        a_play_ = actions_.declare("play");
+        a_fade_ = actions_.declare("fade");
+        a_matrix_ = actions_.declare("matrix");
         for (int n = 0; n < 4; ++n)
         {
             a_seg_[n] = actions_.declare(k_seg_names[n]);
@@ -533,6 +736,11 @@ private:
         (void)actions_.bind_key(a_bind_, SDL_SCANCODE_N);
         (void)actions_.bind_key(a_weights_, SDL_SCANCODE_W);
         (void)actions_.bind_key(a_ghost_, SDL_SCANCODE_B);
+        (void)actions_.bind_key(a_clip_, SDL_SCANCODE_P);
+        (void)actions_.bind_key(a_play_, SDL_SCANCODE_SPACE);
+        (void)actions_.bind_key(a_matrix_, SDL_SCANCODE_M);
+        (void)actions_.bind_key(a_fade_, SDL_SCANCODE_UP, +1.0f);
+        (void)actions_.bind_key(a_fade_, SDL_SCANCODE_DOWN, -1.0f);
     }
 
     [[nodiscard]] engine::transform camera_placement() const
@@ -555,6 +763,20 @@ private:
     /// from.
     void build_pose()
     {
+        if (clip_mode_)
+        {
+            // *** THE WHOLE OF LESSON 7.7, IN THREE CALLS. *** Two clips sampled
+            // at the same instant, and one cross-fade between the results. Note
+            // what is NOT here: no rest pose to start from (the sampler fills
+            // every joint, falling back to the bind value for channels the
+            // reduction deleted), and no `nearest` (it is inside `quat_nlerp`,
+            // inside `transform_blend`, inside `blend_poses`).
+            engine::anim::sample(curl_, skeleton_, time_, cursors_a_, pose_a_);
+            engine::anim::sample(twist_clip_, skeleton_, time_, cursors_b_, pose_b_);
+            blend_ = engine::anim::blend_poses(pose_a_, pose_b_, fade_, pose_);
+            return;
+        }
+
         engine::anim::rest_pose(skeleton_, pose_);
 
         if (twisting_)
@@ -693,6 +915,40 @@ private:
         ImGui::SetNextWindowSize(ImVec2(376.0f, 0.0f), ImGuiCond_FirstUseEver);
         if (ImGui::Begin("rig"))
         {
+            if (clip_mode_)
+            {
+                ImGui::Text("CLIP MODE [P]  %s", playing_ ? "playing [Space]" : "PAUSED");
+                ImGui::Text("t %6.3f / %.2f s   phase %5.3f", static_cast<double>(time_),
+                            static_cast<double>(curl_.duration),
+                            static_cast<double>(time_ / curl_.duration));
+                ImGui::Text("cursor  curl j5 %3u   twist j5 %3u",
+                            cursors_a_.empty() ? 0u : cursors_a_[5].rotation,
+                            cursors_b_.empty() ? 0u : cursors_b_[5].rotation);
+                ImGui::Separator();
+                ImGui::Text("fade %5.3f  curl -> twist   ([Up]/[Down])",
+                            static_cast<double>(fade_));
+                ImGui::Text("blend space   %s [M]",
+                            matrix_blend_ ? "MATRICES — the bug" : "poses");
+                ImGui::Text("chain length  %6.4f  (bind %d.000)", static_cast<double>(chain_),
+                            k_joints - 1);
+                ImGui::Text("worst local arc %6.2f deg, %zu flips",
+                            static_cast<double>(blend_.worst_arc * k_deg), blend_.flips);
+                ImGui::Separator();
+                ImGui::Text("curl  %zu keys, %zu B, %zu of %zu channels",
+                            curl_report_.keys, curl_report_.key_bytes, curl_report_.channels,
+                            3 * curl_report_.tracks);
+                ImGui::Text("twist %zu keys, %zu B, %zu of %zu channels",
+                            twist_report_.keys, twist_report_.key_bytes,
+                            twist_report_.channels, 3 * twist_report_.tracks);
+                ImGui::Text("loop seam %.3e deg", static_cast<double>(
+                                curl_report_.loop_gap_radians * k_deg));
+                ImGui::Separator();
+                ImGui::TextUnformatted("[P] back to the sliders  [M] blend space");
+                ImGui::TextUnformatted("left/right scrub  up/down fade  [Space] play");
+                ImGui::End();
+                return;
+            }
+
             ImGui::Text("mode          %s", twisting_ ? "TWIST [T]" : "BEND [T]");
             ImGui::Text("angle         %7.2f deg", static_cast<double>(
                             (twisting_ ? twist_ : bend_) * k_deg));
@@ -722,6 +978,7 @@ private:
             ImGui::Separator();
             ImGui::TextUnformatted("left/right angle  [T] twist  [N] binds");
             ImGui::TextUnformatted("[W] weights  [B] bind ghost  [R] reset");
+            ImGui::TextUnformatted("[P] play a clip instead (Lesson 7.7)");
         }
         ImGui::End();
     }
@@ -735,6 +992,30 @@ private:
     /// before anybody noticed.
     void write_shot()
     {
+        if (clip_mode_)
+        {
+            std::printf("rig: clip t %.3f s, fade %.3f, blend %s\n",
+                        static_cast<double>(time_), static_cast<double>(fade_),
+                        matrix_blend_ ? "MATRICES" : "poses");
+            std::printf("rig: chain %.5f of %d.000, worst arc %.2f deg\n",
+                        static_cast<double>(chain_), k_joints - 1,
+                        static_cast<double>(blend_.worst_arc * k_deg));
+            std::printf("rig: curl %zu keys %zu B, %zu of %zu channels\n",
+                        curl_report_.keys, curl_report_.key_bytes,
+                        curl_report_.channels, 3 * curl_report_.tracks);
+            std::printf("rig: twist %zu keys %zu B, %zu of %zu channels\n",
+                        twist_report_.keys, twist_report_.key_bytes,
+                        twist_report_.channels, 3 * twist_report_.tracks);
+            std::printf("rig: cursor curl j5 %u, twist j5 %u, seam %.3e deg\n",
+                        cursors_a_.empty() ? 0u : cursors_a_[5].rotation,
+                        cursors_b_.empty() ? 0u : cursors_b_[5].rotation,
+                        static_cast<double>(curl_report_.loop_gap_radians * k_deg));
+            std::printf("rig: %zu objects, %zu triangles, %d debug lines\n",
+                        collect_.drawn, triangles_.size(), debug_drawn_);
+            request_quit(engine::save_ppm(fb(), shot_path_));
+            return;
+        }
+
         std::printf("rig: %s %.2f deg, %d segments, binds %s\n",
                     twisting_ ? "twist" : "bend",
                     static_cast<double>((twisting_ ? twist_ : bend_) * k_deg),
@@ -765,6 +1046,30 @@ private:
     bool use_inverse_binds_ = true;
     bool weight_view_ = false;
     bool ghost_ = false;
+
+    // Lesson 7.7.
+    bool clip_mode_ = false;
+    bool playing_ = true;
+    bool matrix_blend_ = false;
+    float time_ = 0.0f;
+    float fade_ = 0.0f;
+    float chain_ = 0.0f;
+
+    engine::anim::clip curl_;
+    engine::anim::clip twist_clip_;
+    engine::anim::clip_report curl_report_{};
+    engine::anim::clip_report twist_report_{};
+    engine::anim::pose_blend_report blend_{};
+
+    // THE MUTABLE HALF OF PLAYBACK, and it lives here rather than in the clip —
+    // one set per playing instance. Two characters sharing a walk must not share
+    // a cursor, and a `clip` that owned one could not be an asset.
+    std::vector<engine::anim::track_cursor> cursors_a_;
+    std::vector<engine::anim::track_cursor> cursors_b_;
+    std::vector<transform> pose_a_;
+    std::vector<transform> pose_b_;
+    std::vector<mat4> posed_a_;
+    std::vector<mat4> posed_b_;
 
     engine::anim::skeleton skeleton_;
     engine::anim::skinned_mesh tube_;
@@ -800,6 +1105,7 @@ private:
     engine::action_map actions_;
     engine::action_id a_quit_{}, a_reset_{}, a_angle_{};
     engine::action_id a_twist_{}, a_bind_{}, a_weights_{}, a_ghost_{};
+    engine::action_id a_clip_{}, a_play_{}, a_fade_{}, a_matrix_{};
     engine::action_id a_seg_[4]{};
 
     engine::debug_ui ui_;

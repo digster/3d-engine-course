@@ -23,10 +23,17 @@
 add_library(engine STATIC
     # Lesson 7.6. A new directory, and the same argument asset/ made in 5.5 and
     # ui/ made in 5.11: animation is not a graphics subsystem. Nothing in these
-    # two files mentions a framebuffer, a pipeline or a colour — they compose
-    # transforms and deform arrays — and Module 7.7's clip sampling lands here
-    # beside them. Putting them under gfx/ would say that a character stops
-    # moving when nobody is looking at it.
+    # files mentions a framebuffer, a pipeline or a colour — they compose
+    # transforms and deform arrays — and Lesson 7.7's clip sampling landed here
+    # beside them, exactly as this comment predicted it would. Putting them under
+    # gfx/ would say that a character stops moving when nobody is looking at it.
+    #
+    # Lesson 7.7. `clip.cpp` is FIRST in the group and last in the dependency
+    # graph: it includes `anim/skeleton.hpp` (a sample needs the bind pose to fall
+    # back to) and nothing includes it. Alphabetical order and dependency order
+    # agree here by luck rather than by design, which is worth noticing precisely
+    # because the list is maintained alphabetically and will not keep agreeing.
+    src/anim/clip.cpp
     src/anim/skeleton.cpp
     src/anim/skin.cpp
     # Lesson 5.5. A new directory rather than another file in gfx/: an asset

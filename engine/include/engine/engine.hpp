@@ -85,6 +85,7 @@
 // notice a whole subsystem rather than one more file in a familiar folder — and
 // because the failure it prevents scales with that: a public `engine::anim` the
 // table of contents does not mention reads as an engine with no animation in it.
+#include <engine/anim/clip.hpp>
 #include <engine/anim/skeleton.hpp>
 #include <engine/anim/skin.hpp>
 

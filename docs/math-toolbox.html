@@ -3671,6 +3671,57 @@ The singular values are sqrt(1 + |sin p|), 1, sqrt(1 - |sin p|).</span>
     </p>
   </div>
 
+  <div class="card">
+    <h3>The keyframe bracket, and the segment parameter <span class="from">Lesson 7.7</span></h3>
+    <div class="eq">
+      \[ i = \max\{\,k : t_k \le t\,\}, \qquad u = \frac{t - t_i}{t_{i+1} - t_i} \in [0,1] \]
+      <span class="eq-plain">Find the last key at or before the time, then measure how far into that interval the time falls.</span>
+    </div>
+    <p>
+      The whole of sampling. With keys at <code>0.1333</code> and <code>0.2000</code> and
+      <code>t = 0.1800</code>, <code>u = 0.0467 / 0.0667 = 0.7000</code>. <code>i</code> is clamped
+      into <code>[0, n-2]</code> so the right key always exists, and <code>u</code> is clamped into
+      <code>[0, 1]</code> so a time outside the keys&rsquo; range holds the nearest key rather than
+      extrapolating. <strong>Finding <code>i</code> is a search you can usually skip</strong>:
+      playback is coherent, so last frame&rsquo;s answer is nearly always this frame&rsquo;s, and a
+      remembered cursor beats a binary search 2.74&times; at 31 keys and 10.34&times; at 301.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>Arithmetic minus geometric mean &mdash; the scale question <span class="from">Lesson 7.7</span></h3>
+    <div class="eq">
+      \[ \frac{a+b}{2} \;-\; \sqrt{ab} \;\ge\; 0, \qquad \text{equality only when } a = b \]
+      <span class="eq-plain">The midpoint of a linear interpolation always sits above the midpoint of a geometric one, by the gap between the two means.</span>
+    </div>
+    <p>
+      The exact disagreement between interpolating a scale linearly and geometrically, evaluated at
+      the midpoint. From 1 to 8 it is <code>4.500 &minus; 2.828</code>, a <strong>59.10%</strong>
+      gap; over the range squash and stretch actually uses it is <strong>0.62%</strong>. The gap is
+      a function of the <em>ratio</em>, so splitting a span into <code>n</code> keys takes the
+      <code>n</code>-th root of it: six keys across 1&rarr;8 leave 1.51%.
+      <strong>Which is the answer to somebody who wants geometric growth</strong> &mdash; a
+      keyframe, not a runtime rule.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>A blended chain, shortened <span class="from">Lesson 7.7</span></h3>
+    <div class="eq">
+      \[ \text{chain} \;=\; \sum_{k=1}^{n-1} \cos\!\left(\frac{(k-1)\,\delta}{2}\right) \]
+      <span class="eq-plain">Blending two poses' composed matrices shortens each bone by the cosine of half the accumulated angle between its two directions.</span>
+    </div>
+    <p>
+      The candy-wrapper cosine above, one level up and with a different angle in it. A matrix lerp
+      averages the joint <em>positions</em>, so bone <code>k</code> becomes the average of two unit
+      vectors an angle apart; and bone <code>k</code>&rsquo;s direction is joint <code>k-1</code>&rsquo;s
+      own axis, which has <strong>accumulated</strong> every rotation above it. So the error grows
+      down the chain &mdash; hips untouched, hands and feet ruined. Blending the <em>poses</em>
+      instead preserves every bone exactly, because a normalised quaternion blend is still a
+      rotation. Measured against the formula: <code>4.768e&minus;07</code>.
+    </p>
+  </div>
+
   <h2 id="coming"><span class="num">9</span>Coming as the course proceeds</h2>
 
   <p>

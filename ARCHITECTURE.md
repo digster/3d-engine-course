@@ -1041,7 +1041,15 @@ chore. What follows is on disk.
 │   │   │   │                 #   (the 4 SDL callbacks) — the engine keeps the loop
 │   │   │   └── main.hpp      # ENGINE_MAIN. ONE .cpp per program; no main() in it.
 │   │   │                     #   NOT in engine.hpp, deliberately
-│   │   ├── anim/           # SKELETONS AND THE SURFACES THEY BEND          [7.6]
+│   │   ├── anim/           # SKELETONS, THE SURFACES THEY BEND, AND THE
+│   │   │                   #   RECORDED MOTION THAT DRIVES THEM         [7.6-7.7]
+│   │   │   ├── clip.hpp      # keyframe<T>, joint_track, clip, track_cursor,   [7.7]
+│   │   │   │                 #   clip_report; sampling, wrapping, cross-fading,
+│   │   │   │                 #   canonicalising and reduction. A CLIP IS A
+│   │   │   │                 #   FUNCTION FROM TIME TO POSE and has NO STATE:
+│   │   │   │                 #   the playhead and the search cursor live in the
+│   │   │   │                 #   caller, because a clip is an ASSET and two
+│   │   │   │                 #   characters must be able to play it out of phase
 │   │   │   ├── skeleton.hpp  # joint, skeleton, skeleton_report; the bind pose,
 │   │   │   │                 #   its inverse, and pose -> palette. A skinning
 │   │   │   │                 #   matrix is model_from_joint(posed) *
@@ -1161,15 +1169,18 @@ chore. What follows is on disk.
 │   │                             #   texture, a comparison sampler, its own
 │   │                             #   render pass, and fill_uniforms() so the two
 │   │                             #   renderers cannot disagree about a bias
-│   └── src/                # ---- PRIVATE. 50 sources; no demo can name this path ----
-│       ├── anim/           # skeleton.cpp, skin.cpp                         [7.6]
+│   └── src/                # ---- PRIVATE. 54 sources; no demo can name this path ----
+│       ├── anim/           # clip.cpp [7.7], skeleton.cpp, skin.cpp          [7.6]
 │       │                   #   A NEW DIRECTORY, and the argument is asset/'s in
 │       │                   #   5.5 and ui/'s in 5.11: animation is not a
 │       │                   #   graphics subsystem. Neither file mentions a
 │       │                   #   framebuffer, a pipeline or a colour, and a
 │       │                   #   character keeps moving when nobody is looking.
 │       │                   #   skeleton.cpp runs once per JOINT and skin.cpp
-│       │                   #   once per VERTEX — 2.34% / 97.66% of the pair
+│       │                   #   once per VERTEX — 2.34% / 97.66% of the pair.
+│       │                   #   clip.cpp runs once per CHANNEL and is smaller
+│       │                   #   than either: 0.159 us for 23 joints, two thirds
+│       │                   #   of compose+palette and noise beside skinning
 │       ├── core/           # actions [5.10], clock, fixed_step, input, log, profile
 │       ├── platform/       # platform.cpp, app.cpp                            [5.2]
 │       ├── ui/             # debug_ui.cpp — THE ONLY engine TU that          [5.11]

@@ -97,6 +97,7 @@
       <li><a href="#quat">Quaternions &mdash; storage order, the sandwich, and the double cover</a></li>
       <li><a href="#slerp">Interpolating rotations &mdash; which function, and when</a></li>
       <li><a href="#skinning">Skinning &mdash; the matrix, the weights, and the cosine</a></li>
+      <li><a href="#clips">Clips &mdash; keyframes, sampling, looping and blending</a></li>
       <li><a href="#simulation">The simulation contract</a></li>
       <li><a href="#rotational">Rotational quantities &mdash; torque, spin, inertia</a></li>
       <li><a href="#colour">Colour and diagram conventions</a></li>
@@ -3060,6 +3061,117 @@
       a rotation matrix is <em>unique</em>, so there is no double cover, no long way round, and no
       <code>nearest</code> to forget &mdash; &sect;8f&rsquo;s 359&deg; bug cannot be written here at
       all.
+    </p>
+  </div>
+
+  <!-- ===================================================================== -->
+
+  <h2 id="clips"><span class="num">8h</span>Clips &mdash; keyframes, sampling, looping and blending</h2>
+
+  <p>
+    Lesson 7.7. A clip is a <strong>function from time to pose</strong>, and it has no state. Every
+    rule below follows from that sentence or from the storage decision it forces.
+  </p>
+
+  <div class="tbl-scroll">
+    <table class="conv">
+      <thead><tr><th>Rule</th><th>Why, and what breaks without it</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>Per-channel tracks, each with its own absolute times.</strong>
+              <code>tracks[j].{position, rotation, scale}</code>, parallel to
+              <code>skeleton::joints</code> by index.</td>
+          <td>glTF&rsquo;s layout and everyone else&rsquo;s. Independent times are what let a
+              channel be reduced or deleted without dragging its neighbours &mdash; which is the
+              whole saving, since <strong>53 of 69 channels</strong> on a 23-joint walk carry
+              nothing. Absolute rather than delta times because a clip must be seekable, and a
+              running sum makes a seek impossible.</td>
+        </tr>
+        <tr>
+          <td><strong>An empty channel means the joint&rsquo;s bind value, exactly.</strong> One key
+              means a constant.</td>
+          <td>A representation, not an approximation: the sampler falls back to
+              <code>local_bind</code>, so sampling an all-empty clip reproduces <code>rest_pose</code>
+              bit for bit (measured <code>0.000e+00</code>). It is also what makes an upper-body clip
+              legal rather than a way to lose the legs.</td>
+        </tr>
+        <tr>
+          <td><strong>The clip is shared; the cursor is not.</strong>
+              <code>std::vector&lt;track_cursor&gt;</code> lives in the caller.</td>
+          <td>Same split as <code>skeleton</code>/<code>pose</code> one level up. A playhead or a
+              search cursor inside the clip means two characters cannot play the same walk out of
+              phase &mdash; or at all. 12 bytes a joint against a clip that may be megabytes.</td>
+        </tr>
+        <tr>
+          <td><strong>Three interpolation rules, one per field:</strong> position lerps, rotation
+              <em>nlerps</em>, scale lerps. <code>transform_blend</code>.</td>
+          <td>Not <code>transform_slerp</code> &mdash; one field of three slerps, and naming the
+              whole after it is a lie. Position: a point has only straight lines. Rotation: two
+              adjacent keys of a 30&nbsp;Hz clip are 24&deg; apart even at 720&deg;/s and nlerp lags
+              slerp by <strong>0.016921&deg;</strong>, three orders inside &sect;8f&rsquo;s 73.50&deg;
+              threshold, and glTF Appendix C permits the approximation explicitly. Scale: see
+              below.</td>
+        </tr>
+        <tr>
+          <td><strong>Scale interpolates <em>linearly</em>, not geometrically.</strong></td>
+          <td>Three reasons, hardest last. The arithmetic-minus-geometric mean gap is
+              <strong>0.62%</strong> over the range content uses. <code>ln(0)</code> is
+              <code>&minus;&infin;</code> and a scale of zero is how an animator hides a thing, so
+              the geometric rule <em>teleports</em> rather than shrinks; <code>ln(&minus;1)</code> is
+              NaN for a mirrored rig. And glTF&rsquo;s <code>LINEAR</code> mode <em>is</em>
+              componentwise lerp, so an importer that log-lerps plays the file differently from every
+              other viewer. The answer to anyone wanting geometric growth is another keyframe: six
+              of them cut a 59.10% gap to 1.51%.</td>
+        </tr>
+        <tr>
+          <td><strong>The duration is authored, not derived from the last key time.</strong></td>
+          <td>&ldquo;The largest key time&rdquo; puts a 30&nbsp;Hz two-second loop&rsquo;s last key
+              at 1.9667&nbsp;s and restarts the cycle one frame early: <strong>5.8215&deg; of
+              seam</strong>, once per cycle, on an animation correct at every other instant. Bake
+              <code>frames&nbsp;+&nbsp;1</code> samples over <code>frames</code> intervals.</td>
+        </tr>
+        <tr>
+          <td><strong>Root motion is not a seam.</strong> <code>clip_report</code> reports
+              <code>root_travel</code> separately from <code>loop_gap_position</code>.</td>
+          <td>A walk&rsquo;s root <em>legitimately</em> ends the cycle 1.2 units from where it
+              started; a cycle with zero there moonwalks on the spot. An instrument that cannot tell
+              root motion from a broken loop reports every correct walk as broken, and the first
+              version of this one did.</td>
+        </tr>
+        <tr>
+          <td><strong><code>wrap_time</code>, never bare <code>std::fmod</code>.</strong> And wrap
+              the playhead every step rather than letting it accumulate.</td>
+          <td><code>std::fmod</code> takes the sign of the <em>dividend</em>, so
+              <code>fmod(&minus;0.1, 1.0)</code> is <code>&minus;0.1</code>. It is also
+              <strong>not constant time</strong> &mdash; its cost grows with the quotient, measured
+              at 1.603&nbsp;ns on a bounded clock against 5.901&nbsp;ns after the clock has run to
+              6,666&nbsp;seconds.</td>
+        </tr>
+        <tr>
+          <td><strong>Reduce with the sampler&rsquo;s own interpolation rule.</strong></td>
+          <td>Reduction manufactures long arcs on purpose, which is exactly where nlerp and slerp
+              disagree. A slerp-fitted, nlerp-played constant-rate turn overshoots its half-degree
+              budget <strong>4.5&times;</strong>, and nothing anywhere reports it. Generalises past
+              quaternions: a lossy transformation must be fitted with its consumer&rsquo;s exact
+              reconstruction.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout note">
+    <span class="label">Cross-fade in pose space, never in matrix space</span>
+    <p>
+      Blending two poses joint by joint before composing preserves every bone length
+      <em>exactly</em> (measured <code>2.980e&minus;07</code>), because <code>quat_nlerp</code>
+      normalises and a blended rotation is still a rotation. Blending the composed matrices instead
+      &mdash; identical inputs, identical weight, one step later &mdash; is &sect;8g&rsquo;s linear
+      blend skinning one level up: a matrix lerp averages the joint <em>positions</em>, so each bone
+      shortens by the cosine of half the angle between its two directions, and the chain becomes
+      <code>&Sigma; cos((k&minus;1)&delta;/2)</code> (matched to <code>4.768e&minus;07</code>).
+      Because the angle is the <em>accumulated</em> one, the hips are untouched and the hands and
+      feet are ruined &mdash; which is where props attach. Measured on a real cross-fade:
+      <strong>5.00000 against 4.65020</strong>.
     </p>
   </div>
 

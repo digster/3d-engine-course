@@ -7,7 +7,13 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-09-15 (after Lesson 7.6 — 81 of 107 lessons; Module 7 OPEN,
+updated: 2026-09-15 (after Lesson 7.7 — 82 of 107 lessons; Module 7 OPEN,
+         7 of 8, ~41 h of ~46. Planned at 5 h, shipped at 6, so Module 7 went
+         ~45 -> ~46 h and the course ~519 -> ~520 h. Index prose, hero stats
+         (82 published) and the Module 7 subtotal all moved together;
+         check-curriculum.py confirms — and it caught BOTH of 7.6's next links
+         plus a leftover _preview77.html in docs/lessons/ on the first run.
+         Earlier, after Lesson 7.6 — 81 of 107 lessons; Module 7 OPEN,
          6 of 8, ~35 h of ~45. Planned at 5 h, shipped at 6, so Module 7 went
          ~44 -> ~45 h and the course ~518 -> ~519 h. Index prose, hero stats
          (81 published) and the Module 7 subtotal all moved together;
@@ -72,6 +78,75 @@ conventions:
         quaternion. So the sandwich was NOT CHOSEN. Then q = n1n0 =
         -(cos phi + sin phi n_hat), and NOTHING IN THE DERIVATION DETERMINES
         THAT SIGN — the double cover, arriving before it is named.
+  clip: A CLIP IS A FUNCTION FROM TIME TO POSE, AND IT HAS NO STATE. 7.7,
+        engine/include/engine/anim/clip.hpp + docs/conventions.html §8h.
+        PER-CHANNEL TRACKS, EACH WITH ITS OWN ABSOLUTE TIMES — glTF's layout and
+        everyone else's. `clip.tracks[j].{position,rotation,scale}`, parallel to
+        skeleton::joints BY INDEX, and a clip may be SHORTER than the skeleton
+        (an upper-body clip is exactly that). An EMPTY channel means the joint's
+        bind value and is EXACT, not an approximation: sample an all-empty clip
+        and it reproduces rest_pose bit for bit (measured 0.000e+00).
+        *** THE LAYOUT IS NOT THE SAVING. *** A naive per-channel bake is 30%
+        BIGGER than a pose array — 37,076 bytes against 28,520 — because a pose
+        spends 40 B per joint-frame and three channels spend 16+20+16 = 52, each
+        key carrying its own four-byte time. What the layout BUYS is that
+        independent times let a channel be reduced or deleted without dragging
+        its neighbours: 53 of 69 channels on a 23-joint walk carry NOTHING (one
+        position, on the root; no scale anywhere), and the clip lands at 3,716 B,
+        7.7x smaller than the pose array. 3.60 MB -> 0.48 MB at production scale.
+        THE MUTABLE HALF LIVES IN THE CALLER. `std::vector<track_cursor>`, 12 B
+        per joint, exactly as compose_pose's scratch arrays do. A clip is an
+        ASSET — one copy, shared — so a playhead or a cursor inside it would mean
+        two characters could not play the same walk out of phase.
+        THREE INTERPOLATION RULES, ONE PER FIELD, in math/transform.hpp as
+        `transform_blend` (nlerp) and `transform_blend_slerp`. NOT named
+        transform_slerp — 7.5 §12's exercise asked for that and the name is a lie,
+        since one field of three slerps. Position lerps. Rotation NLERPS: two
+        adjacent keys of a 30 Hz clip are 24 deg apart even at 720 deg/s and nlerp
+        lags slerp by 0.016921 deg, three orders inside 7.5's 73.50 deg threshold,
+        and glTF Appendix C explicitly permits the approximation. SCALE LERPS —
+        the decision 7.5 left open — because (a) the arithmetic-minus-geometric
+        mean gap is 0.62% over the range content uses, (b) ln(0) is -inf and a
+        scale of ZERO is how an animator hides a thing (geometric TELEPORTS
+        rather than shrinks) while ln(-1) is NaN for a mirrored rig, and (c)
+        glTF's LINEAR mode is componentwise lerp so an importer that log-lerps
+        plays the file differently from every other viewer. THE ANSWER TO ANYONE
+        WANTING GEOMETRIC GROWTH IS ANOTHER KEYFRAME: 1->8 in six keys cuts the
+        59.10% gap to 1.51%, and a policy the content pipeline can express does
+        not belong in the sampler.
+        DURATION IS AUTHORED, NOT DERIVED. "The largest key time" puts a 30 Hz
+        two-second loop's last key at 1.9667 and restarts the cycle one frame
+        early: 5.8215 deg of seam, once per cycle, on an animation correct at
+        every other instant. Bake `frames + 1` samples over `frames` intervals.
+        ROOT MOTION IS NOT A SEAM, and the first instrument could not tell — it
+        reported 1.200 units on a perfect walk. clip_report splits `root_travel`
+        (parent == k_no_parent) from `loop_gap_position` (everything else).
+        NOTHING APPLIES the travel to a world transform yet; 7.7 §10 names it.
+        wrap_time, NOT std::fmod: fmod takes the sign of the DIVIDEND, so
+        fmod(-0.1, 1.0) is -0.1. And AND std::fmod IS NOT CONSTANT TIME — its
+        cost grows with the quotient, 1.603 ns on a bounded clock against 5.901
+        after the clock has run to 6,666 s. WRAP THE PLAYHEAD EVERY STEP.
+  blend-space: *** A CROSS-FADE IS NOT 7.6's WEIGHTED SUM, AND THE DIFFERENCE IS
+        WHICH OBJECT IS BEING AVERAGED. *** 7.7 §7.
+        BLEND THE POSES: one transform_blend per joint, in LOCAL space, before
+        anything is composed. quat_nlerp normalises, so a blended rotation is
+        still a rotation and a blended transform is still a placement — every
+        bone length preserved to 2.980e-07 at every angle.
+        BLEND THE COMPOSED MATRICES: identical inputs, identical weight, ONE STEP
+        LATER — and it is linear blend skinning one level up. A matrix lerp
+        averages the joint POSITIONS, so bone k becomes the average of two unit
+        vectors an angle apart and shortens by cos of half it. Bone k's direction
+        is joint k-1's own axis, which has ACCUMULATED every rotation above it,
+        so the chain is sum cos((k-1)*delta/2) — matched to 4.768e-07 over a
+        sweep. 0.4434 units of five at 20 deg per joint; the demo measures
+        5.00000 against 4.65020 on a real cross-fade. THE ERROR GROWS DOWN THE
+        CHAIN, so the hips are untouched and the HANDS AND FEET are ruined, which
+        is where props attach and where a player looks.
+        pose_blend_report::worst_arc is the LOCAL arc, not the accumulated one:
+        a chain differing by 20 deg at every joint and 100 at the tip reports 20,
+        correctly, because the per-joint arc is what sets nlerp's error.
+        Computed as the ARGMIN of |scalar| (one dot each, which nearest needs
+        anyway) with angle_between run ONCE on the winner.
   skinning: A SKINNING MATRIX IS `model_from_model`, AND EVERYTHING FOLLOWS
         FROM THAT. 7.6, engine/include/engine/anim/skeleton.hpp +
         docs/conventions.html §8g.
@@ -5031,6 +5106,23 @@ completed:
   ===> MODULE 7 IN PROGRESS: 6 of 8 (7.7 clips, 7.8 audio) <===
 
 capabilities:
+  - 7.7 THE ENGINE CAN PLAY RECORDED MOTION. `engine::anim::clip` is a function
+    from time to pose: per-channel keyframe tracks, cursor-based sampling with a
+    binary-search fallback on any jump, correct looping, cross-fading in POSE
+    space, load-time sign canonicalisation and greedy keyframe reduction.
+    THE SEAM 7.6 DREW HELD. `build_pose` in demos/rig went from two sliders to
+    two sample() calls and a blend_poses(), and NOTHING between it and the screen
+    changed — because everything downstream takes std::span<const transform>.
+    What the seam could NOT hide is [M], the matrix-blend path, and it was never
+    going to: that is a different operation on a different type, and a span
+    cannot conceal a change in what is being averaged. An abstraction that holds
+    is one that is honest about its edges.
+    WHAT IS MISSING, and 7.7 §10 lists it rather than implying it: nothing LOADS
+    a clip (the demo and the harness both bake); root motion is measured and not
+    applied; there is no STEP and no CUBICSPLINE; no additive layer (Exercise 4
+    derives it — it is quat_pow_unit, which 7.5 already wrote); no blend tree or
+    state machine (gameplay, and the right side of the boundary); no component
+    quantisation.
   - 7.6 THE ENGINE CAN DEFORM A SURFACE, which is categorically not what 5.9's
     hierarchy does: that PLACES objects, and this moves parts of ONE continuous
     mesh by different amounts. `engine::anim` holds a skeleton (joints,
@@ -8193,18 +8285,22 @@ files:
               (rotation.hpp is the representation-INDEPENDENT layer — the metric
                moved into it from euler.hpp, which now includes it so no call
                site changed. 7.3 and 7.4 both have reason to add to it.)
-  engine/include/engine/anim/: skeleton.hpp, skin.hpp                        [7.6]
+  engine/include/engine/anim/: clip.hpp [7.7], skeleton.hpp, skin.hpp        [7.6]
             (A NEW DIRECTORY, and the argument is asset/'s in 5.5 and ui/'s in
-             5.11: animation is not a graphics subsystem. Nothing in either file
-             mentions a framebuffer, a pipeline or a colour, and a character
-             keeps moving when nobody is looking at it. 7.7's clip sampling
-             lands here beside them.)
+             5.11: animation is not a graphics subsystem. Nothing in any of these
+             files mentions a framebuffer, a pipeline or a colour, and a character
+             keeps moving when nobody is looking at it. 7.7's clip sampling landed
+             here beside them, exactly as this note predicted.
+             clip.hpp includes skeleton.hpp — a sample needs the bind pose to fall
+             back to — and nothing includes clip.hpp. Alphabetical order and
+             dependency order agree here BY LUCK, and the CMake list is maintained
+             alphabetically, so they will not keep agreeing.)
   engine/include/engine/platform/: platform.hpp, app.hpp,
             main.hpp   (NOT in engine.hpp — it defines the entry point)
   engine/include/engine/ui/: debug_ui.hpp                                   [5.11]
             (a new directory, same argument asset/ made in 5.5: tooling UI is not a
              graphics subsystem. Does NOT include <imgui.h> — see debug-ui.)
-  engine/src/anim/: skeleton.cpp, skin.cpp                              [7.6]
+  engine/src/anim/: clip.cpp [7.7], skeleton.cpp, skin.cpp               [7.6]
             (Translation units rather than headers for draw_order.cpp's reason:
              every function in them is a real loop over an array. skeleton.cpp
              runs once per JOINT and skin.cpp once per VERTEX, and 7.6 §10
@@ -8343,7 +8439,8 @@ files:
                  07-03-complex-numbers.html,
                  07-04-quaternions.html,
                  07-05-slerp.html,
-                 07-06-skeletal-animation.html
+                 07-06-skeletal-animation.html,
+                 07-07-sampling-blending.html
                  (5.12 IS OUT OF SEQUENCE ON PURPOSE — Module 5 closed eleven
                   lessons after 5.11 and one after 6.18, and the list is
                   append-ordered rather than sorted so that the history is
@@ -8374,6 +8471,26 @@ files:
                   directly. Candidate for 9.10.)
   docs/shared/: course.css, course.js      (THE stylesheet + page script; one copy each)
   docs/_template/: lesson-template.html, README.md, apply-shared.py, check-page.js
+  scratch/ (7.7, not shipped with the engine): verify_77.cpp, build_verify_77.sh,
+           golden_77.cpp, closure_77.py, figs_77.py, build_77.py,
+           l77_body_{a,b,c,d,e}.html, l77_fig{1..10}.svg,
+           l77_fade{0,5,5m,1}.ppm (the cross-fade renders figs_77 encodes for
+           figure 6), tools/figshot77.py.
+           TEN PINS, taken the moment the page first built and before anything
+           else could touch those files. `demos/rig/main.cpp` is listed WHOLE and
+           7.7 is the second lesson to edit it; `math/transform.hpp` is the
+           most-edited file in the repository. build_77.py GENERATES its pin paths
+           from LISTING_META via `_pin`, so a path added without a pin file beside
+           it fails loudly at build time — which is the opposite of build_66.py's
+           failure, where three inherited pins sat inert for a whole lesson and
+           made the discipline LOOK satisfied.
+           NO PROBE. Every measurement had an answer derivable on paper first, so
+           they went into verify_77 as assertions. Two throwaway experiments DID
+           get written and then folded back in rather than kept: one that measured
+           std::fmod's quotient-dependence in isolation (now §I), and one that
+           timed three bracket strategies (now §A.4, with the RETIRED two-loop
+           walk kept beside them for the same reason quat.hpp keeps
+           angle_between_by_cosine).
   scratch/ (5.7, not shipped with the engine): ecs_probe.hpp, bench_57.cpp,
            verify_57.cpp, measure_57.py, build_bench_57.sh, build_verify_57.sh,
            figs_57.py, build_57.py, l57_body_{a,b}.html, l57_fig{1..6}.svg
@@ -8921,107 +9038,90 @@ roadmap: RESHAPED 2026-09-08, AFTER TWO EXTERNAL REVIEWS OF THE PUBLISHED OUTLIN
 
 
 
-next: 7.7 — Sampling and Blending Animations
+next: 7.8 — SDL3 Audio: Streams, Mixing, and 3D Sound
 
-      (planned filename: docs/lessons/07-07-sampling-blending.html. 7.6's TWO
-       next links point at the index and BOTH need repointing —
-       scratch/l76_body_a.html holds the top one and build_76.py's TAIL the
-       bottom, the same pair every Module 7 lesson has had.
-       check-curriculum.py reports it the moment the page exists. ALSO:
-       docs/conventions.html §8g is new and is fully linked, and its entry is in
-       the Conventions TOC — the defect 7.3 found for §8c, avoided for the
-       second lesson running by adding both together.)
+      (planned filename: docs/lessons/07-08-audio.html. 7.7's TWO next links
+       point at the index and BOTH need repointing — scratch/l77_body_a.html
+       holds the top one and build_77.py's TAIL the bottom, the same pair every
+       Module 7 lesson has had, and check-curriculum.py caught both of 7.6's on
+       its first run after 7.7 shipped.
+       7.8 CLOSES MODULE 7, so the module badge in docs/index.html goes from
+       `wip`/"in progress" to done — the first module boundary since 6.18, and
+       the first one check-curriculum.py has ever been present for. §7 of
+       CLAUDE.md also requires index.html, conventions.html and
+       math-toolbox.html to be REISSUED at a module boundary.
+       BOTH LIVING PAGES WERE UPDATED WITH THE LESSON, not deferred to the
+       boundary: docs/conventions.html gained §8h (clips) WITH its TOC entry, and
+       math-toolbox.html gained three cards — the keyframe bracket, the
+       arithmetic-minus-geometric mean gap, and the blended-chain sum. 7.7's
+       Further Reading links the toolbox and now tells the truth. The rule this
+       follows is 7.3's: a section and its TOC entry go in together, or the
+       section is unreachable and nothing says so.)
 
-      WHAT 7.7 INHERITS, AND MUST NOT RE-DERIVE:
-        - A PLACE TO PUT A POSE, and it is already the argument type.
-          compose_pose, build_palette and skinning_palette all take
-          `std::span<const transform>` and do not care where it came from. 7.6
-          filled it from two sliders in demos/rig; 7.7 fills it from a clip and
-          NOTHING ELSE IN engine::anim CHANGES. That is the seam, and it was
-          drawn on purpose.
-        - A WAY TO BE BETWEEN TWO POSES, with the threshold already derived
-          (7.5): under 73.50 deg of arc quat_nlerp is within 0.5 deg of
-          quat_slerp and 3.42x cheaper, and A CLIP'S ADJACENT KEYFRAMES ARE FAR
-          BELOW THAT. 7.7 should default to nlerp and say why.
-        - THE COST OF A POSE. `transform` is 40 bytes, so a hundred joints is
-          4 KB per character per frame and a thirty-second clip at 30 Hz is
-          3.6 MB before any compression. That number is 7.7's whole motivation
-          for talking about keyframe reduction and curve fitting.
-        - THE WARNING. 7.6 §8's cos(theta/2) applies to CLIP BLENDING one level
-          up: blending two poses that are far apart collapses a character for
-          exactly the reason a twisted forearm does. A blend tree that
-          cross-fades a walk into a turn-in-place is doing §1's weighted sum
-          over ORIENTATIONS rather than over matrices, so nlerp's bound applies
-          instead — which is the good news, and 7.7 should say which of the two
-          sums it is doing at every point.
+      WHAT 7.8 INHERITS, AND MUST NOT RE-DERIVE:
+        - THE ASSET / PLAYHEAD SPLIT, twice proven now. A skeleton is shared and
+          a pose is not (7.6); a clip is shared and its cursor is not (7.7). A
+          SOUND is shared and its playback position is not, and the same sentence
+          settles where the mutable half lives. 5.5's asset_store already owns
+          the loading half.
+        - A LISTENER IS A TRANSFORM. ecs::camera and world_transform already give
+          a position and an orientation, and 3D audio needs exactly those — which
+          is the first time this course uses a placement for something that is
+          not drawing.
+        - AN ATTENUATION CURVE IS A LOSSY RECONSTRUCTION, so §9.3's rule applies
+          before a line is written: fit it with the function that will play it.
+        - THE FIXED STEP. 1.4's accumulator is what an audio mixer's buffer
+          deadline argues with, and 7.7's wrap_time finding (std::fmod is not
+          constant time; wrap the clock, do not accumulate it) applies verbatim
+          to a sound's own playhead.
 
-      A DECISION 7.7 HAS TO MAKE AND 7.6 DELIBERATELY DID NOT.
-      `transform_slerp` still does not exist. 7.5 §12 Exercise 4 asked for it
-      and named the open question inside it: position lerps, rotation slerps,
-      and SCALE could go either way — a lerp from 1 to 8 passes through 4.5 at
-      the midpoint where the geometric interpolation a*(b/a)^t passes through
-      2.83, and only one of those looks like smooth growth. 7.6 did not need it
-      (its poses come from sliders, not from samples) and 7.7 cannot avoid it.
-      Decide it with a picture, not a preference.
+      WHAT 7.8 IS LIKELY TO MOVE. A new directory, engine/include/engine/audio/
+      — and if so, THE UMBRELLA LINT WILL FIRE at configure time, which is the
+      third new directory it has seen (anim/ in 7.6 was the first). engine/
+      CMakeLists.txt, demos/CMakeLists.txt for a new target, and asset/ if a
+      sound becomes a loadable asset. ⚠ VERIFY SDL3's audio API against the
+      headers before writing a line: SDL_OpenAudioDeviceStream,
+      SDL_PutAudioStreamData, SDL_AudioSpec and the callback signature are all
+      SDL3-shaped and none of them is SDL2's.
 
-      WHAT 7.7 IS LIKELY TO MOVE. engine/include/engine/anim/ (a third header —
-      and the umbrella lint WILL be relevant again, see 7.6's note about it not
-      firing); demos/rig, for something to play; and possibly gfx/gltf.hpp,
-      because a clip has to come from somewhere and glTF animations are the
-      obvious source. NOTE THAT 7.6 DID NOT TOUCH THE glTF IMPORTER AT ALL —
-      it still flattens the node tree and ignores skins entirely
-      (gltf_primitive::world_from_local says so in its own doc comment). If 7.7
-      wants to load a real rig rather than generate one, that is a lesson's
-      worth of work on its own and should be scoped before it is started.
+      THE GOLDEN IS PROBABLY NULL FOR 7.8 — audio touches nothing under
+      demo_scene.cpp — but run `python3 scratch/closure_77.py <paths...>`
+      (rename and reuse) and let the graph say so rather than assuming it.
 
-      THE GOLDEN IS IN PLAY ONLY IF math/ MOVES. 7.6 edited
-      math/transform.hpp — in demo_scene.cpp's closure, 70 files — and the
-      render came back identical=YES, hash E917C06C, the TENTH consecutive
-      byte-identical run and the twenty-fifth lesson not to move a pixel. If 7.7
-      touches demo_scene.cpp or anything under it, run
-      `python3 scratch/closure_76.py <paths...>` (rename and reuse) and then run
-      the golden for real. engine/anim/ is OUTSIDE the closure and checked to be.
-
-      CARRY FORWARD from 7.6:
-        - A FLAG REACHES THE TRANSLATION UNITS IT IS ON AND NO FURTHER. This was
-          the first Module 7 harness to LINK a library, and
-          `cmake -S . -B build` leaves CMAKE_BUILD_TYPE EMPTY — so libengine.a
-          carried no -O flag and the first timings were 18.1x too slow per
-          vertex and 26.6x per palette. ARCHITECTURE.md §6's "-O2, never a debug
-          build" was written about harnesses and had never reached what they
-          link. build_verify_76.sh now REFUSES rather than measuring, prints
-          which library and which build type, and takes
-          ENGINE_ALLOW_UNOPTIMISED=1 to do it on purpose. USE build-rel/ FOR ANY
-          TIMING THAT TOUCHES THE LIBRARY.
-        - ASK WHAT A CONTROL WOULD DO IF THE THING WERE COMPLETELY BROKEN.
-          7.6 §G's normal control ran at the BIND POSE and reported 0.020 deg —
-          passing, because every palette matrix is the identity there and its
-          translation column is zero, so the wrong rule gives the right answer.
-          Second instance in two lessons (7.5's std::max/NaN was the first), and
-          together they sharpen into one question to ask of every control you
-          write.
-        - AN INSTRUMENT THAT NEEDS AN AXIS CAN BE FOOLED BY AN ORIENTATION.
-          "Radius perpendicular to the chain" failed twice — once on a fallback
-          axis at the tip ring (0.241 instead of 0.380) and once on a tilted ring
-          plane (0.364) — and BOTH WRONG VERSIONS REPORTED A SMALLER NUMBER,
-          which is the direction the measurement was hunting in, so both looked
-          like a discovery. A distance from the ring's own centroid needs no
-          axis and cannot be fooled by the orientation of anything.
-        - A PREDICTION THAT SURVIVES TWO DIFFERENT DEFORMATIONS IS A PREDICTION
-          ABOUT THE MECHANISM. r cos(delta/2) matches the bend to six figures
-          AND the twist to six figures, on different geometry, which is what
-          makes it a claim about the BLEND rather than about twisting.
-        - CHECK A CHAIN AGAINST CODE THAT SHARES NOTHING WITH IT. §B's control
-          is a Gauss-Jordan 4x4 inverse written from scratch in the harness. A
-          rearrangement of the same per-node inverses would have proved nothing.
-        - THE FIGURE QUANTISER'S BACKGROUND TEST IS PER-CHANNEL. figs_45's
-          quantise returns None — emits no rect — only when r, g AND b are each
-          below 14. A clear colour of (12, 13, 17) fails on blue and the panel
-          comes back at (79, 84, 98). Also: rle_rects butts its rects edge to
-          edge, and at browser scale that seam antialiases from both sides and
-          reads as horizontal banding across a shaded surface; wrap the panel in
-          `<g shape-rendering="crispEdges">` IN THE LESSON'S OWN figs file, not
-          in rle_rects, which every render figure since 4.5 depends on.
+      CARRY FORWARD from 7.7:
+        - A BENCHMARK WITH TWO VARIABLES IN IT HAS NONE. §4.1's first table
+          varied the wrap period by changing the DRIVER'S STEP SIZE, so each
+          lookup on the "more wraps" row also crossed ten intervals instead of
+          one; it reported 43% for the wrong cause, confidently. Hold everything
+          but the one thing.
+        - AND FIXING ONE CONFOUND DOES NOT MEAN THERE WAS ONE. §9.4's timing was
+          wrong twice: an unbounded clock (std::fmod's quotient-dependence) AND a
+          cold-start CPU ramp of ~30% that best_of_three could not see past,
+          because all three attempts were inside it. verify_77 now SPINS FOR
+          150 ms before it measures anything. Two independent reasons for one
+          wrong number is the normal case.
+        - THE TELL WAS A RESULT THAT CONTRADICTED A SIMPLER FACT — a 301-key
+          track cannot be faster to search than a 31-key one. Neither confound
+          was found by suspecting the instrument; both were found by believing
+          arithmetic over a measurement.
+        - A LOSSY TRANSFORMATION MUST BE FITTED WITH ITS CONSUMER'S EXACT
+          RECONSTRUCTION. §9.3: a reduction fitted with slerp and played with
+          nlerp overshoots its half-degree budget 4.5x, and NOTHING reports it —
+          the reducer thinks it succeeded and the sampler thinks it is doing its
+          job. Generalises well past quaternions.
+        - ASK WHAT A CONTROL WOULD DO IF THE THING WERE COMPLETELY BROKEN, for
+          the third lesson running. An UNWARMED cursor of 0 is the RIGHT answer
+          on frame 0, so §A.3 jams every cursor at 9999 instead. 7.5's std::max
+          and 7.6's bind-pose normal were the first two.
+        - A QUANTITY WITH A FACTOR OF TWO IN IT NEEDS ITS UNIT SAID EVERY TIME,
+          AND A DOC COMMENT IS NOT EXEMPT. quat_nlerp's error table was in SPHERE
+          degrees and the sentence under it argued in ROTATION degrees; read as
+          written it claimed a 30 Hz clip's keys are 60 deg of rotation apart,
+          which is 1,800 deg/s. Both tables are in the header now, labelled.
+        - THE PER-CHANNEL LAYOUT LOSES UNTIL SOMETHING IS ELIDED. Worth keeping
+          as a shape rather than a number: an indirection that costs 30% up front
+          and pays 7.7x once the thing it enables is actually done. Measuring
+          only the first half would have condemned it.
         - THE SCRATCHPAD VANISHES BETWEEN TURNS. Playwright helpers live in
           scratch/tools/ and scratch/ is gitignored. PLAYWRIGHT IS NOT IN ANY
           SYSTEM PYTHON ON THIS MACHINE: run them with
