@@ -7,7 +7,13 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-09-15 (after Lesson 7.5 — 80 of 107 lessons; Module 7 OPEN,
+updated: 2026-09-15 (after Lesson 7.6 — 81 of 107 lessons; Module 7 OPEN,
+         6 of 8, ~35 h of ~45. Planned at 5 h, shipped at 6, so Module 7 went
+         ~44 -> ~45 h and the course ~518 -> ~519 h. Index prose, hero stats
+         (81 published) and the Module 7 subtotal all moved together;
+         check-curriculum.py confirms — and its CHECK 8, added in 7.4, caught
+         the STATE manifest missing this very page on the first run.
+         Earlier, after Lesson 7.5 — 80 of 107 lessons; Module 7 OPEN,
          5 of 8, ~29 h of ~44. Planned at 4 h, shipped at 7, so Module 7 went
          ~41 -> ~44 h and the course ~515 -> ~518 h. THE LESSON WAS ALSO
          RETITLED, from "Slerp" to "Slerp, and the Storage Swap" — the question
@@ -66,6 +72,120 @@ conventions:
         quaternion. So the sandwich was NOT CHOSEN. Then q = n1n0 =
         -(cos phi + sin phi n_hat), and NOTHING IN THE DERIVATION DETERMINES
         THAT SIGN — the double cover, arriving before it is named.
+  skinning: A SKINNING MATRIX IS `model_from_model`, AND EVERYTHING FOLLOWS
+        FROM THAT. 7.6, engine/include/engine/anim/skeleton.hpp +
+        docs/conventions.html §8g.
+        skin_j = model_from_joint_j(POSED) * joint_from_model_j(BIND). The
+        inner labels agree, so the product is legal (2.8's rule) — and the two
+        `joint`s are THE SAME JOINT AT TWO DIFFERENT TIMES, which is the one
+        piece of bookkeeping no naming convention carries for you and the piece
+        every confused explanation of skinning has dropped.
+        THE OUTER LABELS ALSO AGREE, and that is rarely said out loud. Domain
+        and codomain are both MODEL space, which is (a) why four of them may be
+        ADDED — you may add linear maps only when they share both — and (b) why
+        the sum is not a rotation, because model-to-model maps are closed under
+        addition and rotations are not. One reading of the labels gives both the
+        licence and the artifact.
+        *** AT THE BIND POSE EVERY SKINNING MATRIX IS EXACTLY I. *** The two
+        factors are then inverses of each other, so skinning a mesh at its bind
+        pose must reproduce it vertex for vertex. THAT IS THE CHEAPEST COMPLETE
+        TEST OF A RIG THAT EXISTS: no reference image, no artist, no eye, and it
+        catches a transposed matrix, a chain composed in the wrong order, an
+        inverse-bind array baked from a different skeleton, a wrong parent index
+        and a skeleton edited after baking. skeleton_report::worst_bind_residual
+        is that number — 4.768e-07 over six joints, 6.676e-06 at depth 32.
+        Control: nudge one bind by 0.01 AFTER baking (a rig edited without a
+        re-export) and it goes to 1.056e-02, four orders louder.
+        NO MATRIX IS INVERTED TO BUILD THE INVERSE BINDS. (AB)^-1 = B^-1 A^-1,
+        so the inverse chain composes with THE SAME FLAT LOOP as the forward
+        one, multiplying the parent on the RIGHT instead of the left:
+          model_from_joint[j] = model_from_joint[p] * parent_from_local(j)
+          joint_from_model[j] = local_from_parent(j) * joint_from_model[p]
+        Both walk index 0 upward. The only inverse anywhere is
+        local_from_parent on one node — a transpose, three reciprocals and a
+        negated offset. Checked against a GAUSS-JORDAN INVERSE WRITTEN FROM
+        SCRATCH IN THE HARNESS, sharing no code with the engine: 4.768e-07 at
+        depth 8.
+        THE ORDERING IS A PRECONDITION, NOT AN ALGORITHM: joints[i].parent < i,
+        always. 5.9's hierarchy could not demand that (pool order is insertion
+        order disturbed by swap-and-pop) and paid three passes plus a dirty flag
+        EVERY FRAME. A skeleton is AUTHORED and SMALL, so the order is a
+        requirement on the data, checked once, and compose_pose is one flat loop
+        with no sorting. The cost lands on the IMPORTER — glTF's skins.joints is
+        an arbitrary permutation — as one topological sort at load time.
+        The failure it prevents is not a broken picture: a child whose parent
+        comes later composes against LAST FRAME's matrix, which reads as a
+        one-frame lag that grows with depth and only appears when the character
+        moves fast. skeleton_report::out_of_order counts it.
+        YOU ATTACH PROPS WITH model_from_joint, NEVER WITH THE PALETTE. A sword
+        in a hand socket is a rigid object with its own vertices in its own
+        space — 5.9's case. Multiplying it by a SKINNING matrix asks "where did
+        this model-space point of the CHARACTER move to", which has nothing to
+        say about the sword. compose_pose and build_palette are kept apart for
+        exactly this reason.
+        WEIGHTS MUST SUM TO 1, AND IT IS NOT TIDINESS. A palette matrix is
+        AFFINE, so its translation is blended too: sum w = s scales every vertex
+        to s times its distance from the MODEL ORIGIN. 0.9 gives a character 10%
+        smaller and sunk into the floor, which reads as a scale bug. Measured on
+        208 vertices: gap from the prediction 0.9*v is 5.218e-07, worst move
+        0.5012 = 0.1 * sqrt(0.35^2 + 5^2). A vertex weighted to NOTHING lands on
+        the model origin and draws a spike; normalise_weights repairs it at
+        import, after validate has counted it.
+        FOUR INFLUENCES IS A HARDWARE NUMBER: the width of a GPU vector
+        register, so four indices are one attribute and four weights one float4,
+        and the blend is four multiply-adds with no loop and no branch. A ZERO
+        WEIGHT MUST STILL CARRY A VALID JOINT INDEX — the index is read before
+        the weight is applied, so a slot padded with 0xFFFF is an out-of-bounds
+        read on the hottest path. skin_report::padded_indices counts it
+        SEPARATELY from out_of_range, because only the second changes the
+        picture and only the first is a latent crash.
+        NORMALS USE THE LINEAR PART, NOT THE INVERSE TRANSPOSE, and the
+        justification is NOT that the error is small. Exact for a rotation
+        (3.817e-07 over 4,000) and for a uniform scale (0.000e+00); 22.6 deg of
+        normal at a 1.5:1 stretch and 36.9 at 2:1, costing 0.083 and 0.134 of
+        Lambert brightness. Non-uniform scale on a SKINNING JOINT is a rig
+        defect rather than a renderer's problem to absorb;
+        skeleton_report::nonuniform_binds counts the authored half.
+        ONLY POSITIONS AND NORMALS CHANGE. uvs, tangents and indices are copied
+        once and never again — which is the observation the GPU path is built
+        on: 4,096 bytes of palette against 116,160 bytes of deformed vertices,
+        28.4x on this fixture and growing with the mesh.
+  candy-wrapper: THE COLLAPSE IS cos(theta/2), DERIVED FROM AN ISOCELES
+        TRIANGLE AND NOTHING ELSE. 7.6, docs/conventions.html §8g.
+        Two joints theta apart send a vertex to two points, both |v| from the
+        axis; the half-and-half blend takes their midpoint, which lies on the
+        bisector, and the bisector of an isoceles triangle meets the base at a
+        RIGHT ANGLE. So |v'| = |v| cos(theta/2). NOTHING IN THAT DERIVATION
+        MENTIONS SKINNING, A JOINT OR A MATRIX — it is the same half-angle 7.3
+        found between two mirrors and 7.4 found inside a quaternion, arrived at
+        for a THIRD independent reason. Worst gap over a 0-180 sweep 8.742e-08.
+        At 180 deg the radius is not small, it is EXACTLY ZERO: the average of
+        two antipodal points is the origin. Control: weight 1.0 on one joint
+        gives 1.000000 at the same twist, so the artifact belongs to the BLEND.
+        THE FIX IS IN THE FORMULA. The collapse depends on the angle between
+        ADJACENT joints, so n segments give cos(theta/2n): 0.000, 0.707, 0.866,
+        0.924 at 180 deg. THAT IS WHAT A FOREARM TWIST BONE IS — a direct attack
+        on a half-angle — and the first one or two joints do nearly all the
+        work.
+        A BEND OBEYS THE SAME COSINE ON AN ELLIPSE. A twist rotates about the
+        limb's OWN axis so the whole ring is in the collapsing plane; a bend
+        rotates about an axis ACROSS it and a rotation fixes its own axis, so
+        the ring FLATTENS: semi-minor r cos(theta/2), semi-major r untouched.
+        Measured at 120 deg: 0.500000 / 0.500000 / 1.000000. That is why a
+        twisted forearm loses its cross-section and a bent elbow reads as a
+        crease — one cosine, two geometries. MEASURE THE MINIMUM RADIUS ON A
+        RING, NOT THE MEAN: the minimum is the minor axis in both cases, so one
+        number reads the same law in both modes.
+        LBS IS NOT "nlerp WITHOUT THE NORMALISE" — WRONG IN BOTH DIRECTIONS.
+        WORSE: nlerp's schedule error is governed by the arc between two
+        QUATERNIONS (half the rotation angle, then doubled), LBS's by the whole
+        angle, and schedule error grows much faster than linearly — about 4x at
+        every arc: 10.95 deg of pose against 2.23 at a 120 deg twist, 76.63
+        against 8.00 at 179. BETTER: a rotation matrix is UNIQUE, so there is no
+        double cover, no long way round and no `nearest` to forget — 7.5's 359
+        deg bug cannot be written here (excess over the chord 1.192e-07 over
+        20,000 pairs). At t = 0.5 the schedule error vanishes by symmetry for
+        both and only the radius is left: 0.500000, which is the cosine.
   slerp: THE FORMULA IS a (a^-1 b)^t AND IT IS NOT ABOUT QUATERNIONS. 7.5,
         engine/include/engine/math/quat.hpp + docs/conventions.html §8f.
         It is the definition of a geodesic on any group with an inverse, a
@@ -4883,8 +5003,43 @@ completed:
          units out in a 960 px frame is 0.00014 PIXELS.
          verify_74 AND verify_73 WERE RE-RUN BECAUSE angle_between CHANGED
          UNDER THEM: 42/42 and 43/43, unmoved.)
+  - 7.6  Skeletal Animation: The Skinning Math
+        (7.5's TWO dead `next` links repointed in the SOURCES —
+         scratch/l75_body_a.html and build_75.py's TAIL — and build_75 rebuilt,
+         so page and generator still agree. Planned at 5 h, shipped at 6.
+         THE FIRST NEW PUBLIC DIRECTORY SINCE 5.11: engine/anim/. The argument
+         is asset/'s and ui/'s — animation is not a graphics subsystem; nothing
+         in skeleton.cpp or skin.cpp mentions a framebuffer, a pipeline or a
+         colour, and a character keeps moving when nobody is looking at it.
+         THE UMBRELLA LINT DID NOT FIRE, for the first time in the run: both
+         includes went in WITH the headers, in the same edit. So it was
+         exercised deliberately instead — delete the two lines, reconfigure, and
+         it names both and stops the build. Five catches in four lessons, then
+         a miss in the check's favour; a check that stays quiet teaches nothing
+         unless you make it speak.
+         THE GOLDEN RAN AS A REAL INSTRUMENT AGAIN (math/transform.hpp is in
+         demo_scene.cpp's closure — 70 files) and came back identical=YES, hash
+         E917C06C, the TENTH consecutive byte-identical run.
+         FIXED IN PASSING: `engine_use_assets(collector)` had been sitting in
+         demos/CMakeLists.txt's GIMBAL block — wrong target named, and wrong for
+         that target too, since collector generates every mesh it draws and
+         gimbal loads nothing. It copied a directory neither program opens.
+         Harmless, and exactly the kind of harmless that survives because
+         nothing fails when it is wrong. build/demos/assets/ is still populated
+         by sandbox, hello_cube, gltf_view and ecs_swarm, which is what the
+         golden harness's search path relies on.)
+  ===> MODULE 7 IN PROGRESS: 6 of 8 (7.7 clips, 7.8 audio) <===
 
 capabilities:
+  - 7.6 THE ENGINE CAN DEFORM A SURFACE, which is categorically not what 5.9's
+    hierarchy does: that PLACES objects, and this moves parts of ONE continuous
+    mesh by different amounts. `engine::anim` holds a skeleton (joints,
+    parent-before-child, bind pose), the inverse binds, a pose -> palette
+    pipeline, and linear blend skinning for points and directions.
+    WHAT IS MISSING IS THE POSE. Everything takes
+    std::span<const transform> and does not care where the transforms came
+    from; in 7.6 they came from two sliders. 7.7 replaces the sliders with a
+    clip, and that is the whole of what is left to make a character animate.
   - 7.5 THE ENGINE CAN BLEND TWO ORIENTATIONS, AND IT STORES THEM AS FOUR
     FLOATS. That second clause is the one Lessons 7.6 and 7.7 are built on: a
     skeleton is a hundred of these per character per frame.
@@ -8038,11 +8193,22 @@ files:
               (rotation.hpp is the representation-INDEPENDENT layer — the metric
                moved into it from euler.hpp, which now includes it so no call
                site changed. 7.3 and 7.4 both have reason to add to it.)
+  engine/include/engine/anim/: skeleton.hpp, skin.hpp                        [7.6]
+            (A NEW DIRECTORY, and the argument is asset/'s in 5.5 and ui/'s in
+             5.11: animation is not a graphics subsystem. Nothing in either file
+             mentions a framebuffer, a pipeline or a colour, and a character
+             keeps moving when nobody is looking at it. 7.7's clip sampling
+             lands here beside them.)
   engine/include/engine/platform/: platform.hpp, app.hpp,
             main.hpp   (NOT in engine.hpp — it defines the entry point)
   engine/include/engine/ui/: debug_ui.hpp                                   [5.11]
             (a new directory, same argument asset/ made in 5.5: tooling UI is not a
              graphics subsystem. Does NOT include <imgui.h> — see debug-ui.)
+  engine/src/anim/: skeleton.cpp, skin.cpp                              [7.6]
+            (Translation units rather than headers for draw_order.cpp's reason:
+             every function in them is a real loop over an array. skeleton.cpp
+             runs once per JOINT and skin.cpp once per VERTEX, and 7.6 §10
+             measures those at 2.34% and 97.66% of the pair.)
   engine/src/asset/: search_path.cpp, asset_store.cpp                   [5.5]
   engine/src/core/: actions.cpp [5.10], clock.cpp, fixed_step.cpp, input.cpp,
             log.cpp, profile.cpp
@@ -8079,6 +8245,17 @@ files:
   demos/gltf_view/: main.cpp                                              [6.6]
   demos/collector/: main.cpp                                             [5.12]
   demos/gimbal/: main.cpp                                                 [7.1]
+  demos/rig/: main.cpp                                                    [7.6]
+           (The first demo that draws something which is NOT a rigid body. One
+            generated tube, six joints, software-rasterized, no assets and no
+            shaders. Its panel prints the smallest ring radius beside
+            r cos(delta/2) and the two agree to five decimals in BOTH modes,
+            which is what makes the derivation a claim about the blend rather
+            than about twisting. NOTE ITS CLEAR COLOUR: (11, 12, 13), darker
+            than gimbal's and plane's (16, 18, 24), because figs_45's quantiser
+            treats a pixel as background — and emits nothing for it — only when
+            EVERY channel is below 14. The obvious (12, 13, 17) has 17 on blue
+            and came back as a mid-grey slab at (79, 84, 98).)
   demos/plane/: main.cpp                                                  [7.3]
            (2-D, framebuffer only, no assets and no shaders. Four modes on
             [1..4]; mode 3 is the two-mirror construction and is the one worth
@@ -8165,7 +8342,8 @@ files:
                  07-02-axis-angle.html,
                  07-03-complex-numbers.html,
                  07-04-quaternions.html,
-                 07-05-slerp.html
+                 07-05-slerp.html,
+                 07-06-skeletal-animation.html
                  (5.12 IS OUT OF SEQUENCE ON PURPOSE — Module 5 closed eleven
                   lessons after 5.11 and one after 6.18, and the list is
                   append-ordered rather than sorted so that the history is
@@ -8743,103 +8921,107 @@ roadmap: RESHAPED 2026-09-08, AFTER TWO EXTERNAL REVIEWS OF THE PUBLISHED OUTLIN
 
 
 
-next: 7.6 — Skeletal Animation: The Skinning Math
+next: 7.7 — Sampling and Blending Animations
 
-      (planned filename: docs/lessons/07-06-skeletal-animation.html. 7.5's TWO
-       next links point at the index and BOTH need repointing — scratch/
-       l75_body_a.html holds the top one and build_75.py's TAIL the bottom, the
-       same pair 7.5, 7.4, 7.3, 7.2, 7.1 and 6.18 had. check-curriculum.py
-       reports it the moment the page exists. ALSO: docs/conventions.html §8f
-       is new and is fully linked — nothing is left as deliberately-unlinked
-       plain text this time.)
+      (planned filename: docs/lessons/07-07-sampling-blending.html. 7.6's TWO
+       next links point at the index and BOTH need repointing —
+       scratch/l76_body_a.html holds the top one and build_76.py's TAIL the
+       bottom, the same pair every Module 7 lesson has had.
+       check-curriculum.py reports it the moment the page exists. ALSO:
+       docs/conventions.html §8g is new and is fully linked, and its entry is in
+       the Conventions TOC — the defect 7.3 found for §8c, avoided for the
+       second lesson running by adding both together.)
 
-      WHAT 7.6 INHERITS, AND MUST NOT RE-DERIVE:
-        - A PLACE TO PUT A POSE. `transform` is (vec3, quat, vec3) = 40 bytes,
-          and a hundred joints is 4 KB per character per frame. That is the
-          whole reason 7.5 did the swap before 7.6 rather than after.
-        - A WAY TO BE BETWEEN TWO POSES. quat_slerp / quat_nlerp, with the
-          threshold already derived: under 73.50 deg of arc nlerp is within
-          0.5 deg and is 3.42x cheaper. A CLIP'S ADJACENT KEYFRAMES ARE FAR
-          BELOW THAT, so 7.6/7.7 should default to nlerp and say why.
-        - A HIERARCHY. Lesson 5.9's transform hierarchy IS a skeleton with six
-          joints instead of a hundred; hierarchy::resolve already does the
-          parent-first walk. 7.6 adds the bind pose and the inverse bind
-          matrix, NOT a new tree.
-        - THE NAMING CONVENTION. 2.8's parent_from_local reading. The inverse
-          bind matrix is `bind_from_model`, and writing the space names down is
-          most of why skinning stops being confusing.
-        - T*R*S PER NODE IS A RESTRICTION (7.5 §8.4). If a rig needs a matrix
-          outside it, the answer is another joint, not a wider field.
+      WHAT 7.7 INHERITS, AND MUST NOT RE-DERIVE:
+        - A PLACE TO PUT A POSE, and it is already the argument type.
+          compose_pose, build_palette and skinning_palette all take
+          `std::span<const transform>` and do not care where it came from. 7.6
+          filled it from two sliders in demos/rig; 7.7 fills it from a clip and
+          NOTHING ELSE IN engine::anim CHANGES. That is the seam, and it was
+          drawn on purpose.
+        - A WAY TO BE BETWEEN TWO POSES, with the threshold already derived
+          (7.5): under 73.50 deg of arc quat_nlerp is within 0.5 deg of
+          quat_slerp and 3.42x cheaper, and A CLIP'S ADJACENT KEYFRAMES ARE FAR
+          BELOW THAT. 7.7 should default to nlerp and say why.
+        - THE COST OF A POSE. `transform` is 40 bytes, so a hundred joints is
+          4 KB per character per frame and a thirty-second clip at 30 Hz is
+          3.6 MB before any compression. That number is 7.7's whole motivation
+          for talking about keyframe reduction and curve fitting.
+        - THE WARNING. 7.6 §8's cos(theta/2) applies to CLIP BLENDING one level
+          up: blending two poses that are far apart collapses a character for
+          exactly the reason a twisted forearm does. A blend tree that
+          cross-fades a walk into a turn-in-place is doing §1's weighted sum
+          over ORIENTATIONS rather than over matrices, so nlerp's bound applies
+          instead — which is the good news, and 7.7 should say which of the two
+          sums it is doing at every point.
 
-      WHAT 7.6 IS LIKELY TO MOVE. A new header under engine/include/engine/anim/
-      (which means engine.hpp's configure-time lint WILL fire — it has caught
-      five headers in four lessons, every one written by somebody who knew about
-      it); demos/, for a rig to look at; and possibly gfx/ if skinned vertices
-      need a second vertex path. `math/transform.hpp` should NOT need to move.
+      A DECISION 7.7 HAS TO MAKE AND 7.6 DELIBERATELY DID NOT.
+      `transform_slerp` still does not exist. 7.5 §12 Exercise 4 asked for it
+      and named the open question inside it: position lerps, rotation slerps,
+      and SCALE could go either way — a lerp from 1 to 8 passes through 4.5 at
+      the midpoint where the geometric interpolation a*(b/a)^t passes through
+      2.83, and only one of those looks like smooth growth. 7.6 did not need it
+      (its poses come from sliders, not from samples) and 7.7 cannot avoid it.
+      Decide it with a picture, not a preference.
 
-      A DECISION 7.6 OR 7.7 HAS TO MAKE AND 7.5 DELIBERATELY DID NOT.
-      `transform_slerp` does not exist. 7.5 §12 Exercise 4 asks for it and names
-      the open question inside it: position lerps, rotation slerps, and SCALE
-      could go either way — a lerp from 1 to 8 passes through 4.5 at the midpoint
-      where the geometric interpolation a·(b/a)^t passes through 2.83, and only
-      one of those looks like smooth growth. Decide it with a picture, not a
-      preference.
+      WHAT 7.7 IS LIKELY TO MOVE. engine/include/engine/anim/ (a third header —
+      and the umbrella lint WILL be relevant again, see 7.6's note about it not
+      firing); demos/rig, for something to play; and possibly gfx/gltf.hpp,
+      because a clip has to come from somewhere and glTF animations are the
+      obvious source. NOTE THAT 7.6 DID NOT TOUCH THE glTF IMPORTER AT ALL —
+      it still flattens the node tree and ignores skins entirely
+      (gltf_primitive::world_from_local says so in its own doc comment). If 7.7
+      wants to load a real rig rather than generate one, that is a lesson's
+      worth of work on its own and should be scoped before it is started.
 
-      THE GOLDEN IS IN PLAY AND STAYED NULL BY MEASUREMENT RATHER THAN BY
-      ARGUMENT. 7.5 edited four files inside demo_scene.cpp's closure and the
-      render came back identical=YES, hash E917C06C — the ninth consecutive
-      byte-identical run and the twenty-fourth lesson not to move a pixel. If
-      7.6 touches demo_scene.cpp or anything under it, run
-      `python3 scratch/closure_75.py <paths...>` (rename and reuse) and then run
-      the golden for real.
+      THE GOLDEN IS IN PLAY ONLY IF math/ MOVES. 7.6 edited
+      math/transform.hpp — in demo_scene.cpp's closure, 70 files — and the
+      render came back identical=YES, hash E917C06C, the TENTH consecutive
+      byte-identical run and the twenty-fifth lesson not to move a pixel. If 7.7
+      touches demo_scene.cpp or anything under it, run
+      `python3 scratch/closure_76.py <paths...>` (rename and reuse) and then run
+      the golden for real. engine/anim/ is OUTSIDE the closure and checked to be.
 
-      CARRY FORWARD from 7.5:
-        - A NUMERICAL ROUTINE HAS A SCALE, AND THE NAME DOES NOT SAY SO. 7.4
-          wrote angle_between for a SEPARATION; 7.5 asked it for a STEP, and it
-          scored slerp's own geodesic at -41.10%. Re-derive conditioning at
-          every scale you reuse a routine at. Fourth appearance in Module 7 and
-          the first INSIDE THE ENGINE.
-        - A NaN NEVER WINS A MAXIMUM. `std::max(x, NaN)` returns `x`, because
-          every NaN comparison is false — so a worst-case table accumulated with
-          std::max printed a clean 0.0000e+00 for a function that was returning
-          NaN in 404 of 505 samples, AND the one row it printed correctly made
-          the broken function look BETTER. Count non-finite results; never let
-          one into a maximum. Fifth blind instrument in Module 7 and the first
-          in a harness rather than in engine code.
-        - "FINITE" IS NOT "RIGHT". gltf_view's zero-column guard kept the matrix
-          finite and made the extraction wrong in every column. A guard that
-          returns a plausible wrong answer is harder to find than the NaN it
-          prevented, because a NaN spreads and announces itself.
-        - A NARROWER TYPE FINDS EXISTING BUGS, NOT JUST FUTURE ONES. Three this
-          time: gfx/renderable.cpp (shipping since 5.11), demos/ecs_swarm, and
-          demos/collector's camera boom (a SHEARED basis in a field called
-          `rotation`, shipping since 5.12). 7.4 found the first and predicted
-          one; there were three.
-        - CHECK A PREDICTION TO THREE FIGURES WHEN YOU CAN. The textbook slerp's
-          NaN cliff was predicted at 2*sqrt(eps/2) = 0.0280 deg from
-          round-to-nearest and measured at 0.0279. The first draft predicted
-          2*sqrt(eps) = 0.0396 and called a 30% miss agreement; the exact
-          version is a better teaching object AND a better test.
-        - A DEMO FIGURE'S GEOMETRY IS A PEDAGOGICAL DECISION. [S]'s rotation
-          axis points AT THE CAMERA so the nose's path is a circle rather than
-          an ellipse — an ellipse's arc lengths are not proportional to its
-          angles, so the tick spacing that IS the argument would have been
-          compressed by perspective and not by nlerp. 7.4 learned the same thing
-          for its dial. The teal axis is consequently a DOT, which the page has
-          to say out loud or it reads as a missing line.
-        - BOTH ROWS OF TICKS MUST TOUCH THE SAME CIRCLE. Drawing the second row
-          on a smaller circle would have said the two paths differ, which is the
-          exact misconception the mode exists to kill. A layout choice can
-          contradict the caption.
-        - THE FIRST FRAMING OF A NEW MODE IS USUALLY WRONG. [S]'s first version
-          drew the solid craft (which swamped everything), put the ticks inside
-          the aircraft, and used a tilted world axis. Three iterations, each
-          checked by looking at the actual PPM.
-        - MEASURE THE AXIS ERROR AS A CHORD, NEVER WITH acos (7.4, still true),
-          and REPORT WHAT AN ERROR COSTS rather than its raw size: B.2's
-          2.027e-05 of axis wobble is entirely at t < 0.05 and costs 2.309e-07
-          rad of pose, because 7.2 §8's 2 sin(theta/2) factor vanishes exactly
-          where the axis becomes unrecoverable.
+      CARRY FORWARD from 7.6:
+        - A FLAG REACHES THE TRANSLATION UNITS IT IS ON AND NO FURTHER. This was
+          the first Module 7 harness to LINK a library, and
+          `cmake -S . -B build` leaves CMAKE_BUILD_TYPE EMPTY — so libengine.a
+          carried no -O flag and the first timings were 18.1x too slow per
+          vertex and 26.6x per palette. ARCHITECTURE.md §6's "-O2, never a debug
+          build" was written about harnesses and had never reached what they
+          link. build_verify_76.sh now REFUSES rather than measuring, prints
+          which library and which build type, and takes
+          ENGINE_ALLOW_UNOPTIMISED=1 to do it on purpose. USE build-rel/ FOR ANY
+          TIMING THAT TOUCHES THE LIBRARY.
+        - ASK WHAT A CONTROL WOULD DO IF THE THING WERE COMPLETELY BROKEN.
+          7.6 §G's normal control ran at the BIND POSE and reported 0.020 deg —
+          passing, because every palette matrix is the identity there and its
+          translation column is zero, so the wrong rule gives the right answer.
+          Second instance in two lessons (7.5's std::max/NaN was the first), and
+          together they sharpen into one question to ask of every control you
+          write.
+        - AN INSTRUMENT THAT NEEDS AN AXIS CAN BE FOOLED BY AN ORIENTATION.
+          "Radius perpendicular to the chain" failed twice — once on a fallback
+          axis at the tip ring (0.241 instead of 0.380) and once on a tilted ring
+          plane (0.364) — and BOTH WRONG VERSIONS REPORTED A SMALLER NUMBER,
+          which is the direction the measurement was hunting in, so both looked
+          like a discovery. A distance from the ring's own centroid needs no
+          axis and cannot be fooled by the orientation of anything.
+        - A PREDICTION THAT SURVIVES TWO DIFFERENT DEFORMATIONS IS A PREDICTION
+          ABOUT THE MECHANISM. r cos(delta/2) matches the bend to six figures
+          AND the twist to six figures, on different geometry, which is what
+          makes it a claim about the BLEND rather than about twisting.
+        - CHECK A CHAIN AGAINST CODE THAT SHARES NOTHING WITH IT. §B's control
+          is a Gauss-Jordan 4x4 inverse written from scratch in the harness. A
+          rearrangement of the same per-node inverses would have proved nothing.
+        - THE FIGURE QUANTISER'S BACKGROUND TEST IS PER-CHANNEL. figs_45's
+          quantise returns None — emits no rect — only when r, g AND b are each
+          below 14. A clear colour of (12, 13, 17) fails on blue and the panel
+          comes back at (79, 84, 98). Also: rle_rects butts its rects edge to
+          edge, and at browser scale that seam antialiases from both sides and
+          reads as horizontal banding across a shaded surface; wrap the panel in
+          `<g shape-rendering="crispEdges">` IN THE LESSON'S OWN figs file, not
+          in rle_rects, which every render figure since 4.5 depends on.
         - THE SCRATCHPAD VANISHES BETWEEN TURNS. Playwright helpers live in
           scratch/tools/ and scratch/ is gitignored. PLAYWRIGHT IS NOT IN ANY
           SYSTEM PYTHON ON THIS MACHINE: run them with

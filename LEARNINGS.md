@@ -8091,3 +8091,93 @@ renders, the reference still reads as a sentence, and it points at the wrong pic
 
 `check-page.js` catches spill, overlap and text-on-shape. It cannot read. Grep the figure sources
 for `[Ff]igure \d` whenever a number moves.
+
+## A flag reaches the translation units it is on, and no further
+
+`cmake -S . -B build` leaves **`CMAKE_BUILD_TYPE` empty**, which means `libengine.a` is compiled
+with no `-O` flag at all. A harness's own `-O2` covers `verify_NN.cpp` and nothing it links, and an
+unoptimised static library links exactly as quietly as an optimised one.
+
+Lesson 7.6 was the first Module 7 harness to link the library — 7.1 through 7.5 test header-only
+code — and its first timings were **153.90 ns/vertex** where the truth is 8.51, and **26.32 µs** per
+matrix palette where the truth is 0.99. 18.1× and 26.6×, on the same machine in the same minute.
+
+ARCHITECTURE.md §6's rule ("`-O2`, never a debug build") was written when a harness *was* the whole
+program, and had never reached what one links. The tell was physical implausibility: 153.9 ns is
+about five hundred cycles to do four multiply-adds.
+
+**Any harness that times code living in the library must configure a build type**, and the harness
+should say which archive it linked and at what type rather than leaving it to be remembered:
+
+```sh
+cmake -S . -B build-rel -DCMAKE_BUILD_TYPE=Release
+cmake --build build-rel --target engine
+```
+
+## Ask what a control would do if the thing under test were completely broken
+
+Lesson 7.6's §G control skinned normals as *points* — the translation column wrongly applied — and
+reported **0.020°** of tilt, which reads as "the two rules basically agree". It ran at the **bind
+pose**, where every palette matrix is the identity, so its translation column is zero and the wrong
+rule gives the right answer. The check was passing because its fixture could not fail. Posed, the
+same control reports **156.108°**.
+
+That is the second instance in two lessons of the same shape — 7.5's §G table printed a clean
+`0.0000e+00` for a function returning `NaN`, because `std::max(x, NaN)` returns `x`. The two
+together sharpen into one question to ask of every control: **what would this fixture do if the
+thing being tested were completely broken?** If the answer is "pass", the fixture is the bug.
+
+## An instrument that needs an axis can be fooled by an orientation
+
+"How much did this ring shrink" took three attempts, and the first two both measured the radius
+*perpendicular to the chain* — which sounds obviously right, since a ring on a bent limb is not
+perpendicular to anything else.
+
+Version one had no segment through the tip ring (it is weighted entirely to the last joint) and fell
+back to world `+y`; on a limb bent 90° that ring is edge-on, and it read **0.241 instead of 0.380**
+— a pinch reported where there are not two joints to pinch between. Version two clamped to the last
+real segment and left a smaller copy of the same error: the tip ring is rigidly rotated one joint
+angle further than the segment below it, so its plane is tilted against the measuring axis, and at
+120° it read 0.364.
+
+The fix is to stop needing an axis. A rigid rotation does not change the distance between two points,
+so a distance from the ring's **own centroid** is invariant under every rotation the skeleton can
+apply. **Both wrong versions reported a smaller number**, which is the direction the measurement was
+hunting in — so both of them looked like a discovery.
+
+## A prediction that survives two different deformations is about the mechanism
+
+`r cos(δ/2)` matches a *bend* to six figures and a *twist* to six figures, on different geometry
+(a twist collapses a ring uniformly; a bend flattens it into an ellipse whose minor axis is the same
+cosine). One formula that is right about both is a claim about the **blend**, which is what it said
+it was. One that is only right about the case it was derived on is a curve fit.
+
+Corollary for the instrument: **measure the minimum radius on a ring, not the mean.** The minimum is
+the minor axis in both cases, so one number reads the same law in both modes; the mean would be a
+statement about the shape of an ellipse.
+
+## Check a chain against code that shares nothing with it
+
+Lesson 7.6 builds a skeleton's inverse bind matrices by composing exact per-node inverses, and the
+claim is that this equals inverting the composed matrix. Checking it against a rearrangement of the
+same per-node inverses would prove nothing at all, so the harness carries a **general 4×4
+Gauss-Jordan inverse with partial pivoting, written from scratch in `double`**, forty lines, sharing
+no line with the engine. Worst entry difference at depth 8: `4.768e−07`.
+
+The fixture matters as much as the control. A joint chain with identity rotations would have tested
+the easy half of `local_from_parent` — its inverse is a pure negation and never exercises the
+transpose — so the chain has an awkward rotation on every joint and a non-uniform scale on one.
+
+## The figure quantiser's background test is per-channel
+
+`figs_45.py`'s `quantise` emits **nothing** for a pixel — treats it as background — only when red,
+green **and** blue are each below 14. A demo clear colour of `(12, 13, 17)` is darker than the
+house `(16, 18, 24)` on two channels and fails on the third, so the background goes through the
+quantiser like any other colour and comes back at `(79, 84, 98)`: a mid-grey slab with the subject
+barely visible on it. `(11, 12, 13)` is background; `(12, 13, 17)` is not.
+
+A second, unrelated artifact in the same pipeline: `rle_rects` butts its rectangles edge to edge,
+and at browser scale that shared edge is antialiased from both sides, so a solid shaded surface
+picks up a hairline of the panel behind it every row or two. It reads as quantisation banding and is
+a rasterisation seam. Wrap the panel in `<g shape-rendering="crispEdges">` **in the lesson's own
+`figs_NN.py`**, never in `rle_rects`, which every render figure since Lesson 4.5 depends on.

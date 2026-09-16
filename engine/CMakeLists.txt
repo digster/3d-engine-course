@@ -21,6 +21,14 @@
 # reloads shaders and assets, not code. If that ever changes, this word is the
 # only thing that has to.
 add_library(engine STATIC
+    # Lesson 7.6. A new directory, and the same argument asset/ made in 5.5 and
+    # ui/ made in 5.11: animation is not a graphics subsystem. Nothing in these
+    # two files mentions a framebuffer, a pipeline or a colour — they compose
+    # transforms and deform arrays — and Module 7.7's clip sampling lands here
+    # beside them. Putting them under gfx/ would say that a character stops
+    # moving when nobody is looking at it.
+    src/anim/skeleton.cpp
+    src/anim/skin.cpp
     # Lesson 5.5. A new directory rather than another file in gfx/: an asset
     # system is not a graphics subsystem — it loads meshes, images, and in
     # Module 7 sounds — and putting it under gfx/ would make the audio loader's

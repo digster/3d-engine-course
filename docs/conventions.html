@@ -96,6 +96,7 @@
       <li><a href="#plane">Plane rotations &mdash; complex numbers, and the rotor</a></li>
       <li><a href="#quat">Quaternions &mdash; storage order, the sandwich, and the double cover</a></li>
       <li><a href="#slerp">Interpolating rotations &mdash; which function, and when</a></li>
+      <li><a href="#skinning">Skinning &mdash; the matrix, the weights, and the cosine</a></li>
       <li><a href="#simulation">The simulation contract</a></li>
       <li><a href="#rotational">Rotational quantities &mdash; torque, spin, inertia</a></li>
       <li><a href="#colour">Colour and diagram conventions</a></li>
@@ -2940,6 +2941,129 @@
       </tbody>
     </table>
   </div>
+
+  <!-- ===================================================================== -->
+
+  <h2 id="skinning"><span class="num">8g</span>Skinning &mdash; the matrix, the weights, and the cosine</h2>
+
+  <p>
+    Lesson 7.6. Skinning carries more vocabulary than mathematics, and most of the vocabulary names
+    things by <em>how they were made</em> rather than by what they do. This engine names them by
+    their job, in &sect;<a href="#chain">3</a>&rsquo;s convention, and the formula then reads itself.
+  </p>
+
+  <div class="tbl-scroll">
+    <table class="conv">
+      <thead><tr><th>Rule</th><th>Why, and what breaks without it</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>A skinning matrix is
+              <code>model_from_joint(posed) &middot; joint_from_model(bind)</code></strong> &mdash;
+              the same joint at two different <em>times</em>.</td>
+          <td>The inner labels agree, so the product is legal. The <em>outer</em> labels agree too:
+              a skinning matrix is <code>model_from_model</code>. That is why four of them may be
+              added (you may add linear maps only when they share a domain and a codomain) and why
+              the sum is not a rotation (that set is not closed under addition).</td>
+        </tr>
+        <tr>
+          <td><strong>&ldquo;Inverse bind matrix&rdquo; is
+              <code>joint_from_model</code>.</strong></td>
+          <td>Same object, named for its job instead of its construction. It is baked once and is
+              the only piece of a skeleton that is not directly authorable, which is why it lives
+              in the skeleton&rsquo;s own parallel array rather than on a joint.</td>
+        </tr>
+        <tr>
+          <td><strong>At the bind pose every skinning matrix is exactly <code>I</code>.</strong></td>
+          <td>The two factors are then inverses. <strong>The cheapest complete test of a rig that
+              exists</strong> &mdash; no reference image, no artist &mdash; and it catches a
+              transposed matrix, a chain composed in the wrong order, a stale bake, and a wrong
+              parent index. Measured: <code>4.768e&minus;07</code> over six joints,
+              <code>6.676e&minus;06</code> at depth 32.</td>
+        </tr>
+        <tr>
+          <td><strong>A joint&rsquo;s parent index is strictly less than its own.</strong></td>
+          <td>A precondition, not an algorithm. 5.9&rsquo;s hierarchy could not demand it and paid
+              three passes and a dirty flag every frame; a skeleton is authored and small, so it
+              demands the order and <code>compose_pose</code> is one flat loop. The importer owes a
+              topological sort &mdash; glTF&rsquo;s <code>skins.joints</code> is an arbitrary
+              permutation. Violated, a child composes against <em>last frame&rsquo;s</em> parent,
+              which reads as a one-frame lag that grows with depth.</td>
+        </tr>
+        <tr>
+          <td><strong>Attach props with <code>model_from_joint</code>, never with the
+              palette.</strong></td>
+          <td>A sword in a hand socket is a rigid object with its own vertices in its own space
+              &mdash; 5.9&rsquo;s case exactly. A skinning matrix answers &ldquo;where did this
+              model-space point of the <em>character</em> move to&rdquo;, which says nothing about
+              the sword. The bug is invisible at the bind pose.</td>
+        </tr>
+        <tr>
+          <td><strong>Weights sum to 1.</strong></td>
+          <td>Not tidiness: a palette matrix is <em>affine</em>, so its translation is blended too,
+              and a sum of <code>s</code> scales every vertex to <code>s</code> times its distance
+              from the <strong>model origin</strong>. A sum of 0.9 gives a character 10% smaller and
+              sunk into the floor, which reads as a scale bug. A vertex weighted to nothing lands on
+              the origin and draws a spike.</td>
+        </tr>
+        <tr>
+          <td><strong>Four influences, and a zero weight still carries a valid joint
+              index.</strong></td>
+          <td>Four is the width of a GPU vector register. The index is read <em>before</em> the
+              weight is applied &mdash; that is what keeps the loop branch-free &mdash; so a slot
+              padded with <code>0xFFFF</code> is an out-of-bounds read on the hottest path in the
+              frame, on exactly one asset.</td>
+        </tr>
+        <tr>
+          <td><strong>Normals are skinned with the linear part, not the inverse
+              transpose.</strong></td>
+          <td>Exact for a rotation (<code>3.817e&minus;07</code>) and for a uniform scale
+              (<code>0.000e+00</code>). <strong>Not</strong> exact otherwise &mdash; 22.6&deg; of
+              normal at a 1.5:1 stretch, 0.083 of Lambert brightness &mdash; and the justification
+              is that non-uniform scale on a <em>skinning joint</em> is a rig defect rather than a
+              renderer&rsquo;s problem to absorb. And a normal is a DIRECTION: no translation
+              column, or the joint&rsquo;s position leaks into the lighting (measured at 156&deg; of
+              tilt).</td>
+        </tr>
+        <tr>
+          <td><strong>Only positions and normals change per frame.</strong></td>
+          <td>Uvs, tangents and indices are copied once. That is the observation the GPU path is
+              built on: 4 KB of palette against 113 KB of deformed vertices on this fixture, and the
+              ratio grows with the mesh.</td>
+        </tr>
+        <tr>
+          <td><strong>The blend collapses a twist to <code>cos(&theta;/2)</code>, and
+              <code>cos(&theta;/2n)</code> over <code>n</code> joints.</strong></td>
+          <td>Derived from an isoceles triangle; nothing in the derivation mentions skinning. At a
+              half-turn the radius is <em>exactly zero</em>. The same half-angle &sect;8d found
+              between two mirrors and &sect;8e found inside a quaternion. Twist bones are the fix:
+              0.000, 0.707, 0.866, 0.924 for n = 1, 2, 3, 4.</td>
+        </tr>
+        <tr>
+          <td><strong>A bend obeys the same cosine on the <em>minor axis of an
+              ellipse</em>.</strong></td>
+          <td>A twist rotates about the limb&rsquo;s own axis, so the whole ring is in the
+              collapsing plane; a bend rotates about an axis across it, and a rotation fixes its own
+              axis. Measure the <em>minimum</em> radius on a ring, never the mean &mdash; the
+              minimum is the minor axis in both cases, so one number reads the same law in both.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout note">
+    <span class="label">Linear blend skinning is not &ldquo;nlerp without the normalise&rdquo;</span>
+    <p>
+      It is <strong>worse</strong>: both get the schedule wrong, but nlerp&rsquo;s error is governed
+      by the arc between two <em>quaternions</em> &mdash; half the rotation angle &mdash; and the
+      matrix blend&rsquo;s by the whole angle, which measures about 4&times; at every arc
+      (10.95&deg; of pose against 2.23&deg; at a 120&deg; twist). And it is <strong>better</strong>:
+      a rotation matrix is <em>unique</em>, so there is no double cover, no long way round, and no
+      <code>nearest</code> to forget &mdash; &sect;8f&rsquo;s 359&deg; bug cannot be written here at
+      all.
+    </p>
+  </div>
+
+  <!-- ===================================================================== -->
 
   <h2 id="simulation"><span class="num">9</span>The simulation contract</h2>
 

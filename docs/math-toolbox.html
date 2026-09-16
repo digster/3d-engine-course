@@ -3567,6 +3567,110 @@ The singular values are sqrt(1 + |sin p|), 1, sqrt(1 - |sin p|).</span>
     </p>
   </div>
 
+  <div class="card">
+    <h3>The skinning matrix <span class="from">Lesson 7.6</span></h3>
+    <div class="eq">
+      \[ S_j \;=\; \mathrm{model\_from\_joint}_j(\text{posed}) \cdot
+                   \mathrm{joint\_from\_model}_j(\text{bind}) \]
+      <span class="eq-plain">The skinning matrix for a joint is where that joint is now, times the inverse of where it was when the mesh was modelled.</span>
+    </div>
+    <p>
+      The inner labels agree, so the product is legal &mdash; and the two <code>joint</code>s are
+      the <strong>same joint at two different times</strong>, which is the one piece of bookkeeping
+      no naming convention carries for you. The <em>outer</em> labels agree too, so a skinning
+      matrix is <code>model_from_model</code>: that is simultaneously why four of them may be
+      <em>added</em> (you may add linear maps only when they share a domain and a codomain) and why
+      the sum is not a rotation. At the bind pose the two factors are inverses, so every
+      <code>S<sub>j</sub></code> is exactly <code>I</code> &mdash; the cheapest complete test of a
+      rig that exists.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>Linear blend skinning <span class="from">Lesson 7.6</span></h3>
+    <div class="eq">
+      \[ v' \;=\; \sum_{i} w_i \, S_i \, v, \qquad \sum_i w_i = 1 \]
+      <span class="eq-plain">The deformed vertex is the weighted sum of what each influencing joint would have done to it alone, with the weights summing to one.</span>
+    </div>
+    <p>
+      The constraint is not tidiness. A palette matrix is <strong>affine</strong>, so writing
+      <code>S<sub>i</sub>v = A<sub>i</sub>v + t<sub>i</sub></code> shows the offsets are blended
+      too, and at the bind pose (where every <code>A<sub>i</sub> = I</code> and
+      <code>t<sub>i</sub> = 0</code>) a weight sum of <code>s</code> gives <code>s&middot;v</code>:
+      every vertex scaled toward the <em>model origin</em>. A sum of 0.9 is a character 10% smaller
+      and sunk into the floor, which reads as a scale bug and is a weighting bug.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>Inverting a chain without inverting a matrix <span class="from">Lesson 7.6</span></h3>
+    <div class="eq">
+      \[ (AB)^{-1} = B^{-1}A^{-1}
+         \;\;\Longrightarrow\;\;
+         \mathrm{joint\_from\_model}[j] = \mathrm{local\_from\_parent}(j) \cdot
+                                          \mathrm{joint\_from\_model}[p] \]
+      <span class="eq-plain">Because inverting a product reverses it, the inverse chain composes with the same parent-before-child loop as the forward one, multiplying on the other side.</span>
+    </div>
+    <p>
+      The forward chain multiplies the parent on the <em>left</em> and the inverse chain on the
+      <em>right</em>; both walk the array in the same direction and both read an entry the loop has
+      already finished. The only inverse anywhere is one node at a time, and a
+      <code>transform</code> knows how to undo itself:
+      <code>(TRS)<sup>&minus;1</sup> = S<sup>&minus;1</sup>R<sup>&#8288;T</sup>T<sup>&minus;1</sup></code>,
+      a transpose, three reciprocals and a negated offset.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>Inverting a <code>transform</code> <span class="from">Lesson 7.6</span></h3>
+    <div class="eq">
+      \[ L = S^{-1}R^{\mathsf{T}}, \qquad
+         \mathrm{local\_from\_parent}(t)\,v \;=\; L\,(v - p) \]
+      <span class="eq-plain">The linear part is the transposed rotation with row k divided by scale k; the offset is whatever sends the position back to the origin.</span>
+    </div>
+    <p>
+      A rotation&rsquo;s inverse is its transpose because its columns are orthonormal; a scale&rsquo;s
+      is the reciprocals; a translation&rsquo;s is the negation. <strong>A zero scale has no
+      inverse</strong>, and taking its reciprocal as 0 makes this the <em>pseudo</em>-inverse: it
+      projects rather than inverts, so the round trip is not the identity. Finite is not right, so
+      the condition is reported rather than absorbed.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>The candy-wrapper collapse <span class="from">Lesson 7.6</span></h3>
+    <div class="eq">
+      \[ \big|\tfrac{1}{2}(R_0 v + R_1 v)\big| \;=\; |v|\,\cos(\theta/2),
+         \qquad \text{over } n \text{ joints: } \cos\!\big(\theta/2n\big) \]
+      <span class="eq-plain">Averaging two rotated copies of a vertex theta apart puts it at cos of half theta times its radius; spreading the same twist over n joints gives cos of theta over two n.</span>
+    </div>
+    <p>
+      One isoceles triangle: <code>R<sub>0</sub>v</code> and <code>R<sub>1</sub>v</code> are the
+      same length and <code>&theta;</code> apart, their midpoint lies on the bisector, and the
+      bisector of an isoceles triangle meets the base at a right angle. <strong>Nothing in the
+      derivation mentions skinning</strong> &mdash; it is the same half-angle &sect;<a
+      href="#rotation">12</a> found between two mirrors and inside a quaternion, met a third time.
+      At a half-turn the radius is not small but <em>exactly zero</em>. Twist bones are the fix:
+      0.000, 0.707, 0.866, 0.924 for <code>n</code> = 1, 2, 3, 4.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>A bend flattens where a twist collapses <span class="from">Lesson 7.6</span></h3>
+    <div class="eq">
+      \[ \text{semi-minor} = r\cos(\theta/2), \qquad \text{semi-major} = r \]
+      <span class="eq-plain">A bent ring becomes an ellipse whose short axis obeys the same cosine and whose long axis is untouched.</span>
+    </div>
+    <p>
+      A twist rotates about the limb&rsquo;s own axis, so the entire ring lies in the collapsing
+      plane and shrinks uniformly. A bend rotates about an axis <em>across</em> it, and a rotation
+      fixes its own axis &mdash; so the vertices on that axis do not move and the ring flattens. One
+      cosine, two geometries, which is why a twisted forearm loses its whole cross-section and a
+      bent elbow reads as a crease. <strong>Measure the minimum radius on a ring, never the
+      mean</strong>: the minimum is the minor axis in both cases.
+    </p>
+  </div>
+
   <h2 id="coming"><span class="num">9</span>Coming as the course proceeds</h2>
 
   <p>

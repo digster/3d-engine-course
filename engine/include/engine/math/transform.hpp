@@ -334,16 +334,72 @@ struct transform_extraction
 /// smallest shear anybody authors by accident.
 inline constexpr float k_transform_square_tolerance = 1e-3f;
 
-// There is deliberately no `local_from_parent` here yet.
-//
-// It exists, it is useful, and it is cheap for this particular shape — undoing
-// `T * R * S` is `S⁻¹ * Rᵀ * T⁻¹`, with no general 4x4 inversion needed, because
-// a rotation's inverse is its transpose and a scale's inverse is the reciprocals.
-// It is left out because nothing needs it yet, and because the first thing that
-// will need it — Lesson 2.9's view matrix, which is exactly "the inverse of where
-// the camera is" — deserves to derive it rather than to find it already written.
-// Same reasoning as `mat4`'s missing `inverse`, and the same discipline: a maths
-// library grows one justified function at a time or it grows without getting
-// better.
+/// The matrix that carries a point from PARENT space back into this object's
+/// local space — the exact inverse of `parent_from_local`.
+///
+/// **LESSON 7.6 FINALLY WROTE THE FUNCTION LESSON 2.8 DECLINED TO.** The comment
+/// that stood here for five modules said it was "left out because nothing needs
+/// it yet, and because the first thing that will need it deserves to derive it
+/// rather than to find it already written". That was the right call and this is
+/// the caller it was waiting for: a skeleton's INVERSE BIND MATRICES are nothing
+/// but this function composed down the joint chain (`anim/skeleton.hpp`).
+///
+/// **NO GENERAL 4x4 INVERSION HAPPENS HERE, and that is the point.** Inverting a
+/// product reverses it, so
+///
+///     (T · R · S)⁻¹  =  S⁻¹ · R⁻¹ · T⁻¹  =  S⁻¹ · Rᵀ · T⁻¹
+///
+/// and every one of those three is free. A rotation's inverse is its transpose
+/// (Lesson 2.6 — its columns are orthonormal, so RᵀR = I by inspection). A
+/// scale's inverse is the reciprocals. A translation's inverse is the negation.
+/// The general route — cofactors, a determinant and a divide — costs about forty
+/// operations, can be numerically poor, and would be answering a question this
+/// struct already knows the answer to. **A type that knows how it was built knows
+/// how to undo itself.**
+///
+/// Read the result the way `parent_from_local`'s doc comment reads its own: the
+/// linear part is Rᵀ with row `k` divided by `scale[k]`, so it *unrotates* and
+/// then *unscales*, in that order, and the translation is whatever it takes to
+/// send `position` back to the origin.
+///
+/// **A ZERO SCALE HAS NO INVERSE, AND THIS RETURNS SOMETHING ANYWAY — read this
+/// paragraph before you rely on it.** A scale of 0 on an axis collapses a
+/// dimension, and no matrix un-collapses one; the information is gone. The
+/// reciprocal is taken as 0 rather than as an infinity, which makes the result
+/// the PSEUDO-inverse: it projects onto the surviving axes instead of inverting,
+/// so `local_from_parent(t) * parent_from_local(t)` is a projection and **not**
+/// the identity. That is a real answer to a different question, and Lesson 7.5's
+/// rule applies in full — *finite is not right*. The value is finite so that a
+/// degenerate joint cannot spray NaNs across a whole skeleton; the caller is
+/// expected to have been told, and `anim::validate` is what tells it
+/// (`skeleton_report::singular_binds`).
+[[nodiscard]] inline mat4 local_from_parent(const transform& t)
+{
+    // Rᵀ. `transpose` rather than `mat3_from_quat(conjugate(q))`, which produces
+    // the same nine floats: the transpose is nine moves and the conjugate route
+    // is a negate plus the twelve multiplies of a rebuild. Both are correct and
+    // one of them says "this is an inverse because the matrix is orthonormal",
+    // which is the fact worth reading off the line.
+    const mat3 unrotate = transpose(mat3_from_quat(t.rotation));
+
+    // The reciprocals, with 0 standing in where there is nothing to invert.
+    const float rx = (t.scale.x != 0.0f) ? 1.0f / t.scale.x : 0.0f;
+    const float ry = (t.scale.y != 0.0f) ? 1.0f / t.scale.y : 0.0f;
+    const float rz = (t.scale.z != 0.0f) ? 1.0f / t.scale.z : 0.0f;
+
+    // S⁻¹ · Rᵀ scales ROW k by 1/scale[k] — and a row in column-major storage is
+    // one component taken from each column, which is why this reads as three
+    // component-wise multiplies rather than as a matrix product. Nine multiplies
+    // instead of twenty-seven, for the same reason `parent_from_local` builds its
+    // columns by hand instead of composing with `scale(...)`.
+    const mat3 linear{{unrotate.c0.x * rx, unrotate.c0.y * ry, unrotate.c0.z * rz},
+                      {unrotate.c1.x * rx, unrotate.c1.y * ry, unrotate.c1.z * rz},
+                      {unrotate.c2.x * rx, unrotate.c2.y * ry, unrotate.c2.z * rz}};
+
+    // …and the offset that sends `position` to the origin. Not `-position`: the
+    // linear part acts on the difference, so the translation this matrix applies
+    // is the one measured AFTER unrotating and unscaling.
+    return affine(linear, -(linear * t.position));
+}
 
 } // namespace engine

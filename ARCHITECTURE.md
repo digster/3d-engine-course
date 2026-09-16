@@ -1041,6 +1041,15 @@ chore. What follows is on disk.
 │   │   │   │                 #   (the 4 SDL callbacks) — the engine keeps the loop
 │   │   │   └── main.hpp      # ENGINE_MAIN. ONE .cpp per program; no main() in it.
 │   │   │                     #   NOT in engine.hpp, deliberately
+│   │   ├── anim/           # SKELETONS AND THE SURFACES THEY BEND          [7.6]
+│   │   │   ├── skeleton.hpp  # joint, skeleton, skeleton_report; the bind pose,
+│   │   │   │                 #   its inverse, and pose -> palette. A skinning
+│   │   │   │                 #   matrix is model_from_joint(posed) *
+│   │   │   │                 #   joint_from_model(bind) — SAME JOINT, TWO TIMES
+│   │   │   └── skin.hpp      # skin_influence (4 joints, 4 weights — a GPU
+│   │   │                     #   register's width), skinned_mesh, validation,
+│   │   │                     #   and linear blend skinning for POINTS and for
+│   │   │                     #   DIRECTIONS, which differ by one column
 │   │   ├── ui/             # TOOLING UI. Never gameplay UI (§4, binding)   [5.11]
 │   │   │   └── debug_ui.hpp  # the Dear ImGui lifecycle + the capture flags.
 │   │   │                     #   Does NOT include <imgui.h>: owning the
@@ -1153,6 +1162,14 @@ chore. What follows is on disk.
 │   │                             #   render pass, and fill_uniforms() so the two
 │   │                             #   renderers cannot disagree about a bias
 │   └── src/                # ---- PRIVATE. 50 sources; no demo can name this path ----
+│       ├── anim/           # skeleton.cpp, skin.cpp                         [7.6]
+│       │                   #   A NEW DIRECTORY, and the argument is asset/'s in
+│       │                   #   5.5 and ui/'s in 5.11: animation is not a
+│       │                   #   graphics subsystem. Neither file mentions a
+│       │                   #   framebuffer, a pipeline or a colour, and a
+│       │                   #   character keeps moving when nobody is looking.
+│       │                   #   skeleton.cpp runs once per JOINT and skin.cpp
+│       │                   #   once per VERTEX — 2.34% / 97.66% of the pair
 │       ├── core/           # actions [5.10], clock, fixed_step, input, log, profile
 │       ├── platform/       # platform.cpp, app.cpp                            [5.2]
 │       ├── ui/             # debug_ui.cpp — THE ONLY engine TU that          [5.11]
@@ -2646,12 +2663,29 @@ translation unit that calls into ImGui.
 **Output goes in `build/demos/`** so that `SDL_GetBasePath()` finds `assets/` and `shaders/`,
 which the build copies next to each executable. Run the script from the repository root.
 
-Three rules, all of which have caught something (Lesson 3.10, conventions §7e):
+Four rules, all of which have caught something (Lesson 3.10, conventions §7e):
 
 - **`-O2`, never a debug build.** A debug build is not slower by a constant factor; it is slower
   by a factor that varies per function, so profiling one produces a ranking of a *different
   program*. Lesson 1.5 measured `put_pixel` versus a row pointer at 5.1× under `-O0` and 14.8×
   under `-O2`.
+- **`-O2` on the harness does not reach the library the harness LINKS** — Lesson 7.6. `cmake -S .
+  -B build` leaves `CMAKE_BUILD_TYPE` **empty**, so `libengine.a` carries no `-O` flag at all, and
+  an unoptimised static library links exactly as quietly as an optimised one. Measured on the same
+  machine in the same minute: 153.90 ns/vertex against 8.51, and 26.32 µs per matrix palette
+  against 0.99 — **18.1× and 26.6×**. Any harness that times code living in the library must build
+  and link a configured tree:
+
+  ```sh
+  cmake -S . -B build-rel -DCMAKE_BUILD_TYPE=Release
+  cmake --build build-rel --target engine
+  ```
+
+  `scratch/build_verify_76.sh` is the first harness to enforce this: it reads the build type out of
+  the cache, prints which archive it is linking and at what type, and **refuses to run** when there
+  is none (`ENGINE_ALLOW_UNOPTIMISED=1` overrides, which is how the slow row above was produced).
+  The rule above this one was written when a harness *was* the whole program, and had never been
+  reached by anything.
 - **A `volatile` sink**, or the compiler deletes the work whose cost you are measuring.
 - **Both variants in the same run**, back to back, because thermal and scheduling state drift
   between runs and not within one.

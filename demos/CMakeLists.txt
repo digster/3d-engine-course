@@ -142,7 +142,36 @@ engine_set_warnings(collector)
 add_executable(gimbal gimbal/main.cpp)
 target_link_libraries(gimbal PRIVATE engine::engine)
 engine_set_warnings(gimbal)
-engine_use_assets(collector)
+# FIXED IN PASSING, Lesson 7.6: an `engine_use_assets(collector)` stood here —
+# in the gimbal block, naming the wrong target, and wrong for that target too.
+# `collector` builds every mesh it draws (see its own section above, which says
+# so) and `gimbal` loads nothing either, so the line copied a directory that
+# neither program opens. Harmless, and exactly the kind of harmless that survives
+# because nothing fails when it is wrong. `build/demos/assets/` is still
+# populated by sandbox, hello_cube, gltf_view and ecs_swarm, which is what the
+# lesson harnesses' search path relies on.
+
+# ---- rig: one surface, six joints ------------------------------------------
+#
+# Lesson 7.6. The first demo in this repository that draws something which is
+# NOT a rigid body: every other program here places whole meshes with whole
+# transforms, which is what `ecs::hierarchy` is for and what it can do. A skinned
+# tube is the case that needs `engine::anim`, and it exists to be looked at while
+# the numbers on its panel are read.
+#
+# `engine::engine` directly and NOT `demo_common`, the same statement `gimbal`,
+# `collector` and `ecs_swarm` make: a program written to exercise the public API
+# does not get to reach for the shared demo scene. Every vertex in it is
+# generated, and the ImGui panel comes with the engine.
+#
+# No `engine_use_assets` and no `engine_use_shaders`. It loads nothing and
+# compiles nothing: the mesh is built in `build_tube()` and the renderer is the
+# software one, which is deliberate — the argument of this lesson is arithmetic
+# that happens before anything is drawn, and a CPU path lets a headless `--shot`
+# reproduce it byte for byte on any machine.
+add_executable(rig rig/main.cpp)
+target_link_libraries(rig PRIVATE engine::engine)
+engine_set_warnings(rig)
 
 # ---- plane: the complex plane, drawn ---------------------------------------
 #

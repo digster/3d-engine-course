@@ -69,6 +69,25 @@
 #include <engine/core/pool.hpp>
 #include <engine/core/profile.hpp>
 
+// ---- Animation: skeletons, and the surfaces they bend ----------------------
+//
+// Lesson 7.6, and for the first time in the run the lint did NOT catch anybody:
+// these two lines went in with the headers, in the same edit, by somebody who
+// had just read the paragraph above about the check firing on people who know
+// about it. **Five catches in four lessons, then a miss — in the check's
+// favour.**
+//
+// So it was exercised on purpose instead, by deleting both lines and
+// reconfiguring, which is how 5.12 proved it in the first place and is the only
+// way to learn anything from a check that stays quiet. It names both headers and
+// stops the configure. Worth doing here specifically because this is the first
+// NEW DIRECTORY since 5.11 and therefore the first time the glob has had to
+// notice a whole subsystem rather than one more file in a familiar folder — and
+// because the failure it prevents scales with that: a public `engine::anim` the
+// table of contents does not mention reads as an engine with no animation in it.
+#include <engine/anim/skeleton.hpp>
+#include <engine/anim/skin.hpp>
+
 // ---- Assets: finding files, and owning what they become --------------------
 #include <engine/asset/asset_store.hpp>
 #include <engine/asset/search_path.hpp>
