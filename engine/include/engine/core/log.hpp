@@ -73,6 +73,26 @@ namespace engine {
 ///
 /// Deliberately few. Five categories a person can hold in their head beats
 /// twenty nobody can, and the cost of merging two is one grep.
+///
+/// **Lesson 7.8 added the sixth, and it is the first since 5.3 wrote this list**,
+/// so the sentence above is owed an argument rather than an exception. `audio`
+/// could have been folded into `core`, and the reason it is not comes down to
+/// what a category is FOR, which is deciding what to silence:
+///
+///   * Audio is the one subsystem that routinely fails **harmlessly**. A machine
+///     with no sound card, a device that disappears when a headset is unplugged,
+///     a format the driver will not take — all of those are conditions a correct
+///     program continues through, and all of them log. Folded into `core` they
+///     would be un-silenceable without also silencing the clock and the profiler.
+///   * It is also the one subsystem with a thread that **must not log at all**
+///     (audio/mixer.hpp). Having its own category makes that rule checkable: any
+///     `log_audio` line arriving between two buffers came from somewhere it
+///     should not have.
+///
+/// The test for a new category is therefore not "is this a new subsystem" — the
+/// ECS is a subsystem and lives under `core` — it is "would somebody want to turn
+/// exactly this off". Two more subsystems arrive in Modules 8 and 9 and neither
+/// is expected to need one.
 enum log_category : int
 {
     log_core = SDL_LOG_CATEGORY_CUSTOM,   ///< clock, input, fixed_step, profiler
@@ -80,6 +100,7 @@ enum log_category : int
     log_gfx,                              ///< the CPU rasterizer, meshes, textures
     log_gpu,                              ///< SDL_GPU: devices, pipelines, uploads
     log_asset,                            ///< files: images, OBJ, and Module 5's asset system
+    log_audio,                            ///< Lesson 7.8: devices, sounds, the mixer
 
     log_category_count                    ///< not a category; the count, for iteration
 };

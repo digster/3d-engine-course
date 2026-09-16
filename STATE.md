@@ -126,6 +126,65 @@ conventions:
         fmod(-0.1, 1.0) is -0.1. And AND std::fmod IS NOT CONSTANT TIME — its
         cost grows with the quotient, 1.603 ns on a bounded clock against 5.901
         after the clock has run to 6,666 s. WRAP THE PLAYHEAD EVERY STEP.
+  audio: *** ENERGY ADDS, AMPLITUDES DO NOT. *** 7.8,
+        engine/include/engine/audio/ + docs/conventions.html §8i +
+        math-toolbox.html §8d. Almost every rule below is that sentence wearing
+        a different hat, and the factor of two that keeps appearing in the
+        exponents is always the same factor of two.
+        ONE RUNTIME FORMAT: interleaved f32 in [-1,1] at the DEVICE's rate,
+        converted once at load. Float for headroom (a sum of things in [-1,1] is
+        not), interleaved because that is what the device takes, one format
+        because five means five inner loops and four tested by nobody. Costs
+        2.00x the file's memory for 16-bit content — the streaming debt, named
+        for Module 9.
+        A FRAME IS ONE SAMPLE PER CHANNEL. Durations, buffer sizes and cursors
+        are all in FRAMES. Confusing the two is SILENT IN MONO and the first
+        stereo file plays at double speed with the channels scrambled.
+        SIGNED INTEGERS DIVIDE BY 2^(bits-1), never by 2^(bits-1) - 1. 16-bit
+        divides by 32768, so -32768 -> exactly -1.0. Round trip measured at
+        0.000e+00.
+        A LISTENER IS A TRANSFORM, and `forward` is where -z_hat lands (§2's
+        world space, applied to something that is NOT drawing). Getting the minus
+        wrong is INAUDIBLE with two speakers until somebody adds a filter for
+        sounds behind the head. The listener is usually the camera and MUST NOT
+        BE ASSUMED to be: a third-person game hears from the character.
+        pan = dot(dir_to_source, listener.right), which is already the sine of
+        the angle off the median plane — no atan2, no special cases. Elevation
+        folds to the centre FOR FREE, which is where two speakers can put it;
+        front and back give the same answer, which is the limit of a stereo pair
+        rather than a bug.
+        CONSTANT-POWER PANNING: L = cos(theta), R = sin(theta),
+        theta = (pan+1)*pi/4. CENTRE IS 0.7071, NOT 0.5, because two speakers
+        playing one signal are correlated and what decides loudness is L^2+R^2.
+        The linear law puts 0.5 there = -3.01 dB, a hole a swept sound falls
+        into. Measured worst deviation over a sweep: 3.010 dB vs 0.000 dB.
+        AMPLITUDE FALLS AS 1/d, NOT 1/d^2. Intensity falls as 1/d^2 — that part
+        is right — but a SAMPLE IS A PRESSURE and pressure is sqrt(intensity).
+        -6.02 dB per doubling; the plausible mistake gives -12.04 and sounds like
+        every source is at the bottom of a well.
+        A DISTANCE CURVE MUST REACH ZERO AT max_distance, not be cut off there.
+        The bare inverse law is still at -33.98 dB at 50 m with a 1 m reference,
+        and a step to silence is a click. falloff::inverse_ranged subtracts the
+        value at max and rescales; it costs 8.7 dB of extra steepness at 32 m,
+        which is the price of a curve that ends.
+        dB IS 20*log10(amplitude). Twenty, not ten, for the same reason as the
+        row above. Halving an amplitude is -6.02 dB.
+        ANY PER-FRAME GAIN CHANGE IS RAMPED ACROSS THE BUFFER, NEVER ASSIGNED.
+        The gain is sampled at 60 Hz and reconstructed at 48 kHz; a zero-order
+        hold injects 0.100745 in one sample, 7.70x the waveform's own largest
+        step, of which 98.8% is BROADBAND. 7.7's reconstruction rule in a
+        subsystem that had never heard of animation.
+        THE YARDSTICK FOR ANY INJECTED STEP IS THE SIGNAL'S OWN SLOPE,
+        A*2*pi*f/f_s. A fade does not make a start-of-sound step SMALL, it
+        REMOVES it: 0.2500 (38.2x) becomes 0.0065443 (1.00x), which IS the
+        slope.
+        THE AUDIO THREAD DOES NOT ALLOCATE, LOG, THROW, OR WAIT ON ANYTHING
+        UNBOUNDED. It increments counters; the main thread reads them. 64 voices
+        are 29.76 us of a 10,667 us deadline, so the mixing is never what makes
+        you late — one log line is 1.02 us ON AVERAGE and is a syscall.
+        A SOUND MUST OUTLIVE EVERY VOICE READING IT. stop_sound() before
+        releasing one. The only UB in the subsystem, and deliberate: a shared_ptr
+        would put a possible free on the audio thread.
   blend-space: *** A CROSS-FADE IS NOT 7.6's WEIGHTED SUM, AND THE DIFFERENCE IS
         WHICH OBJECT IS BEING AVERAGED. *** 7.7 §7.
         BLEND THE POSES: one transform_blend per joint, in LOCAL space, before
@@ -5103,9 +5162,112 @@ completed:
          nothing fails when it is wrong. build/demos/assets/ is still populated
          by sandbox, hello_cube, gltf_view and ecs_swarm, which is what the
          golden harness's search path relies on.)
-  ===> MODULE 7 IN PROGRESS: 6 of 8 (7.7 clips, 7.8 audio) <===
+  - 7.7  Sampling and Blending Animations
+        (ADDED RETROSPECTIVELY BY 7.8, and the omission is the finding. 7.7
+         shipped its page, wrote its `capabilities:` entry and put its filename
+         in the `files:` published-pages block — and never gained a line here, so
+         this roll and the module marker under it still said "6 of 8"
+         while the index,
+         the nav chain and the file manifest all said otherwise. check-curriculum
+         passed throughout, because check 8 watches a list of FILENAMES and
+         cannot see a missing lesson NUMBER. A new conversation resuming from
+         this file would have been told to write 7.7 again.
+         FIXED BY A CHECK, not by resolving to remember: `check_state_completed`
+         is check 9 in docs/_template/check-curriculum.py, added by 7.8, and it
+         caught both this and 7.8's own entry on its first run.
+         Planned at 5 h, shipped at 6.)
+  - 7.8  SDL3 Audio: Streams, Mixing, and 3D Sound
+        (7.7's TWO dead `next` links repointed in the SOURCES —
+         scratch/l77_body_a.html and build_77.py's TAIL — and build_77 rebuilt,
+         so page and generator still agree. Planned at 5 h, shipped at 6, so
+         Module 7 went 46 h -> 47 h and the course total 520 -> 521; the index
+         meta, the prose line and BOTH hero stats moved with it, which
+         check-curriculum verifies.
+         MODULE BOUNDARY, and §7 of CLAUDE.md's reissue rule was honoured
+         INCREMENTALLY rather than at the boundary: conventions.html gained §8i
+         (audio) plus TEN rows in §11's verified-facts table, and
+         math-toolbox.html gained §8d with five cards — each WITH its TOC entry,
+         in the same edit, which is 7.3's rule.
+         THE FOURTH NEW PUBLIC DIRECTORY SINCE 5.11: engine/audio/, and the
+         first whose contents never touch a pixel. NOT under asset/, although
+         one of its three files loads a file — 5.5 predicted this directory by
+         name and predicted the wrong home for it.
+         THE UMBRELLA LINT FIRED AGAIN, on the whole directory, three headers at
+         once: SIX CATCHES IN FIVE LESSONS. 86 -> 89 public headers.
+         NO GOLDEN RUN, and the graph was asked rather than assumed: nothing
+         this lesson touched is in demo_scene.cpp's include closure. log.hpp is
+         the only edited file anything else includes, and the edit is one
+         enumerator plus comments.)
+  ===> MODULE 7 COMPLETE <===
 
 capabilities:
+  - 7.8 THE ENGINE CAN HEAR. `engine::audio` is three headers and about a
+    thousand lines: a WAV loader with format conversion and linear resampling, a
+    float mixer with a voice table behind generational handles, and a spatial
+    model that turns a listener and an emitter into two gains.
+    THE ASSET / PLAYHEAD SPLIT FOR THE THIRD TIME, and the third instance is what
+    makes it feel inevitable rather than clever: a skeleton is shared and a pose
+    is not (7.6), a clip is shared and its cursor is not (7.7), a sound is shared
+    and its playback position is not. Here it buys something the other two did
+    not — the voice table is the ONLY shared mutable state in the subsystem, so
+    the only thing a mutex has to guard.
+    WHAT IS NEW: audio::sound + wav_report + load_wav + make_tone + make_noise +
+    apply_fade + measure; audio::listener + listener_from + falloff (4 laws) +
+    emitter + stereo_gain + spatial_result + attenuation + pan_of +
+    pan_constant_power + pan_linear + spatialise + amplitude_to_db +
+    db_to_amplitude; audio::mixer + mixer_config + voice_params + mixer_report +
+    voice_id + open/open_offline/close/play/play_spatial/set_gain/set_gain_pan/
+    set_pitch/playing/stop/stop_sound/stop_all/update/report/reset_report/
+    mix_into. Plus `log_audio`, the sixth log category since 5.3 and the first
+    added since, with the argument for it written into log.hpp.
+    THE NUMBERS, MEASURED, NINE SECTIONS AND TWELVE CONTROLS:
+      rms of N uncorrelated voices   0.577*sqrt(N)  exactly, N = 1..64
+      peak of the same mix           7.68x at N=16  (sqrt(N) says 4, N says 16)
+      peak vs observation window     6.98x @ 10 ms -> 10.46x @ 8 s
+      CONTROL, N copies of one voice peak = N exactly
+      linear pan law, worst dip      -3.01 dB at centre (constant power: 0.000)
+      1/d vs 1/d^2 per doubling      -6.02 dB vs -12.04 dB
+      bare inverse at max_distance   -33.98 dB, then cut: a step, i.e. a click
+      gain as a step vs the waveform 0.100745 vs 0.013088   7.70x
+      gain as a ramp vs the waveform 0.013072               1.00x
+      of the injected error, at f0   1.2%   (the other 98.8% is the click)
+      a sound starting on a peak     0.2500 step, 38.2x; 5 ms fade -> 1.00x
+      linear resampler 44.1 -> 48    62.40 dB SNR (SDL 85.05, no resample 91.67)
+      ...and by frequency            89.00 dB @ 200 Hz, 20.43 dB @ 10 kHz
+      64 voices, 512-frame buffer    29.761 us of 10,667 us   0.28%
+      per voice per frame            0.91 ns
+      set_gain (lock + 2 stores)     9.0 ns
+      one log line, format only      82.0 ns; + write + flush 1,021.6 ns
+    THE OFFLINE PATH IS THE DESIGN, NOT A TEST HOOK. `mix_into` is public and
+    `open_offline` builds the voice table with no device, so the real-time path
+    is a pure function from a table to an array of floats. Every number above
+    was produced on a machine that was never asked whether it had speakers, and
+    demos/audio's `--shot` uses the same entry point, so a screenshot is silent
+    and deterministic.
+    AND THAT LEFT EXACTLY ONE THING UNTESTED, WHICH FOUND A BUG.
+    scratch/devcheck_78.cpp opens a real device for 700 ms. Its first run
+    reported 28 of 58 buffers "starved" on a mix at 0.2% load: the counter
+    incremented when SDL_GetAudioStreamQueued() was 0 at callback entry, which in
+    SDL3's PULL model is the steady state rather than a failure. Renamed to
+    `queue_empty`; the question it was meant to answer is now `late`, which
+    compares the mixer's own time against its own deadline and needs nothing from
+    the driver. A healthy run prints `late 0` — a check whose degenerate case is
+    a FAILURE.
+    WHAT IS STILL NOT: NO STREAMING (a 4-minute track is 44 MB resident; Module
+    9). NO COMPRESSED FORMATS (WAV only; Ogg/Opus are the stb_image argument
+    again). NO EFFECTS, no filters, no buses, no reverb. NO VOICE STEALING — a
+    play past max_voices is refused and counted, and the 65th voice is 0.6 dB.
+    NO FRONT/BACK and no elevation: two speakers cannot express it, and HRTFs are
+    where the next ten percent begins. NO DOPPLER (set_pitch exists; it is an
+    exercise). NO LOCK-FREE COMMAND QUEUE — one mutex on the audio thread, with
+    the priority-inversion compromise stated in mixer.cpp rather than hidden, and
+    Module 9's job system named as where it goes.
+    ONE UNDEFINED BEHAVIOUR, DELIBERATELY: a voice holds a non-owning
+    `const sound*`, so a sound destroyed while a voice reads it is UB rather than
+    a counter. `stop_sound()` before releasing one. It is a raw pointer on
+    purpose — a shared_ptr would put a refcount decrement, and therefore possibly
+    a free, on the audio thread.
+
   - 7.7 THE ENGINE CAN PLAY RECORDED MOTION. `engine::anim::clip` is a function
     from time to pose: per-channel keyframe tracks, cursor-based sampling with a
     binary-search fallback on any jump, correct looping, cross-fading in POSE
@@ -8286,6 +8448,21 @@ files:
                moved into it from euler.hpp, which now includes it so no call
                site changed. 7.3 and 7.4 both have reason to add to it.)
   engine/include/engine/anim/: clip.hpp [7.7], skeleton.hpp, skin.hpp        [7.6]
+  engine/include/engine/audio/: mixer.hpp, sound.hpp, spatial.hpp          [7.8]
+            (THE FOURTH NEW DIRECTORY SINCE THE REFACTOR, and the first whose
+             contents never touch a pixel. NOT under asset/, although sound.cpp
+             loads a file: 5.5 predicted this directory by name ("it loads
+             meshes, images, and in Module 7 sounds") and predicted the wrong
+             home for it. The asset system's job is FINDING, CACHING and OWNING;
+             decoding a WAV into floats is a subsystem's own business, exactly as
+             gfx/image.cpp decodes a PNG and lives under gfx/.
+             mixer.hpp includes the other two, so two of the umbrella's three
+             new lines are redundant TO THE COMPILER and neither is redundant to
+             a reader — engine.hpp is a table of contents.
+             mixer.hpp is the ONE public header that includes <SDL3/SDL_audio.h>
+             and it has no choice: the callback SDL runs is a member, and its
+             declaration needs SDLCALL. Everything else — the mutex, the voice
+             pool, the scratch buffer — is inside an incomplete `state`.)
             (A NEW DIRECTORY, and the argument is asset/'s in 5.5 and ui/'s in
              5.11: animation is not a graphics subsystem. Nothing in any of these
              files mentions a framebuffer, a pipeline or a colour, and a character
@@ -8300,6 +8477,13 @@ files:
   engine/include/engine/ui/: debug_ui.hpp                                   [5.11]
             (a new directory, same argument asset/ made in 5.5: tooling UI is not a
              graphics subsystem. Does NOT include <imgui.h> — see debug-ui.)
+  engine/src/audio/: mixer.cpp, sound.cpp, spatial.cpp                    [7.8]
+            (mixer.cpp is the only file in this library that runs on a thread SDL
+             owns, and every strange thing in it comes from that: no allocation,
+             no logging, no unbounded wait, one mutex whose compromise is written
+             down rather than hidden, and a `voice` struct completed here so that
+             handle<voice> can exist without the layout ever being public.
+             `mix_into` is PUBLIC so that it can be measured.)
   engine/src/anim/: clip.cpp [7.7], skeleton.cpp, skin.cpp               [7.6]
             (Translation units rather than headers for draw_order.cpp's reason:
              every function in them is a real loop over an array. skeleton.cpp
@@ -8352,6 +8536,18 @@ files:
             treats a pixel as background — and emits nothing for it — only when
             EVERY channel is below 14. The obvious (12, 13, 17) has 17 on blue
             and came back as a mid-grey slab at (79, 84, 98).)
+  demos/audio/: main.cpp                                                  [7.8]
+           (The first demo here whose OUTPUT IS NOT THE PICTURE. The map is an
+            EXPLANATION of the result — where each source is and what two gains
+            fell out — because the result itself cannot be looked at. Faint rings
+            at 2/4/8/16/32 m from the LISTENER, so each ring is one halving.
+            Its grid is every FOUR metres and not every one: at 12 px/m a
+            one-metre grid survived the figure pipeline's 3:1 peak downsample as
+            a mesh with the content buried in it.
+            No assets and no shaders: every sound is synthesised with make_tone,
+            so the repository still carries no .wav and `--shot` is byte-for-byte
+            reproducible. `--shot` uses open_offline, so a headless run opens NO
+            DEVICE — silent, deterministic, and runnable with no sound card.)
   demos/plane/: main.cpp                                                  [7.3]
            (2-D, framebuffer only, no assets and no shaders. Four modes on
             [1..4]; mode 3 is the two-mirror construction and is the one worth
@@ -8441,6 +8637,7 @@ files:
                  07-05-slerp.html,
                  07-06-skeletal-animation.html,
                  07-07-sampling-blending.html
+                 07-08-audio.html
                  (5.12 IS OUT OF SEQUENCE ON PURPOSE — Module 5 closed eleven
                   lessons after 5.11 and one after 6.18, and the list is
                   append-ordered rather than sorted so that the history is
@@ -9038,92 +9235,86 @@ roadmap: RESHAPED 2026-09-08, AFTER TWO EXTERNAL REVIEWS OF THE PUBLISHED OUTLIN
 
 
 
-next: 7.8 — SDL3 Audio: Streams, Mixing, and 3D Sound
+next: 8.1 — Integrators: Why One Explodes
 
-      (planned filename: docs/lessons/07-08-audio.html. 7.7's TWO next links
-       point at the index and BOTH need repointing — scratch/l77_body_a.html
-       holds the top one and build_77.py's TAIL the bottom, the same pair every
-       Module 7 lesson has had, and check-curriculum.py caught both of 7.6's on
-       its first run after 7.7 shipped.
-       7.8 CLOSES MODULE 7, so the module badge in docs/index.html goes from
-       `wip`/"in progress" to done — the first module boundary since 6.18, and
-       the first one check-curriculum.py has ever been present for. §7 of
-       CLAUDE.md also requires index.html, conventions.html and
-       math-toolbox.html to be REISSUED at a module boundary.
-       BOTH LIVING PAGES WERE UPDATED WITH THE LESSON, not deferred to the
-       boundary: docs/conventions.html gained §8h (clips) WITH its TOC entry, and
-       math-toolbox.html gained three cards — the keyframe bracket, the
-       arithmetic-minus-geometric mean gap, and the blended-chain sum. 7.7's
-       Further Reading links the toolbox and now tells the truth. The rule this
-       follows is 7.3's: a section and its TOC entry go in together, or the
-       section is unreachable and nothing says so.)
+      (planned filename: docs/lessons/08-01-integrators.html. 7.8's TWO next
+       links point at the index and BOTH need repointing —
+       scratch/l78_body_a.html holds the top one and build_78.py's TAIL the
+       bottom, the same pair every Module 7 lesson has had, and
+       check-curriculum.py has now caught that pair three lessons running.
+       8.1 OPENS MODULE 8, so docs/index.html's Module 8 badge goes from
+       `planned` to `wip`/"in progress" — the mirror of the edit 7.8 just made to
+       Module 7's. Check it with check-curriculum.py rather than by eye.
+       MODULE 7 CLOSED WITHOUT A REISSUE PASS, on purpose: conventions.html and
+       math-toolbox.html were updated WITH the lesson (§8i and §8d, each with its
+       TOC entry) rather than deferred to the boundary, which is 7.3's rule and
+       is the only version of §7's reissue requirement that has ever actually
+       happened. index.html was reissued — badge, meta, hero stats and the row.)
 
-      WHAT 7.8 INHERITS, AND MUST NOT RE-DERIVE:
-        - THE ASSET / PLAYHEAD SPLIT, twice proven now. A skeleton is shared and
-          a pose is not (7.6); a clip is shared and its cursor is not (7.7). A
-          SOUND is shared and its playback position is not, and the same sentence
-          settles where the mutable half lives. 5.5's asset_store already owns
-          the loading half.
-        - A LISTENER IS A TRANSFORM. ecs::camera and world_transform already give
-          a position and an orientation, and 3D audio needs exactly those — which
-          is the first time this course uses a placement for something that is
-          not drawing.
-        - AN ATTENUATION CURVE IS A LOSSY RECONSTRUCTION, so §9.3's rule applies
-          before a line is written: fit it with the function that will play it.
-        - THE FIXED STEP. 1.4's accumulator is what an audio mixer's buffer
-          deadline argues with, and 7.7's wrap_time finding (std::fmod is not
-          constant time; wrap the clock, do not accumulate it) applies verbatim
-          to a sound's own playhead.
+      WHAT 8.1 INHERITS, AND MUST NOT RE-DERIVE:
+        - 1.4's ACCUMULATOR, which was built for exactly this and has been
+          waiting eight modules. `fixed_step` already hands out a constant `h`;
+          8.1's whole subject is what to do with it, and the lesson should open
+          by pointing at code that already exists rather than by building a loop.
+        - THE HARNESS SHAPE. Nine sections, every one with a control, and the
+          control chosen by asking WHAT IT WOULD SAY IF THE THING WERE COMPLETELY
+          BROKEN. 7.8 added a second question to that: what would it say if the
+          thing were completely FINE? Its dropout counter answered "starved" on a
+          healthy run, and would have gone on doing so forever.
+        - `scratch/build_verify_NN.sh` REFUSES an unoptimised libengine.a. Copy
+          it; do not re-derive the 16.9x.
+        - A LESSON PAGE ENDS AT FURTHER READING. STATE.md is the sole resume key.
 
-      WHAT 7.8 IS LIKELY TO MOVE. A new directory, engine/include/engine/audio/
+      WHAT 8.1 IS LIKELY TO MOVE. A new directory, engine/include/engine/phys/
       — and if so, THE UMBRELLA LINT WILL FIRE at configure time, which is the
-      third new directory it has seen (anim/ in 7.6 was the first). engine/
-      CMakeLists.txt, demos/CMakeLists.txt for a new target, and asset/ if a
-      sound becomes a loadable asset. ⚠ VERIFY SDL3's audio API against the
-      headers before writing a line: SDL_OpenAudioDeviceStream,
-      SDL_PutAudioStreamData, SDL_AudioSpec and the callback signature are all
-      SDL3-shaped and none of them is SDL2's.
+      fifth new directory it has seen and the sixth catch in six lessons.
+      engine/CMakeLists.txt, and demos/CMakeLists.txt for a new target. It is
+      unlikely to touch anything under demo_scene.cpp's closure, but run
+      `python3 scratch/closure_77.py <paths...>` (rename and reuse) and let the
+      graph say so rather than assuming it.
 
-      THE GOLDEN IS PROBABLY NULL FOR 7.8 — audio touches nothing under
-      demo_scene.cpp — but run `python3 scratch/closure_77.py <paths...>`
-      (rename and reuse) and let the graph say so rather than assuming it.
-
-      CARRY FORWARD from 7.7:
-        - A BENCHMARK WITH TWO VARIABLES IN IT HAS NONE. §4.1's first table
-          varied the wrap period by changing the DRIVER'S STEP SIZE, so each
-          lookup on the "more wraps" row also crossed ten intervals instead of
-          one; it reported 43% for the wrong cause, confidently. Hold everything
-          but the one thing.
-        - AND FIXING ONE CONFOUND DOES NOT MEAN THERE WAS ONE. §9.4's timing was
-          wrong twice: an unbounded clock (std::fmod's quotient-dependence) AND a
-          cold-start CPU ramp of ~30% that best_of_three could not see past,
-          because all three attempts were inside it. verify_77 now SPINS FOR
-          150 ms before it measures anything. Two independent reasons for one
-          wrong number is the normal case.
-        - THE TELL WAS A RESULT THAT CONTRADICTED A SIMPLER FACT — a 301-key
-          track cannot be faster to search than a 31-key one. Neither confound
-          was found by suspecting the instrument; both were found by believing
-          arithmetic over a measurement.
-        - A LOSSY TRANSFORMATION MUST BE FITTED WITH ITS CONSUMER'S EXACT
-          RECONSTRUCTION. §9.3: a reduction fitted with slerp and played with
-          nlerp overshoots its half-degree budget 4.5x, and NOTHING reports it —
-          the reducer thinks it succeeded and the sampler thinks it is doing its
-          job. Generalises well past quaternions.
-        - ASK WHAT A CONTROL WOULD DO IF THE THING WERE COMPLETELY BROKEN, for
-          the third lesson running. An UNWARMED cursor of 0 is the RIGHT answer
-          on frame 0, so §A.3 jams every cursor at 9999 instead. 7.5's std::max
-          and 7.6's bind-pose normal were the first two.
-        - A QUANTITY WITH A FACTOR OF TWO IN IT NEEDS ITS UNIT SAID EVERY TIME,
-          AND A DOC COMMENT IS NOT EXEMPT. quat_nlerp's error table was in SPHERE
-          degrees and the sentence under it argued in ROTATION degrees; read as
-          written it claimed a 30 Hz clip's keys are 60 deg of rotation apart,
-          which is 1,800 deg/s. Both tables are in the header now, labelled.
-        - THE PER-CHANNEL LAYOUT LOSES UNTIL SOMETHING IS ELIDED. Worth keeping
-          as a shape rather than a number: an indirection that costs 30% up front
-          and pays 7.7x once the thing it enables is actually done. Measuring
-          only the first half would have condemned it.
+      CARRY FORWARD from 7.8:
+        - ENERGY ADDS, AMPLITUDES DO NOT, and this generalises straight into
+          Module 8: kinetic energy is the square of a velocity, so every
+          "combine two independent things" question in the solver has the same
+          shape as §5's sqrt(N). Whenever the quantity that adds is the square,
+          the thing you can see grows as the root.
+        - A PEAK IS NOT A BOUND. The peak of 16 uncorrelated voices kept growing
+          with the observation window — 6.98x at 10 ms, 10.46x at 8 s — because
+          it is the largest coincidence that happened rather than a property of
+          the signals. Physics has the identical trap: the worst-case penetration
+          depth in a stack is a statistic about how long you watched.
+        - A CONTROL THAT FIRES ON THE HEALTHY CASE IS NOT A CONTROL. `starved`
+          reported 28 of 58 on a mix at 0.2% load, because it measured SDL3's
+          pull model working. It was replaced by `late`, which compares the
+          subsystem's own time against its own deadline and needs nothing from
+          anybody else. Prefer counters computed entirely from quantities you
+          own.
+        - EVERY SAMPLED QUANTITY HAS A RECONSTRUCTION, AND CHOOSING IT BY
+          ACCIDENT CHOOSES THE WORST ONE. 7.7 found this in keyframes and thought
+          it was about animation; 7.8 found the same structure in a GAIN sampled
+          at 60 Hz and reconstructed at 48 kHz. Module 8's integrator IS a
+          reconstruction of a continuous trajectory from a sampled derivative,
+          which is the third instance and the one the rule was really about.
+        - REAL-TIME CODE YOU CANNOT CALL FROM A TEST IS UNDEBUGGABLE. Making
+          `mix_into` a pure function with a public offline entry point cost one
+          method and bought every number in the lesson. A physics `step()` that
+          can be driven from a harness with no window buys the same thing.
+        - THE RESUME KEY CARRIES THE SAME FACT IN THREE PLACES AND ONE OF THEM
+          WILL BE MISSED. 7.7 updated `capabilities:` and the file manifest and
+          not `completed:`, and nothing noticed for a whole lesson because check 8
+          watches FILENAMES. check 9 now watches lesson NUMBERS. Assume there is
+          a fourth place.
+        - AND A CHECK CAN BE BROKEN BY WRITING ABOUT IT. Check 8 anchored on the
+          bare string `docs/lessons/:`, so a `completed:` note that MENTIONED the
+          key moved the block it parsed a thousand lines up the file and it
+          reported all 82 pages missing. Anchored on the indented key now. Any
+          check that greps its own corpus has this failure mode.
         - THE SCRATCHPAD VANISHES BETWEEN TURNS. Playwright helpers live in
           scratch/tools/ and scratch/ is gitignored. PLAYWRIGHT IS NOT IN ANY
           SYSTEM PYTHON ON THIS MACHINE: run them with
           `uv run --with playwright python scratch/tools/<tool>.py ...`, and
           `uv run --with playwright playwright install chromium` once.
+          scratch/tools/figview78.sh is the pattern worth copying: it rebuilds
+          the SVGs AND reassembles the preview page, because the SVGs are inlined
+          into it and regenerating one alone changes nothing Playwright can see.

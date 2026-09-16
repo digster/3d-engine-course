@@ -93,6 +93,23 @@
 #include <engine/asset/asset_store.hpp>
 #include <engine/asset/search_path.hpp>
 
+// ---- Audio: the first subsystem with a thread of its own -------------------
+//
+// Lesson 7.8, and the lint fired again — on the whole DIRECTORY this time, three
+// headers at once, from somebody who had just read 7.6's note above about being
+// the first miss in the check's favour. **Six catches in five lessons.** The
+// shape of the miss was the same every time and is worth naming for the last
+// time: you write the header, the build compiles it, your harness links it and
+// passes, and there is no moment at which anything makes you open this file.
+//
+// `mixer.hpp` includes `sound.hpp` and `spatial.hpp`, so two of these three lines
+// are strictly redundant to the compiler and neither is redundant to the reader —
+// this file is a table of contents, and a table of contents that omits a chapter
+// because another chapter mentions it is not one.
+#include <engine/audio/mixer.hpp>
+#include <engine/audio/sound.hpp>
+#include <engine/audio/spatial.hpp>
+
 // ---- Entities: the ECS -----------------------------------------------------
 //
 // Note `ecs/pool.hpp` and `core/pool.hpp` are BOTH here and are two different

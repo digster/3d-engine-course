@@ -1041,6 +1041,28 @@ chore. What follows is on disk.
 │   │   │   │                 #   (the 4 SDL callbacks) — the engine keeps the loop
 │   │   │   └── main.hpp      # ENGINE_MAIN. ONE .cpp per program; no main() in it.
 │   │   │                     #   NOT in engine.hpp, deliberately
+│   │   ├── audio/          # THE FIRST SUBSYSTEM WHOSE OUTPUT YOU CANNOT     [7.8]
+│   │   │                   #   LOOK AT, and the first with a thread the engine
+│   │   │                   #   does not own. Three headers, ~1,000 lines.
+│   │   │   ├── sound.hpp     # sound (interleaved f32), wav_report, load_wav,
+│   │   │   │                 #   make_tone, make_noise, apply_fade, measure.
+│   │   │   │                 #   THE ASSET HALF of the split: immutable, shared,
+│   │   │   │                 #   and with no idea it is playing
+│   │   │   ├── spatial.hpp   # listener, listener_from, falloff (4 laws), emitter,
+│   │   │   │                 #   stereo_gain, spatial_result, attenuation, pan_of,
+│   │   │   │                 #   pan_constant_power/pan_linear, spatialise,
+│   │   │   │                 #   amplitude_to_db/db_to_amplitude. A LISTENER IS A
+│   │   │   │                 #   TRANSFORM — the first use of a placement for
+│   │   │   │                 #   something that is not drawing
+│   │   │   └── mixer.hpp     # voice (INCOMPLETE — phantom tag for voice_id),
+│   │   │                     #   mixer_config, voice_params, mixer_report, mixer.
+│   │   │                     #   THE ONLY public header that includes SDL_audio.h,
+│   │   │                     #   and it has no choice: SDL's callback is a member
+│   │   │                     #   and its declaration needs SDLCALL. mix_into() is
+│   │   │                     #   PUBLIC so that it can be measured, and
+│   │   │                     #   open_offline() builds the voice table with NO
+│   │   │                     #   DEVICE — which is what makes the real-time path
+│   │   │                     #   a pure function you can diff
 │   │   ├── anim/           # SKELETONS, THE SURFACES THEY BEND, AND THE
 │   │   │                   #   RECORDED MOTION THAT DRIVES THEM         [7.6-7.7]
 │   │   │   ├── clip.hpp      # keyframe<T>, joint_track, clip, track_cursor,   [7.7]
@@ -1169,7 +1191,20 @@ chore. What follows is on disk.
 │   │                             #   texture, a comparison sampler, its own
 │   │                             #   render pass, and fill_uniforms() so the two
 │   │                             #   renderers cannot disagree about a bias
-│   └── src/                # ---- PRIVATE. 54 sources; no demo can name this path ----
+│   └── src/                # ---- PRIVATE. 57 sources; no demo can name this path ----
+│       ├── audio/          # mixer.cpp, sound.cpp, spatial.cpp                [7.8]
+│       │                   #   THE FOURTH NEW DIRECTORY SINCE THE REFACTOR and
+│       │                   #   the first whose contents never touch a pixel. NOT
+│       │                   #   under asset/, although sound.cpp loads a file:
+│       │                   #   5.5 predicted this directory by name and predicted
+│       │                   #   the wrong home for it. The asset system FINDS,
+│       │                   #   CACHES and OWNS; decoding a WAV into floats is a
+│       │                   #   subsystem's own business, exactly as gfx/image.cpp
+│       │                   #   decodes a PNG and lives under gfx/.
+│       │                   #   mixer.cpp is the ONLY file in the library that
+│       │                   #   runs on a thread SDL owns: no allocation, no
+│       │                   #   logging, no unbounded wait, one mutex whose
+│       │                   #   compromise is written down rather than hidden
 │       ├── anim/           # clip.cpp [7.7], skeleton.cpp, skin.cpp          [7.6]
 │       │                   #   A NEW DIRECTORY, and the argument is asset/'s in
 │       │                   #   5.5 and ui/'s in 5.11: animation is not a
@@ -1223,6 +1258,15 @@ chore. What follows is on disk.
 │   │                       #   --shot runs 240 deterministic steps and prints four
 │   │                       #   numbers, which makes it a characterization test for
 │   │                       #   the ECS, the hierarchy and the pools               [5.12]
+│   ├── audio/main.cpp      # A LISTENER, THREE EMITTERS, AND A MAP OF WHY   [7.8]
+│   │                       #   IT SOUNDS LIKE THAT. The first demo here whose
+│   │                       #   OUTPUT IS NOT THE PICTURE: the map is an
+│   │                       #   explanation of a result that cannot be looked at.
+│   │                       #   Rings at 2/4/8/16/32 m from the listener, so each
+│   │                       #   one is a halving. --shot uses open_offline, so a
+│   │                       #   headless run opens NO DEVICE and is silent and
+│   │                       #   deterministic. No assets, no shaders, no .wav —
+│   │                       #   every sound is synthesised with make_tone
 │   ├── gimbal/main.cpp     # THREE RINGS AND A NUMBER. One aircraft, three hoops  [7.1]
 │   │                       #   whose planes contain their own pivot axles, and a
 │   │                       #   live |det J| beside them. [E] drives the weakest
@@ -2561,6 +2605,33 @@ Built roughly in dependency order — each module's milestone is the next module
   once, which SDL's own header states by calling pipelines "precalculated rendering state". Our
   `fill_style` already spans 96 combinations decided at runtime per pixel; a GPU compiles the one
   you asked for, and that is what a shader is.
+- **The real-time path is a pure function, and it is public** (Module 7, Lesson 7.8).
+  `audio::mixer::mix_into()` produces N frames into a caller's buffer and touches nothing else;
+  `open_offline()` builds the voice table with no device at all. That is not a testing hook bolted
+  on afterwards — it is the only thing that makes the subsystem legible. A real-time callback is
+  the worst place in a program to learn anything: you cannot breakpoint it without changing the
+  result, you cannot print from it, and its output is a pressure wave. Offline, the same code is a
+  function from a voice table to an array of floats, and an array of floats can be diffed, plotted
+  and asserted on. **Every number in Lesson 7.8 was produced on a machine that was never asked
+  whether it had speakers**, and `demos/audio --shot` uses the same entry point, so a screenshot is
+  silent and deterministic. The generalisation is the rule: *real-time code you cannot call from a
+  test is real-time code you cannot debug.*
+- **The audio thread reports by counting, never by logging** (Module 7, Lesson 7.8). Sixty-four
+  voices cost **29.76 µs of a 10,667 µs deadline** — 0.28% — so the thing that will cause a dropout
+  is never the mixing; it is anything *unbounded* on that thread. One log line costs 82 ns to
+  format and 1,022 ns to format, write and flush, and the second number is a **mean**: it is a
+  syscall, and a syscall has no upper bound. So `mixer_report` is eleven counters the audio thread
+  increments with relaxed atomics and the main thread reads without taking the lock. The one field
+  that *does* take the lock is `live_voices`, because it is a container's size rather than a
+  counter, and reading a size while another thread inserts is a race rather than a stale number.
+- **A counter that fires on the healthy case is not a counter** (Module 7, Lesson 7.8). The
+  mixer's first dropout proxy incremented when the device's queue was empty as the callback began,
+  which is the obvious reading and is wrong for SDL3's pull model — the callback is invoked
+  *because* the device wants more. It reported **28 of 58 buffers "starved"** on a mix at 0.2% load
+  with nothing wrong. It is now `queue_empty` and says what it observes; the question it was meant
+  to answer is `late`, which compares the mixer's own time against the mixer's own deadline and
+  needs nothing from the driver, so a healthy run prints zero. **Prefer counters computed entirely
+  from quantities you own.**
 - **Public API surface is a deliberate artifact,** not whatever headers happen to be reachable.
 
 ---

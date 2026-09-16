@@ -31,6 +31,7 @@ WHAT IT CHECKS
      index's order, and its <title> and .eyebrow carry its own id and module.
   7. Every href pointing inside docs/ resolves to a file that exists.
   8. STATE.md's `docs/lessons/:` manifest lists every published page.
+  9. STATE.md's `completed:` roll names every published lesson number.
 
 CHECK 8 WAS ADDED BY LESSON 7.4, AND STATE.md ASKED FOR IT BY NAME. That file's
 own note beside the list reads: "check-curriculum.py verifies the INDEX against
@@ -402,11 +403,21 @@ def check_state_manifest(report: "Report") -> None:
         return
 
     text = STATE.read_text(encoding="utf-8")
-    marker = "docs/lessons/:"
+
+    # ANCHORED ON THE INDENTED KEY, not on the bare string, and Lesson 7.8 is
+    # why. `text.find("docs/lessons/:")` matched a mention of the key in a
+    # `completed:` note a thousand lines above the manifest, so the block this
+    # walked was a paragraph of prose and the check reported all 82 published
+    # pages missing. Loud, and still the wrong failure for the wrong reason — a
+    # check that can be broken by writing about it is a check nobody can write
+    # about.
+    marker = "\n  docs/lessons/:"
     at = text.find(marker)
     if at < 0:
-        report.fail("STATE manifest", "no `docs/lessons/:` block found")
+        report.fail("STATE manifest", "no `  docs/lessons/:` block found")
         return
+    at += 1   # past the newline, so the slice starts at the key itself
+    marker = marker[1:]
 
     # The manifest is an indented block: take everything up to the next line
     # that starts a new top-level key at the same indentation. `docs/shared/:`
@@ -427,6 +438,53 @@ def check_state_manifest(report: "Report") -> None:
         )
     else:
         report.ok(f"STATE.md lists all {len(on_disk)} published pages")
+
+
+def check_state_completed(report: "Report") -> None:
+    """STATE.md's `completed:` list must name every lesson the index marks done.
+
+    CHECK 9 WAS ADDED BY LESSON 7.8, BECAUSE CHECK 8 WATCHED THE WRONG LIST.
+    STATE.md carries the same fact in three places — the `completed:` roll, the
+    `capabilities:` notes, and the `files:` manifest — and 7.7 landed in two of
+    them. Its page shipped, its capability entry was written, its filename went
+    into `docs/lessons/:`, and the `completed:` list simply never gained a line;
+    the module marker underneath still read "6 of 8". Check 8 passed the whole
+    time, because a manifest of FILENAMES cannot see a missing lesson NUMBER.
+
+    Which is the same structural failure this file was built for and the same one
+    the umbrella lint in engine/CMakeLists.txt was built for: two lists that must
+    agree, and nothing making them. A new conversation resuming from STATE.md
+    would have read "MODULE 7 IN PROGRESS: 6 of 8" and rewritten a published
+    lesson.
+    """
+    if not STATE.exists():
+        return   # check 8 has already reported this
+
+    text = STATE.read_text(encoding="utf-8")
+    at = text.find("\ncompleted:")
+    if at < 0:
+        report.fail("STATE completed", "no `completed:` block found")
+        return
+
+    tail = text[at + 1:]
+    end = re.search(r"\n[a-z_]+:", tail)
+    block = tail[: end.start()] if end else tail
+    listed = set(re.findall(r"^\s*-\s+(\d+\.\d+[a-z]?)\s", block, re.M))
+
+    published = set()
+    for path in sorted(LESSONS.glob("*.html")):
+        m = re.match(r"(\d\d)-(\d\d[a-z]?)-", path.name)
+        if m:
+            published.add(f"{int(m.group(1))}.{m.group(2).lstrip('0') or '0'}")
+
+    missing = sorted(published - listed, key=lambda v: [int(x) for x in v.split(".")[:1]] + [v])
+    if missing:
+        report.fail(
+            "STATE completed",
+            f"`completed:` is missing {len(missing)}: {', '.join(missing)}",
+        )
+    else:
+        report.ok(f"STATE.md's completed list names all {len(published)} lessons")
 
 
 def main() -> int:
@@ -450,6 +508,7 @@ def main() -> int:
     check_navigation(ordered, report)
     check_links(report)
     check_state_manifest(report)
+    check_state_completed(report)
 
     if report.failures:
         print(f"\n{len(report.failures)} problem(s):")

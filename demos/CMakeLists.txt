@@ -187,3 +187,22 @@ engine_set_warnings(rig)
 add_executable(plane plane/main.cpp)
 target_link_libraries(plane PRIVATE engine::engine)
 engine_set_warnings(plane)
+
+# ---- audio: a listener, three emitters, and a map --------------------------
+#
+# Lesson 7.8, and the first demo in this repository whose OUTPUT IS NOT THE
+# PICTURE. The map is an explanation: it shows where the sources are and what
+# gains fell out of that, so the numbers on the panel can be checked against
+# something. A demo for a subsystem you cannot look at has to be built the other
+# way round from every other one here.
+#
+# `engine::engine` directly and NOT `demo_common`, the same statement `gimbal`,
+# `rig`, `plane`, `collector` and `ecs_swarm` make. Every sound it plays it
+# synthesises with `make_tone`, so this target needs no assets and the repository
+# carries no .wav — which also means a `--shot` run is byte-for-byte reproducible
+# on any machine.
+#
+# No `engine_use_assets` and no `engine_use_shaders`.
+add_executable(audio audio/main.cpp)
+target_link_libraries(audio PRIVATE engine::engine)
+engine_set_warnings(audio)

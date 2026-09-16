@@ -103,6 +103,7 @@
       <li><a href="#performance">Reasoning about cost</a></li>
       <li><a href="#pipelining">Two processors, overlapped</a></li>
       <li><a href="#rotation">Parameterising a rotation</a></li>
+      <li><a href="#sound">Sound: energy, gain and distance</a></li>
       <li><a href="#coming">Coming as the course proceeds</a></li>
     </ol>
   </details>
@@ -3719,6 +3720,112 @@ The singular values are sqrt(1 + |sin p|), 1, sqrt(1 - |sin p|).</span>
       down the chain &mdash; hips untouched, hands and feet ruined. Blending the <em>poses</em>
       instead preserves every bone exactly, because a normalised quaternion blend is still a
       rotation. Measured against the formula: <code>4.768e&minus;07</code>.
+    </p>
+  </div>
+
+  <h2 id="sound"><span class="num">8d</span>Sound: energy, gain and distance</h2>
+
+  <p>
+    Lesson 7.8, and the whole section is one idea with four faces: <strong>energy adds, amplitudes
+    do not</strong>. Every card below is that sentence applied to a different quantity, and the
+    factor of two that keeps appearing in the exponents is always the same factor of two.
+  </p>
+
+  <div class="card">
+    <h3>Uncorrelated sums grow as &radic;N <span class="from">Lesson 7.8</span></h3>
+    <div class="eq">
+      \[ \mathbb{E}\big[(a+b)^2\big] = \mathbb{E}[a^2] + 2\,\mathbb{E}[ab] + \mathbb{E}[b^2]
+         \;\;\Rightarrow\;\; \mathrm{RMS}_N = \sqrt{N}\,\mathrm{RMS}_1 \]
+      <span class="eq-plain">For uncorrelated signals the cross term vanishes, so mean squares add and amplitude grows as the square root of the count.</span>
+    </div>
+    <p>
+      Sixteen footsteps are four times as loud, not sixteen. Measured over seven voice counts at
+      <strong>0.577&middot;&radic;N</strong>, with no fitting &mdash; and with a control mixing the
+      <em>same</em> voice N times, where the signals are perfectly correlated, the cross term does
+      not vanish, and the peak lands on <strong>N exactly</strong>.
+    </p>
+    <p>
+      <strong>The peak obeys neither.</strong> It is the largest coincidence that happened to occur
+      in the window you looked at, so it keeps growing with observation time &mdash; 6.98&times; at
+      ten milliseconds, <strong>10.46&times; at eight seconds</strong>, for the same sixteen voices.
+      Budget <code>1/&radic;N</code> and expect to be exceeded; <code>1/N</code> is a bound bought
+      with 12&nbsp;dB of signal.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>Constant-power panning <span class="from">Lesson 7.8</span></h3>
+    <div class="eq">
+      \[ L = \cos\theta, \quad R = \sin\theta, \quad \theta = \tfrac{\pi}{4}(p+1)
+         \;\;\Longrightarrow\;\; L^2 + R^2 = 1 \]
+      <span class="eq-plain">Parameterise the two gains on a circle and the power the pair delivers is one for every pan position.</span>
+    </div>
+    <p>
+      The obvious law &mdash; <code>L + R = 1</code> &mdash; is right at both ends and wrong in
+      between, because two speakers playing the same signal are <em>correlated</em> and what decides
+      loudness is <code>L&sup2; + R&sup2;</code>. At centre that is
+      <code>0.5&sup2; + 0.5&sup2; = 0.5</code>, which is <strong>&minus;3.01&nbsp;dB</strong>: a
+      hole in the middle of the image that a sound audibly falls into as it crosses. The circle law
+      puts <strong>0.7071</strong> in each channel instead, which is where audio&rsquo;s ubiquitous
+      <code>0.707</code> comes from &mdash; it is the amplitude that carries half the power.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>Inverse distance &mdash; the exponent is 1 <span class="from">Lesson 7.8</span></h3>
+    <div class="eq">
+      \[ I \propto \frac{1}{4\pi d^{2}}, \qquad p \propto \sqrt{I} \propto \frac{1}{d} \]
+      <span class="eq-plain">Energy spreads over a sphere so intensity falls as one over distance squared; a sample is a pressure, and pressure is the square root of intensity.</span>
+    </div>
+    <p>
+      The inverse-square law is correct and it is about the wrong quantity. What you multiply a
+      <em>sample</em> by falls as <code>1/d</code>, which is <strong>&minus;6.02&nbsp;dB per
+      doubling</strong>; using <code>1/d&sup2;</code> gives &minus;12.04 and sounds like every
+      source in the scene is at the bottom of a well. Same factor of two as the card below, and as
+      the pan card above.
+    </p>
+    <p>
+      The law also never ends, so it has to be made to: subtract its value at
+      <code>max_distance</code> and rescale, giving 1 at the reference distance and exactly 0 at the
+      maximum. Without that, a source cut off at 50&nbsp;m is silenced from
+      <strong>&minus;33.98&nbsp;dB</strong> &mdash; a step, and therefore a click.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>Decibels: twenty, not ten <span class="from">Lesson 7.8</span></h3>
+    <div class="eq">
+      \[ \mathrm{dB} = 10\log_{10}\!\frac{P}{P_0} = 20\log_{10}\!\frac{A}{A_0} \]
+      <span class="eq-plain">Decibels are defined on power; power goes as amplitude squared, and the square comes out of the logarithm as a factor of two.</span>
+    </div>
+    <p>
+      Two numbers worth memorising, because they settle most arguments:
+      <strong>halving an amplitude is &minus;6.02&nbsp;dB</strong>, and a tenth of the amplitude is
+      &minus;20&nbsp;dB. Note that the second is <em>not</em> a tenth as loud &mdash; loudness is
+      perceptual and closer to the cube root of intensity &mdash; which is why a mix is built in
+      decibels and not in gains.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>A discontinuity is broadband <span class="from">Lesson 7.8</span></h3>
+    <div class="eq">
+      \[ \Delta x[n] \;=\; \Delta g \cdot x[n] \]
+      <span class="eq-plain">Applying a gain change as a step injects a jump proportional to the change and to whatever the signal happened to be.</span>
+    </div>
+    <p>
+      The quantity that decides whether an audio error is audible is almost never the proportion of
+      samples affected &mdash; it is whether the affected ones are <em>discontinuous with their
+      neighbours</em>. A step contains energy at every frequency, which is what a click is. Measured
+      on a gain applied per buffer instead of per sample: a jump <strong>7.70&times;</strong> the
+      largest step the waveform itself ever takes, of which only <strong>1.2%</strong> sits at the
+      signal's own frequency.
+    </p>
+    <p>
+      The same arithmetic explains why 33 clipped samples out of 40,960 &mdash; 0.08% &mdash; is
+      audible, why a sound that starts on a peak clicks, and why a voice cut off mid-sample clicks.
+      <strong>Compare every injected step against the signal&rsquo;s own slope</strong>,
+      <code>A&middot;2&pi;f/f_s</code>, which is the only honest yardstick.
     </p>
   </div>
 

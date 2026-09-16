@@ -98,6 +98,7 @@
       <li><a href="#slerp">Interpolating rotations &mdash; which function, and when</a></li>
       <li><a href="#skinning">Skinning &mdash; the matrix, the weights, and the cosine</a></li>
       <li><a href="#clips">Clips &mdash; keyframes, sampling, looping and blending</a></li>
+      <li><a href="#audio">Audio &mdash; format, listener, panning and distance</a></li>
       <li><a href="#simulation">The simulation contract</a></li>
       <li><a href="#rotational">Rotational quantities &mdash; torque, spin, inertia</a></li>
       <li><a href="#colour">Colour and diagram conventions</a></li>
@@ -3177,6 +3178,130 @@
 
   <!-- ===================================================================== -->
 
+  <h2 id="audio"><span class="num">8i</span>Audio &mdash; format, listener, panning and distance</h2>
+
+  <p>
+    Lesson 7.8. Audio has more silently-wrong conventions per line of code than anything else in
+    this engine, because nothing on screen tells you when one is violated. Every rule below is
+    checked in <code>scratch/verify_78.cpp</code>, and the number beside it is measured.
+  </p>
+
+  <div class="tbl-scroll">
+    <table class="conv">
+      <thead><tr><th>Rule</th><th>Why, and what breaks without it</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>One runtime format: interleaved 32-bit float in [&minus;1,&nbsp;1], at the
+              device&rsquo;s rate.</strong> Conversion happens once, at load.</td>
+          <td>Float for headroom &mdash; a sum of things that each fit in [&minus;1,&nbsp;1] does
+              not, and in integers it has already wrapped. Interleaved because that is what the
+              device takes. One format because a mixer that handles five has five inner loops and
+              four of them are tested by nobody. Costs <strong>2.00&times;</strong> the file&rsquo;s
+              memory for 16-bit content.</td>
+        </tr>
+        <tr>
+          <td><strong>A <em>frame</em> is one sample per channel. Durations, buffer sizes and
+              cursors are all in frames.</strong></td>
+          <td>Confusing frames with samples is silent in mono, because the two are the same number.
+              The first stereo file then plays at double speed, half length, with the channels
+              scrambled &mdash; which reads as a corrupt file rather than as an off-by-two.</td>
+        </tr>
+        <tr>
+          <td><strong>Signed integer formats divide by 2<sup>bits&minus;1</sup>, never by
+              2<sup>bits&minus;1</sup>&minus;1.</strong> 16-bit divides by 32768.</td>
+          <td>&minus;32768 maps to exactly &minus;1.0 and +32767 to 0.99997. Dividing by 32767
+              instead puts &minus;full-scale at &minus;1.00003, outside the stated range, on a file
+              that did nothing wrong. Round-trip error measured at <strong>0.000e+00</strong>.</td>
+        </tr>
+        <tr>
+          <td><strong>A listener is a <code>transform</code>. <code>forward</code> is where
+              <strong>&minus;&zcaron;</strong> lands, <code>right</code> is where
+              <strong>+x&#x302;</strong> lands.</strong></td>
+          <td>&sect;2&rsquo;s world space, applied to something that is not drawing. Getting the
+              minus wrong gives a listener whose left and right are correct and who hears everything
+              behind them as in front &mdash; and with two speakers <em>you cannot hear the
+              mistake</em> until somebody adds a filter for sounds behind the head.</td>
+        </tr>
+        <tr>
+          <td><strong><code>pan</code> is <code>dot(direction_to_source, listener.right)</code>,
+              &minus;1 hard left to +1 hard right.</strong></td>
+          <td>Already the sine of the angle off the median plane, so no <code>atan2</code> and no
+              special cases: elevation folds to the centre for free, which is exactly where two
+              speakers can put it. Front and back give the same answer, which is the limit of a
+              stereo pair rather than a bug.</td>
+        </tr>
+        <tr>
+          <td><strong>Constant-power panning: <code>L = cos&theta;</code>,
+              <code>R = sin&theta;</code>, <code>&theta; = (pan+1)&pi;/4</code>.</strong>
+              Centre is <strong>0.7071</strong>, not 0.5.</td>
+          <td>Two speakers playing the same signal are correlated, so what decides loudness is
+              <code>L&sup2; + R&sup2;</code>. The linear law puts 0.5 there, which is
+              <strong>&minus;3.01&nbsp;dB</strong>, and a sound swept across the image audibly ducks
+              in the middle. Measured worst deviation over a full sweep: <strong>3.010&nbsp;dB
+              against 0.000&nbsp;dB</strong>.</td>
+        </tr>
+        <tr>
+          <td><strong>Distance attenuates amplitude as <code>1/d</code>, not
+              <code>1/d&sup2;</code>.</strong></td>
+          <td>Intensity falls as <code>1/d&sup2;</code> &mdash; that part is right &mdash; but a
+              sample is a <em>pressure</em>, and pressure is the square root of intensity. The
+              physical answer is <strong>&minus;6.02&nbsp;dB per doubling</strong>; the plausible
+              mistake gives <strong>&minus;12.04</strong>, and sounds like every source is at the
+              bottom of a well.</td>
+        </tr>
+        <tr>
+          <td><strong>A distance curve must reach zero at <code>max_distance</code>, not be cut off
+              there.</strong> Default <code>falloff::inverse_ranged</code>.</td>
+          <td>The bare inverse law is still at <strong>&minus;33.98&nbsp;dB</strong> at 50&nbsp;m
+              with a 1&nbsp;m reference &mdash; quiet, audible, and a step to silence is a click.
+              Rescaling costs 8.7&nbsp;dB of extra steepness at 32&nbsp;m, which is the price of a
+              curve that ends.</td>
+        </tr>
+        <tr>
+          <td><strong>Decibels are <code>20&nbsp;log&#8321;&#8320;(amplitude)</code>.</strong>
+              Halving an amplitude is <strong>&minus;6.02&nbsp;dB</strong>.</td>
+          <td>Twenty, not ten, for the same reason as the row above: dB is defined on power and
+              power goes as amplitude squared. <code>amplitude_to_db</code> floors at
+              &minus;120&nbsp;dB so that silence is a number a debug panel can print.</td>
+        </tr>
+        <tr>
+          <td><strong>Any per-frame gain change is RAMPED across the buffer, never assigned.</strong></td>
+          <td>The gain is sampled at 60&nbsp;Hz and reconstructed at 48&nbsp;kHz; a zero-order hold
+              injects <strong>0.100745 in one sample, 7.70&times;</strong> the waveform&rsquo;s own
+              largest step, of which <strong>98.8% is broadband</strong>. Lesson 7.7&rsquo;s rule
+              (&sect;8h) in a subsystem that had never heard of animation.</td>
+        </tr>
+        <tr>
+          <td><strong>The audio thread does not allocate, log, throw, or wait on anything
+              unbounded.</strong> It increments counters; the main thread reads them.</td>
+          <td>Sixty-four voices cost <strong>29.76&nbsp;&micro;s of a 10,667&nbsp;&micro;s
+              deadline</strong>, so the mixing is never what makes you late. One log line costs
+              1.02&nbsp;&micro;s <em>on average</em> and is a syscall, which has no upper bound at
+              all.</td>
+        </tr>
+        <tr>
+          <td><strong>A sound must outlive every voice reading it.</strong>
+              <code>stop_sound()</code> before releasing one.</td>
+          <td>The mixer holds a non-owning <code>const sound*</code>, because a refcount decrement on
+              the audio thread is a possible <code>free</code> on the audio thread. This is the one
+              failure in the subsystem that is undefined behaviour rather than a counter.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note">
+    <p>
+      <strong>Two numbers to keep in your head, because they settle most arguments.</strong>
+      <strong>0.7071</strong> is the gain that puts half the <em>power</em> in each of two speakers,
+      and <strong>&minus;6&nbsp;dB</strong> is both a halving of amplitude and a doubling of
+      distance. Almost every convention above is one of those two facts wearing a different hat, and
+      both come from the same place: energy adds, amplitudes do not.
+    </p>
+  </div>
+
+  <!-- ===================================================================== -->
+
   <h2 id="simulation"><span class="num">9</span>The simulation contract</h2>
 
   <p>
@@ -3469,6 +3594,16 @@
         <tr><td>Sampler create-info</td><td><code>min_filter</code> and <code>mag_filter</code> <strong>separately</strong>, <code>address_mode_u/_v/_w</code>, mipmap mode and LOD clamps, anisotropy, and <code>enable_compare</code> + <code>compare_op</code> for shadow sampling</td><td><code>SDL3/SDL_gpu.h</code></td></tr>
         <tr><td>Texture + sampler binding</td><td><code>SDL_BindGPUFragmentSamplers(pass, first_slot, bindings, count)</code> with <code>SDL_GPUTextureSamplerBinding { texture, sampler }</code></td><td><code>SDL3/SDL_gpu.h</code></td></tr>
         <tr><td>Register spaces, per stage</td><td>vertex: t/s <code>space0</code>, cbuffer <code>space1</code>. fragment: t/s <code>space2</code>, cbuffer <code>space3</code>. Storage buffers share space0/space2 <em>after</em> sampled and storage textures.</td><td><code>SDL3/SDL_gpu.h</code>, <code>SDL_CreateGPUShader</code></td></tr>
+        <tr><td>Audio spec</td><td><code>SDL_AudioSpec { SDL_AudioFormat format; int channels; int freq; }</code> — <strong>three fields, and no buffer size</strong> (an SDL2 → SDL3 change: <code>samples</code>, <code>silence</code>, <code>callback</code> and <code>userdata</code> are all gone)</td><td><code>SDL3/SDL_audio.h</code></td></tr>
+        <tr><td>Default playback device</td><td><code>SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK</code> = <code>0xFFFFFFFFu</code> (recording is <code>0xFFFFFFFEu</code>)</td><td><code>SDL3/SDL_audio.h</code></td></tr>
+        <tr><td>Opening a stream</td><td><code>SDL_OpenAudioDeviceStream(SDL_AudioDeviceID devid, const SDL_AudioSpec *spec, SDL_AudioStreamCallback callback, void *userdata)</code></td><td><code>SDL3/SDL_audio.h</code></td></tr>
+        <tr><td>Stream starts <strong>PAUSED</strong></td><td><code>SDL_ResumeAudioStreamDevice(stream)</code> is required; SDL2 started a device on open. <strong>Its absence is a program that is silent with every counter at zero.</strong></td><td>SDL3 wiki, <code>SDL_OpenAudioDeviceStream</code></td></tr>
+        <tr><td>Callback signature</td><td><code>void SDLCALL (*)(void *userdata, SDL_AudioStream *stream, int additional_amount, int total_amount)</code> — both amounts in <strong>BYTES</strong>, not frames</td><td><code>SDL3/SDL_audio.h</code></td></tr>
+        <tr><td>Feeding a stream</td><td><code>SDL_PutAudioStreamData(stream, buf, len)</code>, <code>len</code> in bytes; returns <code>bool</code></td><td><code>SDL3/SDL_audio.h</code></td></tr>
+        <tr><td>Queue depth</td><td><code>SDL_GetAudioStreamQueued(stream)</code> → bytes still to be consumed. <strong>Zero at callback entry is the NORMAL state</strong> in the pull model, not an underrun (measured: 28 of 58 buffers on a healthy run)</td><td>Lesson 7.8 §9.5</td></tr>
+        <tr><td>Loading a WAV</td><td><code>SDL_LoadWAV(path, &amp;spec, &amp;buf, &amp;len)</code> returns <code>bool</code>; the buffer is freed with <code>SDL_free</code>. <strong>Needs no audio subsystem</strong> — it parses a file and touches no device</td><td><code>SDL3/SDL_audio.h</code></td></tr>
+        <tr><td>Format predicates</td><td><code>SDL_AUDIO_BITSIZE</code>, <code>SDL_AUDIO_BYTESIZE</code>, <code>SDL_AUDIO_ISFLOAT</code>, <code>SDL_AUDIO_ISSIGNED</code>, <code>SDL_AUDIO_ISBIGENDIAN</code> — macros on the format word</td><td><code>SDL3/SDL_audio.h</code></td></tr>
+        <tr><td>Subsystem refcount</td><td><code>SDL_InitSubSystem(SDL_INIT_AUDIO)</code> / <code>SDL_QuitSubSystem</code> are refcounted, so a mixer may initialise audio itself regardless of what <code>app_config::extra_subsystems</code> already asked for</td><td><code>SDL3/SDL_init.h</code></td></tr>
       </tbody>
     </table>
   </div>

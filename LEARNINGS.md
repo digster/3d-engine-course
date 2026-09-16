@@ -8252,3 +8252,69 @@ rotation apart, which is 1,800°/s and nothing a limb does.
 A quantity with a factor of two in it needs its unit stated every single time it appears, including
 in prose, including in a comment, including when the surrounding paragraph "obviously" means the
 other one.
+
+## A control that fires on the healthy case is not a control
+
+Lesson 7.8's mixer shipped a dropout counter that incremented when the audio device's queue was
+empty as the callback began. The reasoning is the obvious one — an empty queue means the device has
+already consumed everything we gave it — and it is wrong for SDL3's pull model, where the callback
+is invoked *because* the device wants more. On a mix using **0.2% of its budget**, with nothing
+audibly or measurably wrong, it reported **28 of 58 buffers starved**.
+
+The danger is not that it was wrong; it is that it was wrong in the direction of *always firing*. A
+counter that reads non-zero on every healthy run is a counter nobody looks at, and on the day a real
+dropout happens it has nothing new to say. The replacement is `late`, which compares the mixer's own
+elapsed time against the mixer's own deadline: it needs nothing from the driver, it is true on every
+platform, and a healthy run prints zero.
+
+Two rules come out of it. **Prefer a counter computed entirely from quantities you own** — anything
+you have to ask another layer for encodes that layer's model, and you may have the model wrong. And
+**check a new instrument against the healthy case before you trust it on the sick one**: 7.6's rule
+was to ask what a control would say if the thing were completely broken, and this is the other half
+of the same question.
+
+## Real-time code you cannot call from a test is code you cannot debug
+
+An audio callback is the worst place in a program to learn anything. You cannot breakpoint it
+without changing the result — the device keeps consuming and the thing you were investigating is
+replaced by the sound of having stopped. You cannot print from it, because that is a syscall. And
+its output is a pressure wave.
+
+Making `mixer::mix_into()` **public**, and adding an `open_offline()` that builds the voice table
+with no device at all, cost one extra method. What it bought was every number in Lesson 7.8: with no
+device, the real-time path is a pure function from a voice table to an array of floats, and an array
+of floats can be diffed, plotted, subtracted and asserted on. The whole nine-section harness runs on
+a machine with no sound card, and the demo's `--shot` uses the same entry point, so a screenshot is
+silent and deterministic.
+
+The generalisation is not about audio. Any subsystem that runs on a clock you do not control — a
+job-system worker, a network tick, a physics step driven by a fixed accumulator — should expose the
+thing it *computes* separately from the thing that *schedules* it.
+
+## A check that greps its own corpus can be broken by writing about it
+
+`check-curriculum.py`'s STATE-manifest check found its block with
+`text.find("docs/lessons/:")`. Lesson 7.8 added a note to `STATE.md`'s `completed:` roll that
+*mentioned* that key in prose — a thousand lines above the real manifest — and the check began
+parsing a paragraph instead of a list, reporting all 82 published pages missing.
+
+Loud, and still the wrong failure for the wrong reason. It is now anchored on `"\n  docs/lessons/:"`,
+the indented key rather than the bare string. Any check that searches the corpus it lives in has this
+shape, and the fix is always the same: **match on the structure, not on the word**.
+
+## The same fact in three places, and one of them will be missed
+
+`STATE.md` records each lesson in three separate places: the `completed:` roll, a `capabilities:`
+entry, and the `files:` manifest. Lesson 7.7 landed in two of them. Its page shipped, its capability
+notes were written, its filename went into the manifest — and the `completed:` list never gained a
+line, so that roll and the module marker under it still said "6 of 8" while the index, the navigation
+chain and the file manifest all said otherwise.
+
+Nothing caught it for a whole lesson, because the existing check watched a list of **filenames** and
+could not see a missing lesson **number**. A new conversation resuming from `STATE.md` — which is
+the file's entire job — would have been told to write 7.7 again.
+
+`check_state_completed` is now check 9. The transferable part is the diagnosis rather than the fix:
+when one fact is recorded in *n* places, the probability that all *n* are updated is not high, and
+"be careful" has never once been the answer in this repository. Count the places, then write the
+check that compares them.

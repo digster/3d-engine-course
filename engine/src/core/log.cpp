@@ -27,6 +27,13 @@ constexpr named_category k_categories[] = {
     {"gfx",      log_gfx},
     {"gpu",      log_gpu},
     {"asset",    log_asset},
+    // Lesson 7.8. Added here and in the enum in the same edit — which the
+    // `static_assert` below makes compulsory rather than polite: adding the
+    // enumerator alone fails the build with "every log_category needs a name".
+    // That is the third check in this repository written to catch a two-file
+    // change made in one file, after 5.12's umbrella lint and 7.7's builder pins,
+    // and it is the only one of the three that costs nothing at all at runtime.
+    {"audio",    log_audio},
 };
 
 static_assert(std::size(k_categories) == static_cast<std::size_t>(log_category_count)

@@ -42,6 +42,20 @@ add_library(engine STATIC
     # home a joke six lessons before it is written.
     src/asset/asset_store.cpp
     src/asset/search_path.cpp
+    # Lesson 7.8. The fourth new directory since the refactor, and the first
+    # whose contents never touch a pixel. `sound.cpp` is a loader and a
+    # resampler, `spatial.cpp` is a distance curve and a pan law, and `mixer.cpp`
+    # is the only file in this library that runs on a thread SDL owns.
+    #
+    # NOT under `asset/`, although one of the three loads files — 5.5 predicted
+    # this directory by name ("it loads meshes, images, and in Module 7 sounds")
+    # and predicted the wrong home for it. The asset system's job is finding,
+    # caching and owning; decoding a WAV into floats is what a subsystem does for
+    # its own format, exactly as `gfx/image.cpp` decodes a PNG and lives under
+    # gfx/.
+    src/audio/mixer.cpp
+    src/audio/sound.cpp
+    src/audio/spatial.cpp
     # Lesson 5.10. The action layer has a source file where the ECS did not,
     # and the reason is that it has real per-frame work to do: `update()` walks
     # the binding table and derives every action's level and edges. A header-only

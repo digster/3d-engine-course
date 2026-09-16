@@ -2799,3 +2799,13 @@ next
 ```
 next
 ```
+
+---
+
+## Session — 2026-09-16
+
+```
+next
+```
+
+(Lesson 7.8 — SDL3 Audio: Streams, Mixing, and 3D Sound. Closes Module 7.)
