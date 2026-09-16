@@ -155,7 +155,17 @@ def run_one(builder: str, show_diff: bool, figures: bool = False) -> tuple[str, 
         with open(shipped, encoding="utf-8") as fh:
             want = fh.read()
         if got == want:
-            return "ok", f"{len(want):,} bytes"
+            # BYTES, not characters, which is `build_74.py`'s note arriving in
+            # the checker. `want` was read with `encoding="utf-8"`, so `len()`
+            # counts code points; these pages are full of × − ° ₁ and the number
+            # came out several thousand short of `wc -c` and of what every
+            # builder's own main() prints for the same file (8.1: 431,138
+            # against 432,701). Nothing consumes the figure — the verdict is the
+            # `got == want` above, which is exact and untouched — but a checker
+            # and the thing it checks should not disagree about how big a file
+            # is, because the first person to notice will assume the comparison
+            # is as loose as the label.
+            return "ok", f"{len(want.encode('utf-8')):,} bytes"
 
         got_lines, want_lines = got.splitlines(True), want.splitlines(True)
         changed = sum(1 for ln in difflib.unified_diff(want_lines, got_lines, n=0)
