@@ -54,6 +54,7 @@
 // cannot survive it, nothing built on top of it can.
 #pragma once
 
+#include <engine/math/quat.hpp>
 #include <engine/math/vec3.hpp>
 
 namespace engine::phys
@@ -299,5 +300,126 @@ void apply_drag(motion& m, float k, float h);
 /// compares the area it comes out with against this prediction. A claim about a
 /// determinant that is never evaluated is a claim you are asking to be believed.
 [[nodiscard]] float area_factor(integrator rule, float omega, float h);
+
+// ---- Advancing an ORIENTATION ----------------------------------------------
+//
+// Lesson 8.3. Everything above this line integrates a vector: a position moves
+// by `v*h` because positions live in a vector space and adding a displacement to
+// one is the definition of moving it. An orientation does not live in a vector
+// space, and that single sentence is the whole reason this section exists rather
+// than a fourth line in `integrate`.
+//
+// Angular velocity `omega` is a vector — a direction (the axis) and a magnitude
+// (radians per second) — so it *looks* as though a rotation ought to advance by
+// `omega*h` the way a position advances by `v*h`. It does not, and the failure
+// is not an approximation that gets better with smaller `h`. Rotations do not
+// commute, so "the total rotation" is not the sum of the small ones; there is no
+// vector whose derivative is the angular velocity, and 8.3 §7 measures the
+// discrepancy rather than asserting it.
+//
+// What IS true is that `q` itself has a derivative, and it is a product:
+//
+//     q'(t) = (1/2) * omega_pure * q(t)          omega_pure = quat{0, omega}
+//
+// Derived in 8.3 §7 from nothing more than Lesson 7.4's `q = (cos(theta/2),
+// sin(theta/2)*n)` and a first-order expansion of a small rotation. The `1/2` is
+// the same half-angle that has been in every quaternion since 7.3, arriving here
+// as a factor in a derivative.
+//
+// Two ways to use that, and they are genuinely different animals.
+
+/// How an orientation is advanced through one step.
+enum class spin_rule : int
+{
+    /// `q + (h/2)*omega_pure*q`, renormalised. One quaternion product, one add
+    /// and one normalise — no trigonometry at all.
+    ///
+    /// It is the derivative above, taken literally, and it is what most engines
+    /// ship. It is **first order in the angle**: after renormalising, the
+    /// rotation it actually performs is `2*atan(|omega|*h/2)` rather than
+    /// `|omega|*h`, which is short by a relative `(|omega|*h)^2/12`. At 60 Hz and
+    /// 10 rad/s that is 0.23% per step, and it is a LAG rather than a drift —
+    /// 8.3 §7 predicts the number before measuring it.
+    ///
+    /// The renormalisation is not optional. Before it, the length of the result
+    /// is `sqrt(1 + (|omega|*h/2)^2)`, which is greater than one for every
+    /// nonzero spin — the quaternion inflates by `(|omega|*h)^2/8` EVERY STEP,
+    /// 0.35% at the same numbers, compounding to 23% in one second.
+    linearised,
+
+    /// `quat_from_axis_angle(omega/|omega|, |omega|*h) * q`.
+    ///
+    /// The **exponential map**: build the exact delta rotation and compose it.
+    /// For a constant `omega` this is not an approximation at all — it is the
+    /// closed-form answer, to the last bit the floats can hold — and it needs no
+    /// renormalisation, because a unit quaternion times a unit quaternion is a
+    /// unit quaternion (to rounding).
+    ///
+    /// It costs a `sqrt` and a `sin`/`cos` pair per body per step. Whether that
+    /// is worth paying is a measurement, not an opinion, and 8.3 §12 takes it.
+    exponential,
+};
+
+[[nodiscard]] constexpr const char* name_of(spin_rule rule)
+{
+    switch (rule)
+    {
+    case spin_rule::linearised:  return "linearised";
+    case spin_rule::exponential: return "exponential";
+    }
+    return "?";
+}
+
+/// Below this angular speed the exponential map falls back to the linearised
+/// form, because `omega/|omega|` is a divide by something on its way to zero.
+///
+/// The fallback is exact enough that the seam is invisible: at `|omega| = 1e-6`
+/// rad/s a step of 1/60 s turns the body by 1.7e-8 radians, where the two rules
+/// differ in the eleventh significant figure — far below a float's eighth.
+inline constexpr float k_spin_epsilon = 1e-6f;
+
+/// Advance `q` by an angular velocity `omega` (radians per second, in the same
+/// space `q` maps *out of*) for `h` seconds.
+///
+/// **`omega` is a WORLD-space vector here**, which is why it multiplies `q` from
+/// the LEFT. Lesson 7.4 fixed the convention that `a*b` applies `b` first, so a
+/// delta rotation expressed in world axes is the outer one. A body-space angular
+/// velocity would multiply from the right instead — the same arithmetic, the
+/// other side, and the silent-wrong-answer that follows from mixing them up is
+/// 8.3 §7's second pitfall.
+[[nodiscard]] inline quat advance_orientation(quat q, vec3 omega, float h, spin_rule rule)
+{
+    const float speed = length(omega);
+    if (speed <= 0.0f) { return q; }
+
+    if (rule == spin_rule::exponential && speed > k_spin_epsilon)
+    {
+        // The exact delta rotation: turn by |omega|*h about the axis omega
+        // points along. `quat_from_axis_angle` wants a unit axis, and `speed` is
+        // the divide we already have.
+        const quat delta = quat_from_axis_angle(omega / speed, speed * h);
+        return normalised(delta * q);
+    }
+
+    // The derivative, taken literally. `quat::pure(omega)*q` is the product the
+    // formula above names; the `0.5f*h` is the step.
+    const quat rate = quat::pure(omega) * q;
+    return normalised(quat{q.w + rate.w * (0.5f * h), q.v + rate.v * (0.5f * h)});
+}
+
+/// The factor by which one linearised step multiplies a unit quaternion's length
+/// **before** renormalisation: `sqrt(1 + (|omega|*h/2)^2)`.
+///
+/// Available as a function for the same reason `area_factor` is: 8.3 §7 measures
+/// the inflation and compares it against this, and a prediction that is never
+/// evaluated is a claim you are asking somebody to take on trust.
+[[nodiscard]] float spin_inflation(float omega_magnitude, float h);
+
+/// The relative angle error of one linearised step: the rotation it actually
+/// performs, divided by the one it was asked for, minus one.
+///
+/// Negative — the linearised rule always turns slightly LESS far than asked,
+/// because `2*atan(x) < 2*x`. Approximately `-(|omega|*h)^2/12`.
+[[nodiscard]] float spin_angle_error(float omega_magnitude, float h);
 
 } // namespace engine::phys

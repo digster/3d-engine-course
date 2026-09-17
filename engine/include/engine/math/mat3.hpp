@@ -229,6 +229,172 @@ struct mat3
             {c20 * inv, c21 * inv, c22 * inv}};
 }
 
+// ---- A matrix as a QUANTITY, not a transformation -----------------------------
+//
+// Lesson 8.3, and the block below is the first thing in this file that is not
+// about moving space around.
+//
+// For eighty lessons a `mat3` has been one thing: "where do the basis vectors
+// land". Under that reading the operators below are meaningless — the sum of two
+// rotations is not a rotation, half a shear is not half as sheared in any useful
+// sense, and nothing in the renderer ever wanted either. That is exactly why
+// they were never written.
+//
+// An INERTIA TENSOR is a mat3 under a different reading. It is not a map from
+// vectors to vectors that happens to be useful; it is a *quantity* — the way a
+// body's mass is spread out around its centre — which turns out to need nine
+// numbers rather than one, and which is USED as a map (it takes an angular
+// velocity to an angular momentum) only because that is what its nine numbers
+// mean. Quantities add. Two lumps of matter bolted together have the sum of
+// their tensors about a common point, for the same reason two lumps have the sum
+// of their masses, and Lesson 8.3 §5 builds a compound body by doing exactly
+// that.
+//
+// So `mat3` grows three arithmetic operators and one product, and the reason the
+// arithmetic arrives eighty lessons late is not oversight. It is that until
+// today there was nothing in this engine a matrix could be the *amount* of.
+
+/// Element-wise sum. Meaningful for tensors; meaningless for transformations.
+[[nodiscard]] constexpr mat3 operator+(const mat3& a, const mat3& b)
+{
+    return {a.c0 + b.c0, a.c1 + b.c1, a.c2 + b.c2};
+}
+
+/// Element-wise difference — the parallel-axis theorem runs in this direction
+/// when it carries a tensor *back* to the centre of mass (8.3 §5).
+[[nodiscard]] constexpr mat3 operator-(const mat3& a, const mat3& b)
+{
+    return {a.c0 - b.c0, a.c1 - b.c1, a.c2 - b.c2};
+}
+
+/// Negation, which is the difference from zero and is written out so that
+/// `-outer(r, r)` reads the way the derivation does.
+[[nodiscard]] constexpr mat3 operator-(const mat3& m)
+{
+    return {-m.c0, -m.c1, -m.c2};
+}
+
+[[nodiscard]] constexpr mat3 operator*(const mat3& m, float s)
+{
+    return {m.c0 * s, m.c1 * s, m.c2 * s};
+}
+
+[[nodiscard]] constexpr mat3 operator*(float s, const mat3& m) { return m * s; }
+
+constexpr mat3& operator+=(mat3& a, const mat3& b)
+{
+    a.c0 += b.c0;
+    a.c1 += b.c1;
+    a.c2 += b.c2;
+    return a;
+}
+
+constexpr mat3& operator-=(mat3& a, const mat3& b)
+{
+    a.c0 -= b.c0;
+    a.c1 -= b.c1;
+    a.c2 -= b.c2;
+    return a;
+}
+
+constexpr mat3& operator*=(mat3& m, float s)
+{
+    m.c0 *= s;
+    m.c1 *= s;
+    m.c2 *= s;
+    return m;
+}
+
+/// The **outer product** `a ⊗ b`: the matrix whose action is `v ↦ a (b · v)`.
+///
+/// The dot product of two vectors is a number. The outer product is the other
+/// thing you can do with a pair of vectors, and it is a matrix — which sounds
+/// like trivia until you meet the one place in this engine that needs it.
+///
+/// Read the definition rather than the formula. `(a ⊗ b) v` measures how much of
+/// `v` lies along `b` (that is the dot product) and hands back that much of `a`.
+/// Two consequences follow immediately and are worth having in your hands before
+/// Lesson 8.3 §4 uses them:
+///
+///   * **Its rank is one.** Every output is a multiple of `a`, so the whole of
+///     space is squashed onto a single line. Its determinant is therefore zero
+///     and it has no inverse. An outer product is never a transformation you
+///     would want; it is always a *term* in something else.
+///   * **`a ⊗ a` is the projection onto `a`, times `|a|²`.** So
+///     `|r|²·1 − r ⊗ r` — the expression at the centre of the inertia tensor —
+///     is "keep everything, then remove the part along `r`", scaled by `|r|²`.
+///     It annihilates `r` itself and leaves anything perpendicular to `r`
+///     multiplied by `|r|²`, which is precisely the statement that a point mass
+///     resists being spun about an axis through itself not at all, and about a
+///     perpendicular axis by `m r²`.
+///
+/// Columns, as always, are the images of the basis vectors: `(a ⊗ b) x̂` keeps
+/// `b.x` of `a`.
+[[nodiscard]] constexpr mat3 outer(vec3 a, vec3 b)
+{
+    return {a * b.x, a * b.y, a * b.z};
+}
+
+/// The **cross-product matrix** `[w]ₓ`, whose action is `v ↦ w × v`.
+///
+/// Lesson 3.4's cross product, written as a matrix so it can be composed with
+/// other matrices instead of only applied to vectors. Two uses, one in this
+/// lesson and one waiting:
+///
+///   * 8.3 §4 checks its own derivation with the identity
+///     `−[r]ₓ[r]ₓ = |r|²·1 − r ⊗ r`, which is the inertia tensor's integrand
+///     arriving by a completely different route. Two expressions built from
+///     different operators agreeing to the bit is worth more than either one
+///     re-read carefully.
+///   * 8.9's contact Jacobian is written in terms of `[r]ₓ`, because the
+///     velocity of a point on a body is `v + ω × r` and that `×` has to become
+///     a matrix before it can be a row of anything.
+///
+/// It is **antisymmetric**: `transpose(skew(w)) == -skew(w)`, which is the matrix
+/// way of saying `w × v = −v × w`, and its diagonal is therefore zero.
+[[nodiscard]] constexpr mat3 skew(vec3 w)
+{
+    return {{0.0f, w.z, -w.y},      // image of x̂ is w × x̂
+            {-w.z, 0.0f, w.x},      // image of ŷ is w × ŷ
+            {w.y, -w.x, 0.0f}};     // image of ẑ is w × ẑ
+}
+
+/// The sum of the diagonal.
+///
+/// For an inertia tensor this is not decoration: `trace(I) = 2 Σ m|r|²`, which is
+/// twice the body's mass-weighted mean-square radius and is **invariant under any
+/// rotation of the axes**. 8.3 §6 uses it as the cheapest possible check that a
+/// basis change `R I Rᵀ` moved a tensor without changing what it is.
+[[nodiscard]] constexpr float trace(const mat3& m)
+{
+    return m.c0.x + m.c1.y + m.c2.z;
+}
+
+/// A diagonal matrix from a vector of diagonal entries.
+///
+/// Numerically identical to `scale(d.x, d.y, d.z)` and deliberately a separate
+/// name: a diagonal inertia tensor is not a scale, it is a body whose principal
+/// axes happen to be the coordinate axes, and code that reads
+/// `diagonal(moments)` says which of the two it meant.
+[[nodiscard]] constexpr mat3 diagonal(vec3 d)
+{
+    return {{d.x, 0.0f, 0.0f}, {0.0f, d.y, 0.0f}, {0.0f, 0.0f, d.z}};
+}
+
+/// The largest absolute difference between `m` and its own transpose.
+///
+/// Zero exactly when `m` is symmetric. An inertia tensor is symmetric by
+/// construction — `|r|²·1 − r ⊗ r` is, and sums of symmetric matrices are — so
+/// any nonzero value here is arithmetic error or a bug, and 8.3's harness prints
+/// it beside every tensor it builds.
+[[nodiscard]] inline float asymmetry(const mat3& m)
+{
+    const float d0 = std::fabs(m.c1.x - m.c0.y);   // (0,1) against (1,0)
+    const float d1 = std::fabs(m.c2.x - m.c0.z);   // (0,2) against (2,0)
+    const float d2 = std::fabs(m.c2.y - m.c1.z);   // (1,2) against (2,1)
+    return (d0 > d1) ? ((d0 > d2) ? d0 : d2) : ((d1 > d2) ? d1 : d2);
+}
+
 // ---- Comparison ---------------------------------------------------------------
 
 [[nodiscard]] constexpr bool operator==(const mat3& a, const mat3& b)

@@ -22,6 +22,18 @@
 namespace engine::phys
 {
 
+const char* name_of(gyroscopic_mode mode)
+{
+    switch (mode)
+    {
+    case gyroscopic_mode::off:           return "off";
+    case gyroscopic_mode::explicit_term: return "explicit";
+    case gyroscopic_mode::implicit_term: return "implicit";
+    case gyroscopic_mode::momentum:      return "momentum";
+    }
+    return "?";
+}
+
 const char* name_of(body_kind kind)
 {
     switch (kind)
@@ -118,6 +130,172 @@ void add_acceleration(rigid_body& b, vec3 metres_per_second_squared)
 void clear_force(rigid_body& b)
 {
     b.force = vec3{};
+}
+
+// ---- Torque (Lesson 8.3) ---------------------------------------------------
+
+void add_torque(rigid_body& b, vec3 newton_metres)
+{
+    b.torque += newton_metres;
+}
+
+void add_force_at(rigid_body& b, vec3 newtons, vec3 world_point)
+{
+    // Both accumulators, one call. The lever arm is measured from the centre of
+    // mass, which for this engine is the body's position — see the header note
+    // on `add_force_at` for why there is no separate centre-of-mass offset.
+    b.force += newtons;
+    b.torque += cross(world_point - b.state.position, newtons);
+}
+
+void add_impulse_at(rigid_body& b, vec3 newton_seconds, vec3 world_point)
+{
+    b.state.velocity += newton_seconds * b.inv_mass;
+
+    const vec3 arm = world_point - b.state.position;
+    b.angular_velocity += world_inv_inertia(b) * cross(arm, newton_seconds);
+}
+
+void add_angular_impulse(rigid_body& b, vec3 newton_metre_seconds)
+{
+    b.angular_velocity += world_inv_inertia(b) * newton_metre_seconds;
+}
+
+void clear_torque(rigid_body& b)
+{
+    b.torque = vec3{};
+}
+
+// ---- Inertia (Lesson 8.3) --------------------------------------------------
+
+bool set_inertia(rigid_body& b, const mat3& body_inertia)
+{
+    const inertia_report r = inspect_inertia(body_inertia);
+    if (!r.usable)
+    {
+        // The same shape of refusal as `set_mass`, and it goes to `log_core` for
+        // the same reason: this is a programmer error, not a condition anybody
+        // would want a per-subsystem switch for. 7.8's rule for a log category
+        // is "would somebody want to turn exactly this off", and nobody wants to
+        // turn off the line that tells them their crate cannot exist.
+        ENGINE_LOG_WARN(log_core,
+                        "set_inertia: rejected tensor (diag %f %f %f, asym %f, "
+                        "positive %d, triangle %d); body unchanged",
+                        static_cast<double>(r.diagonal.x),
+                        static_cast<double>(r.diagonal.y),
+                        static_cast<double>(r.diagonal.z),
+                        static_cast<double>(r.asymmetry),
+                        r.positive ? 1 : 0, r.triangle ? 1 : 0);
+        return false;
+    }
+
+    // BOTH, always, and this is the only function that writes either. See the
+    // note on `rigid_body::inertia_local`.
+    b.inv_inertia_local = inverse_inertia(body_inertia);
+    b.inertia_local = body_inertia;
+    return true;
+}
+
+mat3 inertia_of(const rigid_body& b)
+{
+    return b.inertia_local;
+}
+
+mat3 world_inv_inertia(const rigid_body& b)
+{
+    return world_inverse_inertia(b.orientation, b.inv_inertia_local);
+}
+
+vec3 gyroscopic_step(const rigid_body& b, float h, gyroscopic_mode mode)
+{
+    // `momentum` is not a correction applied to an angular velocity — it is a
+    // different choice of state variable, and it needs the END-OF-STEP
+    // orientation, which this function does not have. `step` implements it
+    // directly; here it is a no-op so that a caller cycling through the modes
+    // does not get a wrong answer instead of an unavailable one.
+    if (mode == gyroscopic_mode::off || mode == gyroscopic_mode::momentum)
+    {
+        return b.angular_velocity;
+    }
+
+    const mat3 body_to_world = mat3_from_quat(b.orientation);
+    const mat3& i_body = b.inertia_local;
+
+    if (mode == gyroscopic_mode::explicit_term)
+    {
+        // The obvious one: evaluate the term at the state you already have and
+        // add it. Done in world space, where `omega` already lives.
+        const mat3 i_world = body_to_world * i_body * transpose(body_to_world);
+        const mat3 inv_i_world =
+            body_to_world * b.inv_inertia_local * transpose(body_to_world);
+
+        const vec3 term = cross(b.angular_velocity, i_world * b.angular_velocity);
+        return b.angular_velocity - (inv_i_world * term) * h;
+    }
+
+    // ---- the implicit one, in the BODY frame ------------------------------
+    //
+    // Work in body axes, because that is the one frame in which `I` is a
+    // constant and can be differentiated through without a product rule.
+    const vec3 w0 = transpose(body_to_world) * b.angular_velocity;
+    const vec3 l0 = i_body * w0;
+
+    // Write the step as a root-finding problem in the UNKNOWN end-of-step
+    // angular velocity `w`:
+    //
+    //     f(w) = I*(w - w0) + h * (w x (I w)) = 0
+    //
+    // At `w = w0` the first term vanishes and the residual is just the term
+    // itself, scaled by the step. That residual is already O(h), which is why
+    // ONE Newton iteration is enough — a second would correct an O(h^2) error
+    // in a scheme that is O(h) anyway.
+    const vec3 residual = cross(w0, l0) * h;
+
+    // The derivative of `w x (I w)` with respect to `w`, applied to a
+    // perturbation `d`, is `d x (I w) + w x (I d)` — which as matrices is
+    // `[w]x I - [I w]x`. Both cross-product matrices, and the reason `skew`
+    // exists in mat3.hpp.
+    const mat3 jacobian = i_body + (skew(w0) * i_body - skew(l0)) * h;
+
+    const vec3 correction = inverse(jacobian) * residual;
+    return body_to_world * (w0 - correction);
+}
+
+vec3 angular_momentum(const rigid_body& b)
+{
+    // `R * (I_body * (R^T * omega))` rather than `(R I_body R^T) * omega`.
+    //
+    // The two are the same number and not the same amount of work: the sandwich
+    // builds a whole matrix — two 3x3 products, 90 flops — and then throws it
+    // away after one use, where this route is three matrix-VECTOR products at 15
+    // flops each. Build the operator when you will apply it many times; apply it
+    // directly when you will not.
+    const mat3 body_to_world = mat3_from_quat(b.orientation);
+    const vec3 omega_body = transpose(body_to_world) * b.angular_velocity;
+    return body_to_world * (b.inertia_local * omega_body);
+}
+
+float kinetic_energy(const rigid_body& b)
+{
+    const float linear = (b.inv_mass > 0.0f)
+                       ? (0.5f * length_squared(b.state.velocity) / b.inv_mass)
+                       : 0.0f;
+
+    // The rotational half is a quadratic FORM — omega . (I omega) — not a
+    // product of two scalars, which is the whole difference between a mass and
+    // a tensor written out in one line of arithmetic.
+    const vec3 l = angular_momentum(b);
+    return linear + 0.5f * dot(b.angular_velocity, l);
+}
+
+vec3 point_velocity(const rigid_body& b, vec3 world_point)
+{
+    return b.state.velocity + cross(b.angular_velocity, world_point - b.state.position);
+}
+
+vec3 world_point_of(const rigid_body& b, vec3 local_point)
+{
+    return b.state.position + rotate(b.orientation, local_point);
 }
 
 // ---------------------------------------------------------------------------
@@ -272,6 +450,9 @@ vec3 body_world::gravity() const { return gravity_; }
 void body_world::set_integrator(integrator rule) { rule_ = rule; }
 integrator body_world::integrator_rule() const { return rule_; }
 
+void body_world::set_spin_rule(spin_rule rule) { spin_ = rule; }
+spin_rule body_world::spin() const { return spin_; }
+
 const step_report& body_world::report() const { return report_; }
 
 const step_report& body_world::step(float h)
@@ -281,6 +462,14 @@ const step_report& body_world::step(float h)
     for (rigid_body& b : bodies_.items())
     {
         ++report_.bodies;
+
+        // Lesson 8.3's instrument, read BEFORE the step touches anything: how
+        // far from the unit sphere did this body's quaternion ARRIVE? The step
+        // renormalises on the way out, so anything found here was written by
+        // somebody else — an animation blend, a lerp, a network packet, a
+        // hand-authored quaternion. See `step_report::max_unit_error`.
+        const float unit_error = std::fabs(length(b.orientation) - 1.0f);
+        if (unit_error > report_.max_unit_error) { report_.max_unit_error = unit_error; }
 
         switch (b.kind)
         {
@@ -292,6 +481,7 @@ const step_report& body_world::step(float h)
             // system pushing on the floor does not leak a growing vector.
             ++report_.fixed;
             b.force = vec3{};
+            b.torque = vec3{};
             continue;
 
         case body_kind::kinematic:
@@ -303,7 +493,15 @@ const step_report& body_world::step(float h)
             // that the velocity is NOT being changed.
             ++report_.kinematic;
             b.state.position += b.state.velocity * h;
+
+            // Lesson 8.3: it TURNS as well as travels. A rotating platform, a
+            // swinging door and a fan blade are all this line, and the same
+            // sentence above applies to it — the angular velocity is whatever
+            // gameplay set, and nothing here changes it.
+            b.orientation = advance_orientation(b.orientation, b.angular_velocity, h, spin_);
+
             b.force = vec3{};
+            b.torque = vec3{};
             break;
         }
 
@@ -355,10 +553,143 @@ const step_report& body_world::step(float h)
             // (8.1 §8). A body with `damping` 0 pays a branch and no exp.
             if (b.damping > 0.0f) { apply_drag(b.state, b.damping, h); }
 
-            // (4) ...and only now is the accumulator cleared, so that a debug
+            // ---- (5) THE ANGULAR HALF, Lesson 8.3 -------------------------
+            //
+            // Structurally the mirror of the three lines above — a resistance,
+            // an accumulator, a step — with three differences that are the
+            // whole of 8.3.
+            //
+            // FIRST: the resistance is a TENSOR and it lives in body axes, so
+            // it has to be carried into world space before it can act on a
+            // world-space torque. That is the sandwich `R * I^-1 * R^T`, and
+            // §6 is about why it is a sandwich rather than a product.
+            //
+            // ONE `mat3_from_quat` PER BODY PER STEP, and §12 is the reason
+            // it is spelled out here rather than left inside
+            // `world_inverse_inertia`. The first version of this loop called
+            // that function and then `angular_momentum` twenty lines later, and
+            // each of them built the same rotation matrix from the same
+            // quaternion — 7.843 ns apiece, measured, on a 33.793 ns update.
+            // Hoisting it is the single largest saving in the angular half.
+            const mat3 body_to_world = mat3_from_quat(b.orientation);
+            const mat3 inv_i_world =
+                body_to_world * b.inv_inertia_local * transpose(body_to_world);
+
+            // SECOND: there is a term with no linear counterpart at all.
+            // `alpha = I^-1 * tau` is only half of Euler's equation; the other
+            // half is the body's own angular momentum being carried around by
+            // its own rotation, and it is what makes an asymmetric body tumble
+            // instead of spin. Without it, §10's demo never flips. See
+            // `gyroscopic_mode` — four answers, and §9 measures all of them.
+            //
+            // THIRD: the orientation update is not an addition. `q += omega*h`
+            // is not a rotation — it is not even a unit quaternion — and §7 is
+            // the derivation of what goes there instead.
+            //
+            // SEMI-IMPLICIT ALWAYS, whatever `rule_` says, and the
+            // inconsistency is deliberate. `rule_` chooses how a position
+            // update is paired with a velocity update; velocity Verlet's second
+            // half would need the tensor rebuilt at the new orientation and a
+            // second renormalisation, to correct by less than the
+            // renormalisation's own error. §7 measures both sides of that.
+            if (b.gyroscopic == gyroscopic_mode::momentum)
+            {
+                // ---- the momentum formulation -------------------------------
+                //
+                // Integrate `L`, derive `omega`. Nothing below ever writes `L`
+                // except the torque line, so a torque-free body's angular
+                // momentum is conserved BIT FOR BIT rather than to a tolerance.
+                //
+                // Note what has disappeared: there is no gyroscopic term here,
+                // no Jacobian and no Newton iteration. The term was never
+                // physics — it was the price of differentiating `I(t)*omega`
+                // while insisting that `omega` be the state.
+                vec3 l_world = body_to_world
+                             * (b.inertia_local
+                                * (transpose(body_to_world) * b.angular_velocity));
+
+                l_world += b.torque * h;
+
+                if (b.angular_damping > 0.0f)
+                {
+                    l_world *= std::exp(-b.angular_damping * h);
+                }
+
+                // ---- and now the MIDPOINT, which is the whole accuracy
+                // ---- of this mode.
+                //
+                // Advancing the orientation by the angular velocity at the
+                // START of the step is first order, and §9 measured what that
+                // costs on a tumbling box. `L` is conserved by construction
+                // whatever this line does, so `L` cannot tell you the body is
+                // wrong — the SECOND conserved quantity can. At 60 Hz the
+                // kinetic energy, which a torque-free body also holds exactly,
+                // drifted by **97.1%**, and `|omega|` ranged over 4.0559 to
+                // 8.0350 where §8 derives a bound of 4.0524 to 4.4880. The
+                // momentum was beautifully conserved and the body was doing the
+                // wrong thing with it.
+                //
+                // The fix is to take a half step first, read the angular
+                // velocity THERE, and use that for the whole step. One extra
+                // rotation matrix and one extra orientation advance took the
+                // energy drift from 9.714e-01 to **1.198e-04** at the same
+                // 60 Hz — a factor of 8,100 — and put `|omega|` on
+                // 4.0525..4.4879, inside the bound.
+                //
+                // This works here and would not work on `angular_velocity`,
+                // because `L` is FIXED across the whole step: the only thing
+                // the half step is estimating is where the body will be
+                // pointing, and that is a question a half step answers well.
+                const vec3 omega_start = body_to_world
+                                       * (b.inv_inertia_local
+                                          * (transpose(body_to_world) * l_world));
+
+                const quat half = advance_orientation(b.orientation, omega_start,
+                                                      0.5f * h, spin_);
+                const mat3 half_to_world = mat3_from_quat(half);
+                const vec3 omega_mid = half_to_world
+                                     * (b.inv_inertia_local
+                                        * (transpose(half_to_world) * l_world));
+
+                b.orientation = advance_orientation(b.orientation, omega_mid, h, spin_);
+
+                // ...and re-derive the angular velocity at the orientation the
+                // body actually ended up in. THIS is where the tumble comes
+                // from: `L` did not move, `I_world` did, so `omega` must.
+                const mat3 new_to_world = mat3_from_quat(b.orientation);
+                b.angular_velocity = new_to_world
+                                   * (b.inv_inertia_local
+                                      * (transpose(new_to_world) * l_world));
+            }
+            else
+            {
+                // The gyroscopic term first, on its own, and the applied torque
+                // after it. The order is Bullet's and it is the order the
+                // derivation wants: the implicit solve asks "where does this
+                // body's OWN momentum carry its angular velocity in `h`
+                // seconds", which is a question about the body as it is now,
+                // before anything external has been added to it.
+                if (b.gyroscopic != gyroscopic_mode::off)
+                {
+                    b.angular_velocity = gyroscopic_step(b, h, b.gyroscopic);
+                }
+
+                b.angular_velocity += (inv_i_world * b.torque) * h;
+
+                if (b.angular_damping > 0.0f)
+                {
+                    b.angular_velocity *= std::exp(-b.angular_damping * h);
+                }
+
+                b.orientation =
+                    advance_orientation(b.orientation, b.angular_velocity, h, spin_);
+            }
+
+            // (6) ...and only now are the accumulators cleared, so that a debug
             // overlay, an assertion or 8.10's solver can still read what was
             // applied during the step that just ran.
             b.force = vec3{};
+            b.torque = vec3{};
 
             // A `sqrt` PER BODY, and it was measured before being kept. The
             // obvious saving is to compare squared speeds and take one root at
@@ -370,10 +701,30 @@ const step_report& body_world::step(float h)
             const float speed = length(b.state.velocity);
             if (speed > report_.max_speed) { report_.max_speed = speed; }
 
+            const float spin = length(b.angular_velocity);
+            if (spin > report_.max_spin) { report_.max_spin = spin; }
+
             // Momentum excludes immovable bodies: theirs is either zero or
             // infinite and neither belongs in a sum that 8.9 will compare
             // across a collision.
-            report_.momentum += b.state.velocity * (1.0f / b.inv_mass);
+            const float mass = 1.0f / b.inv_mass;
+            report_.momentum += b.state.velocity * mass;
+
+            // Angular momentum about the WORLD ORIGIN, which is two terms and
+            // the second one is the one people forget: `I*omega` is the body's
+            // spin about its own centre, and `r x (m*v)` is the angular
+            // momentum its linear motion carries about the origin. A body
+            // sailing past in a straight line without rotating at all has the
+            // second and not the first, which is how a planet's orbit conserves
+            // one.
+            // Reusing `body_to_world` from twenty lines above, and applying
+            // the tensor rather than building the world one — see
+            // `angular_momentum`, which does the same thing for a caller who
+            // does not already have the rotation in hand.
+            report_.angular_momentum +=
+                body_to_world * (b.inertia_local
+                                 * (transpose(body_to_world) * b.angular_velocity))
+                + cross(b.state.position, b.state.velocity * mass);
             break;
         }
         }
@@ -400,11 +751,32 @@ rigid_body make_dynamic(vec3 position, float mass)
     return b;
 }
 
+rigid_body make_box(vec3 position, float mass, vec3 half_extents)
+{
+    rigid_body b = make_dynamic(position, mass);
+    set_inertia(b, inertia_solid_box(mass, half_extents));
+    return b;
+}
+
+rigid_body make_sphere(vec3 position, float mass, float radius)
+{
+    rigid_body b = make_dynamic(position, mass);
+    set_inertia(b, inertia_solid_sphere(mass, radius));
+    return b;
+}
+
 rigid_body make_fixed(vec3 position)
 {
     rigid_body b;
     b.state.position = position;
     b.inv_mass = 0.0f;
+
+    // Nine zeros, for exactly the reason the one zero above is there: no torque
+    // can spin this, exactly, with no branch and no sentinel. 8.2's argument
+    // for `inv_mass = 0`, made nine floats wide. The forward tensor is zero too,
+    // which makes the body's angular momentum exactly zero rather than infinite.
+    b.inv_inertia_local = mat3{vec3{}, vec3{}, vec3{}};
+    b.inertia_local = mat3{vec3{}, vec3{}, vec3{}};
     b.kind = body_kind::fixed;
     return b;
 }
@@ -415,6 +787,11 @@ rigid_body make_kinematic(vec3 position, vec3 velocity)
     b.state.position = position;
     b.state.velocity = velocity;
     b.inv_mass = 0.0f;
+
+    // Immovable by torques as well as by forces. Set `angular_velocity`
+    // directly to make it turn — that is what kinematic means.
+    b.inv_inertia_local = mat3{vec3{}, vec3{}, vec3{}};
+    b.inertia_local = mat3{vec3{}, vec3{}, vec3{}};
     b.kind = body_kind::kinematic;
     return b;
 }

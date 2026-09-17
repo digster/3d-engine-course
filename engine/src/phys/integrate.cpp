@@ -154,4 +154,30 @@ float area_factor(integrator rule, float omega, float h)
     return 1.0f;
 }
 
+
+// ---- Orientation (Lesson 8.3) ----------------------------------------------
+
+float spin_inflation(float omega_magnitude, float h)
+{
+    // |q + (h/2)*w_pure*q| with |q| = 1. The product `w_pure*q` is orthogonal to
+    // `q` in 4-D — a fact worth checking once rather than believing: their dot
+    // product is `-dot(w, q.v)*q.w + dot(w*q.w + w x q.v, q.v)`, and the first
+    // two terms cancel while the cross product is perpendicular to `q.v`. So the
+    // step is a right-angled triangle, and Pythagoras gives the length directly.
+    const float half = 0.5f * omega_magnitude * h;
+    return std::sqrt(1.0f + half * half);
+}
+
+float spin_angle_error(float omega_magnitude, float h)
+{
+    const float asked = omega_magnitude * h;
+    if (asked <= 0.0f) { return 0.0f; }
+
+    // After renormalising, the result is the unit quaternion whose imaginary
+    // part points along `omega` with `tan(theta/2) = asked/2` — so the angle it
+    // actually turns through is twice that arctangent.
+    const float achieved = 2.0f * std::atan(0.5f * asked);
+    return achieved / asked - 1.0f;
+}
+
 } // namespace engine::phys

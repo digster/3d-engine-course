@@ -184,6 +184,13 @@ add_library(engine STATIC
     # vector space. Modules 8.2 onward fill this directory with bodies, shapes,
     # contacts and a solver, none of which would fit under `math/` either.
     src/phys/integrate.cpp
+    # Lesson 8.3. How a body's mass is spread out, which is a different question
+    # from how much of it there is — and a separate file from rigid_body.cpp for
+    # exactly that reason. This one knows about SHAPES (a box, a capsule, a cloud
+    # of point masses) and nothing about bodies; rigid_body.cpp knows about bodies
+    # and asks this file what a shape weighs. The dependency runs one way, as the
+    # note below promised it would.
+    src/phys/inertia.cpp
     # Lesson 8.2. The second file, and the directory's shape is now visible: the
     # stepper knows nothing about bodies and the bodies know nothing about how
     # they are stepped. `rigid_body.cpp` includes `integrate.hpp` and not the

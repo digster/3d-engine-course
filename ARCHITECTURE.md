@@ -997,7 +997,7 @@ chore. What follows is on disk.
 │   └── Shaders.cmake       # add_hlsl_shader(name stage) -> a GLOBAL PROPERTY   [4.3, reshaped 5.1]
 ├── engine/                 # THE LIBRARY                                        [5.1]
 │   ├── CMakeLists.txt      # produces engine::engine (STATIC)
-│   ├── include/engine/     # ---- THE PUBLIC API. 91 headers. Nothing else. ----
+│   ├── include/engine/     # ---- THE PUBLIC API. 92 headers. Nothing else. ----
 │   │   ├── engine.hpp      # the umbrella. UNTIL 5.12 it listed 40 of the 55 headers
 │   │   │                   #   it could have — missing the whole ECS, the asset
 │   │   │                   #   store, handles, the logger and the action map —
@@ -1041,7 +1041,7 @@ chore. What follows is on disk.
 │   │   │   │                 #   (the 4 SDL callbacks) — the engine keeps the loop
 │   │   │   └── main.hpp      # ENGINE_MAIN. ONE .cpp per program; no main() in it.
 │   │   │                     #   NOT in engine.hpp, deliberately
-│   │   ├── phys/           # HOW A VELOCITY BECOMES A POSITION, AND WHAT MOVES IT [8.1, 8.2]
+│   │   ├── phys/           # HOW A STATE ADVANCES, WHAT MOVES IT, AND HOW IT TURNS [8.1-8.3]
 │   │   │                   #   THE FIFTH NEW DIRECTORY SINCE THE REFACTOR, and
 │   │   │                   #   the second (after audio/) that never touches a
 │   │   │                   #   pixel. NOT under math/: the test is what a file
@@ -1235,8 +1235,9 @@ chore. What follows is on disk.
 │   │                             #   texture, a comparison sampler, its own
 │   │                             #   render pass, and fill_uniforms() so the two
 │   │                             #   renderers cannot disagree about a bias
-│   └── src/                # ---- PRIVATE. 59 sources; no demo can name this path ----
-│       ├── phys/           # integrate.cpp [8.1], rigid_body.cpp             [8.2]
+│   └── src/                # ---- PRIVATE. 60 sources; no demo can name this path ----
+│       ├── phys/           # integrate.cpp [8.1], rigid_body.cpp [8.2],
+│       │                   # inertia.cpp                                     [8.3]
 │       │                   #   Everything that is NOT a template: the constant-
 │       │                   #   acceleration overload (the gravity path), the two
 │       │                   #   drag helpers, and the four diagnostics. Nothing in

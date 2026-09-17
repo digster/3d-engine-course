@@ -43,11 +43,35 @@
 //
 // ---- WHAT IS STILL NOT HERE -------------------------------------------------
 //
-// No rotation. A `rigid_body` here is a point with a mass: it translates and it
-// does not spin, `add_force` has no application point, and there is no torque
-// and no inertia tensor. That is Lesson 8.3, and it needs 7.4's quaternions.
-// Everything in this file is the LINEAR half, and the linear half is genuinely
-// separable — momentum and angular momentum do not mix.
+// ---- WHAT LESSON 8.3 ADDED --------------------------------------------------
+//
+// Rotation. 8.2 left this file with a body that was a point with a mass — it
+// translated and it did not spin, `add_force` had no application point, and
+// there was no torque and no inertia tensor. All of that is here now:
+// `orientation`, `angular_velocity`, a `torque` accumulator, `inv_inertia_local`
+// and `add_force_at`, which is the first function in this engine that can make
+// something tumble.
+//
+// **The linear half above is untouched by it**, and that is a fact about physics
+// rather than about how carefully the edit was made. Linear momentum and angular
+// momentum do not mix: the centre of mass of a body moves exactly as `F = ma`
+// says however wildly the body is spinning, which is why a thrown hammer's
+// centre traces a clean parabola while the hammer tumbles around it. Every
+// number 8.2 measured is still the number it measured.
+//
+// THREE THINGS IN THE ANGULAR HALF ARE NOT MIRRORS OF THE LINEAR ONE, and they
+// are where 8.3's difficulty lives:
+//
+//   * **The tensor is in BODY axes and everything else is in world axes.** See
+//     `inv_inertia_local`. It is forced, not chosen.
+//   * **The orientation update is not an addition.** See `advance_orientation`
+//     in integrate.hpp. `q += omega*h` is not merely inaccurate, it is not a
+//     rotation.
+//   * **`omega` is not conserved when `tau` is zero — `L` is.** A torque-free
+//     body's angular velocity wanders continuously, changes magnitude, and for
+//     an asymmetric body can flip end over end without anything acting on it.
+//     `angular_momentum` is the quantity to watch in a debugger; `gyroscopic`
+//     is the flag that decides whether any of it happens.
 //
 // No collision (8.4 onward), no constraints (8.10, 8.11), no sleeping (8.10),
 // and no continuous collision detection: `step_report::max_travel` measures how
@@ -59,9 +83,12 @@
 
 #include <engine/core/handle.hpp>
 #include <engine/core/pool.hpp>
+#include <engine/math/mat3.hpp>
 #include <engine/math/mat4.hpp>
+#include <engine/math/quat.hpp>
 #include <engine/math/transform.hpp>
 #include <engine/math/vec3.hpp>
+#include <engine/phys/inertia.hpp>
 #include <engine/phys/integrate.hpp>
 
 #include <cstdint>
@@ -144,6 +171,93 @@ enum class body_kind : std::uint8_t
 // The body
 // ---------------------------------------------------------------------------
 
+/// What to do about the term in Euler's equations that has no linear
+/// counterpart. Lesson 8.3 §9.
+///
+/// `alpha = I^-1 * tau` is only half of the rotational equation of motion. The
+/// other half is `-I^-1 * (omega x (I omega))`, and it is the term that makes an
+/// asymmetric body **tumble** rather than merely spin: a thrown book wobbles,
+/// a rugby ball precesses, and a box spun about its middle axis flips end over
+/// end. Without it, none of that happens — a box spun about any axis spins
+/// about that axis forever, which looks perfectly stable and is wrong.
+///
+/// It is also the one term in this engine that an explicit rule cannot be
+/// trusted with, and 8.1's determinant argument says exactly why: it feeds the
+/// angular velocity back into itself through a cross product, which is a
+/// rotation of `omega` — and an explicitly integrated rotation grows by
+/// `sqrt(1 + (sigma*h)^2)` per step. §9 measures a 1 kg box gaining **164% of
+/// its angular momentum in sixty seconds** at 60 Hz, and diverging outright at
+/// 30 Hz.
+enum class gyroscopic_mode : std::uint8_t
+{
+    /// Drop the term. Fast, unconditionally stable, and visibly wrong for
+    /// anything the player watches tumble. **The default**, and the default
+    /// every engine ships — it is what Bullet and PhysX both do (⚠ VERIFY the
+    /// exact spellings against the headers: Bullet's
+    /// `BT_ENABLE_GYROSCOPIC_FORCE_IMPLICIT_BODY` flag on `btRigidBody`, and
+    /// PhysX's `PxRigidBodyFlag::eENABLE_GYROSCOPIC_FORCES`, both opt-in).
+    off,
+
+    /// The term, evaluated at the start of the step and added explicitly.
+    ///
+    /// **This is the one you would write first and it is the one that
+    /// diverges.** It is here so that §9's measurement can be reproduced and so
+    /// that the demo can show it — not because it is ever the right choice.
+    explicit_term,
+
+    /// The term, solved implicitly in the body frame by one Newton step.
+    ///
+    /// Write the step as a root-finding problem in the unknown end-of-step
+    /// angular velocity, differentiate, invert a 3x3 and take one iteration.
+    /// One Newton step is what Bullet does, and the reason one is enough is that
+    /// the residual is already `O(h)`.
+    ///
+    /// **It stops the divergence and does not conserve anything.** §9 measures
+    /// the same box: explicit gains 162% of its angular momentum in a minute at
+    /// 60 Hz and diverges by 3.3e+11 at 30, while implicit *loses* 35%. That is
+    /// 8.1's backward-Euler determinant — `1/(1 + h^2 w^2)`, the exact
+    /// reciprocal of the explicit one — arriving in the one place this engine
+    /// still integrates something explicitly. It damps rather than explodes,
+    /// which is why it is shippable and why it is not the last word.
+    implicit_term,
+
+    /// **Make the term unnecessary**, by integrating the angular MOMENTUM and
+    /// deriving the angular velocity from it.
+    ///
+    /// The gyroscopic term is not a force. It is the bookkeeping that appears
+    /// when you differentiate `L = I(t) * omega` and insist on treating `omega`
+    /// as the state: `I` is turning with the body, so a constant `L` *requires*
+    /// a changing `omega`, and the term is the size of that requirement. Store
+    /// `L` instead and it is not a term at all —
+    ///
+    ///     L += tau * h                 exactly, because dL/dt = tau
+    ///     omega = I_world(q)^-1 * L    derived, every step, from the new q
+    ///
+    /// — and the only thing left that can move `L` is arithmetic. §9 measures
+    /// **8.0e-04 against implicit's 3.5e-01** at 60 Hz, three orders of
+    /// magnitude, and that residue is not truncation: the engine stores `omega`
+    /// and rebuilds `L` from it every step, so the error grows with the NUMBER
+    /// of steps and is the one column in §9's table that gets WORSE as the step
+    /// shrinks. Storing `L` would remove it, at the cost of converting at every
+    /// solver iteration.
+    ///
+    /// **So why is this not the default, and why does every shipping engine
+    /// store `omega`?** Because a contact solver speaks velocities. Lessons
+    /// 8.9–8.11 iterate impulses against relative velocities at contact points,
+    /// dozens of times per body per frame, and each iteration would have to
+    /// convert. The choice here is between a cheap exact tumble and a cheap
+    /// solver, and this module needs the solver — so the engine keeps `omega`
+    /// and offers this for the bodies whose tumbling is the point.
+    ///
+    /// The orientation still integrates approximately, so the body's ATTITUDE
+    /// drifts exactly as §7 says — and §9 shows that conserving `L` is not on
+    /// its own enough to make the tumble right, which is why `step` pairs this
+    /// mode with a half-step estimate of the angular velocity.
+    momentum,
+};
+
+[[nodiscard]] const char* name_of(gyroscopic_mode mode);
+
 /// A point with a mass: where it is, how fast it is going, and what is pushing
 /// on it.
 ///
@@ -166,6 +280,34 @@ struct rigid_body
     /// hierarchy and it converts rather than integrating.
     motion state{};
 
+    /// Which way the body is facing, as a **unit** quaternion (Lesson 7.4).
+    ///
+    /// Lesson 8.3. `state` says where the body is; this says how it is turned,
+    /// and the two are independent in exactly the way 8.1's `motion` was not
+    /// ready for — which is why orientation could not simply be a fourth field
+    /// in `motion`. A position is a point in a vector space and moves by
+    /// addition. An orientation is not, and does not. See `advance_orientation`
+    /// in integrate.hpp, and 8.3 §7.
+    ///
+    /// **`step` renormalises it every step**, and that is not defensive
+    /// programming. The linearised update inflates a unit quaternion by
+    /// `(|omega|*h)^2/8` per step — 0.35% at 10 rad/s and 60 Hz, compounding to
+    /// 23% in one second — so without the renormalisation the body visibly
+    /// shears and then collapses. 8.3 §7 measures it.
+    quat orientation{};
+
+    /// Angular velocity **in world space**, in radians per second.
+    ///
+    /// Direction is the axis (right-hand rule, conventions.html §10), magnitude
+    /// is the rate. World space rather than body space for the same reason
+    /// `state.position` is: a solver in 8.9 has two bodies in front of it and
+    /// needs their velocities in one common frame, and converting at every
+    /// contact is both slower and a place to get the direction backwards.
+    ///
+    /// **It is the tensor that lives in body space**, not this. See
+    /// `inv_inertia_local` and `world_inv_inertia`.
+    vec3 angular_velocity{};
+
     /// Newtons, accumulated since the last step, and **cleared by `step`**.
     ///
     /// A force is an INPUT to a step, not a property of a body — it is the sum
@@ -180,6 +322,24 @@ struct rigid_body
     /// magnitude, the solver in 8.10 reading what the contact generator asked
     /// for. Clear it first and every one of those reads zero.
     vec3 force{};
+
+    /// Newton-metres about the body's **centre of mass**, accumulated since the
+    /// last step and cleared alongside `force`.
+    ///
+    /// Lesson 8.3, and everything said above about `force` applies here word for
+    /// word: torques add, for the same reason forces do, and a torque left set
+    /// is a body that spins up forever.
+    ///
+    /// **About the centre of mass, world axes.** A torque is only a number once
+    /// you say what it is about, and choosing the centre of mass is what
+    /// decouples the two halves of `step`: about any other point, a force
+    /// through the centre of mass would produce a torque, and pushing a crate
+    /// squarely in the middle would set it spinning. 8.3 §3.
+    ///
+    /// Most callers never touch this directly — `add_force_at` computes
+    /// `r x F` and feeds both accumulators at once, which is what a thruster, an
+    /// explosion or a contact impulse actually wants.
+    vec3 torque{};
 
     /// **One over the mass, in 1/kg. Zero means immovable.**
     ///
@@ -220,6 +380,48 @@ struct rigid_body
     /// that costs an afternoon.
     float inv_mass = 1.0f;
 
+    /// The **inverse inertia tensor about the centre of mass, in BODY axes**.
+    /// All zeros means "cannot rotate".
+    ///
+    /// Lesson 8.3, and it is `inv_mass`'s argument repeated with nine floats
+    /// instead of one — all three reasons survive intact, and the first one
+    /// survives best. A zero tensor is exactly what an immovable body wants: it
+    /// is representable, it is exact, it needs no sentinel, and it passes
+    /// through the basis change `R * I^-1 * R^T` unchanged, so a wall absorbs
+    /// every torque in the scene with no branch anywhere in the step.
+    ///
+    /// **BODY axes, unlike every other field in this struct**, and the asymmetry
+    /// is forced rather than chosen. In world space a tensor changes the instant
+    /// the body turns, so storing it there would mean rebuilding it from the
+    /// shape every step; in body axes it is constant for the life of the body.
+    /// `world_inv_inertia` is the one line that carries it out, and 8.3 §6 is
+    /// about why that line is a sandwich and not a product.
+    ///
+    /// The default is the identity, i.e. a body that resists being spun about
+    /// any axis by 1 kg·m². It is a *shape-free* default and no real shape has
+    /// it; `set_inertia` is how a body gets a real one, and the demo and harness
+    /// both go through `inertia_solid_box` and friends.
+    mat3 inv_inertia_local{};
+
+    /// The **forward** tensor, same point and same axes. All zeros means
+    /// "cannot rotate", exactly as above.
+    ///
+    /// Thirty-six bytes of redundancy, and §12 is the reason it is here. The
+    /// first version of this struct stored only the inverse — which is the
+    /// argument `inv_mass` makes, carried over honestly — and every consumer of
+    /// the forward tensor paid a **3x3 inverse per body per step**: the
+    /// gyroscopic term, and `step_report::angular_momentum`, which is computed
+    /// whether or not anybody reads it. Measured at 3.591 ns of a 33.793 ns
+    /// update, on top of the second basis change each of them also needed.
+    ///
+    /// **THE INVARIANT IS THAT THESE TWO AGREE**, and it is maintained by
+    /// `set_inertia` being the only supported way to write either. Assigning
+    /// `inv_inertia_local` directly leaves a body whose angular momentum and
+    /// angular acceleration disagree about what it is made of — which no
+    /// assertion here can catch, and which is exactly the cost of caching
+    /// anything. It is paid because the measurement said so.
+    mat3 inertia_local{};
+
     /// Velocity-space damping, in 1/s. **This is not air resistance.**
     ///
     /// Applied by `step` as `apply_drag` — the exact `v *= exp(-k*h)` from 8.1,
@@ -245,6 +447,24 @@ struct rigid_body
     /// `terminal_speed_dragged` sit next to each other below so the difference
     /// is one line of reading.
     float damping = 0.0f;
+
+    /// The same knob for spin, in 1/s: `omega *= exp(-k*h)` every step.
+    ///
+    /// Lesson 8.3, and it is the same shape of lie as `damping` and for the same
+    /// reason — real rotational drag depends on the body's shape, its speed and
+    /// which way round it is, and none of that is what a designer means by
+    /// "stop it spinning forever". Separate from `damping` because the two are
+    /// tuned independently in practice: a thrown axe should keep tumbling long
+    /// after air resistance has taken the sting out of its flight.
+    float angular_damping = 0.0f;
+
+    /// How this body handles the **gyroscopic term** `omega x (I*omega)`.
+    /// Off by default.
+    ///
+    /// Lesson 8.3 §9. See `gyroscopic_mode` — this is the one field in the
+    /// struct whose default was chosen by a measurement rather than by an
+    /// argument, and the measurement is not the one you would expect.
+    gyroscopic_mode gyroscopic = gyroscopic_mode::off;
 
     /// Multiplier on the world's gravity for this body alone.
     ///
@@ -339,6 +559,142 @@ void add_acceleration(rigid_body& b, vec3 metres_per_second_squared);
 /// Discard any accumulated force without stepping. Mostly for tests and for a
 /// system that changed its mind.
 void clear_force(rigid_body& b);
+
+// ---------------------------------------------------------------------------
+// Torque, and forces that are not aimed at the centre
+// ---------------------------------------------------------------------------
+
+/// Add a pure torque, in newton-metres about the centre of mass, world axes.
+///
+/// "Pure" means it spins the body without pushing it anywhere — which is
+/// physically what you get from a *couple*, a pair of equal and opposite forces
+/// offset from each other. A reaction wheel, a motor mounted on the body, a
+/// character's own effort to right themselves: all torque, no force.
+void add_torque(rigid_body& b, vec3 newton_metres);
+
+/// Apply a force at a **world-space point**, which is what almost everything in
+/// a real game actually does.
+///
+///     force  += F
+///     torque += (point - centre of mass) x F
+///
+/// One call, both accumulators, and the cross product is the entire content of
+/// Lesson 8.3 §3. Note what falls out of it for free: a force aimed straight at
+/// the centre of mass produces `r x F` with `F` parallel to `r`, which is
+/// exactly zero — so pushing a crate squarely in the middle does not spin it,
+/// and pushing it at a corner does, without either case being special-cased.
+///
+/// **The point is in world space and the body's centre of mass is
+/// `state.position`.** This engine has no concept of a centre of mass offset
+/// from the origin of the body: `inertia_assembly` computes where a compound
+/// body balances so that you can place it there, rather than carrying an offset
+/// through every subsequent calculation. 8.3 §5 explains the trade.
+void add_force_at(rigid_body& b, vec3 newtons, vec3 world_point);
+
+/// The impulse form of `add_force_at`: an instantaneous change in both
+/// velocities, with no `h` anywhere in it.
+///
+///     velocity         += J * inv_mass
+///     angular_velocity += world_inv_inertia * ((point - centre) x J)
+///
+/// 8.2 §6 argued that anything instantaneous must be an impulse rather than a
+/// one-step force, and the argument carries over word for word — with one extra
+/// consequence that is the reason 8.9 exists. **This function is a contact
+/// response.** A ball striking a plank off-centre spins the plank and slows
+/// itself, and both halves of that are this one call applied twice with opposite
+/// signs. Everything Lesson 8.9 adds is deciding what `J` should be.
+///
+/// Costs one basis change (`world_inv_inertia`), which is two matrix products.
+/// A solver applying thousands of these per frame hoists that out — 8.10's cached
+/// per-body tensor — and this entry point is the correct, obvious one.
+void add_impulse_at(rigid_body& b, vec3 newton_seconds, vec3 world_point);
+
+/// Change the angular velocity directly by an angular impulse, in
+/// newton-metre-seconds: `omega += world_inv_inertia * L`.
+void add_angular_impulse(rigid_body& b, vec3 newton_metre_seconds);
+
+/// Zero the torque accumulator. `clear_force` does not — they are separate so
+/// that a debug overlay can consume one and leave the other.
+void clear_torque(rigid_body& b);
+
+// ---------------------------------------------------------------------------
+// Inertia
+// ---------------------------------------------------------------------------
+
+/// Give a body an inertia tensor, expressed **about its centre of mass, in body
+/// axes** — normally straight from one of inertia.hpp's shape functions.
+///
+/// Stores the inverse, validates first, and returns false without changing
+/// anything if the tensor is not one a real mass distribution could have:
+/// asymmetric, non-positive, or violating the triangle inequality. The
+/// refusal is the same shape as `set_mass`'s and for the same reason — a body
+/// that reaches the step with a nonsense tensor gains energy from nowhere, and
+/// the symptom appears several seconds and several systems away from the cause.
+///
+/// **A thin rod is refused**, because `inertia_thin_rod` has an exact zero
+/// principal moment and its inverse does not exist. Give it a real radius; every
+/// physical object has one.
+bool set_inertia(rigid_body& b, const mat3& body_inertia);
+
+/// The body's inertia tensor about its centre of mass in body axes.
+///
+/// Free — it reads `inertia_local`, which is stored. It was not free before
+/// §12; see that field's note.
+[[nodiscard]] mat3 inertia_of(const rigid_body& b);
+
+/// The body's **world-space** inverse inertia tensor: `R * inv_inertia_local *
+/// R^T`, rebuilt from the current orientation.
+///
+/// The one quantity every rotational calculation in the rest of this module
+/// starts from, and the reason `world_inverse_inertia` in inertia.hpp is worth
+/// its own function: this is called once per body per step by `step`, and once
+/// per contact per iteration by 8.10 unless it is hoisted.
+[[nodiscard]] mat3 world_inv_inertia(const rigid_body& b);
+
+/// The body's angular velocity after one step's worth of the gyroscopic term
+/// alone — no applied torque, no damping.
+///
+/// Exposed as a function rather than buried in `step` because §9 compares the
+/// two modes against each other and against doing nothing, and a measurement of
+/// a branch inside a loop is a measurement of the loop.
+///
+/// `mode::off` returns `b.angular_velocity` unchanged, bit for bit.
+[[nodiscard]] vec3 gyroscopic_step(const rigid_body& b, float h, gyroscopic_mode mode);
+
+/// Angular momentum in world space: `I_world * omega`.
+///
+/// **The quantity to watch.** With no torque applied this is conserved exactly,
+/// forever, while `angular_velocity` is not — it changes direction and magnitude
+/// on its own, which is not a bug and is the subject of 8.3 §9. A debug overlay
+/// that plots `|L|` is the single most useful rotational diagnostic there is,
+/// because a rising `|L|` on a torque-free body means the integrator is inventing
+/// energy and nothing else does.
+[[nodiscard]] vec3 angular_momentum(const rigid_body& b);
+
+/// Total kinetic energy, in joules: `(1/2) m v^2 + (1/2) omega . (I omega)`.
+///
+/// The second term is the rotational half, and its shape is worth noticing: it
+/// is a quadratic form in `omega` rather than a product of scalars, which is the
+/// price of the resistance-to-turning being a tensor. Like `|L|`, it should be
+/// flat on a torque-free body.
+[[nodiscard]] float kinetic_energy(const rigid_body& b);
+
+/// The world-space velocity of a point rigidly attached to the body:
+/// `v + omega x r`, with `r` measured from the centre of mass.
+///
+/// The formula that makes a rigid body rigid, and the one every contact in 8.9
+/// is written against — a collision does not happen at a body's centre, it
+/// happens at a point on its surface which may be moving very differently. A
+/// wheel's contact patch is the standard demonstration: its centre moves forward
+/// at `v`, and the patch touching the road is instantaneously **stationary**,
+/// because `omega x r` exactly cancels `v` there.
+[[nodiscard]] vec3 point_velocity(const rigid_body& b, vec3 world_point);
+
+/// Where a point authored in body coordinates is right now, in world space.
+///
+/// `position + rotate(orientation, local)`. The other half of the pair above,
+/// and what a debug renderer needs to draw a box around a tumbling body.
+[[nodiscard]] vec3 world_point_of(const rigid_body& b, vec3 local_point);
 
 // ---------------------------------------------------------------------------
 // Terminal speeds — the two that look the same and are not
@@ -503,6 +859,47 @@ struct step_report
     /// Immovable bodies are excluded, because their momentum is either zero or
     /// infinite and neither is a useful contribution to a sum.
     vec3 momentum{};
+
+    /// Total **angular** momentum of every dynamic body about the world origin,
+    /// in kg·m²/s. Lesson 8.3.
+    ///
+    /// Two terms per body, and the second one surprises people: `I_world*omega`
+    /// is the body's spin about its own centre, and `r x (m*v)` is the angular
+    /// momentum its linear motion has *about the origin*. A body sailing past in
+    /// a straight line without rotating at all has angular momentum about any
+    /// point not on its path, which is why a planet's orbit conserves one.
+    ///
+    /// Like `momentum`, it is the law a collision response is judged against —
+    /// and it is the stricter of the two, because getting the contact point
+    /// wrong changes this without changing that.
+    vec3 angular_momentum{};
+
+    /// The fastest-spinning body's angular speed at the end of the step, rad/s.
+    ///
+    /// The rotational twin of `max_speed`, and it has its own tunnelling
+    /// analogue: a body turning more than a radian or so per step cannot have
+    /// its contacts tracked frame to frame, because the features that were
+    /// touching are on the other side by the time the next test runs. 8.8's
+    /// manifold persistence is where that bites.
+    float max_spin = 0.0f;
+
+    /// The largest `| |q| - 1 |` over all bodies, measured as the step **found**
+    /// them — before it touched anything.
+    ///
+    /// A pure instrument, and it is deliberately *not* a measurement of the
+    /// integrator's drift. `step` renormalises on the way out, so by the time
+    /// the next step looks, the integrator's own inflation is already gone and
+    /// what is left is a couple of ulps. §7 measures the inflation in the
+    /// harness, where the un-normalised intermediate is still visible.
+    ///
+    /// What this catches is the other thing: **code outside the step writing
+    /// `orientation` without normalising it.** A gameplay system that lerps two
+    /// rotations, an animation blend, a network packet, a hand-authored
+    /// `quat{0.7f, {0.7f, 0, 0}}` — all of them leave a body slightly off the
+    /// unit sphere, all of them render as a subtle shear that is very hard to
+    /// see and impossible to search for, and all of them show up here as a
+    /// number that is not 1e-7.
+    float max_unit_error = 0.0f;
 };
 
 /// The table of bodies, and the thing that steps them.
@@ -556,6 +953,12 @@ public:
     void set_integrator(integrator rule);
     [[nodiscard]] integrator integrator_rule() const;
 
+    /// How orientations are advanced. Lesson 8.3 §7, and the default is
+    /// `linearised` — the cheap one — because §12 measures the difference and
+    /// the honest answer is that it depends on what you are simulating.
+    void set_spin_rule(spin_rule rule);
+    [[nodiscard]] spin_rule spin() const;
+
     /// Advance every body by `h` seconds.
     ///
     /// **THE ORDER OF OPERATIONS IS THE LESSON**, and it is four steps:
@@ -586,6 +989,7 @@ private:
     pool<rigid_body> bodies_;
     vec3 gravity_ = k_gravity_down;
     integrator rule_ = integrator::semi_implicit_euler;
+    spin_rule spin_ = spin_rule::linearised;
     step_report report_{};
 };
 
@@ -594,9 +998,36 @@ private:
 // ---------------------------------------------------------------------------
 
 /// A dynamic body of `mass` kilograms at `position`, at rest.
+///
+/// **Its inertia tensor is the default identity**, which is no shape at all. A
+/// body made this way will spin, and will spin wrong. Use `make_box` or
+/// `set_inertia` for anything whose rotation is going to be looked at; this one
+/// remains because most of what a physics engine simulates never rotates
+/// visibly, and because 8.2's demos and harness call it.
 [[nodiscard]] rigid_body make_dynamic(vec3 position, float mass);
 
+/// A dynamic body shaped like a box: mass, half-extents, and the matching
+/// inertia tensor, all set consistently. Lesson 8.3.
+///
+/// The convenience that makes the common case right by default. Note that this
+/// is the FIRST factory in the file that could not have existed in 8.2 — a mass
+/// and a position are enough to describe a point, and a shape is the extra thing
+/// rotation needs.
+[[nodiscard]] rigid_body make_box(vec3 position, float mass, vec3 half_extents);
+
+/// A dynamic body shaped like a solid sphere. Lesson 8.3.
+///
+/// The only shape whose tensor is a multiple of the identity — so it is the only
+/// shape for which "resistance to turning" really is one number, and the only
+/// one that behaves the way the single-`float` version of this engine's angular
+/// dynamics would have.
+[[nodiscard]] rigid_body make_sphere(vec3 position, float mass, float radius);
+
 /// An immovable body at `position`: `inv_mass` 0, kind `fixed`.
+///
+/// **Its inverse inertia tensor is all zeros too**, from 8.3 onward, which is
+/// the same statement as `inv_mass = 0` made nine floats wide: no torque can
+/// spin it, exactly, with no branch and no sentinel.
 [[nodiscard]] rigid_body make_fixed(vec3 position);
 
 /// A kinematic body at `position` moving at `velocity`: immovable by forces,

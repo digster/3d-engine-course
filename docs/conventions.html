@@ -102,6 +102,7 @@
       <li><a href="#simulation">The simulation contract</a></li>
       <li><a href="#rotational">Rotational quantities &mdash; torque, spin, inertia</a></li>
       <li><a href="#bodies">Bodies &mdash; mass, forces, and which space they live in</a></li>
+      <li><a href="#rotating">Rotating bodies &mdash; the tensor, the sandwich, and the term everybody drops</a></li>
       <li><a href="#colour">Colour and diagram conventions</a></li>
       <li><a href="#code">Code organization &mdash; the boundary</a></li>
       <li><a href="#verified">The verified-facts table</a></li>
@@ -3523,6 +3524,98 @@
     </p>
   </div>
 
+  <h2 id="rotating"><span class="num">9d</span>Rotating bodies &mdash; the tensor, the sandwich, and the term everybody drops</h2>
+
+  <p>
+    Settled in Lesson 8.3 and binding for the rest of Module 8. &sect;9b fixed the <em>signs</em> of
+    rotational quantities before the first physics lesson; these are the <em>storage and lifecycle</em>
+    decisions, and each of them is measured on 8.3's page.
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>Rule</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>The inertia tensor is the one quantity in this engine that lives in <em>body</em>
+              axes.</strong> Position, velocity, force, torque and angular velocity are all world
+              space; <code>inv_inertia_local</code> and <code>inertia_local</code> are not.</td>
+          <td>It is the only frame in which the tensor is <em>constant</em>. In world space it changes
+              the instant the body turns, so storing it there means rebuilding it from the shape every
+              step. The asymmetry is forced, not chosen, and <code>world_inv_inertia</code> is the one
+              line that crosses it.</td>
+        </tr>
+        <tr>
+          <td><strong>A tensor crosses a frame with a <em>sandwich</em>:
+              <code>R I R&#7488;</code>.</strong> Never <code>R&#7488; I R</code>, and never a matrix
+              with a scale in it.</td>
+          <td>A quantity that eats a vector and produces one must be converted on <em>both</em> sides.
+              The reversed sandwich is symmetric, has the same trace, the same determinant and the
+              same principal moments, is reported <code>usable</code>, and is out by
+              <strong>1.569413</strong> &mdash; and a test built on a 90&deg; rotation passes with the
+              transpose in either place. <strong>Test with a generic rotation.</strong></td>
+        </tr>
+        <tr>
+          <td><strong>Torque accumulates about the <em>centre of mass</em>, in world axes, and is
+              cleared at the <em>end</em> of the step</strong> alongside <code>force</code>.</td>
+          <td>Only about the centre of mass do the linear and angular halves decouple &mdash; about
+              any other point, a force through the centre would produce a torque, and pushing a crate
+              squarely in the middle would set it spinning. Clearing at the end is 8.2's rule, for
+              8.2's reason: an overlay, an assertion or 8.10's solver may still want to read what was
+              applied.</td>
+        </tr>
+        <tr>
+          <td><strong>A body's centre of mass <em>is</em> its <code>state.position</code>.</strong>
+              There is no offset, ever.</td>
+          <td><code>inertia_assembly</code> computes where a compound body balances so that you can
+              <em>place</em> it there. The alternative carries an offset through every line of 8.9's
+              solver, which is what this was traded for.</td>
+        </tr>
+        <tr>
+          <td><strong>An orientation is renormalised every step, by the step.</strong> Anything that
+              writes <code>orientation</code> from outside must normalise it itself.</td>
+          <td>The linearised update inflates a unit quaternion by <code>(&omega;h)&sup2;/8</code> per
+              step &mdash; 0.35% at 10&nbsp;rad/s and 60&nbsp;Hz, compounding to <strong>23% in one
+              second</strong> &mdash; and a non-unit quaternion is a matrix with a <em>scale</em> in
+              it. <code>step_report::max_unit_error</code> exists to catch the outside writers and
+              reads about 1e&minus;7 when all is well.</td>
+        </tr>
+        <tr>
+          <td><strong>An angular velocity in world axes composes from the <em>left</em>.</strong> Body
+              axes compose from the right.</td>
+          <td>7.4 fixed that <code>a&middot;b</code> applies <code>b</code> first, so a delta expressed
+              in world axes is the outer one. Mixing them up produces unit quaternions and smooth
+              motion that is <strong>57.6&deg; wrong after one second</strong> &mdash; and is correct
+              for a body at the identity orientation, which is why it survives testing.</td>
+        </tr>
+        <tr>
+          <td><strong>The gyroscopic term is <em>opt-in</em>, per body.</strong> The default is
+              <code>off</code>, so out of the box this engine's bodies do not tumble.</td>
+          <td>Integrated explicitly it is 8.1's determinant in the last place this engine integrates
+              explicitly &mdash; <strong>3.3&nbsp;&times;&nbsp;10&sup1;&sup1;</strong> of drift at
+              30&nbsp;Hz. Bullet and PhysX both ship it off. Turn it on for the bodies whose tumbling
+              the player will look at.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout warn">
+    <span class="label">A validity check tells you a tensor <em>could</em> exist</span>
+    <p>
+      <code>inspect_inertia</code> tests four things &mdash; symmetry, positive moments, the triangle
+      inequality <code>I&#8321; + I&#8322; &ge; I&#8323;</code>, and usability &mdash; and every one
+      of them passes on a compound body assembled <em>without</em> the parallel-axis shift, which is
+      <strong>15.3&times; too small</strong>. It is a perfectly good tensor: of a body whose parts are
+      all piled on top of each other at the balance point.
+    </p>
+    <p>
+      Validation catches the impossible. It does not catch the merely wrong, and the merely wrong is
+      the common case. The same distinction returns in 8.7, where a well-formed contact can be
+      between the wrong pair of features.
+    </p>
+  </div>
+
   <h2 id="colour"><span class="num">10</span>Colour and diagram conventions</h2>
 
   <p>
@@ -3660,6 +3753,16 @@
         <tr><td>Reduced mass of a pair</td><td><code>1/(w_a + w_b)</code> where <code>w = 1/m</code>; equals <code>m_a m_b/(m_a + m_b)</code>, and an immovable body contributes <strong>0</strong> to the sum</td><td>Standard; the form 8.9's solver uses</td></tr>
         <tr><td>Terminal speed, velocity damping</td><td><code>g/k</code> &mdash; <strong>no mass in it</strong>; the discrete fixed point of our step is <code>gh&middot;e^(&minus;kh)/(1&minus;e^(&minus;kh))</code>, 0.42% lower at 60&nbsp;Hz</td><td>Derived and measured, 8.2 &sect;6</td></tr>
         <tr><td>Terminal speed, linear drag force</td><td><code>mg/b</code> &mdash; <strong>proportional to mass</strong>; time constant <code>m/b</code></td><td>Derived and measured, 8.2 &sect;6</td></tr>
+        <tr><td>Inertia tensor of a point mass</td><td><code>m(|r|&sup2;&middot;1 &minus; r&otimes;r)</code>, equivalently <code>&minus;m[r]&#8339;[r]&#8339;</code>. The second form is what the engine ships: the first <strong>returns exactly zero</strong> in <code>float</code> for <code>r = (1000, 0.001, 0)</code></td><td>Derived and measured, 8.3 &sect;4</td></tr>
+        <tr><td>Parallel-axis theorem</td><td><code>I_d = I_cm + m(|d|&sup2;&middot;1 &minus; d&otimes;d)</code> &mdash; the correction is exactly the tensor of a point mass <code>m</code> at <code>d</code>, and it works <strong>only from the centre of mass</strong></td><td>Derived 8.3 &sect;5; the cross term vanishes by the definition of the centre of mass</td></tr>
+        <tr><td>Solid box, about its centre</td><td><code>I&#8339;&#8339; = m(b&sup2; + c&sup2;)/3</code> for half-extents <code>(a, b, c)</code> &mdash; note that <strong>a does not appear</strong></td><td>Standard; checked against a brute-force sum, 8.3 &sect;5</td></tr>
+        <tr><td>Grid-sampling deficit</td><td>summing <code>N&sup3;</code> point masses over a box is low by exactly <code>1 &minus; 1/N&sup2;</code>, because each cell's own spread is missing</td><td>Predicted then measured to six decimals, 8.3 &sect;5</td></tr>
+        <tr><td>Basis change of a tensor</td><td><code>R I R&#7488;</code>, and <code>(R I R&#7488;)&#8315;&sup1; = R I&#8315;&sup1; R&#7488;</code> exactly, which is why a body inverts once and never again</td><td>Derived 8.3 &sect;6; measured at 5.96e&minus;08</td></tr>
+        <tr><td>Quaternion derivative</td><td><code>q&#775; = &frac12;&nbsp;&omega;_pure&nbsp;q</code> for a <em>world</em>-space <code>&omega;</code>. The &frac12; is 7.3's half-angle</td><td>Derived 8.3 &sect;7 from <code>q = (cos&theta;/2, n&#770;sin&theta;/2)</code></td></tr>
+        <tr><td>Linearised spin errors</td><td>length inflates by <code>&radic;(1 + (&omega;h/2)&sup2;)</code>; the angle achieved after renormalising is <code>2&nbsp;arctan(&omega;h/2)</code>, short by <code>(&omega;h)&sup2;/12</code></td><td>Both predicted then measured, 8.3 &sect;7</td></tr>
+        <tr><td>Euler's equation</td><td><code>&omega;&#775; = I&#8315;&sup1;(&tau; &minus; &omega; &times; I&omega;)</code>. The second term is <strong>the price of choosing &omega; as the state</strong> &mdash; store <code>L</code> and it is not a term</td><td>Derived 8.3 &sect;9; all four treatments measured</td></tr>
+        <tr><td>Torque-free conserved quantities</td><td><strong>two</strong>: <code>|L|&sup2;</code> and <code>2T = &Sigma;L&#7522;&sup2;/I&#7522;</code>. Both are linear in <code>L&#7522;&sup2;</code>, which makes the reachable range of <code>|&omega;|</code> a two-line derivation</td><td>Derived 8.3 &sect;8; predicted 4.0524&hellip;4.4880, measured 4.0527&hellip;4.4924</td></tr>
+        <tr><td>Intermediate-axis instability</td><td>growth rate <code>&sigma; = &Omega;&radic;((I&#8323;&minus;I&#8322;)(I&#8322;&minus;I&#8321;)/(I&#8321;I&#8323;))</code>; the other two axes oscillate</td><td>Derived 8.3 &sect;10; predicted 4.8038, measured 4.8084 at 7,680&nbsp;Hz</td></tr>
         <tr><td>Length-scale law</td><td>scale every length by <code>s</code> with <code>g</code> fixed &rarr; every duration scales by <strong>&radic;s</strong></td><td>Derived from <code>d = &frac12;gt&sup2;</code>, 8.2 &sect;8</td></tr>
         <tr><td>NDC extents</td><td>lower-left <code>(−1,−1)</code>, upper-right <code>(1,1)</code> → <strong>+Y up</strong></td><td>SDL3 wiki, CategoryGPU</td></tr>
         <tr><td>NDC depth</td><td><strong><code>z ∈ [0,1]</code></strong>, 0 = near</td><td>SDL3 wiki, CategoryGPU</td></tr>

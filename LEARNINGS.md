@@ -8524,3 +8524,94 @@ desktop width and which no amount of reading the HTML would reveal.
 
 `.tbl-scroll` around the table fixes it. Two rules follow: run `check-page.js` at **both** widths
 before shipping a page, and wrap any table whose first column can hold a long unbreakable token.
+
+## A derivation says *what* to compute, not *how* — third time
+
+`|r|²·1 − r⊗r` is what the vector triple product hands you for a point mass's inertia tensor, and it
+is the form every textbook prints. Its diagonal is `|r|² − x²`: a sum of three squares with one of
+them subtracted straight off again. For a sample at `r = (1000, 0.001, 0)` the true `Ixx/m` is
+`1e−6`, and a `float` computes `1000000 − 1000000` and returns **exactly zero** — the `1e−6` was
+never *in* the sum, because the ulp at 1e6 is 0.0625.
+
+`−m·[r]ₓ[r]ₓ` — the cross-product matrix squared and negated — is the same algebra, builds the
+diagonal from `y² + z²` directly, never forms the cancelling sum, and is nine multiplies instead of
+two matrix products. `inertia_of_point` ships that; the derived form appears nowhere in the engine.
+
+The consequence of getting it wrong is *behavioural*, not numerical: a zero principal moment makes
+the tensor singular, `inverse_inertia` refuses it, and every plank, rail, sword and lamp post in the
+level silently will not rotate about its own length — while everything else about the body works.
+
+This is the third instance of the same class in the course: Lesson 6.16's `perspective()` formed
+`A + 1` with `A = −1.003009` and amplified one ulp by 332×, and Lesson 8.2's mass round trip failed
+for 16% of masses. **Whenever a formula subtracts two things that are nearly equal, look for the
+algebraically identical version that does not.**
+
+## Convention bugs hide behind symmetric test data
+
+`Rᵀ I R` instead of `R I Rᵀ` is the easiest inertia-tensor mistake there is, and nothing structural
+catches it: the result is symmetric, has the same trace, the same determinant, the same principal
+moments, satisfies the triangle inequality, and `inspect_inertia` reports it `usable`. It is a
+perfectly good tensor — the basis change in the other direction — and is out by 1.569413 on a body
+whose moments run 1.67 to 4.33.
+
+Worse, the obvious behavioural test does not catch it either. Rotate the body 90° about `z` and
+check that the world `Ixx` equals the body `Iyy`: **both sandwiches pass**, because a right angle is
+its own inverse up to a sign on a diagonal tensor. Lesson 8.3 §6 uses 0.7π about `(1, 2, 3)`
+normalised for exactly this reason.
+
+Test transforms with a *generic* rotation, never an axis-aligned right angle. The same warning
+applies to winding order, to matrix/vector multiplication order, and to anything whose bug is a
+transposition.
+
+## Validation catches the impossible, not the merely wrong
+
+`inspect_inertia` tests symmetry, positive moments, the triangle inequality and usability — and a
+compound body assembled *without* the parallel-axis shift passes every one of them while being
+**15.3× too small**. It has to: the wrong answer is a genuine inertia tensor, of a body whose parts
+are all piled on top of each other at the balance point. That body could exist. It is just not the
+one you meant.
+
+The same shape of failure is waiting in contact generation, where a perfectly well-formed contact can
+be between the wrong pair of features. A validity check is a lower bound on correctness and is worth
+having; it is not a correctness test, and treating it as one is how a 15× error ships.
+
+## Measure in the frame the equations are written in
+
+Euler's equations are **body-frame** equations. `rigid_body` stores `angular_velocity` in world
+space (deliberately — 8.9's solver needs one common frame). For a body spinning about its own `y`
+axis, the two perturbation components are carried around `y` at the spin rate, so a world-space
+`ω.x` oscillates at 10 Hz while its envelope grows.
+
+Lesson 8.3's first measurement of the intermediate-axis growth rate sampled that world-space
+component at threshold crossings and fitted **3.8498** against a predicted 4.8038 — a 20% miss that
+looked like a failed prediction and was a failed frame. Everything in §10 now measures
+`transpose(mat3_from_quat(q)) * ω`.
+
+**The tell was that the spurious oscillation was at the spin rate.** A perturbation has no reason to
+know about the spin; when a measured signal carries a frequency that belongs to something else in the
+system, suspect the frame before the physics.
+
+## A benchmark that copies state measures the copy
+
+Lesson 8.3 §12's first draft wrote each arm as `body_world w = seed; … w.step(h)` so that both arms
+would start from identical state. That is a reasonable instinct and it put a **557 KB copy of the
+body pool inside the timed region**: every arm reported 34–58 ns/body against 8.2's 1–2, and every
+ratio came out near 1.000 — *including the ratio the comparison was supposed to produce*.
+
+The control is what should have caught it immediately. Two identical arms at ratio 1.000 is correct;
+two identical arms at 1.000 **while every real comparison is also 1.000** is the signature of a
+benchmark measuring something both arms have in common. Build the state once, outside the timed
+region, and let the arms diverge — for a comparison of *work*, the state only has to be
+representative, not identical.
+
+## The largest optimisation is usually not an algorithm
+
+The same section then found the real cost: `mat3_from_quat` was being called **twice from the same
+quaternion, twenty lines apart**, once inside `world_inverse_inertia` and once inside
+`angular_momentum`, in two functions that were each perfectly reasonable on their own. Hoisting it
+and storing the forward inertia tensor beside its inverse took the step from 33.793 to
+**18.778 ns/body** with no change to a single result.
+
+Before reaching for a better algorithm, itemise what the loop actually calls and look for the same
+pure function invoked twice on the same argument. Composable helpers make this *easy* to do by
+accident, and a profiler shows it as time in the helper rather than as a duplicate.

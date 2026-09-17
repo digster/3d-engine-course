@@ -2825,3 +2825,14 @@ next
 ```
 next
 ```
+
+---
+
+## Session — 2026-09-16 (4), Lesson 8.3
+
+```
+next
+```
+
+(Continuation of the standing protocol: `next` produces exactly one complete lesson. Resumed from
+CLAUDE.md + STATE.md, which named 8.3 — Angular Dynamics: Torque and the Inertia Tensor.)

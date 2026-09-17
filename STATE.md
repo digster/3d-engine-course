@@ -7,41 +7,85 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-09-16 (after Lesson 8.2 — 85 of 107 lessons; MODULE 8 OPEN, 2 of
+updated: 2026-09-16 (after Lesson 8.3 — 86 of 107 lessons; MODULE 8 OPEN, 3 of
+         13, ~17 h of ~70. PLANNED AT 6 AND SHIPPED AT 6 — the first lesson
+         since 7.3 to land on its estimate — so no module subtotal and no course
+         total moved. Still 107 lessons, ~523 h. check-curriculum.py green, and
+         checks 1, 2, 10 and 11 were all clean on the first run for the second
+         lesson running.
+         THE ENGINE CAN TURN. Orientation, angular velocity, a torque
+         accumulator, an inertia tensor and its inverse, four gyroscopic modes.
+         `add_force_at` is the first function in 86 lessons that can make
+         something tumble. New file pair engine/phys/inertia.{hpp,cpp}, and the
+         split IS the dependency direction 8.2 promised: inertia knows about
+         SHAPES and nothing about bodies. 90 -> 91 public headers.
+         mat3 GREW ARITHMETIC EIGHTY LESSONS LATE, and not by oversight: for 80
+         lessons a mat3 was "where do the basis vectors land", under which
+         reading operator+ is meaningless. An inertia tensor is a mat3 under a
+         DIFFERENT reading — a QUANTITY — and quantities add.
+         THE DERIVATION'S OWN EXPRESSION IS THE ONE THAT MUST NOT SHIP.
+         |r|^2*1 - outer(r,r) has diagonal |r|^2 - x^2; at r = (1000, 0.001, 0)
+         a float computes 1000000 - 1000000 and returns EXACTLY ZERO where the
+         answer is 1e-6 — 100% wrong, and the 1e-6 was never IN the sum (ulp at
+         1e6 is 0.0625). -[r]x[r]x is the same algebra, never forms the sum, and
+         is nine multiplies instead of two matrix products. The consequence is
+         BEHAVIOURAL: a zero principal moment is a singular tensor, so every
+         plank, rail and sword silently refuses to spin about its own length.
+         THIRD APPEARANCE OF THIS CLASS after 6.16's perspective() and 8.2's
+         mass round trip: a derivation says WHAT to compute, not HOW.
+         FOUR GYROSCOPIC MODES, and the fourth reframes the other three.
+         explicit = 8.1's determinant in the last place this engine integrates
+         explicitly (|L| drift 3.2967e+11 at 30 Hz). implicit = 8.1's OTHER
+         determinant, the exact reciprocal, so it DAMPS (loses 35% at 60 Hz).
+         momentum = integrate L, derive omega — the term was never physics, it
+         is the price of choosing omega as the state, so it VANISHES (8.0e-04).
+         AND THE MOMENTUM COLUMN GETS WORSE AS h SHRINKS, which is the ONLY
+         table in this course that does: its error is rounding rather than
+         truncation, so it grows with the NUMBER of steps. Storing L is debt.
+         CONSERVING THE RIGHT QUANTITY IS NOT ENOUGH. momentum conserves L BY
+         CONSTRUCTION, so |L| cannot tell you the body is wrong — the SECOND
+         conserved quantity can. With a start-of-step omega, E drifts 97.1% and
+         |omega| reaches 8.0350 where §8 DERIVES a bound of 4.0524..4.4880. One
+         half step: 1.198e-04, and 4.0525..4.4879, INSIDE the bound. 8,100x.
+         THE BOUND IS DERIVED, NOT OBSERVED: write u_i = L_i^2 and BOTH
+         conserved quantities are linear in u, so the reachable set is a segment
+         and a linear function on a segment extremises at the ENDS. Measured
+         4.0527..4.4924 against a predicted 4.0524..4.4880.
+         THE TENNIS RACKET THEOREM, predicted and measured: 4.8038 s^-1 against
+         4.9058 / 4.8310 / 4.8128 / 4.8084 at 120/480/1920/7680 Hz. Flips every
+         2.6651 s, forever, with nothing acting on the body.
+         AND ITS FIRST MEASUREMENT MISSED BY 20% BECAUSE OF A FRAME: Euler's
+         equations are BODY-frame, the engine stores omega in WORLD space, and
+         the oscillation was AT THE SPIN RATE — which is the tell.
+         §12 MEASURED A memcpy FIRST (a 557 KB pool copy inside the timed
+         region; every arm 34-58 ns, every ratio near 1, including the control).
+         AND THEN THE REAL FINDING, WHICH IS NOT AN ALGORITHM: mat3_from_quat
+         built TWICE from the same quaternion, twenty lines apart, in two
+         functions that were each reasonable alone. Hoisting it plus storing the
+         forward tensor: 33.793 -> 18.778 ns/body, 1.80x, with no number on the
+         page changing. sizeof(rigid_body) 60 -> 172, one cache line -> three.
+         NO NEW LOG CATEGORY — the SECOND test of 7.8's prediction, and it holds
+         for the same reason: phys/ has one thing to say and it is a programmer
+         error. Six categories, unchanged since 7.8.
+         AND THE UMBRELLA LINT DID NOT FIRE, for the SECOND lesson running,
+         which is the first time this file has been kept current across
+         consecutive lessons since Module 5.
+         check-page.js green at 1280 AND 390 — and 390 caught the manifest table
+         AGAIN, exactly as it did for 8.2. check-builders.py: 54/54.
+         Earlier, after Lesson 8.2 — 85 of 107 lessons; MODULE 8 OPEN, 2 of
          13, ~11 h of ~70. Planned at 4 h, shipped at 5, so Module 8 went
-         69 -> 70 h and the course total 522 -> 523. Index prose, both hero
-         stats and the module subtotal all moved together; check-curriculum.py
-         confirms, and its checks 1, 2, 10 and 11 were all green on the first
-         run for the first time since check 11 existed.
-         THE ENGINE CHANGED ITS MIND ABOUT GRAVITY, WITH A MEASUREMENT.
-         `step()` first put weight into the force accumulator as m*g — the
-         honest reading, and the one the header was written around — which
-         needs a FLOAT DIVIDE per body per step to recover a mass the body
-         deliberately does not store. §11 measured that at 15% of the whole
-         update (b/a = 0.845, 0.848, 0.847 over three runs), which is more than
-         8.1's ENTIRE semi-implicit step (0.963 ns). Gravity is now added AFTER
-         the division, as the acceleration it already is, which is also exact by
-         construction where the other route is exact only by luck. Box2D makes
-         the same choice in the same place. WHAT IT COST IS NAMED IN §12:
-         `rigid_body::force` no longer contains the body's weight, so a force
-         overlay draws every push EXCEPT the one that is always there.
-         AND THE OPPOSITE RESULT, KEPT: comparing squared speeds to avoid a
-         sqrt per body measured 1.036, 0.968, 0.969 — a tie, once a loss. The
-         sqrt stays, because when a measurement is a wash the version that reads
-         as what it means wins by default. TWO OPTIMISATIONS, AND THE FAMOUS ONE
-         WAS THE TIE.
-         NO NEW LOG CATEGORY, and that is the FIRST TEST OF 7.8'S PREDICTION.
-         log.hpp says the test for a category is "would somebody want to turn
-         exactly this off" and predicted that Modules 8 and 9 would not qualify.
-         phys/ has one thing to say — that a caller passed something which is
-         not a mass — and a programmer error is the last line anybody wants a
-         switch for. It goes to log_core, with the reasoning written at the call
-         site. Six categories, unchanged since 7.8.
-         AND THE UMBRELLA LINT DID NOT FIRE, for the first time in EIGHT
-         lessons: the engine.hpp line went in during the same edit as the header
-         it names. Recorded rather than celebrated — seven of the previous eight
-         missed it, and the streak broke on the lesson immediately after the one
-         that wrote a paragraph about missing it.
+         69 -> 70 h and the course total 522 -> 523.
+         THE ENGINE CHANGED ITS MIND ABOUT GRAVITY, WITH A MEASUREMENT: `step()`
+         first put weight into the force accumulator as m*g, which needs a FLOAT
+         DIVIDE per body per step to recover a mass the body deliberately does
+         not store — 15% of the whole update (b/a = 0.845, 0.848, 0.847). Gravity
+         is now added AFTER the division, as the acceleration it already is.
+         WHAT IT COST IS NAMED IN §12: `rigid_body::force` no longer contains the
+         body's weight, so a force overlay draws every push EXCEPT the one that
+         is always there.
+         AND THE OPPOSITE RESULT, KEPT: comparing squared speeds to avoid a sqrt
+         measured 1.036, 0.968, 0.969 — a tie, once a loss. TWO OPTIMISATIONS,
+         AND THE FAMOUS ONE WAS THE TIE.
          Earlier, after Lesson 8.1 — 84 of 107 lessons; MODULE 8 OPEN, 1 of
          13, ~6 h of ~69. Planned at 5 h, shipped at 6, so Module 8 went
          68 -> 69 h and the course total 521 -> 522. Module 8's index badge went
@@ -5303,6 +5347,85 @@ completed:
          enumerator plus comments.)
   ===> MODULE 7 COMPLETE <===
   - 8.1  Integrators: Why One Explodes
+  - 8.3  Angular Dynamics: Torque and the Inertia Tensor
+        (8.2's dead `next` link repointed in ALL THREE copies — the page,
+         scratch/l82_body_a.html and build_82.py's TAIL — and build_82 rebuilt,
+         so page and generator still agree; the diff was those four lines and
+         nothing else. Planned at 6 h and SHIPPED AT 6, so no module subtotal and
+         no course total moved: still 107 lessons, ~523 h. The first lesson since
+         7.3 to land on its estimate.
+         THE SIXTH NEW PUBLIC DIRECTORY-MEMBER, not a directory: inertia.{hpp,cpp}
+         joins phys/, and the split is the dependency direction 8.2 promised —
+         inertia.cpp knows about SHAPES and nothing about bodies; rigid_body.cpp
+         knows about bodies and asks it what a shape weighs. 90 -> 91 headers.
+         THE UMBRELLA LINT DID NOT FIRE, for the SECOND lesson running, which is
+         the first time this file has been kept current across consecutive
+         lessons since Module 5.
+         mat3 GREW ARITHMETIC EIGHTY LESSONS LATE, and the reason is the lesson:
+         for 80 lessons a mat3 was "where do the basis vectors land", under which
+         reading operator+ is meaningless (the sum of two rotations is not a
+         rotation). An inertia tensor is a mat3 under a DIFFERENT reading — a
+         QUANTITY — and quantities add. operator+/-/unary-/scalar*, +=, -=, *=,
+         outer, skew, trace, diagonal, asymmetry.
+         THE DERIVATION'S OWN EXPRESSION IS THE ONE THAT MUST NOT SHIP.
+         |r|^2*1 - outer(r,r) has diagonal |r|^2 - x^2 — a sum of three squares
+         with one subtracted straight off again. At r = (1000, 0.001, 0) a float
+         computes 1000000 - 1000000 and returns EXACTLY ZERO where the answer is
+         1e-6: 100% wrong, and the 1e-6 was never IN the sum (ulp at 1e6 is
+         0.0625). -[r]x[r]x is the same algebra, never forms the sum, and is
+         nine multiplies instead of two matrix products. inertia_of_point ships
+         that. The consequence is behavioural: a zero principal moment is a
+         singular tensor, so every plank, rail and sword silently refuses to
+         spin about its own length.
+         AND THE SAME SHAPE OF LESSON A THIRD TIME: a derivation says WHAT to
+         compute, not HOW. 6.16 found it in perspective() (A+1 with
+         A = -1.003009 discards 8 bits, amplifies one ulp by 332x).
+         FOUR GYROSCOPIC MODES, and the fourth reframes the other three.
+         explicit = 8.1's determinant in the last place this engine integrates
+         explicitly: |L| drift 3.2967e+11 at 30 Hz, 1.6233e+00 at 60.
+         implicit (one Newton step in the body frame, Bullet's) = 8.1's OTHER
+         determinant, 1/(1+h^2w^2), so it DAMPS: loses 35% at 60 Hz.
+         momentum = integrate L, derive omega. The term was never physics — it
+         is the price of choosing omega as the state — so it VANISHES. 8.0e-04.
+         AND THE MOMENTUM COLUMN GETS WORSE AS h SHRINKS (3.86e-4, 8.05e-4,
+         3.01e-3, 1.18e-2 at 30/60/240/960 Hz), which is the ONLY table in this
+         course that does. Its error is not truncation — nothing in it
+         approximates L; the engine stores omega and rebuilds L every step, so
+         the error grows with the NUMBER of steps. Storing L is named as debt.
+         CONSERVING THE RIGHT QUANTITY IS NOT ENOUGH. momentum conserves L BY
+         CONSTRUCTION whatever it does with the orientation, so |L| cannot tell
+         you the body is wrong — the SECOND conserved quantity can. Paired with
+         a start-of-step omega, E drifts 97.1% and |omega| reaches 8.0350 where
+         §8 DERIVES a bound of 4.0524..4.4880. One half step: 1.198e-04 and
+         4.0525..4.4879, INSIDE the bound. A factor of 8,100.
+         THE BOUND IS DERIVED, NOT OBSERVED, and that is the strongest check in
+         the lesson: write u_i = L_i^2 and BOTH conserved quantities are linear
+         in u, so the reachable set is a segment, |omega|^2 is linear on it, and
+         a linear function on a segment extremises at the ENDS. Three
+         candidates, one infeasible. Predicted 4.0524..4.4880, measured
+         4.0527..4.4924.
+         THE TENNIS RACKET THEOREM, predicted and measured: sigma = 4.8038 s^-1
+         against 4.9058 / 4.8310 / 4.8128 / 4.8084 at 120/480/1920/7680 Hz —
+         each refinement roughly quarters the error, which is the midpoint
+         pairing's second order showing. Flips every 2.6651 s, forever.
+         AND THE FIRST VERSION OF THAT MEASUREMENT MISSED BY 20% BECAUSE OF A
+         FRAME: Euler's equations are BODY-frame equations, the engine stores
+         omega in WORLD space, and for a spin about y the two perturbation
+         components are carried around y at the spin rate. A world-space
+         omega.x oscillates at 10 Hz with a growing envelope, and sampling it at
+         a threshold crossing samples the oscillation. Fitted 3.8498.
+         §12 MEASURED A memcpy FIRST: each arm was `body_world w = seed; ...`,
+         putting a 557 KB pool copy inside the timed region. Every arm read
+         34-58 ns/body against 8.2's 1-2 and every ratio came out near 1.
+         AND THEN THE REAL FINDING, which is not an algorithm: the step built
+         mat3_from_quat TWICE from the same quaternion, twenty lines apart, in
+         world_inverse_inertia and angular_momentum. Hoisting it plus storing
+         the forward tensor took the step 33.793 -> 18.778 ns/body, 1.80x, with
+         no number on the page changing. sizeof(rigid_body) 60 -> 172 bytes,
+         one cache line -> three, which is the number 8.10's solver will care
+         about.
+         Ten figures. check-page.js green at 1280 AND 390.)
+
   - 8.2  Forces, Gravity, and Linear Rigid Bodies
         (OPENS MODULE 8. 7.8's TWO dead `next` links repointed in the SOURCES —
          scratch/l78_body_a.html and build_78.py's TAIL — and build_78 rebuilt,
@@ -5334,6 +5457,65 @@ completed:
          evidence.)
 
 capabilities:
+  - 8.3 THE ENGINE CAN TURN. A `rigid_body` carries an `orientation` (unit
+    quat), an `angular_velocity` (WORLD space, rad/s), a `torque` accumulator
+    (N.m about the CENTRE OF MASS, world axes), an `inv_inertia_local` AND an
+    `inertia_local` (both BODY axes, about the centre of mass — the redundancy
+    is §12's, measured), an `angular_damping` and a `gyroscopic_mode`.
+    WHAT IS NEW, in phys/inertia.hpp: point_mass + inertia_of_point (the
+    WELL-CONDITIONED form, see below) + inertia_of_points + inertia_solid_box /
+    _solid_sphere / _hollow_sphere / _solid_cylinder / _thin_rod / _capsule +
+    shift_inertia / unshift_inertia (parallel axis, BOTH directions) +
+    rotate_inertia + world_inertia + world_inverse_inertia + inverse_inertia
+    (RELATIVE singularity test, not det == 0) + inertia_part /
+    inertia_assembly_result / inertia_assembly + inertia_report /
+    inspect_inertia (asymmetry, trace, diagonal, off_diagonal, positive,
+    TRIANGLE INEQUALITY, usable).
+    ...in phys/integrate.hpp: spin_rule (linearised | exponential) +
+    advance_orientation + k_spin_epsilon + spin_inflation + spin_angle_error.
+    ...in phys/rigid_body.hpp: gyroscopic_mode (off | explicit_term |
+    implicit_term | momentum) + add_torque + add_force_at + add_impulse_at +
+    add_angular_impulse + clear_torque + set_inertia + inertia_of +
+    world_inv_inertia + gyroscopic_step + angular_momentum + kinetic_energy +
+    point_velocity + world_point_of + make_box + make_sphere; step_report gains
+    angular_momentum, max_spin and max_unit_error; body_world gains
+    set_spin_rule / spin().
+    ...in math/mat3.hpp: operator+ / - (binary and unary) / *(scalar, both
+    orders) / += / -= / *= + outer + skew + trace + diagonal + asymmetry.
+    THE DECISIONS, each with a number behind it:
+      1. THE TENSOR IS IN BODY AXES AND EVERYTHING ELSE IS IN WORLD AXES, and
+         that asymmetry is FORCED: in world space a tensor changes the instant
+         the body turns. world_inv_inertia is the bridge, and it is a SANDWICH
+         (R I R^T) because a quantity that eats a vector and produces one must
+         be converted on BOTH sides.
+      2. R^T I R IS THE PLAUSIBLE WRONG ONE. Symmetric, same trace, same
+         determinant, same principal moments, `usable` — and out by 1.569413.
+         A test built on a 90-degree turn passes with the transpose in EITHER
+         place, because a right angle is its own inverse on a diagonal tensor.
+         Convention bugs hide behind symmetric test data.
+      3. STORE BOTH TENSORS. 36 bytes of redundancy with an invariant nothing
+         can enforce (set_inertia is the only writer), bought because the
+         forward tensor is needed by the gyroscopic term AND by
+         step_report::angular_momentum — which is computed whether or not
+         anybody reads it, and was 40% of the whole step at 13.418 ns.
+      4. THE ORIENTATION UPDATE IS SEMI-IMPLICIT ALWAYS, whatever `rule_` says.
+         Velocity Verlet's second half would need the tensor rebuilt at the new
+         orientation and a second renormalisation, to correct by less than the
+         renormalisation's own error.
+      5. GYROSCOPIC DEFAULTS TO `off`, which is what Bullet and PhysX both ship
+         (⚠ VERIFY the flag spellings). So out of the box this engine's bodies
+         do NOT tumble, and the most interesting thing in the lesson is
+         something you have to ask for. Said out loud in §13.
+    THE INSTRUMENT THAT MEASURES SOMEBODY ELSE: step_report::max_unit_error
+    reads | |q| - 1 | as the step FINDS each body, before touching anything.
+    Since step renormalises on the way out, anything it finds was written from
+    outside — an animation blend, a lerp, a network packet, a hand-authored
+    quat — all of which render as a subtle shear that is impossible to grep for.
+    NO NEW LOG CATEGORY, and that is the SECOND test of 7.8's prediction: phys/
+    still has one thing to say (a caller passed a tensor no shape could have)
+    and it is a programmer error. set_inertia's refusal goes to log_core beside
+    set_mass's. Six categories, unchanged since 7.8.
+
   - 8.2 THE ENGINE HAS BODIES, and can be told what is pushing on what.
     `engine::phys::body_world` is a `pool<rigid_body>` and about eight lines of
     policy: gravity, a choice of integrator, and a walk that turns a force
@@ -8697,7 +8879,8 @@ files:
              alphabetically, so they will not keep agreeing.)
   engine/include/engine/platform/: platform.hpp, app.hpp,
             main.hpp   (NOT in engine.hpp — it defines the entry point)
-  engine/include/engine/phys/: integrate.hpp [8.1], rigid_body.hpp          [8.2]
+  engine/include/engine/phys/: integrate.hpp [8.1], rigid_body.hpp [8.2],
+                               inertia.hpp                              [8.3]
             (THE FIFTH NEW DIRECTORY SINCE THE REFACTOR. NOT math/: math/ knows
              about numbers and has no .cpp at all; this knows that a velocity is
              metres per second and that a step size has a stability limit.
@@ -8708,11 +8891,20 @@ files:
              `rigid_body` a `motion`; it does not widen this.
              THERE IS NO implicit_euler ENUMERATOR, and the enum says why: the
              solve is a root find for anything non-linear, and its determinant is
-             1/(1 + h^2 w^2), so it is costly AND lossy.)
+             1/(1 + h^2 w^2), so it is costly AND lossy.
+             8.3 SPLIT inertia.hpp OUT rather than widening rigid_body.hpp, and
+             the split IS the dependency direction: inertia knows about SHAPES
+             and nothing about bodies; rigid_body knows about bodies and asks it
+             what a shape weighs. 8.4's collision shapes inherit that.
+             integrate.hpp grew spin_rule/advance_orientation because an
+             orientation advance IS an integrator — 8.1's file said 8.3 would
+             add it — and it is the one function in the header that needs
+             quat.hpp.)
   engine/include/engine/ui/: debug_ui.hpp                                   [5.11]
             (a new directory, same argument asset/ made in 5.5: tooling UI is not a
              graphics subsystem. Does NOT include <imgui.h> — see debug-ui.)
-  engine/src/phys/: integrate.cpp [8.1], rigid_body.cpp                    [8.2]
+  engine/src/phys/: integrate.cpp [8.1], rigid_body.cpp [8.2],
+                    inertia.cpp                                         [8.3]
             (Everything that is NOT a template: the constant-acceleration
              overload, apply_drag/damping_factor, and the four diagnostics.
              Nothing in it is hot — the general stepper stayed in the header
@@ -8788,6 +8980,28 @@ files:
             camera back without limit and every correct curve collapses to a dot.
             Its clear colour is (16, 18, 24), and figs_81.py's palette lists the
             demo's own constants because rle_rects SNAPS.)
+  demos/spin/: main.cpp                                                   [8.3]
+           (THE FIRST DEMO IN THE MODULE THAT DRAWS AN OBJECT rather than a graph
+            of one, because the claim it settles is about which way something is
+            POINTING and a tumbling box is not a trajectory. Wireframe, parallel
+            projection, twelve edges sorted by one depth key — 3.1's painter's
+            algorithm on twelve primitives — plus the three body axes in the
+            course's x/y/z = red/green/blue and ONE AMBER LINE THAT DOES NOT
+            MOVE, which is L. Amber deliberately not an axis colour: a reader who
+            took it for a fourth body axis would have the picture backwards.
+            THE RIGHT PANEL IS IN BODY AXES AND HAS TO BE. The engine stores
+            omega in WORLD space, where the two perturbation components of a spin
+            about y are carried around y at the spin rate — so a world-space plot
+            is an unreadable 10 Hz oscillation with a growing envelope. The flip
+            is a SIGN CHANGE only in the frame Euler's equations are written in,
+            and getting that wrong is what made §10's first fit miss by 20%.
+            NO GRAVITY AND NO FLOOR, which is the experiment rather than a
+            missing feature: every claim here is about a body with NOTHING acting
+            on it. Gravity would not change the tumble (its lever arm is zero)
+            but it would carry the box out of the panel and invite the reader to
+            wonder whether the falling was doing it.
+            [G] cycles the four gyroscopic modes, which is the whole point: OFF
+            is a flat line.)
   demos/bodies/: main.cpp                                                 [8.2]
            (WORLD-SPACE TRAJECTORIES, not phase space, because the claim it
             settles is one a player could see. Three masses (0.1, 1, 10 kg) on
@@ -8906,7 +9120,7 @@ files:
                  07-06-skeletal-animation.html,
                  07-07-sampling-blending.html
                  07-08-audio.html, 08-01-integrators.html,
-                 08-02-forces-and-bodies.html
+                 08-02-forces-and-bodies.html, 08-03-angular-dynamics.html
                  (5.12 IS OUT OF SEQUENCE ON PURPOSE — Module 5 closed eleven
                   lessons after 5.11 and one after 6.18, and the list is
                   append-ordered rather than sorted so that the history is
@@ -9512,79 +9726,70 @@ roadmap: RESHAPED 2026-09-08, AFTER TWO EXTERNAL REVIEWS OF THE PUBLISHED OUTLIN
 
 
 
-next: 8.3 — Angular Dynamics: Torque and the Inertia Tensor
+next: 8.4 — Collision Primitives: Spheres, AABBs, OBBs, and the SAT
 
-      WHAT 8.3 INHERITS, AND MUST NOT RE-DERIVE:
-        - `rigid_body`, `body_world`, `body_id` AND THE ACCUMULATOR. 8.3 adds
-          orientation, angular velocity, a torque accumulator and an inverse
-          inertia tensor to the SAME struct and the SAME walk. It does not
-          reopen why there is an accumulator (linearity of F = ma) or why the
-          mass is stored inverted — and the second of those pays off a second
-          time: A ZERO INVERSE INERTIA TENSOR IS EXACTLY WHAT AN IMMOVABLE BODY
-          WANTS, for the same three reasons §4 gave for inv_mass.
-        - GRAVITY IS ADDED AFTER THE DIVISION and `force` does NOT contain
-          weight. 8.3's torque accumulator has the mirror decision to make and
-          should make it the same way — but note the asymmetry: gravity acting
-          at the CENTRE OF MASS produces no torque at all, which is why a
-          uniform body falls without tumbling and why 8.3's `add_force_at` is
-          the first function in the module that can.
-        - BODIES ARE WORLD SPACE, FULL STOP. inspect_frame/place_in_parent are
-          the bridge, and 8.3 inherits a new reason: R I R^T is a BASIS CHANGE,
-          so a non-uniformly scaled parent does not merely tilt gravity, it
-          turns a sphere into an ellipsoid and an inertia tensor into something
-          that is not one.
+      WHAT 8.4 INHERITS, AND MUST NOT RE-DERIVE:
+        - `rigid_body` NOW HAS AN ORIENTATION, so a shape attached to one is
+          attached in BODY axes and 8.4's first job is the same sandwich 8.3 §6
+          derived. An OBB is an AABB plus that orientation, which is why the
+          three primitives are one lesson rather than three.
+        - `point_velocity(b, p) = v + omega x r` EXISTS and is what a contact
+          point's velocity is. 8.4 does not need it; 8.9 is written entirely in
+          terms of it, and 8.4 should not invent a second one.
+        - `world_point_of(b, local)` is the other half, and is what a debug
+          renderer draws a box with.
+        - INERTIA IS A SEPARATE FILE FROM BODIES, and the dependency runs one
+          way. 8.4's shapes go in phys/ beside inertia.hpp and may depend on it
+          (a shape knows what it weighs); inertia.hpp must not learn about them.
         - THE HARNESS SHAPE. Nine sections, EVERY one with a control, chosen by
           asking what it would say if the thing were completely BROKEN and what
           it would say if the thing were completely FINE.
         - `scratch/build_verify_NN.sh` REFUSES an unoptimised libengine.a.
         - A LESSON PAGE ENDS AT FURTHER READING. STATE.md is the sole resume key.
 
-      WHAT 8.3 IS LIKELY TO MOVE. `engine/include/engine/math/mat3.hpp` — the
-      roadmap has said since the reshape that mat3 NEEDS operator+/-, scalar
-      multiply and an OUTER PRODUCT before an inertia tensor can be written;
-      inverse/transpose/multiply already exist. Then rigid_body.hpp and its .cpp,
-      engine/CMakeLists.txt if a file is added, and engine.hpp if a header is.
-      8.2's listings are PINNED at scratch/l82_*, so editing rigid_body.hpp does
-      not disturb the published page — but if 8.3 CORRECTS something 8.2 got
-      wrong, the fix goes into the pin AND the live file, or the page and the
-      repo disagree invisibly (6.6 §10's three copies).
+      WHAT 8.4 IS LIKELY TO MOVE. New files under engine/{include/engine,src}/
+      phys/ for the shapes and the tests, engine/CMakeLists.txt, engine.hpp (the
+      umbrella lint has now gone TWO lessons without firing — do not let 8.4 be
+      the one that breaks it), and demos/CMakeLists.txt. 8.3's listings are
+      PINNED at scratch/l83_*, so editing rigid_body.hpp does not disturb the
+      published page — but if 8.4 CORRECTS something 8.3 got wrong, the fix goes
+      into the pin AND the live file, or the page and the repo disagree
+      invisibly (6.6 §10's three copies).
 
-      CARRY FORWARD from 8.2:
-        - HAND-PICKED TEST DATA AGREES WITH THE CODE BY CONSTRUCTION. Seven
-          masses chosen by a person all survived the round trip (g/w)*w; a sweep
-          of a million found 15.9937% that do not, the first at 1.000145 kg.
-          When a check passes on every value you thought of, the next move is to
-          try values nobody would think of, in bulk.
-        - AND THE OPPOSITE FAILURE: A CONTROL CAN HAVE A BUG AND NOT FAIL. E.4
-          held a force for `round(rate/60)` steps, which at 144 Hz is 13.9 ms
-          rather than 16.7 — so the control produced a THIRD number and invited
-          an explanation. Rescaling the force to the duration actually held
-          fixed it. A control that disagrees with both arms is not evidence.
-        - ALTERNATE THE ARMS OR MEASURE THE MACHINE. §11's first draft timed
-          four loops one after another and reported the same arrangement at
-          2.625, 1.758, 1.476 and 1.459 ns/body on four runs of one binary —
-          whichever arm ran first always lost. 5.6's `bench_compare` runs them
-          one rep each, alternately, and the RATIO then repeats to three
-          decimals. Quote the ratio of medians, and print min beside it: spread()
-          over 2000 reps is dominated by scheduler outliers and reads as 1-4 on a
-          machine that is behaving perfectly.
-        - THE FAMOUS OPTIMISATION WAS THE TIE. Avoiding a sqrt per body: 1.036,
-          0.968, 0.969. Declining to compute a mass in order to cancel it: 0.845,
-          0.848, 0.847. A pipelined sqrtss off the critical path is free; a divss
-          is not. Measure both before believing either.
-        - PRINT THE DISCRETE PREDICTION, NOT ONLY THE CONTINUOUS ONE. Damping's
-          terminal speed is g/k in the limit and g*h*e^-kh/(1-e^-kh) in the loop
-          we actually run — 19.6200 against 19.5384, a 0.42% offset that is far
-          too consistent to be noise and would have sent somebody bug-hunting.
-        - THREE CURVES ON TOP OF ONE ANOTHER LOOK LIKE ONE CURVE, and the
-          picture that proves they agree then looks exactly like a bug that lost
-          two of them. Both demos/bodies and figs_82.py draw one dash in three,
-          with the same phases.
-        - CHECK-PAGE.JS AT 390 FOUND WHAT 1280 COULD NOT: a `manifest` table
-          whose longest path (engine/include/engine/phys/rigid_body.hpp, two
-          characters longer than 8.1's) cannot wrap inside <code>, forcing the
-          whole PAGE to scroll horizontally. `.tbl-scroll` around it. Run BOTH
-          widths; pageScrollsX is invisible at desktop.
-        - AND figs_82.py IS LITERAL UNICODE THROUGHOUT, never \uXXXX, which is
-          8.1's flagged debt not repeated. Every patch script against it asserts
-          its replacement count.
+      CARRY FORWARD from 8.3:
+        - A DERIVATION SAYS WHAT TO COMPUTE, NOT HOW. |r|^2*1 - outer(r,r) is
+          the expression the algebra hands you and it returns EXACTLY ZERO for a
+          plank in float, because its diagonal subtracts two numbers that are
+          equal to within an ulp. -[r]x[r]x is the same algebra, never forms the
+          cancelling sum, and is faster. THIRD TIME THIS CLASS HAS APPEARED
+          (6.16's perspective(), 8.2's mass round trip, now this): whenever a
+          formula subtracts two nearly-equal things, look for the version that
+          does not. 8.4's SAT projects onto axes and subtracts intervals.
+        - CONVENTION BUGS HIDE BEHIND SYMMETRIC TEST DATA. R^T I R passes trace,
+          determinant, symmetry, principal moments AND any test built on a
+          90-degree rotation, because a right angle is its own inverse on a
+          diagonal tensor. Test with a GENERIC rotation — 8.3 §6 uses 0.7*pi
+          about (1,2,3) normalised.
+        - VALIDATION CATCHES THE IMPOSSIBLE, NOT THE MERELY WRONG. A compound
+          body assembled without the parallel-axis shift is 15.3x too small and
+          passes symmetric/positive/triangle/usable, because it IS a valid
+          tensor — of a body whose parts are piled at the balance point. 8.7's
+          manifolds have exactly this shape of failure.
+        - MEASURE IN THE FRAME THE EQUATIONS ARE WRITTEN IN. §10's first fit read
+          3.8498 against a predicted 4.8038 because it sampled a world-space
+          component of a body-frame quantity. The oscillation was AT THE SPIN
+          RATE, which is the tell — a perturbation has no reason to know about
+          it.
+        - A BENCHMARK THAT COPIES STATE MEASURES THE COPY. §12's first draft put
+          a 557 KB pool copy inside the timed region; every arm read 34-58 ns and
+          every ratio came out near 1, including the control, which is the shape
+          of a benchmark measuring something both arms have in common.
+        - AND THE REAL OPTIMISATION WAS NOT AN ALGORITHM: mat3_from_quat built
+          twice from the same quaternion, twenty lines apart, in two functions
+          that were each reasonable alone. 33.793 -> 18.778 ns/body.
+        - CHECK-PAGE.JS AT 390 FOUND THE MANIFEST TABLE AGAIN, exactly as it did
+          for 8.2: a path inside <code> cannot wrap, so the longest one forces
+          the whole PAGE to scroll. `.tbl-scroll` around it. Run BOTH widths;
+          pageScrollsX is invisible at desktop and was green at 1280 both times.
+        - AND figs_83.py IS LITERAL UNICODE THROUGHOUT, never \uXXXX, with every
+          patch script asserting its replacement count.

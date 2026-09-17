@@ -245,3 +245,26 @@ engine_set_warnings(integrate)
 add_executable(bodies bodies/main.cpp)
 target_link_libraries(bodies PRIVATE engine::engine)
 engine_set_warnings(bodies)
+
+# ---- spin: a box that flips with nothing touching it -----------------------
+#
+# Lesson 8.3, and the picture is a WIREFRAME BODY beside a body-frame plot —
+# the first demo in this module that draws an object rather than a graph of one,
+# because the claim it settles is about which way something is POINTING. A
+# tumbling box is not a trajectory.
+#
+# The right-hand panel is the other half, and it has to be in BODY axes: the
+# engine stores `omega` in world space, where the two perturbation components of
+# a spin about y are carried around y at the spin rate, so a world-space plot of
+# them is an unreadable 10 Hz oscillation with a slowly growing envelope. The
+# flip is a sign change only in the frame Euler's equations are written in.
+#
+# `engine::engine` directly and NOT `demo_common`, the same statement `gimbal`,
+# `rig`, `plane`, `collector`, `ecs_swarm`, `audio`, `integrate` and `bodies`
+# make. It loads nothing and computes everything on screen, so a `--shot` run is
+# byte-for-byte reproducible on any machine.
+#
+# No `engine_use_assets` and no `engine_use_shaders`.
+add_executable(spin spin/main.cpp)
+target_link_libraries(spin PRIVATE engine::engine)
+engine_set_warnings(spin)

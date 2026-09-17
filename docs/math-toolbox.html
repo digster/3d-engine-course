@@ -105,6 +105,7 @@
       <li><a href="#rotation">Parameterising a rotation</a></li>
       <li><a href="#sound">Sound: energy, gain and distance</a></li>
       <li><a href="#dynamics">Forces, impulses and mass</a></li>
+      <li><a href="#rotational-dynamics">Torque, the inertia tensor, and what a tumble conserves</a></li>
       <li><a href="#coming">Coming as the course proceeds</a></li>
     </ol>
   </details>
@@ -3922,6 +3923,119 @@ The singular values are sqrt(1 + |sin p|), 1, sqrt(1 - |sin p|).</span>
       which is the complaint &ldquo;the jumping feels floaty&rdquo; with a number attached. Scaling
       <code>g</code> by <code>1/s</code> fixes it exactly &mdash; it is a change of units &mdash; and
       carries no <em>absolute</em> length with it, which is where it stops working.
+    </p>
+  </div>
+
+  <h2 id="rotational-dynamics"><span class="num">8f</span>Torque, the inertia tensor, and what a tumble conserves</h2>
+
+  <p>
+    Lesson 8.3, and the rotational half is not the mirror of &sect;8e. Three of the six cards below
+    have no linear counterpart at all, and the reason is always the same: mass is a scalar that does
+    not rotate with the body, and the thing that replaces it is.
+  </p>
+
+  <div class="card">
+    <h3>Torque, and the point it is about <span class="from">Lesson 8.3</span></h3>
+    <div class="eq">
+      \[ \boldsymbol{\tau} = \mathbf{r} \times \mathbf{F},
+         \qquad |\boldsymbol{\tau}| = |\mathbf{r}||\mathbf{F}|\sin\theta \]
+      <span class="eq-plain">Torque is the lever arm crossed with the force: distance times the perpendicular part of the force, about the axis given by the right-hand rule.</span>
+    </div>
+    <p>
+      A torque is a property of a force <em>and a point</em>, not of a force. Taking it about the
+      <strong>centre of mass</strong> is what decouples the linear and angular halves of a step:
+      about any other point, a force through the centre would produce a torque. Two things fall out
+      with no extra code &mdash; a force aimed at the centre gives exactly zero (which is why gravity
+      does not tumble anything), and two equal and opposite forces at different points give torque
+      with no net force at all.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>The outer product <span class="from">Lesson 8.3</span></h3>
+    <div class="eq">
+      \[ (\mathbf{a} \otimes \mathbf{b})\,\mathbf{v} = \mathbf{a}\,(\mathbf{b}\cdot\mathbf{v}) \]
+      <span class="eq-plain">The outer product of two vectors is the matrix that measures how much of its input lies along b, and hands back that much of a.</span>
+    </div>
+    <p>
+      The <em>other</em> thing you can do with a pair of vectors: the dot product gives a number,
+      this gives a matrix. Its rank is one, so it flattens all of space onto a line &mdash; never a
+      transformation you would want, always a term in something else. <code>a &otimes; a</code> is
+      the projection onto <code>a</code> scaled by <code>|a|&sup2;</code>, which is what makes the
+      next card readable.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>The inertia tensor <span class="from">Lesson 8.3</span></h3>
+    <div class="eq">
+      \[ \mathbf{L} = \mathbf{I}\,\boldsymbol{\omega}, \qquad
+         \mathbf{I} = \sum_i m_i\bigl(|\mathbf{r}_i|^2\,\mathbf{1} - \mathbf{r}_i \otimes \mathbf{r}_i\bigr) \]
+      <span class="eq-plain">Angular momentum is the inertia tensor times the angular velocity, and the tensor is a mass-weighted sum over the body of the identity scaled by the squared distance, minus the outer product of the offset with itself.</span>
+    </div>
+    <p>
+      Read the bracket as geometry: resist <em>every</em> axis by <code>m r&sup2;</code>, then take
+      all of it back along <code>r</code>. So a point mass resists an axis through itself by nothing
+      and a perpendicular one by <code>m r&sup2;</code>.
+      <strong>Do not evaluate it this way in <code>float</code></strong> &mdash; the diagonal is
+      <code>|r|&sup2; &minus; x&sup2;</code>, which cancels catastrophically on a long thin body and
+      returns exactly zero. Use <code>&minus;m[r]&#8339;[r]&#8339;</code>, which is the same algebra
+      and never forms the sum.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>Moving it, and turning it <span class="from">Lesson 8.3</span></h3>
+    <div class="eq">
+      \[ \mathbf{I}_{\mathbf{d}} = \mathbf{I}_{\text{cm}} + m\bigl(|\mathbf{d}|^2\mathbf{1} - \mathbf{d}\otimes\mathbf{d}\bigr),
+         \qquad
+         \mathbf{I}_{\text{world}} = \mathbf{R}\,\mathbf{I}\,\mathbf{R}^{\!\top} \]
+      <span class="eq-plain">The parallel-axis theorem moves a tensor from the centre of mass to an offset point by adding the tensor of a point mass at that offset; a change of basis sandwiches it between the rotation and its transpose.</span>
+    </div>
+    <p>
+      Two <em>different</em> operations, and neither substitutes for the other: one changes the
+      <strong>point</strong>, the other changes the <strong>basis</strong>. The theorem works only
+      from the centre of mass, because that is where the cross term vanishes. The sandwich is a
+      sandwich because a quantity that eats a vector and produces one must be converted on both
+      sides &mdash; and <code>(R I R&#7488;)&#8315;&sup1; = R I&#8315;&sup1; R&#7488;</code> exactly,
+      which is why a body inverts its tensor once and never again.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>Advancing an orientation <span class="from">Lesson 8.3</span></h3>
+    <div class="eq">
+      \[ \dot q = \tfrac{1}{2}\,\boldsymbol{\omega}_{\text{pure}}\,q,
+         \qquad
+         \Delta q = \left(\cos\tfrac{|\boldsymbol{\omega}|h}{2},\;\hat{\boldsymbol{\omega}}\sin\tfrac{|\boldsymbol{\omega}|h}{2}\right) \]
+      <span class="eq-plain">The quaternion's derivative is half the pure-imaginary angular velocity times the quaternion; the exact delta rotation over a step is the axis-angle quaternion for turning by omega-h about the omega axis.</span>
+    </div>
+    <p>
+      <strong>An orientation does not integrate by addition</strong>, because rotations do not
+      commute and the sum of two rotation vectors is order-blind. Taking the derivative literally
+      gives an update that inflates the quaternion by <code>(&omega;h)&sup2;/8</code> per step and,
+      after renormalising, still turns <em>short</em> by <code>(&omega;h)&sup2;/12</code>. The second
+      form &mdash; the exponential map &mdash; is exact for a constant <code>&omega;</code> and needs
+      no renormalisation. The &frac12; is 7.3's half-angle, arriving as a factor in a derivative.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>Euler's equation, and the two things a tumble conserves <span class="from">Lesson 8.3</span></h3>
+    <div class="eq">
+      \[ \dot{\boldsymbol{\omega}} = \mathbf{I}^{-1}\bigl(\boldsymbol{\tau} - \boldsymbol{\omega}\times(\mathbf{I}\boldsymbol{\omega})\bigr),
+         \qquad
+         |\mathbf{L}|^2 \;\text{and}\; 2T = \sum_i \frac{L_i^2}{I_i} \;\text{are constant when}\; \boldsymbol{\tau} = 0 \]
+      <span class="eq-plain">Angular acceleration is the inverse tensor applied to the torque minus omega crossed with the angular momentum; with no torque, both the squared angular momentum and twice the kinetic energy stay constant.</span>
+    </div>
+    <p>
+      The extra term has no counterpart in <code>F = ma</code> and is <strong>not physics</strong>:
+      it appears on the line where you differentiate <code>L = I(t)&omega;</code> and insist that
+      <code>&omega;</code> be the state. Store <code>L</code> instead and it is not a term at all.
+      The two conserved quantities are both <em>linear in <code>L&#7522;&sup2;</code></em>, which is
+      what turns "how far can a tumbling body's angular speed wander" into a two-line derivation
+      rather than a simulation &mdash; and it is also what makes the intermediate axis unstable, at
+      <code>&sigma; = &Omega;&radic;((I&#8323;&minus;I&#8322;)(I&#8322;&minus;I&#8321;)/(I&#8321;I&#8323;))</code>.
     </p>
   </div>
 

@@ -7,28 +7,36 @@ There is no engine to download here and no framework doing the interesting parts
 write the math library, the rasterizer, the ECS, the renderer, the physics, and the editor. By
 the end you have a real engine and a game built on its public API.
 
-**Status:** curriculum and conventions published; lessons in progress — **Modules 0–4 are complete**, **Module 5 is complete** — all 12 lessons, ~62 h, closed out of order by its checkpoint game — and **Module 6 is complete** — all 18 lessons, ~93 h, the longest module in the course — **Module 7 is complete** — all 8 lessons, ~47 h — and **Module 8 is under way** (**85 of 107**).
-The newest lesson is [8.2 — Forces, Gravity, and Linear Rigid Bodies](docs/lessons/08-02-forces-and-bodies.html),
-which gives the engine **bodies**. 8.1 taught it to advance a state through time and left it unable
-to tell a crate from a pebble: an acceleration *cannot be added up*, so four systems that each want
-to push the same body overwrite one another silently, and it does not know what anything weighs. The
-fix is `F = ma`, and the interesting part is everything the engine has to decide to make it usable —
-an **accumulator** rather than a setter (licensed by exactly one property: the law is linear in `F`,
-so four independent systems need no interface between them); the **reciprocal** of the mass rather
-than the mass, because *immovable* is the common case in a real level and is a clean exact zero where
-the alternative is an infinity whose difference with itself is a **NaN** on its way to the screen;
-and an **impulse** as its own entry point, because `Δv = J/m` has no `h` in it and the same jump
-written as a one-step force spans **23×** between 30 and 144 Hz. Two questions then stop being
-pedantry: **units**, where multiplying every length by `s` multiplies every *duration* by `√s` —
-which is why a 1/8 scale model ship runs **2.83×** too fast and why "the jumping feels floaty" is a
-measurement rather than an opinion — and **frames**, where a body integrated under a parent scaled
-by 2 falls at **2 g**, one merely *turned* under a non-uniformly scaled parent falls at **1.5811 g,
-63.435° off vertical**, and a *spinning* parent passes every test a matrix can answer while putting a
-force-free body **3.7963 m** off the straight line Newton obliges it to travel. Two measurements paid
-for the harness on their own: a sweep of **a million masses** found **16%** that fail a round trip
-seven hand-picked ones all passed, and of two candidate optimisations the famous one — avoid a
-`sqrt` per body — was a **tie**, while declining to compute a mass in order to cancel it was worth
-**15% of the whole update**.
+**Status:** curriculum and conventions published; lessons in progress — **Modules 0–4 are complete**, **Module 5 is complete** — all 12 lessons, ~62 h, closed out of order by its checkpoint game — and **Module 6 is complete** — all 18 lessons, ~93 h, the longest module in the course — **Module 7 is complete** — all 8 lessons, ~47 h — and **Module 8 is under way** (**86 of 107**).
+The newest lesson is [8.3 — Angular Dynamics: Torque and the Inertia Tensor](docs/lessons/08-03-angular-dynamics.html),
+which teaches the engine to **turn**. Eighty-five lessons in, nothing in it could tumble: 8.2 gave a
+body a mass, which answers one question — how hard is it to push? — and this lesson answers the other
+one, which turns out to need **nine numbers rather than one**. Spin a book about its three axes and
+you get three different resistances; spin it about an axis *between* two of them and the angular
+momentum does not point along the spin axis at all, and a thing that eats a vector and hands back one
+pointing somewhere else is a matrix. The **inertia tensor** falls out of `L = Σ m r × (ω × r)` in four
+lines — and then the expression the derivation produces turns out to be the one you must not ship: its
+diagonal is `|r|² − x²`, a sum of three squares with one subtracted straight off again, so for a plank
+at `(1000, 0.001, 0)` a `float` computes `1000000 − 1000000` and returns **exactly zero**. The
+consequence is behavioural rather than numerical — every plank, rail and sword in a level silently
+refuses to spin about its own length. Then the **parallel-axis theorem**, verified by a test that
+passes only if the theorem is exactly true (a naive grid sum is low by precisely `1 − 1/N²`, predicted
+before it was measured), and skipped it costs you a compound body **15.3× too small** that passes
+every validity test there is — because it is a perfectly good tensor, of a body whose parts are all
+piled on top of each other. Then the basis change `R I Rᵀ` and its plausible twin `Rᵀ I R`, which is
+symmetric, has the same trace, the same determinant and the same principal moments, is out by 1.57,
+and *passes any test built on a 90° rotation*. Then rotation itself: two 90° turns in the other order
+land **120° away** while the sum of the rotation vectors is identical, so `q += ωh` is not merely
+inaccurate — it is **not a rotation**. And then the payoff, which is one of the loveliest results in
+mechanics. A torque-free body **conserves L and does not conserve ω**, swinging its angular speed by
+**10.85%** with nothing acting on it, between bounds derived *by hand* and then measured to four
+digits; and spun about its middle axis it **flips end over end, forever**, every 2.6651 s, at a rate
+Euler's equations predict to a tenth of a percent. The term that causes all of it is the one almost
+every engine drops, for a measured reason — integrated explicitly it diverges by **3.3 × 10¹¹** at
+30 Hz — and the fourth answer to it is the interesting one: the gyroscopic term is **not physics at
+all**, it is the price of choosing `ω` as the state variable, and storing the momentum instead makes
+it vanish from the equations. Which produces the one table in the course where a *smaller* step is a
+worse answer. The `spin` demo draws the flip, with a key that turns it off.
 
 Module 8 is physics, and it opens with [Lesson 8.1](docs/lessons/08-01-integrators.html), which is
 about the two lines everybody writes first. Eighty-three lessons in, *nothing in this engine moves
