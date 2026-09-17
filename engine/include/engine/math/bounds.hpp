@@ -1,4 +1,20 @@
-// engine/include/engine/gfx/bounds.hpp — an axis-aligned box, and what it is for.
+// engine/include/engine/math/bounds.hpp — an axis-aligned box, and what it is for.
+//
+// **MOVED HERE IN LESSON 8.4, from `engine/gfx/bounds.hpp`, and the move is the
+// lesson's smallest edit and its clearest one.** Nothing in this file has ever
+// been about graphics: it includes `math/vec3.hpp` and `math/mat4.hpp` and
+// nothing else, and every line of it is geometry. It lived under `gfx/` because
+// 6.8's shadow fitting is who needed it first, which is how most headers end up
+// where they are.
+//
+// That was free until 8.4, when the collision tests wanted the same type — and
+// `phys/` including a `gfx/` header would have been the engine's FIRST edge from
+// simulation to rendering, in the wrong direction, entrenched two lessons later
+// by the broadphase and the manifold cache. The alternative was a second `aabb`
+// in `phys/`, which is the duplication this file was created to end (see below:
+// three call sites is the rule, and there were three). Six include lines and an
+// include guard, once, against a layering inversion that would have been quoted
+// as precedent forever.
 //
 // Lesson 6.8. This struct has existed three times already, written out by hand
 // each time: `demos/gltf_view` accumulates a `bounds_min_`/`bounds_max_` pair to
@@ -34,8 +50,8 @@
 // axis-alignment and it is why the function is named for what it does rather
 // than for what a caller might wish it did.
 
-#ifndef ENGINE_GFX_BOUNDS_HPP
-#define ENGINE_GFX_BOUNDS_HPP
+#ifndef ENGINE_MATH_BOUNDS_HPP
+#define ENGINE_MATH_BOUNDS_HPP
 
 #include <engine/math/mat4.hpp>
 #include <engine/math/vec3.hpp>
@@ -218,4 +234,4 @@ struct sphere
 
 } // namespace engine
 
-#endif // ENGINE_GFX_BOUNDS_HPP
+#endif // ENGINE_MATH_BOUNDS_HPP

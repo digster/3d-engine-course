@@ -198,6 +198,8 @@ add_library(engine STATIC
     # inherits — shapes will know about bodies, the broadphase about shapes, the
     # solver about contacts, and nothing will ever point back up the chain.
     src/phys/rigid_body.cpp
+    src/phys/shape.cpp
+    src/phys/collide.cpp
     # Lesson 5.2. Note what is NOT here: platform/main.hpp, which carries
     # ENGINE_MAIN. It is header-only and deliberately so — including it emits a
     # real `main`, and an entry point is not a library's to own. See the comment

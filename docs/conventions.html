@@ -3616,6 +3616,111 @@
     </p>
   </div>
 
+  <h2 id="collision"><span class="num">9e</span>Collision &mdash; shapes, the answer, and which way the axis points</h2>
+
+  <p>
+    Settled in Lesson 8.4 and binding for the rest of Module 8. These are the decisions that 8.5's
+    GJK, 8.6's broadphase, 8.7's manifolds and 8.9's solver all read and none of them may vary.
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>Rule</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong><code>collide(a, b)</code> returns an axis pointing <em>from</em> <code>a</code>
+              toward <code>b</code>.</strong> Translating <code>b</code> by
+              <code>+axis &times; depth</code> separates them; translating <code>a</code> by
+              <code>&minus;axis &times; depth</code> does too.</td>
+          <td>A candidate axis has no inherent direction &mdash; <code>L</code> and <code>&minus;L</code>
+              cast the same shadow &mdash; so the sign is chosen once, in one place. A contact normal
+              pointing the wrong way is a solver that pulls objects together, and that does not look
+              like a sign error: it looks like an instability. Checked on <strong>84,586</strong>
+              overlapping pairs, all of which separate when pushed by their own answer and none of
+              which separate when pushed the same distance the other way.</td>
+        </tr>
+        <tr>
+          <td><strong><code>separation::depth</code> is <em>signed</em>: positive is penetration in
+              metres, negative is a gap.</strong> <code>hit()</code> is derived from its sign, never
+              stored beside it.</td>
+          <td>A separating axis and a penetration axis are the same object measured in two directions,
+              which is why the same fifteen candidates answer both questions. A stored
+              <code>bool</code> beside a number is a pair that can contradict itself.</td>
+        </tr>
+        <tr>
+          <td><strong>A reported gap is a gap on <em>one axis</em>, and therefore a lower bound on the
+              distance &mdash; not the distance.</strong></td>
+          <td>Two boxes offset diagonally have a gap on two axes and the true distance is neither. The
+              SAT never computes it because a proof of separation does not need one; Lesson 8.5's GJK
+              is the algorithm that does.</td>
+        </tr>
+        <tr>
+          <td><strong>A shape is defined in body axes, centred on the centre of mass</strong>, and is
+              placed in the world by a position and an orientation supplied at the call site.</td>
+          <td>Every tensor in <code>inertia.hpp</code> is about the centre of mass,
+              <code>state.position</code> <em>is</em> the centre of mass, and a torque is
+              <code>r &times; F</code> measured from it. A collider whose geometric centre is
+              elsewhere puts all three quietly out of step. Off-centre colliders belong to the
+              collider (8.6), where the offset is applied once, visibly.</td>
+        </tr>
+        <tr>
+          <td><strong>Half extents, never full widths</strong>, in every box in the engine &mdash;
+              shape, OBB, AABB extent.</td>
+          <td>Every line of the SAT is a sum of half extents times absolute dot products. Storing the
+              full width would put a <code>* 0.5f</code> on fifteen consecutive lines of the hottest
+              loop in the module.</td>
+        </tr>
+        <tr>
+          <td><strong>An OBB stores its axes as a <code>mat3</code>, not a quaternion</strong>, built
+              once at placement.</td>
+          <td>Every line of the SAT is a dot product between the two boxes' axes, and a quaternion
+              cannot supply one without building the matrix first. 8.3 &sect;12 found the engine
+              building the same <code>mat3_from_quat</code> twice in one step because two reasonable
+              functions each needed it; a box is placed once per frame and tested against many
+              neighbours, so the conversion belongs at placement.</td>
+        </tr>
+        <tr>
+          <td><strong>Corner index order is the same for <code>aabb</code> and <code>obb</code></strong>:
+              bit&nbsp;0 is the first axis, bit&nbsp;1 the second, bit&nbsp;2 the third, and a set bit
+              means the <code>+</code> side.</td>
+          <td>8.7 identifies contact features by index. Two conventions for &ldquo;corner 3&rdquo; is a
+              bug that appears only when a shape changes type.</td>
+        </tr>
+        <tr>
+          <td><strong>Geometry types live under <code>engine/math/</code></strong>, not under the
+              subsystem that needed them first. <code>bounds.hpp</code> moved out of
+              <code>gfx/</code> in 8.4.</td>
+          <td><code>phys/</code> depends on <code>math/</code> and <code>core/</code> and on nothing
+              else. A physics header including a graphics one would be the engine's first arrow from
+              simulation to rendering, and the second one is always easier to justify than the first.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout warn">
+    <span class="label">The degeneracy guard protects one formulation and not the other</span>
+    <p>
+      Two objects on the same floor have parallel up axes at every yaw, so one of the nine edge-edge
+      candidates is degenerate in the most common arrangement a scene produces &mdash; and never
+      <em>exactly</em> degenerate, because both axes arrive through a quaternion conversion and their
+      cross product comes out around <strong>1.22e&minus;07</strong>.
+    </p>
+    <p>
+      <strong>The normalised form cannot be broken by it.</strong> If two convex bodies overlap then
+      no direction separates them, so an axis made of pure rounding error reports an overlap like any
+      other &mdash; measured at <strong>zero</strong> false separations with the guard removed
+      entirely. The <em>unnormalised</em> form is where the epsilon is load-bearing: there every term
+      of the edge-edge test scales with <code>|a&#7522; &times; b&#11388;|</code> while its rounding
+      error does not, and it fails <strong>188 times in 400</strong> without it.
+    </p>
+    <p>
+      And on 200,000 pairs at random orientations the guard fires <strong>zero</strong> times out of
+      1,800,000 candidate axes. Random test data cannot reach this bug; the arrangement that produces
+      it is the one every scene is full of.
+    </p>
+  </div>
+
   <h2 id="colour"><span class="num">10</span>Colour and diagram conventions</h2>
 
   <p>
@@ -3763,6 +3868,12 @@
         <tr><td>Euler's equation</td><td><code>&omega;&#775; = I&#8315;&sup1;(&tau; &minus; &omega; &times; I&omega;)</code>. The second term is <strong>the price of choosing &omega; as the state</strong> &mdash; store <code>L</code> and it is not a term</td><td>Derived 8.3 &sect;9; all four treatments measured</td></tr>
         <tr><td>Torque-free conserved quantities</td><td><strong>two</strong>: <code>|L|&sup2;</code> and <code>2T = &Sigma;L&#7522;&sup2;/I&#7522;</code>. Both are linear in <code>L&#7522;&sup2;</code>, which makes the reachable range of <code>|&omega;|</code> a two-line derivation</td><td>Derived 8.3 &sect;8; predicted 4.0524&hellip;4.4880, measured 4.0527&hellip;4.4924</td></tr>
         <tr><td>Intermediate-axis instability</td><td>growth rate <code>&sigma; = &Omega;&radic;((I&#8323;&minus;I&#8322;)(I&#8322;&minus;I&#8321;)/(I&#8321;I&#8323;))</code>; the other two axes oscillate</td><td>Derived 8.3 &sect;10; predicted 4.8038, measured 4.8084 at 7,680&nbsp;Hz</td></tr>
+        <tr><td>Separating Axis Theorem</td><td>two <strong>convex</strong> sets are disjoint <em>iff</em> some direction&rsquo;s projections are disjoint. One half needs nothing; the other needs convexity, and fails on a ball resting in a cup</td><td>Sketched 8.4 &sect;3.1; Boyd &amp; Vandenberghe &sect;2.5 for the general statement</td></tr>
+        <tr><td>Candidate axes for two boxes</td><td><strong>15</strong> &mdash; 3 face normals each and 9 edge&times;edge cross products; they are the face normals of the Minkowski difference</td><td>Derived 8.4 &sect;7; Gottschalk, Lin &amp; Manocha (1996)</td></tr>
+        <tr><td>Projected radius of a box</td><td><code>r(L) = &Sigma;&#7522; h&#7522; |u&#7522; &middot; L|</code> for unit <code>L</code>. The absolute values are three independent choices of corner</td><td>Derived 8.4 &sect;6; checked against the farthest of 8 corners over 100,000 pairs at 7.1526e&minus;07</td></tr>
+        <tr><td>Six face axes are not enough</td><td>edge-edge axes separate <strong>4.6%</strong> of what a face-only test calls a collision, and supply the MTV on <strong>49.8%</strong> of random overlapping pairs</td><td>Measured 8.4 &sect;7.5, 200,000 random OBB pairs; all 5,727 re-proved in double</td></tr>
+        <tr><td>The MTV&rsquo;s regime</td><td>the shallowest escape is the right correction while it is <em>small</em>; at half buried it is most of the object&rsquo;s own width and may exit the wrong face</td><td>Measured 8.4 &sect;8.2: two cubes 10&nbsp;cm out of alignment, corrected by 1.9&nbsp;m</td></tr>
+        <tr><td>Collision precision floor</td><td>set by distance from the origin, not by the algorithm: a 1&nbsp;mm gap is 2.3% wrong at 1&nbsp;km and reports <strong>exactly zero</strong> at 100&nbsp;km</td><td>Measured 8.4 &sect;11; the double-precision control shows the float centres lost it first</td></tr>
         <tr><td>Length-scale law</td><td>scale every length by <code>s</code> with <code>g</code> fixed &rarr; every duration scales by <strong>&radic;s</strong></td><td>Derived from <code>d = &frac12;gt&sup2;</code>, 8.2 &sect;8</td></tr>
         <tr><td>NDC extents</td><td>lower-left <code>(−1,−1)</code>, upper-right <code>(1,1)</code> → <strong>+Y up</strong></td><td>SDL3 wiki, CategoryGPU</td></tr>
         <tr><td>NDC depth</td><td><strong><code>z ∈ [0,1]</code></strong>, 0 = near</td><td>SDL3 wiki, CategoryGPU</td></tr>

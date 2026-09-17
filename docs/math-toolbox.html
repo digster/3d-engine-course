@@ -106,6 +106,7 @@
       <li><a href="#sound">Sound: energy, gain and distance</a></li>
       <li><a href="#dynamics">Forces, impulses and mass</a></li>
       <li><a href="#rotational-dynamics">Torque, the inertia tensor, and what a tumble conserves</a></li>
+      <li><a href="#separation">Separation: shadows, support, and the fifteen</a></li>
       <li><a href="#coming">Coming as the course proceeds</a></li>
     </ol>
   </details>
@@ -4036,6 +4037,94 @@ The singular values are sqrt(1 + |sin p|), 1, sqrt(1 - |sin p|).</span>
       what turns "how far can a tumbling body's angular speed wander" into a two-line derivation
       rather than a simulation &mdash; and it is also what makes the intermediate axis unstable, at
       <code>&sigma; = &Omega;&radic;((I&#8323;&minus;I&#8322;)(I&#8322;&minus;I&#8321;)/(I&#8321;I&#8323;))</code>.
+    </p>
+  </div>
+
+  <h2 id="separation"><span class="num">8g</span>Separation: shadows, support, and the fifteen</h2>
+
+  <p>
+    Lesson 8.4. Five cards, and the first one is the whole subject &mdash; everything else is that
+    idea made finite, made numerical, or made fast.
+  </p>
+
+  <div class="card">
+    <h3>The Separating Axis Theorem <span class="from">Lesson 8.4</span></h3>
+    <div class="eq">
+      \[ A \cap B = \varnothing \iff \exists\,\mathbf{L}:\ \bigl[\min_{a \in A} \mathbf{a}\cdot\mathbf{L},\ \max_{a \in A} \mathbf{a}\cdot\mathbf{L}\bigr] \cap \bigl[\min_{b \in B} \mathbf{b}\cdot\mathbf{L},\ \max_{b \in B} \mathbf{b}\cdot\mathbf{L}\bigr] = \varnothing \]
+      <span class="eq-plain">Two convex sets are disjoint exactly when some direction exists on which their projections — their shadows — do not overlap.</span>
+    </div>
+    <p>
+      One half is free: a gap in any shadow proves them apart, because a point in both objects would
+      cast a point in both shadows. The other half &mdash; apart implies <em>some</em> direction has
+      a gap &mdash; needs <strong>convexity</strong>, and it is the half an algorithm depends on: a
+      search that finds nothing becomes a proof of contact rather than a failed search. A ball
+      resting in the mouth of a cup is apart with every shadow overlapping, which is what convexity
+      buys and why collision meshes are lists of convex hulls.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>Projected radius of a box <span class="from">Lesson 8.4</span></h3>
+    <div class="eq">
+      \[ r(\mathbf{L}) = \sum_{i} h_i\,\bigl|\mathbf{u}_i \cdot \mathbf{L}\bigr| \]
+      <span class="eq-plain">Half the width of a box's shadow on a unit direction is the sum, over its three axes, of each half extent times the absolute value of that axis dotted with the direction.</span>
+    </div>
+    <p>
+      Derived in three lines: a point of the box is
+      <code>c + &Sigma; s&#7522; h&#7522; u&#7522;</code> with each <code>s&#7522;</code> in
+      <code>[&minus;1, 1]</code>; dotting distributes; the three terms are <em>independent</em>, so
+      the maximum comes from choosing each sign to match its own term. That is exactly what the
+      absolute values are &mdash; three choices of corner, made one axis at a time. Drop them and you
+      get the projection of one particular corner, which is wrong for three quarters of directions.
+      Run it three times on the world axes and it is the AABB around an OBB.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>The overlap test on one axis <span class="from">Lesson 8.4</span></h3>
+    <div class="eq">
+      \[ \text{depth}(\mathbf{L}) = \bigl(r_A(\mathbf{L}) + r_B(\mathbf{L})\bigr) - \bigl|(\mathbf{c}_B - \mathbf{c}_A)\cdot\mathbf{L}\bigr| \]
+      <span class="eq-plain">The overlap along a direction is the sum of the two shadows' radii minus the distance between their centres measured along that direction; positive is penetration and negative is a gap.</span>
+    </div>
+    <p>
+      One signed number carries both cases, which is why the same candidate list answers both
+      questions. Note the offset is taken <em>first</em>: algebraically that is identical to comparing
+      two absolute intervals, and numerically it is the difference between subtracting numbers the
+      size of the boxes and numbers the size of the world. A millimetre gap measured 10&nbsp;km from
+      the origin is not representable in <code>float</code>.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>Why fifteen <span class="from">Lesson 8.4</span></h3>
+    <div class="eq">
+      \[ \{\mathbf{a}_0,\mathbf{a}_1,\mathbf{a}_2\} \;\cup\; \{\mathbf{b}_0,\mathbf{b}_1,\mathbf{b}_2\} \;\cup\; \{\mathbf{a}_i \times \mathbf{b}_j\}_{i,j} \]
+      <span class="eq-plain">The candidate directions for two boxes are the three face normals of each, plus the nine cross products of one edge direction from each.</span>
+    </div>
+    <p>
+      They are the face normals of the <strong>Minkowski difference</strong>
+      <code>A &#8854; B</code>, whose faces arise either from a face of one box or from one edge of
+      each sweeping past the other. Three rather than six per box because opposite faces differ only
+      in sign and <code>L</code> and <code>&minus;L</code> cast the same shadow. The nine are the ones
+      people leave out, and they separate <strong>4.6%</strong> of what six axes call a collision.
+      For general convex hulls the same argument gives a much longer edge list, which is what
+      Gregorius&rsquo;s Gauss-map pruning is for.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>The support function <span class="from">Lesson 8.4</span></h3>
+    <div class="eq">
+      \[ S_A(\mathbf{d}) = \operatorname*{arg\,max}_{\mathbf{p} \in A} \ \mathbf{p} \cdot \mathbf{d} \]
+      <span class="eq-plain">The support function returns the point of a shape that is farthest along a given direction.</span>
+    </div>
+    <p>
+      The projected-radius argument with &ldquo;the largest value&rdquo; replaced by &ldquo;the point
+      that achieves it&rdquo;. For a box it is three sign tests; for a sphere it is the centre plus
+      the radius along the direction; for a convex hull it is a walk over vertices. It is the
+      <em>only</em> thing Lesson 8.5's GJK asks a shape for &mdash; no faces, no corners, no case
+      analysis &mdash; which is how &ldquo;convex&rdquo; stops being a restriction and becomes an
+      interface.
     </p>
   </div>
 

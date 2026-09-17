@@ -54,7 +54,7 @@
 #include <span>
 #include <vector>
 
-#include <engine/gfx/bounds.hpp>
+#include <engine/math/bounds.hpp>
 #include <engine/gfx/shadow.hpp>
 #include <engine/math/mat4.hpp>
 #include <engine/math/vec3.hpp>

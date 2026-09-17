@@ -268,3 +268,27 @@ engine_set_warnings(bodies)
 add_executable(spin spin/main.cpp)
 target_link_libraries(spin PRIVATE engine::engine)
 engine_set_warnings(spin)
+
+# ---- collide: fifteen candidate axes, live ---------------------------------
+#
+# Lesson 8.4. The Separating Axis Theorem makes a NEGATIVE claim — these fifteen
+# directions found no gap, therefore no direction has one — and a negative claim
+# is the hardest kind to believe from a statement. So the right-hand panel draws
+# all fifteen candidates as bars against a zero line, and the reader watches the
+# answer flip at the instant the first bar crosses it.
+#
+# The [F] key is the demo's argument: it throws away the nine edge-edge
+# candidates, keeps the six face normals, and in the crossed-planks preset
+# reports two visibly separated boxes as touching. That is the whole reason the
+# candidate list is fifteen rather than six, and it is far more convincing seen
+# than derived.
+#
+# `engine::engine` directly and NOT `demo_common`, the same statement `gimbal`,
+# `rig`, `plane`, `collector`, `ecs_swarm`, `audio`, `integrate`, `bodies` and
+# `spin` make. It loads nothing and computes everything on screen, so a `--shot`
+# run is byte-for-byte reproducible on any machine.
+#
+# No `engine_use_assets` and no `engine_use_shaders`.
+add_executable(collide collide/main.cpp)
+target_link_libraries(collide PRIVATE engine::engine)
+engine_set_warnings(collide)

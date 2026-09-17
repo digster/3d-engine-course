@@ -140,6 +140,7 @@
 // umbrella is a file you have no reason to open. A check that fires on people
 // who know about it is doing the only job worth doing.
 #include <engine/math/axis_angle.hpp>
+#include <engine/math/bounds.hpp>
 #include <engine/math/complex.hpp>
 #include <engine/math/euler.hpp>
 #include <engine/math/mat2.hpp>
@@ -156,7 +157,6 @@
 #include <engine/gfx/antialias.hpp>
 #include <engine/gfx/blend.hpp>
 #include <engine/gfx/bloom.hpp>
-#include <engine/gfx/bounds.hpp>
 #include <engine/gfx/cascade.hpp>
 #include <engine/gfx/clip.hpp>
 #include <engine/gfx/colour.hpp>
@@ -231,9 +231,11 @@
 // because it is not evidence that the habit has taken: seven of the last eight
 // lessons missed this file, and the streak broke on the lesson immediately
 // after the one that wrote a paragraph about missing it.
+#include <engine/phys/collide.hpp>
 #include <engine/phys/inertia.hpp>
 #include <engine/phys/integrate.hpp>
 #include <engine/phys/rigid_body.hpp>
+#include <engine/phys/shape.hpp>
 
 // ---- Platform: how a program starts ---------------------------------------
 //

@@ -45,7 +45,7 @@
 #ifndef ENGINE_GFX_SHADOW_HPP
 #define ENGINE_GFX_SHADOW_HPP
 
-#include <engine/gfx/bounds.hpp>
+#include <engine/math/bounds.hpp>
 #include <engine/gfx/cull.hpp>
 #include <engine/gfx/depth_buffer.hpp>
 #include <engine/gfx/framebuffer.hpp>

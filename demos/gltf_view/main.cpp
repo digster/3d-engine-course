@@ -35,7 +35,7 @@
 #include <engine/gfx/mesh.hpp>
 #include <engine/gfx/projector.hpp>
 #include <engine/gfx/raster.hpp>
-#include <engine/gfx/bounds.hpp>
+#include <engine/math/bounds.hpp>
 #include <engine/gfx/scene.hpp>
 #include <engine/gfx/cascade.hpp>
 #include <engine/gfx/draw_order.hpp>
@@ -1516,7 +1516,7 @@ private:
     /// **LESSON 6.8 REPLACED TWO LOOSE `vec3` WITH ONE `aabb`**, and the reason
     /// is not tidiness: the shadow map needs exactly this quantity to fit its
     /// orthographic box, so the pattern acquired its third caller and moved into
-    /// the engine (`gfx/bounds.hpp`). The inside-out default that used to be
+    /// the engine (`math/bounds.hpp`). The inside-out default that used to be
     /// spelled `1e30f` here by hand is now the type's own, which is what removes
     /// the first-vertex special case.
     engine::aabb bounds_;

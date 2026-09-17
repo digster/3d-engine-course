@@ -7,8 +7,57 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-09-16 (after Lesson 8.3 — 86 of 107 lessons; MODULE 8 OPEN, 3 of
-         13, ~17 h of ~70. PLANNED AT 6 AND SHIPPED AT 6 — the first lesson
+updated: 2026-09-16 (after Lesson 8.4 — 87 of 107 lessons; MODULE 8 OPEN, 4 of
+         13, ~23 h of ~70. PLANNED AT 6 AND SHIPPED AT 6, the second lesson
+         running to land on its estimate, so no module subtotal and no course
+         total moved. Still 107 lessons, ~523 h. check-curriculum.py green;
+         check-builders.py 55/55; check-page.js green at 1280 AND 390.
+         THE ENGINE KNOWS HOW BIG THINGS ARE. Two new file pairs,
+         engine/phys/shape.{hpp,cpp} and engine/phys/collide.{hpp,cpp}; 92 -> 94
+         public headers. A `shape` is geometry (sphere | box, body axes, centred
+         on the centre of mass) and a `rigid_body` is dynamics, and they are
+         SEPARATE ON PURPOSE — the collider that pairs them is 8.6's, because a
+         pair is only useful once something walks a list of them. The one arrow
+         between them is `inertia_of(shape, mass)`: a shape knows what it weighs,
+         and inertia.hpp still knows nothing about collision geometry.
+         THE AABB MOVED OUT OF gfx/. engine/gfx/bounds.hpp -> engine/math/
+         bounds.hpp, six include lines and a guard. It includes only vec3.hpp and
+         mat4.hpp and every line of it is geometry; it lived under gfx/ because
+         6.8 needed it first. phys/ including a gfx/ header would have been the
+         engine's FIRST arrow from simulation to rendering, and 8.6's broadphase
+         and 8.7's manifolds would have entrenched it. 6.8's page still prints the
+         old path with the old content, correctly: a page is an archive of its own
+         era, and the disagreement is the move being recorded rather than drift.
+         THE ANSWER IS A CERTIFICATE, AND THAT IS THE TESTING STRATEGY. `collide`
+         returns a `separation`: a unit axis FROM a TOWARD b, a SIGNED depth
+         (positive penetration, negative gap, hit() derived from the sign), the
+         winning axis index (0-2 A faces, 3-5 B faces, 6-14 edge pairs), and how
+         many candidates were examined. A separating axis can be re-proved by
+         anybody in four dot products, so the harness CHECKS PROOFS rather than
+         comparing against a second implementation: 173,329/173,329 sphere gaps
+         and 5,727/5,727 edge-edge separations re-proved in double.
+         SIX AXES ARE NOT ENOUGH, AND THE COUNTEREXAMPLE IS BUILT RATHER THAN
+         FOUND: pick L = normalise(a0 x b0) FIRST, then place the second plank
+         along it at reach + 5 cm. All six face normals report overlaps of 0.118
+         to 3.128 m; a0 x b0 reports +0.05000. On 200,000 random pairs, 5,727 are
+         separated ONLY by an edge axis — 4.6% of everything six axes call a
+         collision — and when boxes DO overlap the MTV is on an edge axis 49.8%
+         of the time (uniform random orientations; a real scene of things resting
+         on floors is face-dominated, so treat 49.8% as the upper end).
+         THE DEGENERACY FOLKLORE IS ABOUT A FORMULATION, NOT THE ALGORITHM.
+         Two objects on one floor share an up axis at EVERY yaw, and never
+         exactly (both come through mat3_from_quat; the cross comes out ~1.22e-7).
+         The NORMALISED form cannot be broken by it — 0 false separations with the
+         guard removed entirely — because if two convex bodies overlap then NO
+         direction separates them, so an axis of pure rounding error reports an
+         overlap like any other. The UNNORMALISED absR form is where the epsilon
+         is load-bearing: 188/400 false separations without it, 0 with. And on
+         200,000 random-orientation pairs the guard fires 0 of 1,800,000 times,
+         which is why this bug survives every random test suite.
+         THE PRECISION FLOOR IS SET BY WHERE YOU ARE. A 1 mm gap: 2.3% wrong at
+         1 km, unresolvable at 10 km, EXACTLY ZERO at 100 km. The control shows
+         the float CENTRES lost it before collide was called.
+         Previously, after 8.3: 86 of 107; PLANNED AT 6 AND SHIPPED AT 6 — the first lesson
          since 7.3 to land on its estimate — so no module subtotal and no course
          total moved. Still 107 lessons, ~523 h. check-curriculum.py green, and
          checks 1, 2, 10 and 11 were all clean on the first run for the second
@@ -5455,8 +5504,64 @@ completed:
          labels sitting on their own curves' strokes, all moved OUTSIDE the plot
          at the source, which is figs_78.py's standing rule arriving with
          evidence.)
+  - 8.4  Collision Primitives: Spheres, AABBs, OBBs, and the SAT
+        (8.3's dead `next` link repointed in ALL THREE copies — the page,
+         scratch/l83_body_a.html and build_83.py's TAIL — and build_83 rebuilt,
+         so page and generator still agree. Planned at 6 h and SHIPPED AT 6, the
+         second lesson running to land on its estimate: still 107 lessons, ~523 h.
+         THE FIRST HEADER THIS COURSE HAS EVER MOVED. engine/gfx/bounds.hpp ->
+         engine/math/bounds.hpp, because phys/ wanted `aabb` and a physics header
+         including a graphics one is the wrong arrow. The file includes only
+         vec3.hpp and mat4.hpp; it was never about graphics; 6.8 simply needed it
+         first. Cost: six include lines, one guard, and three gfx headers plus a
+         demo touched. The umbrella lint caught the move before the compiler did.
+         TWO NEW FILE PAIRS in phys/: shape.{hpp,cpp} (sphere | box, the obb
+         placement type, bounds_of, as_obb, support) and collide.{hpp,cpp}
+         (separation, interval/project/projected_radius/gap_on_axis, the five
+         collide overloads, the boolean-only overlaps, closest_point). 92 -> 94.
+         NO `shape` MEMBER ON rigid_body, on purpose: collision is a query over
+         GEOMETRY, and the collider that pairs shape with body is 8.6's.
+         A SEPARATION IS A CERTIFICATE, and the harness checks proofs rather than
+         answers: 173,329/173,329 and 5,727/5,727 re-proved in double from the
+         shape data alone, with a 41^3 witness hunt for the overlap direction
+         (364/365, the miss a 4.485e-03 m sliver — an instrument out of
+         resolution, which is a different thing from a wrong answer).
+         Ten figures. check-page.js caught ten spilled figure footers and four
+         labels on their own shapes; the footers went into the CAPTIONS, where
+         that prose belonged, and the plot panel in fig 9 was drawn with box()
+         instead of figs_71's stroke-only frame() — which that helper's own
+         docstring warns about, and which only the visual pass caught.
+         demos/collide: two panels, the fifteen candidate gaps as bars against a
+         zero line, and [F] to throw the nine cross products away.)
 
 capabilities:
+  - 8.4 THE ENGINE KNOWS HOW BIG THINGS ARE, and can answer "are these two
+    touching, and if so how do I fix it?" for every pair of {sphere, aabb, obb}.
+    phys/shape.hpp: shape_kind{sphere,box} + `shape` (20 bytes, BODY axes,
+    CENTRED on the centre of mass) + sphere_shape/box_shape/cube_shape +
+    volume_of + bounding_radius (the one measurement a rotation cannot change,
+    which is what a broadphase wants) + inertia_of(shape, mass) — the ONE arrow
+    into inertia.hpp, and it runs one way + `obb` (centre, mat3 axes as COLUMNS,
+    half extents, axis(i)/half(i)/corners()) + world_obb/world_sphere +
+    bounds_of(obb) and bounds_of(shape, centre, quat) + as_obb + support() for
+    box and sphere — added a lesson early because 8.5's GJK is written entirely
+    in terms of it.
+    phys/collide.hpp: `separation` (unit axis FROM a TOWARD b, signed depth,
+    axis_index, axes_tested, hit() DERIVED from the sign) + axis_source +
+    source_of + flip + `interval` + interval_overlap + projected_radius +
+    project + gap_on_axis + k_parallel_sin2 + collide() for sphere/sphere,
+    aabb/aabb, aabb/sphere, obb/sphere, obb/obb (both argument orders where they
+    differ) + overlaps() (the absR formulation, boolean only, no square roots) +
+    closest_point and distance_squared_to for aabb and obb.
+    THE TWO FORMULATIONS ARE A DELIBERATE PAIR, not duplication: collide()
+    normalises because the DEPTH must be comparable across candidates, overlaps()
+    does not because the boolean is scale-invariant. Measured 79.258 ns vs
+    10.458 ns on crowded pairs — 7.58x, same answers on 200,000 pairs, and the
+    ratio is entirely square roots. A broadphase confirmation pass wants
+    overlaps(); a contact generator wants collide().
+    STILL MISSING, all of it named on the page: a DISTANCE (a gap is on one axis
+    and is a lower bound — 8.5's GJK), CONTACT POINTS (8.7), anything better than
+    quadratic (8.6), and any awareness of MOTION (8.6's continuous half).
   - 8.3 THE ENGINE CAN TURN. A `rigid_body` carries an `orientation` (unit
     quat), an `angular_velocity` (WORLD space, rad/s), a `torque` accumulator
     (N.m about the CENTRE OF MASS, world axes), an `inv_inertia_local` AND an
@@ -8807,7 +8912,6 @@ files:
              engine::ecs::pool<T> is a DIFFERENT container from core/pool.hpp's
              engine::pool<T>; see conventions:ecs-runtime.)
   engine/include/engine/gfx/: clip.hpp, colour.hpp, debug_draw.hpp,
-            bounds.hpp                                                       [6.8]
             cascade.hpp                                                      [6.9]
             mipmap.hpp                                                      [6.10]
             blend.hpp                                                       [6.11]
@@ -8839,6 +8943,20 @@ files:
             soft_renderer.hpp, texture.hpp, viewport.hpp
   engine/include/engine/math/: mat2.hpp, mat3.hpp, mat4.hpp, transform.hpp,
             vec2.hpp, vec3.hpp, vec4.hpp,
+            bounds.hpp                                          [6.8, MOVED 8.4]
+              (WAS engine/gfx/bounds.hpp. It includes vec3.hpp and mat4.hpp and
+               nothing else, and every line of it is geometry; it lived under
+               gfx/ because 6.8's shadow fitting needed it first, which is how
+               most headers end up where they are. 8.4 moved it because phys/
+               wanted the same type and a physics header including a graphics one
+               would have been the engine's FIRST arrow from simulation to
+               rendering — entrenched two lessons later by the broadphase and the
+               manifold cache. The alternative was a SECOND aabb in phys/, which
+               is the duplication 6.8 created this file to end.
+               6.8's PAGE STILL PRINTS THE OLD PATH WITH THE OLD CONTENT, and
+               that is correct: a page is an archive of its own era. build_68.py
+               splices a PIN, so the move did not disturb it — check-builders
+               stayed 55/55 across the move.)
             euler.hpp                                                        [7.1]
             rotation.hpp, axis_angle.hpp                                     [7.2]
             complex.hpp                                                      [7.3]
@@ -8880,7 +8998,8 @@ files:
   engine/include/engine/platform/: platform.hpp, app.hpp,
             main.hpp   (NOT in engine.hpp — it defines the entry point)
   engine/include/engine/phys/: integrate.hpp [8.1], rigid_body.hpp [8.2],
-                               inertia.hpp                              [8.3]
+                               inertia.hpp [8.3], shape.hpp [8.4],
+                               collide.hpp                              [8.4]
             (THE FIFTH NEW DIRECTORY SINCE THE REFACTOR. NOT math/: math/ knows
              about numbers and has no .cpp at all; this knows that a velocity is
              metres per second and that a step size has a stability limit.
@@ -8895,7 +9014,21 @@ files:
              8.3 SPLIT inertia.hpp OUT rather than widening rigid_body.hpp, and
              the split IS the dependency direction: inertia knows about SHAPES
              and nothing about bodies; rigid_body knows about bodies and asks it
-             what a shape weighs. 8.4's collision shapes inherit that.
+             what a shape weighs. 8.4's collision shapes inherit that, and
+             shape.hpp's inertia_of(shape, mass) is the ONE arrow it adds —
+             inertia.hpp still knows nothing about collision geometry, because
+             plenty of bodies get their tensor from an artist's number or a
+             compound assembly instead.
+             8.4 SPLIT shape.hpp FROM collide.hpp for the same kind of reason:
+             a shape is geometry that may be asked what it weighs, a collide is a
+             QUERY over geometry that must not know what anything weighs. There
+             is deliberately NO `shape` member on rigid_body — the collider that
+             pairs them is 8.6's, because a pair is only useful once something
+             walks a list of them looking for candidates, and because a real
+             collider also carries an offset, a material and a filter mask.
+             phys/ DEPENDS ON math/ AND core/ AND NOTHING ELSE. That was free
+             until 8.4 wanted `aabb`; see math/bounds.hpp above for what it cost
+             to keep.
              integrate.hpp grew spin_rule/advance_orientation because an
              orientation advance IS an integrator — 8.1's file said 8.3 would
              add it — and it is the one function in the header that needs
@@ -8904,7 +9037,7 @@ files:
             (a new directory, same argument asset/ made in 5.5: tooling UI is not a
              graphics subsystem. Does NOT include <imgui.h> — see debug-ui.)
   engine/src/phys/: integrate.cpp [8.1], rigid_body.cpp [8.2],
-                    inertia.cpp                                         [8.3]
+                    inertia.cpp [8.3], shape.cpp [8.4], collide.cpp     [8.4]
             (Everything that is NOT a template: the constant-acceleration
              overload, apply_drag/damping_factor, and the four diagnostics.
              Nothing in it is hot — the general stepper stayed in the header
@@ -8981,6 +9114,14 @@ files:
             Its clear colour is (16, 18, 24), and figs_81.py's palette lists the
             demo's own constants because rle_rects SNAPS.)
   demos/spin/: main.cpp                                                   [8.3]
+  demos/collide/: main.cpp                                                [8.4]
+            (Two panels, and the right one is the lesson: all fifteen candidate
+             gaps as bars against a zero line, so the reader watches the verdict
+             flip at the instant the FIRST bar crosses it. [F] keeps the six face
+             normals and throws the nine cross products away, which turns two
+             visibly separated planks red. A negative claim — these fifteen found
+             no gap, therefore no direction has one — is the hardest kind to
+             believe from a statement.)
            (THE FIRST DEMO IN THE MODULE THAT DRAWS AN OBJECT rather than a graph
             of one, because the claim it settles is about which way something is
             POINTING and a tumbling box is not a trajectory. Wireframe, parallel
@@ -9120,7 +9261,8 @@ files:
                  07-06-skeletal-animation.html,
                  07-07-sampling-blending.html
                  07-08-audio.html, 08-01-integrators.html,
-                 08-02-forces-and-bodies.html, 08-03-angular-dynamics.html
+                 08-02-forces-and-bodies.html, 08-03-angular-dynamics.html,
+                 08-04-collision-primitives.html
                  (5.12 IS OUT OF SEQUENCE ON PURPOSE — Module 5 closed eleven
                   lessons after 5.11 and one after 6.18, and the list is
                   append-ordered rather than sorted so that the history is
@@ -9151,6 +9293,32 @@ files:
                   directly. Candidate for 9.10.)
   docs/shared/: course.css, course.js      (THE stylesheet + page script; one copy each)
   docs/_template/: lesson-template.html, README.md, apply-shared.py, check-page.js
+  scratch/ (8.4, not shipped with the engine): verify_84.cpp, build_verify_84.sh,
+           figs_84.py, build_84.py, check_84.mjs, shots_84.mjs,
+           l84_body_{a..e}.html, l84_fig{1..10}.svg, _b84_p{0,1,1f,2}.ppm,
+           verify_84.log, and the LISTING PINS l84_<path>.
+           (check_84.mjs AND shots_84.mjs ARE NEW AND WORTH KEEPING. The first
+            drives docs/_template/check-page.js at 1280 and 390 through the
+            Playwright NODE LIBRARY rather than the MCP server, which matters:
+            the MCP browser holds a single profile lock and refuses a second
+            client, and a scripted two-viewport run has no business needing one.
+            The second screenshots every figure.pdia into /tmp for the visual
+            pass — and it earned its place immediately, because check-page.js was
+            GREEN on a figure whose plot panel was drawn with box() instead of
+            figs_71's stroke-only frame(). A filled panel is not a geometry error;
+            it is just wrong, and only eyes catch it.
+            THE HARNESS CARRIES THREE FUNCTIONS THE ENGINE DOES NOT SHIP, and the
+            lesson measures all three: overlaps_faces_only (six axes),
+            collide_unguarded (fifteen, no degeneracy guard) and overlaps_eps
+            (the absR form with a settable epsilon). Keeping them here rather
+            than behind a flag in the engine is the rule 8.3's four gyroscopic
+            modes did NOT follow, and the difference is that those four are
+            choices a caller might legitimately want.
+            THE GROUND TRUTH IS overlaps_double — the same fifteen axes in
+            double — and it is a legitimate reference ONLY because §F's question
+            is about precision: a cross product of nearly parallel unit vectors
+            has direction error eps/sin(theta), which is 1e-16/sin in double and
+            1e-7/sin in float.)
   scratch/ (8.1, not shipped with the engine): verify_81.cpp, build_verify_81.sh,
            figs_81.py, build_81.py, l81_body_{a..e}.html, l81_fig{1..10}.svg,
            l81_demo.ppm, verify_81.log, and the LISTING PINS l81_<path>.
@@ -9726,70 +9894,84 @@ roadmap: RESHAPED 2026-09-08, AFTER TWO EXTERNAL REVIEWS OF THE PUBLISHED OUTLIN
 
 
 
-next: 8.4 — Collision Primitives: Spheres, AABBs, OBBs, and the SAT
+next: 8.5 — GJK: Convex Distance from a Support Function
 
-      WHAT 8.4 INHERITS, AND MUST NOT RE-DERIVE:
-        - `rigid_body` NOW HAS AN ORIENTATION, so a shape attached to one is
-          attached in BODY axes and 8.4's first job is the same sandwich 8.3 §6
-          derived. An OBB is an AABB plus that orientation, which is why the
-          three primitives are one lesson rather than three.
-        - `point_velocity(b, p) = v + omega x r` EXISTS and is what a contact
-          point's velocity is. 8.4 does not need it; 8.9 is written entirely in
-          terms of it, and 8.4 should not invent a second one.
-        - `world_point_of(b, local)` is the other half, and is what a debug
-          renderer draws a box with.
-        - INERTIA IS A SEPARATE FILE FROM BODIES, and the dependency runs one
-          way. 8.4's shapes go in phys/ beside inertia.hpp and may depend on it
-          (a shape knows what it weighs); inertia.hpp must not learn about them.
-        - THE HARNESS SHAPE. Nine sections, EVERY one with a control, chosen by
-          asking what it would say if the thing were completely BROKEN and what
-          it would say if the thing were completely FINE.
+      WHAT 8.5 INHERITS, AND MUST NOT RE-DERIVE:
+        - `support(obb, d)` AND `support(sphere, d)` ALREADY EXIST, added in 8.4
+          §6.3 a lesson early and deliberately: GJK is written entirely in terms
+          of a support function and needs nothing else. Do not invent a second
+          one, and do not make it a virtual — the engine core has no RTTI and
+          the switch over `shape_kind` is the dispatch.
+        - THE MINKOWSKI DIFFERENCE IS ALREADY SET UP. 8.4 §3.2 introduces
+          `A ⊖ B`, says overlap ⟺ it contains the origin, and says that the SAT
+          enumerates its FACES while GJK SEARCHES it. That framing is the bridge
+          between the two lessons and 8.5 should pay it off rather than restate
+          it.
+        - `separation` IS THE ANSWER TYPE, with a signed depth and an axis FROM a
+          TOWARD b (conventions.html §9e). GJK returns a real DISTANCE where the
+          SAT returned a lower bound, so the field means more, not something
+          different. 8.4 §13 promises exactly this.
+        - THE HARNESS SHAPE. Nine sections, EVERY one with a control. 8.4 added a
+          strictly better instrument where the answer allows it: a SEPARATING
+          AXIS IS A CERTIFICATE, re-checkable in four dot products, so the
+          harness verifies PROOFS rather than comparing implementations. GJK's
+          witness is the same kind of object — the simplex and the closest point
+          — and 8.5 should check it the same way.
         - `scratch/build_verify_NN.sh` REFUSES an unoptimised libengine.a.
+        - `scratch/check_NN.mjs` DRIVES check-page.js THROUGH THE NODE LIBRARY,
+          not the MCP server, which holds a single profile lock. Copy it.
         - A LESSON PAGE ENDS AT FURTHER READING. STATE.md is the sole resume key.
 
-      WHAT 8.4 IS LIKELY TO MOVE. New files under engine/{include/engine,src}/
-      phys/ for the shapes and the tests, engine/CMakeLists.txt, engine.hpp (the
-      umbrella lint has now gone TWO lessons without firing — do not let 8.4 be
-      the one that breaks it), and demos/CMakeLists.txt. 8.3's listings are
-      PINNED at scratch/l83_*, so editing rigid_body.hpp does not disturb the
-      published page — but if 8.4 CORRECTS something 8.3 got wrong, the fix goes
-      into the pin AND the live file, or the page and the repo disagree
-      invisibly (6.6 §10's three copies).
+      WHAT 8.5 IS LIKELY TO MOVE. `shape.hpp` (a convex-hull shape_kind, and the
+      capsule 8.4 set as an exercise), `collide.hpp`/`collide.cpp` (GJK's entry
+      point beside the SAT's, because a caller wants one function), engine.hpp,
+      engine/CMakeLists.txt and demos/CMakeLists.txt. 8.4's listings are PINNED
+      at scratch/l84_*, so editing shape.hpp does not disturb the published page
+      — but if 8.5 CORRECTS something 8.4 got wrong, the fix goes into the pin
+      AND the live file, or the page and the repo disagree invisibly (6.6 §10's
+      three copies).
 
-      CARRY FORWARD from 8.3:
-        - A DERIVATION SAYS WHAT TO COMPUTE, NOT HOW. |r|^2*1 - outer(r,r) is
-          the expression the algebra hands you and it returns EXACTLY ZERO for a
-          plank in float, because its diagonal subtracts two numbers that are
-          equal to within an ulp. -[r]x[r]x is the same algebra, never forms the
-          cancelling sum, and is faster. THIRD TIME THIS CLASS HAS APPEARED
-          (6.16's perspective(), 8.2's mass round trip, now this): whenever a
-          formula subtracts two nearly-equal things, look for the version that
-          does not. 8.4's SAT projects onto axes and subtracts intervals.
-        - CONVENTION BUGS HIDE BEHIND SYMMETRIC TEST DATA. R^T I R passes trace,
-          determinant, symmetry, principal moments AND any test built on a
-          90-degree rotation, because a right angle is its own inverse on a
-          diagonal tensor. Test with a GENERIC rotation — 8.3 §6 uses 0.7*pi
-          about (1,2,3) normalised.
-        - VALIDATION CATCHES THE IMPOSSIBLE, NOT THE MERELY WRONG. A compound
-          body assembled without the parallel-axis shift is 15.3x too small and
-          passes symmetric/positive/triangle/usable, because it IS a valid
-          tensor — of a body whose parts are piled at the balance point. 8.7's
-          manifolds have exactly this shape of failure.
-        - MEASURE IN THE FRAME THE EQUATIONS ARE WRITTEN IN. §10's first fit read
-          3.8498 against a predicted 4.8038 because it sampled a world-space
-          component of a body-frame quantity. The oscillation was AT THE SPIN
-          RATE, which is the tell — a perturbation has no reason to know about
-          it.
-        - A BENCHMARK THAT COPIES STATE MEASURES THE COPY. §12's first draft put
-          a 557 KB pool copy inside the timed region; every arm read 34-58 ns and
-          every ratio came out near 1, including the control, which is the shape
-          of a benchmark measuring something both arms have in common.
-        - AND THE REAL OPTIMISATION WAS NOT AN ALGORITHM: mat3_from_quat built
-          twice from the same quaternion, twenty lines apart, in two functions
-          that were each reasonable alone. 33.793 -> 18.778 ns/body.
-        - CHECK-PAGE.JS AT 390 FOUND THE MANIFEST TABLE AGAIN, exactly as it did
-          for 8.2: a path inside <code> cannot wrap, so the longest one forces
-          the whole PAGE to scroll. `.tbl-scroll` around it. Run BOTH widths;
-          pageScrollsX is invisible at desktop and was green at 1280 both times.
-        - AND figs_83.py IS LITERAL UNICODE THROUGHOUT, never \uXXXX, with every
-          patch script asserting its replacement count.
+      CARRY FORWARD from 8.4:
+        - THE FOLKLORE WAS ABOUT A FORMULATION, NOT THE ALGORITHM, and the
+          measurement is the only reason we know. "Guard the cross products or
+          objects fall through each other" is TRUE of the unnormalised absR test
+          (188 false separations in 400) and FALSE of the normalised one (0, with
+          the guard removed entirely), because if two convex bodies overlap then
+          NO direction separates them — so an axis of pure rounding error reports
+          an overlap like any other. I WROTE THE FOLKLORE INTO collide.hpp'S
+          DOC COMMENTS BEFORE MEASURING IT and had to go back and correct them.
+          Measure first, then write the comment.
+        - AND THE FIRST FIXTURE FOUND NOTHING BECAUSE IT WAS TOO CLEAN. A tiny
+          rotation about a WORLD axis leaves cross products EXACT — their terms
+          are products with zero, nothing cancels, nothing rounds. The failure
+          needs GENERIC orientations. Then the second fixture found nothing
+          because a CUBE's projected radius is ≥ 0.5 in every direction, so a
+          spurious axis cannot produce a gap at all. The configuration that fails
+          is two similar boxes meeting at a CORNER with a shared axis — which is
+          also the one every scene is full of.
+        - A GUARD THAT NEVER FIRES ON RANDOM DATA IS NOT A GUARD THAT IS NEVER
+          NEEDED. 0 firings in 1,800,000 candidate axes at random orientations;
+          the real arrangement (two things on one floor) has a degenerate pair at
+          EVERY yaw. Random test data and a real scene disagree completely about
+          which inputs are typical, and 8.6's broadphase will have the same
+          property — a uniform grid tested on uniform random points measures
+          nothing about a level.
+        - AN ANSWER THAT CARRIES ITS OWN PROOF IS WORTH DESIGNING FOR. Returning
+          the axis instead of a bool is what let the harness re-prove 179,056
+          separations in double without a second implementation. When a later
+          lesson can choose between "return the answer" and "return the answer
+          and its witness", take the witness.
+        - THE DERIVATION-VS-TRANSCRIPTION RULE PAID AGAIN. The nine absR
+          edge-edge tests are printed as a table in every book; deriving them
+          from `Aₖ · L = det(Aₖ, Aᵢ, Bⱼ)` and `Bₖ · L = Aᵢ · (Bⱼ × Bₖ)` gives a
+          loop over cyclic indices, and the derived version agreed with the
+          explicit formulation on 200,000 pairs first time.
+        - THE PRECISION FLOOR IS SET BY WHERE THINGS ARE, not by what you do to
+          them: a 1 mm gap is 2.3% wrong at 1 km and EXACTLY ZERO at 100 km,
+          because `b.centre - a.centre` subtracts world-sized numbers. Every
+          quantity in a collision test should be a difference taken as early as
+          possible. 8.7's manifolds must store OFFSETS, not world points.
+        - AND check-page.js IS NOT A SUBSTITUTE FOR LOOKING. It was green on a
+          figure whose plot panel was a filled `box()` where figs_71's
+          stroke-only `frame()` was meant — a helper whose docstring warns about
+          exactly that. Screenshot every figure and look at it.
