@@ -1041,7 +1041,8 @@ chore. What follows is on disk.
 │   │   │   │                 #   (the 4 SDL callbacks) — the engine keeps the loop
 │   │   │   └── main.hpp      # ENGINE_MAIN. ONE .cpp per program; no main() in it.
 │   │   │                     #   NOT in engine.hpp, deliberately
-│   │   ├── phys/           # HOW A STATE ADVANCES, WHAT MOVES IT, AND HOW IT TURNS [8.1-8.3]
+│   │   ├── phys/           # HOW A STATE ADVANCES, WHAT MOVES IT, HOW IT TURNS, AND
+│   │   │                   #   WHERE ITS SURFACE IS                    [8.1-8.5]
 │   │   │                   #   THE FIFTH NEW DIRECTORY SINCE THE REFACTOR, and
 │   │   │                   #   the second (after audio/) that never touches a
 │   │   │                   #   pixel. NOT under math/: the test is what a file
@@ -1050,6 +1051,49 @@ chore. What follows is on disk.
 │   │   │                   #   metres per second and that a step size has a
 │   │   │                   #   STABILITY LIMIT. Those are claims about a
 │   │   │                   #   simulation, not about a vector space.
+│   │   │   └── inertia.hpp   # point_mass, inertia_of_point(s), the solid-body
+│   │   │                     #   tensors (box/sphere/cylinder/rod/CAPSULE),
+│   │   │                     #   shift_/unshift_inertia (parallel axis),
+│   │   │                     #   rotate_/world_inertia (the R I Rᵀ sandwich),
+│   │   │                     #   inverse_inertia, inertia_assembly,
+│   │   │                     #   inspect_inertia.                          [8.3]
+│   │   │   └── shape.hpp     # shape_kind{sphere,box,capsule} + `shape` (24 bytes,
+│   │   │                     #   BODY axes, CENTRED on the centre of mass) + the
+│   │   │                     #   factories + volume_of/bounding_radius +
+│   │   │                     #   inertia_of (the ONE arrow into inertia.hpp) +
+│   │   │                     #   the world placements `obb`/`capsule`/`hull` +
+│   │   │                     #   support and support_local for all four.
+│   │   │                     #   `hull` IS NOT A shape_kind: it holds a span of
+│   │   │                     #   somebody else's vertices, and a `shape` is a
+│   │   │                     #   value you can copy into a save file. The sharper
+│   │   │                     #   reason is that inertia_of would have to answer
+│   │   │                     #   for it and cannot — a tensor needs faces.
+│   │   │                     #                                          [8.4, 8.5]
+│   │   │   └── collide.hpp   # `separation` (unit axis FROM a TOWARD b, signed
+│   │   │                     #   depth, axis_index, axes_tested), axis_source,
+│   │   │                     #   the projection primitives, collide() for every
+│   │   │                     #   pair of {sphere, aabb, obb}, overlaps(), the
+│   │   │                     #   closest-point pair — and 8.5's collide(convex,
+│   │   │                     #   convex) facade over GJK.               [8.4, 8.5]
+│   │   │   └── convex.hpp    # `convex`: a support FUNCTION POINTER, a context
+│   │   │                     #   pointer and an origin. 24 bytes, header only.
+│   │   │                     #   THE THIRD DISPATCH PATTERN IN THE ENGINE, after
+│   │   │                     #   the ECS's type-erased pools and 6.17's frame-graph
+│   │   │                     #   callbacks, and chosen the same way: 5.2 forbids
+│   │   │                     #   virtuals in the core, a template would instantiate
+│   │   │                     #   GJK once per PAIR of shape types, and the switch
+│   │   │                     #   cannot reach a `hull`. Measured at 1.906 ns
+│   │   │                     #   against 1.908 direct. `support` returns a point
+│   │   │                     #   RELATIVE to `origin`, which is the file's whole
+│   │   │                     #   numerical argument: 96,270x smaller error a
+│   │   │                     #   thousand km out. Four DELETED rvalue overloads,
+│   │   │                     #   because a view that outlives its subject is the
+│   │   │                     #   one mistake this shape of interface invites. [8.5]
+│   │   │   └── gjk.hpp       # gjk_vertex/simplex/gjk_status/gjk_result/gjk_config,
+│   │   │                     #   gjk_distance, gjk_intersects, certify, and
+│   │   │                     #   cso_support + reduce_simplex — the last two public
+│   │   │                     #   because demos/gjk single-steps the loop and the
+│   │   │                     #   harness measures the solver directly.        [8.5]
 │   │   │   └── integrate.hpp # motion (position + velocity, and nothing else),
 │   │   │                     #   integrator (explicit_euler, semi_implicit_euler,
 │   │   │                     #   velocity_verlet), integrate() x2, apply_drag,
@@ -1235,9 +1279,13 @@ chore. What follows is on disk.
 │   │                             #   texture, a comparison sampler, its own
 │   │                             #   render pass, and fill_uniforms() so the two
 │   │                             #   renderers cannot disagree about a bias
-│   └── src/                # ---- PRIVATE. 60 sources; no demo can name this path ----
+│   └── src/                # ---- PRIVATE. 63 sources; no demo can name this path ----
 │       ├── phys/           # integrate.cpp [8.1], rigid_body.cpp [8.2],
-│       │                   # inertia.cpp                                     [8.3]
+│       │                   # inertia.cpp [8.3], shape.cpp [8.4],
+│       │                   # collide.cpp [8.4], gjk.cpp                      [8.5]
+│       │                   #   gjk.cpp is the only one of these with no header of
+│       │                   #   its own shape knowledge: it includes gjk.hpp, which
+│       │                   #   includes convex.hpp, and nothing in it names a box.
 │       │                   #   Everything that is NOT a template: the constant-
 │       │                   #   acceleration overload (the gravity path), the two
 │       │                   #   drag helpers, and the four diagnostics. Nothing in
@@ -1310,6 +1358,34 @@ chore. What follows is on disk.
 │   │                       #   --shot runs 240 deterministic steps and prints four
 │   │                       #   numbers, which makes it a characterization test for
 │   │                       #   the ECS, the hierarchy and the pools               [5.12]
+│   ├── gjk/main.cpp        # THE MINKOWSKI DIFFERENCE, SEARCHED               [8.5]
+│   │                       #   Two panels. Left, the world; right, `A ⊖ B`
+│   │                       #   OUTLINED BY TRACING ITS OWN SUPPORT FUNCTION —
+│   │                       #   a convex set's shadow is convex, and its support
+│   │                       #   function is the original's composed with the
+│   │                       #   transpose of the projection, so one loop draws a
+│   │                       #   box, a capsule, a hull or a difference set.
+│   │                       #   Drawing the support POINTS instead — the obvious
+│   │                       #   first attempt — draws almost nothing for a
+│   │                       #   polytope: 900 directions on a box land on 8
+│   │                       #   corners. [S] steps the search one iteration at a
+│   │                       #   time, which is the one reason this demo drives
+│   │                       #   the loop itself through `cso_support` and
+│   │                       #   `reduce_simplex` rather than calling
+│   │                       #   `gjk_distance`: a visualiser needs the iteration,
+│   │                       #   not the answer. Preset 3 is the lesson — two
+│   │                       #   boxes on one floor, and the simplex never leaves
+│   │                       #   the plane y = 0, which is why that arrangement
+│   │                       #   can never produce a tetrahedron for 8.6's EPA.
+│   ├── collide/main.cpp    # FIFTEEN BARS, AND THE ONE THAT CROSSES ZERO      [8.4]
+│   │                       #   All fifteen SAT candidates as bars against a zero
+│   │                       #   line, so the reader watches the verdict flip at
+│   │                       #   the instant the FIRST one crosses. [F] keeps the
+│   │                       #   six face normals and throws the nine cross
+│   │                       #   products away, turning two visibly separated
+│   │                       #   planks red. A negative claim — these fifteen
+│   │                       #   found no gap, therefore no direction has one — is
+│   │                       #   the hardest kind to believe from a statement.
 │   ├── bodies/main.cpp     # THREE MASSES, THREE WAYS TO FALL                [8.2]
 │   │                       #   World-space trajectories, not phase space, because
 │   │                       #   the claim it settles is one a player could see:

@@ -200,6 +200,12 @@ add_library(engine STATIC
     src/phys/rigid_body.cpp
     src/phys/shape.cpp
     src/phys/collide.cpp
+
+    # Lesson 8.5. GJK depends on `convex.hpp` (header-only: a function pointer and
+    # four inline adapters) and on nothing else in the module, which is the
+    # physical shape of the claim it makes — an algorithm that needs no knowledge
+    # of the shapes it is handed does not need to be compiled against them.
+    src/phys/gjk.cpp
     # Lesson 5.2. Note what is NOT here: platform/main.hpp, which carries
     # ENGINE_MAIN. It is header-only and deliberately so — including it emits a
     # real `main`, and an entry point is not a library's to own. See the comment

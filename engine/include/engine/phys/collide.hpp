@@ -60,6 +60,7 @@
 
 #include <engine/math/bounds.hpp>
 #include <engine/math/vec3.hpp>
+#include <engine/phys/convex.hpp>
 #include <engine/phys/shape.hpp>
 
 namespace engine::phys
@@ -76,10 +77,11 @@ enum class axis_source
     face_a,      ///< A face normal of the first box. Index 0-2.
     face_b,      ///< A face normal of the second box. Index 3-5.
     edge_edge,   ///< The cross product of an edge from each. Index 6-14.
+    witness,     ///< GJK. Index -3: not a candidate axis but a pair of points.
     none,        ///< No axis: a degenerate or trivially-empty input.
 };
 
-/// `"radial"`, `"face A"`, `"face B"`, `"edge-edge"`, `"none"`.
+/// `"radial"`, `"face A"`, `"face B"`, `"edge-edge"`, `"witness"`, `"none"`.
 [[nodiscard]] const char* name_of(axis_source source);
 
 /// The result of one overlap query: a direction, a signed distance, a witness.
@@ -113,7 +115,17 @@ struct separation
 
     /// Which candidate produced this axis. `-1` for radial tests, `0-2` for the
     /// first box's faces, `3-5` for the second's, `6-14` for the nine edge
-    /// pairs: `6 + 3*i + j` is `a.axis(i) × b.axis(j)`.
+    /// pairs: `6 + 3*i + j` is `a.axis(i) × b.axis(j)`. `-2` is "no axis at all",
+    /// a degenerate input.
+    ///
+    /// Lesson 8.5 adds `-3`, meaning GJK — an axis that came from a pair of
+    /// WITNESS POINTS rather than from any enumerated candidate, which is the
+    /// whole difference between the two algorithms expressed as an integer. It
+    /// is `-3` and not `-2` because `-2` was already spoken for by
+    /// `collide.cpp`'s `k_no_axis`, which `source_of` mapped to `none` through
+    /// its final fallthrough rather than through a named case. A sentinel that
+    /// is only reachable by falling off the end of a function is a sentinel
+    /// waiting to be reused by mistake; both are named cases now.
     int axis_index = -1;
 
     /// How many candidates were examined before the answer was known.
@@ -320,6 +332,38 @@ inline constexpr float k_parallel_sin2 = 1e-6f;
 /// cost**, which is what makes it the right thing for a broadphase's confirmation
 /// pass and the wrong thing for anything that needs a normal.
 [[nodiscard]] bool overlaps(const obb& a, const obb& b);
+
+// ---------------------------------------------------------------------------
+// Lesson 8.5: the same question, asked of any convex shape
+// ---------------------------------------------------------------------------
+
+/// **Two arbitrary convex shapes, by GJK.** The façade over `gjk.hpp`.
+///
+/// Every test above needed to know what it was holding. This one does not: it
+/// takes two `convex` views — box, sphere, capsule, arbitrary point set, any
+/// mixture — and asks the Minkowski difference whether it contains the origin.
+/// There is no candidate axis list, because there is no enumeration.
+///
+/// The result is the same `separation` the rest of this file returns, so a
+/// caller can swap the specialised test for the general one without touching
+/// anything downstream. Three fields are filled differently and the doc comment
+/// is the contract:
+///
+///   * `axis_index` is `-3`, so `source_of` reports `witness`.
+///   * `axes_tested` is the GJK ITERATION COUNT rather than a candidate count.
+///     Same meaning — how much work did the answer take — different unit.
+///   * **`depth` is exact when negative and a placeholder when not.** A gap is
+///     the true distance, better than anything the SAT can produce. An OVERLAP
+///     reports `+0` with the last search direction as the axis, because GJK
+///     cannot measure penetration: the origin is inside `A ⊖ B` and the depth is
+///     a distance to its boundary, which the search never looks at. Lesson 8.6
+///     is the one that fixes this, and until then a caller that needs a
+///     penetration depth for two boxes must keep using `collide(obb, obb)`.
+///
+/// **This is the honest state of the engine after 8.5**, and naming it is the
+/// point: the general test answers the question the specialised one could not
+/// (how far apart, exactly) and cannot yet answer the one it could (how deep).
+[[nodiscard]] separation collide(const convex& a, const convex& b);
 
 // ---------------------------------------------------------------------------
 // Closest points

@@ -3,6 +3,8 @@
 
 #include <engine/phys/collide.hpp>
 
+#include <engine/phys/gjk.hpp>
+
 #include <algorithm>
 #include <cmath>
 
@@ -14,6 +16,11 @@ namespace
 /// The index a `separation` carries when there is no axis at all: an empty box,
 /// or a degenerate input. `-1` already means "radial", which is a real axis.
 constexpr int k_no_axis = -2;
+
+/// The index a `separation` carries when GJK produced it (Lesson 8.5). Not a
+/// candidate axis: the direction came from two witness points on two surfaces,
+/// and there was never a list to be the n-th element of.
+constexpr int k_witness = -3;
 
 /// The cyclic successors of 0, 1, 2. `nxt[i]` is `(i+1) % 3` and `prv[i]` is
 /// `(i+2) % 3`, written as tables because the nine edge-edge tests below index
@@ -53,6 +60,7 @@ const char* name_of(axis_source source)
         case axis_source::face_a:    return "face A";
         case axis_source::face_b:    return "face B";
         case axis_source::edge_edge: return "edge-edge";
+        case axis_source::witness:   return "witness";
         case axis_source::none:      return "none";
     }
     return "?";
@@ -64,6 +72,8 @@ axis_source source_of(const separation& s)
     if (s.axis_index >= 3) { return axis_source::face_b; }
     if (s.axis_index >= 0) { return axis_source::face_a; }
     if (s.axis_index == -1) { return axis_source::radial; }
+    if (s.axis_index == k_no_axis) { return axis_source::none; }
+    if (s.axis_index == k_witness) { return axis_source::witness; }
     return axis_source::none;
 }
 
@@ -477,6 +487,39 @@ separation collide(const aabb& box, const engine::sphere& s)
 separation collide(const engine::sphere& s, const aabb& box)
 {
     return flip(collide(box, s));
+}
+
+// ---------------------------------------------------------------------------
+// Lesson 8.5: the general test
+// ---------------------------------------------------------------------------
+
+separation collide(const convex& a, const convex& b)
+{
+    const gjk_result g = gjk_distance(a, b);
+
+    separation out;
+    out.axis_index = k_witness;
+    out.axes_tested = g.iterations;
+
+    if (g.status == gjk_status::separated)
+    {
+        // The one case where this function beats everything above it: `depth` is
+        // the TRUE distance, not the largest gap some enumerated axis happened
+        // to find. Negative, because the sign convention is 8.4's and has not
+        // moved.
+        out.axis = g.direction;
+        out.depth = -g.distance;
+        return out;
+    }
+
+    // Overlapping, or out of iterations, which a caller must treat the same way.
+    // `depth` is +0 and it is a PLACEHOLDER — the header says so in as many
+    // words, because a zero here is the one value that could be mistaken for a
+    // measurement. The axis is the last search direction, which is a reasonable
+    // guess at a contact normal and nothing more. 8.6 replaces both.
+    out.axis = g.direction;
+    out.depth = 0.0f;
+    return out;
 }
 
 } // namespace engine::phys

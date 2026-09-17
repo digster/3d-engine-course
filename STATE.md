@@ -5505,6 +5505,7 @@ completed:
          at the source, which is figs_78.py's standing rule arriving with
          evidence.)
   - 8.4  Collision Primitives: Spheres, AABBs, OBBs, and the SAT
+  - 8.5  GJK: Convex Distance from a Support Function
         (8.3's dead `next` link repointed in ALL THREE copies — the page,
          scratch/l83_body_a.html and build_83.py's TAIL — and build_83 rebuilt,
          so page and generator still agree. Planned at 6 h and SHIPPED AT 6, the
@@ -5535,6 +5536,29 @@ completed:
          zero line, and [F] to throw the nine cross products away.)
 
 capabilities:
+  - 8.5 THE ENGINE CAN MEASURE THE DISTANCE BETWEEN ANY TWO CONVEX SHAPES and
+    hand back the two surface points that realise it. Box, sphere, capsule,
+    arbitrary point set, in any of the ten pairings, through one function that
+    names none of them.
+    phys/convex.hpp: `convex` (support_fn + const void* data + vec3 origin, 24
+    bytes) + world_support + as_convex() for obb/sphere/capsule/hull + FOUR
+    DELETED RVALUE OVERLOADS. `support` returns a point RELATIVE TO `origin`,
+    which is the whole numerical argument of the file: see §12's 96,270x.
+    phys/gjk.hpp: gjk_vertex (w + pa + pb, the two halves carried so the witness
+    points come out of the same barycentric weights) + `simplex` (4 vertices,
+    Caratheodory) + gjk_status{separated, intersecting, iteration_limit} +
+    gjk_result (+ `stalled`, + the TERMINAL SIMPLEX for 8.6) + gjk_config
+    (tolerance RELATIVE, max_iterations, initial_direction) + gjk_distance +
+    gjk_intersects + gjk_bounds/certify + cso_support + reduce_simplex (the last
+    two public because the demo single-steps the loop and §C measures the solver
+    directly).
+    phys/shape.hpp GAINS: shape_kind::capsule + `shape::half_height` (24 bytes
+    now) + capsule_shape + `capsule` (world placement) + `hull` (world placement
+    + std::span of BODY-AXES points) + world_capsule + world_hull +
+    support/support_local for all four + bounds_of for capsule and hull.
+    phys/collide.hpp GAINS: axis_source::witness (index -3) + collide(convex,
+    convex) — the facade, returning a `separation` so a caller can swap the
+    specialised test for the general one without touching anything downstream.
   - 8.4 THE ENGINE KNOWS HOW BIG THINGS ARE, and can answer "are these two
     touching, and if so how do I fix it?" for every pair of {sphere, aabb, obb}.
     phys/shape.hpp: shape_kind{sphere,box} + `shape` (20 bytes, BODY axes,
@@ -8999,7 +9023,14 @@ files:
             main.hpp   (NOT in engine.hpp — it defines the entry point)
   engine/include/engine/phys/: integrate.hpp [8.1], rigid_body.hpp [8.2],
                                inertia.hpp [8.3], shape.hpp [8.4],
-                               collide.hpp                              [8.4]
+                               collide.hpp [8.4], convex.hpp [8.5],
+                               gjk.hpp                                  [8.5]
+            (convex.hpp is HEADER ONLY and deliberately so: a function pointer,
+             a context pointer, an origin, four inline adapters and four DELETED
+             rvalue overloads. It has no .cpp because there is nothing to
+             compile — which is also the physical shape of its claim, that an
+             algorithm needing no knowledge of its shapes needs no link against
+             them.)
             (THE FIFTH NEW DIRECTORY SINCE THE REFACTOR. NOT math/: math/ knows
              about numbers and has no .cpp at all; this knows that a velocity is
              metres per second and that a step size has a stability limit.
@@ -9037,7 +9068,8 @@ files:
             (a new directory, same argument asset/ made in 5.5: tooling UI is not a
              graphics subsystem. Does NOT include <imgui.h> — see debug-ui.)
   engine/src/phys/: integrate.cpp [8.1], rigid_body.cpp [8.2],
-                    inertia.cpp [8.3], shape.cpp [8.4], collide.cpp     [8.4]
+                    inertia.cpp [8.3], shape.cpp [8.4], collide.cpp [8.4],
+                    gjk.cpp                                             [8.5]
             (Everything that is NOT a template: the constant-acceleration
              overload, apply_drag/damping_factor, and the four diagnostics.
              Nothing in it is hot — the general stepper stayed in the header
@@ -9122,6 +9154,19 @@ files:
              visibly separated planks red. A negative claim — these fifteen found
              no gap, therefore no direction has one — is the hardest kind to
              believe from a statement.)
+  demos/gjk/: main.cpp                                                    [8.5]
+            (Two panels again, and the right one is the Minkowski difference
+             OUTLINED BY TRACING ITS OWN SUPPORT FUNCTION — a convex set's shadow
+             is convex and its support function is the original's composed with
+             the transpose of the projection, so one loop draws a box, a capsule,
+             a hull or a difference set with no case analysis. Drawing the
+             support POINTS instead, which was the first attempt, draws almost
+             nothing for a polytope: 900 directions on a box land on 8 corners.
+             [S] steps the search one iteration at a time, which is why this demo
+             drives the loop itself through `cso_support` and `reduce_simplex`
+             rather than calling `gjk_distance` — a visualiser needs the
+             iteration, not the answer. Preset 3 is the lesson: two boxes on one
+             floor, and the simplex never leaves the plane y = 0.)
            (THE FIRST DEMO IN THE MODULE THAT DRAWS AN OBJECT rather than a graph
             of one, because the claim it settles is about which way something is
             POINTING and a tumbling box is not a trajectory. Wireframe, parallel
@@ -9262,7 +9307,8 @@ files:
                  07-07-sampling-blending.html
                  07-08-audio.html, 08-01-integrators.html,
                  08-02-forces-and-bodies.html, 08-03-angular-dynamics.html,
-                 08-04-collision-primitives.html
+                 08-04-collision-primitives.html,
+                 08-05-gjk.html
                  (5.12 IS OUT OF SEQUENCE ON PURPOSE — Module 5 closed eleven
                   lessons after 5.11 and one after 6.18, and the list is
                   append-ordered rather than sorted so that the history is
@@ -9893,85 +9939,241 @@ roadmap: RESHAPED 2026-09-08, AFTER TWO EXTERNAL REVIEWS OF THE PUBLISHED OUTLIN
             qualifier too, because a skimmer reads the recap and stops.
 
 
+  8.5 — GJK: CONVEX DISTANCE FROM A SUPPORT FUNCTION.  Nine measured sections,
+        33 checks, 0 failures. 12 figures. The lesson replaces 8.4's enumeration
+        with a search, and the five things worth carrying are all things the
+        measurement changed rather than confirmed.
 
-next: 8.5 — GJK: Convex Distance from a Support Function
+        THE SIMPLEX SOLVER WAS REWRITTEN BECAUSE OF A MEASUREMENT, and this is
+          the finding to remember. The FIRST DRAFT SHIPPED ERICSON'S
+          `ClosestPtPointTriangle` — the seven-Voronoi-region version every
+          implementation copies. Its three region tests are SIGNED AREAS,
+          differences of nearly equal products, and on a thin triangle they are
+          noise: the region it selects can be the wrong one, and the point it
+          then returns is the foot of the perpendicular on the triangle's PLANE,
+          which can be arbitrarily NEARER the origin than the triangle is.
+          Measured: 3 failures in 200,000 FAT triangles and 1,048 in 200,000
+          SLIVERS, worst case 14.5% wrong.
+          AND A SLIVER IS NOT AN EDGE CASE IN GJK. The algorithm's whole job is
+          to drive the simplex onto the closest feature, so by the last two
+          iterations of EVERY query the triangle is as thin as the problem allows
+          and the origin is a fraction of a millimetre from it. The failure mode
+          lives exactly where the algorithm converges, which is why it survives
+          any test suite written against uniform random data — including, for a
+          while, this one, whose first thin population was not thin enough and
+          did not place the origin near the plane.
+          SHIPPED INSTEAD: four candidates (the interior projection, if its
+          barycentrics are non-negative, plus three CLAMPED edges, which already
+          contain their own endpoints) evaluated and compared. 21.681 ns per
+          triangle against a 115 ns query. Refusing to decide costs a few percent
+          and buys an answer that cannot be wrong.
 
-      WHAT 8.5 INHERITS, AND MUST NOT RE-DERIVE:
-        - `support(obb, d)` AND `support(sphere, d)` ALREADY EXIST, added in 8.4
-          §6.3 a lesson early and deliberately: GJK is written entirely in terms
-          of a support function and needs nothing else. Do not invent a second
-          one, and do not make it a virtual — the engine core has no RTTI and
-          the switch over `shape_kind` is the dispatch.
-        - THE MINKOWSKI DIFFERENCE IS ALREADY SET UP. 8.4 §3.2 introduces
-          `A ⊖ B`, says overlap ⟺ it contains the origin, and says that the SAT
-          enumerates its FACES while GJK SEARCHES it. That framing is the bridge
-          between the two lessons and 8.5 should pay it off rather than restate
-          it.
-        - `separation` IS THE ANSWER TYPE, with a signed depth and an axis FROM a
-          TOWARD b (conventions.html §9e). GJK returns a real DISTANCE where the
-          SAT returned a lower bound, so the field means more, not something
-          different. 8.4 §13 promises exactly this.
-        - THE HARNESS SHAPE. Nine sections, EVERY one with a control. 8.4 added a
-          strictly better instrument where the answer allows it: a SEPARATING
-          AXIS IS A CERTIFICATE, re-checkable in four dot products, so the
-          harness verifies PROOFS rather than comparing implementations. GJK's
-          witness is the same kind of object — the simplex and the closest point
-          — and 8.5 should check it the same way.
+        AN INVARIANT YOU CAN CHECK IS WORTH MORE THAN ONE YOU BELIEVE. |v| is
+          monotonically non-increasing across GJK iterations BY CONSTRUCTION: the
+          new simplex contains the old reduced one, and the nearest point of a
+          superset cannot be farther. Two lines test it, and they caught TWO
+          UNRELATED FAILURES:
+            (a) THE LOOP CYCLING, on ordinary input. Two 3 m boxes 2 mm apart
+                reached the 64-iteration cap with the distance ALREADY CORRECT to
+                six digits.
+            (b) THE SOLVER GOING BACKWARDS — which is how (the sliver bug) was
+                found. A sphere against a turned box: 18 iterations converging
+                cleanly to 0.0233827 m against a true 0.0233828, then ONE
+                reduction returning 0.0674522, three times too far.
+          The block RESTORES the last good state rather than merely breaking,
+          which is what turns a terminator into a repair.
+
+        AND A PROOF OUTRANKS A DECISION. A single positive dot(v, w) is a
+          COMPLETE proof of separation — w minimises dot(x, v) over the whole
+          difference set, so if that minimum is positive no point of the set
+          reaches the origin's plane. The loop banks the best such bound and
+          REFUSES any later containment that contradicts it. Measured on the case
+          that motivated it: a sphere and a turned box 55 mm apart, 14 clean
+          iterations to 0.0553297 m, and then a tetrahedron whose four face tests
+          ALL reported containment — turning a 55 mm gap into a contact. A proof
+          does not become false because a later determinant changed sign.
+
+        THE SHARED UP AXIS COLLAPSES THE SEARCH BY A DIMENSION, and this one is
+          8.6'S PROBLEM. Two boxes standing on the same floor have equal y half
+          extents multiplying the same world direction, and `support_local`'s
+          `>= 0` tie-break picks the same sign for both, so EVERY vertex of the
+          difference comes out with w.y = (+h) − (+h) − 0 = EXACTLY zero. All
+          100,000 simplices lay in that plane. A search confined to a plane cannot
+          build a tetrahedron: 0 of 100,000, including all 65,633 pairs
+          overlapping by more than 10 cm — against 77,326 once one box is tilted a
+          SINGLE DEGREE.
+          EVERY DESCRIPTION OF EPA BEGINS "start from the tetrahedron GJK
+          terminated with". On the commonest arrangement in a game there is none,
+          and 8.6's FIRST job is to build one. This is 8.4 §F's finding from the
+          other side: there a shared axis made one cross product degenerate; here
+          it removes a dimension.
+
+        THE SEED'S SIGN WAS WORTH 22%. The difference set is centred near
+          −delta, so the direction from it TOWARD the origin is +delta. The first
+          draft seeded with −delta, which picks the point FARTHEST from the
+          origin — legal, and one wasted iteration per query for ever. Mean over
+          117,413 separated box pairs: 4.52 → 3.52, and sphere-sphere 2 → 1.
+          WARM STARTING, by contrast, is worth 3% (2.219 → 2.152 mean) — and the
+          CONTROL is what makes that number readable: a RANDOM seed costs 54%
+          more, so the seed matters a great deal and the free heuristic was
+          already nearly right. 8.7 will want warm starting for STABILITY (the
+          same contact feature frame to frame), not for speed.
+
+        POLYTOPES TERMINATE, CURVES CONVERGE — and the odd one out is the sphere.
+          Box 2.68→2.80 and hull 1.57→1.98 across five decades of tolerance, i.e.
+          FLAT: finitely many vertices, so the simplex can only improve finitely
+          often and the tolerance is never what stopped the search. The SPHERE is
+          flat at ONE ITERATION, because a ball's nearest point to an exterior
+          point is on the line to its centre and the first support call along
+          `delta` lands ON the answer. Only the CAPSULE genuinely converges
+          (2.06 → 7.43), because its difference is a parallelogram rounded by a
+          ball and the nearest point can sit on the curved part.
+
+        TWO SEPARATE THINGS GIVE OUT AT TWO DIFFERENT GAPS, and conflating them
+          would have produced a wrong fix.
+            THE PROOF first, at |v| ~ eps*|w|/tol ≈ 4.8e-03 m for 2 m cubes. The
+              termination threshold is proportional to |v|² — the gap SQUARED —
+              while its rounding error is O(eps*|v|*|w|) — the gap times the
+              SHAPE. One falls quadratically, the other linearly. Below the
+              crossover the test is noise against noise; the ANSWER is still
+              right and still a valid UPPER bound (worst shortfall below truth
+              over 36,000 sphere-box pairs: 8.5e-06 m).
+            THE ANSWER second, at |v| <= tol*|w| — a CONTACT MARGIN, measured by
+              bisection at 2.11 x tolerance x size across FOUR DECADES of cube
+              size. Which is the finding: `tolerance` is a RELATIVE quantity and
+              "set it to a millimetre" is a category error.
+
+        8.4 §11's PRECISION WALL IS FIXED RATHER THAN REPEATED. Support points
+          are taken RELATIVE to each shape's own centre and the single
+          world-sized subtraction `b.origin − a.origin` is formed ONCE, outside
+          the loop — where it is EXACT by Sterbenz's lemma, which two things
+          about to collide always satisfy. Measured on one pair walked from 0 to
+          1000 km against an exact double reference taken from the SAME float
+          boxes: naive 1.0299e-02 m worst error, relative 1.0698e-07 —
+          **96,270x**. The naive error tracks ulp(position) at a fixed fraction;
+          the relative error tracks nothing.
+          THE TWO ARMS ARE NOT TWO IMPLEMENTATIONS. gjk.cpp is the same code in
+          both columns and only the `convex` VIEW differs, which is what makes
+          the comparison mean anything — 4.8 §3's lesson about harnesses that
+          construct their own configuration, applied on purpose.
+          AND THE REFERENCE HAD TO BE FIXED TOO. The first version computed the
+          box corners as `centre - half` IN FLOAT, which is exactly what the
+          NAIVE arm does, so the reference agreed with the arm it was meant to
+          convict and reported the relative form as 96,270x WORSE. Promoting to
+          double before subtracting flipped the result. A reference that rounds
+          the way one arm rounds is not a reference.
+
+        THE DUPLICATE TEST MUST NOT USE THE USER'S TOLERANCE. It exists to catch
+          a support function returning a vertex the simplex already has, which on
+          a POLYTOPE is how the search finishes exactly. The first version used
+          `cfg.tolerance` (1e-4) and was a quiet disaster on curved shapes: a
+          capsule's support point moves continuously, so consecutive iterations
+          produce points a fraction of a millimetre apart — "duplicates" by a
+          relative 1e-4 measure — and the loop exited before the bounds
+          converged. Measured: capsule certificate slack of 2.4% where the
+          tolerance promised 0.01%, on results NOT flagged stalled and therefore
+          looking trustworthy. `k_duplicate_rel2 = 1e-12f`, at float's own
+          resolution.
+
+        THE SENTINEL THAT WAS ALREADY TAKEN. GJK's `axis_index` is -3, not -2,
+          because collide.cpp already had `constexpr int k_no_axis = -2` and
+          `source_of` mapped it to `none` by FALLING OFF THE END of the function
+          rather than through a named case. A sentinel reachable only by
+          fallthrough is a sentinel waiting to be reused by mistake. Both are
+          named cases now.
+
+        THE FUNCTION POINTER COSTS NOTHING: 1.906 ns through `convex::support`
+          against 1.908 ns direct, bit-identical. One target per query is a
+          branch the predictor learns on the first call — 6.17's finding at a
+          hotter call site. AND GJK IS SLOWER THAN THE SAT ON BOXES AND SHOULD BE:
+          8.433 / 49.477 (overlaps / collide) against 73.223 / 114.744
+          (gjk_intersects / gjk_distance). What GJK buys is the metres and the
+          generality, not the speed, which is why the engine keeps BOTH.
+
+        A HULL IS NOT A shape_kind, and the reason is `inertia_of`. A `shape` is
+          a 24-byte value Module 9 will write to a save file and a pointer is not
+          a value — but the sharper reason is that inertia_of(shape) would have to
+          ANSWER for a hull and cannot: the divergence-theorem sum needs faces and
+          a point set has none. A function returning a plausible wrong answer is
+          worse than one that does not exist. Named in §14; 8.12's ragdolls use
+          capsules for exactly this reason.
+
+
+
+next: 8.6 — EPA: Penetration Depth
+
+      WHAT 8.6 INHERITS, AND MUST NOT RE-DERIVE:
+        - `convex`, `cso_support` and `reduce_simplex` ARE PUBLIC and are the
+          interface EPA is written against. EPA is the same support function
+          asked the same kind of question in the other direction, so it must NOT
+          grow its own shape knowledge, its own adapters or its own dispatch.
+        - `gjk_result::terminal` IS THE HANDOFF and it is already carried for
+          this purpose — but see the next item before writing a word of prose
+          about it.
+        - THE MINKOWSKI DIFFERENCE IS ESTABLISHED. 8.5 §3 proves both
+          equivalences, §5 derives the support identity, and §4 proves that a
+          support function DETERMINES a convex set. EPA should pay those off
+          rather than restate them: penetration depth is the distance from the
+          origin to the BOUNDARY of A ⊖ B, which is the one question 8.5 says
+          out loud that it cannot answer because the search only ever looks
+          inward.
+        - `separation` IS STILL THE ANSWER TYPE. 8.5's collide(convex, convex)
+          returns depth = +0 with `witness` as its source on every overlap and
+          the header calls that a PLACEHOLDER in as many words. 8.6 fills it in;
+          it should not change the type.
+        - THE HARNESS SHAPE. Nine sections, EVERY one with a control, and 8.5
+          added a STRONGER instrument than 8.4's: an answer bracketed from both
+          sides by bounds recomputable FROM THE OUTPUT ALONE. A penetration depth
+          has the same property — the deepest point of A ⊖ B along a claimed
+          normal is one support call — so 8.6 should certify rather than compare.
         - `scratch/build_verify_NN.sh` REFUSES an unoptimised libengine.a.
-        - `scratch/check_NN.mjs` DRIVES check-page.js THROUGH THE NODE LIBRARY,
-          not the MCP server, which holds a single profile lock. Copy it.
+        - `scratch/check_NN.mjs` DRIVES check-page.js THROUGH THE NODE LIBRARY;
+          its default URL is rooted at docs/, so pass the full URL when the
+          server is rooted at the repository.
         - A LESSON PAGE ENDS AT FURTHER READING. STATE.md is the sole resume key.
 
-      WHAT 8.5 IS LIKELY TO MOVE. `shape.hpp` (a convex-hull shape_kind, and the
-      capsule 8.4 set as an exercise), `collide.hpp`/`collide.cpp` (GJK's entry
-      point beside the SAT's, because a caller wants one function), engine.hpp,
-      engine/CMakeLists.txt and demos/CMakeLists.txt. 8.4's listings are PINNED
-      at scratch/l84_*, so editing shape.hpp does not disturb the published page
-      — but if 8.5 CORRECTS something 8.4 got wrong, the fix goes into the pin
-      AND the live file, or the page and the repo disagree invisibly (6.6 §10's
-      three copies).
+      *** THE THING 8.6 MUST DEAL WITH FIRST. *** 8.5 §9 measured that GJK
+      DOES NOT HAND EPA A TETRAHEDRON on the commonest arrangement in a game:
+      two boxes on one floor produce a difference set every vertex of which has
+      y EXACTLY zero, so the simplex is trapped in a plane. 0 tetrahedra in
+      100,000 pairs, including all 65,633 overlapping by more than 10 cm;
+      77,326 once one box is tilted one degree. Every textbook description of
+      EPA opens by assuming the tetrahedron exists. **Building the starting
+      polytope is on 8.6's critical path, not its error path**, and the lesson
+      should open there rather than discover it late.
 
-      CARRY FORWARD from 8.4:
-        - THE FOLKLORE WAS ABOUT A FORMULATION, NOT THE ALGORITHM, and the
-          measurement is the only reason we know. "Guard the cross products or
-          objects fall through each other" is TRUE of the unnormalised absR test
-          (188 false separations in 400) and FALSE of the normalised one (0, with
-          the guard removed entirely), because if two convex bodies overlap then
-          NO direction separates them — so an axis of pure rounding error reports
-          an overlap like any other. I WROTE THE FOLKLORE INTO collide.hpp'S
-          DOC COMMENTS BEFORE MEASURING IT and had to go back and correct them.
-          Measure first, then write the comment.
-        - AND THE FIRST FIXTURE FOUND NOTHING BECAUSE IT WAS TOO CLEAN. A tiny
-          rotation about a WORLD axis leaves cross products EXACT — their terms
-          are products with zero, nothing cancels, nothing rounds. The failure
-          needs GENERIC orientations. Then the second fixture found nothing
-          because a CUBE's projected radius is ≥ 0.5 in every direction, so a
-          spurious axis cannot produce a gap at all. The configuration that fails
-          is two similar boxes meeting at a CORNER with a shared axis — which is
-          also the one every scene is full of.
-        - A GUARD THAT NEVER FIRES ON RANDOM DATA IS NOT A GUARD THAT IS NEVER
-          NEEDED. 0 firings in 1,800,000 candidate axes at random orientations;
-          the real arrangement (two things on one floor) has a degenerate pair at
-          EVERY yaw. Random test data and a real scene disagree completely about
-          which inputs are typical, and 8.6's broadphase will have the same
-          property — a uniform grid tested on uniform random points measures
-          nothing about a level.
-        - AN ANSWER THAT CARRIES ITS OWN PROOF IS WORTH DESIGNING FOR. Returning
-          the axis instead of a bool is what let the harness re-prove 179,056
-          separations in double without a second implementation. When a later
-          lesson can choose between "return the answer" and "return the answer
-          and its witness", take the witness.
-        - THE DERIVATION-VS-TRANSCRIPTION RULE PAID AGAIN. The nine absR
-          edge-edge tests are printed as a table in every book; deriving them
-          from `Aₖ · L = det(Aₖ, Aᵢ, Bⱼ)` and `Bₖ · L = Aᵢ · (Bⱼ × Bₖ)` gives a
-          loop over cyclic indices, and the derived version agreed with the
-          explicit formulation on 200,000 pairs first time.
-        - THE PRECISION FLOOR IS SET BY WHERE THINGS ARE, not by what you do to
-          them: a 1 mm gap is 2.3% wrong at 1 km and EXACTLY ZERO at 100 km,
-          because `b.centre - a.centre` subtracts world-sized numbers. Every
-          quantity in a collision test should be a difference taken as early as
-          possible. 8.7's manifolds must store OFFSETS, not world points.
-        - AND check-page.js IS NOT A SUBSTITUTE FOR LOOKING. It was green on a
-          figure whose plot panel was a filled `box()` where figs_71's
-          stroke-only `frame()` was meant — a helper whose docstring warns about
-          exactly that. Screenshot every figure and look at it.
+      WHAT 8.6 IS LIKELY TO MOVE. A new `engine/include/engine/phys/epa.hpp` and
+      `engine/src/phys/epa.cpp`; `collide.cpp`'s convex facade (to fill in the
+      depth); `gjk.hpp` (possibly a helper that expands a degenerate terminal
+      simplex, which belongs beside the simplex code rather than in EPA);
+      engine.hpp; engine/CMakeLists.txt; demos/CMakeLists.txt. 8.5's listings are
+      PINNED at scratch/l85_*, so editing gjk.hpp does not disturb the published
+      page — but if 8.6 CORRECTS something 8.5 got wrong, the fix goes into the
+      pin AND the live file, or the page and the repo disagree invisibly (6.6
+      §10's three copies).
+
+      CARRY FORWARD from 8.5:
+        - MEASURE THE POPULATION YOU ACTUALLY HAVE. The sliver bug survived a
+          200,000-triangle test because the triangles were uniform random. It
+          appeared the moment the fixture squashed them AND put the origin within
+          a millimetre of the plane — which is the geometry GJK's own convergence
+          produces. 8.4 said the same thing about box orientations; this is the
+          second time in two lessons that a random fixture measured nothing about
+          the real inputs, and 8.6's polytope expansion will have the same
+          property.
+        - A REFERENCE THAT ROUNDS LIKE ONE ARM IS NOT A REFERENCE. §H's first
+          version computed its "exact" corners in float and convicted the wrong
+          arm, by a factor of 96,270 in the wrong direction. Promote before
+          subtracting.
+        - AN INVARIANT YOU CAN CHECK IS WORTH MORE THAN ONE YOU BELIEVE, and it
+          pays twice: as a terminator and as a corruption detector. EPA has one
+          of the same kind — the expanding polytope's closest face distance is
+          monotonically NON-DECREASING — and it should be checked, not assumed.
+        - A PROOF OUTRANKS A DECISION. When two pieces of evidence disagree,
+          prefer the one that is a theorem about a maximum over the one that is
+          the sign of a determinant on a degenerate shape.
+        - AND SCREENSHOT EVERY FIGURE AND LOOK AT IT. check-page.js caught three
+          text-on-shape overlaps this lesson that were invisible in the source
+          and obvious on screen; it did NOT catch a demo panel whose support
+          "cloud" was nine hundred directions landing on eight corners, which
+          only a rendered frame showed.

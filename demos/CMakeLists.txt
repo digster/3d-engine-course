@@ -292,3 +292,27 @@ engine_set_warnings(spin)
 add_executable(collide collide/main.cpp)
 target_link_libraries(collide PRIVATE engine::engine)
 engine_set_warnings(collide)
+
+# ---- gjk: the Minkowski difference, searched --------------------------------
+#
+# Lesson 8.5. GJK's correctness argument is short; the SUBSTITUTION it rests on
+# is not easy to believe from a statement. Two shapes are replaced by their
+# Minkowski difference, and "are these touching?" becomes "does that set contain
+# the origin?". The right-hand panel draws the difference as a cloud of support
+# points with the origin as a cross, and [S] steps the search one iteration at a
+# time so the simplex can be watched growing around it.
+#
+# Preset 3 is the one to sit with: two boxes standing on the same floor produce a
+# difference that is completely FLAT, because a shared up axis puts y = 0 on
+# every vertex of it. That is why the same preset can never produce a
+# tetrahedron, which is 8.6's problem and named here.
+#
+# `engine::engine` directly and NOT `demo_common`, the same statement `gimbal`,
+# `rig`, `plane`, `collector`, `ecs_swarm`, `audio`, `integrate`, `bodies`,
+# `spin` and `collide` make. It loads nothing and computes everything on screen,
+# so a `--shot` run is byte-for-byte reproducible on any machine.
+#
+# No `engine_use_assets` and no `engine_use_shaders`.
+add_executable(gjk gjk/main.cpp)
+target_link_libraries(gjk PRIVATE engine::engine)
+engine_set_warnings(gjk)

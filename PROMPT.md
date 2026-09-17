@@ -2836,3 +2836,14 @@ next
 
 (Continuation of the standing protocol: `next` produces exactly one complete lesson. Resumed from
 CLAUDE.md + STATE.md, which named 8.3 — Angular Dynamics: Torque and the Inertia Tensor.)
+
+---
+
+## Session — 2026-09-17, Lesson 8.5
+
+```
+next
+```
+
+(Continuation of the standing protocol: `next` produces exactly one complete lesson. Resumed from
+CLAUDE.md + STATE.md, which named 8.5 — GJK: Convex Distance from a Support Function.)

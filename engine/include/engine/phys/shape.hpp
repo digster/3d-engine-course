@@ -77,6 +77,7 @@
 #include <engine/phys/inertia.hpp>
 
 #include <cstdint>
+#include <span>
 
 namespace engine::phys
 {
@@ -95,20 +96,24 @@ namespace engine::phys
 /// and stays the right tool at the scale this engine works at.
 enum class shape_kind : std::uint8_t
 {
-    sphere,   ///< A ball. Rotation-invariant, four floats.
-    box,      ///< A rectangular box, centred, in body axes. Six floats.
+    sphere,    ///< A ball. Rotation-invariant, four floats.
+    box,       ///< A rectangular box, centred, in body axes. Six floats.
+    capsule,   ///< A segment along body +y, inflated by a radius. Two floats.
 };
 
-/// `"sphere"`, `"box"`. For logs and debug UI.
+/// `"sphere"`, `"box"`, `"capsule"`. For logs and debug UI.
 [[nodiscard]] const char* name_of(shape_kind kind);
 
 /// A collision primitive **in body axes, centred on the centre of mass**.
 ///
-/// Twenty bytes, laid out as a tag plus the union of what the primitives need —
-/// written as plain members rather than as a `union`, because a `union` here
-/// would save eight bytes and cost every reader a moment of doubt about which
-/// member is live. If a third primitive with a large payload ever arrives, that
-/// trade changes; today it does not.
+/// Twenty-four bytes, laid out as a tag plus the union of what the primitives
+/// need — written as plain members rather than as a `union`, because a `union`
+/// here would save twelve bytes and cost every reader a moment of doubt about
+/// which member is live. If a primitive with a large payload ever arrives, that
+/// trade changes; today it does not. Lesson 8.5's `hull` is exactly such a
+/// primitive, and note where it went: it is NOT a `shape_kind`, because it is a
+/// span of somebody else's vertices and a `shape` is a value you can copy into a
+/// save file. See `hull` below.
 ///
 /// **Centred is a requirement, not a convention.** Every tensor in `inertia.hpp`
 /// is taken about the centre of mass, `rigid_body::state.position` *is* the
@@ -134,6 +139,18 @@ struct shape
     /// the full width would put a `* 0.5f` on fifteen consecutive lines of the
     /// hottest loop in the module.
     vec3 half_extents{0.5f, 0.5f, 0.5f};
+
+    /// Metres, half the length of the **segment** — not of the whole capsule.
+    /// Meaningful when `kind == capsule`, where the total height along body `y`
+    /// is `2*half_height + 2*radius`.
+    ///
+    /// Lesson 8.5. The half again, and for the same reason as `half_extents`:
+    /// a capsule's support function is `sign(d.y) * half_height * y + radius *
+    /// normalise(d)`, and the half is what appears in it. A capsule with
+    /// `half_height == 0` is a sphere, exactly — `volume_of`, `inertia_of` and
+    /// `support` all reduce to the sphere case with no special-casing, which is
+    /// the first hint that these two primitives are the same family.
+    float half_height = 0.5f;
 };
 
 /// A ball of radius `r`.
@@ -145,6 +162,15 @@ struct shape
 /// A cube of side `side`. A convenience, because `box_shape({s/2, s/2, s/2})` is
 /// where the factor of two gets dropped.
 [[nodiscard]] shape cube_shape(float side);
+
+/// A capsule along body **+y**: a segment of half-length `half_height`, inflated
+/// by `radius`. Total height `2*(half_height + radius)`.
+///
+/// Lesson 8.5. **+y and not an arbitrary axis**, because conventions.html §2
+/// makes `y` up and a capsule's overwhelming job in this engine is to stand
+/// upright under a character controller (8.13). An arbitrary axis is a rotation,
+/// and a shape already has one at placement time.
+[[nodiscard]] shape capsule_shape(float radius, float half_height);
 
 /// Cubic metres.
 [[nodiscard]] float volume_of(const shape& s);
@@ -276,5 +302,126 @@ struct obb
 
 /// The farthest point of the sphere in direction `d`. Zero `d` returns the centre.
 [[nodiscard]] vec3 support(const engine::sphere& s, vec3 d);
+
+// ---------------------------------------------------------------------------
+// Lesson 8.5: two more convex shapes, and support taken RELATIVE to a centre
+// ---------------------------------------------------------------------------
+
+/// A capsule placed in the world: a segment, inflated by a radius.
+///
+/// **A capsule is a Minkowski sum, and its support function says so out loud.**
+/// The set is `segment ⊕ ball`, and the support function of a Minkowski sum is
+/// the *sum of the support functions* — `support_{X⊕Y}(d) = support_X(d) +
+/// support_Y(d)` — because maximising `dot(x + y, d)` over independent `x` and
+/// `y` maximises each term separately. So:
+///
+///     support(capsule, d) = ±half_height·axis   +   radius·normalise(d)
+///                           \_____ segment ____/     \______ ball ______/
+///
+/// Two terms, one per operand, and neither of them knows the other exists. That
+/// identity is the reason 8.5 can hand GJK a capsule without GJK learning what a
+/// capsule is, and it is the same identity that makes the Minkowski *difference*
+/// in `gjk.hpp` computable at all.
+struct capsule
+{
+    vec3 centre{};                  ///< World space, the midpoint of the segment.
+    vec3 axis{0.0f, 1.0f, 0.0f};    ///< Unit, world space. Body `+y`, rotated.
+    float half_height = 0.5f;       ///< Half the SEGMENT, not half the capsule.
+    float radius = 0.5f;            ///< Metres.
+
+    /// The two segment endpoints — the capsule's "spine".
+    [[nodiscard]] vec3 end(int sign) const
+    {
+        return centre + axis * (sign >= 0 ? half_height : -half_height);
+    }
+};
+
+/// A convex point set placed in the world — **the shape that has no formula**.
+///
+/// The other primitives in this file are described by numbers: a radius, three
+/// half extents. This one is described by its vertices, which is what an artist's
+/// convex collider actually is, and it is the reason GJK exists. There is no SAT
+/// axis list for an arbitrary hull — 8.4's fifteen candidates came from *knowing*
+/// the shape was a box — and there is no closed form for the distance between
+/// two of them. There is only a support function, and that turns out to be
+/// enough.
+///
+/// **`points` is a non-owning span, and the vertices are in BODY axes relative
+/// to `centre`.** A hull's geometry is an asset: it is loaded once, shared by
+/// every instance, and outlives any particular placement, exactly like a mesh.
+/// That is also why a hull is not a `shape_kind` — a `shape` is a 24-byte value
+/// that Module 9 will write to a save file, and a pointer is not a value.
+///
+/// **It need not actually be a hull.** `support` takes the maximum over the
+/// points, so passing a point cloud gives you the support function of its convex
+/// hull for free, and passing interior points costs time and changes nothing.
+/// The engine does not compute hulls — 8.5 §13 says plainly that a hull builder
+/// is out of scope and names the algorithm.
+struct hull
+{
+    vec3 centre{};                       ///< World space.
+    mat3 axes = mat3::identity();        ///< Columns are the unit body axes in world space.
+    std::span<const vec3> points{};      ///< Body axes, relative to `centre`.
+};
+
+/// Place a capsule shape in the world. Asserts in debug that `s` is a capsule.
+[[nodiscard]] capsule world_capsule(const shape& s, vec3 centre, quat orientation);
+
+/// Place a point set in the world. `points` must outlive the returned `hull`.
+[[nodiscard]] hull world_hull(std::span<const vec3> points, vec3 centre, quat orientation);
+
+/// The farthest point of the capsule in direction `d`.
+[[nodiscard]] vec3 support(const capsule& c, vec3 d);
+
+/// The farthest point of the hull in direction `d`. Linear in the vertex count.
+///
+/// **Brute force, and that is a decision rather than a placeholder.** The
+/// alternative is hill climbing over an adjacency list, which turns O(n) into
+/// roughly O(√n) and needs a data structure this engine does not have. 8.5 §12
+/// measures the crossover: at the vertex counts a hand-authored collider
+/// actually has, the linear scan wins, because it is a contiguous sweep with no
+/// pointer chasing and the branch predictor sees one loop.
+[[nodiscard]] vec3 support(const hull& h, vec3 d);
+
+// ---- support, relative to the shape's own centre ---------------------------
+//
+// THE SAME FUNCTIONS, MINUS THE CENTRE, AND THE DIFFERENCE IS NUMERICAL RATHER
+// THAN STYLISTIC. 8.4 §11 measured a 1 mm gap between two boxes decaying to
+// EXACTLY ZERO at 100 km from the origin, and found the cause upstream of the
+// algorithm: `b.centre - a.centre` subtracts two world-sized floats to produce a
+// crate-sized one, and the information is gone before the test begins.
+//
+// GJK would inherit that intact, and worse: it forms `support_A(d) -
+// support_B(-d)` on EVERY iteration, so the cancellation is not paid once but
+// once per step. These overloads are the fix. Each returns the support point as
+// an OFFSET FROM ITS OWN CENTRE — for a box that is `axes * s` with the centre
+// never entering the arithmetic at all — and `gjk.hpp` forms the one large
+// subtraction `b_origin - a_origin` exactly once, outside the loop.
+//
+// 8.5 §11 measures what that buys, and the honest answer has two halves: the
+// algorithm stops adding error of its own, and the error already present in the
+// input positions stays. A relative formulation cannot recover information that
+// `float` positions never held.
+
+/// The farthest point of the box in direction `d`, **relative to `box.centre`**.
+[[nodiscard]] vec3 support_local(const obb& box, vec3 d);
+
+/// The farthest point of the sphere in direction `d`, relative to its centre.
+[[nodiscard]] vec3 support_local(const engine::sphere& s, vec3 d);
+
+/// The farthest point of the capsule in direction `d`, relative to its centre.
+[[nodiscard]] vec3 support_local(const capsule& c, vec3 d);
+
+/// The farthest point of the hull in direction `d`, relative to its centre.
+[[nodiscard]] vec3 support_local(const hull& h, vec3 d);
+
+/// The axis-aligned box that contains this capsule.
+///
+/// A capsule is a Minkowski sum, so its bounds are one too: the AABB of the
+/// segment, grown by `radius` on every side. No case analysis, no corners.
+[[nodiscard]] aabb bounds_of(const capsule& c);
+
+/// The axis-aligned box that contains this hull. Linear in the vertex count.
+[[nodiscard]] aabb bounds_of(const hull& h);
 
 } // namespace engine::phys

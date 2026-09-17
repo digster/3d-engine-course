@@ -232,6 +232,8 @@
 // lessons missed this file, and the streak broke on the lesson immediately
 // after the one that wrote a paragraph about missing it.
 #include <engine/phys/collide.hpp>
+#include <engine/phys/convex.hpp>
+#include <engine/phys/gjk.hpp>
 #include <engine/phys/inertia.hpp>
 #include <engine/phys/integrate.hpp>
 #include <engine/phys/rigid_body.hpp>

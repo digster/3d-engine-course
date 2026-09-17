@@ -8615,3 +8615,70 @@ and storing the forward inertia tensor beside its inverse took the step from 33.
 Before reaching for a better algorithm, itemise what the loop actually calls and look for the same
 pure function invoked twice on the same argument. Composable helpers make this *easy* to do by
 accident, and a profiler shows it as time in the helper rather than as a duplicate.
+
+## The failure mode lives where the algorithm converges
+
+Lesson 8.5's first draft shipped Ericson's `ClosestPtPointTriangle` — the seven-Voronoi-region
+solver every GJK implementation copies. It passed 200,000 uniformly random triangles. It failed
+**1,048 times in 200,000 slivers**, worst case 14.5% wrong, returning a point that was *not on the
+triangle at all*: its three region tests are signed areas, differences of nearly equal products, and
+when they go to noise the version it selects returns the foot of the perpendicular on the triangle's
+plane instead.
+
+The general lesson is not about triangles. **GJK's whole job is to drive the simplex onto the
+closest feature**, so by the last two iterations of every query the triangle is as thin as the
+problem allows and the origin is a fraction of a millimetre from it. The degenerate case is not a
+corner the algorithm occasionally visits — it is where the algorithm *spends its time*, which is why
+a uniform-random fixture measures nothing about it.
+
+Before trusting a subroutine inside an iterative solver, ask what the solver's own convergence does
+to that subroutine's inputs, and build the fixture from that rather than from a distribution.
+
+## An invariant you can check is worth more than one you believe
+
+`|v|` is monotonically non-increasing across GJK iterations *by construction*: each new simplex
+contains the last, and the nearest point of a superset cannot be farther. Two lines test it. They
+caught two unrelated failures — a loop cycling on ordinary input, and the sliver bug above, which
+showed up as eighteen iterations converging cleanly to 0.0233827 m and then one reduction returning
+**0.0674522**.
+
+The block *restores the last good state* rather than merely breaking, which is what turns a
+terminator into a repair. When a derivation hands you a monotonicity property, spend the comparison:
+it costs nothing and it is the only thing in the loop that can notice a subroutine lying.
+
+## A proof outranks a decision
+
+The same loop banks the best lower bound it has proven — a single positive `dot(v, w)` is a complete
+proof of separation, because `w` minimises `dot(x, v)` over the whole set — and then *refuses* any
+later containment test that contradicts it. Measured on the case that motivated it: a sphere and a
+turned box 55 mm apart, fourteen clean iterations, and then a tetrahedron whose four face tests all
+reported the origin inside, turning a 55 mm gap into a contact.
+
+When two pieces of evidence disagree, they are rarely equally trustworthy. Prefer the one that is a
+theorem about a maximum over the one that is the sign of a determinant on a degenerate shape.
+
+## A reference that rounds the way one arm rounds is not a reference
+
+Lesson 8.5 §H compares two formulations of the same GJK — one taking support points relative to each
+shape's centre, one in world space — walked away from the origin. Its first "exact" reference built
+the box corners as `centre - half` **in float**, which is precisely what the world-space arm does.
+The reference therefore agreed with the arm it was meant to convict, and reported the *relative*
+form as 96,270× worse. Promoting to double before subtracting flipped the result.
+
+A reference must be exact arithmetic on the *inputs*, not exact arithmetic on one arm's
+intermediates. This is 4.8 §3's finding — a harness that constructs its own configuration tests that
+configuration — arriving one level down, in the reference rather than in the fixture.
+
+## A threshold's units decide which constant it may share
+
+Two constants in `gjk.cpp` look interchangeable and are not. The termination test uses the caller's
+`tolerance`, which is dimensionless and relative; the duplicate-vertex test must not. Using
+`tolerance` there was a quiet disaster on curved shapes: a capsule's support point moves
+continuously with the direction, so consecutive iterations produce points a fraction of a millimetre
+apart — "duplicates" by a 1e-4 relative measure — and the loop exited before the bounds converged,
+reporting **2.4% certificate slack where the tolerance promised 0.01%**, on results not flagged as
+stalled and therefore looking trustworthy.
+
+A duplicate test is asking "is this the same vertex?", which is a question about float resolution
+(1e-12 relative), not about how accurate the caller wants the answer. Before reusing a tunable, ask
+what question the new test is asking and whether it has the same units.
