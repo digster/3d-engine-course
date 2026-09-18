@@ -79,7 +79,24 @@ struct convex
     /// `d` need not be unit length. A zero `d` must return a real point.
     using support_fn = vec3 (*)(const void* data, vec3 d);
 
+    /// **The whole feature the shape presents in direction `d`**, relative to
+    /// `origin` — Lesson 8.7's `support_face`.
+    ///
+    /// A SECOND FUNCTION POINTER AND NOT A VIRTUAL, for 5.2's reason and for one
+    /// more that is specific to a pair of them: a `convex` is passed BY VALUE, so
+    /// at a call site that built it from a concrete shape the compiler can see
+    /// both targets and devirtualise them. A base class with two virtuals would
+    /// be one pointer to a table the optimiser has to chase.
+    ///
+    /// It may be null, and a null is not a failure — it is a shape that has no
+    /// face query, for which `face_of` below falls back to a single support
+    /// point. That fallback is CORRECT and not a stub: a one-point manifold is
+    /// exactly right for a ball, and it is what a caller gets for any shape
+    /// whose adapter has not been taught faces yet.
+    using face_fn = contact_face (*)(const void* data, vec3 d);
+
     support_fn support = nullptr;
+    face_fn face = nullptr;
     const void* data = nullptr;
 
     /// Where the shape's local frame sits in the world. Any point inside the
@@ -93,6 +110,25 @@ struct convex
     /// never calls this, on purpose: adding `origin` back is exactly the
     /// cancellation the split exists to avoid.
     [[nodiscard]] vec3 world_support(vec3 d) const { return origin + support(data, d); }
+
+    /// The feature in direction `d`, relative to `origin`, or a single support
+    /// point when this shape has no `face` query.
+    ///
+    /// **The fallback fabricates nothing.** It returns the one point `support`
+    /// gives, with that point's own direction as the normal and an id of zero —
+    /// which is the truth about a shape whose features are unknown, and produces
+    /// a one-point manifold rather than a wrong four-point one.
+    [[nodiscard]] contact_face face_of(vec3 d) const
+    {
+        if (face) { return face(data, d); }
+        contact_face f;
+        f.count = 1;
+        f.v[0] = support(data, d);
+        f.normal = normalised_or(d, vec3{0.0f, 1.0f, 0.0f});
+        f.id[0] = 0;
+        f.feature = 0;
+        return f;
+    }
 };
 
 // ---------------------------------------------------------------------------
@@ -106,6 +142,12 @@ struct convex
 // allocation, no `std::function`, and nothing to indirect through but the call
 // itself.
 //
+// Lesson 8.7 gives each adapter a SECOND thunk, for `support_face`. Note that
+// the two are independent: a shape may have a support function and no face
+// query, and `face_of` then answers with the support point. That is not a
+// degraded mode — it is the honest answer for a ball, which has no flat feature
+// to return, and it is what makes the face query addable one shape at a time.
+//
 // The `= delete` rvalue overloads are the whole safety story. They cost nothing
 // at runtime and they turn the one mistake this interface invites into a
 // compiler diagnostic that names the line.
@@ -115,6 +157,7 @@ struct convex
 {
     return convex{
         +[](const void* data, vec3 d) { return support_local(*static_cast<const obb*>(data), d); },
+        +[](const void* data, vec3 d) { return support_face(*static_cast<const obb*>(data), d); },
         &box,
         box.centre,
     };
@@ -126,6 +169,8 @@ struct convex
     return convex{
         +[](const void* data, vec3 d)
         { return support_local(*static_cast<const engine::sphere*>(data), d); },
+        +[](const void* data, vec3 d)
+        { return support_face(*static_cast<const engine::sphere*>(data), d); },
         &s,
         s.centre,
     };
@@ -137,6 +182,8 @@ struct convex
     return convex{
         +[](const void* data, vec3 d)
         { return support_local(*static_cast<const capsule*>(data), d); },
+        +[](const void* data, vec3 d)
+        { return support_face(*static_cast<const capsule*>(data), d); },
         &c,
         c.centre,
     };
@@ -147,6 +194,7 @@ struct convex
 {
     return convex{
         +[](const void* data, vec3 d) { return support_local(*static_cast<const hull*>(data), d); },
+        +[](const void* data, vec3 d) { return support_face(*static_cast<const hull*>(data), d); },
         &h,
         h.centre,
     };

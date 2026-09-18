@@ -236,6 +236,7 @@
 #include <engine/phys/epa.hpp>
 #include <engine/phys/gjk.hpp>
 #include <engine/phys/inertia.hpp>
+#include <engine/phys/manifold.hpp>
 #include <engine/phys/integrate.hpp>
 #include <engine/phys/rigid_body.hpp>
 #include <engine/phys/shape.hpp>

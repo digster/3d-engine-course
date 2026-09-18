@@ -2858,3 +2858,14 @@ next
 
 (Continuation of the standing protocol: `next` produces exactly one complete lesson. Resumed from
 CLAUDE.md + STATE.md, which named 8.6 — EPA: Penetration Depth.)
+
+---
+
+## Session — 2026-09-18, Lesson 8.7
+
+```
+next
+```
+
+(Continuation of the standing protocol: `next` produces exactly one complete lesson. Resumed from
+CLAUDE.md + STATE.md, which named 8.7 — Contact Manifolds and Persistence.)

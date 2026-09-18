@@ -213,6 +213,14 @@ add_library(engine STATIC
     # on is `shape.hpp`, exactly as GJK does not — the algorithm that measures how
     # deep two things overlap never learns what either of them is.
     src/phys/epa.cpp
+
+    # Lesson 8.7. And this one DOES depend on `shape.hpp`, which is the first
+    # break in the run gjk.cpp and epa.cpp made — and the break is the lesson.
+    # Distance and depth are questions about a set, answerable from a support
+    # function alone; a CONTACT MANIFOLD is a question about a FEATURE, and a
+    # support function cannot name one. So `convex` grew a second entry point and
+    # this file is compiled against the shapes that implement it.
+    src/phys/manifold.cpp
     # Lesson 5.2. Note what is NOT here: platform/main.hpp, which carries
     # ENGINE_MAIN. It is header-only and deliberately so — including it emits a
     # real `main`, and an entry point is not a library's to own. See the comment

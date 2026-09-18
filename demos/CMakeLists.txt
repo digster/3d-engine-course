@@ -345,3 +345,31 @@ engine_set_warnings(gjk)
 add_executable(epa epa/main.cpp)
 target_link_libraries(epa PRIVATE engine::engine)
 engine_set_warnings(epa)
+
+# ---- manifold: one contact is not a contact ---------------------------------
+#
+# Lesson 8.7. 8.6's demo ended on a single vector — how deep, and which way — and
+# a solver cannot rest a crate on a vector. This one draws the SET: the contact
+# points, and the support polygon they span, whose AREA is the number that
+# decides whether a body can stand up at all.
+#
+# The right panel is the one to sit with. It shows the contact face on, in the
+# reference face's own plane, and [S] applies one Sutherland-Hodgman side plane
+# at a time — the plane drawn dashed with its outward normal, so the algorithm
+# 3.3 wrote for the near plane can be watched doing a different job.
+#
+# Preset 2 and the [Z] key are the lesson in one gesture: tilt the crate and the
+# manifold drops from four points to two, the support polygon collapses to a
+# line, and its area goes to zero. Preset 4 is the honest one: a ball has no flat
+# feature, gets one contact point, and should.
+#
+# `engine::engine` directly and NOT `demo_common`, the same statement `gimbal`,
+# `rig`, `plane`, `collector`, `ecs_swarm`, `audio`, `integrate`, `bodies`,
+# `spin`, `collide`, `gjk` and `epa` make. It loads nothing and computes
+# everything on screen, so a `--shot` run is byte-for-byte reproducible on any
+# machine.
+#
+# No `engine_use_assets` and no `engine_use_shaders`.
+add_executable(manifold manifold/main.cpp)
+target_link_libraries(manifold PRIVATE engine::engine)
+engine_set_warnings(manifold)

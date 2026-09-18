@@ -8769,3 +8769,63 @@ that the reader could not see it.
 `course.css` themes `.ink`, `.ink-soft` and `.grid` for exactly this. This is the same rule as
 "CSS beats SVG presentation attributes" for `<text>`, one step further out: a stroke colour is a
 theme decision, and a figure that hardcodes one has decided for both themes at once.
+
+## A control can convict the code of the test's own mistake
+
+Lesson 8.7's persistence section needed a control: a matcher that matches *everything* would look
+perfect on a resting crate, so the harness had to show it refusing something. The control teleported
+the crate two metres sideways between two frames and expected zero id matches. It got **four out of
+four**, and the manifold was right.
+
+A `contact_id` names *features* — the floor's top face, the crate's bottom face, corner 3 — and the
+same corner really is on the same face two metres away. Ids cannot detect a teleport and should not
+be asked to: a body that was *moved* rather than simulated is a discontinuity, and invalidating its
+cached manifolds belongs to the cache. The control that works changes the feature instead — roll the
+crate onto its side, 0 of 4.
+
+The tell was that the "failure" was too clean. Four of four is not what a broken matcher looks like;
+it is what a matcher looks like when it is answering a different question from the one asked. Before
+believing a control's verdict, ask what the instrument is *entitled* to see.
+
+## An instrument can be a tautology
+
+The same lesson's first attempt at measuring what a parallelism tolerance costs checked that each
+contact's two claimed surface points lie on their shapes, and reported **exactly zero error across
+four decades of the tolerance**. The check was true by construction: one of those points is the
+incident vertex and the other is its shadow on the reference plane, so the clipper cannot produce a
+pair that fails it, whatever the tolerance is set to.
+
+If a measurement cannot come out wrong, it is not a measurement. What the tolerance actually decides
+is the contact *normal*, and against 8.4's exact minimum translation the worst error turns out to be
+`acos(face_cos)` exactly — 44.8° at 0.5, 2.56° at the default — which is a genuine result and makes
+the tolerance a knob rather than a magic number.
+
+## `acos` has a resolution floor, and it is 0.036 degrees
+
+`acos(dot(a, b))` is the obvious way to measure the angle between two unit vectors and it cannot
+resolve a small one. For a small angle `t`, `dot` is `1 − t²/2`, so all the information about `t`
+lives in the last bits of a number near 1; two unit `float` vectors give a dot product good to about
+1e−7, which recovers `t` only to `sqrt(2e−7)` radians — **0.036°**. Lesson 8.7 reported a
+bit-exact normal as "0.0198° off" for a whole draft, and the number was the instrument.
+
+The chord is the angle to first order and loses nothing: `2·asin(|a − b|/2)` is exact at every angle,
+and near zero it is a subtraction of two nearly equal vectors, which carries full relative precision
+by Sterbenz's lemma. After the change the same measurement reads 0.0000.
+
+## A knob written for a real hazard can measure zero
+
+Every 2D physics engine biases the choice of reference face, and the reasoning is sound: two equally
+parallel faces make the choice a coin toss, a bare `>` decides it on rounding, and a flip renames
+every contact on the pair. Lesson 8.7 shipped that knob in draft and measured it at **zero flips
+over 208,000 pairs** — freely rotated boxes, crates stacked on crates, and hexagonal prisms whose
+face normals come out of Newell's method rather than out of a rotation matrix.
+
+The reason is better than the knob. On a face contact both cosines are exactly `1.0f`, because each
+face really *is* perpendicular to the contact normal, so the tie is **exact** — and an exact tie is
+resolved deterministically by the comparison. A quantity that merely *ought* to be equal is a coin
+toss; one that *is* equal is not. The hazard belongs to the quantity, not to the comparison.
+
+The knob came out. And a measurement of zero needs a control more than any other kind, because "it
+never happened" and "I was not measuring anything" produce the same number: the control forces a
+flip the only way it can, by swapping the two arguments, and measures that 0 of 4 warm starts
+survive one.

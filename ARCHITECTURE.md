@@ -1042,7 +1042,8 @@ chore. What follows is on disk.
 │   │   │   └── main.hpp      # ENGINE_MAIN. ONE .cpp per program; no main() in it.
 │   │   │                     #   NOT in engine.hpp, deliberately
 │   │   ├── phys/           # HOW A STATE ADVANCES, WHAT MOVES IT, HOW IT TURNS, AND
-│   │   │                   #   WHERE ITS SURFACE IS                    [8.1-8.6]
+│   │   │                   #   WHERE ITS SURFACE IS, AND WHERE TWO OF THEM
+│   │                   #   TOUCH                                 [8.1-8.7]
 │   │   │                   #   THE FIFTH NEW DIRECTORY SINCE THE REFACTOR, and
 │   │   │                   #   the second (after audio/) that never touches a
 │   │   │                   #   pixel. NOT under math/: the test is what a file
@@ -1099,13 +1100,38 @@ chore. What follows is on disk.
 │   │   │                     #   definition minimises over all directions — and
 │   │   │                     #   `manifold()` is Euler's F = 2V − 4 as a runtime
 │   │   │                     #   test computable from the result alone.       [8.6]
+│   │   │   └── manifold.hpp  # contact_feature/contact_id/contact_point/
+│   │   │                     #   manifold_status/contact_manifold/manifold_config,
+│   │   │                     #   build_manifold, collide_manifold, carry_impulses,
+│   │   │                     #   pair_key and manifold_cache.
+│   │   │                     #   WHERE two shapes touch, not how far into each
+│   │   │                     #   other: a set of up to FOUR points sharing one
+│   │   │                     #   normal, because a contact force acts at a point
+│   │   │                     #   and therefore exerts no torque about it, and a
+│   │   │                     #   body held up by one point is balanced on a pin.
+│   │   │                     #   FOUR IS FORCED: four non-negative impulses place
+│   │   │                     #   the resultant anywhere in a planar convex hull
+│   │   │                     #   and a fifth is a linear combination, so it makes
+│   │   │                     #   the answer non-unique rather than better.
+│   │   │                     #   `contact_id` is six named fields and every one is
+│   │   │                     #   an INDEX into geometry that does not move, which
+│   │   │                     #   is what lets 8.10 warm start. epa.hpp needed NO
+│   │   │                     #   CHANGE: its winning triangle is built from support
+│   │   │                     #   points and carries their ambiguity.          [8.7]
 │   │   │   └── gjk.hpp       # gjk_vertex/simplex/gjk_status/gjk_result/gjk_config,
 │   │   │                     #   gjk_distance, gjk_intersects, certify, and
 │   │   │                     #   cso_support + reduce_simplex — the last two public
 │   │   │                     #   because demos/gjk single-steps the loop and the
 │   │   │                     #   harness measures the solver directly. 8.6 needed
 │   │   │                     #   NO CHANGE to this file: `terminal` was designed
-│   │   │                     #   for EPA a lesson before EPA existed.         [8.5]
+│   │   │                     #   for EPA a lesson before EPA existed. 8.7 did not
+│   │   │                     #   change it either — but it DID widen convex.hpp,
+│   │   │                     #   which is the first break in that run, and the
+│   │   │                     #   break is the lesson: distance and depth are
+│   │   │                     #   questions about a SET and answerable from a
+│   │   │                     #   support function; a manifold is a question about
+│   │   │                     #   a FEATURE and a support function cannot name
+│   │   │                     #   one.                                         [8.5]
 │   │   │   └── integrate.hpp # motion (position + velocity, and nothing else),
 │   │   │                     #   integrator (explicit_euler, semi_implicit_euler,
 │   │   │                     #   velocity_verlet), integrate() x2, apply_drag,
@@ -1294,7 +1320,8 @@ chore. What follows is on disk.
 │   └── src/                # ---- PRIVATE. 63 sources; no demo can name this path ----
 │       ├── phys/           # integrate.cpp [8.1], rigid_body.cpp [8.2],
 │       │                   # inertia.cpp [8.3], shape.cpp [8.4],
-│       │                   # collide.cpp [8.4], gjk.cpp [8.5], epa.cpp       [8.6]
+│       │                   # collide.cpp [8.4], gjk.cpp [8.5], epa.cpp [8.6],
+│       │                   # manifold.cpp                                    [8.7]
 │       │                   #   gjk.cpp is the only one of these with no header of
 │       │                   #   its own shape knowledge: it includes gjk.hpp, which
 │       │                   #   includes convex.hpp, and nothing in it names a box.
@@ -1405,6 +1432,21 @@ chore. What follows is on disk.
 │   │                       #   the two can be seen to agree. [F] drops the flood
 │   │                       #   fill from the visibility test and the horizon
 │   │                       #   tears on screen.
+│   ├── manifold/main.cpp   # ONE CONTACT IS NOT A CONTACT                     [8.7]
+│   │                       #   Two panels, and the RIGHT one carries the new
+│   │                       #   idea: the contact seen FACE ON, in the reference
+│   │                       #   face's own plane, with [S] applying one
+│   │                       #   Sutherland-Hodgman side plane per press — the
+│   │                       #   plane dashed, its outward normal a stub. The left
+│   │                       #   panel draws what a solver needs and 8.6 could not
+│   │                       #   give it: the contact POINTS and the closed loop
+│   │                       #   of the support polygon they span, with its AREA,
+│   │                       #   because the area is the number that decides
+│   │                       #   whether a body can stand up. Preset 2 plus [Z] is
+│   │                       #   the lesson in one gesture: tilt the crate and
+│   │                       #   four points become two, the polygon collapses to
+│   │                       #   a line, its area goes to zero. Preset 4 is the
+│   │                       #   honest one — a ball gets ONE point and should.
 │   ├── collide/main.cpp    # FIFTEEN BARS, AND THE ONE THAT CROSSES ZERO      [8.4]
 │   │                       #   All fifteen SAT candidates as bars against a zero
 │   │                       #   line, so the reader watches the verdict flip at

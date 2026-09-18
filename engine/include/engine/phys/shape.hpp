@@ -424,4 +424,199 @@ struct hull
 /// The axis-aligned box that contains this hull. Linear in the vertex count.
 [[nodiscard]] aabb bounds_of(const hull& h);
 
+// ---------------------------------------------------------------------------
+// Lesson 8.7: the support FACE
+// ---------------------------------------------------------------------------
+//
+// *** A SUPPORT FUNCTION DETERMINES A SHAPE AND DOES NOT HAND YOU A FEATURE. ***
+//
+// 8.5's header made a strong claim and it is true: a convex set is completely
+// determined by its support function, because the set is the intersection of all
+// the half-spaces containing it and `support` names the boundary of every one.
+// Two shapes with the same support function are the same shape.
+//
+// But `support(d)` returns **one point**, and when `d` is a face normal the
+// argmax is the whole face. Which of the face's four corners comes back is
+// decided by the tie-break — `support_local(obb)` uses `>= 0` on each of three
+// dot products, so it is deterministic, and it is also arbitrary: rotate the box
+// by a millionth of a degree and a different corner wins. 8.7 §4 measures that
+// directly, and it is the reason a resting box cannot be held up by the witness
+// points GJK and EPA return. A box on a floor needs four contact points; a
+// support call can only ever produce one.
+//
+// So the interface widens by exactly one query. `support_face(shape, d)` returns
+// the whole feature the shape presents in direction `d`:
+//
+//     a sphere                    ->  1 point   (a ball has no flat feature)
+//     a capsule, end on           ->  1 point   (the pole of a cap)
+//     a capsule, side on          ->  2 points  (the segment along its spine)
+//     a box                       ->  4 points  (the dominant face)
+//     a hull                      ->  n points  (the vertices on the supporting plane)
+//
+// and 8.7 clips one against the other to produce a manifold. The counts are not
+// a limitation of the implementation: they are the actual dimensions of the
+// contact features these shapes have, which is why a sphere resting on a plane
+// really does get one contact point and really does not need more.
+//
+// ---- WHAT MAKES THIS ONE HARDER THAN `support_local` -----------------------
+//
+// `support` has no tolerance in it. `support_face` has one, unavoidably, and it
+// is the same shape of problem 8.6 §7 hit at the horizon: deciding whether a
+// vertex is ON the supporting plane is a comparison whose two sides are equal in
+// exact arithmetic. The box and the capsule dodge it with closed forms — a box's
+// dominant axis is an argmax over three numbers, and a capsule is a segment plus
+// a ball — but a `hull` is a point cloud with no face list, so its face has to
+// be GATHERED from the plane, and `k_face_gather_sin` below is the width of that
+// gather. 8.7 §5 measures what it costs to get it wrong in both directions.
+//
+// ---- THE POLYGON IS WOUND, AND THE WINDING IS LOAD-BEARING -----------------
+//
+// Every polygon returned here is wound **counter-clockwise about its own
+// outward normal** — conventions.html §7, the same winding the rasteriser has
+// used since 3.5 and the GPU since 4.4. It is not decoration. 8.7's clipper
+// builds each side plane as `cross(edge, normal)`, which points OUT of the
+// polygon only if the winding is CCW; reverse it and every side plane faces
+// inward, every incident point is classified outside, and the manifold comes
+// back empty on exactly the contacts that matter most.
+
+/// The most vertices `support_face` will return.
+///
+/// Four covers every box, two covers a capsule, one covers a sphere; the number
+/// exists for `hull`, where a face can have as many vertices as the artist drew.
+/// Eight is not a limit on what you may model — it is the resolution at which
+/// this engine represents a contact face, and 8.7 §5 measures the error on a
+/// 24-sided prism, where the inscribed octagon's contact points sit up to
+/// `r(1 - cos(pi/8))` inside the true rim — predicted 0.03806 m at a radius of
+/// 0.5, and measured at 0.03806.
+inline constexpr int k_max_face_vertices = 8;
+
+/// The most vertices `support_face(hull)` will gather before it gives up and
+/// decimates. Larger than `k_max_face_vertices` on purpose: the decimation must
+/// happen AFTER the angular sort, or the polygon it keeps is not a polygon.
+inline constexpr int k_max_gathered_vertices = 32;
+
+/// How far off a face normal a query direction may be and still be answered with
+/// that face, as a **sine** — so `0.05` is about 2.87 degrees.
+///
+/// This is one number wearing two hats, and they are the same hat. For a capsule
+/// it decides when a direction is perpendicular enough to the spine to be
+/// answered with the side segment rather than a single point on the cap. For a
+/// hull it becomes the width of the plane gather: a vertex `w` metres across a
+/// face is `w * sin(theta)` below the supporting plane when the query direction
+/// is `theta` off the face normal, so the gather tolerance that admits a whole
+/// face is exactly this constant times the shape's own extent.
+///
+/// **It is a sine and not a distance**, for 8.5 §11's reason repeated: a
+/// tolerance in metres is a tolerance that is too tight on a car and too loose
+/// on a doorknob.
+inline constexpr float k_face_gather_sin = 0.05f;
+
+/// The feature a convex shape presents in a direction: a point, a segment, or a
+/// polygon.
+///
+/// **RELATIVE TO THE SHAPE'S OWN CENTRE**, exactly like `support_local`, and for
+/// the same reason — 8.4 §11's precision wall. The one world-sized subtraction
+/// is formed once, by the caller, outside every loop.
+///
+/// 8.6 §12 DELETED FOUR DEFAULT MEMBER INITIALISERS AND BOUGHT 20.5%, AND THE
+/// SAME QUESTION HAS A DIFFERENT ANSWER HERE. What made it pay there was not the
+/// struct but the ARRAY: `polytope` held 128 faces, so one initialiser on one
+/// member made `polytope p;` write four kilobytes that the next line overwrote,
+/// and `expand` rebuilt a three-kilobyte horizon array once per pass. This type
+/// is 124 bytes, a manifold query builds exactly two of them once, and there is
+/// no array of them anywhere. `vec3`'s own initialisers are therefore left alone
+/// and `v` is simply documented as written-before-read. 8.7 §11 measures the
+/// whole face query at 5.2 ns.
+struct contact_face
+{
+    /// The feature's vertices, **counter-clockwise about `normal`**, relative to
+    /// the shape's centre. Only the first `count` are meaningful.
+    vec3 v[k_max_face_vertices];
+
+    /// Each vertex's own identity **on its shape**, independent of which face it
+    /// was reached through: a box corner index 0-7 in `obb::corners`' order, a
+    /// capsule end 0 or 1, a hull point index modulo 256, and 0 for a sphere.
+    ///
+    /// 8.4's `obb::corners` doc comment promised this field by name a lesson
+    /// before it existed — "8.7's manifolds identify contact features by index,
+    /// and two conventions for corner 3 would be a bug that only appears when a
+    /// box changes type". It is honoured here literally: corner 3 of a box's
+    /// face is corner 3 of the box.
+    ///
+    /// **A hull with more than 256 vertices aliases**, and the consequence is
+    /// bounded: two contacts that should be distinct share an id, so one frame's
+    /// warm-start impulse lands on the wrong point of the same face, and the
+    /// solver corrects it on the next one. 8.7 §9 measures a settled contact
+    /// matching 100% of its points over 1,999 consecutive frames.
+    std::uint8_t id[k_max_face_vertices];
+
+    /// Unit, outward. For a polygon this is the face's own plane normal, which
+    /// is generally NOT the query direction — that difference is the whole
+    /// reason 8.7 chooses a reference face instead of trusting EPA's normal.
+    vec3 normal{};
+
+    /// 1 (a vertex), 2 (an edge), or 3 and up (a face). Zero only for an empty
+    /// hull.
+    int count = 0;
+
+    /// **Which feature this is, stably across frames.** A box face is `2*axis +
+    /// (negative ? 1 : 0)`, so 0-5; a capsule is 0 and 1 for its caps and 2 for
+    /// its side; a sphere is always 0; a hull face is a 16-bit hash of the
+    /// sorted indices of the vertices on its supporting plane.
+    ///
+    /// THIS IS THE FIELD PERSISTENCE IS BUILT ON. 8.7 §9 makes the argument in
+    /// full: a contact cannot be matched to last frame's contact by POSITION,
+    /// because both shapes moved and the position is a float computed two
+    /// different ways. It can be matched by identity, and this is the identity.
+    std::uint16_t feature = 0;
+
+    /// A hull face had more vertices than would fit and was decimated. Never set
+    /// for a box, a sphere or a capsule.
+    bool truncated = false;
+};
+
+/// The whole face of the box in direction `d`. Always four vertices.
+///
+/// An argmax over three numbers, with no tolerance anywhere: the face is the one
+/// whose axis `d` leans into hardest, which is a strictly better-behaved
+/// question than "is this vertex on the plane". A direction exactly between two
+/// faces picks the lower axis index, deterministically — the tie is a tie in the
+/// value, so either answer is right and only reproducibility is at stake, which
+/// is `support_local`'s `>= 0` argument one dimension up.
+[[nodiscard]] contact_face support_face(const obb& box, vec3 d);
+
+/// The single point of the sphere in direction `d`. Always one vertex.
+///
+/// **A ball has no flat feature and this function does not pretend otherwise.**
+/// Returning a fabricated polygon here — a disc of some radius around the
+/// support point — is a tempting way to make a sphere stack, and it is a lie
+/// that shows up as a ball refusing to roll. One point is the truth.
+[[nodiscard]] contact_face support_face(const engine::sphere& s, vec3 d);
+
+/// The feature of the capsule in direction `d`: the side segment when `d` is
+/// within `k_face_gather_sin` of perpendicular to the spine, one point otherwise.
+[[nodiscard]] contact_face support_face(const capsule& c, vec3 d);
+
+/// The vertices of the hull on its supporting plane in direction `d`, wound CCW.
+///
+/// Linear in the vertex count for the gather, then an insertion sort over what
+/// was gathered — which is the face, so typically three to six. `truncated` is
+/// set if the face had more vertices than `k_max_face_vertices` and had to be
+/// decimated, or more than `k_max_gathered_vertices` and had to be cut short.
+///
+/// **`gather_sin` IS EXPOSED BECAUSE THERE IS NO VALUE THAT IS RIGHT**, and that
+/// is a fact about `hull` rather than about this function. A box, a sphere and a
+/// capsule answer with closed forms because they KNOW their own faces; a hull is
+/// a point cloud with no face list, so its face has to be recovered from the
+/// supporting plane, and how wide to make that plane is a guess about the
+/// geometry. On a hand-authored collider — genuinely flat faces, normals well
+/// apart — any value in a wide range gives the same answer. On a tessellated
+/// cylinder, where consecutive face normals are degrees apart, the default
+/// merges three flat faces into one slightly bulged polygon, and tightening it
+/// until that stops drops the side contact to a bare edge — 8 vertices and
+/// 33.8 mm of bulge at the default, 4 vertices and none at 0.01. 8.7 §5 measures
+/// both ends, and names the only real fix: give `hull` its faces.
+[[nodiscard]] contact_face support_face(const hull& h, vec3 d,
+                                        float gather_sin = k_face_gather_sin);
+
 } // namespace engine::phys
