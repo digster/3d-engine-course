@@ -233,6 +233,7 @@
 // after the one that wrote a paragraph about missing it.
 #include <engine/phys/collide.hpp>
 #include <engine/phys/convex.hpp>
+#include <engine/phys/epa.hpp>
 #include <engine/phys/gjk.hpp>
 #include <engine/phys/inertia.hpp>
 #include <engine/phys/integrate.hpp>

@@ -7,7 +7,105 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-09-16 (after Lesson 8.4 — 87 of 107 lessons; MODULE 8 OPEN, 4 of
+updated: 2026-09-17 (after Lesson 8.6 — 89 of 107 lessons; MODULE 8 OPEN, 6 of
+         13, 34 h of 70. PLANNED AT 5 AND SHIPPED AT 5, so no module subtotal
+         and no course total moved. Still 107 lessons, ~523 h.
+         check-curriculum.py green; check-builders.py 57/57; check-page.js
+         `pass: true` at 1280 AND 390. Nine measured sections, 2,028 checks.
+         *** AND THIS BLOCK WAS NOT WRITTEN AFTER 8.5. *** The header said
+         "after Lesson 8.4 — 87 of 107" while 8.5 was published, its page was in
+         the manifest and `completed:` named it. `check-curriculum.py` verifies
+         the manifest and the completed list and did NOT verify this prose, so
+         the one part of STATE.md that is only read by a human was the one part
+         that drifted. It now checks that `updated:` names the newest completed
+         lesson. 8.5's own findings are in the memory file for 2026-09-17 and in
+         capabilities below; what follows is 8.6's.
+         THE ENGINE CAN NOW SAY HOW DEEP AND WHICH WAY. Two new files,
+         engine/phys/epa.{hpp,cpp}; 97 -> 98 public headers. `gjk.hpp` needed NO
+         CHANGE AT ALL — `cso_support`, `simplex` and `gjk_result::terminal`
+         were already public and already carried doc comments saying they
+         existed for this. Designing the handoff a lesson early cost nothing and
+         bought a clean boundary.
+         8.5's PLACEHOLDER WAS WORSE THAN ITS COMMENT SAID, and the correction
+         is in the lesson rather than in the pin. `collide.cpp` said the axis on
+         an overlap was "the last search direction, a reasonable guess at a
+         contact normal". `gjk_result::direction` is assigned in exactly ONE
+         place and it is on the separated path, so on an overlap it was the ZERO
+         VECTOR: 200,000 of 200,000. 8.5's page still prints the wrong comment,
+         on purpose — a page is an accurate archive of what shipped, and the
+         correction belongs where a reader meets it with the measurement
+         attached. The naive alternative, centre-to-centre, is 40.15° off on
+         average and implies a push of 1.71x the MTV (max 2,538x).
+         PENETRATION DEPTH IS A MINIMUM TRANSLATION, AND THE DERIVATION IS TWO
+         LINES: A and B+t overlap iff t = a − b for some pair iff t ∈ A ⊖ B, so
+         THE TRANSLATIONS THAT KEEP TWO SHAPES OVERLAPPING ARE THE DIFFERENCE
+         SET, and the shortest that separates them is the nearest point of its
+         BOUNDARY. GJK measured the distance to the SET; EPA measures it to the
+         set's boundary. Same support function, same sandwich, opposite
+         handedness: the inner polytope's closest face is a LOWER bound that
+         RISES (8.5's only ever fell) and each support point gives an UPPER
+         bound that falls.
+         AND 8.4 WAS THE EXACT ANSWER FOR BOXES ALL ALONG. min over directions
+         of h(n) is attained on a face normal of A ⊖ B, and for two boxes those
+         are exactly 8.4's fifteen axes in both signs — so the SAT's
+         minimum-overlap axis IS the minimum translation. That makes 8.4 this
+         lesson's reference, and 4,096 sampled directions per pair over 2,000
+         pairs never beat EPA while never getting within 0.03%: a falsifier can
+         convict and can never acquit.
+         THE SEED IS THE ALGORITHM'S HARD PART. THREE OF FOUR BUGS LIVED THERE.
+         On 50,000 crates on a floor GJK hands over a 4-point simplex ZERO
+         times and a flat TRIANGLE 49,951 times — not the flat tetrahedron the
+         folklore warns about, because `reduce_simplex` already dropped the
+         redundant fourth point. A textbook EPA refuses 100% of that row and
+         1.57% even of free orientations. (1) ONE APEX IS NOT ENOUGH: the origin
+         was already in that plane, so it ends up on the tetrahedron's BASE and
+         the lower bound starts and stays at zero — 30,000 of 30,000, maximum as
+         well as mean. (2) SIX FACES STITCHED BY HAND ARE NOT A POLYTOPE: a
+         bipyramid is convex only when each apex projects INSIDE the triangle,
+         and 52.85% do not — while only 2.3% of queries then answered visibly
+         wrong, which is why it survived and why it took a STATUS HISTOGRAM
+         rather than an assertion to see. Fixed by building the tetrahedron on
+         one apex and adding the other through the same beneath-and-beyond step
+         the loop uses. (3) THE CONTAINMENT QUESTION WAS ASKED TOO EARLY: GJK
+         can terminate on a SEGMENT through the origin on a deep overlap, which
+         puts the origin on an EDGE of the seed where the offsets are zero to
+         within a few ulps — a depth of ZERO for spheres 70 cm inside a crate,
+         19 in 20,000, and scaling the threshold by cfg.tolerance made it WORSE
+         as the tolerance tightened. There is no constant that is right. The
+         expansion runs either way and `lower <= 0` at the end is the answer.
+         THE FOURTH BUG WAS THE HORIZON, AND IT IS THE ONE TO REMEMBER. A
+         support point that lands EXACTLY on several face planes leaves
+         dot(n,w) and d as the same number computed two ways, and the last bits
+         decide which side of `>` each face falls on — three faces called
+         visible, sharing no edge, NINE horizon edges with nothing to cancel.
+         Two 1 m cubes face to face with 0.1 mm of overlap reported depth/√3,
+         42% low. Flood filling the visible set from the closest face fixes it
+         and changes nothing in exact arithmetic. Measured: 4.17% of crates on a
+         floor tear (worst 61.7% low), 0.01% at free orientations, and NEVER on
+         random hulls — the THIRD lesson running whose failure needs the
+         structure a real scene is made of.
+         EULER'S FORMULA IS A RUNTIME TEST. F = 2V − 4 for a closed
+         triangulated surface, computable from `epa_result` ALONE, green at
+         every exit over 200,000 queries including 1000:1 slivers. It also sizes
+         the arrays rather than guessing them, and it is why dead faces are
+         COMPACTED rather than flagged: faces CREATED over a query far exceed
+         faces held.
+         THE SPHERE HAS SWAPPED PLACES. GJK's easiest case at exactly ONE
+         iteration is EPA's worst, 28.64 rising to the 60-cap, because a ball
+         has no faces and flat triangles are all chords. GJK walks TO a curved
+         surface; EPA has to COVER it. Which is the concrete argument for
+         keeping 8.4's closed forms. max_iterations = 32 is justified by
+         measurement: 48 removes 98% of the remaining cap hits and buys 1.6
+         MICRONS, because past 32 the error is the discretisation.
+         AND TWO STRUCT DEFINITIONS WERE WORTH 20.5%: 1344.04 -> 1068.14 ns,
+         MEASURED BACK TO BACK (rebuild, time, rebuild, time — run-to-run
+         spread here is a few per cent), from
+         deleting the default member initialisers on `face` and `edge`. One on
+         any member makes the whole type non-trivially-default-constructible,
+         so `polytope p;` memset four kilobytes and `expand`'s horizon array
+         three more PER PASS. The third array was measured and LEFT ALONE
+         (1054.4 against 1053.1, inside the noise) and the file says why.
+         Previously, after 8.4: 87 of 107; MODULE 8 OPEN, 4 of
          13, ~23 h of ~70. PLANNED AT 6 AND SHIPPED AT 6, the second lesson
          running to land on its estimate, so no module subtotal and no course
          total moved. Still 107 lessons, ~523 h. check-curriculum.py green;
@@ -5506,6 +5604,7 @@ completed:
          evidence.)
   - 8.4  Collision Primitives: Spheres, AABBs, OBBs, and the SAT
   - 8.5  GJK: Convex Distance from a Support Function
+  - 8.6  EPA: Penetration Depth
         (8.3's dead `next` link repointed in ALL THREE copies — the page,
          scratch/l83_body_a.html and build_83.py's TAIL — and build_83 rebuilt,
          so page and generator still agree. Planned at 6 h and SHIPPED AT 6, the
@@ -9024,7 +9123,7 @@ files:
   engine/include/engine/phys/: integrate.hpp [8.1], rigid_body.hpp [8.2],
                                inertia.hpp [8.3], shape.hpp [8.4],
                                collide.hpp [8.4], convex.hpp [8.5],
-                               gjk.hpp                                  [8.5]
+                               gjk.hpp [8.5], epa.hpp                   [8.6]
             (convex.hpp is HEADER ONLY and deliberately so: a function pointer,
              a context pointer, an origin, four inline adapters and four DELETED
              rvalue overloads. It has no .cpp because there is nothing to
@@ -9069,7 +9168,7 @@ files:
              graphics subsystem. Does NOT include <imgui.h> — see debug-ui.)
   engine/src/phys/: integrate.cpp [8.1], rigid_body.cpp [8.2],
                     inertia.cpp [8.3], shape.cpp [8.4], collide.cpp [8.4],
-                    gjk.cpp                                             [8.5]
+                    gjk.cpp [8.5], epa.cpp                              [8.6]
             (Everything that is NOT a template: the constant-acceleration
              overload, apply_drag/damping_factor, and the four diagnostics.
              Nothing in it is hot — the general stepper stayed in the header
@@ -9188,6 +9287,17 @@ files:
             wonder whether the falling was doing it.
             [G] cycles the four gyroscopic modes, which is the whole point: OFF
             is a flat line.)
+  demos/epa/: main.cpp                                                    [8.6]
+            (Two panels again, and the LEFT one is the new idea: a GHOST of the
+             second shape drawn at the position the current answer would push it
+             to, so an unconverged lower bound is a crate still buried in a wall
+             rather than a number that is 60% of another number. The right panel
+             is 8.5's, with two differences that say everything — the origin
+             cross is INSIDE the outline, and the pink vector only ever gets
+             LONGER. Builds its own polytope from `cso_support` for the same
+             reason the gjk demo drove its own loop, and prints the real
+             `epa_penetration`'s answer beside its own so the two can be seen to
+             agree. [F] drops the flood fill and §7's failure can be watched.)
   demos/bodies/: main.cpp                                                 [8.2]
            (WORLD-SPACE TRAJECTORIES, not phase space, because the claim it
             settles is one a player could see. Three masses (0.1, 1, 10 kg) on
@@ -9308,7 +9418,7 @@ files:
                  07-08-audio.html, 08-01-integrators.html,
                  08-02-forces-and-bodies.html, 08-03-angular-dynamics.html,
                  08-04-collision-primitives.html,
-                 08-05-gjk.html
+                 08-05-gjk.html, 08-06-epa.html
                  (5.12 IS OUT OF SEQUENCE ON PURPOSE — Module 5 closed eleven
                   lessons after 5.11 and one after 6.18, and the list is
                   append-ordered rather than sorted so that the history is
@@ -10100,80 +10210,241 @@ roadmap: RESHAPED 2026-09-08, AFTER TWO EXTERNAL REVIEWS OF THE PUBLISHED OUTLIN
 
 
 
-next: 8.6 — EPA: Penetration Depth
+  8.6 — EPA: PENETRATION DEPTH.  Nine measured sections, 2,028 checks, 0
+        failures. 11 figures. The lesson pays 8.5's IOU, and FOUR OF ITS FIVE
+        FINDINGS ARE BUGS THE MEASUREMENTS FOUND — three of them in the seed,
+        which is the part every write-up skips.
 
-      WHAT 8.6 INHERITS, AND MUST NOT RE-DERIVE:
-        - `convex`, `cso_support` and `reduce_simplex` ARE PUBLIC and are the
-          interface EPA is written against. EPA is the same support function
-          asked the same kind of question in the other direction, so it must NOT
-          grow its own shape knowledge, its own adapters or its own dispatch.
-        - `gjk_result::terminal` IS THE HANDOFF and it is already carried for
-          this purpose — but see the next item before writing a word of prose
-          about it.
-        - THE MINKOWSKI DIFFERENCE IS ESTABLISHED. 8.5 §3 proves both
-          equivalences, §5 derives the support identity, and §4 proves that a
-          support function DETERMINES a convex set. EPA should pay those off
-          rather than restate them: penetration depth is the distance from the
-          origin to the BOUNDARY of A ⊖ B, which is the one question 8.5 says
-          out loud that it cannot answer because the search only ever looks
-          inward.
-        - `separation` IS STILL THE ANSWER TYPE. 8.5's collide(convex, convex)
-          returns depth = +0 with `witness` as its source on every overlap and
-          the header calls that a PLACEHOLDER in as many words. 8.6 fills it in;
-          it should not change the type.
-        - THE HARNESS SHAPE. Nine sections, EVERY one with a control, and 8.5
-          added a STRONGER instrument than 8.4's: an answer bracketed from both
-          sides by bounds recomputable FROM THE OUTPUT ALONE. A penetration depth
-          has the same property — the deepest point of A ⊖ B along a claimed
-          normal is one support call — so 8.6 should certify rather than compare.
+        THE PLACEHOLDER WAS WORSE THAN ITS OWN COMMENT SAID. 8.5's `collide.cpp`
+          described the axis on an overlap as "the last search direction, a
+          reasonable guess at a contact normal". `gjk_result::direction` is
+          assigned in ONE place and that place is the separated path, so on an
+          overlap it was the ZERO VECTOR — 200,000 of 200,000. A comment that
+          describes what the code was MEANT to do is worse than no comment,
+          because no reader goes looking: a poor normal and a zero normal look
+          identical from outside until something divides by one.
+          8.5's PAGE STILL PRINTS THE WRONG COMMENT, ON PURPOSE. A page is an
+          accurate archive of what shipped, and the correction belongs in 8.6 §1
+          where a reader meets it with the measurement attached. Patching the pin
+          would erase the mistake instead of teaching it. (This is NOT the
+          "port the correction back into the pin" case in CLAUDE.md §11 — that
+          rule is about editing a published page's HTML without editing the
+          fragment it came from. Nothing in 8.5's HTML was touched.)
+          The naive alternative measured for comparison, centre-to-centre, is
+          40.15° off on average and implies a push of 1.71x the MTV (max 2,538x).
+
+        THE DEFINITION IS TWO LINES AND 8.5 ALREADY PROVED THE STEP. A and B+t
+          overlap iff t = a − b for some pair of points iff t ∈ A ⊖ B, so THE
+          TRANSLATIONS THAT KEEP TWO SHAPES OVERLAPPING ARE THE DIFFERENCE SET,
+          and the shortest that separates them is the nearest point of its
+          BOUNDARY. GJK measured the distance to the SET, which is zero when the
+          origin is inside; EPA measures it to the set's BOUNDARY. Same support
+          function, same sandwich, OPPOSITE HANDEDNESS — the inner polytope's
+          closest face is a LOWER bound that RISES, where 8.5's `|v|` only fell.
+          `epa.cpp` therefore carries 8.5's monotonicity check with the
+          inequality reversed, and it fires for the same two reasons.
+
+        AND 8.4 WAS THE EXACT ANSWER FOR BOXES ALL ALONG. min over unit n of
+          h(n) is attained on a FACE NORMAL of A ⊖ B, and the faces of a
+          difference of two boxes have normals ±aᵢ, ±bⱼ, ±(aᵢ × bⱼ) — 8.4's
+          fifteen candidate axes in both signs, and nothing else. So the SAT's
+          minimum-overlap axis IS the minimum translation, shipped a lesson
+          before EPA existed and described only as "the smallest translation
+          that would separate them". That makes 8.4 this lesson's reference.
+          The contrast with sampling is the point: 4,096 random directions per
+          pair over 2,000 pairs never beat EPA (a minimum over a subset can only
+          be too large) and never got within 0.03%, while 30 enumerated normals
+          land on the answer to six digits. A FALSIFIER CAN CONVICT AND CAN
+          NEVER ACQUIT.
+
+        THE SEED IS THE HARD PART, AND THE LITERATURE DOES NOT MENTION IT.
+          On 50,000 crates on a floor GJK hands over a 4-point simplex ZERO
+          times and a flat TRIANGLE 49,951 times. NOT the flat tetrahedron the
+          folklore warns about — `reduce_simplex` discards any vertex the
+          closest point does not use and three points in a plane already span
+          it, so the redundant fourth is gone before the function returns. That
+          is BETTER news: a triangle GJK reduced to necessarily covers the
+          origin's projection (checked, 30,000 of 30,000), where a flat
+          tetrahedron would have needed a choice with no guarantee. A textbook
+          EPA refuses 100% of that row and 1.57% even of free orientations.
+          BUG 1 — ONE APEX IS NOT ENOUGH. The origin was already in that plane,
+            so a single support call out of it leaves the origin on the
+            tetrahedron's BASE: closest face at distance zero, lower bound
+            starts and stays there. 30,000 of 30,000, MAXIMUM as well as mean.
+          BUG 2 — SIX FACES STITCHED BY HAND ARE NOT A POLYTOPE. A bipyramid is
+            convex only when each apex projects INSIDE the triangle, and a
+            support point along the plane normal has no reason to: 52.85% are
+            not convex. Only 2.3% of queries then answered visibly wrong, which
+            is EXACTLY why it survived — nineteen in twenty broken seeds
+            repaired themselves on the first expansion. It took a STATUS
+            HISTOGRAM over 50,000 pairs, not a failing assertion, to see it.
+            Fixed by refusing to hand-build: tetrahedron on the first apex
+            (always convex), second apex through the same `expand` the loop
+            uses, which is beneath-and-beyond and produces the hull by
+            construction. The fix is SMALLER than the code it replaced.
+          BUG 3 — THE CONTAINMENT QUESTION WAS ASKED TOO EARLY. GJK can
+            terminate on a SEGMENT THROUGH THE ORIGIN on a pair overlapping
+            deeply, so the seed puts the origin on an EDGE where the incident
+            offsets are zero to within a few ulps. Testing `d < 0` up front
+            returned a depth of ZERO for spheres 70 cm inside a crate, 19 in
+            20,000 — and scaling the threshold by `cfg.tolerance` made it come
+            BACK as the tolerance tightened, because the margin was set by GJK's
+            tolerance, not EPA's. THERE IS NO CONSTANT THAT IS RIGHT. So it is
+            not asked: the expansion runs either way (beneath-and-beyond does
+            not care where the origin is) and `lower <= 0` at the END is the
+            answer, where it is a measurement rather than a guess.
+
+        BUG 4 — THE HORIZON, AND IT IS THE ONE TO REMEMBER. A support point that
+          lands EXACTLY on several of the polytope's face planes leaves
+          `dot(n, w)` and `d` as the same number computed two different ways,
+          and the last few bits decide which side of `>` each face falls on.
+          Traced on two 1 m cubes face to face with 0.1 mm of overlap: THREE
+          faces called visible, scattered, sharing no edge — nine horizon edges
+          with nothing to cancel, a fan stitched across three loops, and a depth
+          of depth/√3, 42% LOW. A comparison whose two sides are mathematically
+          equal has no correct answer in floating point; the code asked it
+          anyway. The repair is to ask a question that HAS an answer: flood fill
+          the visible set from the CLOSEST face, which is the one face certainly
+          visible. In exact arithmetic it changes nothing (the set was already
+          connected — Preparata & Shamos §3.4); in float it undoes the scatter.
+          MEASURED, AND THIS IS THE THIRD LESSON RUNNING WITH THE SAME MORAL:
+          4.17% of crates on a floor tear (worst 61.7% low), 0.01% at free
+          orientations — four hundred times rarer — and NEVER on hulls built
+          from random points. The tear needs the axis alignment and face-on-face
+          contact a real level is made of, which a uniform random fixture
+          destroys. 8.4 §F said it about shared up axes; 8.5 §C about slivers.
+
+        EULER'S FORMULA AS A RUNTIME TEST. F = 2V − 4 for a closed triangulated
+          surface of genus zero, and `epa_result::manifold()` is that line —
+          computable from the RETURNED STRUCT ALONE, so the harness never has to
+          see inside EPA to know whether EPA built a polytope. Green at every
+          exit over 200,000 queries across two populations, including 1000:1
+          aspect-ratio plates whose face normals are rounding error. It also
+          SIZES the arrays rather than guessing them, and is why dead faces are
+          COMPACTED rather than flagged: faces CREATED over a query (each pass
+          deletes k and stitches k+2) far exceed faces held, so flagging turns a
+          bound on the polytope into a bound on the total work.
+
+        THE SPHERE HAS SWAPPED PLACES, and the asymmetry is geometric. GJK's
+          EASIEST case — exactly ONE iteration, because a ball's nearest point to
+          an exterior point is on the line to its centre — is EPA's WORST, 28.64
+          rising to the 60-cap, because the nearest BOUNDARY point from inside is
+          on a sphere of directions and every triangle is a chord that
+          under-reaches. GJK walks TO a curved surface; EPA has to COVER it. Box
+          and hull are flat against tolerance for 8.5 §9's reason with the
+          inequality reversed. Which is the concrete argument for KEEPING 8.4's
+          closed forms: generality is a property of the interface, not an
+          instruction to use it everywhere.
+          max_iterations = 32 is justified by measurement rather than taste: 48
+          removes 98% of the remaining cap hits and buys 1.6 MICRONS, because
+          past 32 the error is the flat-triangle discretisation, not the count.
+
+        AND TWO STRUCT DEFINITIONS WERE WORTH 20.5%. 1344.04 -> 1068.14 ns/pair,
+          MEASURED BACK TO BACK, from deleting the default member initialisers
+          on `face` and `edge`.
+          One on ANY member makes the whole type non-trivially-default-
+          constructible and that propagates into arrays of it, so `polytope p;`
+          — an ordinary local, once per query — memset four kilobytes the seed
+          overwrote on the next line, and `expand`'s 3 KB horizon array is
+          declared PER PASS. The tell is the array, not the struct. The THIRD
+          array was measured and LEFT ALONE (1054.4 against 1053.1, inside the
+          noise, because the compiler could see it) and the file says so: a
+          change that buys nothing still costs a reader.
+
+        A SWEEP FINDS WHAT A SAMPLE MISSES. §H.2 — two cubes walked face to face
+          from 10 cm of overlap down to zero, nine lines of fixture — found TWO
+          of the four bugs, because it walked a parameter across decades instead
+          of sampling it. Both were invisible to 200,000 random pairs.
+
+        AND THE FIXTURE CAN BE THE NULL RESULT. §H.3's first version used half
+          extents of 0.5 and measured the naive and relative support
+          formulations as EXACTLY EQUAL at every distance — because 0.5 is a
+          multiple of the float grid spacing at every scale below 2²¹, so
+          `centre + half` stays exact even a million metres out. Half extents of
+          0.37 are a multiple of nothing, and the naive arm reaches a CENTIMETRE
+          while the relative one holds at 1.5e−08 m. A null result from a fixture
+          that cannot express the effect is not a null result.
+
+
+next: 8.7 — Contact Manifolds and Persistence
+
+      WHAT 8.7 INHERITS, AND MUST NOT RE-DERIVE:
+        - `epa_penetration` RETURNS A NORMAL, A DEPTH AND TWO WITNESS POINTS,
+          and `collide(convex, convex)` is the façade over GJK-then-EPA that
+          fills `separation` on both sides of zero. 8.7 generates a MANIFOLD;
+          it does not re-derive the normal.
+        - THE MINKOWSKI DIFFERENCE IS ESTABLISHED TWICE OVER. 8.5 §3 proves both
+          equivalences and the support identity; 8.6 §3 proves that the set of
+          overlapping translations IS the difference set and that the depth is
+          min over directions of h(n). 8.7 should pay those off rather than
+          restate them.
+        - `depth_along(a, b, unit_axis)` IS PUBLIC and is `h_{A⊖B}(n)` in one
+          line. A manifold's points all have to be consistent with the SAME
+          normal, and that function is how a candidate is checked.
+        - THE HARNESS SHAPE. Nine sections, EVERY one with a control, and 8.6
+          added two instruments worth reusing: an invariant computable FROM THE
+          OUTPUT STRUCT ALONE (Euler's formula), and a SWEEP across decades
+          rather than a random sample — which found two of 8.6's four bugs.
         - `scratch/build_verify_NN.sh` REFUSES an unoptimised libengine.a.
         - `scratch/check_NN.mjs` DRIVES check-page.js THROUGH THE NODE LIBRARY;
           its default URL is rooted at docs/, so pass the full URL when the
           server is rooted at the repository.
-        - A LESSON PAGE ENDS AT FURTHER READING. STATE.md is the sole resume key.
+        - A LESSON PAGE ENDS AT FURTHER READING. STATE.md is the sole resume key,
+          and as of 8.6 `check-curriculum.py` verifies that `updated:` names the
+          newest published lesson — because after 8.5 it did not.
 
-      *** THE THING 8.6 MUST DEAL WITH FIRST. *** 8.5 §9 measured that GJK
-      DOES NOT HAND EPA A TETRAHEDRON on the commonest arrangement in a game:
-      two boxes on one floor produce a difference set every vertex of which has
-      y EXACTLY zero, so the simplex is trapped in a plane. 0 tetrahedra in
-      100,000 pairs, including all 65,633 overlapping by more than 10 cm;
-      77,326 once one box is tilted one degree. Every textbook description of
-      EPA opens by assuming the tetrahedron exists. **Building the starting
-      polytope is on 8.6's critical path, not its error path**, and the lesson
-      should open there rather than discover it late.
+      *** THE THING 8.7 MUST DEAL WITH FIRST. *** 8.6 §13 named it: the contact
+      NORMAL is discontinuous even though the depth is continuous. Slide a box
+      along a wall toward a corner and the minimising face changes, so the MTV
+      swings ninety degrees in one frame. That is a property of a minimum, not of
+      EPA, and every implementation has it. It is the reason persistence is not a
+      performance optimisation but a CORRECTNESS one: a manifold keyed on feature
+      ids survives the swing, and an unkeyed one re-derives four different points
+      and judders. 8.7 should open there rather than discover it late.
 
-      WHAT 8.6 IS LIKELY TO MOVE. A new `engine/include/engine/phys/epa.hpp` and
-      `engine/src/phys/epa.cpp`; `collide.cpp`'s convex facade (to fill in the
-      depth); `gjk.hpp` (possibly a helper that expands a degenerate terminal
-      simplex, which belongs beside the simplex code rather than in EPA);
-      engine.hpp; engine/CMakeLists.txt; demos/CMakeLists.txt. 8.5's listings are
-      PINNED at scratch/l85_*, so editing gjk.hpp does not disturb the published
-      page — but if 8.6 CORRECTS something 8.5 got wrong, the fix goes into the
-      pin AND the live file, or the page and the repo disagree invisibly (6.6
-      §10's three copies).
+      AND THE SECOND THING: one contact point is not enough to rest a box on a
+      floor. EPA returns ONE pair of witness points; a box on a plane needs four,
+      and they must be the SAME four next frame. Clipping the two contacting
+      faces against each other (Sutherland–Hodgman, which 3.3 already taught for
+      the near plane) is the standard generation method, and the reference
+      feature pair comes from the winning face's vertices — which `epa_result`
+      does NOT currently expose. Expect to widen it, and note that build_86.py
+      PINS epa.hpp, so widening the struct does not disturb 8.6's page.
 
-      CARRY FORWARD from 8.5:
-        - MEASURE THE POPULATION YOU ACTUALLY HAVE. The sliver bug survived a
-          200,000-triangle test because the triangles were uniform random. It
-          appeared the moment the fixture squashed them AND put the origin within
-          a millimetre of the plane — which is the geometry GJK's own convergence
-          produces. 8.4 said the same thing about box orientations; this is the
-          second time in two lessons that a random fixture measured nothing about
-          the real inputs, and 8.6's polytope expansion will have the same
-          property.
-        - A REFERENCE THAT ROUNDS LIKE ONE ARM IS NOT A REFERENCE. §H's first
-          version computed its "exact" corners in float and convicted the wrong
-          arm, by a factor of 96,270 in the wrong direction. Promote before
-          subtracting.
-        - AN INVARIANT YOU CAN CHECK IS WORTH MORE THAN ONE YOU BELIEVE, and it
-          pays twice: as a terminator and as a corruption detector. EPA has one
-          of the same kind — the expanding polytope's closest face distance is
-          monotonically NON-DECREASING — and it should be checked, not assumed.
-        - A PROOF OUTRANKS A DECISION. When two pieces of evidence disagree,
-          prefer the one that is a theorem about a maximum over the one that is
-          the sign of a determinant on a degenerate shape.
-        - AND SCREENSHOT EVERY FIGURE AND LOOK AT IT. check-page.js caught three
-          text-on-shape overlaps this lesson that were invisible in the source
-          and obvious on screen; it did NOT catch a demo panel whose support
-          "cloud" was nine hundred directions landing on eight corners, which
-          only a rendered frame showed.
+      WHAT 8.7 IS LIKELY TO MOVE. A new `engine/include/engine/phys/manifold.hpp`
+      and `engine/src/phys/manifold.cpp`; `epa.hpp` (to carry the winning
+      feature); `collide.hpp`/`collide.cpp` possibly; engine.hpp;
+      engine/CMakeLists.txt; demos/CMakeLists.txt. 8.6's listings are PINNED at
+      scratch/l86_*, so editing epa.hpp does not disturb the published page — but
+      if 8.7 CORRECTS something 8.6 got wrong, the fix goes into the pin AND the
+      live file. (Note the distinction 8.6 drew: a comment that was WRONG WHEN IT
+      SHIPPED stays in the pin, because the page is an archive of its own era and
+      the correction belongs in the later lesson's prose. That is not the same as
+      editing a page's HTML without editing its fragment.)
+
+      CARRY FORWARD from 8.6:
+        - COUNT HOW YOUR CODE FINISHES, NOT ONLY WHAT IT RETURNS. The non-convex
+          seed was invisible in the answers and obvious in a status histogram,
+          because nineteen in twenty broken seeds repaired themselves. A four-byte
+          status field paid for itself twice this lesson.
+        - A COMPARISON WHOSE TWO SIDES ARE MATHEMATICALLY EQUAL HAS NO CORRECT
+          ANSWER IN FLOATING POINT. Do not ask it; ask one whose answer is
+          stable. 8.7's feature matching will be full of these — "is this the
+          same contact point as last frame" is exactly that shape of question,
+          which is why it is keyed on IDS rather than on positions.
+        - A SWEEP FINDS WHAT A SAMPLE MISSES. Nine lines walking an overlap
+          across seven decades found two bugs that 200,000 random pairs did not.
+        - AND THE FIXTURE CAN BE THE NULL RESULT: half extents of 0.5 are a
+          multiple of the float grid at every scale, so a precision fixture built
+          from them measures exactly zero difference and means nothing.
+        - MEASURE THE POPULATION YOU ACTUALLY HAVE. Third lesson running. The
+          failure needs axis alignment, shared up axes and face-on-face contact —
+          and 8.7's whole subject IS face-on-face contact, so its bugs will live
+          there too.
+        - AND SCREENSHOT EVERY FIGURE AND LOOK AT IT. check-page.js caught eight
+          spills and overlaps this lesson that were invisible in the source; it
+          did NOT catch a 2D seed whose lower bound came out NEGATIVE in panel
+          one — contradicting the section it illustrated — or an origin cross
+          drawn in hardcoded near-white, which is invisible in the light theme.
+          Only a rendered frame showed either. Theme SVG strokes with the `.ink`
+          class, never with a literal colour.

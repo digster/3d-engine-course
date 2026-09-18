@@ -7,7 +7,7 @@ There is no engine to download here and no framework doing the interesting parts
 write the math library, the rasterizer, the ECS, the renderer, the physics, and the editor. By
 the end you have a real engine and a game built on its public API.
 
-**Status:** curriculum and conventions published; lessons in progress — **Modules 0–4 are complete**, **Module 5 is complete** — all 12 lessons, ~62 h, closed out of order by its checkpoint game — and **Module 6 is complete** — all 18 lessons, ~93 h, the longest module in the course — **Module 7 is complete** — all 8 lessons, ~47 h — and **Module 8 is under way** (**86 of 107**).
+**Status:** curriculum and conventions published; lessons in progress — **Modules 0–4 are complete**, **Module 5 is complete** — all 12 lessons, ~62 h, closed out of order by its checkpoint game — and **Module 6 is complete** — all 18 lessons, ~93 h, the longest module in the course — **Module 7 is complete** — all 8 lessons, ~47 h — and **Module 8 is under way** (**89 of 107**).
 The newest lesson is [8.3 — Angular Dynamics: Torque and the Inertia Tensor](docs/lessons/08-03-angular-dynamics.html),
 which teaches the engine to **turn**. Eighty-five lessons in, nothing in it could tumble: 8.2 gave a
 body a mass, which answers one question — how hard is it to push? — and this lesson answers the other

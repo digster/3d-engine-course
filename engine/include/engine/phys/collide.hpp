@@ -350,19 +350,19 @@ inline constexpr float k_parallel_sin2 = 1e-6f;
 /// is the contract:
 ///
 ///   * `axis_index` is `-3`, so `source_of` reports `witness`.
-///   * `axes_tested` is the GJK ITERATION COUNT rather than a candidate count.
-///     Same meaning — how much work did the answer take — different unit.
-///   * **`depth` is exact when negative and a placeholder when not.** A gap is
-///     the true distance, better than anything the SAT can produce. An OVERLAP
-///     reports `+0` with the last search direction as the axis, because GJK
-///     cannot measure penetration: the origin is inside `A ⊖ B` and the depth is
-///     a distance to its boundary, which the search never looks at. Lesson 8.6
-///     is the one that fixes this, and until then a caller that needs a
-///     penetration depth for two boxes must keep using `collide(obb, obb)`.
+///   * `axes_tested` is the GJK ITERATION COUNT PLUS THE EPA ONE rather than a
+///     candidate count. Same meaning — how much work did the answer take —
+///     different unit.
+///   * **`depth` is exact on both sides of zero, as of Lesson 8.6.** A gap is
+///     GJK's true distance, better than anything the SAT can produce. An overlap
+///     is EPA's minimum translation distance, which 8.6 §8 measures against the
+///     SAT's MTV on 200,000 box pairs and finds agreeing to **2.4e−05 m** —
+///     two algorithms with nothing in common but the set they are asking about.
 ///
-/// **This is the honest state of the engine after 8.5**, and naming it is the
-/// point: the general test answers the question the specialised one could not
-/// (how far apart, exactly) and cannot yet answer the one it could (how deep).
+/// 8.5 shipped this function with a `+0` here and its doc comment called that a
+/// placeholder in as many words. It is worth knowing what filled it in: not a
+/// second search, but the SAME search continued. EPA starts from `gjk_result::
+/// terminal`, the simplex GJK was already carrying.
 [[nodiscard]] separation collide(const convex& a, const convex& b);
 
 // ---------------------------------------------------------------------------

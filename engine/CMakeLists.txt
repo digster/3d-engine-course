@@ -206,6 +206,13 @@ add_library(engine STATIC
     # physical shape of the claim it makes — an algorithm that needs no knowledge
     # of the shapes it is handed does not need to be compiled against them.
     src/phys/gjk.cpp
+
+    # Lesson 8.6. EPA is the other half of 8.5's idea and it needed no change to
+    # `gjk.hpp` at all: `cso_support`, `simplex` and `gjk_result::terminal` were
+    # already the public interface it is written against. What it does NOT depend
+    # on is `shape.hpp`, exactly as GJK does not — the algorithm that measures how
+    # deep two things overlap never learns what either of them is.
+    src/phys/epa.cpp
     # Lesson 5.2. Note what is NOT here: platform/main.hpp, which carries
     # ENGINE_MAIN. It is header-only and deliberately so — including it emits a
     # real `main`, and an entry point is not a library's to own. See the comment

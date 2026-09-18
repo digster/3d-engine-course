@@ -32,6 +32,7 @@ WHAT IT CHECKS
   7. Every href pointing inside docs/ resolves to a file that exists.
   8. STATE.md's `docs/lessons/:` manifest lists every published page.
   9. STATE.md's `completed:` roll names every published lesson number.
+ 10. STATE.md's `updated:` header names the newest published lesson.
  10. index.html's <meta name="description"> states the same lesson count the
      table does.
  11. Each published lesson page's own "Time: ~ N hours" matches its index row.
@@ -569,6 +570,56 @@ def check_state_completed(report: "Report") -> None:
         report.ok(f"STATE.md's completed list names all {len(published)} lessons")
 
 
+def check_state_header(report: "Report") -> None:
+    """STATE.md's `updated:` line must name the newest lesson on disk.
+
+    THE ONE PART OF STATE.md NOBODY WAS CHECKING WAS THE ONE THAT DRIFTED.
+    `check_state_manifest` and `check_state_completed` verify the two machine-
+    shaped lists, and both were correct after Lesson 8.5. The `updated:` header —
+    which is prose, and is the first thing a resumed session reads — still said
+    "after Lesson 8.4 — 87 of 107" with 8.5 published. It was found a lesson
+    later, by a human reading it.
+
+    The check is deliberately weak: it asserts only that the header NAMES the
+    newest lesson number, not that the paragraph under it is true. A checker
+    cannot verify prose, and pretending otherwise would be worse than this.
+    """
+    if not STATE.exists():
+        report.fail("STATE header", "STATE.md not found")
+        return
+
+    text = STATE.read_text(encoding="utf-8")
+    m = re.search(r"^updated:\s*(.+)$", text, re.M)
+    if not m:
+        report.fail("STATE header", "no `updated:` line found")
+        return
+    header = m.group(1)
+
+    newest = None
+    newest_key = None
+    for path in sorted(LESSONS.glob("*.html")):
+        mm = re.match(r"(\d\d)-(\d\d[a-z]?)-", path.name)
+        if not mm:
+            continue
+        key = (int(mm.group(1)), int(re.sub(r"[a-z]", "", mm.group(2))), mm.group(2))
+        if newest_key is None or key > newest_key:
+            newest_key = key
+            newest = f"{int(mm.group(1))}.{mm.group(2).lstrip('0') or '0'}"
+
+    if newest is None:
+        report.fail("STATE header", "no lesson pages found")
+        return
+
+    if re.search(r"\b" + re.escape(newest) + r"\b", header):
+        report.ok(f"STATE.md's `updated:` header names {newest}, the newest page")
+    else:
+        report.fail(
+            "STATE header",
+            f"`updated:` does not name {newest}, the newest published lesson: "
+            f"{header.strip()[:60]}…",
+        )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--quiet", action="store_true", help="print failures only")
@@ -593,6 +644,7 @@ def main() -> int:
     check_links(report)
     check_state_manifest(report)
     check_state_completed(report)
+    check_state_header(report)
 
     if report.failures:
         print(f"\n{len(report.failures)} problem(s):")

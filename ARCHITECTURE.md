@@ -1042,7 +1042,7 @@ chore. What follows is on disk.
 │   │   │   └── main.hpp      # ENGINE_MAIN. ONE .cpp per program; no main() in it.
 │   │   │                     #   NOT in engine.hpp, deliberately
 │   │   ├── phys/           # HOW A STATE ADVANCES, WHAT MOVES IT, HOW IT TURNS, AND
-│   │   │                   #   WHERE ITS SURFACE IS                    [8.1-8.5]
+│   │   │                   #   WHERE ITS SURFACE IS                    [8.1-8.6]
 │   │   │                   #   THE FIFTH NEW DIRECTORY SINCE THE REFACTOR, and
 │   │   │                   #   the second (after audio/) that never touches a
 │   │   │                   #   pixel. NOT under math/: the test is what a file
@@ -1089,11 +1089,23 @@ chore. What follows is on disk.
 │   │   │                     #   thousand km out. Four DELETED rvalue overloads,
 │   │   │                     #   because a view that outlives its subject is the
 │   │   │                     #   one mistake this shape of interface invites. [8.5]
+│   │   │   └── epa.hpp       # epa_status/epa_result/epa_config, epa_penetration,
+│   │   │                     #   depth_along, and the two capacity constants.
+│   │   │                     #   HOW DEEP AND WHICH WAY, which is the question a
+│   │   │                     #   solver asks and the one GJK cannot answer: the
+│   │   │                     #   depth is a distance to the BOUNDARY of A ⊖ B and
+│   │   │                     #   GJK only ever looks inward. `depth_along` is the
+│   │   │                     #   certificate in one line — h_{A⊖B}(n), which the
+│   │   │                     #   definition minimises over all directions — and
+│   │   │                     #   `manifold()` is Euler's F = 2V − 4 as a runtime
+│   │   │                     #   test computable from the result alone.       [8.6]
 │   │   │   └── gjk.hpp       # gjk_vertex/simplex/gjk_status/gjk_result/gjk_config,
 │   │   │                     #   gjk_distance, gjk_intersects, certify, and
 │   │   │                     #   cso_support + reduce_simplex — the last two public
 │   │   │                     #   because demos/gjk single-steps the loop and the
-│   │   │                     #   harness measures the solver directly.        [8.5]
+│   │   │                     #   harness measures the solver directly. 8.6 needed
+│   │   │                     #   NO CHANGE to this file: `terminal` was designed
+│   │   │                     #   for EPA a lesson before EPA existed.         [8.5]
 │   │   │   └── integrate.hpp # motion (position + velocity, and nothing else),
 │   │   │                     #   integrator (explicit_euler, semi_implicit_euler,
 │   │   │                     #   velocity_verlet), integrate() x2, apply_drag,
@@ -1282,7 +1294,7 @@ chore. What follows is on disk.
 │   └── src/                # ---- PRIVATE. 63 sources; no demo can name this path ----
 │       ├── phys/           # integrate.cpp [8.1], rigid_body.cpp [8.2],
 │       │                   # inertia.cpp [8.3], shape.cpp [8.4],
-│       │                   # collide.cpp [8.4], gjk.cpp                      [8.5]
+│       │                   # collide.cpp [8.4], gjk.cpp [8.5], epa.cpp       [8.6]
 │       │                   #   gjk.cpp is the only one of these with no header of
 │       │                   #   its own shape knowledge: it includes gjk.hpp, which
 │       │                   #   includes convex.hpp, and nothing in it names a box.
@@ -1377,6 +1389,22 @@ chore. What follows is on disk.
 │   │                       #   boxes on one floor, and the simplex never leaves
 │   │                       #   the plane y = 0, which is why that arrangement
 │   │                       #   can never produce a tetrahedron for 8.6's EPA.
+│   ├── epa/main.cpp        # THE BALLOON IN THE DARK ROOM                    [8.6]
+│   │                       #   Two panels again, and the LEFT one carries the
+│   │                       #   new idea: a GHOST of the second shape drawn where
+│   │                       #   the current answer would push it, so an
+│   │                       #   unconverged lower bound is a crate still buried
+│   │                       #   in a wall rather than a number that is 60% of
+│   │                       #   another number. The right panel is the gjk
+│   │                       #   demo's with two differences that say everything:
+│   │                       #   the origin cross is INSIDE the outline, and the
+│   │                       #   pink vector only ever gets LONGER. Builds its own
+│   │                       #   polytope from `cso_support` for the same reason
+│   │                       #   the gjk demo drove its own loop, and prints the
+│   │                       #   real `epa_penetration`'s answer beside its own so
+│   │                       #   the two can be seen to agree. [F] drops the flood
+│   │                       #   fill from the visibility test and the horizon
+│   │                       #   tears on screen.
 │   ├── collide/main.cpp    # FIFTEEN BARS, AND THE ONE THAT CROSSES ZERO      [8.4]
 │   │                       #   All fifteen SAT candidates as bars against a zero
 │   │                       #   line, so the reader watches the verdict flip at

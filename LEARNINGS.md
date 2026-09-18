@@ -8682,3 +8682,90 @@ stalled and therefore looking trustworthy.
 A duplicate test is asking "is this the same vertex?", which is a question about float resolution
 (1e-12 relative), not about how accurate the caller wants the answer. Before reusing a tunable, ask
 what question the new test is asking and whether it has the same units.
+
+## A comparison whose two sides are mathematically equal has no correct answer
+
+`epa.cpp`'s visibility test asks whether a new support point is beyond a face's plane:
+`dot(f.n, w) > f.d`. On two cubes meeting face to face, the support point lands *exactly* on four of
+the polytope's face planes, so both sides are the same number computed two different ways and the
+last few bits decide the verdict. Measured: three faces classified visible, scattered around the
+polytope and sharing no edge, nine horizon edges with nothing to cancel, and a surface that was no
+longer a polytope — reporting a depth 42% low.
+
+The arithmetic was not wrong; the *question* was. The repair is to ask one whose answer is stable:
+flood fill the visible set from the closest face, which is the one face the caller already proved
+visible. In exact arithmetic that changes nothing, because the visible set of a convex polytope from
+an exterior point is connected; in float it projects a scattered classification back onto the answer
+exact arithmetic would have given.
+
+Whenever a predicate's two sides can be equal by construction — coplanar faces, collinear points,
+equal projections — the tie-break is arbitrary and the code must not depend on which way it falls.
+
+## Count how your code finishes, not only what it returns
+
+`seed_polytope`'s first version stitched six faces from a triangle to two apexes. A bipyramid is
+convex only when each apex projects *inside* the triangle, and **52.85%** of seeds did not qualify —
+but only **2.3%** of queries answered visibly wrong, because the first expansion usually deleted the
+offending face and repaired the surface by accident. Nothing asserted, nothing crashed, and the
+answers were mostly right.
+
+What made it visible was a histogram of `epa_status` over 50,000 pairs: 1,172 `stalled` where there
+should have been none. A four-byte status field on a result struct is worth more than it looks,
+because the interesting failures are the ones that still produce plausible output.
+
+## Ask the question late, where it is a measurement
+
+Twice in one lesson a check placed at the *start* of `epa_penetration` had no correct threshold. "Is
+the origin inside the seed polytope?" was tested against zero (wrong: GJK can terminate on a segment
+through the origin on a deep overlap, so the origin sits on an edge where the offsets are zero to
+within a few ulps — a depth of zero for spheres 70 cm inside a crate), and then against
+`cfg.tolerance` (worse: the margin that put the origin outside was set by *GJK's* tolerance, so
+tightening EPA's made the failure come back).
+
+There was no constant that worked, because the question was being asked before the information
+existed. The expansion does not care where the origin is, so it now runs either way and the answer
+is read off the lower bound at the end — where it is a measurement rather than a guess. When a
+guard needs a magic number, check whether it is a guard that could have been a conclusion.
+
+## A sweep finds what a sample misses
+
+Nine lines walking two cubes face to face from 10 cm of overlap down to zero found two of Lesson
+8.6's four bugs. Two hundred thousand random overlapping pairs found neither, and both had been
+green through several full harness runs. A random population samples the *middle* of a parameter's
+range; a sweep visits its decades, and bugs live where a quantity becomes small compared with
+something else.
+
+Pair it with the converse, which the same lesson also produced: a fixture can be a null result. The
+first version of §H.3 gave two support formulations half extents of **0.5**, which is a multiple of
+the float grid spacing at every scale below 2²¹, so `centre + half` stayed exact a million metres
+from the origin and the two arms agreed to the bit. Half extents of 0.37 are a multiple of nothing,
+and the naive arm degrades to a centimetre. A null result from a fixture that cannot express the
+effect is not a null result.
+
+## A default member initialiser can be a memset
+
+`struct face { int v[3] = {0,0,0}; vec3 n{}; float d = 0.0f; bool alive = false; };` cost
+**20.5% of an EPA query** — 1344.04 ns to 1068.14 ns, measured back to back, when the four
+initialisers were deleted. A
+default member initialiser on any member makes the whole type non-trivially-default-constructible,
+and that property propagates into arrays of it, so declaring `polytope p;` wrote four kilobytes of
+zeroes that the next line overwrote. `expand`'s 3 KB horizon array is declared *per pass*, so a
+ten-expansion query paid it ten times.
+
+The tell is the array, not the struct: initialisers are excellent on a type callers construct by
+hand and wrong on a hundred slots of scratch space, every one written before it is read. And measure
+rather than reason — the third array in the same file was 2.3 KB with the same problem, and removing
+it measured 1054.4 against 1053.1, inside the noise, because the compiler could already see through
+it. A change that buys nothing still costs a reader.
+
+## Theme SVG strokes with a class, never a literal colour
+
+Three origin markers in Lesson 8.6's figures were drawn with `cline(..., "#e6ecf8", ...)` — a
+near-white that is perfectly visible against the dark screenshots the same figures embed, and
+invisible against the light theme's page background. `check-page.js` passed: nothing spilled, nothing
+overlapped, and the element was genuinely there. Only a rendered screenshot in the light theme showed
+that the reader could not see it.
+
+`course.css` themes `.ink`, `.ink-soft` and `.grid` for exactly this. This is the same rule as
+"CSS beats SVG presentation attributes" for `<text>`, one step further out: a stroke colour is a
+theme decision, and a figure that hardcodes one has decided for both themes at once.

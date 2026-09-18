@@ -316,3 +316,32 @@ engine_set_warnings(collide)
 add_executable(gjk gjk/main.cpp)
 target_link_libraries(gjk PRIVATE engine::engine)
 engine_set_warnings(gjk)
+
+# ---- epa: the balloon in the dark room --------------------------------------
+#
+# Lesson 8.6. "Expand the polytope toward its closest face" is a sentence; the
+# thing it describes is a shape growing until it presses against a wall you
+# cannot see, and that is worth watching rather than reading. The right panel
+# draws the Minkowski difference with the origin INSIDE it, the expanding
+# polytope in gold, and the vector to its closest face in pink — which, unlike
+# GJK's `v`, only ever gets longer.
+#
+# The left panel earns its place too: it draws a GHOST of the second shape at
+# the position the current answer would push it to. Step the search and watch the
+# ghost stop overlapping. An unconverged lower bound is a shape that has not
+# quite come free.
+#
+# Preset 3 is the one to sit with, and it is 8.5's preset 3 one lesson on: two
+# crates on a floor, where GJK hands over a flat triangle and the seed has to
+# find two more vertices before EPA can start. [F] drops the flood fill from the
+# visibility test — the textbook formulation — and the depth goes visibly wrong.
+#
+# `engine::engine` directly and NOT `demo_common`, the same statement `gimbal`,
+# `rig`, `plane`, `collector`, `ecs_swarm`, `audio`, `integrate`, `bodies`,
+# `spin`, `collide` and `gjk` make. It loads nothing and computes everything on
+# screen, so a `--shot` run is byte-for-byte reproducible on any machine.
+#
+# No `engine_use_assets` and no `engine_use_shaders`.
+add_executable(epa epa/main.cpp)
+target_link_libraries(epa PRIVATE engine::engine)
+engine_set_warnings(epa)

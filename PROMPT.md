@@ -2847,3 +2847,14 @@ next
 
 (Continuation of the standing protocol: `next` produces exactly one complete lesson. Resumed from
 CLAUDE.md + STATE.md, which named 8.5 — GJK: Convex Distance from a Support Function.)
+
+---
+
+## Session — 2026-09-17 (2), Lesson 8.6
+
+```
+next
+```
+
+(Continuation of the standing protocol: `next` produces exactly one complete lesson. Resumed from
+CLAUDE.md + STATE.md, which named 8.6 — EPA: Penetration Depth.)

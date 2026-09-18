@@ -3,6 +3,8 @@
 
 #include <engine/phys/collide.hpp>
 
+#include <engine/phys/epa.hpp>
+
 #include <engine/phys/gjk.hpp>
 
 #include <algorithm>
@@ -513,12 +515,21 @@ separation collide(const convex& a, const convex& b)
     }
 
     // Overlapping, or out of iterations, which a caller must treat the same way.
-    // `depth` is +0 and it is a PLACEHOLDER — the header says so in as many
-    // words, because a zero here is the one value that could be mistaken for a
-    // measurement. The axis is the last search direction, which is a reasonable
-    // guess at a contact normal and nothing more. 8.6 replaces both.
-    out.axis = g.direction;
-    out.depth = 0.0f;
+    //
+    // LESSON 8.6 FILLS IN THE PLACEHOLDER 8.5 LEFT HERE. The comment this
+    // replaced said `depth` was `+0` and called it a placeholder in as many
+    // words; now the terminal simplex GJK carried through its whole search is
+    // handed to EPA, which walks it out to the boundary of the same Minkowski
+    // difference and returns the minimum translation.
+    //
+    // NOTE WHAT IS NOT PAID TWICE. EPA starts from `g.terminal`, so the search
+    // GJK already did is reused rather than repeated — which is the entire
+    // reason `gjk_result` is 180 bytes rather than 32, and the reason these two
+    // algorithms are usually described as one.
+    const epa_result e = epa_penetration(a, b, g.terminal);
+    out.axis = (length_squared(e.normal) > 0.0f) ? e.normal : g.direction;
+    out.depth = e.depth;
+    out.axes_tested = g.iterations + e.iterations;
     return out;
 }
 
