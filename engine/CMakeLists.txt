@@ -229,6 +229,15 @@ add_library(engine STATIC
     # inside anything. It compiles against `collide.hpp` only for the six-line
     # `overlaps(aabb, aabb)` this lesson added there.
     src/phys/broadphase.cpp
+
+    # Lesson 8.9. The first file in phys/ that WRITES a velocity. Everything
+    # above it answers a question — do these overlap, how deep, at which points,
+    # which pairs are worth asking about — and the whole of `engine::phys` could
+    # have been declared `const` until this file. It depends on `manifold.hpp`
+    # for what a contact is and on `rigid_body.hpp` for what to change, which is
+    # the dependency direction the note at the top of this block predicted three
+    # lessons ago: the solver knows about contacts, and nothing points back up.
+    src/phys/solver.cpp
     # Lesson 5.2. Note what is NOT here: platform/main.hpp, which carries
     # ENGINE_MAIN. It is header-only and deliberately so — including it emits a
     # real `main`, and an entry point is not a library's to own. See the comment

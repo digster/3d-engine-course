@@ -241,6 +241,7 @@
 #include <engine/phys/integrate.hpp>
 #include <engine/phys/rigid_body.hpp>
 #include <engine/phys/shape.hpp>
+#include <engine/phys/solver.hpp>
 
 // ---- Platform: how a program starts ---------------------------------------
 //

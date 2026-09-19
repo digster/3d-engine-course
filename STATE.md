@@ -7,93 +7,151 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-09-18 (after Lesson 8.8 — 91 of 107 lessons; MODULE 8 OPEN, 8 of
-         13, 43 h of 70. PLANNED AT 4 AND SHIPPED AT 4, so no module subtotal
+updated: 2026-09-19 (after Lesson 8.9 — 92 of 107 lessons; MODULE 8 OPEN, 9 of
+         13, 48 h of 70. PLANNED AT 5 AND SHIPPED AT 5, so no module subtotal
          and no course total moved. Still 107 lessons, ~523 h.
-         check-curriculum.py green; check-builders.py green (59/59 byte-
-         identical); check-page.js `pass: true` at 1280 AND 390. Ten measured
-         sections, 51 checks.
-         8.7's findings are in STATE below and in the memory file for
-         2026-09-18; what follows is 8.8's.
-         THE ENGINE CAN NOW FIND CANDIDATE PAIRS WITHOUT TESTING EVERY PAIR.
-         Two new files, engine/phys/broadphase.{hpp,cpp}; 99 -> 100 public
-         headers (CMake's own line reads "98 of 99", which excludes engine.hpp
-         and the one documented exception). `collide.hpp` gained
-         `overlaps(aabb, aabb)` — six comparisons, INLINE where its obb sibling
-         is not, because at that size a call costs more than the test.
-         *** THE QUADRATIC IS ALREADY HERE, AT n = 278. *** 8.7's whole chain
-         re-measures on 8.7's own fixture at 432.4 ns (8.7 said 395.1 — the same
-         number, a lesson later, on the same machine), and n(n-1)/2 of those
-         passes 16.67 ms at TWO HUNDRED AND SEVENTY-EIGHT bodies. The AABB test
-         that stands in for it is 1.190 ns, 363x cheaper, and moves the wall only
-         to 5,293 — both are the same quadratic with different constants. Only
-         the grid changes SHAPE.
-         AND THE HONEST HALF: BELOW ABOUT A HUNDRED BODIES THE GRID LOSES.
-         Measured at 96 or 128 depending on the run, the two within 20% either
-         side, so it is "about a hundred" rather than a threshold. Above it,
-         17.4x at 512 and 137.7x at 8,192, with the two pair sets checked EQUAL
-         at every size. A broadphase added on principle to a project that will
-         never have two hundred dynamic bodies makes it slower while looking
-         like diligence.
-         *** THE FAMOUS floor-VERSUS-CAST BUG LOSES ZERO PAIRS. *** §4 was
-         written to demonstrate the opposite and measured 0 on 3,000 proxies
-         centred on the origin. A range-walk grid needs its cell map to be
-         MONOTONE and needs nothing else, because if two intervals overlap then
-         so do their images under a non-decreasing map — and truncation is
-         non-decreasing. What it costs is OCCUPANCY: eight cells become one, a
-         cell's pair loop is quadratic in what is in it, 4.0x the comparisons in
-         that one neighbourhood. A footnote, not a bug. THE MISTAKE THAT DOES
-         LOSE PAIRS is the innocent one beside it — one cell per proxy, by its
-         centre — and it loses 1,892 of 2,836, SIXTY-SIX PER CENT, while looking
-         nearly right because the third it finds are the ones you notice while
-         debugging it.
-         THE OWNER-CELL RULE IS EXACT, NOT HEURISTIC, and the proof is two
-         sentences: the minimum corner of the overlap of two cell ranges lies in
-         both ranges, so both proxies are inserted there (at least once), and
-         there is only one minimum corner (at most once). Three `max` calls, no
-         memory. The alternatives measured 45.2% (std::set of pair keys) and 5%
-         (sort+unique) OF THE ENTIRE BROADPHASE. And the duplicate count is
-         computable in closed form — product of the overlap widths, minus one,
-         summed — which agrees with the counter the grid keeps while doing
-         something else entirely: 3271 AND 3271, exactly.
-         THE CELL-SIZE RULE OF THUMB IS A TWO-TERM COST MODEL. a*entries +
-         b*bucket_tests, solved exactly from two rows of a sweep chosen because
-         each is dominated by one term. The constants come out 8.09/5.45 ns on a
-         sparse scene and 8.11/5.44 on one four times denser — they are
-         properties of the MACHINE. Both wings are cubic, so the optimum moves as
-         the SIXTH ROOT of density: 2.13x the mean longest side sparse, 1.32x
-         dense. `auto_cell_size` returns 1.5x and lands at 1.14x and 0.97x the
-         best measured. AND THE TIMER WAS THE WRONG INSTRUMENT: the spread around
-         the minimum reaches 1.18 over forty-one runs, so the clock cannot
-         distinguish 2.5 m from 4 m; `entries` and `bucket_tests` carry no noise
-         at all. Every timing in 8.8 is a MINIMUM over many runs, not a median —
-         a change from 8.1-8.7, and the conservative direction for §1's claim.
-         THE TEXTBOOK SPATIAL HASH IS MEASURABLY MEDIOCRE AND STAYS ANYWAY.
-         Teschner's three primes are 25.7% above the balls-in-bins prediction on
-         a LATTICE of crates (which is what a physics scene is the moment it
-         settles) against 3.4% for a stronger mix — and the control is that on
-         RANDOM cells it sits on the prediction, so the deficit belongs to the
-         input. Then the two numbers that decide it: the excess is worth 9.4% of
-         the inner loop (99,852 pair tests against 90,514), and the mix costs
-         2.0x per call. It stays, for a reason rather than by inheritance.
-         AND A/B COMPARISONS MUST DIFFER IN ONE THING. The first draft timed
-         hash_cell at 0.66 ns and the mix at 0.23 and concluded the MIX was
-         faster, which is absurd for strictly more work. One arm crossed a
-         translation-unit boundary. Measured with a noinline wrapper: 0.115 ns
-         inlined, 0.692 behind a call — 6.0x, for three multiplies. `cell_of`
-         and `hash_cell` moved into the header because of it.
-         THE TEAPOT IS THE FLOOR. A 200 x 0.2 x 200 m plate at a 1 m cell wants
-         80,802 cells to itself against 30,225 entries for the two thousand
-         crates it is under, and it is alone in almost all of them: 30,225 ->
-         111,027 entries for ONE added object. The guard keeps the contract
-         exactly (pair sets with it on and off are EQUAL) and is linear in
-         big*n — free at k=1, most of the broadphase at k=64, and the last two
-         rows of that table find no extra pairs at all. Which is the grid saying
-         "use a tree".
-         THE FRAME: 2,000 proxies, 983 candidates, broadphase 0.091 ms (17.7%),
-         narrow phase 0.426 ms (82.3%), implied all-pairs narrow phase 843.6 ms.
-         Zero allocations over 2,000 rebuilds, checked with a counting
-         operator new rather than asserted.)
+         check-curriculum.py green; check-builders.py green (60/60 byte-
+         identical, including 8.8's after its `next` was repointed);
+         check-page.js `pass: true` at 1280 AND 390. Eleven measured sections,
+         82 checks.
+         8.8's findings are in STATE below and in the memory file for
+         2026-09-18; what follows is 8.9's.
+         *** THE ENGINE CAN NOW RESOLVE A CONTACT. *** The first file in phys/
+         that WRITES a velocity — everything from 8.4 to 8.8 could have been
+         declared const. Two new files, engine/{include/engine,src}/phys/
+         solver.{hpp,cpp}; 100 -> 101 public headers. `manifold.hpp` needed NO
+         widening: `normal_impulse` and `tangent_impulse[2]` have been waiting
+         since 8.7 and `write_back` finally puts numbers in them.
+         THE PENALTY METHOD WAS GIVEN ITS BEST SHOT AND IT IS NOT "UNSTABLE" —
+         IT IS TUNED. 164 settings swept (4 stiffnesses x 41 dampings, 3 s
+         each). The best of them lands the crate with ZERO residual bounce at
+         108.60 mm of penetration; the shallowest that is stable at all sits at
+         12.55 mm and bounces 366.75 mm FOREVER. At 60 Hz you get one or the
+         other. The impulse solver takes both (12.553 mm, 0.000 mm) with no
+         knob. AND THE TUNING BELONGS TO THE SCENE: the same spring under a
+         200 kg crate lets it 962.13 mm into a half-metre floor, and under a
+         2 kg one bounces it 314.99 mm. §1's first draft claimed no setting
+         works, and the sweep refused it — the honest argument is transfer, not
+         stability.
+         THE STATIC STIFFNESS IS THE OPTIMISTIC NUMBER. k = m*g/x gives
+         omega = sqrt(g/x) with THE MASS CANCELLED, so the allowed sink alone
+         sets the rate: 1 mm needs >= 49.5 Hz and 60 Hz can do no better than
+         0.681 mm. But a MOVING crate's sink is v*sqrt(m/k) — 20.0 mm predicted,
+         44.06 mm measured for a 1.96 m/s arrival on a floor tuned for 1 —
+         and 1 mm out of that impact wants k = 7.85e7 and 990 Hz.
+         `penalty_impact_stiffness` exists so the table regenerates.
+         THE EFFECTIVE MASS IS THE WHOLE OF THE ARITHMETIC, and the
+         rearrangement is the point: dot(d, cross(inv_I*(r x d), r)) becomes
+         dot(w, inv_I*w) with w = r x d by the scalar triple product, which is
+         MANIFESTLY NON-NEGATIVE for a positive semi-definite tensor and
+         therefore PROVES k >= 1/m_a + 1/m_b > 0. Measured over 200,000 random
+         contacts: the two forms agree to 5.016e-07 and the gap
+         k - (1/ma + 1/mb) was NEVER negative (worst +0.000e+00) — a check the
+         agreement could not have made, because both forms would carry the same
+         sign error. A 10 kg plank weighs 10.000 kg pushed at its centre and
+         2.702 kg pushed 1.9 m out.
+         MOMENTUM IS A TAUTOLOGY AND ENERGY IS THE CHECK. `apply_impulse_pair`
+         uses the SAME J twice with opposite signs, so momentum comes out at
+         1e-7 even if every number is wrong. The control proves it: halve the
+         effective mass on purpose and momentum still reads 1.91e-07 while
+         energy reads 9.55e-01. With the correct solver an elastic collision
+         conserves energy to 1.21e-07 and reproduces the 1-D closed form to
+         2.384e-07 m/s at five restitutions.
+         *** A BALL THAT BOUNCES FOREVER, AND ITS HEIGHT IS A CLOSED FORM. ***
+         Semi-implicit Euler applies gravity BEFORE the solver looks, so the
+         approach speed is too large by g*h = 16.35 cm/s. The error is ADDITIVE
+         and the bounce is MULTIPLICATIVE, so the bounce has a fixed point:
+         v = e*(v + g*h) solves to e*g*h/(1-e). Predicted 0.1635 / 0.6540 /
+         3.1065 m/s at e = 0.5 / 0.8 / 0.95; MEASURED 0.1635 / 0.6540 / 3.3759
+         — 1.000x at the first two (the third had not converged in 30 s). That
+         is a 2.2 cm hop at e = 0.8 and 58 cm at 0.95. `restitution_bias`
+         removes it exactly, and the naive implementation ("subtract g*h") is
+         WRONG for two dynamic bodies — gravity gave both the same velocity, so
+         the relative velocity it produced is zero. Control: 3.066632748 m/s
+         with and without, identical.
+         AND THE RESTITUTION THRESHOLD IS THE SAME FIX MADE APPROXIMATELY. At
+         e = 0.6 the threshold takes the resting buzz from 6.9259 mm to 0; so
+         does the bias, with the threshold at ZERO, because a resting body's
+         approach speed IS this step's g*h. Keep both anyway: a 300 N thruster
+         the solver was never told about brings the buzz back at 9.90 mm and
+         only the threshold catches it.
+         THE BOX FRICTION CLIP IS 42.68% DIRECTION-DEPENDENT AND THE CONE IS
+         0.00%, over 361 sliding directions. The extreme ratio is 0.70085
+         against a predicted 1/sqrt(2) = 0.70711, and the basis it is anisotropic
+         in came out of the FLOOR'S NORMAL. Controls: mu = 0 travels 80.1 m and
+         is still going; mu = 2.0, where the clip never binds, puts the two
+         models 2.6e-07 m apart. The cone costs 6.8% of prepare-and-solve.
+         THE SLOPE TEST DISAGREED WITH atan(mu) BY 3.75 DEGREES AND THE FIXTURE
+         WAS AT FAULT. A block has TWO critical angles and does whichever comes
+         first: it slides at tan(theta) > mu and TIPS at tan(theta) > w/h. A
+         CUBE tips at 45 and mu = 1 wants to slide at 45, so the cube column
+         stops measuring friction above about mu = 0.5. A 10:3 slab tips at 73.3
+         and tracks atan(mu) to 0.4289 deg. THE TELL IS THAT THE ERROR GROWS
+         WITH THE PARAMETER — 0.0036 deg at mu = 0.2 — because a wrong constant
+         would have been wrong at both ends. The control is the same instrument
+         pointed at the OTHER formula: mu = 5.0 lets go at 45.0032 deg.
+         *** THE COMBINE RULE DEFAULT IS `minimum`, WHICH IS NOT WHAT BOX2D,
+         BULLET OR PHYSX SHIP. *** Five surface pairs whose three coefficients
+         are all published: mean error 23.0% for min against 119.6% for the
+         geometric mean, and under a +/-30% perturbation of EVERY number, 20,000
+         trials, min wins 100.00% of the time. Physical story: the interface is
+         governed by the more lubricious surface, which is why the geometric
+         mean says steel-on-PTFE is 0.172 where it is 0.04. What it costs is
+         named: `min` is insensitive to the grippier material, so a designer
+         raising rubber's friction sees nothing change against ice.
+         A SLIDING SPHERE ROLLS AT EXACTLY v0/(1+c), AND mu CANCELS. 5/7 for a
+         solid ball, 3/5 for a shell. Quadrupling mu moves the end speed by
+         0.0000% and the transition time by 3.79x. AND THE 0.06% THE SIMULATION
+         MISSES 5/7 BY IS PREDICTABLE: 8.7 puts the contact point midway between
+         the surfaces, so the lever arm is R - depth/2 and the effective
+         coefficient is c*(R/r_c)^2. Across a 150x sweep of penetration the
+         corrected form tracks the measurement to 7.75e-07.
+         AT ONE PASS THE WRONG SOLVE ORDER HAS NO FRICTION AT ALL. Not less:
+         none. Friction-then-normal slides 51.2602 mm where normal-then-friction
+         slides 18.9620, and 51.2602 is EXACTLY what the same slab does at
+         mu = 0 — every frame starts with a zero accumulator, so every cone has
+         radius zero. Two things hide it: ITERATION (at 16 passes the two orders
+         are 0.0436 and 0.0605 mm apart) and WARM STARTING (which hands the cone
+         last frame's radius, taking the wrong order to 6.7872 mm). And it is
+         invisible on a FLAT FLOOR, where both orders agree to 1e-6 m.
+         *** AND THE HONEST ENDING: ONE PASS OVER FOUR CONTACT POINTS DOES NOT
+         HOLD A CRATE UP. *** It leaves 2.6e-02 m/s of residual and the crate
+         sinks 274.57 mm in fifteen seconds — a quarter of its own height —
+         and never stops. 32 passes converge (residual 9.9e-09) and the depth
+         FREEZES at 7.2252 mm, which is the penetration it ARRIVED with on the
+         frame it was first detected. TWO DIFFERENT PROBLEMS: iteration fixes
+         the first and cannot touch the second, which needs a POSITION
+         correction. Solving at the END of the step instead of the middle adds a
+         third — g*h^2 = 2.7250 mm of sink EVERY step, predicted and measured to
+         four decimals, and the crate is through a half-metre floor in four
+         seconds.
+         AND THE COUPLING IS NOT ONLY BETWEEN POINTS. With friction off, ONE
+         contact point has NO residual (3.576e-07). Turn friction on and the
+         same single point has 8.457e-01, because the tangential impulse acts
+         through a lever arm and changes the normal velocity at the very point
+         just solved.
+         WARM STARTING IS ONCE PER STEP, NOT ONCE PER ITERATION, and the first
+         draft put it at the top of `solve_contacts`. With 16 iterations the
+         inherited impulse was applied 16 times and a crate slid 810 mm down a
+         slope it should have gripped — presenting as FRICTION failing, not as
+         warm starting misfiring. Hence `warm_start_contacts` as its own call.
+         THE BUDGET: 139.4 ns per manifold, 64.4 per point, for prepare+solve
+         with cone friction; 130.5 box; 89.8 frictionless; 52.3 for prepare
+         alone. The un-hoisted arm — the SAME three effective masses per point
+         through the two-body overload — costs 134.1 ns, which is 2.56x the
+         entire prepare. 8.8's 983-candidate frame gains 0.137 ms, so collision
+         detection plus one solver pass is 0.654 ms of 16.67.
+         *** AND A FOUR-DEGREE ERROR IN 8.6's EPA THAT FIVE LESSONS HAD NOT
+         SEEN. *** Two spheres head on: the manifold normal is 4.2602 deg off
+         the line of centres, CONSTANT across four decades of overlap, so it is
+         not convergence noise. It is `epa_config::max_iterations = 32`, which
+         8.6 set on the evidence of a worst case of 21 expansions over 200,000
+         pairs OF BOXES; a sphere has no flat face to terminate on. At 64 it
+         drops to 1.0639 deg. 8.7 HIDES IT whenever one shape is a box, because
+         the manifold takes the reference FACE's normal rather than EPA's — so
+         a ball on a floor is bit-exact and two balls are four degrees out.
+         8.9 DOES NOT CHANGE epa.hpp: it is 8.6's knob and the fix needs 8.6's
+         own 200,000-pair measurement rerun to price it. See the handover.)
 
 conventions:
   quat: w FIRST, w = cos(theta/2), SANDWICH q v conj(q), q*p MEANS "DO p THEN q".
@@ -179,6 +237,34 @@ conventions:
         fmod(-0.1, 1.0) is -0.1. And AND std::fmod IS NOT CONSTANT TIME — its
         cost grows with the quotient, 1.603 ns on a bounded clock against 5.901
         after the clock has run to 6,666 s. WRAP THE PLAYHEAD EVERY STEP.
+  contact: *** THE ARITHMETIC IS IN VELOCITY, AND A COLLISION IS AN EVENT
+        RATHER THAN AN INTERVAL. *** 8.9, engine/include/engine/phys/solver.hpp.
+        n points from a toward b (collide.hpp's, unchanged since 8.4), so
+        u = (v_b + w_b x r_b) - (v_a + w_a x r_a) is NEGATIVE along n when
+        approaching. The impulse is +J on b and -J on a: same value twice, which
+        is why momentum is conserved to the bit and therefore why momentum is
+        USELESS as evidence. ENERGY is the check.
+        THE EFFECTIVE MASS IS A SCALAR AND THAT IS THE WHOLE TRICK:
+        k = 1/m_a + 1/m_b + dot(w_a, inv_I_a w_a) + dot(w_b, inv_I_b w_b) with
+        w = r x dir. Store 1/k. The rearrangement from the derivation's
+        dot(dir, cross(inv_I*(r x dir), r)) is by the scalar triple product and
+        it PROVES the division is safe.
+        THE ORDER WITHIN A STEP IS LAW: integrate velocities, THEN solve
+        contacts, THEN integrate positions. Solving last costs g*h^2 per step
+        forever, whatever the solver does.
+        THE ORDER WITHIN A SOLVE IS ALSO LAW: all normals, then all frictions.
+        Coulomb's radius is mu times THIS solve's normal impulse, so friction
+        first means a cone of radius zero and no friction at all.
+        CLAMP THE ACCUMULATED IMPULSE, NEVER THE INCREMENT. Identical at one
+        pass; a stack that launches itself at sixteen.
+        WARM STARTING IS ONCE PER STEP (`warm_start_contacts`), never inside the
+        iteration loop.
+        MATERIALS ARE A PAIR PROPERTY passed to `prepare_contacts`, NOT a field
+        on rigid_body — 8.8's handover predicted otherwise and the reason it was
+        wrong is the content. Both combine defaults are `minimum`, which is NOT
+        what Box2D, Bullet or PhysX ship; see the header block for the five
+        published surface pairs that decided it.
+
   integrator: *** SEMI-IMPLICIT (SYMPLECTIC) EULER IS THE DEFAULT, AND EXPLICIT
         EULER IS NEVER CORRECT. *** 8.1, engine/include/engine/phys/integrate.hpp.
         `position += velocity * h` BEFORE the velocity update is explicit Euler
@@ -5518,6 +5604,7 @@ completed:
   - 8.6  EPA: Penetration Depth
   - 8.7  Contact Manifolds and Persistence
   - 8.8  Broadphase: A Uniform Grid
+  - 8.9  Impulse Response: Restitution and Friction
         (8.3's dead `next` link repointed in ALL THREE copies — the page,
          scratch/l83_body_a.html and build_83.py's TAIL — and build_83 rebuilt,
          so page and generator still agree. Planned at 6 h and SHIPPED AT 6, the
@@ -5548,6 +5635,17 @@ completed:
          zero line, and [F] to throw the nine cross products away.)
 
 capabilities:
+  - 8.9 THE ENGINE CAN RESOLVE A CONTACT, which is the first thing in phys/
+    that changes the world rather than describing it. A crate dropped on a floor
+    lands on it; a ball bounces to e^(2n)*h0 and stops; a slab holds a slope up
+    to atan(mu) to 0.43 deg and slides past it; a sphere that lands sliding
+    rolls away at 5/7 of the speed it arrived with, whatever mu is. Coulomb
+    friction with an isotropic cone clip, restitution with the g*h contamination
+    removed exactly, and a prepared-constraint shape that hoists the per-body
+    basis change out of the inner loop at 139 ns per manifold.
+    WHAT IT CANNOT DO: hold a crate up with ONE pass (it sinks 275 mm in 15 s),
+    or repair an overlap that already exists (the converged solve freezes it at
+    the arrival depth). 8.10.
   - 8.8 THE ENGINE CAN FIND CANDIDATE PAIRS IN A SCENE OF THOUSANDS OF BODIES
     WITHOUT TESTING EVERY PAIR, and can prove it has not missed any.
     phys/broadphase.hpp: `proxy` (aabb + uint32 index — six floats and a number,
@@ -9057,6 +9155,7 @@ files:
                                gjk.hpp [8.5], epa.hpp [8.6],
                                manifold.hpp [8.7],
                                broadphase.hpp                           [8.8]
+                               solver.hpp                               [8.9]
             (convex.hpp is HEADER ONLY and deliberately so: a function pointer,
              a context pointer, an origin, four inline adapters and four DELETED
              rvalue overloads. It has no .cpp because there is nothing to
@@ -9103,6 +9202,7 @@ files:
                     inertia.cpp [8.3], shape.cpp [8.4], collide.cpp [8.4],
                     gjk.cpp [8.5], epa.cpp [8.6], manifold.cpp [8.7],
                     broadphase.cpp                                      [8.8]
+                    solver.cpp                                          [8.9]
             (Everything that is NOT a template: the constant-acceleration
              overload, apply_drag/damping_factor, and the four diagnostics.
              Nothing in it is hot — the general stepper stayed in the header
@@ -9233,6 +9333,23 @@ files:
              `epa_penetration`'s answer beside its own so the two can be seen to
              agree. [F] drops the flood fill and §7's failure can be watched.)
   demos/manifold/: main.cpp                                               [8.7]
+  demos/impulse/: main.cpp                                                [8.9]
+           (THE FIRST DEMO IN THE COURSE IN WHICH SOMETHING MOVES BECAUSE THE
+            PHYSICS SAID SO. Five collision demos before it each answered a
+            question and changed nothing. Four scenes, each one measurement made
+            watchable: [1] the bounce, with e^(2n)*h0 drawn as ghost lines so
+            that [B] shows the ball climbing ABOVE its own prediction; [2] the
+            slope, where [O] swaps the solve order and friction stops existing;
+            [3] the roll, where the ball's spoke makes the spin visible and the
+            panel prints v/v0 against 5/7; [4] the creep, which is the demo of
+            why 8.10 exists. The inset at bottom right is the friction clip
+            ITSELF, in units of mu*j_n, with this frame's tangential impulse
+            plotted in it — press [F] and the square appears around the disc.
+            NOTE THE CLIPPED LINE HELPER: this is the first demo whose world is
+            unbounded, and without Liang-Barsky the ground ran across the ImGui
+            panel and through the inset. It also follows the body along x,
+            because a ball landing at 4 m/s crosses a six-metre view in a second
+            and a half and the first version simply lost it.)
   demos/broadphase/: main.cpp                                             [8.8]
            (THE FIRST COLLISION DEMO WHOSE SUBJECT IS THE SCENE rather than a
             pair. Seen from directly above, so the lattice is visible; each cell
@@ -9382,6 +9499,7 @@ files:
                  08-05-gjk.html, 08-06-epa.html,
                  08-07-contact-manifolds.html,
                  08-08-broadphase.html
+                 08-09-impulse-response.html
                  (5.12 IS OUT OF SEQUENCE ON PURPOSE — Module 5 closed eleven
                   lessons after 5.11 and one after 6.18, and the list is
                   append-ordered rather than sorted so that the history is
@@ -9412,6 +9530,25 @@ files:
                   directly. Candidate for 9.10.)
   docs/shared/: course.css, course.js      (THE stylesheet + page script; one copy each)
   docs/_template/: lesson-template.html, README.md, apply-shared.py, check-page.js
+  scratch/ (8.9, not shipped with the engine): verify_89.cpp, build_verify_89.sh,
+           figs_89.py, build_89.py, l89_body_{a..f}.html, l89_fig{1..8}.svg,
+           verify_89.log, and the LISTING PINS l89_<path>.
+           (Eleven measured sections, 82 checks. THE LOG IS THE CANONICAL RUN
+            for every number on the page, and §K's timings are MINIMA over sixty
+            repetitions with FIVE WARM-UPS DISCARDED — the first repetition
+            after process start measures 173 ns where every later one measures
+            139.5, so without the warm-up the published number depended on which
+            sections the reader asked for. The deterministic counts are what
+            every other conclusion rests on.
+            check-page.js caught, in three rounds: four spilled labels, eight
+            overlapping pairs, and nine labels sitting on their own shapes —
+            including TWO LEGENDS DRAWN INSIDE THEIR PLOTS, which figs_81's
+            legend() docstring already warns about. It did NOT catch the
+            `manifest` table overflowing at 390px (that surfaced as
+            pageScrollsX, not as a table finding) or figure 5's polar plot
+            drawn with a SUPPRESSED ZERO, which made the lobe dramatic and the
+            ratio — the one thing the plot exists to show — a lie. Only a
+            rendered frame showed the second.)
   scratch/ (8.4, not shipped with the engine): verify_84.cpp, build_verify_84.sh,
            figs_84.py, build_84.py, check_84.mjs, shots_84.mjs,
            l84_body_{a..e}.html, l84_fig{1..10}.svg, _b84_p{0,1,1f,2}.ppm,
@@ -10329,103 +10466,114 @@ roadmap: RESHAPED 2026-09-08, AFTER TWO EXTERNAL REVIEWS OF THE PUBLISHED OUTLIN
           that cannot express the effect is not a null result.
 
 
-next: 8.9 — Impulse Response: Restitution and Friction
+next: 8.10 — Sequential Impulses: Warm Starting, Islands, and Sleeping
 
-      WHAT 8.9 INHERITS, AND MUST NOT RE-DERIVE:
-        - THE PIPELINE IS COMPLETE UP TO THE POINT OF DOING SOMETHING ABOUT IT.
-          `uniform_grid::build` -> `pairs()` (a < b, exactly once each) ->
-          `collide_manifold(a, b)` -> up to four `contact_point`s sharing one
-          normal, each with a `contact_id` -> `manifold_cache` + `carry_impulses`
-          -> NOTHING. `normal_impulse` and `tangent_impulse` have been declared
-          since 8.7 and written by nobody. 8.9 is the first lesson that writes
-          them.
-        - THE FRAME'S SHAPE IS MEASURED: 2,000 bodies, broadphase 0.091 ms
-          (17.7%), narrow phase 0.426 ms (82.3%). Whatever the solver costs, it
-          is a THIRD stage and its budget is what is left of 16.67 ms.
-        - `broadphase_config::margin` EXISTS, IS MEASURED AND DEFAULTS TO ZERO.
-          8.8 §8 established that the pair count goes as ((E + 4m)/E)^3 within
-          12% and that a margin never loses a pair; the DECISION about how far
-          to speculate is 8.9's, because speculation is a statement about what
-          the solver will do with a pair that is not touching yet. 8.7's
-          `keep_slop` is the other half of the same hook.
-        - `rigid_body` HAS apply_impulse AND world_inv_inertia (8.2, 8.3), so
-          the angular half of an impulse needs no new machinery — only the
-          Jacobian.
-        - A LESSON PAGE ENDS AT FURTHER READING. STATE.md is the sole resume key,
-          and check-curriculum.py verifies that `updated:` names the newest
-          published lesson.
+      WHAT 8.10 INHERITS, AND MUST NOT RE-DERIVE:
+        - THE WHOLE PIPELINE NOW RUNS END TO END, once. `uniform_grid::build` ->
+          `pairs()` -> `collide_manifold(a, b)` -> `manifold_cache` +
+          `carry_impulses` -> `prepare_contacts` -> `warm_start_contacts` ->
+          `solve_contacts` -> `write_back`. Every piece exists and every piece
+          is measured. What does not exist is the LOOP around it, and a world
+          that owns the loop: `body_world::step` still knows nothing about
+          contacts, and 8.9's harness hand-rolls the step for that reason.
+        - THE THREE-PART FRAME IS MEASURED: broadphase 0.091 ms, narrow phase
+          0.426 ms, one solver pass 0.137 ms, on 2,000 bodies and 983
+          candidates. 0.654 ms of 16.67, so there is room for roughly a hundred
+          solver passes before the budget is the constraint — which means the
+          ITERATION COUNT is a quality decision rather than a performance one at
+          this scene size, and 8.10 should say so with a number.
+        - THE EFFECTIVE MASS, THE CLIP AND THE SIGN CONVENTIONS ARE SETTLED and
+          are in `conventions:` above. Do not re-derive them; cite §4.
+        - `contact_constraint` ALREADY ACCUMULATES rather than storing deltas,
+          and `solve_contacts` already clamps the TOTAL. 8.9 shipped it that way
+          for a caller that did not exist yet; 8.10 is that caller.
+        - A LESSON PAGE ENDS AT FURTHER READING. STATE.md is the sole resume key.
         - `scratch/build_verify_NN.sh` REFUSES an unoptimised libengine.a.
-        - THE HARNESS SHAPE. Ten sections, EVERY one with a control, and 8.8
-          added three instruments worth reusing: an ORACLE (a function that
-          answers the same question exactly, which made every correctness claim
-          a set comparison); a CLOSED FORM checked against a counter the code
-          keeps for its own reasons (3271 and 3271); and a COST MODEL fitted to
-          DETERMINISTIC counters, which distinguished cell sizes the clock could
-          not.
+        - THE HARNESS SHAPE. Eleven sections, EVERY one with a control, and 8.9
+          added three instruments worth reusing: a CLOSED FORM for nearly every
+          claim (bounce height, terminal hop, critical slope, rolling fraction,
+          the 1-D collision) which is the strongest instrument there is and is
+          rarely available; a DELIBERATELY BROKEN ARM (halve the effective mass)
+          to show which of two conservation checks can actually fail; and a
+          PERTURBATION SWEEP over reference data, which is how §8 turned five
+          disputable published numbers into a decision.
 
-      *** THE THING 8.9 MUST DEAL WITH FIRST. *** The solver's arithmetic is in
-      VELOCITY, not in force, and that is the whole reason an impulse method
-      exists. A contact's job is to make the relative normal velocity at the
-      contact point be what you want it to be AFTERWARDS — zero for a resting
-      contact, -e times the approach speed for a bouncing one — and that is one
-      linear equation per contact whose unknown is a scalar impulse. Derive it
-      from the velocity you want rather than from a spring, because the spring
-      version (a penalty force) is where stiff contacts and exploding stacks
-      come from, and 8.1 already measured what a stiff integrator does.
+      *** THE TWO THINGS 8.10 MUST DEAL WITH, AND THEY ARE NOT THE SAME. ***
+      §12 separated them and measured both.
+        1. ONE PASS IS NOT A CONVERGED SOLVE. 2.6e-02 m/s of residual, 274.57 mm
+           of sink in fifteen seconds. Iteration fixes this: 32 passes reach
+           9.9e-09 and the creep stops. Warm starting is what makes a HANDFUL of
+           passes enough instead of thirty-two, and its plumbing is already
+           built and already measured — `carry_impulses` matched 100% of 1,999
+           consecutive frames on a settled crate back in 8.7 §9.
+        2. THE FROZEN OVERLAP. The converged solve stops at 7.2252 mm, which is
+           the depth the crate ARRIVED with, and NO NUMBER OF ITERATIONS TOUCHES
+           IT. It is one step of approach travel, because `collide_manifold`
+           reports nothing until the shapes actually overlap. Two candidate
+           fixes and 8.9 §17's fourth exercise sets one up: a POSITION
+           correction (Baumgarte or split-impulse — the second because the first
+           adds energy the velocity solve did not ask for), or SPECULATIVE
+           CONTACTS using `broadphase_config::margin` and
+           `manifold_config::keep_slop`, which never add energy. Measure both.
 
-      AND THE SECOND THING: friction is NOT a second independent impulse. The
-      tangential impulse is clipped to a cone whose radius is mu times the
-      NORMAL impulse computed in the same iteration, so the two are coupled, and
-      the order in which they are solved is a decision with visible consequences
-      (a box on a slope creeps or does not). The standard simplification — a
-      box rather than a cone, solved per axis — is worth naming as a
-      simplification rather than shipping silently.
+      AND THE THIRD THING, WHICH IS FREE: `body_world::step` should grow a
+      contact phase between its velocity and position halves. §12 measured
+      g*h^2 = 2.7250 mm of sink per step for getting that wrong, predicted and
+      measured to four decimals, and a crate through a half-metre floor in four
+      seconds.
 
-      WHAT 8.9 IS LIKELY TO MOVE. A new `engine/include/engine/phys/solver.hpp`
-      and `engine/src/phys/solver.cpp`; possibly `manifold.hpp` (to give
-      `contact_point` whatever the solver caches per contact — an effective mass,
-      a bias); `rigid_body.hpp` for a material (restitution, friction);
-      engine.hpp; engine/CMakeLists.txt; demos/CMakeLists.txt. 8.8's listings
-      are PINNED at scratch/l88_*, so later edits to broadphase.hpp or
-      collide.hpp do not disturb the published page — but if 8.9 CORRECTS
-      something 8.8 got wrong, the fix goes into the pin AND the live file.
-      (8.6's distinction still holds: a comment that was WRONG WHEN IT SHIPPED
-      stays in the pin, because the page is an archive of its own era and the
-      correction belongs in the later lesson's prose.)
+      WHAT 8.10 IS LIKELY TO MOVE. `solver.hpp`/`solver.cpp` (a solver loop, an
+      island builder, a sleep policy, and whatever `contact_constraint` needs
+      for the position correction — probably a `bias` and a stored separation);
+      `rigid_body.hpp` (a sleep flag and a motion accumulator, which is the
+      first time this module has needed to widen it since 8.3); `body_world`
+      (the contact phase); engine.hpp; both CMakeLists. 8.9's listings are
+      PINNED at scratch/l89_*, so later edits do not disturb the published page
+      — but if 8.10 CORRECTS something 8.9 got wrong, the fix goes into the pin
+      AND the live file. (8.6's distinction still holds: a comment that was
+      WRONG WHEN IT SHIPPED stays in the pin, because the page is an archive of
+      its own era.)
 
-      CARRY FORWARD from 8.8:
-        - A MEASUREMENT WRITTEN TO CONFIRM SOMETHING IS ONLY WORTH WRITING IF IT
-          IS ALLOWED TO REFUSE. §4 was written to show that the truncating cell
-          index loses pairs. It loses zero, and the reason — a range walk needs
-          only a MONOTONE cell map — is worth more than the claim was. Third
-          time in Module 8: 8.6 §1 found a knob measuring zero, 8.7 §9 found a
-          control convicting the code of the test's own mistake.
-        - AND THE BUG WITH THE FAMOUS NAME IS RARELY THE EXPENSIVE ONE. Beside
-          the harmless cast sat the mistake that loses 66.7% of the pairs there
-          are — one cell per proxy, by its centre — which is attractive precisely
-          because it is NEARLY right.
-        - AN A/B COMPARISON MUST DIFFER IN ONE THING. §7's first draft timed an
-          out-of-line call against an inlined function and concluded the hash
-          doing MORE work was faster. A result that contradicts the instruction
-          count is the instrument talking. (4.8 §3 paid for the same lesson in a
-          different currency.)
-        - WHEN THE CLOCK IS NOISIER THAN THE DIFFERENCE, FIND A QUANTITY THAT
-          NEEDS NO CLOCK. The cell-size sweep's spread reached 1.18 over
-          forty-one runs; `entries` and `bucket_tests` are exact. Every timing in
-          8.8 is a MINIMUM over many runs rather than a median, and the counts
-          are what the conclusions rest on.
-        - AND TWO INDEPENDENT ROUTES TO THE SAME INTEGER IS THE CHECK TO REACH
-          FOR WHEN IT IS AVAILABLE, because it cannot be passed by accident.
-          3271 and 3271.
-        - MEASURE WHETHER THE OPTIMISATION IS WORTH SHIPPING AT ALL. Below ~100
-          bodies the grid is SLOWER than the quadratic it replaces. Almost
-          nobody measures that, and a broadphase added on principle to a small
-          project makes it slower while looking like diligence.
-        - A FIGURE'S LAYOUT IS WHERE ITS BUGS ARE. check-page.js caught a table
-          five pixels too wide, two bar labels past their bars, a paragraph
-          placed from the wrong block's height, and two annotations sitting on
-          curves. It did NOT catch `&sup9;`, which is not an HTML entity (only
-          sup1/2/3 are) and renders literally; or a curve CLAMPED rather than
-          clipped at the bottom of a log axis, which draws a flat run that reads
-          as "the cost is constant here" — the opposite of the figure's point.
-          Only a rendered frame showed either.
+      AN OPEN DEFECT, DELIBERATELY NOT FIXED: `epa_config::max_iterations = 32`
+      gives a sphere-sphere contact a normal 4.2602 deg off the line of centres,
+      constant across four decades of overlap, because 8.6 tuned that number on
+      BOXES (worst case 21 expansions over 200,000 pairs) and a sphere has no
+      flat face to terminate on. 64 iterations drops it to 1.0639 deg. 8.7's
+      reference-face snapping hides it whenever one shape is a box, which is why
+      five lessons did not see it. THE FIX IS ONE NUMBER AND THE COST IS NOT
+      KNOWN: raising it needs 8.6 §9's 200,000-pair measurement rerun to price
+      the boxes, which is why 8.9 reported it instead of changing it. Whoever
+      picks this up should also ask whether the cap belongs per-SHAPE-KIND
+      rather than per-config.
+
+      CARRY FORWARD from 8.9:
+        - A SECTION WRITTEN TO CONDEMN SOMETHING SHOULD BE ALLOWED TO ACQUIT IT.
+          §1 set out to show that penalty contacts cannot work at 60 Hz, gave
+          them 164 tuned settings, and found that they can. The honest argument
+          turned out to be TRANSFER — the tuning belongs to the scene — and it
+          is a stronger argument than the one the section was written to make.
+          Fourth time in Module 8: 8.6 §1, 8.7 §9, 8.8 §4.
+        - WHEN A MEASUREMENT DISAGREES WITH A FORMULA, ASK THE SHAPE OF THE
+          ERROR BEFORE ASKING ITS SIZE. §8's slope test was 0.0036 deg out at
+          mu = 0.2 and 3.75 deg at mu = 1.0; an error that GROWS WITH THE
+          PARAMETER is a second effect, not a wrong constant. It was tipping.
+          And the control that proved it was the same instrument pointed at the
+          other formula.
+        - TWO CONSERVATION LAWS, AND ONLY ONE OF THEM IS EVIDENCE. Momentum
+          cannot fail here — the same J is used twice — so reporting it is
+          reassurance rather than a check. Budget a deliberately broken arm to
+          show which instrument can actually fail.
+        - A PREDICTION MADE BEFORE A SWEEP AND HOLDING ACROSS IT IS WORTH MORE
+          THAN A FIT. §9's 0.06% residual was explained from the contact-point
+          convention and then tracked to 7.75e-07 over a 150x range of
+          penetration that the explanation had not seen.
+        - A SUPPRESSED ZERO ON A POLAR PLOT IS A LIE ABOUT THE THING THE PLOT
+          EXISTS TO SHOW. Figure 5's first draft scaled the smallest measured
+          distance to 0.45 of the radius; check-page.js passed it, and only a
+          rendered frame showed that the lobe's dramatic shape was the scale
+          rather than the data.
+        - AND A BUG IN A ONCE-PER-STEP ACTION PRESENTS AS THE FAILURE OF
+          SOMETHING ELSE. Warm starting applied inside the iteration loop looked
+          exactly like friction not working, because the spurious normal
+          impulses launched the crate off the surface. The symptom named the
+          wrong subsystem.

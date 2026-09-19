@@ -400,3 +400,34 @@ engine_set_warnings(manifold)
 add_executable(broadphase broadphase/main.cpp)
 target_link_libraries(broadphase PRIVATE engine::engine)
 engine_set_warnings(broadphase)
+
+# ---- impulse: one contact, resolved ------------------------------------------
+#
+# Lesson 8.9. The first demo in the course in which something moves because the
+# physics said so. Five collision demos before it each ANSWERED a question and
+# changed nothing; this one writes a velocity.
+#
+# Four scenes, and each is one of the lesson's measurements made watchable.
+# [1] draws the closed form e^(2n)*h0 as ghost lines at each predicted peak, so
+# that turning the restitution bias off with [B] shows the ball climbing above
+# its own prediction and settling into a hop that never dies. [2] is the slope,
+# where [O] swaps the two solves and friction stops working entirely. [3] is a
+# ball landing with forward spin-free speed, which friction turns into a roll at
+# exactly 5/7 of the speed it arrived with. [4] is the crate that sinks at one
+# solver pass and stops at sixteen — the demo of why Lesson 8.10 exists.
+#
+# The inset at bottom right is the friction clip itself: press [F] and the square
+# appears around the disc. The extra area in its corners is the 43% of extra
+# friction §6 measures, available only in whichever directions `tangent_basis`
+# happened to choose.
+#
+# `engine::engine` directly and NOT `demo_common`, the same statement `gimbal`,
+# `rig`, `plane`, `collector`, `ecs_swarm`, `audio`, `integrate`, `bodies`,
+# `spin`, `collide`, `gjk`, `epa`, `manifold` and `broadphase` make. It loads
+# nothing and computes everything on screen, so a `--shot` run is byte-for-byte
+# reproducible on any machine.
+#
+# No `engine_use_assets` and no `engine_use_shaders`.
+add_executable(impulse impulse/main.cpp)
+target_link_libraries(impulse PRIVATE engine::engine)
+engine_set_warnings(impulse)

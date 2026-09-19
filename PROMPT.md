@@ -2876,3 +2876,11 @@ next
 
 (Continuation of the standing protocol: `next` produces exactly one complete lesson. Resumed from
 CLAUDE.md + STATE.md, which named 8.8 — Broadphase: A Uniform Grid.)
+
+---
+
+## 2026-09-19 — `next` (Lesson 8.9)
+
+> next
+
+Produced Lesson 8.9 — Impulse Response: Restitution and Friction (Module 8, 9 of 13).
