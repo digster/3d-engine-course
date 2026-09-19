@@ -720,6 +720,15 @@ contact_manifold collide_manifold(const convex& a, const convex& b, const manifo
 
 int carry_impulses(contact_manifold& fresh, const contact_manifold& previous)
 {
+    // *** THE BASIS TRAVELS WITH THE IMPULSES. *** Lesson 8.10. The two
+    // tangent scalars are coordinates, and coordinates without their frame are
+    // noise; `prepare_contacts` reads this to rotate them into the frame it is
+    // about to solve in. Copied unconditionally, including when nothing
+    // matches, because a zero basis is how "no solver has touched this" is
+    // spelled and copying a zero is the honest answer.
+    fresh.tangent[0] = previous.tangent[0];
+    fresh.tangent[1] = previous.tangent[1];
+
     int matched = 0;
     for (int i = 0; i < fresh.count; ++i)
     {

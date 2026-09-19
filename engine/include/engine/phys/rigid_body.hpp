@@ -481,6 +481,52 @@ struct rigid_body
     /// Dynamic, kinematic or fixed. See `body_kind` — it answers a different
     /// question from `inv_mass` and both have to be right.
     body_kind kind = body_kind::dynamic;
+
+    // -----------------------------------------------------------------------
+    // Sleeping (Lesson 8.10)
+    // -----------------------------------------------------------------------
+
+    /// **This body is asleep: nothing integrates it and no contact of its
+    /// island is solved.**
+    ///
+    /// Not a rendering hint and not an optimisation the simulation can ignore —
+    /// a sleeping body is *removed from the simulation* until something wakes
+    /// it, which is why waking is the part that has to be right. 8.10 §10
+    /// measures both halves: a settled yard of a hundred crates costs **43x**
+    /// less to solve and **16x** less to integrate, and a tower slept the
+    /// WRONG way — per body rather than per island — leaves its upper crates
+    /// hanging in the air when the one beneath them is knocked out, measured
+    /// at 0.000 m of fall against 0.500.
+    ///
+    /// **Never set this by hand to `true`.** A body put to sleep outside the
+    /// island machinery is a body its neighbours are still leaning on, and
+    /// `contact_solver` will happily solve a contact against it as though it
+    /// were immovable — which it now effectively is. Sleeping is decided per
+    /// ISLAND, all of it or none of it, by `update_sleep`. Setting it to
+    /// `false` by hand is fine and is exactly what `wake` does.
+    bool sleeping = false;
+
+    /// **Seconds this body has been below both sleep thresholds**, reset to
+    /// zero the moment it exceeds either.
+    ///
+    /// A timer rather than an instantaneous test, and the reason is that every
+    /// oscillation passes through zero: a crate rocking on one edge is
+    /// momentarily motionless twice a cycle, and an engine that slept on the
+    /// instantaneous velocity would freeze it mid-rock. `sleep_config::
+    /// time_to_sleep` is how long the quiet has to last — half a second at the
+    /// default, which is thirty frames.
+    float sleep_timer = 0.0f;
+
+    /// Whether this body may sleep at all. Default true.
+    ///
+    /// Content, not physics, and it is the one knob a designer actually reaches
+    /// for: a body carrying gameplay state that polls its own velocity, a
+    /// platform a script is about to shove, anything the player can walk up to
+    /// and expect to respond on the first frame. **One body with this cleared
+    /// keeps its whole island awake**, because an island sleeps all at once —
+    /// which is a feature (the crate it is resting on stays responsive too) and
+    /// a trap (a single flagged body in a hundred-crate pile costs the lot).
+    bool allow_sleep = true;
 };
 
 /// A stable reference to a body in a `body_world`. Four bytes, 5.4's split.
@@ -697,6 +743,48 @@ bool set_inertia(rigid_body& b, const mat3& body_inertia);
 [[nodiscard]] vec3 world_point_of(const rigid_body& b, vec3 local_point);
 
 // ---------------------------------------------------------------------------
+// Sleeping — Lesson 8.10
+// ---------------------------------------------------------------------------
+
+/// **Put a body back into the simulation**, and reset its quiet timer.
+///
+/// The half of sleeping that has to be right. Falling asleep is an
+/// optimisation and waking is *correctness*: a body that should have woken and
+/// did not is a crate hanging in the air, a door that will not open, a lift
+/// that ignores the player standing on it. So this is cheap, idempotent, and
+/// called generously — by `contact_solver` whenever a sleeping island acquires
+/// a contact with anything awake, and by any gameplay code that touches a body
+/// at all.
+///
+/// **Call it after anything that writes to a body from outside the step.**
+/// Teleporting a body, setting its velocity, changing its mass, attaching it to
+/// a joint: every one of those is a change the sleep test will never see,
+/// because the test only looks at velocities and a sleeping body's velocity is
+/// whatever it was when it fell asleep. `wake` exists so that the rule is one
+/// line rather than a paragraph.
+///
+/// **Resetting `sleep_timer` matters as much as clearing the flag, and the
+/// obvious test does not show it.** A woken body that is then SHOVED does not
+/// care — it is no longer a sleep candidate, so `update_sleep` resets its
+/// timer on the first frame anyway, and 8.10 §10 measures both versions
+/// travelling 1.0027 m. The case that shows it is the quiet one: a body woken
+/// and then left alone falls asleep again after **30 frames** with the reset
+/// and after **1** without it. Which is to say, a body woken so that gameplay
+/// can act on it next frame is asleep again before gameplay gets there.
+void wake(rigid_body& b);
+
+/// Is this body quiet enough, **this instant**, to be a sleep candidate?
+///
+/// `|v| < linear` and `|omega| < angular`, with fixed bodies always quiet and
+/// kinematic bodies never (a moving platform with `allow_sleep` set would stop
+/// carrying whatever is standing on it). It is a *predicate on one moment*;
+/// `sleep_timer` is what turns it into a decision. Exposed because 8.10 §10
+/// sweeps both thresholds and because a debug overlay wants to colour the
+/// bodies that are nearly asleep.
+[[nodiscard]] bool is_sleep_candidate(const rigid_body& b, float linear_threshold,
+                                      float angular_threshold);
+
+// ---------------------------------------------------------------------------
 // Terminal speeds — the two that look the same and are not
 // ---------------------------------------------------------------------------
 
@@ -830,6 +918,17 @@ struct step_report
     int dynamic = 0;
     int kinematic = 0;
     int fixed = 0;
+
+    /// **How many dynamic bodies were asleep and therefore skipped entirely.**
+    /// Lesson 8.10.
+    ///
+    /// Counted inside `dynamic`, not alongside it: a sleeping body is still a
+    /// dynamic body, it is simply not being integrated this step. The ratio
+    /// `sleeping / dynamic` is the single most useful number a physics overlay
+    /// can show, because it is the difference between a scene that costs what
+    /// it looks like it costs and one that costs what it did on the frame
+    /// everything landed.
+    int sleeping = 0;
 
     /// The fastest body's speed at the END of the step, in m/s.
     float max_speed = 0.0f;
@@ -980,7 +1079,71 @@ public:
     /// Kinematic bodies skip 1, 2 and the velocity half of 3: they travel at
     /// whatever velocity you set and nothing else touches them. Fixed bodies are
     /// skipped entirely.
+    ///
+    /// **Sleeping dynamic bodies are skipped entirely too** (Lesson 8.10), not
+    /// integrated with zero gravity: a body asleep is out of the simulation
+    /// until `wake` puts it back. `step_report::sleeping` counts them.
+    ///
+    /// **This is exactly `integrate_velocities(h)` followed by
+    /// `integrate_positions(h)`**, and it is kept because most callers have no
+    /// contacts to insert. A caller that does have contacts must call the two
+    /// halves itself; see them for why the slot between them is the only place
+    /// a contact solve can go.
     const step_report& step(float h);
+
+    /// **The first half of a step: everything that changes a velocity.**
+    /// Lesson 8.10.
+    ///
+    /// Forces to acceleration, gravity, the velocity line of the integrator,
+    /// damping's angular twin, the gyroscopic term. Positions and orientations
+    /// are untouched, and the force accumulators are *not* cleared — both of
+    /// those belong to `integrate_positions`.
+    ///
+    /// **THE POINT OF THE SPLIT IS THE GAP IT LEAVES.** A contact solve has to
+    /// happen after gravity has been applied and before anything moves:
+    ///
+    /// ```
+    /// world.integrate_velocities(h);
+    /// // broadphase, narrow phase, contact_solver::solve(h)
+    /// world.integrate_positions(h);
+    /// ```
+    ///
+    /// Solve before the velocity half and the solver approves a velocity that
+    /// gravity then overrides. Solve after the position half — which is what
+    /// every caller does when the only entry point is `step` — and the body
+    /// moves at the velocity gravity asked for rather than the one the contact
+    /// allowed, sinking by `g·h²` every resting step, forever: 2.725 mm at
+    /// 60 Hz, measured and predicted to four decimals in 8.10 §11, and a crate
+    /// through a half-metre floor in four seconds.
+    ///
+    /// **The split is only separable because the integrator is semi-implicit
+    /// Euler**, whose two lines are independent statements. Explicit Euler's
+    /// position line reads the velocity from *before* the update and velocity
+    /// Verlet's needs the acceleration as well, so for those two rules this
+    /// function does the whole integration and `integrate_positions` does
+    /// nothing to the position — the contact impulse then lands one step late.
+    /// That is another entry in 8.1's ledger, and it is not a reason to use
+    /// them.
+    void integrate_velocities(float h);
+
+    /// **The second half: everything that changes a position**, plus the
+    /// bookkeeping. Lesson 8.10.
+    ///
+    /// The position line, the orientation advance, `exp(-k·h)` damping, the
+    /// force and torque accumulators cleared *last* (so a solver running in the
+    /// gap can still read what was applied), and `step_report`'s speeds,
+    /// travel and momenta computed from the final state.
+    ///
+    /// **It costs one extra `mat3_from_quat` per dynamic body per step**, which
+    /// is the honest price of the split: 8.3 §12 hoisted that basis change so
+    /// that the angular half built it once, and two halves cannot share a local
+    /// variable. 8.10 §11 measures a 4,000-body step at **14.5 ns per body**
+    /// monolithic against **19.9 ns** split, which is **+37%** — and measures
+    /// what buys it back many times over, which is that a sleeping body pays
+    /// neither half: the same yard integrates **16x** faster asleep.
+    ///
+    /// Returns the finished report, so that `step` is one line.
+    const step_report& integrate_positions(float h);
 
     /// What the last `step` saw.
     [[nodiscard]] const step_report& report() const;

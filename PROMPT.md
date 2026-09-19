@@ -2884,3 +2884,11 @@ CLAUDE.md + STATE.md, which named 8.8 — Broadphase: A Uniform Grid.)
 > next
 
 Produced Lesson 8.9 — Impulse Response: Restitution and Friction (Module 8, 9 of 13).
+
+---
+
+## 2026-09-19 — `next` (Lesson 8.10)
+
+> next
+
+Produced Lesson 8.10 — Sequential Impulses: Warm Starting, Islands, and Sleeping (Module 8, 10 of 13).

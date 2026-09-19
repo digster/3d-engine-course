@@ -1043,7 +1043,8 @@ chore. What follows is on disk.
 │   │   │                     #   NOT in engine.hpp, deliberately
 │   │   ├── phys/           # HOW A STATE ADVANCES, WHAT MOVES IT, HOW IT TURNS,
 │   │   │                   #   WHERE ITS SURFACE IS, WHERE TWO OF THEM TOUCH,
-│   │                   #   AND WHICH TWO ARE WORTH ASKING     [8.1-8.8]
+│   │                   #   WHICH TWO ARE WORTH ASKING, AND WHAT TO
+│   │                   #   DO ABOUT IT                       [8.1-8.10]
 │   │   │                   #   THE FIFTH NEW DIRECTORY SINCE THE REFACTOR, and
 │   │   │                   #   the second (after audio/) that never touches a
 │   │   │                   #   pixel. NOT under math/: the test is what a file
@@ -1137,6 +1138,35 @@ chore. What follows is on disk.
 │   │   │                   #   the manifold_cache and the normal never flips.
 │   │   │                   #   `owner_cell` is the duplicate fix and it is EXACT
 │   │   │                   #   rather than heuristic.                    [8.8]
+│   │   ├── solver.hpp      # contact_material/combine_rule/friction_model,
+│   │   │                   #   tangent_basis, contact_velocity, effective_mass,
+│   │   │                   #   solver_config, contact_constraint/contact_batch,
+│   │   │                   #   prepare_contacts, warm_start_contacts,
+│   │   │                   #   solve_contacts, write_back, resolve_contact, and
+│   │   │                   #   six closed forms.                          [8.9]
+│   │   │                   #   THE FIRST FILE IN phys/ THAT WRITES A VELOCITY.
+│   │   │                   #   Everything from 8.4 to 8.8 answers a question;
+│   │   │                   #   this one changes the world. A collision is an
+│   │   │                   #   EVENT rather than an interval, so the arithmetic
+│   │   │                   #   is one linear equation per contact in one scalar
+│   │   │                   #   unknown, and the constant in it is the effective
+│   │   │                   #   mass. Materials are a PAIR property and are an
+│   │   │                   #   argument rather than a field on rigid_body.
+│   │   │                   # + position_correction/pseudo_velocity/prepare_bias/
+│   │   │                   #   solve_positions/apply_pseudo_velocity,
+│   │   │                   #   contact_pair/island/build_islands,
+│   │   │                   #   sleep_config/wake_islands/update_sleep,
+│   │   │                   #   solver_stats/contact_solver, arrival_depth,
+│   │   │                   #   baumgarte_time_constant.                  [8.10]
+│   │   │                   #   THE LOOP AROUND IT, and three orderings are law:
+│   │   │                   #   warm starting ONCE per step; every velocity
+│   │   │                   #   iteration before any position one; WAKING before
+│   │   │                   #   the solve and the SLEEP TEST after it, because
+│   │   │                   #   before the solve every resting body in the scene
+│   │   │                   #   is travelling at g*h. Islands come from a
+│   │   │                   #   union-find in which a body that CANNOT MOVE IS
+│   │   │                   #   NOT A BRIDGE — break that and the floor welds the
+│   │   │                   #   level into one island and nothing ever sleeps.
 │   │   │   └── gjk.hpp       # gjk_vertex/simplex/gjk_status/gjk_result/gjk_config,
 │   │   │                     #   gjk_distance, gjk_intersects, certify, and
 │   │   │                     #   cso_support + reduce_simplex — the last two public
@@ -1340,7 +1370,8 @@ chore. What follows is on disk.
 │       ├── phys/           # integrate.cpp [8.1], rigid_body.cpp [8.2],
 │       │                   # inertia.cpp [8.3], shape.cpp [8.4],
 │       │                   # collide.cpp [8.4], gjk.cpp [8.5], epa.cpp [8.6],
-│       │                   # manifold.cpp [8.7], broadphase.cpp             [8.8]
+│       │                   # manifold.cpp [8.7], broadphase.cpp [8.8],
+│       │                   # solver.cpp                            [8.9, 8.10]
 │       │                   #   gjk.cpp is the only one of these with no header of
 │       │                   #   its own shape knowledge: it includes gjk.hpp, which
 │       │                   #   includes convex.hpp, and nothing in it names a box.
@@ -1482,6 +1513,33 @@ chore. What follows is on disk.
 │   │                       #   four points become two, the polygon collapses to
 │   │                       #   a line, its area goes to zero. Preset 4 is the
 │   │                       #   honest one — a ball gets ONE point and should.
+│   ├── impulse/main.cpp    # THE FIRST DEMO IN WHICH SOMETHING MOVES BECAUSE
+│   │                       #   THE PHYSICS SAID SO                          [8.9]
+│   │                       #   Five collision demos before it each ANSWERED a
+│   │                       #   question and changed nothing. Four scenes, each
+│   │                       #   one measurement made watchable: the bounce with
+│   │                       #   e^(2n)*h0 drawn as ghost peaks, the slope, the
+│   │                       #   roll to 5/7, and the creep that is 8.10's reason
+│   │                       #   to exist. The inset at bottom right is Coulomb's
+│   │                       #   clip drawn as itself — press [F] and the square
+│   │                       #   appears around the disc, and the extra area in
+│   │                       #   its corners IS the 43% of anisotropy.
+│   ├── stack/main.cpp      # A PILE OF CRATES, AND THE FOUR KNOBS THAT DECIDE
+│   │                       #   WHETHER IT IS A PILE                        [8.10]
+│   │                       #   `impulse` could draw the whole of one contact;
+│   │                       #   this one cannot, because its subject is what a
+│   │                       #   hundred contacts do to EACH OTHER — so the
+│   │                       #   interesting quantities are counts and colours
+│   │                       #   rather than vectors. A CRATE'S COLOUR IS ITS
+│   │                       #   ISLAND, which is the one thing about the
+│   │                       #   partition invisible in the geometry, and [B]
+│   │                       #   recomputes the labels with fixed bodies bridging
+│   │                       #   — labels ONLY, because letting the bug into the
+│   │                       #   solve would change what the demo is showing. A
+│   │                       #   sleeping crate is drawn in a DIMMED version of
+│   │                       #   its island colour rather than a flat grey, since
+│   │                       #   a settled scene otherwise loses its partition
+│   │                       #   exactly when a reader wants to see it.
 │   ├── collide/main.cpp    # FIFTEEN BARS, AND THE ONE THAT CROSSES ZERO      [8.4]
 │   │                       #   All fifteen SAT candidates as bars against a zero
 │   │                       #   line, so the reader watches the verdict flip at

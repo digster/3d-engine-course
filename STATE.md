@@ -7,151 +7,176 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-09-19 (after Lesson 8.9 — 92 of 107 lessons; MODULE 8 OPEN, 9 of
-         13, 48 h of 70. PLANNED AT 5 AND SHIPPED AT 5, so no module subtotal
+updated: 2026-09-19 (after Lesson 8.10 — 93 of 107 lessons; MODULE 8 OPEN, 10 of
+         13, 54 h of 70. PLANNED AT 6 AND SHIPPED AT 6, so no module subtotal
          and no course total moved. Still 107 lessons, ~523 h.
-         check-curriculum.py green; check-builders.py green (60/60 byte-
-         identical, including 8.8's after its `next` was repointed);
-         check-page.js `pass: true` at 1280 AND 390. Eleven measured sections,
-         82 checks.
-         8.8's findings are in STATE below and in the memory file for
-         2026-09-18; what follows is 8.9's.
-         *** THE ENGINE CAN NOW RESOLVE A CONTACT. *** The first file in phys/
-         that WRITES a velocity — everything from 8.4 to 8.8 could have been
-         declared const. Two new files, engine/{include/engine,src}/phys/
-         solver.{hpp,cpp}; 100 -> 101 public headers. `manifold.hpp` needed NO
-         widening: `normal_impulse` and `tangent_impulse[2]` have been waiting
-         since 8.7 and `write_back` finally puts numbers in them.
-         THE PENALTY METHOD WAS GIVEN ITS BEST SHOT AND IT IS NOT "UNSTABLE" —
-         IT IS TUNED. 164 settings swept (4 stiffnesses x 41 dampings, 3 s
-         each). The best of them lands the crate with ZERO residual bounce at
-         108.60 mm of penetration; the shallowest that is stable at all sits at
-         12.55 mm and bounces 366.75 mm FOREVER. At 60 Hz you get one or the
-         other. The impulse solver takes both (12.553 mm, 0.000 mm) with no
-         knob. AND THE TUNING BELONGS TO THE SCENE: the same spring under a
-         200 kg crate lets it 962.13 mm into a half-metre floor, and under a
-         2 kg one bounces it 314.99 mm. §1's first draft claimed no setting
-         works, and the sweep refused it — the honest argument is transfer, not
-         stability.
-         THE STATIC STIFFNESS IS THE OPTIMISTIC NUMBER. k = m*g/x gives
-         omega = sqrt(g/x) with THE MASS CANCELLED, so the allowed sink alone
-         sets the rate: 1 mm needs >= 49.5 Hz and 60 Hz can do no better than
-         0.681 mm. But a MOVING crate's sink is v*sqrt(m/k) — 20.0 mm predicted,
-         44.06 mm measured for a 1.96 m/s arrival on a floor tuned for 1 —
-         and 1 mm out of that impact wants k = 7.85e7 and 990 Hz.
-         `penalty_impact_stiffness` exists so the table regenerates.
-         THE EFFECTIVE MASS IS THE WHOLE OF THE ARITHMETIC, and the
-         rearrangement is the point: dot(d, cross(inv_I*(r x d), r)) becomes
-         dot(w, inv_I*w) with w = r x d by the scalar triple product, which is
-         MANIFESTLY NON-NEGATIVE for a positive semi-definite tensor and
-         therefore PROVES k >= 1/m_a + 1/m_b > 0. Measured over 200,000 random
-         contacts: the two forms agree to 5.016e-07 and the gap
-         k - (1/ma + 1/mb) was NEVER negative (worst +0.000e+00) — a check the
-         agreement could not have made, because both forms would carry the same
-         sign error. A 10 kg plank weighs 10.000 kg pushed at its centre and
-         2.702 kg pushed 1.9 m out.
-         MOMENTUM IS A TAUTOLOGY AND ENERGY IS THE CHECK. `apply_impulse_pair`
-         uses the SAME J twice with opposite signs, so momentum comes out at
-         1e-7 even if every number is wrong. The control proves it: halve the
-         effective mass on purpose and momentum still reads 1.91e-07 while
-         energy reads 9.55e-01. With the correct solver an elastic collision
-         conserves energy to 1.21e-07 and reproduces the 1-D closed form to
-         2.384e-07 m/s at five restitutions.
-         *** A BALL THAT BOUNCES FOREVER, AND ITS HEIGHT IS A CLOSED FORM. ***
-         Semi-implicit Euler applies gravity BEFORE the solver looks, so the
-         approach speed is too large by g*h = 16.35 cm/s. The error is ADDITIVE
-         and the bounce is MULTIPLICATIVE, so the bounce has a fixed point:
-         v = e*(v + g*h) solves to e*g*h/(1-e). Predicted 0.1635 / 0.6540 /
-         3.1065 m/s at e = 0.5 / 0.8 / 0.95; MEASURED 0.1635 / 0.6540 / 3.3759
-         — 1.000x at the first two (the third had not converged in 30 s). That
-         is a 2.2 cm hop at e = 0.8 and 58 cm at 0.95. `restitution_bias`
-         removes it exactly, and the naive implementation ("subtract g*h") is
-         WRONG for two dynamic bodies — gravity gave both the same velocity, so
-         the relative velocity it produced is zero. Control: 3.066632748 m/s
-         with and without, identical.
-         AND THE RESTITUTION THRESHOLD IS THE SAME FIX MADE APPROXIMATELY. At
-         e = 0.6 the threshold takes the resting buzz from 6.9259 mm to 0; so
-         does the bias, with the threshold at ZERO, because a resting body's
-         approach speed IS this step's g*h. Keep both anyway: a 300 N thruster
-         the solver was never told about brings the buzz back at 9.90 mm and
-         only the threshold catches it.
-         THE BOX FRICTION CLIP IS 42.68% DIRECTION-DEPENDENT AND THE CONE IS
-         0.00%, over 361 sliding directions. The extreme ratio is 0.70085
-         against a predicted 1/sqrt(2) = 0.70711, and the basis it is anisotropic
-         in came out of the FLOOR'S NORMAL. Controls: mu = 0 travels 80.1 m and
-         is still going; mu = 2.0, where the clip never binds, puts the two
-         models 2.6e-07 m apart. The cone costs 6.8% of prepare-and-solve.
-         THE SLOPE TEST DISAGREED WITH atan(mu) BY 3.75 DEGREES AND THE FIXTURE
-         WAS AT FAULT. A block has TWO critical angles and does whichever comes
-         first: it slides at tan(theta) > mu and TIPS at tan(theta) > w/h. A
-         CUBE tips at 45 and mu = 1 wants to slide at 45, so the cube column
-         stops measuring friction above about mu = 0.5. A 10:3 slab tips at 73.3
-         and tracks atan(mu) to 0.4289 deg. THE TELL IS THAT THE ERROR GROWS
-         WITH THE PARAMETER — 0.0036 deg at mu = 0.2 — because a wrong constant
-         would have been wrong at both ends. The control is the same instrument
-         pointed at the OTHER formula: mu = 5.0 lets go at 45.0032 deg.
-         *** THE COMBINE RULE DEFAULT IS `minimum`, WHICH IS NOT WHAT BOX2D,
-         BULLET OR PHYSX SHIP. *** Five surface pairs whose three coefficients
-         are all published: mean error 23.0% for min against 119.6% for the
-         geometric mean, and under a +/-30% perturbation of EVERY number, 20,000
-         trials, min wins 100.00% of the time. Physical story: the interface is
-         governed by the more lubricious surface, which is why the geometric
-         mean says steel-on-PTFE is 0.172 where it is 0.04. What it costs is
-         named: `min` is insensitive to the grippier material, so a designer
-         raising rubber's friction sees nothing change against ice.
-         A SLIDING SPHERE ROLLS AT EXACTLY v0/(1+c), AND mu CANCELS. 5/7 for a
-         solid ball, 3/5 for a shell. Quadrupling mu moves the end speed by
-         0.0000% and the transition time by 3.79x. AND THE 0.06% THE SIMULATION
-         MISSES 5/7 BY IS PREDICTABLE: 8.7 puts the contact point midway between
-         the surfaces, so the lever arm is R - depth/2 and the effective
-         coefficient is c*(R/r_c)^2. Across a 150x sweep of penetration the
-         corrected form tracks the measurement to 7.75e-07.
-         AT ONE PASS THE WRONG SOLVE ORDER HAS NO FRICTION AT ALL. Not less:
-         none. Friction-then-normal slides 51.2602 mm where normal-then-friction
-         slides 18.9620, and 51.2602 is EXACTLY what the same slab does at
-         mu = 0 — every frame starts with a zero accumulator, so every cone has
-         radius zero. Two things hide it: ITERATION (at 16 passes the two orders
-         are 0.0436 and 0.0605 mm apart) and WARM STARTING (which hands the cone
-         last frame's radius, taking the wrong order to 6.7872 mm). And it is
-         invisible on a FLAT FLOOR, where both orders agree to 1e-6 m.
-         *** AND THE HONEST ENDING: ONE PASS OVER FOUR CONTACT POINTS DOES NOT
-         HOLD A CRATE UP. *** It leaves 2.6e-02 m/s of residual and the crate
-         sinks 274.57 mm in fifteen seconds — a quarter of its own height —
-         and never stops. 32 passes converge (residual 9.9e-09) and the depth
-         FREEZES at 7.2252 mm, which is the penetration it ARRIVED with on the
-         frame it was first detected. TWO DIFFERENT PROBLEMS: iteration fixes
-         the first and cannot touch the second, which needs a POSITION
-         correction. Solving at the END of the step instead of the middle adds a
-         third — g*h^2 = 2.7250 mm of sink EVERY step, predicted and measured to
-         four decimals, and the crate is through a half-metre floor in four
-         seconds.
-         AND THE COUPLING IS NOT ONLY BETWEEN POINTS. With friction off, ONE
-         contact point has NO residual (3.576e-07). Turn friction on and the
-         same single point has 8.457e-01, because the tangential impulse acts
-         through a lever arm and changes the normal velocity at the very point
-         just solved.
-         WARM STARTING IS ONCE PER STEP, NOT ONCE PER ITERATION, and the first
-         draft put it at the top of `solve_contacts`. With 16 iterations the
-         inherited impulse was applied 16 times and a crate slid 810 mm down a
-         slope it should have gripped — presenting as FRICTION failing, not as
-         warm starting misfiring. Hence `warm_start_contacts` as its own call.
-         THE BUDGET: 139.4 ns per manifold, 64.4 per point, for prepare+solve
-         with cone friction; 130.5 box; 89.8 frictionless; 52.3 for prepare
-         alone. The un-hoisted arm — the SAME three effective masses per point
-         through the two-body overload — costs 134.1 ns, which is 2.56x the
-         entire prepare. 8.8's 983-candidate frame gains 0.137 ms, so collision
-         detection plus one solver pass is 0.654 ms of 16.67.
-         *** AND A FOUR-DEGREE ERROR IN 8.6's EPA THAT FIVE LESSONS HAD NOT
-         SEEN. *** Two spheres head on: the manifold normal is 4.2602 deg off
-         the line of centres, CONSTANT across four decades of overlap, so it is
-         not convergence noise. It is `epa_config::max_iterations = 32`, which
-         8.6 set on the evidence of a worst case of 21 expansions over 200,000
-         pairs OF BOXES; a sphere has no flat face to terminate on. At 64 it
-         drops to 1.0639 deg. 8.7 HIDES IT whenever one shape is a box, because
-         the manifold takes the reference FACE's normal rather than EPA's — so
-         a ball on a floor is bit-exact and two balls are four degrees out.
-         8.9 DOES NOT CHANGE epa.hpp: it is 8.6's knob and the fix needs 8.6's
-         own 200,000-pair measurement rerun to price it. See the handover.)
+         check-curriculum.py green; check-builders.py green; check-page.js
+         `pass: true` at 1280 AND 390. Eleven measured sections, 64 checks.
+         8.9's findings are in STATE below (`conventions: contact:`) and in the
+         memory file for 2026-09-19; what follows is 8.10's.
+
+         *** THE ENGINE CAN HOLD A STACK UP. *** And the honest bound on that
+         sentence is one table: EIGHT SWEEPS HOLD FIVE CRATES AND DO NOT HOLD
+         TEN. 2 crates need 2 sweeps, 3 need 2, 5 need 4, 10 need 20, and 15
+         need more than 64. A Gauss-Seidel sweep carries information across ONE
+         contact, so a chain of n needs of order n sweeps; §13 measured the cost
+         as LINEAR in the count, so a tall stack is quadratic and a scene costs
+         what its tallest pile costs. An under-swept tower does not sag, it
+         LEANS, because the corrections arrive inconsistently and the
+         inconsistency has a direction.
+
+         NO NEW TRANSLATION UNIT, NO NEW PUBLIC HEADER. First time in Module 8:
+         engine/CMakeLists.txt and engine.hpp are untouched. Ten listings all
+         the same (10,231 lines, the largest set in the course) because six are
+         files earlier lessons printed and CLAUDE.md §8 says whole.
+
+         THE CONTRACTION IS 0.53 PER SWEEP and it is constant over four decades.
+         Measured on ONE crate — a four-point manifold is already a system, and
+         you do not need a stack to need a solver, because three quarters of the
+         effect of an impulse at a corner of a 0.25 m cube is ROTATION and
+         rotation is what the four points share. The control is a sphere: one
+         point, nothing to iterate against, 2.5e-13 at one pass and the same at
+         sixteen. The two rows below 1e-07 are EXCLUDED from the mean, because
+         there the residual has stopped measuring the solver and started
+         measuring `float` — including them reports 0.64 where the solver is
+         0.53.
+
+         WARM STARTING IS WORTH 89 ITERATIONS AGAINST MORE THAN 400, and at the
+         shipped eight the cold five-crate tower does not settle badly, it
+         COLLAPSES: 2,020 mm of sink against 40. Match rate 97.62% over 600
+         frames. It is FREE (the impulses are already in the manifold) and it is
+         an INITIAL GUESS: scaling the inherited impulse by 2 costs more
+         iterations than discarding it. AND THE ×5 ROW IS THE WARNING THAT GOES
+         WITH EVERY CONVERGENCE NUMBER HERE — 52 iterations, a beautiful
+         residual, and a tower moving at 1.54 m/s. THE RESIDUAL MEASURES
+         CONSISTENCY, NOT CORRECTNESS. Every quoted residual in this lesson has
+         a second measurement beside it saying where the bodies are.
+
+         *** A CACHED NUMBER IS MEANINGLESS WITHOUT THE FRAME IT WAS MEASURED
+         IN, AND THAT BUG WAS THREE LESSONS OLD. *** `contact_point::
+         tangent_impulse` is two COORDINATES in a basis, and the basis was never
+         stored. `tangent_basis` seeds from the normal's SMALLEST component, so
+         on a near-vertical contact the choice is |n.x| against |n.z| — two
+         numbers around 1e-05 that cross constantly. Measured: 113 of 11,830
+         manifold-frames rotate by more than 30 deg, worst 134.6, and last
+         frame's friction is applied SIDEWAYS. Fix: `contact_manifold::tangent`,
+         two dot products, exact. Drift 380 mm -> 155 at 24 iterations. Nothing
+         in the type system was ever going to catch it — both versions are two
+         floats called tangent_impulse — and what found it was a PROBE, not a
+         test: compute the basis independently in the harness and count.
+
+         THE ARRIVAL DEPTH IS A CEILING, NOT AN EQUALITY, and §6's first draft
+         claimed the equality and was refused by up to 81%. The body crosses the
+         surface INSIDE a step and is sampled a whole step later, so how much
+         was left over is arbitrary: over 200 finely spaced drops per row the
+         depth is UNIFORM on [0, v*h] — mean 0.486/0.489/0.505, largest 0.9725,
+         smallest 0.002. `arrival_depth` is documented as the ceiling. And it is
+         FROZEN: 3.09% across a 64x range of iteration count while the residual
+         moves six orders of magnitude. TWO DIFFERENT PROBLEMS.
+
+         BAUMGARTE ADDS ENERGY AND SPLIT IMPULSE DOES NOT, for the same rate.
+         tau = -h/ln(1-beta) measured at 333.33 / 166.67 / 83.33 / 33.33 ms
+         against 324.93 / 158.19 / 74.69 / 32.63 — every one the prediction
+         rounded up to a whole 16.67 ms step, which is the finest a once-a-frame
+         measurement can be. Departure from 100 mm deep with gravity off:
+         1.14006 m/s and 6.50 J from nowhere, against 0.00000 for split impulse.
+         WITH GRAVITY ON IT IS MOSTLY HIDDEN, which is why it survives: below a
+         200 mm start the push cannot beat the climb. At 200 mm Baumgarte throws
+         the crate 99 mm CLEAR OF THE FLOOR and at 300 mm, 215. Split impulse
+         settles at the slop at every depth tried. Cost: one position iteration
+         is 46% of a velocity one.
+         AND THE DECAY FIXTURE HAD TO HAVE GRAVITY IN IT. Without it the decay
+         came out 33% fast at beta=0.05 and exact at 0.40 — an error that grows
+         as a parameter shrinks is a SECOND EFFECT (8.9 §8's rule), and the
+         second effect was this section's own subject: an unheld crate keeps the
+         correction velocity and coasts out at the largest bias it ever saw.
+
+         THE SLOP REFUSED ITS OWN FOLKLORE. Fifth time in Module 8 (8.6 §1,
+         8.7 §9, 8.8 §4, 8.9 §1). A SINGLE resting crate is bit-for-bit
+         motionless at a slop of ZERO, under either correction, because a
+         geometric correction removes 20% of what is left each step and never
+         reaches zero — so the contact never separates and there is nothing to
+         oscillate. The folklore describes beta = 1, which nobody ships. What
+         needs the slop is contacts that COMPETE: a five-crate tower moves
+         1801 um p-p at zero slop, 9086 at 0.5 mm, and 0.00 at 2 mm and above.
+         What it costs is exactly legible — THE RESTING DEPTH IS THE SLOP.
+
+         ISLANDS: 20 AGAINST 1, ON THE SAME CONTACTS. A body that cannot move is
+         NOT A BRIDGE, and it is safe rather than convenient — an impulse
+         applied to a fixed body changes nothing any other contact can read.
+         Break it and one rolling marble keeps the level awake, which is not a
+         slow simulation but NO SLEEPING AT ALL. The whole partition is 2.48 ns
+         per body, labelling included, and allocates nothing: the union-find
+         uses its OUTPUT ARRAY as the parent array.
+         AND THE ENCODING IS `-label - 2`. The obvious `-label - 1` sends label
+         0 to -1, which is already the sentinel for "no island", so the FIRST
+         island in every scene silently ceased to exist and a tower whose bottom
+         crate landed in it fell through the floor while every other tower
+         stood. WHAT FOUND IT WAS TWO INSTRUMENTS DISAGREEING: stats.points == 0
+         on a frame where deepest() read 57 mm. Keep enough counters that they
+         can contradict one another.
+
+         *** THE SLEEP TEST CANNOT RUN BEFORE THE SOLVE, AND THE REASON IS g*h.
+         *** A semi-implicit step gives every dynamic body 0.1635 m/s of
+         downward velocity before the solver looks — 3.3x the default threshold
+         — so a test placed there NEVER FIRES at any setting, and the symptom is
+         indistinguishable from thresholds that are merely too tight. Measured
+         on one frame of a scene motionless for six seconds: 0 of 100 quiet
+         before, 96 of 100 after; fastest 0.1836 before, 0.0629 after. It is
+         8.9's restitution artifact wearing a different hat.
+         WAKING IS THE OPPOSITE — it must run BEFORE the solve, or an island
+         that has just acquired a moving neighbour is skipped on the frame it
+         most needs solving. Hence `wake_islands` and `update_sleep` as separate
+         functions at opposite ends of `solve`.
+         AND SLEEPING IS PER ISLAND BECAUSE A SLEPT BODY IS AN IMMOVABLE BODY.
+         Crate thrown at the bottom of a sleeping three-crate tower: island rule
+         drops the top crate 0.500 m, per-body rule 0.0000 — it hangs in the
+         air. The fair experiment is a COLLISION; a support removed by teleport
+         is invisible to both rules, which is what `wake` is for.
+         THE DEFAULT THRESHOLD IS NOT GENEROUS: the smallest value at which a
+         yard of 100 sleeps at all is 0.02 m/s against a default of 0.05, and
+         one notch below that a quarter of the crates never qualify.
+         `wake` RESETTING THE CLOCK matters only in the case nobody tests: a
+         woken body that is SHOVED reads 1.0027 m either way, and a woken body
+         LEFT ALONE sleeps again after 1 frame without the reset and 30 with.
+
+         THE SPLIT OF body_world::step IS BIT-IDENTICAL, 400 of 400 bodies over
+         120 steps, worst position difference 0.000e+00 — checked against a
+         private copy of the monolithic function rather than asserted. It is
+         only possible because semi-implicit Euler's two lines are independent;
+         the other two rules run whole in the velocity half and a contact
+         impulse arrives one step late for them. `gyroscopic_mode::momentum`
+         cannot be cut at all (its orientation advance is in the middle of its
+         own derivation), so all of it runs in the velocity half and the
+         position half skips that body's orientation.
+         SOLVING ONE STEP LATE COSTS g*h^2 PER RESTING STEP: 2.72500 mm measured
+         against 2.72500 predicted, ratio 1.0000, and 654 mm in four seconds.
+         THE SPLIT COSTS A SECOND mat3_from_quat PER BODY: 14.542 -> 19.938
+         ns/body, +37.1%, undoing half of 8.3 §12's largest saving. Sleeping
+         pays it back 15.7x on the same yard.
+
+         THE BUDGET IS LINEAR TO THREE FIGURES: 14.958 us fixed (islands, sleep,
+         prepare, warm start, write-back) + 12.917 per velocity sweep + 5.903
+         per position sweep, over 100 manifolds. Predicts the n=16 row at 221.6
+         against a measured 221.500. At 2,001 bodies: 0.134 broad + 1.118 narrow
+         + 3.102 solve = 4.354 ms of 16.67 (26%), the solve 71% of it, and
+         1.324 ms once the pile is asleep.
+         AND THE FIRST VERSION OF THAT TABLE WAS NONSENSE: it changed the
+         iteration count on a RUNNING scene, so the zero-iteration row dropped
+         the yard through the floor and measured a scene with no contacts left.
+         A timing sweep over a parameter that changes the simulation has to
+         restore the simulation — AND THE SNAPSHOT HAS TO INCLUDE THE MANIFOLD
+         CACHE, because warm starting is precisely the feature that makes a step
+         depend on more than its bodies.
+
+         SOLVE ORDER IS WORTH 0.12 OF AN ITERATION, which is less than the
+         folklore claims. Bottom-up beats top-down by 1.06x at n=16 and 1.08x at
+         n=64 on a ten-crate tower; at §3's contraction that is an eighth of a
+         sweep. The as-added column is IDENTICAL to bottom-up — the broadphase's
+         cell order happens to run up the tower — and the control (twelve crates
+         touching only the floor, no chain) is 0.000e+00 between the two orders.
+         This engine does not sort and NAMES that, which is more honest than
+         implying an accident is a decision.
 
 conventions:
   quat: w FIRST, w = cos(theta/2), SANDWICH q v conj(q), q*p MEANS "DO p THEN q".
@@ -264,6 +289,54 @@ conventions:
         wrong is the content. Both combine defaults are `minimum`, which is NOT
         what Box2D, Bullet or PhysX ship; see the header block for the five
         published surface pairs that decided it.
+  solver: *** THE LOOP IS SEVEN STAGES AND THREE OF THE ORDERINGS ARE LAW. ***
+        8.10, engine/include/engine/phys/solver.hpp, `contact_solver::solve`.
+          1 build the islands and group them (counting sort, 8.8's shape)
+          2 WAKE any island not entirely asleep        <- before the solve
+          3 prepare + prepare_bias + warm_start_contacts, ONCE per manifold
+          4 velocity_iterations x solve_contacts
+          5 position_iterations x solve_positions, then apply_pseudo_velocity
+          6 write_back
+          7 update_sleep                                <- after the solve
+        WARM STARTING ONCE PER STEP (8.9's scar: inside the loop it slid a crate
+        810 mm down a slope). ALL VELOCITY ITERATIONS BEFORE ANY POSITION ONE
+        (the position pass reads separations the velocity pass will make stale).
+        WAKING BEFORE, THE SLEEP TEST AFTER — two different things that read
+        like one, and the reason is g*h: before the solve every resting body in
+        the scene is moving at 0.1635 m/s, so a pre-solve test never fires.
+        A FIXED BODY IS NOT A BRIDGE. `build_islands` unions only when BOTH ends
+        are dynamic. 20 islands against 1 on a yard of twenty towers, and one
+        island means no sleeping at all. Kinematic bodies are not bridges
+        either. A body with no contacts is its own island of one.
+        THE ISLAND LABEL ENCODING IS `-label - 2` AND THE 2 IS NOT A TYPO.
+        `island_of` is its own union-find parent array (no allocation), so a
+        root's label is written back negative to keep it distinguishable from a
+        parent index — and `-label - 1` sends label 0 to the -1 sentinel.
+        SLEEPING IS ALL OF AN ISLAND OR NONE OF IT, and a slept body has its
+        velocities ZEROED so that "asleep" is a state rather than a pause. A
+        body slept on its own is an immovable body and hangs in the air.
+        SPLIT IMPULSE IS THE DEFAULT CORRECTION. Baumgarte's bias is a real
+        velocity the body keeps; a pseudo velocity is thrown away at the end of
+        the step. Same bias formula, same time constant, 46% of a velocity
+        iteration, 1.14006 m/s of departure against 0.00000.
+        THE BIAS IS NOT COMPUTED BY prepare_contacts, because that function does
+        not know `h` and should not: `prepare_bias(batch, h, cfg)` is separate
+        so the dependency is named rather than hidden in a config struct.
+        A CACHED TANGENT IMPULSE TRAVELS WITH ITS BASIS. `contact_manifold::
+        tangent[2]`, written by write_back, carried by carry_impulses, rotated
+        by prepare_contacts. `tangent_basis` re-chooses the frame every step
+        from the normal's smallest component and flips by 90 deg on 0.96% of
+        manifold-frames.
+        DEFAULTS, ALL MEASURED: 8 velocity iterations (holds 5 crates, not 10),
+        3 position iterations, beta 0.2 (tau 74.7 ms), slop 5 mm (the resting
+        depth IS the slop), max_correction_speed 3 m/s, warm_start TRUE,
+        sleep 0.05 m/s / 0.10 rad/s / 0.5 s (and 0.05 is only 2.5x the floor).
+        AND THE STEP IS TWO HALVES WITH A GAP: integrate_velocities, contacts,
+        integrate_positions. Solving after the position half costs g*h^2 per
+        resting step forever — 2.725 mm at 60 Hz, 654 mm in four seconds. The
+        split is bit-identical to the monolithic `step` (400 of 400 bodies over
+        120 steps) and is only separable because the integrator is
+        semi-implicit; it costs a second mat3_from_quat per body, +37.1%.
 
   integrator: *** SEMI-IMPLICIT (SYMPLECTIC) EULER IS THE DEFAULT, AND EXPLICIT
         EULER IS NEVER CORRECT. *** 8.1, engine/include/engine/phys/integrate.hpp.
@@ -5604,6 +5677,23 @@ completed:
   - 8.6  EPA: Penetration Depth
   - 8.7  Contact Manifolds and Persistence
   - 8.8  Broadphase: A Uniform Grid
+  - 8.10 Sequential Impulses: Warm Starting, Islands, and Sleeping
+        (8.9's `next` repointed in all three copies — the page,
+         scratch/l89_body_a.html and build_89.py's TAIL — and build_89 rebuilt.
+         PLANNED AT 6 h AND SHIPPED AT 6, the third lesson running to land on
+         its estimate: still 107 lessons, ~523 h. Module 8 is 10 of 13, 54 h of
+         70. check-page.js `pass: true` at 1280 AND 390. Eleven measured
+         sections, 64 checks, zero failures; the harness runs in 9 s.
+         NO NEW TRANSLATION UNIT AND NO NEW PUBLIC HEADER — the first lesson in
+         Module 8 that leaves engine/CMakeLists.txt and engine.hpp alone. Ten
+         listings all the same, at 10,231 lines, the largest set in the course,
+         because six of them are files earlier lessons already printed and
+         CLAUDE.md §8 says a file that changed appears whole.
+         THE LARGEST SINGLE EDIT TO A PUBLISHED FILE'S BEHAVIOUR SO FAR:
+         `body_world::step` split into `integrate_velocities` and
+         `integrate_positions`, checked BIT-FOR-BIT against a private copy of
+         the function it replaced — 400 mixed bodies, 120 steps, 400 of 400
+         identical, worst position difference 0.000e+00.)
   - 8.9  Impulse Response: Restitution and Friction
         (8.3's dead `next` link repointed in ALL THREE copies — the page,
          scratch/l83_body_a.html and build_83.py's TAIL — and build_83 rebuilt,
@@ -5635,6 +5725,32 @@ completed:
          zero line, and [F] to throw the nine cross products away.)
 
 capabilities:
+  - 8.10 THE ENGINE CAN HOLD A STACK UP, PARTITION A LEVEL, AND STOP SIMULATING
+    THE PARTS OF IT THAT ARE NOT DOING ANYTHING.
+    phys/solver.hpp gains: `position_correction` (none / baumgarte /
+    split_impulse, default the third) + `pseudo_velocity` + `prepare_bias` +
+    `solve_positions` + `apply_pseudo_velocity` + `contact_pair` + `island` +
+    `build_islands` + `sleep_config` + `wake_islands` + `update_sleep` +
+    `solver_stats` + `contact_solver` (begin/add/solve/islands/island_bodies/
+    island_of/stats/clear) + `arrival_depth` + `baumgarte_time_constant`.
+    `solver_config` gains velocity_iterations (8), position_iterations (3),
+    correction, baumgarte (0.2), penetration_slop (5 mm),
+    max_correction_speed (3 m/s), and warm_start FLIPPED TO TRUE.
+    `contact_constraint` gains separation, bias, pseudo_impulse.
+    phys/rigid_body.hpp gains: sleeping / sleep_timer / allow_sleep on the body,
+    `wake`, `is_sleep_candidate`, step_report::sleeping, and the two halves of
+    `step`.
+    phys/manifold.hpp gains ONE FIELD: `contact_manifold::tangent[2]`, the basis
+    the cached friction impulses were measured in. See `solver:` in conventions.
+    A five-crate tower settles at the slop and sleeps in 2.8 s; a yard of twenty
+    costs 3 us to solve instead of 131 once it has; 2,001 bodies fit in 4.35 ms
+    of a 16.67 ms frame awake and 1.32 asleep.
+    WHAT IT CANNOT DO: hold a TEN-crate tower at the shipped eight iterations
+    (it leans and falls; twenty sweeps hold it, fifteen crates need more than
+    64), or converge quickly at a large mass ratio (1000:1 squashes the light
+    crate 283x further at the same count). Both are the same limitation — a
+    Gauss-Seidel sweep carries information across ONE contact — and both want a
+    Jacobian rather than a bigger number. 8.11.
   - 8.9 THE ENGINE CAN RESOLVE A CONTACT, which is the first thing in phys/
     that changes the world rather than describing it. A crate dropped on a floor
     lands on it; a ball bounces to e^(2n)*h0 and stops; a slab holds a slope up
@@ -9333,6 +9449,19 @@ files:
              `epa_penetration`'s answer beside its own so the two can be seen to
              agree. [F] drops the flood fill and §7's failure can be watched.)
   demos/manifold/: main.cpp                                               [8.7]
+  demos/stack/: main.cpp                                                 [8.10]
+            Four scenes, and each is a measurement made watchable. [1] the
+            ten-crate tower that leans and falls at eight iterations and stands
+            at twenty; [2] the yard, with the crate's COLOUR being its ISLAND
+            and [B] recomputing the labels with fixed bodies bridging (labels
+            only — letting the bug into the solve would change what the demo is
+            showing); [3] a crate 200 mm inside the floor where [C] cycles the
+            correction; [4] four sleeping piles and [X] to throw a crate at
+            them. A sleeping crate is drawn in a DIMMED version of its island
+            colour rather than a flat grey, because a settled scene otherwise
+            loses its whole partition exactly when a reader wants to see it.
+            Per-scene camera: one framing for four scenes wastes most of the
+            frame on three of them.
   demos/impulse/: main.cpp                                                [8.9]
            (THE FIRST DEMO IN THE COURSE IN WHICH SOMETHING MOVES BECAUSE THE
             PHYSICS SAID SO. Five collision demos before it each answered a
@@ -9500,6 +9629,7 @@ files:
                  08-07-contact-manifolds.html,
                  08-08-broadphase.html
                  08-09-impulse-response.html
+                 08-10-sequential-impulses.html
                  (5.12 IS OUT OF SEQUENCE ON PURPOSE — Module 5 closed eleven
                   lessons after 5.11 and one after 6.18, and the list is
                   append-ordered rather than sorted so that the history is
@@ -9530,6 +9660,23 @@ files:
                   directly. Candidate for 9.10.)
   docs/shared/: course.css, course.js      (THE stylesheet + page script; one copy each)
   docs/_template/: lesson-template.html, README.md, apply-shared.py, check-page.js
+  scratch/ (8.10, not shipped with the engine): verify_810.cpp,
+           build_verify_810.sh, figs_810.py, build_810.py,
+           l810_body_{a..f}.html, l810_fig{1..8}.svg, verify_810.log, and the
+           LISTING PINS l810_<path> (TEN of them, the largest set in the
+           course, because six are files earlier lessons already printed).
+           (Eleven measured sections, 64 checks, 9 s. THE LOG IS THE CANONICAL
+            RUN for every number on the page. Two consecutive runs were diffed:
+            everything except the §J timings is byte-identical, which is what
+            lets a figure transcribe a number rather than estimate one.
+            check-page.js caught exactly ONE defect this time — figure 4's
+            legend overlapping the table below it — which is the first lesson
+            since 6.13 where it found fewer than four.
+            THE SNAPSHOT INCLUDES THE MANIFOLD CACHE and that is not optional:
+            the first version held only the bodies, and §B's sweep came out
+            non-monotone because each trial inherited the impulses the PREVIOUS
+            trial had written. Warm starting is exactly the feature that makes
+            a physics step depend on more than its bodies.)
   scratch/ (8.9, not shipped with the engine): verify_89.cpp, build_verify_89.sh,
            figs_89.py, build_89.py, l89_body_{a..f}.html, l89_fig{1..8}.svg,
            verify_89.log, and the LISTING PINS l89_<path>.
@@ -10466,114 +10613,110 @@ roadmap: RESHAPED 2026-09-08, AFTER TWO EXTERNAL REVIEWS OF THE PUBLISHED OUTLIN
           that cannot express the effect is not a null result.
 
 
-next: 8.10 — Sequential Impulses: Warm Starting, Islands, and Sleeping
+next: 8.11 — Constraints and Joints: Hinge and Ball-Socket
 
-      WHAT 8.10 INHERITS, AND MUST NOT RE-DERIVE:
-        - THE WHOLE PIPELINE NOW RUNS END TO END, once. `uniform_grid::build` ->
-          `pairs()` -> `collide_manifold(a, b)` -> `manifold_cache` +
-          `carry_impulses` -> `prepare_contacts` -> `warm_start_contacts` ->
-          `solve_contacts` -> `write_back`. Every piece exists and every piece
-          is measured. What does not exist is the LOOP around it, and a world
-          that owns the loop: `body_world::step` still knows nothing about
-          contacts, and 8.9's harness hand-rolls the step for that reason.
-        - THE THREE-PART FRAME IS MEASURED: broadphase 0.091 ms, narrow phase
-          0.426 ms, one solver pass 0.137 ms, on 2,000 bodies and 983
-          candidates. 0.654 ms of 16.67, so there is room for roughly a hundred
-          solver passes before the budget is the constraint — which means the
-          ITERATION COUNT is a quality decision rather than a performance one at
-          this scene size, and 8.10 should say so with a number.
-        - THE EFFECTIVE MASS, THE CLIP AND THE SIGN CONVENTIONS ARE SETTLED and
-          are in `conventions:` above. Do not re-derive them; cite §4.
-        - `contact_constraint` ALREADY ACCUMULATES rather than storing deltas,
-          and `solve_contacts` already clamps the TOTAL. 8.9 shipped it that way
-          for a caller that did not exist yet; 8.10 is that caller.
+      WHAT 8.11 INHERITS, AND MUST NOT RE-DERIVE:
+        - THE WHOLE PIPELINE NOW RUNS AS A LOOP AND IS THE ENGINE'S OWN SHAPE:
+          `body_world::integrate_velocities` -> `uniform_grid::build` ->
+          `collide_manifold` -> `manifold_cache` + `carry_impulses` ->
+          `contact_solver::solve` -> `body_world::integrate_positions`. 8.10's
+          harness runs exactly that, so its fixture is reusable verbatim —
+          `scratch/verify_810.cpp`'s `scene` struct is the thing to copy.
+        - THE SEVEN-STAGE ORDER IS SETTLED and is in `conventions: solver:`.
+          Do not re-derive it; cite it. In particular: warm starting once per
+          step, all velocity iterations before any position one, waking before
+          the solve and the sleep test after.
+        - THE CONTRACTION IS 0.53 PER SWEEP and the cost model is linear:
+          14.958 us fixed + 12.917 per velocity sweep + 5.903 per position
+          sweep over 100 manifolds. Any new constraint type can be priced
+          against those numbers directly.
+        - `solve_positions` ALREADY TAKES NO BODIES — only a `contact_batch`
+          and two `pseudo_velocity`s — because everything a solve needs was
+          hoisted by `prepare_contacts`. That was deliberate and it is the
+          shape 8.11 generalises.
         - A LESSON PAGE ENDS AT FURTHER READING. STATE.md is the sole resume key.
         - `scratch/build_verify_NN.sh` REFUSES an unoptimised libengine.a.
-        - THE HARNESS SHAPE. Eleven sections, EVERY one with a control, and 8.9
-          added three instruments worth reusing: a CLOSED FORM for nearly every
-          claim (bounce height, terminal hop, critical slope, rolling fraction,
-          the 1-D collision) which is the strongest instrument there is and is
-          rarely available; a DELIBERATELY BROKEN ARM (halve the effective mass)
-          to show which of two conservation checks can actually fail; and a
-          PERTURBATION SWEEP over reference data, which is how §8 turned five
-          disputable published numbers into a decision.
+        - THE HARNESS SHAPE: eleven sections, EVERY one with a control, and the
+          snapshot MUST include the manifold cache.
 
-      *** THE TWO THINGS 8.10 MUST DEAL WITH, AND THEY ARE NOT THE SAME. ***
-      §12 separated them and measured both.
-        1. ONE PASS IS NOT A CONVERGED SOLVE. 2.6e-02 m/s of residual, 274.57 mm
-           of sink in fifteen seconds. Iteration fixes this: 32 passes reach
-           9.9e-09 and the creep stops. Warm starting is what makes a HANDFUL of
-           passes enough instead of thirty-two, and its plumbing is already
-           built and already measured — `carry_impulses` matched 100% of 1,999
-           consecutive frames on a settled crate back in 8.7 §9.
-        2. THE FROZEN OVERLAP. The converged solve stops at 7.2252 mm, which is
-           the depth the crate ARRIVED with, and NO NUMBER OF ITERATIONS TOUCHES
-           IT. It is one step of approach travel, because `collide_manifold`
-           reports nothing until the shapes actually overlap. Two candidate
-           fixes and 8.9 §17's fourth exercise sets one up: a POSITION
-           correction (Baumgarte or split-impulse — the second because the first
-           adds energy the velocity solve did not ask for), or SPECULATIVE
-           CONTACTS using `broadphase_config::margin` and
-           `manifold_config::keep_slop`, which never add energy. Measure both.
+      *** THE ONE THING 8.11 EXISTS TO DO. ***
+      Write a constraint as a JACOBIAN ROW — a 1x12 vector saying which
+      combination of both bodies' linear and angular velocities the constraint
+      cares about — plus an effective mass `1/(J M^-1 J^T)`, a bias, and a
+      clamp. Then:
+        - A CONTACT IS THE SPECIAL CASE where J is [-n, -(r_a x n), n, r_b x n]
+          and the clamp is `j >= 0`. Every number in `solver.cpp` is already
+          that, written out by hand; the exercise is to SHOW they are the same
+          thing, and NOT necessarily to rewrite the contact solver into the
+          general form — measure it first, because the hand-written version is
+          three dot products where the general one is twelve multiplies.
+        - A BALL-SOCKET is three rows with no clamp at all.
+        - A HINGE is five (three linear, two angular), and a LIMIT is a row
+          whose clamp is one-sided — which is a contact again.
+        - A MOTOR is a row with a non-zero target velocity and a symmetric
+          clamp, which is where `contact_material` stops being the right shape
+          for "what this constraint is allowed to do".
 
-      AND THE THIRD THING, WHICH IS FREE: `body_world::step` should grow a
-      contact phase between its velocity and position halves. §12 measured
-      g*h^2 = 2.7250 mm of sink per step for getting that wrong, predicted and
-      measured to four decimals, and a crate through a half-metre floor in four
-      seconds.
+      WHAT 8.11 IS LIKELY TO MOVE. A new `phys/constraint.hpp`/`.cpp` (the
+      first new translation unit since 8.9); `contact_solver` widened to hold
+      joints alongside manifolds, which is where `contact_pair` stops being the
+      right name; `build_islands` MUST union joint edges too, or a ragdoll
+      splits into an island per limb and the halves sleep separately;
+      engine.hpp and engine/CMakeLists.txt gain one line each. 8.10's listings
+      are PINNED at scratch/l810_*, so later edits do not disturb the published
+      page — but if 8.11 CORRECTS something 8.10 got wrong, the fix goes into
+      the pin AND the live file. (8.6's distinction still holds: a comment that
+      was WRONG WHEN IT SHIPPED stays in the pin, because the page is an
+      archive of its own era.)
 
-      WHAT 8.10 IS LIKELY TO MOVE. `solver.hpp`/`solver.cpp` (a solver loop, an
-      island builder, a sleep policy, and whatever `contact_constraint` needs
-      for the position correction — probably a `bias` and a stored separation);
-      `rigid_body.hpp` (a sleep flag and a motion accumulator, which is the
-      first time this module has needed to widen it since 8.3); `body_world`
-      (the contact phase); engine.hpp; both CMakeLists. 8.9's listings are
-      PINNED at scratch/l89_*, so later edits do not disturb the published page
-      — but if 8.10 CORRECTS something 8.9 got wrong, the fix goes into the pin
-      AND the live file. (8.6's distinction still holds: a comment that was
-      WRONG WHEN IT SHIPPED stays in the pin, because the page is an archive of
-      its own era.)
+      THREE OPEN DEFECTS, DELIBERATELY NOT FIXED:
+        1. `epa_config::max_iterations = 32` gives a sphere-sphere contact a
+           normal 4.2602 deg off the line of centres, constant across four
+           decades of overlap, because 8.6 tuned that number on BOXES. 64 drops
+           it to 1.0639. Carried from 8.9, still 8.6's knob, still needs 8.6's
+           200,000-pair measurement rerun to price. Ask whether the cap belongs
+           per-SHAPE-KIND rather than per-config.
+        2. EIGHT SWEEPS DO NOT HOLD A TEN-CRATE TOWER. §14's table. This is the
+           limitation 8.11's formulation is supposed to attack, and the two
+           named-but-unbuilt answers are a BLOCK SOLVER (Box2D solves a 2-point
+           manifold as a 2x2 LCP for exactly this reason; 3D wants 4x4 and
+           nobody ships it) and SHOCK PROPAGATION (Erleben 2007).
+        3. NO SPECULATIVE CONTACTS. §6's arrival depth exists because
+           `collide_manifold` reports nothing until the shapes overlap. The
+           knobs already exist (`manifold_config::keep_slop`,
+           `broadphase_config::margin`) and `gjk_result` already carries
+           witness points and a distance. The blocker is that
+           `contact_point::depth` promises to be non-negative and half the
+           engine reads it. 8.10 §18's fifth exercise sets it up.
 
-      AN OPEN DEFECT, DELIBERATELY NOT FIXED: `epa_config::max_iterations = 32`
-      gives a sphere-sphere contact a normal 4.2602 deg off the line of centres,
-      constant across four decades of overlap, because 8.6 tuned that number on
-      BOXES (worst case 21 expansions over 200,000 pairs) and a sphere has no
-      flat face to terminate on. 64 iterations drops it to 1.0639 deg. 8.7's
-      reference-face snapping hides it whenever one shape is a box, which is why
-      five lessons did not see it. THE FIX IS ONE NUMBER AND THE COST IS NOT
-      KNOWN: raising it needs 8.6 §9's 200,000-pair measurement rerun to price
-      the boxes, which is why 8.9 reported it instead of changing it. Whoever
-      picks this up should also ask whether the cap belongs per-SHAPE-KIND
-      rather than per-config.
-
-      CARRY FORWARD from 8.9:
-        - A SECTION WRITTEN TO CONDEMN SOMETHING SHOULD BE ALLOWED TO ACQUIT IT.
-          §1 set out to show that penalty contacts cannot work at 60 Hz, gave
-          them 164 tuned settings, and found that they can. The honest argument
-          turned out to be TRANSFER — the tuning belongs to the scene — and it
-          is a stronger argument than the one the section was written to make.
-          Fourth time in Module 8: 8.6 §1, 8.7 §9, 8.8 §4.
-        - WHEN A MEASUREMENT DISAGREES WITH A FORMULA, ASK THE SHAPE OF THE
-          ERROR BEFORE ASKING ITS SIZE. §8's slope test was 0.0036 deg out at
-          mu = 0.2 and 3.75 deg at mu = 1.0; an error that GROWS WITH THE
-          PARAMETER is a second effect, not a wrong constant. It was tipping.
-          And the control that proved it was the same instrument pointed at the
-          other formula.
-        - TWO CONSERVATION LAWS, AND ONLY ONE OF THEM IS EVIDENCE. Momentum
-          cannot fail here — the same J is used twice — so reporting it is
-          reassurance rather than a check. Budget a deliberately broken arm to
-          show which instrument can actually fail.
-        - A PREDICTION MADE BEFORE A SWEEP AND HOLDING ACROSS IT IS WORTH MORE
-          THAN A FIT. §9's 0.06% residual was explained from the contact-point
-          convention and then tracked to 7.75e-07 over a 150x range of
-          penetration that the explanation had not seen.
-        - A SUPPRESSED ZERO ON A POLAR PLOT IS A LIE ABOUT THE THING THE PLOT
-          EXISTS TO SHOW. Figure 5's first draft scaled the smallest measured
-          distance to 0.45 of the radius; check-page.js passed it, and only a
-          rendered frame showed that the lobe's dramatic shape was the scale
-          rather than the data.
-        - AND A BUG IN A ONCE-PER-STEP ACTION PRESENTS AS THE FAILURE OF
-          SOMETHING ELSE. Warm starting applied inside the iteration loop looked
-          exactly like friction not working, because the spurious normal
-          impulses launched the crate off the surface. The symptom named the
-          wrong subsystem.
+      CARRY FORWARD from 8.10:
+        - A MEASUREMENT CAN REFUSE ITS OWN SECTION'S CLAIM, and it did three
+          times: the arrival depth is a CEILING not an equality (§6, refused by
+          81%), the slop does nothing for a SINGLE resting contact (§8), and
+          solve order is worth 0.12 of an iteration rather than the third the
+          folklore implies (§5). Sixth, seventh and eighth times in Module 8.
+          Budget for the redraft — each of these was a section rewritten after
+          the harness ran, not before.
+        - WHEN AN ERROR GROWS AS A PARAMETER SHRINKS, IT IS A SECOND EFFECT.
+          §7's decay was 33% fast at beta = 0.05 and exact at 0.40, and the
+          second effect was the section's own subject. Same rule as 8.9 §8,
+          pointed the other way.
+        - TWO INSTRUMENTS DISAGREEING IS THE CHEAPEST BUG-FINDER THERE IS.
+          `stats.points == 0` on a frame where `deepest()` read 57 mm found the
+          island-label collision in minutes; the falling crate it caused would
+          have taken hours, because a crate falling through a floor has a
+          hundred plausible causes and five lessons of geometry among them.
+          KEEP ENOUGH COUNTERS THAT THEY CAN CONTRADICT ONE ANOTHER.
+        - A CACHED QUANTITY MUST CARRY ITS FRAME. Nothing in the type system
+          catches a coordinate stored without its basis — both versions are two
+          floats with the same name — and the symptom names no subsystem at
+          all. What found it was a PROBE rather than a test.
+        - A TIMING SWEEP OVER A PARAMETER THAT CHANGES THE SIMULATION HAS TO
+          RESTORE THE SIMULATION, and the snapshot has to include everything
+          the step depends on. §13's first table reported FEWER iterations as
+          faster, because the low-iteration rows had dropped the scene through
+          the floor before the timer started.
+        - AND A RESIDUAL IS A MEASURE OF CONSISTENCY, NOT CORRECTNESS. A solver
+          that has launched the stack has nothing left to disagree with itself
+          about, and reports a beautiful residual for it. Never quote one
+          without a second number saying where the bodies actually are.

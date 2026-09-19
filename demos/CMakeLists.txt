@@ -431,3 +431,36 @@ engine_set_warnings(broadphase)
 add_executable(impulse impulse/main.cpp)
 target_link_libraries(impulse PRIVATE engine::engine)
 engine_set_warnings(impulse)
+
+# ---- stack: a pile of crates, and the four knobs that decide whether it is one
+#
+# Lesson 8.10. `impulse` resolved ONE contact and could draw the whole of it: a
+# normal arrow, two friction arrows, a cone. This one cannot, because its
+# subject is what a hundred contacts do to EACH OTHER, and the interesting
+# quantities are counts and colours rather than vectors.
+#
+# The colour of a crate is its ISLAND, which is the one thing about the
+# partition that is invisible in the geometry: two crates the same colour can
+# reach each other through a chain of contacts and must be solved together, and
+# [B] recomputes the labels with a fixed body allowed to bridge — whereupon the
+# whole yard turns one colour, which is the bug that means no sleeping at all.
+# A crate that is asleep is drawn hollow and dim; the bar along the bottom is
+# the frame's broadphase, narrow phase and solve to scale against 16.67 ms.
+#
+# Four scenes, and each is one of the lesson's measurements made watchable. [1]
+# is the ten-crate tower that leans and falls at the shipped eight iterations
+# and stands at twenty. [2] is the yard, for islands and waking. [3] is a crate
+# spawned 200 mm inside the floor, where [C] shows Baumgarte throwing it into
+# the air and split impulse lifting it to the surface and stopping. [4] is four
+# sleeping piles and a crate to throw at them.
+#
+# `engine::engine` directly and NOT `demo_common`, the same statement `gimbal`,
+# `rig`, `plane`, `collector`, `ecs_swarm`, `audio`, `integrate`, `bodies`,
+# `spin`, `collide`, `gjk`, `epa`, `manifold`, `broadphase` and `impulse` make.
+# It loads nothing and computes everything on screen, so a `--shot` run is
+# byte-for-byte reproducible on any machine.
+#
+# No `engine_use_assets` and no `engine_use_shaders`.
+add_executable(stack stack/main.cpp)
+target_link_libraries(stack PRIVATE engine::engine)
+engine_set_warnings(stack)

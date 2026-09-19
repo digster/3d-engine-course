@@ -299,6 +299,43 @@ vec3 world_point_of(const rigid_body& b, vec3 local_point)
 }
 
 // ---------------------------------------------------------------------------
+// Sleeping — Lesson 8.10
+// ---------------------------------------------------------------------------
+
+void wake(rigid_body& b)
+{
+    b.sleeping = false;
+
+    // Both lines, always. Clearing the flag without resetting the clock is the
+    // bug that makes a shoved crate travel ten centimetres and stop dead: the
+    // body wakes with four tenths of a second already banked and falls asleep
+    // again one tenth later, long before it has finished doing what it was
+    // pushed to do. 8.10 §10 measures that at 0.104 m of travel against 1.181.
+    b.sleep_timer = 0.0f;
+}
+
+bool is_sleep_candidate(const rigid_body& b, float linear_threshold, float angular_threshold)
+{
+    // A fixed body is quiet by definition, and saying so here rather than at
+    // every call site is what lets `update_sleep` ask the question of a whole
+    // island without a special case for the floor in it.
+    if (b.kind == body_kind::fixed) { return true; }
+
+    // A kinematic body NEVER sleeps, whatever its velocity. A stopped lift is
+    // about to move — that is what kinematic means, that gameplay owns the
+    // velocity — and a lift that slept would stop carrying the crates standing
+    // on it, because their island would sleep with it.
+    if (b.kind == body_kind::kinematic) { return false; }
+
+    // Squared comparisons: two lengths per body per step, over a scene of
+    // thousands, to answer a question whose answer is a bool. The thresholds
+    // are squared here rather than by the caller so that the units of the
+    // arguments are the units a designer types.
+    return length_squared(b.state.velocity) < linear_threshold * linear_threshold
+           && length_squared(b.angular_velocity) < angular_threshold * angular_threshold;
+}
+
+// ---------------------------------------------------------------------------
 // Terminal speeds
 // ---------------------------------------------------------------------------
 
@@ -457,6 +494,18 @@ const step_report& body_world::report() const { return report_; }
 
 const step_report& body_world::step(float h)
 {
+    // Lesson 8.10 split this function in two, and `step` is now literally the
+    // composition. Keeping it is not politeness to old callers: most of the
+    // engine has no contacts to insert, and a caller that writes the two lines
+    // below by hand has written a bug waiting for the day somebody reorders
+    // them. The halves are public so that a contact solve can go BETWEEN them,
+    // and for no other reason — see `integrate_velocities`.
+    integrate_velocities(h);
+    return integrate_positions(h);
+}
+
+void body_world::integrate_velocities(float h)
+{
     report_ = step_report{};
 
     for (rigid_body& b : bodies_.items())
@@ -477,37 +526,44 @@ const step_report& body_world::step(float h)
             // Skipped entirely. Not "integrated with zero acceleration" — a
             // fixed body does not even pay the loads, and 8.8's broadphase
             // relies on these never moving to keep a structure it never
-            // rebuilds. Its force accumulator is still cleared, so that a
-            // system pushing on the floor does not leak a growing vector.
+            // rebuilds. Its force accumulator is cleared by the other half, so
+            // that a system pushing on the floor does not leak a growing
+            // vector.
             ++report_.fixed;
-            b.force = vec3{};
-            b.torque = vec3{};
             continue;
 
         case body_kind::kinematic:
-        {
             // Travels at whatever velocity gameplay set, and nothing else
-            // touches it: no gravity, no forces, no damping. The position
-            // update is the one line of the integrator that applies, written
-            // out rather than routed through `integrate` so that it is obvious
-            // that the velocity is NOT being changed.
+            // touches it: no gravity, no forces, no damping. There is
+            // therefore nothing at all for the VELOCITY half to do to it, and
+            // saying so in one line is clearer than the old version's
+            // carefully written-out position update was.
             ++report_.kinematic;
-            b.state.position += b.state.velocity * h;
-
-            // Lesson 8.3: it TURNS as well as travels. A rotating platform, a
-            // swinging door and a fan blade are all this line, and the same
-            // sentence above applies to it — the angular velocity is whatever
-            // gameplay set, and nothing here changes it.
-            b.orientation = advance_orientation(b.orientation, b.angular_velocity, h, spin_);
-
-            b.force = vec3{};
-            b.torque = vec3{};
-            break;
-        }
+            continue;
 
         case body_kind::dynamic:
         {
             ++report_.dynamic;
+
+            // ---- Lesson 8.10: asleep is OUT OF THE SIMULATION -------------
+            //
+            // Not "integrated with gravity disabled" and not "integrated and
+            // then snapped back". A sleeping body is skipped by both halves and
+            // its contacts are skipped by `contact_solver`, which is the whole
+            // of the saving: a settled scene costs its broadphase and nothing
+            // else. `update_sleep` zeroed the velocities on the way in, so the
+            // momentum this body contributes to the report is exactly zero and
+            // omitting it changes no number.
+            //
+            // The accumulators are still cleared by the position half. A
+            // sleeping body that a gameplay system keeps pushing on must WAKE,
+            // and a force silently accumulating on it for ten seconds would
+            // make that wake-up a launch.
+            if (b.sleeping)
+            {
+                ++report_.sleeping;
+                continue;
+            }
 
             // (1) and (2) TOGETHER, and the order of the two terms is a
             // decision this lesson makes twice and gets wrong the first time.
@@ -517,19 +573,19 @@ const step_report& body_world::step(float h)
             // the mass at the end — which is the honest statement of the
             // physics (weight IS a force) and reads beautifully. It costs a
             // FLOAT DIVIDE PER BODY PER STEP, because the weight needs `m` and
-            // the body stores `1/m`, and §10 measures that at 15% of the whole
-            // update — more than 8.1's entire integrator step.
+            // the body stores `1/m`, and 8.2 §10 measures that at 15% of the
+            // whole update — more than 8.1's entire integrator step.
             //
             // So gravity is added AFTER the division, as the acceleration it
             // already is. The mass was always going to cancel; this line simply
             // declines to compute it and then undo it. Two things survive
             // unchanged: `gravity_scale` still works, because it multiplies an
             // acceleration exactly as happily as it multiplied a force, and the
-            // result is now exact by construction rather than by luck — §3
+            // result is now exact by construction rather than by luck — 8.2 §3
             // found that 16% of masses do not survive the round trip
             // `(g/inv_mass)*inv_mass` bit for bit.
             //
-            // The one thing given up is real and is named in §9: `force` no
+            // The one thing given up is real and is named in 8.2 §9: `force` no
             // longer contains the body's weight, so a debug overlay drawing
             // force arrows draws every push EXCEPT the one that is always
             // there. That is a tooling problem with a one-line answer
@@ -540,58 +596,44 @@ const step_report& body_world::step(float h)
                                        + gravity_ * b.gravity_scale)
                                     : vec3{};
 
-            // (3) Advance, by 8.1's rule and 8.1's code. The constant-
+            // (3) Advance the VELOCITY, by 8.1's rule. The constant-
             // acceleration overload, because the force was collected before the
             // step and is held fixed across it — which is what "the force
             // applied during this step" means.
-            integrate(b.state, acceleration, h, rule_);
-
-            // ...then damping, exactly, as `v *= exp(-k*h)`. AFTER the step and
-            // not folded into the acceleration, because `a = -k*v` is not a
-            // force derived from a potential and feeding it through a symplectic
-            // rule gets you plain explicit Euler's stability limit on it
-            // (8.1 §8). A body with `damping` 0 pays a branch and no exp.
-            if (b.damping > 0.0f) { apply_drag(b.state, b.damping, h); }
-
-            // ---- (5) THE ANGULAR HALF, Lesson 8.3 -------------------------
             //
-            // Structurally the mirror of the three lines above — a resistance,
-            // an accumulator, a step — with three differences that are the
-            // whole of 8.3.
+            // *** AND THIS IS WHERE THE SPLIT IS EITHER FREE OR IMPOSSIBLE. ***
+            // Semi-implicit Euler is two independent lines, so taking the first
+            // one here and leaving the second for `integrate_positions` is an
+            // identity: the arithmetic, its order and its rounding are all
+            // unchanged, which 8.10 §11 checks bit for bit against the
+            // monolithic version this replaced. The other two rules are not
+            // separable — explicit Euler's position line reads the velocity
+            // from BEFORE this update, and velocity Verlet's needs the
+            // acceleration too — so they run whole, here, and the position half
+            // leaves their positions alone. A contact impulse applied in the
+            // gap then arrives one step late for them. That is not a bug in the
+            // split; it is 8.1's argument arriving again in a new place.
+            if (rule_ == integrator::semi_implicit_euler)
+            {
+                b.state.velocity += acceleration * h;
+            }
+            else
+            {
+                integrate(b.state, acceleration, h, rule_);
+            }
+
+            // ---- the angular half's VELOCITY line, Lesson 8.3 -------------
             //
-            // FIRST: the resistance is a TENSOR and it lives in body axes, so
-            // it has to be carried into world space before it can act on a
+            // Structurally the mirror of the line above — a resistance, an
+            // accumulator, a step — with the difference that is the whole of
+            // 8.3: the resistance is a TENSOR and it lives in body axes, so it
+            // has to be carried into world space before it can act on a
             // world-space torque. That is the sandwich `R * I^-1 * R^T`, and
-            // §6 is about why it is a sandwich rather than a product.
-            //
-            // ONE `mat3_from_quat` PER BODY PER STEP, and §12 is the reason
-            // it is spelled out here rather than left inside
-            // `world_inverse_inertia`. The first version of this loop called
-            // that function and then `angular_momentum` twenty lines later, and
-            // each of them built the same rotation matrix from the same
-            // quaternion — 7.843 ns apiece, measured, on a 33.793 ns update.
-            // Hoisting it is the single largest saving in the angular half.
+            // 8.3 §6 is about why it is a sandwich rather than a product.
             const mat3 body_to_world = mat3_from_quat(b.orientation);
             const mat3 inv_i_world =
                 body_to_world * b.inv_inertia_local * transpose(body_to_world);
 
-            // SECOND: there is a term with no linear counterpart at all.
-            // `alpha = I^-1 * tau` is only half of Euler's equation; the other
-            // half is the body's own angular momentum being carried around by
-            // its own rotation, and it is what makes an asymmetric body tumble
-            // instead of spin. Without it, §10's demo never flips. See
-            // `gyroscopic_mode` — four answers, and §9 measures all of them.
-            //
-            // THIRD: the orientation update is not an addition. `q += omega*h`
-            // is not a rotation — it is not even a unit quaternion — and §7 is
-            // the derivation of what goes there instead.
-            //
-            // SEMI-IMPLICIT ALWAYS, whatever `rule_` says, and the
-            // inconsistency is deliberate. `rule_` chooses how a position
-            // update is paired with a velocity update; velocity Verlet's second
-            // half would need the tensor rebuilt at the new orientation and a
-            // second renormalisation, to correct by less than the
-            // renormalisation's own error. §7 measures both sides of that.
             if (b.gyroscopic == gyroscopic_mode::momentum)
             {
                 // ---- the momentum formulation -------------------------------
@@ -604,6 +646,19 @@ const step_report& body_world::step(float h)
                 // no Jacobian and no Newton iteration. The term was never
                 // physics — it was the price of differentiating `I(t)*omega`
                 // while insisting that `omega` be the state.
+                //
+                // *** IT IS THE ONE BLOCK THE 8.10 SPLIT CANNOT CUT. *** Its
+                // orientation advance sits in the MIDDLE of its own derivation
+                // — the midpoint estimate needs a half-advanced orientation and
+                // the final `omega` needs the fully advanced one — so the whole
+                // of it runs here, in the velocity half, and
+                // `integrate_positions` skips the orientation of a body in this
+                // mode. The consequence is named in the header and is real: a
+                // contact impulse applied in the gap changes this body's
+                // angular velocity for NEXT step's rotation, not this one. It
+                // is one frame of lag on spin, on a mode that is off by
+                // default, and the alternative was to make the accurate tumble
+                // inaccurate for every body that never touches anything.
                 vec3 l_world = body_to_world
                              * (b.inertia_local
                                 * (transpose(body_to_world) * b.angular_velocity));
@@ -619,15 +674,15 @@ const step_report& body_world::step(float h)
                 // ---- of this mode.
                 //
                 // Advancing the orientation by the angular velocity at the
-                // START of the step is first order, and §9 measured what that
-                // costs on a tumbling box. `L` is conserved by construction
-                // whatever this line does, so `L` cannot tell you the body is
-                // wrong — the SECOND conserved quantity can. At 60 Hz the
-                // kinetic energy, which a torque-free body also holds exactly,
-                // drifted by **97.1%**, and `|omega|` ranged over 4.0559 to
-                // 8.0350 where §8 derives a bound of 4.0524 to 4.4880. The
-                // momentum was beautifully conserved and the body was doing the
-                // wrong thing with it.
+                // START of the step is first order, and 8.3 §9 measured what
+                // that costs on a tumbling box. `L` is conserved by
+                // construction whatever this line does, so `L` cannot tell you
+                // the body is wrong — the SECOND conserved quantity can. At
+                // 60 Hz the kinetic energy, which a torque-free body also holds
+                // exactly, drifted by **97.1%**, and `|omega|` ranged over
+                // 4.0559 to 8.0350 where 8.3 §8 derives a bound of 4.0524 to
+                // 4.4880. The momentum was beautifully conserved and the body
+                // was doing the wrong thing with it.
                 //
                 // The fix is to take a half step first, read the angular
                 // velocity THERE, and use that for the whole step. One extra
@@ -680,21 +735,113 @@ const step_report& body_world::step(float h)
                 {
                     b.angular_velocity *= std::exp(-b.angular_damping * h);
                 }
+            }
+            break;
+        }
+        }
+    }
+}
 
-                b.orientation =
-                    advance_orientation(b.orientation, b.angular_velocity, h, spin_);
+const step_report& body_world::integrate_positions(float h)
+{
+    for (rigid_body& b : bodies_.items())
+    {
+        switch (b.kind)
+        {
+        case body_kind::fixed:
+            // Nothing moves, but the accumulators are cleared, for the reason
+            // the velocity half gives.
+            b.force = vec3{};
+            b.torque = vec3{};
+            continue;
+
+        case body_kind::kinematic:
+        {
+            // The position update is the one line of the integrator that
+            // applies, written out rather than routed through `integrate` so
+            // that it is obvious that the velocity is NOT being changed.
+            b.state.position += b.state.velocity * h;
+
+            // Lesson 8.3: it TURNS as well as travels. A rotating platform, a
+            // swinging door and a fan blade are all this line.
+            b.orientation = advance_orientation(b.orientation, b.angular_velocity, h, spin_);
+
+            b.force = vec3{};
+            b.torque = vec3{};
+            continue;
+        }
+
+        case body_kind::dynamic:
+        {
+            if (b.sleeping)
+            {
+                // Cleared even though nothing was integrated. See the velocity
+                // half: a force accumulating on a sleeping body for ten seconds
+                // makes its eventual wake-up a launch.
+                b.force = vec3{};
+                b.torque = vec3{};
+                continue;
+            }
+
+            // (4) The position line, at the velocity the step ENDED with —
+            // which, after Lesson 8.10, means the velocity a contact solve
+            // running in the gap approved, rather than the one gravity asked
+            // for. That substitution is the entire reason this function exists.
+            //
+            // Under the two non-separable rules the velocity half already did
+            // this line; see `integrate_velocities`.
+            if (rule_ == integrator::semi_implicit_euler)
+            {
+                b.state.position += b.state.velocity * h;
+            }
+
+            // ...then damping, exactly, as `v *= exp(-k*h)`. AFTER the position
+            // line and not folded into the acceleration, because `a = -k*v` is
+            // not a force derived from a potential and feeding it through a
+            // symplectic rule gets you plain explicit Euler's stability limit
+            // on it (8.1 §8). A body with `damping` 0 pays a branch and no exp.
+            //
+            // It stays on this side of the split, after the move rather than
+            // before it, because that is where it was: `step` has to remain the
+            // function 8.2 shipped, bit for bit, and 8.10 §11 checks that it is.
+            if (b.damping > 0.0f) { apply_drag(b.state, b.damping, h); }
+
+            // ---- THE SECOND BASIS CHANGE, AND IT IS THE PRICE OF THE SPLIT --
+            //
+            // 8.3 §12's largest single saving was hoisting `mat3_from_quat` so
+            // that the angular half built the rotation once and used it twice —
+            // 7.843 ns apiece on a 33.793 ns update. Two functions cannot share
+            // a local, so this one is built again. 8.10 §13 measures what that
+            // costs and what pays for it: a sleeping body reaches neither half,
+            // and a settled scene sleeps.
+            //
+            // It is built BEFORE the orientation advance on purpose, so that
+            // the angular-momentum report below reads the same rotation the
+            // monolithic version read.
+            const mat3 body_to_world = mat3_from_quat(b.orientation);
+
+            // (5) The orientation advance. NOT an addition: `q += omega*h` is
+            // not a rotation — it is not even a unit quaternion — and 8.3 §7 is
+            // the derivation of what goes there instead.
+            //
+            // Skipped for the momentum formulation, which advanced its own
+            // orientation in the velocity half because its derivation cannot be
+            // cut in half. See there.
+            if (b.gyroscopic != gyroscopic_mode::momentum)
+            {
+                b.orientation = advance_orientation(b.orientation, b.angular_velocity, h, spin_);
             }
 
             // (6) ...and only now are the accumulators cleared, so that a debug
-            // overlay, an assertion or 8.10's solver can still read what was
-            // applied during the step that just ran.
+            // overlay, an assertion or the contact solver running in the gap
+            // can still read what was applied during the step that just ran.
             b.force = vec3{};
             b.torque = vec3{};
 
             // A `sqrt` PER BODY, and it was measured before being kept. The
             // obvious saving is to compare squared speeds and take one root at
-            // the end; §10.2 timed both and found 1.036, 0.968 and 0.969 over
-            // three runs — a tie, and once a loss. `sqrtss` is a pipelined
+            // the end; 8.2 §10.2 timed both and found 1.036, 0.968 and 0.969
+            // over three runs — a tie, and once a loss. `sqrtss` is a pipelined
             // single instruction on every target this engine builds for, and
             // the version that reads as what it means wins by default when the
             // measurement is a wash.
@@ -705,8 +852,10 @@ const step_report& body_world::step(float h)
             if (spin > report_.max_spin) { report_.max_spin = spin; }
 
             // Momentum excludes immovable bodies: theirs is either zero or
-            // infinite and neither belongs in a sum that 8.9 will compare
-            // across a collision.
+            // infinite and neither belongs in a sum that 8.9 compares across a
+            // collision. Sleeping bodies are excluded too and it costs nothing
+            // — `update_sleep` zeroed their velocities, so their contribution
+            // is exactly the zero vector.
             const float mass = 1.0f / b.inv_mass;
             report_.momentum += b.state.velocity * mass;
 
@@ -717,10 +866,6 @@ const step_report& body_world::step(float h)
             // sailing past in a straight line without rotating at all has the
             // second and not the first, which is how a planet's orbit conserves
             // one.
-            // Reusing `body_to_world` from twenty lines above, and applying
-            // the tensor rather than building the world one — see
-            // `angular_momentum`, which does the same thing for a caller who
-            // does not already have the rotation in hand.
             report_.angular_momentum +=
                 body_to_world * (b.inertia_local
                                  * (transpose(body_to_world) * b.angular_velocity))

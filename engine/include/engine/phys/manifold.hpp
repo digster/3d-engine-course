@@ -348,6 +348,33 @@ struct contact_manifold
     /// How many points `carry_impulses` matched to the previous frame.
     int warm_points = 0;
 
+    /// **The tangent basis the stored `tangent_impulse` values are expressed
+    /// in.** Written by `write_back`; zero on a manifold no solver has touched.
+    /// Lesson 8.10.
+    ///
+    /// *** A CACHED NUMBER IS MEANINGLESS WITHOUT THE FRAME IT WAS MEASURED
+    /// IN, AND THIS FIELD IS THE BILL FOR FORGETTING THAT. ***
+    ///
+    /// `contact_point::tangent_impulse` is two scalars in "the solver's tangent
+    /// basis", and until 8.10 that basis was rebuilt from the normal every
+    /// frame and never stored. `tangent_basis` branches on the SMALLEST
+    /// component of the normal, so for a near-vertical normal the choice is
+    /// decided by whether `|n.x|` or `|n.z|` is smaller — two numbers that are
+    /// both around 1e-5 on a settled crate and cross each other constantly.
+    /// When they cross, the basis rotates by 90 degrees and last frame's
+    /// friction is applied sideways.
+    ///
+    /// 8.10 §4 measured it at **0.96% of manifold-frames rotating by more than
+    /// 30 degrees, worst case 134.6**, over twenty seconds of a ten-crate
+    /// tower. Storing the basis and rotating the inherited impulse into the
+    /// new one — two dot products, exact — takes that tower's sideways drift
+    /// from **380 mm to 155**.
+    ///
+    /// It is on the MANIFOLD rather than on each point because every point of a
+    /// manifold shares the normal and therefore the plane; `contact_batch`
+    /// makes the same choice for the same reason.
+    vec3 tangent[2] = {};
+
     /// The deepest point's depth, or zero for an empty manifold.
     [[nodiscard]] float deepest() const;
 

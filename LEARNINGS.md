@@ -8898,3 +8898,77 @@ conservative direction whenever a smaller number makes your argument harder. And
 counts, not only the time** — the counters that made this possible exist because a grid is the
 system in this engine where intuition is least reliable, and the difference between a good cell size
 and a bad one is completely invisible in the output.
+
+## A cached quantity must carry the frame it was measured in
+
+`contact_point::tangent_impulse` is two floats, named for what they are ("the accumulated
+tangential impulses in the batch's tangent basis"), and 8.7 shipped them, 8.9 wrote to them and
+8.10 was the first lesson to read them back a frame later. They are **coordinates**, and the basis
+was never stored anywhere.
+
+`tangent_basis` rebuilds that basis from the normal every frame by seeding its cross product from
+whichever axis the normal is *least* aligned with — which on a near-vertical contact is a
+comparison between `|n.x|` and `|n.z|`, two numbers that are both about 10⁻⁵ on a settled crate
+and wander around each other. When they cross, the basis rotates by ninety degrees and last
+frame's friction is applied sideways. Measured over twenty seconds of a ten-crate tower:
+**113 of 11,830 manifold-frames rotate by more than 30°, worst case 134.6**, and storing the basis
+takes the tower's sideways drift from 380 mm to 155.
+
+Three things make this a class rather than an incident.
+
+**Nothing in the type system was ever going to catch it.** Both the broken version and the fixed
+one are two `float`s called `tangent_impulse`. They compile, they look right in a debugger, and
+the units are correct — newton-seconds either way.
+
+**The symptom names no subsystem.** A tower that leans is a friction bug, a solver bug, a manifold
+bug, or six lessons of geometry. Nothing about it points at a cache.
+
+**What found it was a probe, not a test.** Having decided the drift was suspicious, the harness
+computed `tangent_basis` *independently* each frame and counted how often it moved. A test asserts
+something you already suspect; a probe measures something you do not yet have a hypothesis about,
+and it is the cheaper instrument when the symptom is vague.
+
+The general rule: whenever you cache a number that lives in a frame — a basis, a local space, a
+parent transform, a texture's UV convention — cache the frame with it, or convert to a
+frame-independent representation before storing. The fix here was two dot products and it is
+exact.
+
+## Keep enough counters that they can contradict one another
+
+Lesson 8.10's union–find encoded a root's island label as `−label − 1` so it could not be mistaken
+for a parent index — and `−label − 1` sends label 0 to `−1`, which was already the array's
+sentinel for "this body is in no island". The first island in every scene silently ceased to
+exist. Its contacts were never grouped and never solved, and a tower whose bottom crate happened
+to land in it fell through the floor while every other tower in the same scene stood.
+
+A crate falling through a floor has a hundred plausible causes and this engine has five lessons of
+collision geometry among them. What actually found the bug in minutes was a single line of debug
+output in which **`stats.points` read 0 on a frame where `deepest()` read 57 mm**. Neither
+instrument was wrong about what it measured, and they could not both be measuring the same
+manifold — so the fault was between them, in the grouping, and there was nowhere else to look.
+
+Two instruments that can disagree are worth more than either one twice as precise. Budget for
+counters that are *redundant on a healthy run*: `manifolds` against `solved_manifolds`, `points`
+against `warm_points`, an island's `body_count` against the number of dynamic bodies. Every one of
+those is a tautology when the code is right, which is exactly why a violation localises a fault
+instead of merely reporting one.
+
+## A timing sweep over a parameter that changes the simulation must restore the simulation
+
+Lesson 8.10 §13 swept the solver's iteration count to read off a cost model, and its first version
+reported **fewer iterations as faster** — 14.96 µs at zero against 118 at eight. The zero-iteration
+rows had dropped the whole scene through the floor, so what they timed was a frame with no
+contacts left in it.
+
+The fix is to restore a snapshot before every timed row, which is obvious once stated. The part
+that is not obvious is **what belongs in the snapshot**. The first version restored only the
+bodies, and a warm-starting sweep then came out non-monotone because each trial inherited the
+impulses the *previous* trial had written — so a sweep over the iteration count was also an
+uncontrolled sweep over the quality of the initial guess. Warm starting is precisely the feature
+that makes a physics step depend on more than its bodies, and a fixture for measuring it had
+better know that.
+
+The general form: before timing a parameter sweep, ask what state the system carries between
+steps that the parameter can influence. Caches, accumulators, adaptive structures and RNG streams
+all qualify, and all of them look like implementation details right up until they are the
+measurement.
