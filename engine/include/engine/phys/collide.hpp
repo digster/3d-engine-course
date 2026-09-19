@@ -333,6 +333,35 @@ inline constexpr float k_parallel_sin2 = 1e-6f;
 /// pass and the wrong thing for anything that needs a normal.
 [[nodiscard]] bool overlaps(const obb& a, const obb& b);
 
+/// **Two axis-aligned boxes, as a yes or no.** Six comparisons, no branches that
+/// matter, no memory traffic.
+///
+/// Lesson 8.8, and it is `inline` where its `obb` sibling above is not — which is
+/// not an inconsistency but the whole difference between the two functions. The
+/// OBB test is fifteen axes, nine dot products and a matrix of absolute values;
+/// the call overhead is noise against it and it belongs in a translation unit.
+/// This one is six `float` comparisons, so a function call would cost more than
+/// the test does, and a broadphase runs it a hundred thousand times a frame.
+///
+/// **The separating-axis test in its simplest possible form.** Two axis-aligned
+/// boxes are apart exactly when their intervals are disjoint on one of the three
+/// world axes, and they are the only axes worth trying: an AABB's face normals
+/// ARE the world axes, and two boxes with parallel edges have no edge-cross axis
+/// that is not already one of them. Three axes, two comparisons each, done. It
+/// is the same theorem as the fifteen-axis version above, with twelve of the
+/// axes removed by symmetry and the other three shared, which is why an AABB is
+/// the shape a broadphase reaches for.
+///
+/// **Touching counts as overlapping.** The comparisons are strict, so two boxes
+/// sharing exactly a face plane are reported as overlapping — the conservative
+/// direction, and the one 8.8's contract requires.
+[[nodiscard]] inline bool overlaps(const aabb& a, const aabb& b)
+{
+    return !(a.max.x < b.min.x || b.max.x < a.min.x ||
+             a.max.y < b.min.y || b.max.y < a.min.y ||
+             a.max.z < b.min.z || b.max.z < a.min.z);
+}
+
 // ---------------------------------------------------------------------------
 // Lesson 8.5: the same question, asked of any convex shape
 // ---------------------------------------------------------------------------

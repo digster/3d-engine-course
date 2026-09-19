@@ -8829,3 +8829,72 @@ The knob came out. And a measurement of zero needs a control more than any other
 never happened" and "I was not measuring anything" produce the same number: the control forces a
 flip the only way it can, by swapping the two arguments, and measures that 0 of 4 warm starts
 survive one.
+
+## A monotone cell map is all a range-walk grid needs
+
+Every tutorial on spatial grids warns that the cell index must use `std::floor` and never a cast to
+`int`, because a cast truncates toward zero, merging cells −1 and 0 into one double-width cell that
+straddles the origin. The warning is repeated so often that Lesson 8.8's harness was written to
+*demonstrate* the resulting lost pairs. It measured **zero**, on 3,000 proxies centred on the origin.
+
+The reason is one line of order theory. A grid that inserts each proxy into every cell of its
+**range** finds a pair when the two ranges intersect, and a cell map is a function from the reals to
+the integers. If `max(a₀, b₀) ≤ min(a₁, b₁)` and `c` is non-decreasing, then
+`c(max(a₀,b₀)) ≤ c(min(a₁,b₁))`, so the mapped ranges still meet. **Monotonicity is the only
+property the range walk uses** — not equal cell widths, not contiguity, not a particular origin.
+Truncation is monotone. So would a map that made every third cell twice as wide.
+
+What truncation actually costs is occupancy: eight cells become one, a cell's pair loop is quadratic
+in what is inside it, and the neighbourhood around the origin runs **4.0×** the comparisons. That is
+a footnote, not a bug — and worth knowing precisely, because the mistake sitting next to it in the
+same code *is* fatal and has no famous name: inserting each proxy into the single cell containing
+its **centre** loses **66.7%** of the pairs there are, while looking nearly right, because the third
+it finds are the ones that happen to sit well inside one cell and are therefore the ones you notice
+while debugging it.
+
+Use `floor` anyway — it is the same instruction count, and a cell map that behaves identically
+everywhere is one less thing that is only true away from the origin. But do not spend a weekend
+hunting the famous bug when the expensive one is beside it.
+
+## An A/B comparison must differ in exactly one thing — including where the code lives
+
+Lesson 8.8 §7 timed the engine's spatial hash (three multiplies, two exclusive-ors) against a
+stronger mixing function (the same, plus a rotate and a finaliser) and measured the **more expensive
+one as three times faster**. That is arithmetically impossible, and the impossibility is the useful
+part: a result that contradicts the instruction count is the instrument talking, not the code.
+
+One arm crossed a translation-unit boundary. `hash_cell` was defined in `broadphase.cpp`, so a
+caller in another TU paid a real function call for it, while the comparison function was a static in
+the harness and inlined away. Re-measured with a `noinline` wrapper so that the call is the only
+difference: **0.115 ns inlined, 0.692 ns behind a call — 6.0× for three multiplies.** `cell_of` and
+`hash_cell` moved into the header because of it: inside `build` it never mattered, since that is the
+same translation unit, and these two are the engine's introspection hooks, so everybody *else* is
+exactly who calls them.
+
+Lesson 4.8 §3 paid for the same lesson in a different currency — a harness that built its own sRGB
+render target and therefore tested a configuration the shipped program never ran. Before believing
+the difference you were looking for, ask what *else* differs between the arms.
+
+## When the clock is noisier than the difference, find a quantity that needs no clock
+
+A uniform grid's cell size has a real optimum, and Lesson 8.8's first attempt to find it swept
+thirteen sizes across three decades and timed each build. Around the minimum the measurements were
+worthless: `(max − min) / median` over forty-one runs reached **1.18**, meaning the slowest run took
+more than twice as long as the fastest, and the "fastest cell size" moved between 2.5 m and 4 m from
+run to run. The work being timed is a single build of a few hundred microseconds, which is short
+enough that the operating system's interruptions dominate it.
+
+The fix was not more repetitions. It was to notice that `broadphase_stats::entries` and
+`bucket_tests` are **deterministic** — they do not vary by one count between runs — and that the
+cost is `a·entries + b·bucket_tests` for two constants that can be solved *exactly* from two rows of
+the sweep, each chosen because one term dominates it. The constants came out at **8.09 and 5.45 ns**
+on a sparse scene and **8.11 and 5.44** on one four times denser, because they are properties of the
+machine rather than of the scene. Minimising the model then picks a cell size with no timer involved
+at all, and it distinguishes sizes the clock could not.
+
+Two corollaries worth keeping. **Report a minimum rather than a median** when timing sub-millisecond
+work: it is the standard robust estimator for "how fast can this code go", and it is the
+conservative direction whenever a smaller number makes your argument harder. And **instrument the
+counts, not only the time** — the counters that made this possible exist because a grid is the
+system in this engine where intuition is least reliable, and the difference between a good cell size
+and a bad one is completely invisible in the output.

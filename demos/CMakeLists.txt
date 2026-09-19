@@ -373,3 +373,30 @@ engine_set_warnings(epa)
 add_executable(manifold manifold/main.cpp)
 target_link_libraries(manifold PRIVATE engine::engine)
 engine_set_warnings(manifold)
+
+# ---- broadphase: the cheap question, asked of everything ---------------------
+#
+# Lesson 8.8. The first collision demo in the course whose subject is the SCENE
+# rather than a pair. It draws the grid from directly above, shades each cell by
+# how many proxies are in it, and reports the counts the stats struct keeps —
+# entries, bucket tests, the three reasons a candidate is thrown away, and the
+# pairs that survive.
+#
+# [B] is the one to leave on. It runs `brute_force_pairs` beside the grid every
+# frame and colours the verdict, so the contract — a superset, never a subset —
+# is checked live rather than asserted in a comment.
+#
+# Then hold [Up] or [Down]. Entries move by orders of magnitude, bucket tests
+# move the other way, the milliseconds trace the cost curve of Lesson 8.8 §5 —
+# and the PAIRS line does not move at all, which is the whole point.
+#
+# `engine::engine` directly and NOT `demo_common`, the same statement `gimbal`,
+# `rig`, `plane`, `collector`, `ecs_swarm`, `audio`, `integrate`, `bodies`,
+# `spin`, `collide`, `gjk`, `epa` and `manifold` make. It loads nothing and
+# computes everything on screen, so a `--shot` run is byte-for-byte reproducible
+# on any machine.
+#
+# No `engine_use_assets` and no `engine_use_shaders`.
+add_executable(broadphase broadphase/main.cpp)
+target_link_libraries(broadphase PRIVATE engine::engine)
+engine_set_warnings(broadphase)

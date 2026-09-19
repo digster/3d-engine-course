@@ -2869,3 +2869,10 @@ next
 
 (Continuation of the standing protocol: `next` produces exactly one complete lesson. Resumed from
 CLAUDE.md + STATE.md, which named 8.7 — Contact Manifolds and Persistence.)
+
+```
+next
+```
+
+(Continuation of the standing protocol: `next` produces exactly one complete lesson. Resumed from
+CLAUDE.md + STATE.md, which named 8.8 — Broadphase: A Uniform Grid.)

@@ -475,7 +475,7 @@ const step_report& body_world::step(float h)
         {
         case body_kind::fixed:
             // Skipped entirely. Not "integrated with zero acceleration" — a
-            // fixed body does not even pay the loads, and 8.6's broadphase
+            // fixed body does not even pay the loads, and 8.8's broadphase
             // relies on these never moving to keep a structure it never
             // rebuilds. Its force accumulator is still cleared, so that a
             // system pushing on the floor does not leak a growing vector.

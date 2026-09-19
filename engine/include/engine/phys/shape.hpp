@@ -24,7 +24,7 @@
 // every function in `collide.hpp` takes shapes and placements and returns an
 // answer, and none of them has any business knowing what the geometry weighs or
 // which way it is moving. Keeping the dependency pointed that way is what lets
-// 8.5's GJK, 8.6's broadphase and 8.7's manifold cache each take the piece they
+// 8.5's GJK, 8.7's manifold cache and 8.8's broadphase each take the piece they
 // need without dragging the dynamics along.
 //
 // ---- WHY THESE THREE PRIMITIVES -------------------------------------------
@@ -267,7 +267,7 @@ struct obb
 ///
 /// It is loose, necessarily: a box rotated 45° about one axis has an enclosing
 /// AABB up to √2 wider, and up to √3 under a general rotation. That looseness is
-/// the price of axis alignment and is why 8.6's broadphase uses this for
+/// the price of axis alignment and is why 8.8's broadphase uses this for
 /// candidate pairs and then asks `collide` for the real answer.
 [[nodiscard]] aabb bounds_of(const obb& box);
 

@@ -1041,9 +1041,9 @@ chore. What follows is on disk.
 │   │   │   │                 #   (the 4 SDL callbacks) — the engine keeps the loop
 │   │   │   └── main.hpp      # ENGINE_MAIN. ONE .cpp per program; no main() in it.
 │   │   │                     #   NOT in engine.hpp, deliberately
-│   │   ├── phys/           # HOW A STATE ADVANCES, WHAT MOVES IT, HOW IT TURNS, AND
-│   │   │                   #   WHERE ITS SURFACE IS, AND WHERE TWO OF THEM
-│   │                   #   TOUCH                                 [8.1-8.7]
+│   │   ├── phys/           # HOW A STATE ADVANCES, WHAT MOVES IT, HOW IT TURNS,
+│   │   │                   #   WHERE ITS SURFACE IS, WHERE TWO OF THEM TOUCH,
+│   │                   #   AND WHICH TWO ARE WORTH ASKING     [8.1-8.8]
 │   │   │                   #   THE FIFTH NEW DIRECTORY SINCE THE REFACTOR, and
 │   │   │                   #   the second (after audio/) that never touches a
 │   │   │                   #   pixel. NOT under math/: the test is what a file
@@ -1118,6 +1118,25 @@ chore. What follows is on disk.
 │   │   │                     #   is what lets 8.10 warm start. epa.hpp needed NO
 │   │   │                     #   CHANGE: its winning triangle is built from support
 │   │   │                     #   points and carries their ambiguity.          [8.7]
+│   │   ├── broadphase.hpp  # proxy/broadphase_pair/broadphase_config/
+│   │   │                   #   broadphase_stats, brute_force_pairs,
+│   │   │                   #   auto_cell_size, uniform_grid, owner_cell.
+│   │   │                   #   WHICH PAIRS ARE WORTH ASKING ABOUT. THE FIRST
+│   │   │                   #   FILE IN phys/ THAT DEPENDS ON NO SHAPE AT ALL —
+│   │   │                   #   six floats and an index is everything it knows
+│   │   │                   #   about a body, deliberately: the stage whose whole
+│   │   │                   #   value is being cheap must not be able to look
+│   │   │                   #   inside anything. A hashed uniform grid, rebuilt
+│   │   │                   #   every frame in four linear passes, hashed rather
+│   │   │                   #   than arrayed because a dense array's memory
+│   │   │                   #   follows the WORLD and has an EDGE that must be
+│   │   │                   #   clamped, wrapped or rejected. May report pairs
+│   │   │                   #   that do not touch; may NOT omit one that does,
+│   │   │                   #   which is why every approximation rounds outward.
+│   │   │                   #   `a < b` on every pair, so 8.7's pair_key indexes
+│   │   │                   #   the manifold_cache and the normal never flips.
+│   │   │                   #   `owner_cell` is the duplicate fix and it is EXACT
+│   │   │                   #   rather than heuristic.                    [8.8]
 │   │   │   └── gjk.hpp       # gjk_vertex/simplex/gjk_status/gjk_result/gjk_config,
 │   │   │                     #   gjk_distance, gjk_intersects, certify, and
 │   │   │                     #   cso_support + reduce_simplex — the last two public
@@ -1317,11 +1336,11 @@ chore. What follows is on disk.
 │   │                             #   texture, a comparison sampler, its own
 │   │                             #   render pass, and fill_uniforms() so the two
 │   │                             #   renderers cannot disagree about a bias
-│   └── src/                # ---- PRIVATE. 63 sources; no demo can name this path ----
+│   └── src/                # ---- PRIVATE. 66 sources; no demo can name this path ----
 │       ├── phys/           # integrate.cpp [8.1], rigid_body.cpp [8.2],
 │       │                   # inertia.cpp [8.3], shape.cpp [8.4],
 │       │                   # collide.cpp [8.4], gjk.cpp [8.5], epa.cpp [8.6],
-│       │                   # manifold.cpp                                    [8.7]
+│       │                   # manifold.cpp [8.7], broadphase.cpp             [8.8]
 │       │                   #   gjk.cpp is the only one of these with no header of
 │       │                   #   its own shape knowledge: it includes gjk.hpp, which
 │       │                   #   includes convex.hpp, and nothing in it names a box.
@@ -1432,6 +1451,22 @@ chore. What follows is on disk.
 │   │                       #   the two can be seen to agree. [F] drops the flood
 │   │                       #   fill from the visibility test and the horizon
 │   │                       #   tears on screen.
+│   ├── broadphase/main.cpp # THE CHEAP QUESTION, ASKED OF EVERYTHING          [8.8]
+│   │                       #   THE FIRST COLLISION DEMO WHOSE SUBJECT IS THE
+│   │                       #   SCENE rather than a pair. Seen from directly
+│   │                       #   above, so the lattice is visible, with each cell
+│   │                       #   shaded by C(n,2) rather than by occupancy —
+│   │                       #   because the picture is meant to show where the
+│   │                       #   WORK is, and the work is quadratic. [B] runs
+│   │                       #   brute_force_pairs beside the grid every frame and
+│   │                       #   colours the verdict, so the contract is checked
+│   │                       #   live at 60 Hz against a function that cannot be
+│   │                       #   wrong. [Up]/[Down] move entries and bucket tests
+│   │                       #   by orders of magnitude and leave the PAIRS line
+│   │                       #   untouched. [T] adds the ground plate, [Y] toggles
+│   │                       #   the guard. Preset 4 — mixed sizes — is the one to
+│   │                       #   look at: one proxy in seventeen is metres across
+│   │                       #   and each draws a visible STAR of candidate pairs.
 │   ├── manifold/main.cpp   # ONE CONTACT IS NOT A CONTACT                     [8.7]
 │   │                       #   Two panels, and the RIGHT one carries the new
 │   │                       #   idea: the contact seen FACE ON, in the reference

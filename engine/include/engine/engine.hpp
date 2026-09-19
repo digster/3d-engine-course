@@ -231,6 +231,7 @@
 // because it is not evidence that the habit has taken: seven of the last eight
 // lessons missed this file, and the streak broke on the lesson immediately
 // after the one that wrote a paragraph about missing it.
+#include <engine/phys/broadphase.hpp>
 #include <engine/phys/collide.hpp>
 #include <engine/phys/convex.hpp>
 #include <engine/phys/epa.hpp>

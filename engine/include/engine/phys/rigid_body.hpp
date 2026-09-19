@@ -159,7 +159,7 @@ enum class body_kind : std::uint8_t
     kinematic,
 
     /// Does not move, ever. Not integrated at all — `step` skips it entirely,
-    /// which is what lets 8.6's broadphase keep every one of these in a
+    /// which is what lets 8.8's broadphase keep every one of these in a
     /// structure it never has to rebuild. The ground, a wall, a rock.
     fixed,
 };

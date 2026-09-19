@@ -7,120 +7,94 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-09-18 (after Lesson 8.7 — 90 of 107 lessons; MODULE 8 OPEN, 7 of
-         13, 39 h of 70. PLANNED AT 5 AND SHIPPED AT 5, so no module subtotal
+updated: 2026-09-18 (after Lesson 8.8 — 91 of 107 lessons; MODULE 8 OPEN, 8 of
+         13, 43 h of 70. PLANNED AT 4 AND SHIPPED AT 4, so no module subtotal
          and no course total moved. Still 107 lessons, ~523 h.
-         check-curriculum.py green; check-builders.py green; check-page.js
-         `pass: true` at 1280 AND 390. Nine measured sections, 92 checks.
-         8.6's findings are in STATE below and in the memory file for
-         2026-09-17; what follows is 8.7's.
-         THE ENGINE CAN NOW SAY WHERE TWO SHAPES TOUCH, not only how far into
-         each other they are. Two new files, engine/phys/manifold.{hpp,cpp};
-         98 -> 99 public headers. `epa.hpp` needed NO CHANGE AT ALL, and 8.6's
-         own handover note PREDICTED THAT IT WOULD — "expect to widen
-         `epa_result` to carry the winning feature". THE PREDICTION WAS WRONG
-         and the reason is worth more than the prediction: EPA's winning
-         triangle is built from SUPPORT POINTS, so it carries §4's tie-break
-         ambiguity intact, and it is a PIECE of the difference set's face rather
-         than the whole of it. Asking each shape directly is both simpler and
-         exact. `shape.hpp` and `convex.hpp` widened instead, by one query each.
-         ONE CONTACT POINT IS A CRATE BALANCED ON A PIN, and the argument is
-         torque rather than accuracy. A contact force acts AT a point, so its
-         torque about that point is zero; put the point anywhere but under the
-         centre of mass and the weight makes a couple. Measured on the engine's
-         own rigid_body with the same gravity, the same impulses and the same
-         normal in both arms: four points settle at 1.16 mm of penetration and
-         5.234 deg/s of residual rotation, and the SAME CONTACT reduced to its
-         deepest single point sinks 21.27 mm and rocks at 27.989 deg/s, for
-         ever. AND THE UNCOMFORTABLE HALF: the one-point arm carries roughly the
-         same MOMENT, because it emulates a support polygon by CHATTERING —
-         sweeping the face faster than the body can respond. Which is exactly
-         why single-point contact looks nearly fine in a demo and is unusable in
-         a game, and why the headline numbers are the sink and the rocking
-         rather than the tilt.
-         THE STATICS IS DERIVABLE BEFORE IT IS MEASURED. The resultant of
-         non-negative normal forces is a weighted average of the contact points
-         with weights summing to one, i.e. a point of their CONVEX HULL, so a
-         body rests iff its centre of mass projects inside that hull and the
-         moment it can carry is m*g*(w/2). Predicted 49.050 N m, bisected over
-         14 steps at 47.869 — and the 2.41% is not error, it is the penetration
-         the solver allows, which puts the crate's effective lip inside its
-         geometric one. §1's control slides the crate off a ledge: rests at
-         0.00/0.20/0.40/0.45 m of overhang, topples at 0.55/0.70, crossing where
-         statics says. NOTHING IN THE SIMULATION WAS TOLD THERE IS A LEDGE.
-         *** A SUPPORT FUNCTION DETERMINES A SHAPE AND NAMES NO FEATURE. ***
-         8.5's claim stands and is not enough. `support(d)` returns ONE point
-         when the argmax is a whole face, and which one is decided by three
-         `>= 0` tie-breaks on dot products that are all zero in exact
-         arithmetic: 4,000 directions from a cone 0.001 deg wide about a face
-         normal return ALL FOUR CORNERS. Deterministic AND arbitrary, which are
-         not the same thing. The control is what makes it mean something — the
-         same jitter about a CORNER returns 1 of 8 — so the ambiguity belongs to
-         the QUERY and appears exactly where a manifold is needed.
-         FOUR IS FORCED, NOT BUDGETED. Four independent non-negative impulses
-         place the resultant anywhere in a planar convex hull; a fifth is a
-         linear combination as far as the three equations (force + two torque
-         components) are concerned, so it makes the answer NON-UNIQUE rather
-         than better. Same fact as a four-legged table wobbling. Measured: the
-         reduction reaches 96.316% of the BEST four there are, brute-forced over
-         all 70 four-subsets, median EXACTLY 1.00000, and loses ZERO depth
-         because it picks the deepest point first.
-         THE PARALLELISM TOLERANCE BOUNDS THE NORMAL ERROR AT acos(face_cos)
-         EXACTLY — 44.8024 deg at 0.5, 2.5611 at the 0.999 default, 0.2576 at
-         0.99999 — which is what makes it a knob rather than a magic number:
-         choose the largest normal error a solver can live with and take its
-         cosine. Tightening costs too: face contacts fall 59.3% -> 52.8% and the
-         mean contact count 2.381 -> 2.213, each one a body that was resting on
-         a polygon and is now resting on a line.
-         THE MANIFOLD'S NORMAL IS THE REFERENCE FACE'S, NOT EPA's, and that is a
-         design decision rather than an accident. On a BALL — EPA's worst case
-         by 8.6 §9 — it is bit-exact (0,1,0) on 4,000 frames of 4,000 while
-         EPA's wobbles 0.001172 deg. Box-on-box cannot show it, because the
-         difference set has a genuinely flat face and EPA terminates on it. Over
-         random pairs, where the SAT's exact axis came from the same shape's
-         face the manifold clipped against (36,113 of 39,403), the face normal
-         is BIT-EXACT against EPA's worst of 0.0163 deg.
-         PERSISTENCE IS KEYED ON IDENTITY AND CANNOT BE KEYED ON POSITION. Over
-         a crate's landing, a 10 um position match finds 0.00% of the contacts
-         and an id match finds 82.28%, rising to 100.00% of 1,999 consecutive
-         frames once it settles. AND THE TRAP IS THAT A POSITION MATCHER WORKS
-         PERFECTLY ON A BODY THAT IS NOT MOVING: hold the crate still, jitter it
-         100 nm, and BOTH find 100%. It passes every test you would write for it
-         and fails when things move.
-         *** AND §9's FIRST CONTROL WAS WRONG, WHICH IS THE FINDING. *** It
-         teleported the crate two metres and expected zero id matches; it got
-         FOUR OF FOUR, and the manifold was right. An id names a FEATURE — the
-         floor's top face, the crate's bottom face, corner 3 — and the same
-         corner really is on the same face two metres away. Ids cannot detect a
-         teleport and should not be asked to; invalidating a moved body's cached
-         manifolds is the CACHE's job. A control that convicts the code of the
-         TEST's own mistake is the most expensive kind there is, because it
-         looks like a finding. The control that works changes the feature: slid
-         2 m along the same face, 4 of 4; rolled onto its side, 0 of 4.
-         AND A KNOB WAS WRITTEN, MEASURED AT ZERO, AND TAKEN BACK OUT.
-         `reference_bias` guarded the flip every 2D engine guards against —
-         two equally parallel faces, a bare `>` deciding on rounding, all four
-         ids renamed. Measured at ZERO FLIPS IN 208,000 PAIRS across freely
-         rotated boxes, crates on crates and hexagonal prisms, and the reason is
-         better than the knob: on a face contact BOTH cosines are exactly 1.0f,
-         because each face really IS perpendicular to the contact normal, so the
-         tie is EXACT and an exact tie is resolved deterministically. A quantity
-         that merely OUGHT to be equal is a coin toss; one that IS equal is not.
-         Removed under 8.6 §12's rule. A measurement of zero needs a control
-         more than any other kind, and §9's forces a flip by swapping the two
-         arguments: 0 of 4 ids survive, so the flip is not harmless, and it does
-         not fire.
-         THE BUDGET: GJK 87.3 ns/pair, GJK+EPA 252.0, build_manifold alone
-         142.9, the whole narrow phase 395.1, one support_face 5.2 ns, ZERO
-         allocations over 20,000 whole queries. The manifold is 36% of the
-         narrow phase and the penetration depth is still what costs — which is
-         the opposite of the instinct, because clipping FEELS expensive and is
-         four passes over at most eight vertices with no square roots.
-         AND 8.6 §12's 20.5% FROM FOUR DELETED MEMBER INITIALISERS DOES NOT
-         REPEAT, for the reason 8.6 itself named: the tell was the ARRAY, not
-         the struct. `polytope` held 128 faces and `expand` rebuilt a 3 KB array
-         PER PASS; `contact_face` is 124 bytes and a query builds exactly two,
-         once, and there is no array of them anywhere.)
+         check-curriculum.py green; check-builders.py green (59/59 byte-
+         identical); check-page.js `pass: true` at 1280 AND 390. Ten measured
+         sections, 51 checks.
+         8.7's findings are in STATE below and in the memory file for
+         2026-09-18; what follows is 8.8's.
+         THE ENGINE CAN NOW FIND CANDIDATE PAIRS WITHOUT TESTING EVERY PAIR.
+         Two new files, engine/phys/broadphase.{hpp,cpp}; 99 -> 100 public
+         headers (CMake's own line reads "98 of 99", which excludes engine.hpp
+         and the one documented exception). `collide.hpp` gained
+         `overlaps(aabb, aabb)` — six comparisons, INLINE where its obb sibling
+         is not, because at that size a call costs more than the test.
+         *** THE QUADRATIC IS ALREADY HERE, AT n = 278. *** 8.7's whole chain
+         re-measures on 8.7's own fixture at 432.4 ns (8.7 said 395.1 — the same
+         number, a lesson later, on the same machine), and n(n-1)/2 of those
+         passes 16.67 ms at TWO HUNDRED AND SEVENTY-EIGHT bodies. The AABB test
+         that stands in for it is 1.190 ns, 363x cheaper, and moves the wall only
+         to 5,293 — both are the same quadratic with different constants. Only
+         the grid changes SHAPE.
+         AND THE HONEST HALF: BELOW ABOUT A HUNDRED BODIES THE GRID LOSES.
+         Measured at 96 or 128 depending on the run, the two within 20% either
+         side, so it is "about a hundred" rather than a threshold. Above it,
+         17.4x at 512 and 137.7x at 8,192, with the two pair sets checked EQUAL
+         at every size. A broadphase added on principle to a project that will
+         never have two hundred dynamic bodies makes it slower while looking
+         like diligence.
+         *** THE FAMOUS floor-VERSUS-CAST BUG LOSES ZERO PAIRS. *** §4 was
+         written to demonstrate the opposite and measured 0 on 3,000 proxies
+         centred on the origin. A range-walk grid needs its cell map to be
+         MONOTONE and needs nothing else, because if two intervals overlap then
+         so do their images under a non-decreasing map — and truncation is
+         non-decreasing. What it costs is OCCUPANCY: eight cells become one, a
+         cell's pair loop is quadratic in what is in it, 4.0x the comparisons in
+         that one neighbourhood. A footnote, not a bug. THE MISTAKE THAT DOES
+         LOSE PAIRS is the innocent one beside it — one cell per proxy, by its
+         centre — and it loses 1,892 of 2,836, SIXTY-SIX PER CENT, while looking
+         nearly right because the third it finds are the ones you notice while
+         debugging it.
+         THE OWNER-CELL RULE IS EXACT, NOT HEURISTIC, and the proof is two
+         sentences: the minimum corner of the overlap of two cell ranges lies in
+         both ranges, so both proxies are inserted there (at least once), and
+         there is only one minimum corner (at most once). Three `max` calls, no
+         memory. The alternatives measured 45.2% (std::set of pair keys) and 5%
+         (sort+unique) OF THE ENTIRE BROADPHASE. And the duplicate count is
+         computable in closed form — product of the overlap widths, minus one,
+         summed — which agrees with the counter the grid keeps while doing
+         something else entirely: 3271 AND 3271, exactly.
+         THE CELL-SIZE RULE OF THUMB IS A TWO-TERM COST MODEL. a*entries +
+         b*bucket_tests, solved exactly from two rows of a sweep chosen because
+         each is dominated by one term. The constants come out 8.09/5.45 ns on a
+         sparse scene and 8.11/5.44 on one four times denser — they are
+         properties of the MACHINE. Both wings are cubic, so the optimum moves as
+         the SIXTH ROOT of density: 2.13x the mean longest side sparse, 1.32x
+         dense. `auto_cell_size` returns 1.5x and lands at 1.14x and 0.97x the
+         best measured. AND THE TIMER WAS THE WRONG INSTRUMENT: the spread around
+         the minimum reaches 1.18 over forty-one runs, so the clock cannot
+         distinguish 2.5 m from 4 m; `entries` and `bucket_tests` carry no noise
+         at all. Every timing in 8.8 is a MINIMUM over many runs, not a median —
+         a change from 8.1-8.7, and the conservative direction for §1's claim.
+         THE TEXTBOOK SPATIAL HASH IS MEASURABLY MEDIOCRE AND STAYS ANYWAY.
+         Teschner's three primes are 25.7% above the balls-in-bins prediction on
+         a LATTICE of crates (which is what a physics scene is the moment it
+         settles) against 3.4% for a stronger mix — and the control is that on
+         RANDOM cells it sits on the prediction, so the deficit belongs to the
+         input. Then the two numbers that decide it: the excess is worth 9.4% of
+         the inner loop (99,852 pair tests against 90,514), and the mix costs
+         2.0x per call. It stays, for a reason rather than by inheritance.
+         AND A/B COMPARISONS MUST DIFFER IN ONE THING. The first draft timed
+         hash_cell at 0.66 ns and the mix at 0.23 and concluded the MIX was
+         faster, which is absurd for strictly more work. One arm crossed a
+         translation-unit boundary. Measured with a noinline wrapper: 0.115 ns
+         inlined, 0.692 behind a call — 6.0x, for three multiplies. `cell_of`
+         and `hash_cell` moved into the header because of it.
+         THE TEAPOT IS THE FLOOR. A 200 x 0.2 x 200 m plate at a 1 m cell wants
+         80,802 cells to itself against 30,225 entries for the two thousand
+         crates it is under, and it is alone in almost all of them: 30,225 ->
+         111,027 entries for ONE added object. The guard keeps the contract
+         exactly (pair sets with it on and off are EQUAL) and is linear in
+         big*n — free at k=1, most of the broadphase at k=64, and the last two
+         rows of that table find no extra pairs at all. Which is the grid saying
+         "use a tree".
+         THE FRAME: 2,000 proxies, 983 candidates, broadphase 0.091 ms (17.7%),
+         narrow phase 0.426 ms (82.3%), implied all-pairs narrow phase 843.6 ms.
+         Zero allocations over 2,000 rebuilds, checked with a counting
+         operator new rather than asserted.)
+
 conventions:
   quat: w FIRST, w = cos(theta/2), SANDWICH q v conj(q), q*p MEANS "DO p THEN q".
         7.4, engine/include/engine/math/quat.hpp + docs/conventions.html §8e.
@@ -5055,6 +5029,58 @@ curriculum: 107 lessons, ~510 h, 10 modules   (reshaped 2026-09-08 — see `road
         surface is filled twice, which reads as "IBL is too bright" and is
         "fixed" by tuning env_intensity to ~0.6 — a magic number that goes wrong
         the first time anyone changes lighting::ambient.
+  broadphase: *** A BROADPHASE MAY REPORT PAIRS THAT DO NOT TOUCH; IT MAY NOT
+        OMIT ONE THAT DOES. *** 8.8, engine/include/engine/phys/broadphase.hpp.
+        THAT ASYMMETRY IS THE WHOLE DESIGN. A false positive costs one
+        narrow-phase call — 432 ns and a CORRECT answer, so it appears in a
+        profile and never in a bug report. A false negative has no stage
+        downstream that could notice: the narrow phase is never called, no
+        manifold is generated, and the symptom reaches the player as "sometimes
+        things fall through the floor" with no line of code to blame. So every
+        approximation in the file rounds OUTWARD: cell ranges round out, a proxy
+        the grid cannot place is kept rather than dropped, and a candidate is
+        rejected only when a cheap EXACT test says so.
+        AND THE CONTRACT IS CHECKABLE, which 8.5 and 8.6 were not.
+        `brute_force_pairs` answers the same question exactly for any input, so
+        correctness is set equality against a function that cannot be wrong —
+        12 frames of 900 tumbling proxies, 5,230 true pairs, 0 missed, 12/12
+        equal. The demo runs it live every frame behind [B].
+        `a < b` IS A CONTRACT, NOT TIDINESS. pair_key is order-independent and
+        the manifold is not; generate (7,3) one frame and (3,7) the next and the
+        normal reverses, the reference face moves, and every warm start is lost.
+        Sorted once, at `emit`, the only place pairs are made.
+        THE GRID IS HASHED, NOT ARRAYED, for memory and for the absence of an
+        EDGE. A dense array needs the world's extent (10^9 cells for a km at a
+        metre) and has a boundary that must be clamped, wrapped or rejected —
+        two of which lose pairs. A collision costs a comparison and never an
+        answer, because every entry carries its cell coordinate.
+        AND REBUILT, NOT UPDATED. Removal is the expensive operation in every
+        open scheme, most proxies move most frames, and a rebuild is two linear
+        passes over contiguous memory. 8.7's manifold_cache made the same
+        argument one lesson earlier: a structure thrown away every frame never
+        rots. Zero allocations over 2,000 rebuilds, checked with a counting
+        operator new.
+        THE STORAGE IS A COUNTING SORT, NOT A VECTOR PER BUCKET. Count, prefix
+        sum, scatter — one contiguous array with every bucket's members
+        adjacent, and no per-cell allocation anywhere. The repeated triple loop
+        that looks wasteful is cheaper than one pass that allocates.
+        `owner_cell` IS EXACT. The minimum corner of the overlap of two cell
+        ranges lies in both, so both proxies are there (at least once), and there
+        is one minimum corner (at most once). Three max calls, no memory, against
+        45.2% of the whole broadphase for a std::set of pair keys.
+        THE THREE REJECTION TESTS ARE ORDERED BY COST: same cell? (a hash
+        collision), owner cell? (a duplicate), boxes overlap? (six comparisons to
+        avoid 432 ns). Each counted separately, so the demo can show WHY a
+        candidate died.
+        `max_cells_per_proxy` IS A DIAGNOSIS, NOT A CURE. An oversized proxy is
+        tested against EVERYTHING — the most conservative thing available — so
+        the guard changes cost and not answers (pair sets on and off are equal).
+        Linear in big*n: free at one floor, most of the broadphase at 64.
+        AND `margin` DEFAULTS TO ZERO AND IS 8.9's. It is measured (pairs go as
+        ((E+4m)/E)^3, within 12%) and monotone (no margin ever loses a pair), and
+        the decision about how far to speculate belongs to the solver that acts
+        on it.
+
   manifold: *** A CONTACT IS A SET OF POINTS SHARING ONE NORMAL, AND THE NUMBER
         IS FOUR. *** 8.7, engine/include/engine/phys/manifold.hpp.
         FOUR IS FORCED. Four independent non-negative impulses place the
@@ -5491,6 +5517,7 @@ completed:
   - 8.5  GJK: Convex Distance from a Support Function
   - 8.6  EPA: Penetration Depth
   - 8.7  Contact Manifolds and Persistence
+  - 8.8  Broadphase: A Uniform Grid
         (8.3's dead `next` link repointed in ALL THREE copies — the page,
          scratch/l83_body_a.html and build_83.py's TAIL — and build_83 rebuilt,
          so page and generator still agree. Planned at 6 h and SHIPPED AT 6, the
@@ -5521,6 +5548,24 @@ completed:
          zero line, and [F] to throw the nine cross products away.)
 
 capabilities:
+  - 8.8 THE ENGINE CAN FIND CANDIDATE PAIRS IN A SCENE OF THOUSANDS OF BODIES
+    WITHOUT TESTING EVERY PAIR, and can prove it has not missed any.
+    phys/broadphase.hpp: `proxy` (aabb + uint32 index — six floats and a number,
+    and NOTHING ELSE, because the stage whose value is being cheap must not be
+    able to look inside anything) + `broadphase_pair` (a < b ALWAYS, which is
+    what lets 8.7's pair_key index the manifold_cache) + `broadphase_config`
+    (cell_size, margin, max_cells_per_proxy) + `broadphase_stats` (proxies,
+    cell_size, entries, buckets, occupied, largest_bucket, colliding_buckets,
+    bucket_tests, owner_rejects, cell_rejects, box_rejects, pairs, oversized,
+    oversized_pairs) + `brute_force_pairs` (oracle AND baseline AND the right
+    answer below ~100) + `auto_cell_size` (1.5x the mean longest side) +
+    `uniform_grid` (build/pairs/stats/clear + static cell_of and hash_cell,
+    both INLINE in the header — §7 measured 6.0x for the call) + `owner_cell`.
+    phys/collide.hpp GAINS: `overlaps(aabb, aabb)` — six comparisons, inline,
+    the SAT with twelve of its fifteen axes deleted by symmetry.
+    NOT a shape, not a body, not a pointer to either, and no dependency on
+    anything in phys/ but `collide.hpp` for those six comparisons. It is the
+    first file in phys/ that depends on no shape at all.
   - 8.5 THE ENGINE CAN MEASURE THE DISTANCE BETWEEN ANY TWO CONVEX SHAPES and
     hand back the two surface points that realise it. Box, sphere, capsule,
     arbitrary point set, in any of the ten pairings, through one function that
@@ -9010,7 +9055,8 @@ files:
                                inertia.hpp [8.3], shape.hpp [8.4],
                                collide.hpp [8.4], convex.hpp [8.5],
                                gjk.hpp [8.5], epa.hpp [8.6],
-                               manifold.hpp                             [8.7]
+                               manifold.hpp [8.7],
+                               broadphase.hpp                           [8.8]
             (convex.hpp is HEADER ONLY and deliberately so: a function pointer,
              a context pointer, an origin, four inline adapters and four DELETED
              rvalue overloads. It has no .cpp because there is nothing to
@@ -9055,7 +9101,8 @@ files:
              graphics subsystem. Does NOT include <imgui.h> — see debug-ui.)
   engine/src/phys/: integrate.cpp [8.1], rigid_body.cpp [8.2],
                     inertia.cpp [8.3], shape.cpp [8.4], collide.cpp [8.4],
-                    gjk.cpp [8.5], epa.cpp [8.6], manifold.cpp          [8.7]
+                    gjk.cpp [8.5], epa.cpp [8.6], manifold.cpp [8.7],
+                    broadphase.cpp                                      [8.8]
             (Everything that is NOT a template: the constant-acceleration
              overload, apply_drag/damping_factor, and the four diagnostics.
              Nothing in it is hot — the general stepper stayed in the header
@@ -9186,6 +9233,19 @@ files:
              `epa_penetration`'s answer beside its own so the two can be seen to
              agree. [F] drops the flood fill and §7's failure can be watched.)
   demos/manifold/: main.cpp                                               [8.7]
+  demos/broadphase/: main.cpp                                             [8.8]
+           (THE FIRST COLLISION DEMO WHOSE SUBJECT IS THE SCENE rather than a
+            pair. Seen from directly above, so the lattice is visible; each cell
+            shaded by C(n,2) rather than by occupancy, because the picture is
+            meant to show where the WORK is and the work is quadratic. [B] runs
+            `brute_force_pairs` beside the grid every frame and colours the
+            verdict, which is the contract checked live at 60 Hz. [Up]/[Down]
+            move entries and bucket tests by orders of magnitude and leave the
+            PAIRS line untouched, which is 8.8 §7.3 in one gesture. [T] adds the
+            ground plate and [Y] toggles the guard. Preset 4 — mixed sizes — is
+            the one to look at: one proxy in seventeen is metres across and each
+            draws a visible STAR of candidate pairs, which is §9's argument in
+            miniature.)
             (Two panels, and the RIGHT one is the new idea: the contact seen
              FACE ON, in the reference face's own plane, with [S] applying one
              Sutherland-Hodgman side plane per press — the plane dashed, its
@@ -9320,7 +9380,8 @@ files:
                  08-02-forces-and-bodies.html, 08-03-angular-dynamics.html,
                  08-04-collision-primitives.html,
                  08-05-gjk.html, 08-06-epa.html,
-                 08-07-contact-manifolds.html
+                 08-07-contact-manifolds.html,
+                 08-08-broadphase.html
                  (5.12 IS OUT OF SEQUENCE ON PURPOSE — Module 5 closed eleven
                   lessons after 5.11 and one after 6.18, and the list is
                   append-ordered rather than sorted so that the history is
@@ -10268,163 +10329,103 @@ roadmap: RESHAPED 2026-09-08, AFTER TWO EXTERNAL REVIEWS OF THE PUBLISHED OUTLIN
           that cannot express the effect is not a null result.
 
 
-next: 8.8 — Broadphase: A Uniform Grid
+next: 8.9 — Impulse Response: Restitution and Friction
 
-      WHAT 8.8 INHERITS, AND MUST NOT RE-DERIVE:
-        - `collide_manifold(a, b)` IS THE WHOLE NARROW PHASE IN ONE CALL and
-          costs 395.1 ns/pair on boxes. 8.8's entire subject is not calling it.
-          The arithmetic is in §11 and should be quoted, not re-measured: 400
-          bodies is 79,800 pairs is 31.5 ms, which is half a frame spent almost
-          entirely on pairs that are metres apart.
-        - `bounds_of` EXISTS FOR EVERY SHAPE (8.4) and `bounding_radius` is the
-          one measurement a rotation cannot change — 8.4's doc comment says so
-          and calls it "the right thing to hand a broadphase". It is.
-        - *** THE ARGUMENT ORDER IS 8.8's TO FIX. *** `pair_key` is
-          order-independent and the MANIFOLD is not: hand the same pair to
-          `collide_manifold` the other way round on one frame and the normal
-          reverses, the reference moves, and every id changes. 8.7 §9 measured
-          the cost at every warm start on the pair. 8.8 must adopt "lower body
-          index first" and say so where a reader will meet it.
-        - `manifold_cache` IS BUILT AND HAS A THREE-CALL FRAME DISCIPLINE
-          (begin_frame / find+store / end_frame). Skipping `end_frame` is a leak
-          that presents as a slow frame every few seconds. 8.8 is the first
-          thing that will hold one for real.
-        - THE HARNESS SHAPE. Nine sections, EVERY one with a control, and 8.7
-          added two instruments worth reusing: a SIGNED distance field, because
-          a point pushed INSIDE a shape is exactly as wrong as one outside and
-          `distance_squared_to` answers zero for both; and a fixture whose
-          answer is written down on paper BEFORE it is run, because a sweep can
-          only show self-consistency.
-        - `scratch/build_verify_NN.sh` REFUSES an unoptimised libengine.a.
-        - `scratch/check_NN.mjs` DRIVES check-page.js THROUGH THE NODE LIBRARY;
-          its default URL is rooted at docs/, so pass the full URL when the
-          server is rooted at the repository.
-        - A LESSON PAGE ENDS AT FURTHER READING. STATE.md is the sole resume key.
-
-      *** THE THING 8.8 SHOULD BE HONEST ABOUT. *** A uniform grid is the
-      cheapest possible broadphase and it is cheap for one reason: it assumes
-      the bodies are all about the same size and roughly evenly spread. A level
-      is neither. One floor collider the size of the level occupies every cell;
-      a pile of crates occupies one. 8.8 should measure the degenerate cases
-      rather than mention them, and name what replaces a grid when they bite
-      (a BVH, or a sweep-and-prune) without building it.
-
-      AND THE SECOND THING: the broadphase's output is PAIRS, and its contract
-      with 8.7 is that it may report false positives and must not report false
-      negatives. That asymmetry is the whole design, and it is what lets the
-      cells be loose and the AABBs be fattened. Measure the false-positive rate
-      rather than assuming it.
-
-      WHAT 8.8 IS LIKELY TO MOVE. A new `engine/include/engine/phys/broadphase.hpp`
-      and `engine/src/phys/broadphase.cpp`; engine.hpp; engine/CMakeLists.txt;
-      demos/CMakeLists.txt. 8.7's listings are PINNED at scratch/l87_*, so later
-      edits to shape.hpp or manifold.hpp do not disturb the published page — but
-      if 8.8 CORRECTS something 8.7 got wrong, the fix goes into the pin AND the
-      live file. (Note 8.6's distinction, which still holds: a comment that was
-      WRONG WHEN IT SHIPPED stays in the pin, because the page is an archive of
-      its own era and the correction belongs in the later lesson's prose.)
-
-      CARRY FORWARD from 8.7:
-        - A CONTROL CAN CONVICT THE CODE OF THE TEST'S OWN MISTAKE, and that is
-          the most expensive kind of failure there is, because it looks like a
-          finding. §9's teleport control expected 0 matches and got 4 of 4, and
-          the manifold was right. Ask what the instrument is ENTITLED to see
-          before believing what it reports.
-        - AND AN INSTRUMENT CAN BE A TAUTOLOGY. §6's first version checked that
-          the two claimed surface points lie on their shapes, which is true BY
-          CONSTRUCTION at every tolerance, and reported a flat zero across four
-          decades. If a measurement cannot come out wrong, it is not a
-          measurement.
-        - A KNOB WRITTEN FOR A REAL HAZARD CAN MEASURE ZERO. `reference_bias`
-          guarded the reference flip every 2D engine guards against, measured 0
-          in 208,000 pairs, and came out — because on a face contact both
-          cosines are EXACTLY 1.0f and an exact tie is deterministic. The hazard
-          belongs to the QUANTITY, not to the comparison.
-        - acos IS THE WRONG WAY TO MEASURE A SMALL ANGLE. Its resolution floor
-          on float unit vectors is 0.036 deg, and §6's first numbers were the
-          instrument rather than the normal. Use the chord: 2*asin(|a-b|/2).
-        - MEASURE THE POPULATION YOU ACTUALLY HAVE. Fourth lesson running. §7's
-          worst cases needed deep overlaps that a solver would never allow, and
-          quoting them without the shallow population would have been alarming
-          and useless.
-
-      WHAT 8.7 INHERITS, AND MUST NOT RE-DERIVE:
-        - `epa_penetration` RETURNS A NORMAL, A DEPTH AND TWO WITNESS POINTS,
-          and `collide(convex, convex)` is the façade over GJK-then-EPA that
-          fills `separation` on both sides of zero. 8.7 generates a MANIFOLD;
-          it does not re-derive the normal.
-        - THE MINKOWSKI DIFFERENCE IS ESTABLISHED TWICE OVER. 8.5 §3 proves both
-          equivalences and the support identity; 8.6 §3 proves that the set of
-          overlapping translations IS the difference set and that the depth is
-          min over directions of h(n). 8.7 should pay those off rather than
-          restate them.
-        - `depth_along(a, b, unit_axis)` IS PUBLIC and is `h_{A⊖B}(n)` in one
-          line. A manifold's points all have to be consistent with the SAME
-          normal, and that function is how a candidate is checked.
-        - THE HARNESS SHAPE. Nine sections, EVERY one with a control, and 8.6
-          added two instruments worth reusing: an invariant computable FROM THE
-          OUTPUT STRUCT ALONE (Euler's formula), and a SWEEP across decades
-          rather than a random sample — which found two of 8.6's four bugs.
-        - `scratch/build_verify_NN.sh` REFUSES an unoptimised libengine.a.
-        - `scratch/check_NN.mjs` DRIVES check-page.js THROUGH THE NODE LIBRARY;
-          its default URL is rooted at docs/, so pass the full URL when the
-          server is rooted at the repository.
+      WHAT 8.9 INHERITS, AND MUST NOT RE-DERIVE:
+        - THE PIPELINE IS COMPLETE UP TO THE POINT OF DOING SOMETHING ABOUT IT.
+          `uniform_grid::build` -> `pairs()` (a < b, exactly once each) ->
+          `collide_manifold(a, b)` -> up to four `contact_point`s sharing one
+          normal, each with a `contact_id` -> `manifold_cache` + `carry_impulses`
+          -> NOTHING. `normal_impulse` and `tangent_impulse` have been declared
+          since 8.7 and written by nobody. 8.9 is the first lesson that writes
+          them.
+        - THE FRAME'S SHAPE IS MEASURED: 2,000 bodies, broadphase 0.091 ms
+          (17.7%), narrow phase 0.426 ms (82.3%). Whatever the solver costs, it
+          is a THIRD stage and its budget is what is left of 16.67 ms.
+        - `broadphase_config::margin` EXISTS, IS MEASURED AND DEFAULTS TO ZERO.
+          8.8 §8 established that the pair count goes as ((E + 4m)/E)^3 within
+          12% and that a margin never loses a pair; the DECISION about how far
+          to speculate is 8.9's, because speculation is a statement about what
+          the solver will do with a pair that is not touching yet. 8.7's
+          `keep_slop` is the other half of the same hook.
+        - `rigid_body` HAS apply_impulse AND world_inv_inertia (8.2, 8.3), so
+          the angular half of an impulse needs no new machinery — only the
+          Jacobian.
         - A LESSON PAGE ENDS AT FURTHER READING. STATE.md is the sole resume key,
-          and as of 8.6 `check-curriculum.py` verifies that `updated:` names the
-          newest published lesson — because after 8.5 it did not.
+          and check-curriculum.py verifies that `updated:` names the newest
+          published lesson.
+        - `scratch/build_verify_NN.sh` REFUSES an unoptimised libengine.a.
+        - THE HARNESS SHAPE. Ten sections, EVERY one with a control, and 8.8
+          added three instruments worth reusing: an ORACLE (a function that
+          answers the same question exactly, which made every correctness claim
+          a set comparison); a CLOSED FORM checked against a counter the code
+          keeps for its own reasons (3271 and 3271); and a COST MODEL fitted to
+          DETERMINISTIC counters, which distinguished cell sizes the clock could
+          not.
 
-      *** THE THING 8.7 MUST DEAL WITH FIRST. *** 8.6 §13 named it: the contact
-      NORMAL is discontinuous even though the depth is continuous. Slide a box
-      along a wall toward a corner and the minimising face changes, so the MTV
-      swings ninety degrees in one frame. That is a property of a minimum, not of
-      EPA, and every implementation has it. It is the reason persistence is not a
-      performance optimisation but a CORRECTNESS one: a manifold keyed on feature
-      ids survives the swing, and an unkeyed one re-derives four different points
-      and judders. 8.7 should open there rather than discover it late.
+      *** THE THING 8.9 MUST DEAL WITH FIRST. *** The solver's arithmetic is in
+      VELOCITY, not in force, and that is the whole reason an impulse method
+      exists. A contact's job is to make the relative normal velocity at the
+      contact point be what you want it to be AFTERWARDS — zero for a resting
+      contact, -e times the approach speed for a bouncing one — and that is one
+      linear equation per contact whose unknown is a scalar impulse. Derive it
+      from the velocity you want rather than from a spring, because the spring
+      version (a penalty force) is where stiff contacts and exploding stacks
+      come from, and 8.1 already measured what a stiff integrator does.
 
-      AND THE SECOND THING: one contact point is not enough to rest a box on a
-      floor. EPA returns ONE pair of witness points; a box on a plane needs four,
-      and they must be the SAME four next frame. Clipping the two contacting
-      faces against each other (Sutherland–Hodgman, which 3.3 already taught for
-      the near plane) is the standard generation method, and the reference
-      feature pair comes from the winning face's vertices — which `epa_result`
-      does NOT currently expose. Expect to widen it, and note that build_86.py
-      PINS epa.hpp, so widening the struct does not disturb 8.6's page.
+      AND THE SECOND THING: friction is NOT a second independent impulse. The
+      tangential impulse is clipped to a cone whose radius is mu times the
+      NORMAL impulse computed in the same iteration, so the two are coupled, and
+      the order in which they are solved is a decision with visible consequences
+      (a box on a slope creeps or does not). The standard simplification — a
+      box rather than a cone, solved per axis — is worth naming as a
+      simplification rather than shipping silently.
 
-      WHAT 8.7 IS LIKELY TO MOVE. A new `engine/include/engine/phys/manifold.hpp`
-      and `engine/src/phys/manifold.cpp`; `epa.hpp` (to carry the winning
-      feature); `collide.hpp`/`collide.cpp` possibly; engine.hpp;
-      engine/CMakeLists.txt; demos/CMakeLists.txt. 8.6's listings are PINNED at
-      scratch/l86_*, so editing epa.hpp does not disturb the published page — but
-      if 8.7 CORRECTS something 8.6 got wrong, the fix goes into the pin AND the
-      live file. (Note the distinction 8.6 drew: a comment that was WRONG WHEN IT
-      SHIPPED stays in the pin, because the page is an archive of its own era and
-      the correction belongs in the later lesson's prose. That is not the same as
-      editing a page's HTML without editing its fragment.)
+      WHAT 8.9 IS LIKELY TO MOVE. A new `engine/include/engine/phys/solver.hpp`
+      and `engine/src/phys/solver.cpp`; possibly `manifold.hpp` (to give
+      `contact_point` whatever the solver caches per contact — an effective mass,
+      a bias); `rigid_body.hpp` for a material (restitution, friction);
+      engine.hpp; engine/CMakeLists.txt; demos/CMakeLists.txt. 8.8's listings
+      are PINNED at scratch/l88_*, so later edits to broadphase.hpp or
+      collide.hpp do not disturb the published page — but if 8.9 CORRECTS
+      something 8.8 got wrong, the fix goes into the pin AND the live file.
+      (8.6's distinction still holds: a comment that was WRONG WHEN IT SHIPPED
+      stays in the pin, because the page is an archive of its own era and the
+      correction belongs in the later lesson's prose.)
 
-      CARRY FORWARD from 8.6:
-        - COUNT HOW YOUR CODE FINISHES, NOT ONLY WHAT IT RETURNS. The non-convex
-          seed was invisible in the answers and obvious in a status histogram,
-          because nineteen in twenty broken seeds repaired themselves. A four-byte
-          status field paid for itself twice this lesson.
-        - A COMPARISON WHOSE TWO SIDES ARE MATHEMATICALLY EQUAL HAS NO CORRECT
-          ANSWER IN FLOATING POINT. Do not ask it; ask one whose answer is
-          stable. 8.7's feature matching will be full of these — "is this the
-          same contact point as last frame" is exactly that shape of question,
-          which is why it is keyed on IDS rather than on positions.
-        - A SWEEP FINDS WHAT A SAMPLE MISSES. Nine lines walking an overlap
-          across seven decades found two bugs that 200,000 random pairs did not.
-        - AND THE FIXTURE CAN BE THE NULL RESULT: half extents of 0.5 are a
-          multiple of the float grid at every scale, so a precision fixture built
-          from them measures exactly zero difference and means nothing.
-        - MEASURE THE POPULATION YOU ACTUALLY HAVE. Third lesson running. The
-          failure needs axis alignment, shared up axes and face-on-face contact —
-          and 8.7's whole subject IS face-on-face contact, so its bugs will live
-          there too.
-        - AND SCREENSHOT EVERY FIGURE AND LOOK AT IT. check-page.js caught eight
-          spills and overlaps this lesson that were invisible in the source; it
-          did NOT catch a 2D seed whose lower bound came out NEGATIVE in panel
-          one — contradicting the section it illustrated — or an origin cross
-          drawn in hardcoded near-white, which is invisible in the light theme.
-          Only a rendered frame showed either. Theme SVG strokes with the `.ink`
-          class, never with a literal colour.
+      CARRY FORWARD from 8.8:
+        - A MEASUREMENT WRITTEN TO CONFIRM SOMETHING IS ONLY WORTH WRITING IF IT
+          IS ALLOWED TO REFUSE. §4 was written to show that the truncating cell
+          index loses pairs. It loses zero, and the reason — a range walk needs
+          only a MONOTONE cell map — is worth more than the claim was. Third
+          time in Module 8: 8.6 §1 found a knob measuring zero, 8.7 §9 found a
+          control convicting the code of the test's own mistake.
+        - AND THE BUG WITH THE FAMOUS NAME IS RARELY THE EXPENSIVE ONE. Beside
+          the harmless cast sat the mistake that loses 66.7% of the pairs there
+          are — one cell per proxy, by its centre — which is attractive precisely
+          because it is NEARLY right.
+        - AN A/B COMPARISON MUST DIFFER IN ONE THING. §7's first draft timed an
+          out-of-line call against an inlined function and concluded the hash
+          doing MORE work was faster. A result that contradicts the instruction
+          count is the instrument talking. (4.8 §3 paid for the same lesson in a
+          different currency.)
+        - WHEN THE CLOCK IS NOISIER THAN THE DIFFERENCE, FIND A QUANTITY THAT
+          NEEDS NO CLOCK. The cell-size sweep's spread reached 1.18 over
+          forty-one runs; `entries` and `bucket_tests` are exact. Every timing in
+          8.8 is a MINIMUM over many runs rather than a median, and the counts
+          are what the conclusions rest on.
+        - AND TWO INDEPENDENT ROUTES TO THE SAME INTEGER IS THE CHECK TO REACH
+          FOR WHEN IT IS AVAILABLE, because it cannot be passed by accident.
+          3271 and 3271.
+        - MEASURE WHETHER THE OPTIMISATION IS WORTH SHIPPING AT ALL. Below ~100
+          bodies the grid is SLOWER than the quadratic it replaces. Almost
+          nobody measures that, and a broadphase added on principle to a small
+          project makes it slower while looking like diligence.
+        - A FIGURE'S LAYOUT IS WHERE ITS BUGS ARE. check-page.js caught a table
+          five pixels too wide, two bar labels past their bars, a paragraph
+          placed from the wrong block's height, and two annotations sitting on
+          curves. It did NOT catch `&sup9;`, which is not an HTML entity (only
+          sup1/2/3 are) and renders literally; or a curve CLAMPED rather than
+          clipped at the bottom of a log axis, which draws a flat run that reads
+          as "the cost is constant here" — the opposite of the figure's point.
+          Only a rendered frame showed either.

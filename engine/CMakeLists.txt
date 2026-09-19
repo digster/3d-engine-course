@@ -221,6 +221,14 @@ add_library(engine STATIC
     # support function cannot name one. So `convex` grew a second entry point and
     # this file is compiled against the shapes that implement it.
     src/phys/manifold.cpp
+
+    # Lesson 8.8. The broadphase, and it is the FIRST file in phys/ that depends
+    # on no shape at all — six floats and an index is the whole of what it knows
+    # about a body, and that is deliberate rather than minimal: the stage whose
+    # entire value is being cheap is the stage that must not be able to look
+    # inside anything. It compiles against `collide.hpp` only for the six-line
+    # `overlaps(aabb, aabb)` this lesson added there.
+    src/phys/broadphase.cpp
     # Lesson 5.2. Note what is NOT here: platform/main.hpp, which carries
     # ENGINE_MAIN. It is header-only and deliberately so — including it emits a
     # real `main`, and an entry point is not a library's to own. See the comment
