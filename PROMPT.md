@@ -2892,3 +2892,14 @@ Produced Lesson 8.9 — Impulse Response: Restitution and Friction (Module 8, 9 
 > next
 
 Produced Lesson 8.10 — Sequential Impulses: Warm Starting, Islands, and Sleeping (Module 8, 10 of 13).
+
+---
+
+## 2026-09-22 — `next` (Lesson 8.11)
+
+> next
+
+(The session hit a usage limit part-way through and resumed on "I hit my usage limit while you
+were working, but it has reset now. Please continue from where you left off.")
+
+Produced Lesson 8.11 — Constraints and Joints: Hinge and Ball-Socket (Module 8, 11 of 13).

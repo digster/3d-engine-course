@@ -231,8 +231,12 @@
 // because it is not evidence that the habit has taken: seven of the last eight
 // lessons missed this file, and the streak broke on the lesson immediately
 // after the one that wrote a paragraph about missing it.
+//
+// Lesson 8.11 added `phys/constraint.hpp` in the same edit as the file itself.
+// Noted for the count, not as a boast: the lint is what makes this reliable.
 #include <engine/phys/broadphase.hpp>
 #include <engine/phys/collide.hpp>
+#include <engine/phys/constraint.hpp>
 #include <engine/phys/convex.hpp>
 #include <engine/phys/epa.hpp>
 #include <engine/phys/gjk.hpp>

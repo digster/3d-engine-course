@@ -230,6 +230,16 @@ add_library(engine STATIC
     # `overlaps(aabb, aabb)` this lesson added there.
     src/phys/broadphase.cpp
 
+    # Lesson 8.11. A constraint as a Jacobian row, and the three joints built
+    # from rows. It sits BELOW solver.cpp in the dependency graph and above
+    # rigid_body.cpp: it knows what a body's velocity and inverse inertia are,
+    # and it knows nothing about contacts, manifolds or the loop that visits it
+    # — which is the physical shape of the lesson's claim that a contact is a
+    # special case of a row rather than the other way round. `solver.hpp`
+    # includes it; it includes nothing from the solver. (Its one reach sideways
+    # is `pair_key`, from manifold.hpp, for the collision filter.)
+    src/phys/constraint.cpp
+
     # Lesson 8.9. The first file in phys/ that WRITES a velocity. Everything
     # above it answers a question — do these overlap, how deep, at which points,
     # which pairs are worth asking about — and the whole of `engine::phys` could

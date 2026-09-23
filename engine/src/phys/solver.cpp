@@ -25,6 +25,13 @@
 //   * and the loop itself, which is thirty lines and whose only subtlety is
 //     what is inside it and what is outside — warm starting once per step, all
 //     the velocity iterations before any position iteration.
+//
+// Lesson 8.11 added joints to the loop and changed nothing else in it. Every
+// stage that visits a manifold now visits the island's joints first, through
+// `constraint.hpp`'s four functions; `build_islands` unions joint edges by the
+// same rule as contact edges; and the class was renamed `constraint_solver`,
+// with `contact_solver` kept as an alias. The contact half of this file is
+// byte for byte what 8.10 shipped.
 
 #include <engine/phys/solver.hpp>
 
@@ -709,10 +716,48 @@ int find_root(std::vector<int>& parent, int x)
     return x;
 }
 
+/// Join the islands of two bodies, if the edge between them is an edge.
+///
+/// Lesson 8.11 lifted this out of the contact loop so that joints could use it
+/// too, unchanged — which is the point: a joint is an edge of the island graph
+/// by EXACTLY the rule a contact is, and writing the rule twice is how the two
+/// would one day disagree.
+void union_edge(std::vector<int>& island_of, int n, std::uint32_t body_a, std::uint32_t body_b)
+{
+    const int a = static_cast<int>(body_a);
+    const int b = static_cast<int>(body_b);
+    if (a < 0 || a >= n || b < 0 || b >= n) { return; }
+
+    // BOTH ends must be able to move. An impulse applied to a fixed or
+    // kinematic body changes nothing any other constraint can read — its
+    // velocity is never written — so it propagates nothing and joins nothing.
+    // The floor is in every contact in the scene and in no island; the ceiling
+    // a lamp hangs from is in every lamp's joint and in no island either.
+    if (island_of[static_cast<std::size_t>(a)] < 0) { return; }
+    if (island_of[static_cast<std::size_t>(b)] < 0) { return; }
+
+    const int ra = find_root(island_of, a);
+    const int rb = find_root(island_of, b);
+    if (ra == rb) { return; }
+
+    // Union by INDEX rather than by size: the smaller index wins, always.
+    // It is one comparison instead of a second array, and it costs a
+    // theoretically worse tree — which path halving flattens anyway, and
+    // which 8.10 §9 prices, labelling included, at 2.5 ns per body.
+    if (ra < rb) { island_of[static_cast<std::size_t>(rb)] = ra; }
+    else         { island_of[static_cast<std::size_t>(ra)] = rb; }
+}
+
 } // namespace
 
 int build_islands(std::span<const rigid_body> bodies, std::span<const contact_pair> contacts,
                   std::vector<int>& island_of)
+{
+    return build_islands(bodies, contacts, std::span<const joint_pair>{}, island_of);
+}
+
+int build_islands(std::span<const rigid_body> bodies, std::span<const contact_pair> contacts,
+                  std::span<const joint_pair> joints, std::vector<int>& island_of)
 {
     const int n = static_cast<int>(bodies.size());
 
@@ -723,7 +768,7 @@ int build_islands(std::span<const rigid_body> bodies, std::span<const contact_pa
     // finished with the moment the labels start. So `island_of` is the parent
     // array for the first half of this function and the answer for the second,
     // and the whole thing allocates nothing on a scene whose size has not
-    // changed. `contact_solver` calls this every step.
+    // changed. `constraint_solver` calls this every step.
     island_of.assign(static_cast<std::size_t>(n), -1);
     for (int i = 0; i < n; ++i)
     {
@@ -736,31 +781,15 @@ int build_islands(std::span<const rigid_body> bodies, std::span<const contact_pa
         }
     }
 
-    // ---- union over the contact edges -------------------------------------
-    for (const contact_pair& p : contacts)
-    {
-        const int a = static_cast<int>(p.body_a);
-        const int b = static_cast<int>(p.body_b);
-        if (a < 0 || a >= n || b < 0 || b >= n) { continue; }
-
-        // BOTH ends must be able to move. An impulse applied to a fixed or
-        // kinematic body changes nothing any other contact can read — its
-        // velocity is never written — so it propagates nothing and joins
-        // nothing. The floor is in every contact in the scene and in no island.
-        if (island_of[static_cast<std::size_t>(a)] < 0) { continue; }
-        if (island_of[static_cast<std::size_t>(b)] < 0) { continue; }
-
-        const int ra = find_root(island_of, a);
-        const int rb = find_root(island_of, b);
-        if (ra == rb) { continue; }
-
-        // Union by INDEX rather than by size: the smaller index wins, always.
-        // It is one comparison instead of a second array, and it costs a
-        // theoretically worse tree — which path halving flattens anyway, and
-        // which 8.10 §9 prices, labelling included, at 2.5 ns per body.
-        if (ra < rb) { island_of[static_cast<std::size_t>(rb)] = ra; }
-        else         { island_of[static_cast<std::size_t>(ra)] = rb; }
-    }
+    // ---- union over the contact edges, then the joint edges ----------------
+    //
+    // Lesson 8.11 added the second loop. A joint joins two bodies that need
+    // not be touching — the links of a chain, a door and its frame — and
+    // leaving it out of the graph is the bug §12 measures: the chain goes to
+    // sleep one link at a time, and a sleeping link is an immovable body to its
+    // neighbour.
+    for (const contact_pair& p : contacts) { union_edge(island_of, n, p.body_a, p.body_b); }
+    for (const joint_pair& p : joints)     { union_edge(island_of, n, p.body_a, p.body_b); }
 
     // ---- turn roots into dense labels, in place ---------------------------
     //
@@ -948,24 +977,26 @@ int update_sleep(std::span<rigid_body> bodies, std::span<const std::uint32_t> is
 }
 
 // ---------------------------------------------------------------------------
-// The solver — Lesson 8.10
+// The solver — Lessons 8.10 and 8.11
 // ---------------------------------------------------------------------------
 
-void contact_solver::begin(std::span<rigid_body> bodies)
+void constraint_solver::begin(std::span<rigid_body> bodies)
 {
     bodies_ = bodies;
 
     // `clear` and not `= {}`: a vector cleared keeps its capacity, so a scene
     // of a settled size allocates on its first step and never again. 8.8's grid
-    // makes the same contract in the same words, and `contact_solver::clear` is
-    // the way to actually give the memory back.
+    // makes the same contract in the same words, and `constraint_solver::clear`
+    // is the way to actually give the memory back.
     pairs_.clear();
     batches_.clear();
+    joints_.clear();
+    joint_batches_.clear();
     stats_ = solver_stats{};
 }
 
-void contact_solver::add(std::uint32_t body_a, std::uint32_t body_b, contact_manifold& m,
-                         const contact_material& material)
+void constraint_solver::add(std::uint32_t body_a, std::uint32_t body_b, contact_manifold& m,
+                            const contact_material& material)
 {
     // An empty manifold is not a contact. Dropping it here rather than in the
     // solve loop keeps it out of the contact graph too, which matters: a pair
@@ -976,16 +1007,27 @@ void contact_solver::add(std::uint32_t body_a, std::uint32_t body_b, contact_man
     pairs_.push_back(contact_pair{body_a, body_b, &m, material});
 }
 
-const solver_stats& contact_solver::solve(float h, const solver_config& cfg,
-                                          const sleep_config& sleep)
+void constraint_solver::add(std::uint32_t body_a, std::uint32_t body_b, joint& j)
+{
+    // No equivalent of the empty-manifold test: a joint always constrains, and
+    // it is an edge of the island graph whether or not it is under load. A
+    // chain hanging perfectly still is still one chain.
+    joints_.push_back(joint_pair{body_a, body_b, &j});
+}
+
+const solver_stats& constraint_solver::solve(float h, const solver_config& cfg,
+                                             const sleep_config& sleep)
 {
     stats_ = solver_stats{};
     stats_.manifolds = static_cast<int>(pairs_.size());
+    stats_.joints = static_cast<int>(joints_.size());
 
     const std::size_t body_count = bodies_.size();
 
-    // ---- 1. the contact graph -----------------------------------------------
-    stats_.islands = build_islands(bodies_, pairs_, island_of_);
+    // ---- 1. the constraint graph ---------------------------------------------
+    //
+    // Contacts and joints are both edges, by one rule. See `build_islands`.
+    stats_.islands = build_islands(bodies_, pairs_, joints_, island_of_);
 
     // Group the bodies by island: count, prefix-sum, scatter. A counting sort,
     // exactly as 8.8's grid sorts proxies into cells, and for the same payoff —
@@ -1015,18 +1057,19 @@ const solver_stats& contact_solver::solve(float h, const solver_config& cfg,
         ++it.body_count;
     }
 
-    // The same sort over the contacts. A contact's island is whichever of its
-    // two bodies has one; a contact between two immovable bodies has none and
-    // is dropped, which is a level-design bug reported by its absence.
-    const auto pair_island = [this](const contact_pair& p) {
-        const int ia = island_of_[p.body_a];
-        return ia >= 0 ? ia : island_of_[p.body_b];
+    // The same sort over the contacts, and then over the joints. An edge's
+    // island is whichever of its two bodies has one; an edge between two
+    // immovable bodies has none and is dropped, which is a level-design bug
+    // reported by its absence.
+    const auto edge_island = [this](std::uint32_t a, std::uint32_t b) {
+        const int ia = island_of_[a];
+        return ia >= 0 ? ia : island_of_[b];
     };
 
     for (island& isl : islands_) { isl.contact_count = 0; }
     for (const contact_pair& p : pairs_)
     {
-        const int isl = pair_island(p);
+        const int isl = edge_island(p.body_a, p.body_b);
         if (isl >= 0) { ++islands_[static_cast<std::size_t>(isl)].contact_count; }
     }
     running = 0;
@@ -1039,12 +1082,37 @@ const solver_stats& contact_solver::solve(float h, const solver_config& cfg,
     island_contacts_.assign(static_cast<std::size_t>(running), 0);
     for (std::size_t ci = 0; ci < pairs_.size(); ++ci)
     {
-        const int isl = pair_island(pairs_[ci]);
+        const int isl = edge_island(pairs_[ci].body_a, pairs_[ci].body_b);
         if (isl < 0) { continue; }
         island& it = islands_[static_cast<std::size_t>(isl)];
         island_contacts_[static_cast<std::size_t>(it.first_contact + it.contact_count)] =
             static_cast<int>(ci);
         ++it.contact_count;
+    }
+
+    // Lesson 8.11. The joints, sorted into the same islands the same way.
+    for (island& isl : islands_) { isl.joint_count = 0; }
+    for (const joint_pair& p : joints_)
+    {
+        const int isl = edge_island(p.body_a, p.body_b);
+        if (isl >= 0) { ++islands_[static_cast<std::size_t>(isl)].joint_count; }
+    }
+    running = 0;
+    for (island& isl : islands_)
+    {
+        isl.first_joint = running;
+        running += isl.joint_count;
+        isl.joint_count = 0;
+    }
+    island_joints_.assign(static_cast<std::size_t>(running), 0);
+    for (std::size_t ji = 0; ji < joints_.size(); ++ji)
+    {
+        const int isl = edge_island(joints_[ji].body_a, joints_[ji].body_b);
+        if (isl < 0) { continue; }
+        island& it = islands_[static_cast<std::size_t>(isl)];
+        island_joints_[static_cast<std::size_t>(it.first_joint + it.joint_count)] =
+            static_cast<int>(ji);
+        ++it.joint_count;
     }
 
     // ---- 2. which islands are asleep, and wake the ones that are not --------
@@ -1061,11 +1129,50 @@ const solver_stats& contact_solver::solve(float h, const solver_config& cfg,
 
     // ---- 3. prepare, and warm start ONCE ------------------------------------
     batches_.assign(pairs_.size(), contact_batch{});
+    joint_batches_.assign(joints_.size(), joint_batch{});
     pseudo_.assign(body_count, pseudo_velocity{});
 
     for (const island& isl : islands_)
     {
         if (isl.sleeping) { continue; }
+
+        // Joints first, here as in the sweeps. The warm starts are all applied
+        // before the first sweep either way, so the order in THIS loop changes
+        // only which impulse is added to a velocity first — i.e. nothing but
+        // the last bit of the sum.
+        for (int k = 0; k < isl.joint_count; ++k)
+        {
+            const int ji = island_joints_[static_cast<std::size_t>(isl.first_joint + k)];
+            const joint_pair& p = joints_[static_cast<std::size_t>(ji)];
+            rigid_body& a = bodies_[p.body_a];
+            rigid_body& b = bodies_[p.body_b];
+
+            joint_batch& batch = joint_batches_[static_cast<std::size_t>(ji)];
+            batch = prepare_joint(a, b, *p.joint_ptr, h, cfg.joints);
+            if (cfg.joints.warm_start) { warm_start_joint(a, b, batch); }
+
+            stats_.joint_linear_error =
+                std::max(stats_.joint_linear_error, length(batch.point_error));
+            for (int i = 0; i < 2; ++i)
+            {
+                stats_.joint_angular_error =
+                    std::max(stats_.joint_angular_error, std::abs(batch.angular_error[i]));
+            }
+            for (int r = 0; r < batch.row_count; ++r)
+            {
+                const jacobian_row& row = batch.rows[r];
+                const float violation = row.lower == 0.0f ? std::max(0.0f, -row.error)
+                                        : row.role == static_cast<std::uint8_t>(row_role::motor)
+                                            ? 0.0f
+                                            : std::abs(row.error);
+                const bool angular = length_squared(row.linear_a) == 0.0f
+                                     && length_squared(row.linear_b) == 0.0f;
+                if (angular) { stats_.joint_angular_error = std::max(stats_.joint_angular_error, violation); }
+                else         { stats_.joint_linear_error = std::max(stats_.joint_linear_error, violation); }
+            }
+            ++stats_.solved_joints;
+        }
+
         for (int k = 0; k < isl.contact_count; ++k)
         {
             const int ci = island_contacts_[static_cast<std::size_t>(isl.first_contact + k)];
@@ -1092,24 +1199,44 @@ const solver_stats& contact_solver::solve(float h, const solver_config& cfg,
 
     // ---- 4. the velocity iterations ------------------------------------------
     //
-    // Gauss–Seidel: every sweep re-solves each contact against the velocities
-    // the other contacts have since produced, so the corrections compose
-    // instead of competing. The order within a sweep is the order the caller
-    // added the manifolds, grouped by island — and it MATTERS, because a
-    // Gauss–Seidel sweep propagates information in the direction it walks.
-    // 8.10 §5 measures it and finds LESS than the folklore claims: bottom-up
-    // beats top-down by 1.08x in residual on a ten-crate tower, which at §3's
+    // Gauss–Seidel: every sweep re-solves each constraint against the
+    // velocities the others have since produced, so the corrections compose
+    // instead of competing. Within an island the JOINTS go first and the
+    // contacts second, which is Box2D's order and is argued rather than
+    // measured: a contact is the constraint that must never be violated
+    // visibly (a limb through a floor is worse than a limb a millimetre off
+    // its socket), so it gets the last word in each sweep. 8.11 leaves the
+    // measurement as an exercise, and says so.
+    //
+    // The order within the contacts is the order the caller added the
+    // manifolds, grouped by island — and it MATTERS, because a Gauss–Seidel
+    // sweep propagates information in the direction it walks. 8.10 §5
+    // measures it and finds LESS than the folklore claims: bottom-up beats
+    // top-down by 1.08x in residual on a ten-crate tower, which at §3's
     // measured contraction is worth 0.12 of an iteration. This engine
     // therefore does not sort, and says so rather than implying a decision.
+    const bool joint_bias = cfg.correction == position_correction::baumgarte;
     for (int iteration = 0; iteration < cfg.velocity_iterations; ++iteration)
     {
         stats_.max_residual = 0.0f;
+        stats_.joint_residual = 0.0f;
         stats_.normal_impulse = 0.0f;
         stats_.friction_impulse = 0.0f;
 
         for (const island& isl : islands_)
         {
             if (isl.sleeping) { continue; }
+
+            for (int k = 0; k < isl.joint_count; ++k)
+            {
+                const int ji = island_joints_[static_cast<std::size_t>(isl.first_joint + k)];
+                const joint_pair& p = joints_[static_cast<std::size_t>(ji)];
+                const joint_report r = solve_joint(bodies_[p.body_a], bodies_[p.body_b],
+                                                   joint_batches_[static_cast<std::size_t>(ji)],
+                                                   joint_bias);
+                stats_.joint_residual = std::max(stats_.joint_residual, r.max_residual);
+            }
+
             for (int k = 0; k < isl.contact_count; ++k)
             {
                 const int ci = island_contacts_[static_cast<std::size_t>(isl.first_contact + k)];
@@ -1138,6 +1265,15 @@ const solver_stats& contact_solver::solve(float h, const solver_config& cfg,
             for (const island& isl : islands_)
             {
                 if (isl.sleeping) { continue; }
+
+                for (int k = 0; k < isl.joint_count; ++k)
+                {
+                    const int ji = island_joints_[static_cast<std::size_t>(isl.first_joint + k)];
+                    const joint_pair& p = joints_[static_cast<std::size_t>(ji)];
+                    (void)solve_joint_positions(joint_batches_[static_cast<std::size_t>(ji)],
+                                                pseudo_[p.body_a], pseudo_[p.body_b]);
+                }
+
                 for (int k = 0; k < isl.contact_count; ++k)
                 {
                     const int ci =
@@ -1187,9 +1323,18 @@ const solver_stats& contact_solver::solve(float h, const solver_config& cfg,
     // matches it onto next frame's points by feature id, and next frame's
     // `prepare_contacts` reads it back as an initial guess. Three lessons of
     // machinery, and this is the line that closes the loop.
+    //
+    // A joint needs none of the matching: it is the same joint next step, by
+    // construction, so its impulses go straight back into it.
     for (const island& isl : islands_)
     {
         if (isl.sleeping) { continue; }
+        for (int k = 0; k < isl.joint_count; ++k)
+        {
+            const int ji = island_joints_[static_cast<std::size_t>(isl.first_joint + k)];
+            write_back(joint_batches_[static_cast<std::size_t>(ji)],
+                       *joints_[static_cast<std::size_t>(ji)].joint_ptr);
+        }
         for (int k = 0; k < isl.contact_count; ++k)
         {
             const int ci = island_contacts_[static_cast<std::size_t>(isl.first_contact + k)];
@@ -1222,33 +1367,41 @@ const solver_stats& contact_solver::solve(float h, const solver_config& cfg,
     return stats_;
 }
 
-std::span<const island> contact_solver::islands() const
+std::span<const island> constraint_solver::islands() const
 {
     return {islands_.data(), islands_.size()};
 }
 
-std::span<const std::uint32_t> contact_solver::island_bodies() const
+std::span<const std::uint32_t> constraint_solver::island_bodies() const
 {
     return {island_bodies_.data(), island_bodies_.size()};
 }
 
-std::span<const int> contact_solver::island_of() const
+std::span<const int> constraint_solver::island_of() const
 {
     return {island_of_.data(), island_of_.size()};
 }
 
-const solver_stats& contact_solver::stats() const { return stats_; }
+const solver_stats& constraint_solver::stats() const { return stats_; }
 
-void contact_solver::clear()
+std::span<const joint_batch> constraint_solver::joint_batches() const
+{
+    return {joint_batches_.data(), joint_batches_.size()};
+}
+
+void constraint_solver::clear()
 {
     bodies_ = {};
     pairs_ = {};
     batches_ = {};
+    joints_ = {};
+    joint_batches_ = {};
     pseudo_ = {};
     island_of_ = {};
     islands_ = {};
     island_bodies_ = {};
     island_contacts_ = {};
+    island_joints_ = {};
     stats_ = solver_stats{};
 }
 

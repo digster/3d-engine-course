@@ -8972,3 +8972,64 @@ The general form: before timing a parameter sweep, ask what state the system car
 steps that the parameter can influence. Caches, accumulators, adaptive structures and RNG streams
 all qualify, and all of them look like implementation details right up until they are the
 measurement.
+
+## A quantity read at the end of a step may belong to its start
+
+Lesson 8.11 §5 checked a spinning rod's kinetic energy against `(L/r)²` — angular momentum is
+conserved, so the speed should fall exactly as the radius grows — and missed by **0.4%**, which is
+enormous for a check that should agree to the rounding. The velocity a step *ends* with was solved
+by the constraint at the radius the step *started* with, one drift earlier; the position update
+then moved the bob. Pairing the end-of-step velocity with the end-of-step radius mixed two instants,
+and the error was exactly one step's worth of drift. Paired with the start-of-step radius it agreed
+to **1 × 10⁻⁶**.
+
+The same session produced a second instance of the same mistake in a different costume: a
+pendulum's period at a 2° amplitude compared against the **small-swing limit**, which is a
+different instant of a different sort — the period of a swing that does not exist. The "error"
+refused to shrink with the step (+6.6 × 10⁻⁵ at 240 Hz), and against the period at 2° it fell by
+exactly four per halving of `h`.
+
+Two rules come out of it. In a stepped simulation, write down *when* each quantity you compare was
+computed, not just what it is — velocities after the solve, positions after the move, and an
+energy that adds them is an energy of no instant at all. And **an error that will not shrink with
+`h` is a reference that is wrong**, far more often than it is a simulation that is.
+
+## Sample the phase, not the parameter
+
+Lesson 8.11 §10 measured a hinge limit's overshoot — which should be uniform on `[0, ω·h]`, like
+8.10's arrival depth — by sweeping the arrival speed finely from 2.0 to 2.2 rad/s, and read a mean
+of **0.42** instead of 0.50. The speeds were uniform; the *phase* at which the arm crossed its stop
+within a step was not, because that sweep moved the phase through 1.36 cycles rather than a whole
+number of them. Holding the speed and stepping the starting angle back through exactly one step's
+travel gave 200 evenly spaced phases and a mean of **0.4985**.
+
+When a measured quantity depends on where an event falls inside a discrete step, the variable to
+sweep uniformly is that position, not whatever physical parameter happens to move it.
+
+## A count can be the wrong instrument where a consequence is the right one
+
+Lesson 8.11 §3's control for a sign-flipped Jacobian first counted how many flipped contact rows
+applied an impulse, expecting zero on a resting yard. It read 111 of 200, then 90 of 200, and could
+not be made to mean anything: in a stack, gravity gives *both* crates of a crate-on-crate contact
+the same `g·h`, so only the floor contacts are clearly approaching and the rest sit either side of
+zero on noise. Running the flipped rows as the yard's only contact solver for half a second said
+it in one number — **784 mm** through the floor, against 27 for the rows as derived.
+
+If a control's count depends on a detail you did not intend to test, measure what the defect
+*does* instead of how often it fires.
+
+## SVG collapses whitespace, so columns need coordinates
+
+Lesson 8.11's figure 2 wrote each row of a cost table as one monospace string padded with spaces
+to line up the columns. SVG collapses runs of whitespace in `<text>` exactly as HTML does, and the
+columns came out ragged. `check-page.js` cannot see it, because nothing overlaps and nothing
+spills. Emit one `<text>` per column at a computed `x`, with `text-anchor="end"` for numbers.
+
+## A demo can hide the very thing it exists to show
+
+Lesson 8.11's joints demo drove two arms into their hinge limits with motors, to show a door
+bouncing off its stop at 7.5% of its arrival speed. The motor, still pushing into the stop,
+swallowed a 7.5% rebound within a few frames, and the scene showed two arms sitting still. Kicking
+the arms and letting them *coast* into the stop made the rebound a visible drift of a fraction of a
+radian. Before a demo scene ships, run it headless at the moment the effect should be visible and
+look at the frame.

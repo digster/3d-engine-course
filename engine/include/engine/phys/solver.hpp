@@ -129,6 +129,34 @@
 // `integrate_positions` in the same edit, because a contact solve has to happen
 // between them and there was no way to say so.
 //
+// ---- AND WHAT LESSON 8.11 ADDED -------------------------------------------
+//
+// Joints, in the same loop. `constraint.hpp` writes a constraint as a Jacobian
+// row and builds rods, ropes, ball-sockets and hinges out of rows; this file
+// learned three things to carry them:
+//
+//   **THE SOLVER HOLDS JOINTS BESIDE MANIFOLDS.** `contact_solver` is now
+//     `constraint_solver`, because a class that solves hinges is not a contact
+//     solver, and the old name survives as an alias so that 8.10's demo and
+//     harness still compile unchanged. `add` gains an overload for a joint.
+//     Within every sweep of every island the joints are visited first and the
+//     contacts second — Box2D's order, argued rather than measured; the
+//     argument is in `solve`, and measuring it is one of 8.11's exercises.
+//
+//   **A JOINT IS AN EDGE OF THE ISLAND GRAPH.** A chain whose links do not
+//     touch is still one island, or it would sleep a link at a time — and a
+//     sleeping link is an immovable body to its neighbour, so the chain hangs
+//     from a frozen link in mid-air. 8.11 §12 measures it. A joint to a fixed
+//     body is not a bridge, for 8.10's reason.
+//
+//   **`pseudo_velocity` MOVED DOWN A LAYER**, into `constraint.hpp`, because
+//     joints need it and joints sit below the loop. 8.10's comment on it
+//     predicted exactly this. Nothing that includes this header notices.
+//
+// What did NOT change is the contact solve. A contact normal IS a Jacobian row
+// — 8.11 §3 proves it numerically, row by row — and it stays hand-written;
+// §3 measures why.
+//
 // ---- A NOTE ON WHERE THE MATERIAL LIVES ------------------------------------
 //
 // 8.8's handover said this lesson would put `restitution` and `friction` on
@@ -148,6 +176,7 @@
 
 #include <engine/math/mat3.hpp>
 #include <engine/math/vec3.hpp>
+#include <engine/phys/constraint.hpp>
 #include <engine/phys/manifold.hpp>
 #include <engine/phys/rigid_body.hpp>
 
@@ -574,6 +603,15 @@ struct solver_config
 
     /// Which position correction to use. Defaults to `split_impulse`; see
     /// `position_correction`, and 8.10 §7 for what the cheaper one costs.
+    ///
+    /// **Lesson 8.11: joints use it too**, and 8.11 §6 found the choice cuts
+    /// both ways there. Baumgarte leaves a limb spawned out of its socket
+    /// spinning with 0.35 J it was never given; on a joint that is turning,
+    /// it puts back what the velocity projection removes, so a 90-degree
+    /// pendulum keeps 92.0% of its energy per period against split impulse's
+    /// 75.4%. Split impulse stays the default because a joint that loses
+    /// energy reads as damping and a joint that invents it reads as a bug; see
+    /// `joint_config` for the whole argument.
     position_correction correction = position_correction::split_impulse;
 
     /// **The fraction of the excess penetration removed per step**, for both
@@ -628,6 +666,14 @@ struct solver_config
     /// what the wrong order does, which is a box that slides a few millimetres
     /// on the first frame of every landing and then grips.
     bool normal_before_friction = true;
+
+    /// The joints' own knobs. Lesson 8.11; see `joint_config`.
+    ///
+    /// Nested rather than flattened into this struct because they are about a
+    /// different kind of constraint, and a reader tuning a stack of crates
+    /// should not have to read past a hinge's block-solve switch to find the
+    /// slop.
+    joint_config joints{};
 };
 
 // ---------------------------------------------------------------------------
@@ -867,30 +913,12 @@ solve_report resolve_contact(rigid_body& a, rigid_body& b, contact_manifold& m,
 // The position solve — Lesson 8.10
 // ---------------------------------------------------------------------------
 
-/// **A body's shadow velocity: it moves positions and nothing else.**
-///
-/// The whole of the split-impulse idea, in twenty-four bytes. The position pass
-/// solves exactly the same linear system as the velocity pass — same lever
-/// arms, same effective masses, same non-negativity — but against *this*
-/// instead of `rigid_body::state.velocity`, and at the end of the step
-/// `integrate_positions` is handed `velocity + pseudo.linear` to move by.
-/// Nothing here survives into the next step.
-///
-/// **That is the entire difference between the two corrections.** Baumgarte
-/// pushes on the real velocity, so a body that has finished separating is
-/// still holding the push and leaves; this pushes on a velocity that is thrown
-/// away, so it arrives at the surface with exactly the momentum it had. 8.10
-/// §8 measures **1.14006 m/s** of departure against **0.00000**.
-///
-/// It lives in an array beside the bodies rather than in `rigid_body` because
-/// it is **solver scratch**, not state: it is meaningless outside a step, it
-/// would serialise as noise, and a body asleep or outside every island never
-/// needs one. 8.11's joints will want the same array and will get it for free.
-struct pseudo_velocity
-{
-    vec3 linear{};
-    vec3 angular{};
-};
+// `pseudo_velocity` — a body's shadow velocity, which moves positions and
+// nothing else — was defined here in Lesson 8.10 and now lives in
+// `constraint.hpp`, unchanged, because joints need it and joints sit below this
+// file's loop rather than inside it. 8.10's comment predicted the move: "8.11's
+// joints will want the same array and will get it for free". The split-impulse
+// argument is in its doc comment there.
 
 /// **Compute each point's correction bias**, which is the one prepared
 /// quantity that depends on how long the step is.
@@ -971,6 +999,19 @@ struct contact_pair
     contact_material material{};
 };
 
+/// **One joint, with the two bodies it belongs to.** Lesson 8.11.
+///
+/// `contact_pair`'s twin, and for the same reasons: indices rather than
+/// pointers so the island graph is a set of integers, and a pointer to the
+/// caller's `joint` because the write-back into it is the whole mechanism of
+/// warm starting. The joint must outlive the step.
+struct joint_pair
+{
+    std::uint32_t body_a = 0;
+    std::uint32_t body_b = 0;
+    joint* joint_ptr = nullptr;
+};
+
 /// **A group of bodies that can only affect one another.**
 ///
 /// Two bodies are in the same island when a chain of contacts joins them.
@@ -1000,6 +1041,11 @@ struct island
     int body_count = 0;
     int first_contact = 0;
     int contact_count = 0;
+
+    /// A range into `constraint_solver`'s joint ordering, grouped the same way
+    /// as the contacts. Lesson 8.11.
+    int first_joint = 0;
+    int joint_count = 0;
 
     /// Every body in it was quiet for long enough. Nothing in a sleeping
     /// island is integrated and none of its contacts are solved.
@@ -1031,6 +1077,25 @@ struct island
 /// answer: a falling body is quiet nowhere and its island never sleeps.
 int build_islands(std::span<const rigid_body> bodies, std::span<const contact_pair> contacts,
                   std::vector<int>& island_of);
+
+/// **The same partition, over contacts AND joints.** Lesson 8.11.
+///
+/// A joint is an edge of the graph exactly as a contact is, and under exactly
+/// the same rule — both ends must be able to move — so a lamp hanging from a
+/// fixed ceiling is its own island, and two lamps hanging from the same ceiling
+/// are two.
+///
+/// **LEAVE THE JOINTS OUT AND A CHAIN SLEEPS ONE LINK AT A TIME.** The links of
+/// a chain do not touch (their joints stop them), so without joint edges each
+/// is its own island of one, each goes quiet on its own schedule, and a
+/// sleeping link is an immovable body to the link below it. Strike the bottom
+/// of a resting chain and one link swings from a frozen chain above it. 8.11
+/// §12 counts the bodies that move.
+///
+/// The three-argument overload above is this with no joints, and is kept
+/// because 8.10's harness and demo call it.
+int build_islands(std::span<const rigid_body> bodies, std::span<const contact_pair> contacts,
+                  std::span<const joint_pair> joints, std::vector<int>& island_of);
 
 // ---------------------------------------------------------------------------
 // Sleeping — Lesson 8.10
@@ -1177,18 +1242,43 @@ struct solver_stats
 
     float normal_impulse = 0.0f;
     float friction_impulse = 0.0f;
+
+    /// Joints handed in, and how many were solved. Lesson 8.11.
+    int joints = 0;
+    int solved_joints = 0;
+
+    /// The worst joint residual after the last velocity iteration — the joint
+    /// half of `max_residual`, kept separate because the two converge at
+    /// different rates and a single number would report whichever was worse.
+    float joint_residual = 0.0f;
+
+    /// The largest joint error at prepare time, metres and radians. What the
+    /// position correction is working on; see `joint_error`.
+    float joint_linear_error = 0.0f;
+    float joint_angular_error = 0.0f;
 };
 
-/// **The sequential-impulse solver: every contact in the world, iterated.**
+/// **The sequential-impulse solver: every contact and every joint in the world,
+/// iterated.**
+///
+/// Named `contact_solver` in Lesson 8.10, when contacts were all it held; the
+/// alias below keeps that name compiling. Lesson 8.11 added joints, and a class
+/// that holds a hinge is not a contact solver.
 ///
 /// Four calls per step, in order:
 ///
 /// ```
 /// solver.begin(world.bodies());
 /// for (auto& [key, m] : cache) { solver.add(a, b, m, material); }
+/// for (auto& jp : joints)      { solver.add(jp.a, jp.b, jp.joint); }
 /// solver.solve(h, cfg, sleep);
 /// // world.integrate_positions(h)
 /// ```
+///
+/// Joints go through every stage contacts do, in the same place: prepared and
+/// warm-started once, visited in every velocity sweep (FIRST in each island,
+/// then the contacts), visited in every position sweep under split impulse,
+/// and written back at the end.
 ///
 /// `solve` does, in this order: build the islands; wake every island that is
 /// not entirely asleep; prepare and warm-start every awake manifold once; sweep
@@ -1217,7 +1307,7 @@ struct solver_stats
 /// releasing them, so a scene of a fixed size allocates in its first step and
 /// never again — the same contract 8.8's `uniform_grid` makes, for the same
 /// reason, and `clear` is how a level change gets the memory back.
-class contact_solver
+class constraint_solver
 {
 public:
     /// Begin a step over these bodies. The span is retained until `solve`
@@ -1234,6 +1324,14 @@ public:
     /// integers, not a set of pointers.
     void add(std::uint32_t body_a, std::uint32_t body_b, contact_manifold& m,
              const contact_material& material);
+
+    /// Add one joint between two bodies. Lesson 8.11.
+    ///
+    /// `j` is retained by pointer and written back into at the end of `solve`,
+    /// exactly as a manifold is. A joint between two bodies neither of which
+    /// can move is kept out of every island and never solved — a level-design
+    /// bug reported by its absence, as for contacts.
+    void add(std::uint32_t body_a, std::uint32_t body_b, joint& j);
 
     /// Solve everything. See the class comment for the stage order.
     const solver_stats& solve(float h, const solver_config& cfg = {},
@@ -1252,17 +1350,30 @@ public:
     /// Release the scratch. A new step does not need this; a level change does.
     void clear();
 
+    /// The prepared joints of the last `solve`, in the order they were added.
+    /// Instrumentation: a demo draws the anchors from these, and 8.11's
+    /// harness reads the residuals.
+    [[nodiscard]] std::span<const joint_batch> joint_batches() const;
+
 private:
     std::span<rigid_body> bodies_{};
     std::vector<contact_pair> pairs_;
     std::vector<contact_batch> batches_;
+    std::vector<joint_pair> joints_;
+    std::vector<joint_batch> joint_batches_;
     std::vector<pseudo_velocity> pseudo_;
     std::vector<int> island_of_;
     std::vector<island> islands_;
     std::vector<std::uint32_t> island_bodies_;
     std::vector<int> island_contacts_;
+    std::vector<int> island_joints_;
     solver_stats stats_{};
 };
+
+/// **8.10's name for `constraint_solver`**, kept so that code written against
+/// it — 8.10's demo and harness among it — compiles unchanged. New code should
+/// use the new name; the old one says less than the class does.
+using contact_solver = constraint_solver;
 
 // ---------------------------------------------------------------------------
 // Closed forms, for checking simulations against

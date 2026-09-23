@@ -464,3 +464,29 @@ engine_set_warnings(impulse)
 add_executable(stack stack/main.cpp)
 target_link_libraries(stack PRIVATE engine::engine)
 engine_set_warnings(stack)
+
+# ---- joints: rods, ropes, sockets and hinges, in the loop that stacks crates --
+#
+# Lesson 8.11. `stack` showed contacts answering one another; this shows the
+# other kind of constraint the same solver now holds, and each of its four
+# scenes is one of the lesson's measurements made watchable.
+#
+# [1] is three pendulums: a ball on a rod and a plank whose centre is the same
+# distance below its pin drift out of step, which is the parallel-axis theorem
+# heard as a period, and a ball on a rope goes slack exactly half a length above
+# the pin. [2] is two arms driven into a limit: [S] toggles speculation, and the
+# turnstile stops dead where the gate still bounces, at the m d^2 / I_pivot rate
+# the lesson derives. [3] is a chain with a heavy end weight, where [U] swaps
+# eight sweeps of one step for one sweep of eight sub-steps and the stretch
+# nearly vanishes. [4] is a hinged bridge carrying crates — contacts and joints
+# in one loop, with `collision_filter` keeping each pair of hinged planks from
+# fighting its own joint.
+#
+# `engine::engine` directly and NOT `demo_common`, like every physics demo
+# before it: it loads nothing and computes everything on screen, so a `--shot`
+# run is byte-for-byte reproducible on any machine.
+#
+# No `engine_use_assets` and no `engine_use_shaders`.
+add_executable(joints joints/main.cpp)
+target_link_libraries(joints PRIVATE engine::engine)
+engine_set_warnings(joints)

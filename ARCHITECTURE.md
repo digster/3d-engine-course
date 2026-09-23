@@ -997,7 +997,7 @@ chore. What follows is on disk.
 │   └── Shaders.cmake       # add_hlsl_shader(name stage) -> a GLOBAL PROPERTY   [4.3, reshaped 5.1]
 ├── engine/                 # THE LIBRARY                                        [5.1]
 │   ├── CMakeLists.txt      # produces engine::engine (STATIC)
-│   ├── include/engine/     # ---- THE PUBLIC API. 92 headers. Nothing else. ----
+│   ├── include/engine/     # ---- THE PUBLIC API. 102 headers. Nothing else. ---
 │   │   ├── engine.hpp      # the umbrella. UNTIL 5.12 it listed 40 of the 55 headers
 │   │   │                   #   it could have — missing the whole ECS, the asset
 │   │   │                   #   store, handles, the logger and the action map —
@@ -1167,6 +1167,34 @@ chore. What follows is on disk.
 │   │   │                   #   union-find in which a body that CANNOT MOVE IS
 │   │   │                   #   NOT A BRIDGE — break that and the floor welds the
 │   │   │                   #   level into one island and nothing ever sleeps.
+│   │   │                   # + constraint_solver (the class renamed; the old
+│   │   │                   #   `contact_solver` is an alias), joint_pair, the
+│   │   │                   #   joint ranges on `island`, a four-argument
+│   │   │                   #   build_islands, solver_config::joints and the
+│   │   │                   #   joint fields of solver_stats.             [8.11]
+│   │   │                   #   JOINTS RIDE THE SAME LOOP: prepared and warm-
+│   │   │                   #   started once, visited FIRST in every sweep of
+│   │   │                   #   every island, then the contacts. A joint is an
+│   │   │                   #   island edge by `union_edge` — the same function
+│   │   │                   #   contacts use — or a chain sleeps a link at a time.
+│   │   ├── constraint.hpp  # jacobian_row + point_row/angular_row/prepare_row/
+│   │   │                   #   solve_row; joint_kind {distance, ball_socket,
+│   │   │                   #   hinge}, joint_limit, joint_motor, joint and its
+│   │   │                   #   make_* functions, hinge_angle, measure_joint,
+│   │   │                   #   joint_config, joint_batch (3x3 point block, 2x2
+│   │   │                   #   hinge block), prepare/warm_start/solve_joint,
+│   │   │                   #   solve_joint_positions, write_back,
+│   │   │                   #   collision_filter, pseudo_velocity (moved here
+│   │   │                   #   from solver.hpp), and six closed forms including
+│   │   │                   #   lever_ratio.                              [8.11]
+│   │   │                   #   A CONSTRAINT IS A ROW AND TWO BOUNDS. It sits
+│   │   │                   #   BELOW solver.hpp — solver includes it and it
+│   │   │                   #   includes nothing from the solver — because a
+│   │   │                   #   contact is a special case of a row and not the
+│   │   │                   #   other way round. Joints are authored in each
+│   │   │                   #   body's own frame and cache their impulses as
+│   │   │                   #   WORLD vectors, so no cached number outlives its
+│   │   │                   #   frame (8.10's bug, designed out).
 │   │   │   └── gjk.hpp       # gjk_vertex/simplex/gjk_status/gjk_result/gjk_config,
 │   │   │                     #   gjk_distance, gjk_intersects, certify, and
 │   │   │                     #   cso_support + reduce_simplex — the last two public
@@ -1366,12 +1394,13 @@ chore. What follows is on disk.
 │   │                             #   texture, a comparison sampler, its own
 │   │                             #   render pass, and fill_uniforms() so the two
 │   │                             #   renderers cannot disagree about a bias
-│   └── src/                # ---- PRIVATE. 66 sources; no demo can name this path ----
+│   └── src/                # ---- PRIVATE. 68 sources; no demo can name this path ----
 │       ├── phys/           # integrate.cpp [8.1], rigid_body.cpp [8.2],
 │       │                   # inertia.cpp [8.3], shape.cpp [8.4],
 │       │                   # collide.cpp [8.4], gjk.cpp [8.5], epa.cpp [8.6],
 │       │                   # manifold.cpp [8.7], broadphase.cpp [8.8],
-│       │                   # solver.cpp                            [8.9, 8.10]
+│       │                   # solver.cpp                      [8.9, 8.10, 8.11]
+│       │                   # constraint.cpp                              [8.11]
 │       │                   #   gjk.cpp is the only one of these with no header of
 │       │                   #   its own shape knowledge: it includes gjk.hpp, which
 │       │                   #   includes convex.hpp, and nothing in it names a box.
@@ -1524,6 +1553,18 @@ chore. What follows is on disk.
 │   │                       #   clip drawn as itself — press [F] and the square
 │   │                       #   appears around the disc, and the extra area in
 │   │                       #   its corners IS the 43% of anisotropy.
+│   ├── joints/main.cpp     # RODS, ROPES, SOCKETS AND HINGES, IN THE LOOP THAT
+│   │                       #   STACKS CRATES                              [8.11]
+│   │                       #   Four scenes, each a measurement made watchable:
+│   │                       #   pendulums (a plank and a ball with the same
+│   │                       #   pivot-to-centre distance drift apart — the
+│   │                       #   parallel axis, heard — and a rope goes slack),
+│   │                       #   a turnstile and a gate KICKED into their stops
+│   │                       #   (the gate bounces at rho^8; a motor would have
+│   │                       #   hidden it), a weighted chain with [U] for
+│   │                       #   sub-steps, and a hinged bridge carrying crates.
+│   │                       #   Uses collision_filter, because the narrow phase
+│   │                       #   is the caller's.
 │   ├── stack/main.cpp      # A PILE OF CRATES, AND THE FOUR KNOBS THAT DECIDE
 │   │                       #   WHETHER IT IS A PILE                        [8.10]
 │   │                       #   `impulse` could draw the whole of one contact;
