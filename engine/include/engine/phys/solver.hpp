@@ -1158,6 +1158,32 @@ struct sleep_config
 int wake_islands(std::span<rigid_body> bodies, std::span<const std::uint32_t> island_bodies,
                  std::span<island> islands);
 
+/// **Wake every sleeping body that a MOVING kinematic body touches.** Lesson
+/// 8.12. Runs just before `wake_islands`, which then wakes the rest of each
+/// woken body's island by its own rule.
+///
+/// *** THE RULE ABOVE HAD A HOLE, AND IT WAS 8.10's. *** "A moving body that
+/// collides with a sleeping pile is joined to it by `build_islands`" is true
+/// of a DYNAMIC body only: `build_islands` unions an edge only when both ends
+/// are dynamic, because a body that cannot be pushed is not a bridge (8.10 §9,
+/// and still right). So a kinematic body — a lift, a moving platform, an
+/// animated character — could touch a sleeping crate for ever and never wake
+/// it: the crate's island stayed entirely asleep, its contacts were skipped,
+/// and the kinematic body passed straight through. 8.12 §12 found it as a
+/// jogging character running through a crate that had fallen asleep half a
+/// second before it arrived: 48 frames of contact, and the crate did not move.
+///
+/// Every contact and every joint between a sleeping dynamic body and a
+/// kinematic one moving faster than `cfg`'s thresholds wakes the dynamic one.
+/// **Faster than the thresholds, not merely touching**: a crate resting on a
+/// STOPPED lift must still be allowed to sleep, and a kinematic body never
+/// does (8.10), so "touching a kinematic body" alone would keep everything on
+/// every platform awake for ever. Does nothing when sleeping is disabled.
+///
+/// Returns how many bodies it woke.
+int wake_touched_by_kinematic(std::span<rigid_body> bodies, std::span<const contact_pair> contacts,
+                              std::span<const joint_pair> joints, const sleep_config& cfg = {});
+
 /// **Advance every body's sleep timer and put whole islands to sleep.** Runs
 /// AFTER the solve, and that is not a detail.
 ///
@@ -1256,6 +1282,10 @@ struct solver_stats
     /// position correction is working on; see `joint_error`.
     float joint_linear_error = 0.0f;
     float joint_angular_error = 0.0f;
+
+    /// Bodies woken this step because a moving kinematic body touched them.
+    /// Lesson 8.12; see `wake_touched_by_kinematic`.
+    int kinematic_wakes = 0;
 };
 
 /// **The sequential-impulse solver: every contact and every joint in the world,

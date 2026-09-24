@@ -1195,6 +1195,28 @@ chore. What follows is on disk.
 │   │   │                   #   body's own frame and cache their impulses as
 │   │   │                   #   WORLD vectors, so no cached number outlives its
 │   │   │                   #   frame (8.10's bug, designed out).
+│   │   │                   #   8.12 added split_swing_twist, swing_angle,
+│   │   │                   #   joint_cone and make_cone_twist (a ball-socket
+│   │   │                   #   with a swing cone and a twist range; the twist
+│   │   │                   #   row is the HALF-WAY axis over cos(phi/2), never
+│   │   │                   #   the bone), and FIXED 8.11's position pass: a
+│   │   │                   #   satisfied one-sided row takes its speculative
+│   │   │                   #   target, or a limit's far stop cancels the near
+│   │   │                   #   one's correction.                        [8.12]
+│   │   ├── ragdoll.hpp     # ragdoll_part_desc/ragdoll_desc (model space, bind
+│   │   │                   #   pose), build_ragdoll + ragdoll_report, and the
+│   │   │                   #   seam: part_targets, spawn, steer (kinematic
+│   │   │                   #   bodies moved by VELOCITY: the chord, and the
+│   │   │                   #   Rodrigues vector the linearised spin inverts),
+│   │   │                   #   simulate/animate, add_joints, exclude_pairs,
+│   │   │                   #   read_pose, realign_model.                 [8.12]
+│   │   │                   #   THE FIRST FILE IN phys/ THAT INCLUDES FROM
+│   │   │                   #   anim/: skeleton.hpp, which is maths only. The arrow points at the more general
+│   │   │                   #   (5.12's rule): an animation system in a game
+│   │   │                   #   with no physics must still compile. EVERY BODY
+│   │   │                   #   HAS ONE OWNER: the clip (kinematic, steered) or
+│   │   │                   #   the solver (dynamic). Bodies are a contiguous
+│   │   │                   #   run of the world's dense array from first_body.
 │   │   │   └── gjk.hpp       # gjk_vertex/simplex/gjk_status/gjk_result/gjk_config,
 │   │   │                     #   gjk_distance, gjk_intersects, certify, and
 │   │   │                     #   cso_support + reduce_simplex — the last two public
@@ -1401,6 +1423,7 @@ chore. What follows is on disk.
 │       │                   # manifold.cpp [8.7], broadphase.cpp [8.8],
 │       │                   # solver.cpp                      [8.9, 8.10, 8.11]
 │       │                   # constraint.cpp                              [8.11]
+│       │                   # ragdoll.cpp                                 [8.12]
 │       │                   #   gjk.cpp is the only one of these with no header of
 │       │                   #   its own shape knowledge: it includes gjk.hpp, which
 │       │                   #   includes convex.hpp, and nothing in it names a box.
@@ -1553,6 +1576,16 @@ chore. What follows is on disk.
 │   │                       #   clip drawn as itself — press [F] and the square
 │   │                       #   appears around the disc, and the extra area in
 │   │                       #   its corners IS the 43% of anisotropy.
+│   ├── ragdoll/main.cpp    # A CHARACTER ANIMATED, DROPPED, AND ANIMATED AGAIN
+│   │                       #                                              [8.12]
+│   │                       #   The trip (a jog steered into crates that fell
+│   │                       #   asleep first — 8.12's kinematic-wake fix is why
+│   │                       #   they move — the handoff, three seconds down, and
+│   │                       #   a realigned slerp return), the hang from one
+│   │                       #   hand ([U] sub-steps), and a pile of five. Draws
+│   │                       #   capsule silhouettes in an orthographic 3/4 view,
+│   │                       #   and the skinned skeleton through them from the
+│   │                       #   clip or from read_pose, passengers included.
 │   ├── joints/main.cpp     # RODS, ROPES, SOCKETS AND HINGES, IN THE LOOP THAT
 │   │                       #   STACKS CRATES                              [8.11]
 │   │                       #   Four scenes, each a measurement made watchable:
@@ -1820,6 +1853,8 @@ within the public API, since 5.2:
 `math` depends on nothing but the standard library — which is exactly why it is the first thing
 under test. `core` may not include `gfx`. Nothing in `engine/` may include from `demos/`. A
 cycle here is a design error, not an inconvenience to work around.
+
+**Lesson 8.12 added an arrow from `phys/` to `anim/`:** `phys/ragdoll.hpp` includes `anim/skeleton.hpp`. It points that way because a skeleton is joints and bind transforms and includes nothing but maths, while a ragdoll is a physics object built *from* one — 5.12's rule that the arrow points at the more general. The reverse would make every animated character compile the solver. `anim/` still includes nothing from `phys/`.
 
 **Lesson 5.11 added a second, finer-grained direction *inside* `gfx/`, and it is enforced by
 include lists rather than by the build:**

@@ -880,6 +880,32 @@ int wake_islands(std::span<rigid_body> bodies, std::span<const std::uint32_t> is
     return sleeping_islands;
 }
 
+int wake_touched_by_kinematic(std::span<rigid_body> bodies, std::span<const contact_pair> contacts,
+                              std::span<const joint_pair> joints, const sleep_config& cfg)
+{
+    if (!cfg.enabled) { return 0; }
+
+    // "Moving" is the sleep test's own definition turned round: a kinematic
+    // body that WOULD fail it, were it allowed to sleep, is one that can
+    // disturb what it touches. A stopped lift passes it and wakes nothing.
+    const auto moving_kinematic = [&cfg](const rigid_body& b) {
+        return b.kind == body_kind::kinematic
+               && (length_squared(b.state.velocity) > cfg.linear_threshold * cfg.linear_threshold
+                   || length_squared(b.angular_velocity) > cfg.angular_threshold * cfg.angular_threshold);
+    };
+
+    int woken = 0;
+    const auto edge = [&](std::uint32_t ia, std::uint32_t ib) {
+        rigid_body& a = bodies[ia];
+        rigid_body& b = bodies[ib];
+        if (a.sleeping && moving_kinematic(b)) { wake(a); ++woken; }
+        if (b.sleeping && moving_kinematic(a)) { wake(b); ++woken; }
+    };
+    for (const contact_pair& p : contacts) { edge(p.body_a, p.body_b); }
+    for (const joint_pair& p : joints) { edge(p.body_a, p.body_b); }
+    return woken;
+}
+
 int update_sleep(std::span<rigid_body> bodies, std::span<const std::uint32_t> island_bodies,
                  std::span<island> islands, float h, const sleep_config& cfg)
 {
@@ -1125,6 +1151,11 @@ const solver_stats& constraint_solver::solve(float h, const solver_config& cfg,
     // Note what this is NOT: it is not the sleep TEST. It only reads flags the
     // previous step set, and the test itself runs at the very end of this
     // function — see there for the reason, which is a number.
+    //
+    // Lesson 8.12 put one line in front of it: a moving KINEMATIC body is not
+    // a bridge, so it never joins the island it touches, and without this line
+    // it never woke one either. See `wake_touched_by_kinematic`.
+    stats_.kinematic_wakes = wake_touched_by_kinematic(bodies_, pairs_, joints_, sleep);
     wake_islands(bodies_, island_bodies_, islands_);
 
     // ---- 3. prepare, and warm start ONCE ------------------------------------

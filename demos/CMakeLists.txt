@@ -490,3 +490,24 @@ engine_set_warnings(stack)
 add_executable(joints joints/main.cpp)
 target_link_libraries(joints PRIVATE engine::engine)
 engine_set_warnings(joints)
+
+# ---- ragdoll: a skeleton handed to the solver and back ----------------------
+#
+# Lesson 8.12. `joints` put 8.11's rows on sticks and planks; this puts them on
+# 7.7's humanoid — eleven capsules, four hinges, six cone-twist sockets — and
+# hands the character from the animation system to the solver mid-stride and
+# back. [1] is the trip: the jog, steered kinematically through a row of
+# crates that fell asleep before it arrived (8.12's wake fix is why they move),
+# then the handoff, the fall, and the realigned return. [M] swaps in 7.7's
+# walk, whose knees bend forward, so the limbs snap back inside their joints.
+# [2] hangs the character from one hand, where [U] swaps eight sweeps for
+# eight sub-steps and the joints close; [3] is a pile of five, by island.
+#
+# `engine::engine` directly and NOT `demo_common`, like every physics demo
+# before it: it loads nothing and computes everything on screen, so a `--shot`
+# run is byte-for-byte reproducible on any machine.
+#
+# No `engine_use_assets` and no `engine_use_shaders`.
+add_executable(ragdoll ragdoll/main.cpp)
+target_link_libraries(ragdoll PRIVATE engine::engine)
+engine_set_warnings(ragdoll)

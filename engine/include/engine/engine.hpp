@@ -234,6 +234,10 @@
 //
 // Lesson 8.11 added `phys/constraint.hpp` in the same edit as the file itself.
 // Noted for the count, not as a boast: the lint is what makes this reliable.
+//
+// Lesson 8.12 added `phys/ragdoll.hpp`, again in the same edit — the first
+// header in this block that includes one from another subsystem's section
+// (`anim/skeleton.hpp`), which is fine here because this file includes both.
 #include <engine/phys/broadphase.hpp>
 #include <engine/phys/collide.hpp>
 #include <engine/phys/constraint.hpp>
@@ -243,6 +247,7 @@
 #include <engine/phys/inertia.hpp>
 #include <engine/phys/manifold.hpp>
 #include <engine/phys/integrate.hpp>
+#include <engine/phys/ragdoll.hpp>
 #include <engine/phys/rigid_body.hpp>
 #include <engine/phys/shape.hpp>
 #include <engine/phys/solver.hpp>

@@ -85,6 +85,32 @@
 // stretch 388 mm at eight sweeps. §14 measures that, and measures the better
 // answer — SUB-STEPPING, eight steps of one sweep instead of one step of eight,
 // which stretches it 20 mm for the same work — and names it for Module 9.
+//
+// ---- LESSON 8.12: A SHOULDER IS A BALL-SOCKET WITH TWO LIMITS ------------------
+//
+// A ragdoll's shoulder and hip turn in all three directions, and not by any
+// amount: the arm may swing inside a cone and may twist about itself within a
+// range. Both are one-sided angular rows — the hinge limit's shape — and the
+// whole of the work is choosing the two ANGLES, because a limit is only as good
+// as the angle it is a limit on.
+//
+//   * **The angles are a swing–twist split, not Euler angles.** Split the joint's
+//     relative rotation into the minimal rotation that carries one bone axis
+//     onto the other (the SWING) and a turn about the bone (the TWIST). The only
+//     singularity is a swing of 180°, which is outside every joint a body has;
+//     three Euler angles break at 90° of the middle one, which is an arm raised
+//     to the horizontal. `split_swing_twist`; 8.12 §3.
+//   * **The swing row is exact and the obvious twist row is not.** The swing is
+//     the angle between two axes and its rate is `(w_b − w_a) · n` exactly. The
+//     twist's rate is `(w_b − w_a) · (a1 + b1) / (1 + a1·b1)` — the HALF-WAY axis
+//     divided by `cos(swing/2)` — and a row about the bone instead is wrong by
+//     the rate at which the swing's plane turns. Integrated round a loop that
+//     error is the cone's solid angle, `2π(1 − cos φ)`, which biomechanics has
+//     called CODMAN'S PARADOX since 1934. 8.12 §5 derives and measures both.
+//
+// Everything else — speculation, warm starting, the position pass, islands —
+// is 8.11's, unchanged, and the new rows go through the same `one_sided` code
+// the hinge limit does.
 
 #pragma once
 
@@ -278,6 +304,12 @@ float solve_row(jacobian_row& row, float inv_mass_a, float inv_mass_b, vec3& v_a
 float solve_row_position(jacobian_row& row, float inv_mass_a, float inv_mass_b, pseudo_velocity& a,
                          pseudo_velocity& b);
 
+/// The same, driving `J·V` toward `goal` instead of `row.bias`. Lesson 8.12:
+/// `solve_joint_positions` hands a not-yet-violated one-sided row its
+/// speculative target here, for the reason given where it does.
+float solve_row_position_to(jacobian_row& row, float goal, float inv_mass_a, float inv_mass_b,
+                            pseudo_velocity& a, pseudo_velocity& b);
+
 // ---------------------------------------------------------------------------
 // Joints
 // ---------------------------------------------------------------------------
@@ -311,6 +343,13 @@ enum class joint_kind : std::uint8_t
     /// as a block, one visit leaves 5.9e-07, and costs 10.8 ns against 23.1.
     /// Through the centre of mass, `r = 0`, the rows do not couple and the two
     /// are identical.
+    ///
+    /// **Lesson 8.12 gives it two optional limits**, which is what turns a lamp
+    /// hook into a shoulder: a SWING CONE (`joint::cone`), the largest angle
+    /// `b`'s axis may make with the cone's axis on `a`, and a TWIST RANGE
+    /// (`joint::limit`, the field a hinge uses for its angle), how far `b` may
+    /// turn about its own axis. `make_cone_twist` authors both axes. A
+    /// ball-socket with neither enabled is exactly 8.11's.
     ball_socket,
 
     /// **A hinge**: a ball-socket plus two angular rows that keep the bodies'
@@ -327,11 +366,36 @@ enum class joint_kind : std::uint8_t
 
 /// An angular range a hinge may turn through, radians, measured from the pose
 /// the joint was created in.
+///
+/// Lesson 8.12: on a ball-socket the same struct is the TWIST range — how far
+/// `b` may turn about its own axis — and it is measured by the same function,
+/// `hinge_angle`, because a hinge's angle IS the twist of a swing–twist split
+/// whose swing the hinge's alignment rows hold at zero.
 struct joint_limit
 {
     bool enabled = false;
     float lower = 0.0f;   ///< Radians, `<= 0` for a range that includes the authored pose.
     float upper = 0.0f;   ///< Radians, `>= lower`.
+};
+
+/// **A swing cone: the largest angle `b`'s axis may make with the cone's axis
+/// on `a`.** Lesson 8.12.
+///
+/// One number, the cone's half-angle, because the swing is one number: the
+/// angle between two unit vectors, `atan2(|a1 × b1|, a1 · b1)`. Round, not
+/// elliptical — a shoulder's real range is wider forward than back, and the
+/// engine's answer is to TILT the cone's axis into the middle of the range
+/// (`make_cone_twist`'s `world_cone_axis`) rather than to give the cone two
+/// radii, which would make the row's direction depend on where round the
+/// ellipse the limb is. The elliptical cone is 8.12's exercise 2.
+///
+/// Keep it well under 180°: the twist is undefined at a swing of exactly 180°
+/// (the only singularity a swing–twist split has), and the twist rows are
+/// skipped within a whisker of it.
+struct joint_cone
+{
+    bool enabled = false;
+    float swing = 0.0f;   ///< Radians, the cone's half-angle, in (0, π).
 };
 
 /// A hinge motor: drive the relative angular speed about the axis toward
@@ -384,7 +448,13 @@ struct joint
     vec3 anchor_b{};
 
     /// The hinge axis, in each body's own frame, unit length. Unused by the
-    /// other two kinds.
+    /// distance joint.
+    ///
+    /// Lesson 8.12: on a ball-socket with a cone or a twist range, `axis_a` is
+    /// the CONE's axis, fixed in `a`, and `axis_b` is the TWIST axis, fixed in
+    /// `b` — the bone. They need not agree at the authored pose: a cone tilted
+    /// into the middle of a shoulder's range starts with the arm already
+    /// swung, and `rest` below absorbs the difference.
     vec3 axis_a{0.0f, 0.0f, 1.0f};
     vec3 axis_b{0.0f, 0.0f, 1.0f};
 
@@ -392,6 +462,14 @@ struct joint
     /// `conjugate(q_a) * q_b` at the authored pose. The limit and the angle
     /// `hinge_angle` reports are both measured from here, so a door authored
     /// half open reads zero half open.
+    ///
+    /// Lesson 8.12: for a cone tilted off the bone this is
+    /// `conjugate(offset) * conjugate(q_a) * q_b`, with `offset` the swing that
+    /// carries the cone's axis onto the bone at the authored pose — chosen so
+    /// that `conjugate(q_a) * q_b * conjugate(rest)` maps `axis_a` onto the bone
+    /// in `a`'s frame at EVERY pose, which is what makes its swing–twist split
+    /// the joint's swing and twist. With no tilt, `offset` is the identity and
+    /// this is the hinge's `rest` exactly.
     quat rest{};
 
     /// A distance joint's range, metres. Equal for a rod; `min_length = 0` for
@@ -401,6 +479,9 @@ struct joint
 
     joint_limit limit{};
     joint_motor motor{};
+
+    /// A ball-socket's swing cone. Lesson 8.12. Ignored by the other kinds.
+    joint_cone cone{};
 
     /// Should the two bodies this joint connects also collide with each other?
     /// **Almost never**, which is why the default is false: two links of a
@@ -427,6 +508,16 @@ struct joint
 
     /// The motor row's accumulated impulse, N·m·s.
     float motor_impulse = 0.0f;
+
+    /// The swing cone's accumulated impulse, N·m·s. Lesson 8.12.
+    ///
+    /// A scalar along `normalised(a1 × b1)` — the axis the swing is measured
+    /// about — and 8.10 §4's rule asks whether that frame can rotate out from
+    /// under it. It cannot jump: it is fixed by where the two bones point, not
+    /// re-chosen from a world vector, so it turns exactly as smoothly as the
+    /// limb does. It is undefined only on the cone's axis, where the limb is
+    /// as far from the limit as it can be and this is zero.
+    float swing_impulse = 0.0f;
 };
 
 /// A ball-socket holding `a` and `b` together at `world_anchor`, as they stand.
@@ -436,6 +527,21 @@ struct joint
 /// hinge angle reads zero in this pose. `world_axis` need not be unit length.
 [[nodiscard]] joint make_hinge(const rigid_body& a, const rigid_body& b, vec3 world_anchor,
                                vec3 world_axis);
+
+/// **A ball-socket that can carry a swing cone and a twist range**, as the
+/// bodies stand. Lesson 8.12.
+///
+/// `world_twist_axis` is the bone: the direction of `b` the twist is measured
+/// about. `world_cone_axis` is the middle of the cone, fixed to `a`; pass the
+/// twist axis (or a zero vector) for a cone centred on the authored pose, or a
+/// direction tilted toward where the limb spends its time — a shoulder authored
+/// in a T-pose wants its cone between "out" and "down", or an arm hanging at
+/// rest sits on the edge of it. Neither need be unit length.
+///
+/// Both limits start disabled; set `cone` and `limit` on the result. The swing
+/// at this pose is the angle between the two axes, and the twist is zero.
+[[nodiscard]] joint make_cone_twist(const rigid_body& a, const rigid_body& b, vec3 world_anchor,
+                                    vec3 world_twist_axis, vec3 world_cone_axis = {});
 
 /// A rigid rod between `anchor_a` on `a` and `anchor_b` on `b`, both given in
 /// world space, at the length they are apart now.
@@ -460,7 +566,48 @@ struct joint
 /// the same rotation (7.4's double cover) and only one of them gives an angle
 /// in (−π, π]. Its rate of change is `axis · (w_b − w_a)`, which is exactly
 /// the limit row's `J·V` — the angle and the row agree by construction.
+///
+/// Lesson 8.12: on a ball-socket this is the TWIST, and the sentence above
+/// stops being true. It holds on a hinge because the alignment rows keep the
+/// swing at zero; with a swing of φ the rate is `(w_b − w_a) · (a1 + b1) /
+/// (1 + a1·b1)` — see `split_swing_twist` — and the twist rows use that.
 [[nodiscard]] float hinge_angle(const joint& j, const rigid_body& a, const rigid_body& b);
+
+/// **A rotation, split into a swing and a twist**: `q = swing * twist`. Lesson
+/// 8.12.
+///
+/// `twist` turns about `axis` and `swing` about an axis perpendicular to it, so
+/// applied to `axis` the twist does nothing and the swing does everything:
+/// `rotate(q, axis) == rotate(swing, axis)`. The swing is therefore the SMALLEST
+/// rotation that carries `axis` to where `q` sends it — which 7.4's mirrors
+/// build directly as `rotor_from_mirrors(axis, h)` with `h` the half-way
+/// vector, and that form is the one 8.12 §5 differentiates.
+///
+/// Computed by projection: the twist is `q` with the part of `q.v`
+/// perpendicular to `axis` deleted, renormalised; the swing is what is left.
+/// Both come back with `w >= 0`.
+///
+/// **One singularity, and it is a swing of exactly 180°**: `q` then has no
+/// component the projection can keep (`q.w` and `q.v · axis` both zero), every
+/// twist is as good as any other, and this returns the identity for it. Euler
+/// angles, by contrast, lose a degree of freedom at 90° of their middle angle —
+/// 8.12 §3 measures a raised arm there.
+struct swing_twist
+{
+    quat swing{};
+    quat twist{};
+};
+
+[[nodiscard]] swing_twist split_swing_twist(quat q, vec3 unit_axis);
+
+/// **The swing angle, radians, in [0, π]**: the angle between the cone's axis
+/// as `a` carries it and the twist axis as `b` carries it. Lesson 8.12.
+///
+/// `atan2(|a1 × b1|, a1 · b1)`, for 8.7's reason — `acos` has a 0.036° floor
+/// on float unit vectors — and it is exactly the angle of `split_swing_twist`'s
+/// swing. Its rate of change is `(w_b − w_a) · normalised(a1 × b1)`, with no
+/// correction factor, which is why the cone row is the easy one.
+[[nodiscard]] float swing_angle(const joint& j, const rigid_body& a, const rigid_body& b);
 
 /// How far a joint is from satisfied, right now. Instrumentation.
 struct joint_error
@@ -471,6 +618,9 @@ struct joint_error
 
     /// Radians. The angle between the two hinge axes, plus any violation of
     /// an enabled limit. Zero for the other kinds.
+    ///
+    /// Lesson 8.12: for a ball-socket, how far outside its cone and its twist
+    /// range it is — zero when neither is enabled, as it was.
     float angular = 0.0f;
 };
 
@@ -553,6 +703,9 @@ struct joint_config
 
 /// The most rows one joint can produce: a hinge's three point rows, two
 /// perpendicular rows, two limit rows and a motor.
+///
+/// Lesson 8.12 did not need it to grow: a ball-socket with a cone and a twist
+/// range is at most three point rows, one swing row and two twist rows — six.
 inline constexpr int k_max_joint_rows = 8;
 
 /// What each prepared row feeds back into, for warm starting.
@@ -563,6 +716,7 @@ enum class row_role : std::uint8_t
     limit_lower,     ///< The lower end of a limit or a length range; a rod's row.
     limit_upper,     ///< The upper end.
     motor,           ///< The motor.
+    swing,           ///< A ball-socket's swing cone. Lesson 8.12.
 };
 
 /// One joint, with everything the solve needs computed once.
@@ -643,8 +797,13 @@ struct joint_batch
     jacobian_row rows[k_max_joint_rows];
     int row_count = 0;
 
-    /// The hinge angle at prepare time, radians. Instrumentation.
+    /// The hinge angle at prepare time, radians. Instrumentation. For a
+    /// ball-socket with limits, the twist (Lesson 8.12).
     float angle = 0.0f;
+
+    /// The swing angle at prepare time, radians, for a ball-socket with a
+    /// cone or a twist range; zero otherwise. Instrumentation. Lesson 8.12.
+    float swing = 0.0f;
 };
 
 /// What one visit to one joint did. Instrumentation, in 3.10's shape.
@@ -686,8 +845,16 @@ void warm_start_joint(rigid_body& a, rigid_body& b, const joint_batch& batch);
 joint_report solve_joint(rigid_body& a, rigid_body& b, joint_batch& batch, bool use_bias);
 
 /// One visit of the position pass, in pseudo-velocity space, under split
-/// impulse. No motor and no speculative target — a position correction only
-/// repairs error that already exists.
+/// impulse. No motor — a position correction only repairs error that already
+/// exists.
+///
+/// **Lesson 8.12 corrected the other half of that sentence.** It used to say
+/// "and no speculative target", and the code solved a one-sided row that was
+/// not violated against a target of zero — which made the far stop of every
+/// two-ended limit cancel every correction of the near one, so under split
+/// impulse a violated hinge limit was never repaired at all. A satisfied
+/// one-sided row now gets its speculative target, `−C/h`: a correction may
+/// carry the joint up to the far stop and no further. 8.12 §7.
 ///
 /// Returns the largest remaining error in the batch, metres.
 float solve_joint_positions(joint_batch& batch, pseudo_velocity& pa, pseudo_velocity& pb);

@@ -18,6 +18,10 @@
 // happen: the SIGN of each row (every row here is written so that `J·V` is the
 // rate of change of a `C` whose satisfied side is `>= 0`), and which frame a
 // cached impulse lives in.
+//
+// Lesson 8.12 added a third, and it is the subtlest: the AXIS of a row is the
+// derivative of its angle, and for a twist measured after a swing that is not
+// the axis the twist is about. `prepare_joint`'s ball-socket case says why.
 
 #include <engine/phys/constraint.hpp>
 
@@ -36,6 +40,14 @@ constexpr float k_pi = 3.14159265358979323846f;
 /// Below this, a distance joint's two anchors are treated as coincident and
 /// the line between them has no direction.
 constexpr float k_min_length = 1e-6f;
+
+/// Below this `sin(swing)` — 0.0057 degrees — a ball-socket's swing has no
+/// axis to be measured about. Lesson 8.12.
+constexpr float k_min_swing_sin = 1e-4f;
+
+/// Below this `1 + cos(swing)` — a swing within 2.6 degrees of 180 — the twist
+/// row's axis `(a1 + b1)/(1 + a1·b1)` is dividing by nearly nothing. Lesson 8.12.
+constexpr float k_min_twist_cos = 1e-3f;
 
 /// A body-local point from a world point, and a body-local direction from a
 /// world direction. The inverse of `world_point_of` and of `rotate`.
@@ -69,6 +81,41 @@ void perpendicular_pair(vec3 n, vec3& p, vec3& q)
                                                             : vec3{0.0f, 0.0f, 1.0f});
     p = normalised(cross(n, seed));
     q = cross(n, p);
+}
+
+/// **The smallest rotation carrying unit `from` onto unit `to`**, with `w >= 0`.
+///
+/// Two mirrors, 7.4's construction: reflect in the plane perpendicular to
+/// `from`, then in the plane perpendicular to the HALF-WAY vector
+/// `h = normalised(from + to)`. Two reflections make a rotation by twice the
+/// angle between their normals — twice `angle(from, h)`, which is
+/// `angle(from, to)` — about the line where the planes meet, which is
+/// perpendicular to both. No trigonometry, and no division but the one in the
+/// normalisation. 8.12 §5 differentiates exactly this form.
+///
+/// Opposite vectors have no half-way vector and every perpendicular axis is
+/// equally minimal; one is chosen by `perpendicular_pair`'s rule.
+[[nodiscard]] quat minimal_rotation(vec3 from, vec3 to)
+{
+    const vec3 sum = from + to;
+    const float len2 = length_squared(sum);
+    if (len2 < 1e-12f)
+    {
+        vec3 p;
+        vec3 q;
+        perpendicular_pair(from, p, q);
+        return quat{0.0f, p};   // a half-turn about a perpendicular
+    }
+    const quat r = rotor_from_mirrors(from, sum / std::sqrt(len2));
+    return r.w < 0.0f ? -r : r;
+}
+
+/// The unit axes a ball-socket's limits are measured with, as the bodies stand
+/// now: the cone's axis as `a` carries it, and the twist axis as `b` does.
+void cone_axes(const joint& j, const rigid_body& a, const rigid_body& b, vec3& a1, vec3& b1)
+{
+    a1 = normalised(rotate(a.orientation, j.axis_a));
+    b1 = normalised(rotate(b.orientation, j.axis_b));
 }
 
 /// Scale `v` down to at most `max_length` long, keeping its direction.
@@ -203,8 +250,14 @@ float solve_row(jacobian_row& row, float inv_mass_a, float inv_mass_b, vec3& v_a
 float solve_row_position(jacobian_row& row, float inv_mass_a, float inv_mass_b, pseudo_velocity& a,
                          pseudo_velocity& b)
 {
+    return solve_row_position_to(row, row.bias, inv_mass_a, inv_mass_b, a, b);
+}
+
+float solve_row_position_to(jacobian_row& row, float goal, float inv_mass_a, float inv_mass_b,
+                            pseudo_velocity& a, pseudo_velocity& b)
+{
     const float jv = row_velocity(row, a.linear, a.angular, b.linear, b.angular);
-    float delta = row.mass * (row.bias - jv);
+    float delta = row.mass * (goal - jv);
     const float total = std::clamp(row.pseudo_impulse + delta, row.lower, row.upper);
     delta = total - row.pseudo_impulse;
     row.pseudo_impulse = total;
@@ -254,6 +307,30 @@ joint make_hinge(const rigid_body& a, const rigid_body& b, vec3 world_anchor, ve
     return j;
 }
 
+joint make_cone_twist(const rigid_body& a, const rigid_body& b, vec3 world_anchor,
+                      vec3 world_twist_axis, vec3 world_cone_axis)
+{
+    joint j = make_ball_socket(a, b, world_anchor);
+
+    const vec3 twist = normalised(world_twist_axis);
+    const vec3 cone = length_squared(world_cone_axis) > 0.0f ? normalised(world_cone_axis) : twist;
+    j.axis_a = local_direction_of(a, cone);
+    j.axis_b = local_direction_of(b, twist);
+
+    // `rest` must make `r = conj(q_a) q_b conj(rest)` carry `axis_a` onto the
+    // bone in `a`'s frame at every pose, so that r's swing–twist split IS the
+    // joint's swing and twist. `make_ball_socket` set `rest = r0 =
+    // conj(q_a) q_b`, which carries the bone onto itself; pre-multiplying by
+    // the conjugate of `offset` — the swing from the cone's axis to the bone —
+    // makes r equal `offset` now, which is a pure swing, so the twist reads
+    // zero at the authored pose and the swing reads the tilt. With no tilt
+    // `offset` is the identity and `rest` is the hinge's.
+    const vec3 bone_in_a = local_direction_of(a, twist);
+    const quat offset = minimal_rotation(j.axis_a, bone_in_a);
+    j.rest = conjugate(offset) * j.rest;
+    return j;
+}
+
 joint make_rod(const rigid_body& a, const rigid_body& b, vec3 anchor_a, vec3 anchor_b)
 {
     joint j;
@@ -293,6 +370,42 @@ float hinge_angle(const joint& j, const rigid_body& a, const rigid_body& b)
     return 2.0f * std::atan2(dot(q.v, j.axis_a), q.w);
 }
 
+swing_twist split_swing_twist(quat q, vec3 unit_axis)
+{
+    swing_twist out;
+
+    // Keep the component of q.v along the axis and delete the rest: what is
+    // left is a rotation about the axis, and it is the twist because the part
+    // deleted — q.v's perpendicular component — is exactly what the swing is
+    // made of. The swing is then whatever turns the twist into q.
+    const float along = dot(q.v, unit_axis);
+    const float len2 = q.w * q.w + along * along;
+
+    // The one singularity: a swing of 180 degrees leaves nothing to project.
+    // Every twist is equally right there; the identity is the one that does
+    // not invent a turn nobody asked for.
+    if (len2 < 1e-12f)
+    {
+        out.swing = q.w < 0.0f ? -q : q;
+        return out;
+    }
+
+    const float inv = 1.0f / std::sqrt(len2);
+    out.twist = quat{q.w * inv, unit_axis * (along * inv)};
+    if (out.twist.w < 0.0f) { out.twist = -out.twist; }
+    out.swing = q * conjugate(out.twist);
+    if (out.swing.w < 0.0f) { out.swing = -out.swing; }
+    return out;
+}
+
+float swing_angle(const joint& j, const rigid_body& a, const rigid_body& b)
+{
+    vec3 a1;
+    vec3 b1;
+    cone_axes(j, a, b, a1, b1);
+    return std::atan2(length(cross(a1, b1)), dot(a1, b1));
+}
+
 joint_error measure_joint(const joint& j, const rigid_body& a, const rigid_body& b)
 {
     joint_error e;
@@ -309,6 +422,18 @@ joint_error measure_joint(const joint& j, const rigid_body& a, const rigid_body&
     }
     case joint_kind::ball_socket:
         e.linear = length(pb - pa);
+        // Lesson 8.12: the two limits, if any. Measured with the same two
+        // functions the rows are built from, so an instrument and a row can
+        // never disagree about what "outside the cone" means.
+        if (j.cone.enabled)
+        {
+            e.angular += std::max(0.0f, swing_angle(j, a, b) - j.cone.swing);
+        }
+        if (j.limit.enabled)
+        {
+            const float theta = hinge_angle(j, a, b);
+            e.angular += std::max(0.0f, j.limit.lower - theta) + std::max(0.0f, theta - j.limit.upper);
+        }
         break;
     case joint_kind::hinge:
     {
@@ -530,6 +655,75 @@ joint_batch prepare_joint(const rigid_body& a, const rigid_body& b, const joint&
     // ---- the point constraint: a ball-socket, and the hinge's pin ---------------
     case joint_kind::ball_socket:
     {
+        // ---- Lesson 8.12: a swing cone and a twist range, before the pin -----
+        //
+        // Guarded on the kind because the hinge FALLS THROUGH into this case
+        // for its pin, and a hinge's `limit` is its own angle, emitted above.
+        if (j.kind == joint_kind::ball_socket && (j.cone.enabled || j.limit.enabled))
+        {
+            vec3 a1;
+            vec3 b1;
+            cone_axes(j, a, b, a1, b1);
+            const vec3 n = cross(a1, b1);
+            const float sin_swing = length(n);
+            const float cos_swing = dot(a1, b1);
+            batch.axis = a1;
+            batch.swing = std::atan2(sin_swing, cos_swing);
+
+            // THE SWING ROW. `C = cone − φ >= 0`, and φ is the angle between two
+            // unit vectors, whose rate is exactly `(w_b − w_a) · n̂` with n̂ along
+            // `a1 × b1` (8.12 §4: differentiate `cos φ = a1 · b1` and divide by
+            // `|a1 × b1| = sin φ`). So `dC/dt = −(w_b − w_a) · n̂`, which is
+            // `angular_row(−n̂)` — the hinge's upper stop with n̂ for the axis.
+            //
+            // On the cone's axis n̂ does not exist, and there the limb is as far
+            // from the cone as it can be, so the row is left out: speculation
+            // only misses a cone the limb could cross from dead centre in ONE
+            // step, which at 60 Hz is a spin faster than `swing / h` — 31 rad/s
+            // for a 30-degree cone. The other degenerate case, a limb folded
+            // straight back through 180 degrees, is fully violated and still
+            // needs pushing, so it gets a perpendicular.
+            if (j.cone.enabled)
+            {
+                vec3 axis{};
+                if (sin_swing > k_min_swing_sin) { axis = n / sin_swing; }
+                else if (cos_swing < 0.0f)
+                {
+                    vec3 q;
+                    perpendicular_pair(a1, axis, q);
+                }
+                if (length_squared(axis) > 0.0f)
+                {
+                    one_sided(angular_row(-axis), j.cone.swing - batch.swing, row_role::swing,
+                              j.swing_impulse);
+                }
+            }
+
+            // THE TWIST ROWS, and the one place in this file where the obvious
+            // axis is wrong. The twist θ of `r = swing * twist` changes at
+            //
+            //     dθ/dt = (w_b − w_a) · (a1 + b1) / (1 + a1·b1)
+            //
+            // — the HALF-WAY axis over `cos(φ/2)`, not the bone. The part of
+            // the relative spin along the bone that is not twist is the swing
+            // plane turning, and a row about the bone would count it as twist
+            // (8.12 §5 derives this from 7.4's mirrors, and measures what the
+            // bone axis gets wrong: Codman's paradox). At φ = 0 it IS the bone,
+            // and the hinge's limit rows are this with the swing held at zero.
+            //
+            // Undefined at φ = 180 degrees, where the twist itself is; skipped
+            // within a whisker of it.
+            if (j.limit.enabled && 1.0f + cos_swing > k_min_twist_cos)
+            {
+                const vec3 axis = (a1 + b1) / (1.0f + cos_swing);
+                batch.angle = hinge_angle(j, a, b);
+                one_sided(angular_row(axis), batch.angle - j.limit.lower, row_role::limit_lower,
+                          j.limit_impulse[0]);
+                one_sided(angular_row(-axis), j.limit.upper - batch.angle, row_role::limit_upper,
+                          j.limit_impulse[1]);
+            }
+        }
+
         batch.point_error = pb - pa;
         const vec3 bias = clamp_length(batch.point_error * (-cfg.baumgarte * inv_h),
                                        cfg.max_correction_speed);
@@ -711,7 +905,26 @@ float solve_joint_positions(joint_batch& batch, pseudo_velocity& pa, pseudo_velo
 
         const bool one_sided = row.lower == 0.0f;
         worst = std::max(worst, one_sided ? std::max(0.0f, -row.error) : std::abs(row.error));
-        (void)solve_row_position(row, batch.inv_mass_a, batch.inv_mass_b, pa, pb);
+
+        // *** LESSON 8.12 FIXED THIS, AND IT HAD BEEN WRONG SINCE 8.11. ***
+        //
+        // A one-sided row that is NOT violated — a limit the joint has not
+        // reached — used to be solved here against `row.bias`, which is zero for
+        // it, and that made it a hard "no pseudo-velocity toward me" row. A hinge
+        // with both stops enabled always has both rows, so the far stop, a
+        // hundred and fifty degrees away, cancelled every correction of the
+        // near one exactly: a violated limit was NEVER repaired under split
+        // impulse. 8.11 measured limits at the velocity level only — bounces,
+        // overshoots, stalls — and never met it. 8.12 §7 found it holding a
+        // ragdoll's knee 9 degrees hyperextended, and an isolated shin on its
+        // stop at a violation frozen, to four decimals, for ten seconds.
+        //
+        // The row's own speculative target is the right answer here too: the
+        // correction may carry the joint up to the far stop and no further,
+        // which is what `target = −C/h` already says. A violated row keeps its
+        // bias; a rod's bilateral row has no speculative side and keeps its bias.
+        const float goal = (one_sided && row.error > 0.0f) ? row.target : row.bias;
+        (void)solve_row_position_to(row, goal, batch.inv_mass_a, batch.inv_mass_b, pa, pb);
     }
 
     if (batch.angular_block)
@@ -751,6 +964,7 @@ void write_back(const joint_batch& batch, joint& j)
     j.limit_impulse[0] = 0.0f;
     j.limit_impulse[1] = 0.0f;
     j.motor_impulse = 0.0f;
+    j.swing_impulse = 0.0f;
 
     for (int i = 0; i < batch.row_count; ++i)
     {
@@ -773,6 +987,7 @@ void write_back(const joint_batch& batch, joint& j)
         case row_role::limit_lower: j.limit_impulse[0] = row.impulse; break;
         case row_role::limit_upper: j.limit_impulse[1] = row.impulse; break;
         case row_role::motor:       j.motor_impulse = row.impulse; break;
+        case row_role::swing:       j.swing_impulse = row.impulse; break;
         }
     }
 }

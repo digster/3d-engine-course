@@ -248,6 +248,17 @@ add_library(engine STATIC
     # the dependency direction the note at the top of this block predicted three
     # lessons ago: the solver knows about contacts, and nothing points back up.
     src/phys/solver.cpp
+
+    # Lesson 8.12. The ragdoll, and the FIRST file in phys/ that knows what a
+    # skeleton is. The arrow points from physics to `anim/skeleton.hpp` and not
+    # the other way, and the reason is the one 5.12 gave for renderable.hpp:
+    # the arrow points at the more general. A skeleton is joints and bind
+    # transforms and includes nothing but math; an animation system in a game
+    # with no physics must still compile, and a ragdoll is a physics object
+    # built FROM a skeleton. It reaches down to solver.hpp only to hand joints
+    # to `constraint_solver::add`, and down to gjk.hpp once, at build time, to
+    # ask which capsules overlap at rest.
+    src/phys/ragdoll.cpp
     # Lesson 5.2. Note what is NOT here: platform/main.hpp, which carries
     # ENGINE_MAIN. It is header-only and deliberately so — including it emits a
     # real `main`, and an entry point is not a library's to own. See the comment

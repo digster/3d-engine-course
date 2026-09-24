@@ -9033,3 +9033,69 @@ swallowed a 7.5% rebound within a few frames, and the scene showed two arms sitt
 the arms and letting them *coast* into the stop made the rebound a visible drift of a fraction of a
 radian. Before a demo scene ships, run it headless at the moment the effect should be visible and
 look at the frame.
+
+## A satisfied one-sided row must keep its speculative target in the position pass
+
+Lesson 8.11's `solve_joint_positions` solved every non-motor row against `row.bias`. For a one-sided
+row that is *not* violated — a hinge stop the joint is nowhere near — the bias is zero, and solving
+against zero turns the row into a hard "no pseudo-velocity toward me" constraint. With speculation
+on, a two-ended limit always has both rows, so the far stop cancelled every correction of the near
+one exactly: a loaded knee sat frozen at −0.1691° for ten seconds (to four decimals), and with warm
+starting off the stop gave way to −70.7°. Baumgarte never had it, which is why "split impulse is
+too weak for a loaded stop" would have been exactly the wrong diagnosis.
+
+A one-sided row in any pass of the solver needs the same speculative rule in both: `−C/h` when
+`C > 0`. And a violation that does not change in the fourth decimal over seconds is not a slow
+correction; it is no correction.
+
+## A kinematic body is not a bridge, so it must wake things explicitly
+
+8.10's waking rule — an island is asleep only if every body in it is, and a moving body joins the
+island it hits — works for dynamic bodies only, because `build_islands` unions an edge only when
+both ends are dynamic. A moving kinematic body (a lift, a platform, a steered ragdoll) therefore
+never woke anything, and passed straight through a crate that had fallen asleep before it arrived:
+48 frames of contact, crate unmoved; with sleeping off, 4.78 m/s. Wake the dynamic side of every
+contact or joint with a kinematic body moving faster than the sleep thresholds — and gate it on the
+thresholds, or nothing on a stopped platform can ever sleep.
+
+## Drive kinematic bodies by velocity, and invert the integrator you actually have
+
+Teleporting a body onto an animated pose leaves its velocity as a lie (20.6 m/s of accumulated
+gravity in 8.12 §12), which every contact then sees and every handoff inherits. Steer instead:
+set the velocity that the next position update will integrate exactly onto the target. For
+position that is the chord `(x_target − x)/h`; for orientation it depends on the spin rule —
+the logarithm for an exact exponential step, and for the engine's linearised
+`normalise(q + ½hωq)` the Rodrigues vector `(2/h)·Δq.v/Δq.w`. The logarithm under a linearised
+integrator misses by `θ³/12` per step (9.75e-05 against 9.76e-05 predicted).
+
+## A twist limit's row is the half-way axis over cos(φ/2), not the bone
+
+With a swing–twist split `r = swing·twist`, the relative spin is the swing's own angular velocity
+plus the twist rate along the bone, and the swing's angular velocity (`2h × ḣ`, from the swing as
+two mirrors) is perpendicular to `a₁ + b₁`. So the twist rate is `Ω·(a₁ + b₁)/(1 + a₁·b₁)`. A row
+about the bone is wrong by up to `|Ω⊥|·tan(φ/2)`, which integrated round a loop is the loop's solid
+angle (Codman's paradox). In a solver it does not walk through the stop — the position pass reads
+the true angle — but it lags past it by the drift over β for as long as the limb circles.
+
+## Measure where an effect persists, not its deepest instant
+
+8.12 §6 compared two self-collision rules by the deepest overlap reached in twelve falls, and both
+read a tenth of a metre, because without speculative contacts a fast limb arrives up to `v·h` deep
+in one step whatever the rule. The rules differed only in whether the overlap *stayed*: frames
+spent more than 2 cm deep, and the depth at rest. A transient maximum is often the arrival artefact
+of the step, not the behaviour under test.
+
+## Instruments that measured their own floor this time
+
+Four in one lesson. `acos` of a float dot product near 1 bottoms out near 7e-4 rad (8.7's floor)
+and hid a 1.6e-7 landing error — use `atan2(|q.v|, |q.w|)` of the difference rotation. nlerp and
+slerp were compared at the blend's midpoint, where they agree by symmetry (the lag peaks near the
+quarter-points). An undamped hanging body was sampled mid-swing, so the "joint gap" measured the
+swing's phase. And total kinetic energy, dominated by a walk's travel, swamped what the joints did
+until it was taken relative to the centre of mass.
+
+## zsh does not word-split `set -- $spec`
+
+A loop of `for spec in "1 0.6 run" ...; do set -- $spec; demo --scene $1 --t $2 --shot $3; done`
+passed each spec as ONE argument under zsh, `--t` swallowed `--shot`, and the demo opened a real
+window and never quit. Write shot commands out longhand (or use `${=spec}`).

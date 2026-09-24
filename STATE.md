@@ -7,125 +7,91 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-09-22 (after Lesson 8.11 — 94 of 107 lessons; MODULE 8 OPEN, 11 of
-         13, 60 h of 70. PLANNED AT 6 AND SHIPPED AT 6 — the fourth lesson
-         running to land on its estimate — so no module subtotal and no course
-         total moved. Still 107 lessons, ~523 h.
-         check-curriculum.py green; check-builders.py green; check-page.js
-         `pass: true` at 1280 AND 390. Eleven measured sections, 58 checks, in
-         half a second. 8.10's findings are in STATE below (`conventions:
-         solver:` and the `8.10 —` notes block after `roadmap:`) and in the
-         memory file for 2026-09-19; what follows is 8.11's.
+updated: 2026-09-23 (after Lesson 8.12 — 95 of 107 lessons; MODULE 8 OPEN, 12 of
+         13, 66 h of 71. PLANNED AT 5 AND SHIPPED AT 6 — the first lesson
+         since 8.7 to miss its estimate, and the index moved with it: M8 70 ->
+         71 h, the course ~523 -> ~524 h. Eleven measured sections and TWO
+         ENGINE BUGS FIXED WITH REGRESSION EVIDENCE is 8.11's size, not 5 h.
+         check-curriculum.py green; check-builders.py 63/63 byte-identical
+         (see OPEN DEFECTS for --figures); check-page.js `pass: true` at 1280
+         AND 390. Eleven sections, 68 checks, 1.84 s. 8.11's findings are in
+         `conventions: joint:` and the `8.11 —` notes block after `roadmap:`;
+         what follows is 8.12's.
 
-         *** THE ENGINE HAS JOINTS, AND NO SECOND SOLVER. *** A constraint is a
-         JACOBIAN ROW — twelve numbers in four vec3 blocks — plus two BOUNDS on
-         the accumulated impulse. A rod, a rope, a ball-socket, a hinge, a limit
-         and a motor are choices of rows and bounds (and so, analysed, is 8.9's
-         friction). Joints ride 8.10's loop unchanged: prepared and warm-started
-         once, visited FIRST in every sweep of every island and then the
-         contacts, visited in the split-impulse position pass, written back.
-         `contact_solver` is now `constraint_solver`; the old name survives as
-         an alias so demos/stack and 8.10's harness compile unchanged.
+         *** THE ENGINE HAS RAGDOLLS. *** phys/ragdoll.{hpp,cpp}: a skeleton
+         becomes eleven capsules (Dempster's masses, Winter Table 4.1: pelvis
+         .142, thorax+abdomen .355, head+neck .081, upper arm .028, forearm+
+         hand .022, thigh .100, leg+foot .061 — they sum to 1), 4 hinges and 6
+         BALL-SOCKETS WITH A SWING CONE AND A TWIST RANGE. Twelve of 23 joints
+         are PASSENGERS riding on the part above at the clip's last local.
+         EVERY BODY HAS EXACTLY ONE OWNER: animated = kinematic, STEERED BY
+         VELOCITY (never teleported); simulated = dynamic, joints in the solver.
 
-         A CONTACT NORMAL IS A ROW, checked to 1.9e-07 on 200 real contacts, and
-         eight sweeps both ways agree to 2.6e-08 m/s. Controls: delete the
-         angular halves and the mass is wrong by 3.80x-4.03x (8.10 §2's corner
-         predicts 4.000); negate J and the yard falls 784 mm in 0.5 s where the
-         derived rows sink 27 mm (the cold-start sink). THE ROW IS 27% FASTER —
-         8.75 against 11.95 ns a point per sweep, 108 against 76 bytes — which
-         REFUSED the handover's prediction: a row stores M^-1 J^T and applies an
-         impulse with four scaled adds, where 8.9 recomputes I^-1 (r x J) with
-         two cross products and two mat-vecs on every visit. solve_contacts
-         stays hand-written ANYWAY, because the hoist changes every number 8.9
-         and 8.10 printed at the rounding level. It is exercise 3.
+         SWING-TWIST, NOT EULER. q = swing * twist, twist about the bone; the
+         swing is 7.4's two mirrors (t, then half-way h). Euler sensitivity
+         609.9 at an arm raised forward (1/cos(pitch) = 573 predicted), swing-
+         twist 1.55 there; its one singularity is the antipode of the axis the
+         swing is measured FROM — so measure from a cone axis tilted into the
+         middle of the range, and no cone ever contains it.
+         THE SWING ROW IS EXACT: dphi/dt = (w_b - w_a).n, n = a1 x b1 / |..|.
+         THE TWIST ROW IS THE HALF-WAY AXIS OVER cos(phi/2):
+         (w_b - w_a).(a1 + b1)/(1 + a1.b1), because the swing's own angular
+         velocity 2 h x h_dot is perpendicular to a1 + b1. A row about the bone
+         is wrong by -(w_perp . a1)/(1 + cos phi) <= |w_perp| tan(phi/2)
+         (bound measured to 1.0045). CODMAN'S PARADOX: carried round a loop
+         with no spin about itself a limb gains the loop's SOLID ANGLE of
+         twist — 90.000 deg for the octant, 48.231/180/360/540 for circles at
+         30/60/90/120 — to three decimals. In the solver the bone row does NOT
+         walk through its stop (REFUSED): the position pass measures the TRUE
+         twist and lags it by alpha'(1 - cos phi) h / beta = 9.55 deg predicted,
+         9.08 measured; with no position pass, 179.93 deg.
 
-         A ROPE IS A CONTACT TURNED INSIDE OUT: point_row(-u), bounds [0, inf).
-         Swung up with v0^2 = 3.5 g L, it lets go at EXACTLY the height a rod's
-         row changes sign from tension to compression, at every rate — and both
-         read LOW against the closed form L/2 (17% at 60 Hz, 3.6% at 240, 0.9%
-         at 960, first order in h per unit time) because the bob has lost 10% of
-         its energy on the way up. REFUSAL #2, and the refusal was §5. The
-         parabola after release lands EXACTLY on the lowest point of the circle
-         (y = L/2 + 3L/2 - 3L = -L), which nobody planned.
+         TWO SHIPPED BUGS, FIXED. (1) 8.11's solve_joint_positions solved a
+         SATISFIED one-sided row against its zero bias, so a two-ended limit's
+         far stop cancelled every correction of the near one: a loaded knee
+         frozen at -0.1691 deg for ten seconds, cold -70.7 deg; now 0.0000 and
+         a steady -1.8915. Fix: satisfied rows take their speculative target
+         -C/h in the position pass too (solve_row_position_to). verify_811
+         rerun: 58/58, ONE table moved (§H rebound 0.0753 -> 0.0750, overshoot
+         0.00318 -> 0.00316 rad). (2) 8.10's islands never let a MOVING
+         KINEMATIC body wake anything (kinematic is not a bridge, so it never
+         joined the sleeping island): a steered character ran through a crate
+         asleep before it arrived (0.09 m/s, 48 contact frames). Fix:
+         wake_touched_by_kinematic before wake_islands, gated on the sleep
+         thresholds so a stopped lift wakes nothing. verify_810: every
+         non-timing line byte-identical.
 
-         *** A VELOCITY JOINT DRIFTS AND DISSIPATES, BOTH IN CLOSED FORM. ***
-         After the solve the bob moves along a TANGENT, so r(n+1)^2 = r(n)^2 +
-         (v h)^2, and the next solve removes only radial velocity, so v r is
-         conserved EXACTLY: a rod at 5 m/s tracked for 60 steps to 1.7e-07,
-         angular momentum to 2.9e-07, energy (L/r)^2 to 1e-06. For a BODY on a
-         pin only the centre's ORBIT is projected, so the energy lost per step
-         is rho (w h)^2 with rho = m d^2 / (I_cm + m d^2) — to 0.1% on six
-         configurations. `lever_ratio` and `projection_loss_per_step` compute it.
-         INSTRUMENT LESSON: the velocity a step ENDS with was solved at the
-         radius the step STARTED with; pairing it with the final radius missed
-         by exactly one step's drift (0.4%).
+         THE HANDOFF IS ONE ASSIGNMENT. The chord a steered body carries IS
+         semi-implicit Euler's velocity (x_n = x_{n-1} + h v_n): 0.0045 m/s
+         from the clip's midpoint velocity, 0.2320 from its end. Rotation:
+         the linearised spin inverts to the RODRIGUES vector (2/h) dq.v/dq.w —
+         lands to 1.57e-07 rad, the logarithm misses by 9.75e-05 against
+         theta^3/12 = 9.76e-05. Momentum kept EXACTLY (204.40 kg m/s =
+         80 x 2.555); at rest the character stops dead (10 mm in 0.5 s against
+         1.18 m). Each joint starts violated by 1/2 h |wb x (wb x rb) -
+         wa x (wa x ra)|, to 0.43%. 7.7'S WALK BENDS THE KNEES FORWARD (48 deg
+         past the stop) and twists forearms off their hinges (32 deg): split
+         impulse repairs it adding 0.001 J, Baumgarte leaves 0.356 J more.
 
-         *** BAUMGARTE CUTS BOTH WAYS ON A JOINT. *** Both corrections leave a
-         turning joint stretched by delta/beta (12.50 vs 12.22 mm split, 16.55
-         vs 16.53 Baumgarte). Split impulse then loses (w h)^2 per step exactly
-         as no correction does; BAUMGARTE LOSES NOTHING, because its REAL inward
-         bias delta/h, turned by w h into the next step's tangent, is
-         v (w h)^2 / 2 — precisely the speed the projection removes. REFUSAL #3:
-         the section set out to show Baumgarte adding energy. But a cube pulled
-         back into a corner socket from 0.2 m keeps 0.35 J of spin under
-         Baumgarte (zero through the centre, zero under split) — the energy goes
-         into the joint's FREE degrees of freedom. A 90 deg pendulum at 60 Hz
-         keeps 75.4% of its energy per period under split and 92.0% under
-         Baumgarte. THE DEFAULT STAYS SPLIT IMPULSE: damping reads as damping,
-         invented energy reads as a twitching limb. Per-joint choice is ex. 2.
+         THE RETURN: read_pose inverts part_targets to 2.4e-07; realign_model
+         (ground plane only; heading is ex. 4) removes a 1.302 m slide; a
+         local slerp blend changes no bone by more than 0.06 mm, a model-space
+         blend by 208 mm; first frame 58 mm against a 1.648 m snap; the worst
+         joint crosses 115.5 deg, where nlerp lags slerp by 1.98 deg.
+         THE FIGHT: teleported dynamic bodies carry a 20.6 m/s velocity lie
+         and a limb 287 mm into a crate; with the chord added, 159 mm.
 
-         THE BLOCK. A socket's three rows are Gauss-Seidel on K = J M^-1 J^T,
-         and their contraction IS K's Gauss-Seidel spectral radius — 0.2323
-         measured against 0.2325 computed from K alone. The 3x3 block is exact
-         (5.9e-07 of the violation, worst of 1,000 random sockets, against up to
-         0.925 for rows) AND cheaper (10.8 against 23.1 ns a visit). r = 0
-         control: K is diagonal and rows are exact too. Affordable because joint
-         rows have NO CLAMP; a block of contact rows is an LCP. On a 12-link
-         chain it barely helps (94 against 102 mm worst gap): a chain's problem
-         is between its joints, not inside one.
-
-         THE PENDULUM. 1.645967 s against 1.646241 at 2 deg, 13.8% from the
-         point-mass formula; error divided by 4.02 / 4.00 / 3.98 per halving of
-         h. The reference HAD to be the period at 2 deg — T0 / AGM(1, cos(a/2))
-         — or the error refused to converge (+6.6e-05 at 240 Hz). The AGM form
-         holds to 2.6e-03 up to 120 deg at 3840 Hz.
-
-         THE HINGE: a 3x3 pin block plus a 2x2 alignment block. A door stays
-         within 0.0001 deg of true; on the socket alone it falls 176 deg. The
-         perpendicular basis is chosen from the axis IN BODY a's FRAME and the
-         cached impulse is a WORLD vector: a world-chosen basis flips 127 of
-         7,787 hinge-steps on a sagging bridge, every one exactly 90 deg; the
-         body-chosen one, never.
-
-         *** LIMITS ARE SPECULATIVE FOR FREE, AND rho IS A CONVERGENCE RATE. ***
-         A hinge always knows its angle, so a limit row exists before its stop
-         with target -C/h. Turnstile: reactive overshoot uniform on [0, w h]
-         (mean 0.4985 over 200 PHASES — sweeping the speed instead covered 1.36
-         phase cycles and read 0.42), speculative exactly 0. On a DOOR the limit
-         row, which sees I_cm, converges against the pin at EXACTLY rho per
-         sweep: 0.4261 / 0.7481 / 0.9224 at d = W/4, W/2, W, to four figures. Any
-         uniform slab hinged at its edge is 3/4. At eight sweeps a door with
-         restitution zero bounces off its stop at 7.53% of its arrival speed.
-
-         MOTORS. A saturated clamp is an exact torque: the stall bisects to
-         9.8100 N m against m g d = 9.8100. Spin-up t = I w / tau is right to the
-         step through the centre and 7.9% SLOW at the edge — REFUSAL #4 — because
-         the joint bleeds rho (w h)^2 while the motor works; dw/dt = tau/I -
-         (rho h / 2) w^3 predicts 2.8847 s against a measured 2.8833. A
-         zero-speed motor is Coulomb friction in the hinge: it stops a door
-         within two steps of prediction and then holds it to 1e-43 rad/s.
-
-         ISLANDS. A joint is an edge by `union_edge`, THE SAME FUNCTION contacts
-         use. Two chains from one ceiling are 2 islands (16 without joint
-         edges). A sleeping chain struck at the bottom: the island rule wakes 8
-         of 8, a per-link rule 1 of 8, swinging from a frozen chain.
-
-         WHAT IT LEAVES. A 10-link chain under a 100:1 end weight stretches
-         388 mm at eight sweeps (1:1, 1.33 mm; 1000:1 does not settle). EIGHT
-         SUB-STEPS OF ONE SWEEP hold it to 20.5 mm — 19x better for the same
-         joint visits. Per joint per sweep: socket 13.7 ns, hinge 23.9, hinge +
-         limit + motor 60.0, rod 12.5, against 129 per contact MANIFOLD.
-
+         WHAT RAGDOLLS LEAVE. Capsule rho about 0.1 above Dempster's (0.76-0.78
+         vs 0.64-0.68). Default exclusion = the 10 jointed pairs (nothing else
+         within 4 cm at rest — the handover's forearm/torso overlap REFUSED);
+         "two links" excludes 13 more incl. torso/forearm (touch in 9 of 12
+         falls) and a forearm RESTS 179.6 mm inside the chest. Eight sweeps:
+         92 mm peak gap in a fall; hung from one hand 4.13 mm at 8 sweeps,
+         2.52 at 32, 0.001 with EIGHT SUB-STEPS; a chest lying on an arm sinks
+         61.4 mm (a 16:1 stack). SLEEP REFUSED: every trip settles to mJ, only
+         4 of 12 sleep at 8.10's crate-tuned thresholds (5 crushed, 3 thin
+         limbs turning); angular damping 1/s -> 7 of 12. 12.4 us a falling
+         ragdoll a step (solve 8.1), 81 per ms.
 conventions:
   quat: w FIRST, w = cos(theta/2), SANDWICH q v conj(q), q*p MEANS "DO p THEN q".
         7.4, engine/include/engine/math/quat.hpp + docs/conventions.html §8e.
@@ -321,6 +287,50 @@ conventions:
         rho = m d^2 / (I_cm + m d^2) (`lever_ratio`) sets a body pendulum's
         period, the energy a velocity joint loses per step (rho (w h)^2), and
         the per-sweep convergence of any angular row against its pin.
+
+  swing_twist: *** q = swing * twist, TWIST FIRST, ABOUT THE BONE. *** 8.12,
+        engine/include/engine/phys/constraint.hpp `split_swing_twist`.
+        The twist keeps q.v's component along the axis, renormalised; the
+        swing is q * conj(twist) and is the SMALLEST rotation carrying the axis
+        where q does = rotor_from_mirrors(t, h), h the half-way vector. Both
+        returned with w >= 0. One singularity: a swing of exactly 180 deg,
+        returned as twist = identity.
+        A CONE-TWIST JOINT (ball_socket + `joint_cone` + `joint_limit`):
+        axis_a = the CONE's axis in a, axis_b = the TWIST axis (bone) in b,
+        rest = conj(offset) conj(q_a) q_b with offset the swing from cone axis
+        to bone at authoring, so conj(q_a) q_b conj(rest) splits into the
+        joint's real swing and twist at every pose and `hinge_angle` IS the
+        twist. Swing = atan2(|a1 x b1|, a1.b1) (`swing_angle`).
+        ROWS: swing = angular_row(-n), n = a1 x b1 normalised, left out when
+        sin(swing) < 1e-4 (on the axis; a limb crossing a cone from dead
+        centre in one step needs > swing/h). Twist = angular_row(+/-(a1 + b1)
+        /(1 + a1.b1)), left out within 2.6 deg of a 180 swing. NEVER ABOUT THE
+        BONE (Codman). The hinge's limit rows are the zero-swing case, so 8.11
+        was right for hinges. Row role `swing`, warm-start `joint::swing_impulse`
+        (a scalar along n, which is fixed by the bones and cannot jump).
+        k_max_joint_rows stays 8 (cone-twist needs 6).
+        POSITION PASS (8.12 fix): a one-sided row with C > 0 is solved against
+        its SPECULATIVE TARGET -C/h, never its zero bias.
+
+  ragdoll: *** EVERY BODY HAS EXACTLY ONE OWNER. *** 8.12,
+        engine/include/engine/phys/ragdoll.hpp. Animated = KINEMATIC (inv mass
+        and inertia zeroed) and STEERED: v = (x_target - x)/h, w = Rodrigues
+        (2/h) dq.v/dq.w under spin_rule::linearised (the log under
+        exponential) — the inverse of the integrator, never a teleport.
+        Simulated = dynamic; `simulate` restores mass/inertia and KEEPS the
+        velocities; `animate` zeroes them again and CLEARS every joint's cached
+        impulse. Joints are added only while simulated (`add_joints`).
+        DESCRIPTIONS ARE MODEL SPACE AT THE BIND POSE; parts in parent-first
+        order; the part member is `bone` (not `joint`: two kinds of joint).
+        joint_from_body (offset, rotation) is the only link between skeleton
+        and body. Capsules along body +y. Unit scale on every joint required.
+        BODIES ARE A CONTIGUOUS RUN of the world's dense array from
+        `first_body` (spawn produces that; body_world::remove breaks it —
+        Module 9's handles lift it). Exclusion default `overlapping` (jointed +
+        overlap at rest within 1 cm; audited by ragdoll_report). Return:
+        realign_model (x, z only) -> read_pose -> animate -> steer toward
+        transform_blend_slerp(start, clip, w), local space.
+        Passengers ride at `frozen_local` (the clip's pose at `simulate`).
 
   integrator: *** SEMI-IMPLICIT (SYMPLECTIC) EULER IS THE DEFAULT, AND EXPLICIT
         EULER IS NEVER CORRECT. *** 8.1, engine/include/engine/phys/integrate.hpp.
@@ -5661,6 +5671,15 @@ completed:
   - 8.6  EPA: Penetration Depth
   - 8.7  Contact Manifolds and Persistence
   - 8.8  Broadphase: A Uniform Grid
+  - 8.12 Ragdolls: Joints on a Skeleton
+         THE FIRST FILE IN phys/ THAT KNOWS A SKELETON: phys/ragdoll.{hpp,cpp}
+         (the arrow points at the more general: anim/skeleton.hpp is maths
+         only). constraint.* gains swing-twist and the cone; solver.* one
+         stage. Twelve listings, the largest set since 8.10. demos/ragdoll:
+         the trip (steered jog into sleeping crates, handoff, realigned
+         return; [M] 7.7's walk, [Z] at rest, [A] realign), the hang ([U]
+         sub-steps), the pile. Eleven sections, 68 checks, five refusals, two
+         engine bugs fixed (see `updated:`).
   - 8.11 Constraints and Joints: Hinge and Ball-Socket
         (8.10's `next` repointed in all three copies — the page,
          scratch/l810_body_a.html and build_810.py's TAIL — and build_810
@@ -5735,6 +5754,23 @@ completed:
          zero line, and [F] to throw the nine cross products away.)
 
 capabilities:
+  - 8.12 THE ENGINE HAS RAGDOLLS, AND HANDS A CHARACTER TO THE SOLVER AND BACK.
+    phys/ragdoll.hpp (new): ragdoll_link {root, hinge, cone_twist};
+    ragdoll_part_desc; ragdoll_exclusion {jointed, overlapping, two_links};
+    ragdoll_desc; ragdoll_part; ragdoll_mode; ragdoll; ragdoll_report;
+    build_ragdoll, part_targets, spawn, steering_angular_velocity, steer,
+    simulate, animate, add_joints, exclude_pairs, read_pose, realign_model,
+    worst_joint_error.
+    phys/constraint.hpp: swing_twist + split_swing_twist, swing_angle,
+    joint_cone, make_cone_twist, joint::cone / swing_impulse, row_role::swing,
+    joint_batch::swing, solve_row_position_to; ball-socket swing and twist
+    rows; the position-pass FIX.
+    phys/solver.hpp: wake_touched_by_kinematic (the kinematic-wake FIX),
+    solver_stats::kinematic_wakes.
+    WHAT IT CANNOT DO: get a character up convincingly (no get-up clip;
+    ex. 4 heading), put most settled ragdolls to sleep (thresholds tuned on
+    crates; ex. 3), hold a chest off an arm at 8 sweeps (61 mm), elliptical
+    cones (ex. 2), or active/powered ragdolls (ex. 5).
   - 8.11 THE ENGINE HAS JOINTS, IN THE SAME LOOP AS CONTACTS.
     phys/constraint.hpp (new): `jacobian_row` + point_row / angular_row /
     prepare_row / row_velocity / solve_row / solve_row_position; `joint_kind`
@@ -5758,7 +5794,8 @@ capabilities:
     WHAT IT CANNOT DO: hold a heavy weight on a light chain (388 mm of stretch
     at 100:1 and eight sweeps), stop a door dead at its limit at eight sweeps
     (7.5% rebound, rho = 3/4 per sweep), or keep a fast swing's energy under
-    split impulse (rho (w h)^2 per step). No swing or twist limits: 8.12.
+    split impulse (rho (w h)^2 per step). No swing or twist limits: 8.12
+    added them (and fixed this lesson's position pass — see 8.12).
   - 8.10 THE ENGINE CAN HOLD A STACK UP, PARTITION A LEVEL, AND STOP SIMULATING
     THE PARTS OF IT THAT ARE NOT DOING ANYTHING.
     phys/solver.hpp gains: `position_correction` (none / baumgarte /
@@ -8200,6 +8237,16 @@ capabilities:
   - skills: reading SDL headers as source of truth; debugging with lldb/gdb/VS
 
 decisions:
+  shipped-lesson-fixes: *** A LATER LESSON THAT FIXES AN EARLIER LESSON'S ENGINE
+        CODE SHIPS THE FIX IN ITS OWN LISTINGS AND TELLS THE STORY; THE EARLIER
+        PAGE STAYS AN ARCHIVE OF WHAT SHIPPED. *** 8.10's tangent basis set the
+        precedent; 8.12 applied it twice (8.11's position pass, 8.10's
+        kinematic wake). The earlier lesson's pins are NOT edited — its page
+        shows the buggy code with the comment that was right about intent.
+        THE EARLIER HARNESS IS RERUN AGAINST THE FIXED ENGINE and the new
+        lesson reports exactly what moved (verify_811: one table, 0.0753 ->
+        0.0750; verify_810: timings only). If an earlier page's prose quoted a
+        moved number, say so on the new page; here 8.11 says "7.5%", still true.
   quat-swap-deferred: THE FIELD IS CALLED `rotation` AND ONE CALLER DOES NOT PUT
         A ROTATION IN IT. 7.4. transform.hpp has promised since Module 2 that
         `transform::rotation` becomes a quaternion and that "the swap touches
@@ -9307,6 +9354,7 @@ files:
                                broadphase.hpp                           [8.8]
                                solver.hpp                               [8.9]
                                constraint.hpp                          [8.11]
+                               ragdoll.hpp                             [8.12]
             (convex.hpp is HEADER ONLY and deliberately so: a function pointer,
              a context pointer, an origin, four inline adapters and four DELETED
              rvalue overloads. It has no .cpp because there is nothing to
@@ -9355,6 +9403,7 @@ files:
                     broadphase.cpp                                      [8.8]
                     solver.cpp                                          [8.9]
                     constraint.cpp                                     [8.11]
+                    ragdoll.cpp                                        [8.12]
             (Everything that is NOT a template: the constant-acceleration
              overload, apply_drag/damping_factor, and the four diagnostics.
              Nothing in it is hot — the general stepper stayed in the header
@@ -9485,6 +9534,15 @@ files:
              `epa_penetration`'s answer beside its own so the two can be seen to
              agree. [F] drops the flood fill and §7's failure can be watched.)
   demos/manifold/: main.cpp                                               [8.7]
+  demos/ragdoll/: main.cpp                                               [8.12]
+            Three scenes, orthographic three-quarter view that follows the
+            character. [1] trip: the jog steered into four crates asleep
+            before it arrives (the kinematic-wake fix is why they move),
+            tripped at 1.2 s, three seconds down, realigned slerp return,
+            repeat; [M] 7.7's walk, [Z] hand over at rest, [A] realign off.
+            [2] hang from one hand ([U] 8 sub-steps). [3] pile of five by
+            island. Capsule silhouettes; the skinned skeleton drawn through
+            them from the clip or from read_pose. `--shot` works headless.
   demos/joints/: main.cpp                                                [8.11]
             Four scenes. [1] three pendulums from one bar — a ball on a 1 m rod
             and a 2 m plank whose centre is ALSO 1 m down drift apart (the
@@ -9678,6 +9736,7 @@ files:
                  08-09-impulse-response.html
                  08-10-sequential-impulses.html
                  08-11-constraints-and-joints.html
+                 08-12-ragdolls.html
                  (5.12 IS OUT OF SEQUENCE ON PURPOSE — Module 5 closed eleven
                   lessons after 5.11 and one after 6.18, and the list is
                   append-ordered rather than sorted so that the history is
@@ -9708,6 +9767,14 @@ files:
                   directly. Candidate for 9.10.)
   docs/shared/: course.css, course.js      (THE stylesheet + page script; one copy each)
   docs/_template/: lesson-template.html, README.md, apply-shared.py, check-page.js
+  scratch/ (8.12, not shipped with the engine): verify_812.cpp,
+           build_verify_812.sh, figs_812.py, build_812.py, gen_l812_body_e.py
+           (one-off: cut §14's snippets from the sources into the STATIC
+           fragment l812_body_e.html), l812_body_{a..f}.html,
+           l812_fig{1..10}.svg, verify_812.log, and the LISTING PINS
+           l812_<path> (twelve).
+           (Eleven sections, 68 checks, 1.84 s; two consecutive runs identical
+            but §K's timings. §E keeps a PRIVATE COPY of 8.11's position pass.)
   scratch/ (8.11, not shipped with the engine): verify_811.cpp,
            build_verify_811.sh, figs_811.py, build_811.py,
            l811_body_{a..f}.html, l811_fig{1..10}.svg, verify_811.log, and the
@@ -10846,97 +10913,186 @@ roadmap: RESHAPED 2026-09-08, AFTER TWO EXTERNAL REVIEWS OF THE PUBLISHED OUTLIN
          This engine does not sort and NAMES that, which is more honest than
          implying an accident is a decision.
 
-next: 8.12 — Ragdolls: Joints on a Skeleton
+  8.11 — CONSTRAINTS AND JOINTS: HINGE AND BALL-SOCKET. (Its `updated:`
+        header, moved here intact by 8.12 so that append-and-merge loses nothing.)
+         13, 60 h of 70. PLANNED AT 6 AND SHIPPED AT 6 — the fourth lesson
+         running to land on its estimate — so no module subtotal and no course
+         total moved. Still 107 lessons, ~523 h.
+         check-curriculum.py green; check-builders.py green; check-page.js
+         `pass: true` at 1280 AND 390. Eleven measured sections, 58 checks, in
+         half a second. 8.10's findings are in STATE below (`conventions:
+         solver:` and the `8.10 —` notes block after `roadmap:`) and in the
+         memory file for 2026-09-19; what follows is 8.11's.
 
-      WHAT 8.12 INHERITS, AND MUST NOT RE-DERIVE:
-        - JOINTS EXIST: ball-socket and hinge (with limit and motor), rods and
-          ropes, solved in constraint_solver's loop alongside contacts, grouped
-          into islands and put to sleep by the same rules. `conventions: joint:`
-          has the sign and frame conventions; cite 8.11 §2 for the Jacobian
-          rather than deriving it again.
-        - THE FIXTURES: scratch/verify_811.cpp's `rig` (bodies + joints, no
-          collision) and `scene` (8.10's whole pipeline + joints +
-          collision_filter) are the things to copy. The harness runs in half a
-          second.
-        - rho = lever_ratio(I_cm, m, d) PREDICTS, for every limb, before
-          anything is run: the energy it loses per step (rho (w h)^2), the
-          per-sweep convergence of any angular row against its pin (limits,
-          motors, and the swing and twist rows 8.12 will add), and its period
-          as a pendulum. Price a ragdoll's limbs with it before measuring them.
-        - Speculative one-sided rows are the default and work for any angle a
-          joint can compute exactly — which is the precondition for a swing
-          cone and a twist range.
+         *** THE ENGINE HAS JOINTS, AND NO SECOND SOLVER. *** A constraint is a
+         JACOBIAN ROW — twelve numbers in four vec3 blocks — plus two BOUNDS on
+         the accumulated impulse. A rod, a rope, a ball-socket, a hinge, a limit
+         and a motor are choices of rows and bounds (and so, analysed, is 8.9's
+         friction). Joints ride 8.10's loop unchanged: prepared and warm-started
+         once, visited FIRST in every sweep of every island and then the
+         contacts, visited in the split-impulse position pass, written back.
+         `contact_solver` is now `constraint_solver`; the old name survives as
+         an alias so demos/stack and 8.10's harness compile unchanged.
+
+         A CONTACT NORMAL IS A ROW, checked to 1.9e-07 on 200 real contacts, and
+         eight sweeps both ways agree to 2.6e-08 m/s. Controls: delete the
+         angular halves and the mass is wrong by 3.80x-4.03x (8.10 §2's corner
+         predicts 4.000); negate J and the yard falls 784 mm in 0.5 s where the
+         derived rows sink 27 mm (the cold-start sink). THE ROW IS 27% FASTER —
+         8.75 against 11.95 ns a point per sweep, 108 against 76 bytes — which
+         REFUSED the handover's prediction: a row stores M^-1 J^T and applies an
+         impulse with four scaled adds, where 8.9 recomputes I^-1 (r x J) with
+         two cross products and two mat-vecs on every visit. solve_contacts
+         stays hand-written ANYWAY, because the hoist changes every number 8.9
+         and 8.10 printed at the rounding level. It is exercise 3.
+
+         A ROPE IS A CONTACT TURNED INSIDE OUT: point_row(-u), bounds [0, inf).
+         Swung up with v0^2 = 3.5 g L, it lets go at EXACTLY the height a rod's
+         row changes sign from tension to compression, at every rate — and both
+         read LOW against the closed form L/2 (17% at 60 Hz, 3.6% at 240, 0.9%
+         at 960, first order in h per unit time) because the bob has lost 10% of
+         its energy on the way up. REFUSAL #2, and the refusal was §5. The
+         parabola after release lands EXACTLY on the lowest point of the circle
+         (y = L/2 + 3L/2 - 3L = -L), which nobody planned.
+
+         *** A VELOCITY JOINT DRIFTS AND DISSIPATES, BOTH IN CLOSED FORM. ***
+         After the solve the bob moves along a TANGENT, so r(n+1)^2 = r(n)^2 +
+         (v h)^2, and the next solve removes only radial velocity, so v r is
+         conserved EXACTLY: a rod at 5 m/s tracked for 60 steps to 1.7e-07,
+         angular momentum to 2.9e-07, energy (L/r)^2 to 1e-06. For a BODY on a
+         pin only the centre's ORBIT is projected, so the energy lost per step
+         is rho (w h)^2 with rho = m d^2 / (I_cm + m d^2) — to 0.1% on six
+         configurations. `lever_ratio` and `projection_loss_per_step` compute it.
+         INSTRUMENT LESSON: the velocity a step ENDS with was solved at the
+         radius the step STARTED with; pairing it with the final radius missed
+         by exactly one step's drift (0.4%).
+
+         *** BAUMGARTE CUTS BOTH WAYS ON A JOINT. *** Both corrections leave a
+         turning joint stretched by delta/beta (12.50 vs 12.22 mm split, 16.55
+         vs 16.53 Baumgarte). Split impulse then loses (w h)^2 per step exactly
+         as no correction does; BAUMGARTE LOSES NOTHING, because its REAL inward
+         bias delta/h, turned by w h into the next step's tangent, is
+         v (w h)^2 / 2 — precisely the speed the projection removes. REFUSAL #3:
+         the section set out to show Baumgarte adding energy. But a cube pulled
+         back into a corner socket from 0.2 m keeps 0.35 J of spin under
+         Baumgarte (zero through the centre, zero under split) — the energy goes
+         into the joint's FREE degrees of freedom. A 90 deg pendulum at 60 Hz
+         keeps 75.4% of its energy per period under split and 92.0% under
+         Baumgarte. THE DEFAULT STAYS SPLIT IMPULSE: damping reads as damping,
+         invented energy reads as a twitching limb. Per-joint choice is ex. 2.
+
+         THE BLOCK. A socket's three rows are Gauss-Seidel on K = J M^-1 J^T,
+         and their contraction IS K's Gauss-Seidel spectral radius — 0.2323
+         measured against 0.2325 computed from K alone. The 3x3 block is exact
+         (5.9e-07 of the violation, worst of 1,000 random sockets, against up to
+         0.925 for rows) AND cheaper (10.8 against 23.1 ns a visit). r = 0
+         control: K is diagonal and rows are exact too. Affordable because joint
+         rows have NO CLAMP; a block of contact rows is an LCP. On a 12-link
+         chain it barely helps (94 against 102 mm worst gap): a chain's problem
+         is between its joints, not inside one.
+
+         THE PENDULUM. 1.645967 s against 1.646241 at 2 deg, 13.8% from the
+         point-mass formula; error divided by 4.02 / 4.00 / 3.98 per halving of
+         h. The reference HAD to be the period at 2 deg — T0 / AGM(1, cos(a/2))
+         — or the error refused to converge (+6.6e-05 at 240 Hz). The AGM form
+         holds to 2.6e-03 up to 120 deg at 3840 Hz.
+
+         THE HINGE: a 3x3 pin block plus a 2x2 alignment block. A door stays
+         within 0.0001 deg of true; on the socket alone it falls 176 deg. The
+         perpendicular basis is chosen from the axis IN BODY a's FRAME and the
+         cached impulse is a WORLD vector: a world-chosen basis flips 127 of
+         7,787 hinge-steps on a sagging bridge, every one exactly 90 deg; the
+         body-chosen one, never.
+
+         *** LIMITS ARE SPECULATIVE FOR FREE, AND rho IS A CONVERGENCE RATE. ***
+         A hinge always knows its angle, so a limit row exists before its stop
+         with target -C/h. Turnstile: reactive overshoot uniform on [0, w h]
+         (mean 0.4985 over 200 PHASES — sweeping the speed instead covered 1.36
+         phase cycles and read 0.42), speculative exactly 0. On a DOOR the limit
+         row, which sees I_cm, converges against the pin at EXACTLY rho per
+         sweep: 0.4261 / 0.7481 / 0.9224 at d = W/4, W/2, W, to four figures. Any
+         uniform slab hinged at its edge is 3/4. At eight sweeps a door with
+         restitution zero bounces off its stop at 7.53% of its arrival speed.
+
+         MOTORS. A saturated clamp is an exact torque: the stall bisects to
+         9.8100 N m against m g d = 9.8100. Spin-up t = I w / tau is right to the
+         step through the centre and 7.9% SLOW at the edge — REFUSAL #4 — because
+         the joint bleeds rho (w h)^2 while the motor works; dw/dt = tau/I -
+         (rho h / 2) w^3 predicts 2.8847 s against a measured 2.8833. A
+         zero-speed motor is Coulomb friction in the hinge: it stops a door
+         within two steps of prediction and then holds it to 1e-43 rad/s.
+
+         ISLANDS. A joint is an edge by `union_edge`, THE SAME FUNCTION contacts
+         use. Two chains from one ceiling are 2 islands (16 without joint
+         edges). A sleeping chain struck at the bottom: the island rule wakes 8
+         of 8, a per-link rule 1 of 8, swinging from a frozen chain.
+
+         WHAT IT LEAVES. A 10-link chain under a 100:1 end weight stretches
+         388 mm at eight sweeps (1:1, 1.33 mm; 1000:1 does not settle). EIGHT
+         SUB-STEPS OF ONE SWEEP hold it to 20.5 mm — 19x better for the same
+         joint visits. Per joint per sweep: socket 13.7 ns, hinge 23.9, hinge +
+         limit + motor 60.0, rod 12.5, against 129 per contact MANIFOLD.
+
+next: 8.13 — A Character Controller
+
+      WHAT 8.13 INHERITS, AND MUST NOT RE-DERIVE:
+        - Kinematic bodies are STEERED by velocity and now WAKE what they touch
+          (8.12's fix, gated on the sleep thresholds). A character controller
+          is kinematic-shaped: it moves by intent, and must push props with an
+          honest velocity. `steer`/`steering_angular_velocity` in ragdoll.hpp
+          are the inverse-of-the-integrator pattern; reuse the idea, not the
+          ragdoll.
+        - Capsules stand along body +y (8.5 said the controller is what a
+          capsule is FOR). GJK distance, EPA depth and collide_manifold take
+          any convex pair; the harness/demo `placed` dispatch (sphere/box/
+          capsule by value, so as_convex has an lvalue) is written in three
+          demos and two harnesses now — copy it, and name the debt again.
+        - 8.10 §6 ARRIVAL DEPTH IS UNIFORM ON [0, v h] and there are NO
+          SPECULATIVE CONTACTS: that is the tunnelling 8.13 exists to handle
+          (1.8's swept test). 8.12 §6 saw it as a 106.6 mm transient from a
+          fast forearm.
         - A LESSON PAGE ENDS AT FURTHER READING. STATE.md is the sole resume key.
         - `scratch/build_verify_NN.sh` REFUSES an unoptimised libengine.a.
+        - zsh DOES NOT WORD-SPLIT `set -- $spec`: 8.12's first demo-shot loop
+          launched a WINDOWED demo that never quit. Write shots out longhand.
 
-      *** THE ONE THING 8.12 EXISTS TO DO. ***
-      Turn 7.6's skeleton into a tree of capsules joined by 8.11's joints — a
-      hinge at each elbow and knee, a ball-socket with a SWING CONE and a TWIST
-      RANGE at each shoulder and hip — and hand a character from the animation
-      system to the solver mid-motion and back: initial velocities from the
-      animation's last two poses, and a return to animation the physics does
-      not fight.
-
-      WHAT 8.12 IS LIKELY TO MOVE:
-        - constraint.hpp: a swing-twist split (the twist is `hinge_angle`
-          already; the swing is the tilt of the bone axis) and two new one-sided
-          angular rows. Either joint_kind grows a cone-twist kind or the socket
-          grows optional limits; k_max_joint_rows (8) may need to grow.
-        - Capsule contacts in the harness and demo. 8.10's `scene` dispatch
-          handles spheres and boxes only; convex.hpp has had capsules since 8.5
-          and collide_manifold takes any convex pair, so this is dispatch, not
-          geometry. inertia_of(capsule) exists (8.3).
-        - collision_filter will need more than DIRECT pairs: a forearm and a
-          torso overlap too, two joints apart.
-        - 8.11's listings are PINNED at scratch/l811_*. If 8.12 corrects
-          something 8.11 got wrong, the fix goes into the pin AND the live file
-          (a comment that was wrong WHEN IT SHIPPED stays in the pin — 8.6's
-          rule).
-
-      FOUR LIMITS THE RAGDOLL WILL HIT, EACH ALREADY MEASURED:
-        1. MASS RATIOS. A torso is ~10x a hand, and 8.11 §14's chain at 10:1
-           stretched 18 mm at eight sweeps. Measure the ragdoll's own joint gaps
-           first; sub-steps are the answer 8.11 measured (19x at 100:1).
-        2. THE LIMIT-PIN COUPLING. A limb striking its swing limit bounces at
-           about rho^8 of its speed. The named fix is a block with one clamp
-           (limit + pin, 4x4, two cases).
-        3. DISSIPATION. rho (w h)^2 per step — a flailing ragdoll loses energy
-           quickly, which is probably WANTED: ragdolls should settle.
-        4. BAUMGARTE'S FREE-DOF INJECTION. A ragdoll spawned from an animation
-           pose its joints disagree with IS the dislocated-limb fixture (0.35 J
-           of spin under Baumgarte). Keep split impulse.
+      *** THE ONE THING 8.13 EXISTS TO DO. ***
+      A controller that obeys design intent, not Newton: grounding, slopes (a
+      max walkable angle), step-up, and no tunnelling at speed — built from
+      queries (GJK/EPA/sweeps), not from the solver. The lesson is WHY it must
+      not be a rigid body. MODULE 8 CLOSES WITH IT: reissue conventions.html
+      and math-toolbox.html (module boundary, CLAUDE.md §7), adding 8.12's
+      swing-twist order, the half-way twist row, Codman, and the
+      one-owner/steering rule; and the Module 8 project tree (CLAUDE.md §8).
 
       OPEN DEFECTS, STILL DELIBERATELY NOT FIXED:
         1. `epa_config::max_iterations = 32` gives a sphere-sphere normal
-           4.2602 deg off the line of centres (8.6's knob, tuned on boxes; needs
-           8.6's 200,000-pair measurement rerun to price). Carried since 8.9.
-        2. EIGHT SWEEPS DO NOT HOLD A TEN-CRATE TOWER (8.10 §14). 8.11 did not
-           attack it, because a block of contact rows is an LCP; it measured the
-           better answer for joints — sub-stepping — and pricing that with
-           contacts in the loop is Module 9's.
-        3. NO SPECULATIVE CONTACTS (8.10 §6). Limits got speculation for free;
-           contacts still need the narrow phase to report pairs not yet touching.
-        4. NEW: the M^-1 J^T hoist into contact_constraint (8.11 §3: 27% per
-           normal visit) — exercise 3, deliberately not made, because it moves
-           every 8.9 and 8.10 number at the rounding level.
-        5. NEW: joints-before-contacts in a sweep is argued, not measured
-           (exercise 4).
+           4.2602 deg off (8.6's knob). Capsule-capsule contacts in 8.12 read
+           exact depths (0.2 mm of GJK's segment distance), so it did not bite.
+        2. EIGHT SWEEPS DO NOT HOLD A TEN-CRATE TOWER — nor a chest off an arm
+           (8.12 §8: 61.4 mm), nor a hanging body (4.13 mm; sub-steps 0.001).
+           SUB-STEPPING IS NOW THE MEASURED ANSWER THREE TIMES; Module 9 prices
+           it with contacts in the loop.
+        3. NO SPECULATIVE CONTACTS (8.10 §6).
+        4. The M^-1 J^T hoist into contact_constraint (8.11 ex. 3).
+        5. Joints-before-contacts is argued, not measured (8.11 ex. 4).
+        6. NEW: SLEEP THRESHOLDS ARE PER-BODY SPEEDS tuned on crates; 8 of 12
+           tripped ragdolls never sleep. Energy-based test is 8.12 ex. 3.
+        7. NEW: `check-builders.py --figures` fails 511 (build/swarm511.ppm,
+           a gitignored render capture, is gone) as well as the known
+           45/46/48. Pages rebuild 63/63 from their committed SVGs.
 
-      CARRY FORWARD from 8.11:
-        - FOUR MEASUREMENTS REFUSED THEIR SECTION'S CLAIM — the cost of a row
-          (§3), the rope's release height (§4), Baumgarte's energy (§6), the
-          motor's spin-up (§11) — the ninth to twelfth times in Module 8. Each
-          was a redraft, and each improved the lesson.
-        - TWO INSTRUMENT ERRORS, BOTH ABOUT WHICH INSTANT A QUANTITY BELONGS
-          TO: an end-of-step velocity paired with the end-of-step radius (it
-          was solved at the start-of-step one), and a period timed against the
-          small-swing limit at a 2-degree amplitude. AN ERROR THAT WILL NOT
-          SHRINK WITH h IS A REFERENCE THAT IS WRONG.
-        - SAMPLE THE PHASE, NOT THE PARAMETER. Sweeping a speed across 1.36
-          arrival-phase cycles read a biased mean (0.42 against 0.50).
-        - A COUNT CAN BE THE WRONG INSTRUMENT. The flipped-J control counted
-          pushing rows and could not be made to mean anything, because a
-          crate-on-crate contact gets g*h on BOTH bodies; the consequence — the
-          yard through the floor — was the honest instrument.
-        - A DEMO CAN HIDE ITS OWN POINT. Motors driving arms into a stop
-          swallowed the 7.5% rebound in a few frames; the scene kicks instead.
+      CARRY FORWARD from 8.12:
+        - FIVE MEASUREMENTS REFUSED THEIR SECTION'S CLAIM (the 13th to 17th in
+          Module 8): the forearm/torso overlap at rest; the bone row walking
+          through its stop; "each doubling of sweeps halves the stretch" (a
+          hanging load barely moves); the deepest instant as a self-collision
+          measure; and "a settled ragdoll sleeps".
+        - TWO ENGINE BUGS FOUND BY PROBES, NOT TESTS: printing one joint's
+          angle against its limits for ten seconds (a violation that does not
+          change in the fourth decimal is not being corrected), and a crate
+          that did not move with sleeping on and did with it off.
+        - INSTRUMENT ERRORS THIS TIME: acos of a float near 1 (8.7's floor,
+          7e-4 rad) hid a 1.6e-7 landing error; nlerp vs slerp measured at the
+          midpoint, where they agree by symmetry; an undamped hanging body
+          measured mid-swing; total KE swamping the joints' internal KE.

@@ -2903,3 +2903,15 @@ Produced Lesson 8.10 — Sequential Impulses: Warm Starting, Islands, and Sleepi
 were working, but it has reset now. Please continue from where you left off.")
 
 Produced Lesson 8.11 — Constraints and Joints: Hinge and Ball-Socket (Module 8, 11 of 13).
+
+---
+
+## 2026-09-23 — `next` (Lesson 8.12)
+
+> next
+
+> Try again
+
+(The session was interrupted after the harness was complete and resumed on "Try again".)
+
+Produced Lesson 8.12 — Ragdolls: Joints on a Skeleton (Module 8, 12 of 13).
