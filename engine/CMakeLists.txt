@@ -259,6 +259,19 @@ add_library(engine STATIC
     # to `constraint_solver::add`, and down to gjk.hpp once, at build time, to
     # ask which capsules overlap at rest.
     src/phys/ragdoll.cpp
+
+    # Lesson 8.13. Two files, and they split along the lesson's own seam. The
+    # CAST is a query — "how far can this shape move before it touches that
+    # one?" — and like gjk.cpp it knows nothing about bodies or shapes, only
+    # about `convex`; a projectile, a camera boom or a line of sight needs it
+    # as much as a character does. The CHARACTER is policy written on top of
+    # the query: it reaches down to rigid_body.hpp for where the obstacles are
+    # and how a platform moved, and to collide.hpp once, for 8.6's EPA when
+    # something has already moved into it. It does NOT include solver.hpp —
+    # the controller is deliberately outside the simulation, and the only
+    # thing it hands the solver is a proxy's velocity, which is a float3.
+    src/phys/cast.cpp
+    src/phys/character.cpp
     # Lesson 5.2. Note what is NOT here: platform/main.hpp, which carries
     # ENGINE_MAIN. It is header-only and deliberately so — including it emits a
     # real `main`, and an entry point is not a library's to own. See the comment

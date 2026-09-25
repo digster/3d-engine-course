@@ -238,7 +238,12 @@
 // Lesson 8.12 added `phys/ragdoll.hpp`, again in the same edit — the first
 // header in this block that includes one from another subsystem's section
 // (`anim/skeleton.hpp`), which is fine here because this file includes both.
+//
+// Lesson 8.13 added `phys/cast.hpp` and `phys/character.hpp`, both in the same
+// edit, closing the module: fifteen headers, the longest block in this file.
 #include <engine/phys/broadphase.hpp>
+#include <engine/phys/cast.hpp>
+#include <engine/phys/character.hpp>
 #include <engine/phys/collide.hpp>
 #include <engine/phys/constraint.hpp>
 #include <engine/phys/convex.hpp>

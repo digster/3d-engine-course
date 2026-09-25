@@ -7,91 +7,132 @@ To resume: read CLAUDE.md (the binding spec), then this file, then continue from
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-09-23 (after Lesson 8.12 — 95 of 107 lessons; MODULE 8 OPEN, 12 of
-         13, 66 h of 71. PLANNED AT 5 AND SHIPPED AT 6 — the first lesson
-         since 8.7 to miss its estimate, and the index moved with it: M8 70 ->
-         71 h, the course ~523 -> ~524 h. Eleven measured sections and TWO
-         ENGINE BUGS FIXED WITH REGRESSION EVIDENCE is 8.11's size, not 5 h.
-         check-curriculum.py green; check-builders.py 63/63 byte-identical
-         (see OPEN DEFECTS for --figures); check-page.js `pass: true` at 1280
-         AND 390. Eleven sections, 68 checks, 1.84 s. 8.11's findings are in
-         `conventions: joint:` and the `8.11 —` notes block after `roadmap:`;
-         what follows is 8.12's.
+updated: 2026-09-24 (after Lesson 8.13 — 96 of 107 lessons; *** MODULE 8 COMPLETE ***,
+         13 of 13, 72 h. PLANNED AT 5 AND SHIPPED AT 6, like 8.12, and the
+         index moved with it: M8 71 -> 72 h, the course ~524 -> ~525 h.
+         check-curriculum.py green; check-builders.py green (63/63 plus 813,
+         and 511 REPAIRED: its gitignored scratch/l511_fig7.svg had been
+         truncated to 0 bytes after 8.12's run and was restored from the
+         published page, which archives it); check-page.js `pass: true` at
+         1280 AND 390 for 8.13, 8.12, the index, conventions and the toolbox.
+         Eleven measured sections, 90 checks, 2.49 s. 8.12's `updated:` text
+         is in the `8.12 —` notes block after `roadmap:`; what follows is
+         8.13's.
 
-         *** THE ENGINE HAS RAGDOLLS. *** phys/ragdoll.{hpp,cpp}: a skeleton
-         becomes eleven capsules (Dempster's masses, Winter Table 4.1: pelvis
-         .142, thorax+abdomen .355, head+neck .081, upper arm .028, forearm+
-         hand .022, thigh .100, leg+foot .061 — they sum to 1), 4 hinges and 6
-         BALL-SOCKETS WITH A SWING CONE AND A TWIST RANGE. Twelve of 23 joints
-         are PASSENGERS riding on the part above at the clip's last local.
-         EVERY BODY HAS EXACTLY ONE OWNER: animated = kinematic, STEERED BY
-         VELOCITY (never teleported); simulated = dynamic, joints in the solver.
+         *** THE ENGINE HAS A CHARACTER CONTROLLER, AND A SHAPE CAST. ***
+         phys/cast.{hpp,cpp}: `cast(mover, d, obstacle, cfg)` — conservative
+         advancement. phys/character.{hpp,cpp}: `move_character` in five
+         stages (carry, recover, sideways, vertical, ground+snap), a
+         `character_config` with the knobs each section measures, the proxy
+         (`steer_proxy`), and eight closed forms. convex.hpp gains
+         `placed_shape` + `place` (the dispatch five scenes had copied — the
+         debt paid; the five copies left as they shipped).
 
-         SWING-TWIST, NOT EULER. q = swing * twist, twist about the bone; the
-         swing is 7.4's two mirrors (t, then half-way h). Euler sensitivity
-         609.9 at an arm raised forward (1/cos(pitch) = 573 predicted), swing-
-         twist 1.55 there; its one singularity is the antipode of the axis the
-         swing is measured FROM — so measure from a cone axis tilted into the
-         middle of the range, and no cone ever contains it.
-         THE SWING ROW IS EXACT: dphi/dt = (w_b - w_a).n, n = a1 x b1 / |..|.
-         THE TWIST ROW IS THE HALF-WAY AXIS OVER cos(phi/2):
-         (w_b - w_a).(a1 + b1)/(1 + a1.b1), because the swing's own angular
-         velocity 2 h x h_dot is perpendicular to a1 + b1. A row about the bone
-         is wrong by -(w_perp . a1)/(1 + cos phi) <= |w_perp| tan(phi/2)
-         (bound measured to 1.0045). CODMAN'S PARADOX: carried round a loop
-         with no spin about itself a limb gains the loop's SOLID ANGLE of
-         twist — 90.000 deg for the octant, 48.231/180/360/540 for circles at
-         30/60/90/120 — to three decimals. In the solver the bone row does NOT
-         walk through its stop (REFUSED): the position pass measures the TRUE
-         twist and lags it by alpha'(1 - cos phi) h / beta = 9.55 deg predicted,
-         9.08 measured; with no position pass, 179.93 deg.
+         WHY NOT A RIGID BODY, MEASURED (§1): a locked-rotation capsule on 8.10's
+         solver at mu 0.6 HANGS on a wall mid-jump at any stick speed above
+         g h / mu (0.2725 predicted, 0.2757 bisected); slides 2.91 m after the
+         stick is released (the discrete sum from release: 2.9098, to four
+         decimals); climbs a 20 cm ledge only at 8 m/s; passes a 10 cm wall 50%
+         of the time at 42 m/s. A designer's 1.20 m jump rises 1.1599 m
+         (v0^2/2g - v0 h/2 = 1.1596: 8.1's integrator).
 
-         TWO SHIPPED BUGS, FIXED. (1) 8.11's solve_joint_positions solved a
-         SATISFIED one-sided row against its zero bias, so a two-ended limit's
-         far stop cancelled every correction of the near one: a loaded knee
-         frozen at -0.1691 deg for ten seconds, cold -70.7 deg; now 0.0000 and
-         a steady -1.8915. Fix: satisfied rows take their speculative target
-         -C/h in the position pass too (solve_row_position_to). verify_811
-         rerun: 58/58, ONE table moved (§H rebound 0.0753 -> 0.0750, overshoot
-         0.00318 -> 0.00316 rad). (2) 8.10's islands never let a MOVING
-         KINEMATIC body wake anything (kinematic is not a bridge, so it never
-         joined the sleeping island): a steered character ran through a crate
-         asleep before it arrived (0.09 m/s, 48 contact frames). Fix:
-         wake_touched_by_kinematic before wake_islands, gated on the sleep
-         thresholds so a stopped lift wakes nothing. verify_810: every
-         non-timing line byte-identical.
+         A CAST IS NEWTON'S METHOD ON A CONVEX DISTANCE, AND IT IS SAFE BECAUSE
+         EACH STEP STOPS AT A SEPARATING PLANE — so it MUST step from GJK's
+         certified LOWER bound (certify().lower). Stepped from gjk_result::
+         distance (an upper bound) 377 of 6,049 hits finished inside the skin,
+         up to 0.17 mm (REFUSAL: "Newton on a convex function cannot
+         overshoot" was true only of the exact distance). 9,996 random casts:
+         0 missed, 0 late, 2.75 Newton steps mean, 7 worst; 67 hits stop early
+         by up to 1.81 mm where GJK STALLS at a centimetre (8.5 F.5). Worked
+         example t = 0.55, errors 0.55 / 0.025 / 4.6e-4 / 1.9e-7, ratio -> 0.9.
+         A flat face is ONE step (1.8's swept test was always the first Newton
+         step). ONE CAST PER OBSTACLE: stepping on a union went through a wall
+         11,194 of 20,000 times. Sphere tracing (gap/|d|) takes 237 steps at
+         1 deg where the cast takes 2. THE SKIN (REFUSAL): with no skin a cast
+         lands ON the contact, GJK calls it intersecting, and it falls back —
+         134 mm short on average, 2.3 m worst; a 0.1 mm skin is WORSE than none
+         (7.3% of slides start inside vs 2.1%); >= 1 mm, none. Default 1 cm.
 
-         THE HANDOFF IS ONE ASSIGNMENT. The chord a steered body carries IS
-         semi-implicit Euler's velocity (x_n = x_{n-1} + h v_n): 0.0045 m/s
-         from the clip's midpoint velocity, 0.2320 from its end. Rotation:
-         the linearised spin inverts to the RODRIGUES vector (2/h) dq.v/dq.w —
-         lands to 1.57e-07 rad, the logarithm misses by 9.75e-05 against
-         theta^3/12 = 9.76e-05. Momentum kept EXACTLY (204.40 kg m/s =
-         80 x 2.555); at rest the character stops dead (10 mm in 0.5 s against
-         1.18 m). Each joint starts violated by 1/2 h |wb x (wb x rb) -
-         wa x (wa x ra)|, to 0.43%. 7.7'S WALK BENDS THE KNEES FORWARD (48 deg
-         past the stop) and twists forearms off their hinges (32 deg): split
-         impulse repairs it adding 0.001 J, Baumgarte leaves 0.356 J more.
+         COLLIDE AND SLIDE (§4): CLIP THE ORIGINAL MOTION, scaled to the time
+         left, against every plane (Quake 1's SV_FlyMove). The first draft
+         clipped the REMAINDER against every plane and walked back and forth
+         in a 120 deg corner at 575 mm/s (REFUSAL: the plane list alone is not
+         the fix); last-plane-only 572 mm/s there and burns all 4 slides in a
+         60 deg corner. `min_approach` 1e-4: at 0, a character running along a
+         wall moves at 0.0000 m/s.
 
-         THE RETURN: read_pose inverts part_targets to 2.4e-07; realign_model
-         (ground plane only; heading is ex. 4) removes a 1.302 m slide; a
-         local slerp blend changes no bone by more than 0.06 mm, a model-space
-         blend by 208 mm; first frame 58 mm against a 1.648 m snap; the worst
-         joint crosses 115.5 deg, where nlerp lags slerp by 1.98 deg.
-         THE FIGHT: teleported dynamic bodies carry a 20.6 m/s velocity lie
-         and a limb 287 mm into a crate; with the chord added, 159 mm.
+         SLOPES (§5): walkable = n.y >= cos(max_slope), 45 deg. along_ground
+         t = d - y (d.n)/n.y keeps the horizontal speed exactly (3.0000 m/s
+         on 10-40 deg ramps). Gravity slid along the ground instead of stopped
+         creeps at g h sin a (0.081746 vs 0.081750 on 30 deg). Flattening a
+         wall normal matters only IN THE AIR (REFUSAL): on the ground the
+         re-lay along the floor already discards the climb; hopping into 50 deg,
+         0.638 m unflattened vs 0.257. A steep slope is slid down at g t sin a
+         with no force anywhere (4.3897 vs 4.3895).
 
-         WHAT RAGDOLLS LEAVE. Capsule rho about 0.1 above Dempster's (0.76-0.78
-         vs 0.64-0.68). Default exclusion = the 10 jointed pairs (nothing else
-         within 4 cm at rest — the handover's forearm/torso overlap REFUSED);
-         "two links" excludes 13 more incl. torso/forearm (touch in 9 of 12
-         falls) and a forearm RESTS 179.6 mm inside the chest. Eight sweeps:
-         92 mm peak gap in a fall; hung from one hand 4.13 mm at 8 sweeps,
-         2.52 at 32, 0.001 with EIGHT SUB-STEPS; a chest lying on an arm sinks
-         61.4 mm (a 16:1 stack). SLEEP REFUSED: every trip settles to mJ, only
-         4 of 12 sleep at 8.10's crate-tuned thresholds (5 crushed, 3 thin
-         limbs turning); angular damping 1/s -> 7 of 12. 12.4 us a falling
-         ragdoll a step (solve 8.1), 81 per ms.
+         THE ROUND BOTTOM (§6-§8), R = r + skin = 0.31: free curb R(1 - cos t)
+         = 90.80 mm (91.83 bisected); overhang R sin t = 219.20 (219.79 placed,
+         215.0 walking at 5 mm/step); least step-up forward R(1 - sin t) =
+         90.80 (bisected 46.15/84.67/90.89 at three risers vs 46.32/84.94/
+         90.80). TALLEST LEDGE = step_height + free curb = 0.39080 (0.39092
+         bisected; REFUSAL: not step_height). GJK's normal at a centimetre is
+         good to ~0.2 deg (0.189 worst), which is the 1 mm on the curb. AND
+         THE CERTIFICATE'S LOOSENESS SCALES WITH THE OBSTACLE'S SIZE, not the
+         tolerance (REFUSAL): standing 10.00-10.07 mm off a 6 m ramp,
+         10.02-12.32 mm off a 60 m one, at GJK tol 1e-4 and 1e-7 alike.
+
+         SNAPPING (§7): moved flat, a character skips down a 30 deg slope above
+         (g h^2 + 2 skin)/(h tan a) = 2.3617 (onset bisected 2.3561 on an 8 m
+         ramp, 2.2537 on a 60 m one — the looser certificate eats the probe's
+         reach); laid along it, never. A CREST (REFUSAL: "launches like a
+         projectile at a jog"): the round bottom rolls over it while v h <=
+         sqrt(R^2 - (R - reach)^2) = 0.1165 m, v < 6.99 m/s; above, it flies
+         0.833/1.133/1.617 s vs 2v tan a/g 0.883/1.177/1.648. Stairs down: the
+         snap ROLLS OFF the edge by R - overhang, then casts down — 0 frames
+         airborne, 9 snaps, worst extra forward 77.7 mm (the draft's tangent-
+         plane slide lurched 175 mm); no snap: 54 frames. Snap 0.35 m: a 0.30
+         drop is snapped, 0.50 falls 16 frames.
+
+         TUNNELLING (§9): rigid capsule through a 10 cm wall with probability
+         max(0, 1 - (w/2 + r)/(v h)), 200 phases per speed: 15.5/30/50/65/79%
+         vs 16/30/50/65/79. Controller at a 1 cm wall at 10..10,000 m/s: never,
+         stops 10.004-10.051 mm from the face.
+
+         CARRY (§10): by the platform's step as a TRANSFORM, read back with the
+         integrator (Delta q = advance_orientation(identity, w, h, rule) =
+         normalise(1, h w/2) linearised): radius 1.50000 after a revolution,
+         0.000 deg lag, facing turns with it. By VELOCITY: |r|^2 *= 1 + (wh)^2
+         a step, (1+(wh)^2)^(N/2) ~ e^(pi w h) a revolution — 1.05375 vs
+         1.05375 at 1 rad/s, 1.11065 vs 1.11035 at 2 (189 whole steps). A lift
+         that only translates: both rules exact (< 10 um in 2 s).
+
+         THE PROXY (§11): kinematic capsule, STEERED by the chord. Steered, a
+         20 kg crate moves at 2.0000 m/s WITH velocity 2.0000, overlap 5.00 mm
+         (the slop), coasts 0.3562 m = discrete v^2/2mu g 0.3233 + ONE STEP at
+         v (the proxy follows a step late) = 0.3566. TELEPORTED (REFUSAL: "the
+         crate stops dead"): the crate had fallen asleep and a zero-velocity
+         kinematic never wakes it — WALKED THROUGH (8.12's bug class, by a lie
+         about velocity); kept awake, it moves at 1.9941 m/s with velocity 0,
+         the character sunk slop + v h/beta - v h = 138.33 mm (138.20); on
+         release pushed out of the excess ~ v h/beta (0.1649). Baumgarte gives
+         the velocity back (coast 0.3565), same 138 mm sunk. 100 kg crate: a
+         wall. Standing on a 20 kg crate: grounded on it, one skin above its
+         top, carrying none of the weight. A 200 kg boulder at 5 m/s stops dead
+         (0.0688 m/s) against a standing character: ONE-WAY COUPLING. The draft
+         recover() also pushed out of heavy DYNAMIC bodies and the boulder
+         carried the character 2.94 m (observed on the draft): two owners; now
+         recover answers only to fixed and kinematic bodies.
+
+         THE BILL (§12): 0.963 us a move on a flat floor (2 casts, 15 GJK
+         iterations), 3.27 on stairs, 6.85 pressed into a corner; the AABB cull
+         is linear — 847 us at 10,000 boxes, 10.00x the 1,000-box cost for the
+         same 2.05 casts. A region query on 8.8's grid is exercise 5.
+
+         EIGHT REFUSALS (the 18th to 25th in Module 8): no skin is merely
+         inconvenient; Newton cannot overshoot; the plane list fixes corners;
+         flattening matters on the ground; a tighter GJK tolerance buys
+         precision; a crest launches at a jog; step_height is the tallest
+         ledge; a teleported proxy's crate merely stops dead.
 conventions:
   quat: w FIRST, w = cos(theta/2), SANDWICH q v conj(q), q*p MEANS "DO p THEN q".
         7.4, engine/include/engine/math/quat.hpp + docs/conventions.html §8e.
@@ -332,6 +373,42 @@ conventions:
         transform_blend_slerp(start, clip, w), local space.
         Passengers ride at `frozen_local` (the clip's pose at `simulate`).
 
+  cast: *** A CAST IS NEWTON'S METHOD ON A CONVEX DISTANCE, STEPPED FROM GJK'S
+        LOWER BOUND. *** 8.13, engine/include/engine/phys/cast.hpp.
+        t <- t + (lower - skin)/(d . n), n = gjk_result::direction (mover ->
+        obstacle), lower = certify(at, obstacle, g).lower. SAFE for any n (the
+        slab normal to n narrows at exactly d.n per unit t); CONVERGES
+        quadratically because f is convex. Exits: d.n <= min_approach |d|
+        (1e-4) -> clear (the slab never narrows); lower - skin <= tolerance |d|
+        (1e-4, RELATIVE) -> hit; GJK intersecting at step 0 -> started_inside
+        (EPA's question), later -> hit at the last measured iterate. 32
+        steps max (worst seen 7). cast_result::surface_normal points OBSTACLE
+        -> MOVER — the named exception to 9e's a -> b. ONE CONVEX OBSTACLE PER
+        CAST. skin >= 1 mm (0 and 0.1 mm both measured worse).
+  character: *** A CHARACTER IS A QUESTION, NOT A BODY. *** 8.13,
+        engine/include/engine/phys/character.hpp. Capsule along world +y,
+        position = capsule CENTRE, no mass, radius 0.3, half_height 0.6, skin
+        0.01 (the mesh is drawn a skin lower). walkable = n.y >= cos(max_slope)
+        - 1e-5, 45 deg. move_character ORDER: 1 carry (ground body's step as a
+        TRANSFORM, swept, walls flattened) 2 recover (EPA out of FIXED and
+        KINEMATIC only; back to a skin from < skin/2) 3 sideways (x,z; laid
+        along walkable ground while grounded and not rising; walls clipped by
+        clip_rule::original with flattened normals; ONE step-up try at the
+        first wall; pushables ignored) 4 vertical (up: first thing is a
+        ceiling; down: land on walkable, slide along steep, stop_on_ground)
+        5 ground (probe 2 skins down, not while rising) + snap (grounded last
+        step, not rising, snap_distance 0.35, roll off an edge by R - overhang
+        first). step_height 0.3 (tallest ledge = 0.39: step + curb);
+        step-up across >= R(1 - sin t). push_mass_limit 40 kg: sideways moves
+        and recover ignore dynamic bodies at or below it; vertical and probe
+        include them (you stand on crates). character::velocity = ACHIEVED
+        displacement / h. RUN AFTER THE PHYSICS STEP: steer_proxy(proxy,
+        ch.position, h) -> world step -> move_character. character_world is
+        the parallel bodies[i]/shapes[i] arrays (a precondition, like the
+        ragdoll's contiguous run) plus `self` (the proxy) and the spin rule.
+        Knobs that exist to be measured: clip_rule {original, remainder,
+        last_plane}, flatten_walls, lay_along_ground, stop_on_ground,
+        carry_rule {transform, velocity, none}.
   integrator: *** SEMI-IMPLICIT (SYMPLECTIC) EULER IS THE DEFAULT, AND EXPLICIT
         EULER IS NEVER CORRECT. *** 8.1, engine/include/engine/phys/integrate.hpp.
         `position += velocity * h` BEFORE the velocity update is explicit Euler
@@ -5753,7 +5830,49 @@ completed:
          demos/collide: two panels, the fifteen candidate gaps as bars against a
          zero line, and [F] to throw the nine cross products away.)
 
+  - 8.13 A Character Controller
+        (8.12's `next` repointed in all three copies — the page,
+         scratch/l812_body_a.html and build_812.py's TAIL — and build_812
+         rebuilt byte-identical. PLANNED AT 5 h AND SHIPPED AT 6: M8 71 -> 72 h,
+         course ~524 -> ~525 h; the index's M8 badge is now `complete`.
+         MODULE BOUNDARY, honoured AT the boundary this time, because 8.5 to
+         8.12 had added nothing to either page: conventions.html gains §9f-§9k
+         (distance/depth/casts, contacts, the solver, joints, ragdolls, the
+         controller) plus the missing TOC entry for §9e and 13 verified facts;
+         math-toolbox.html gains §8h-§8l, 21 cards, and a Module 8 `complete`
+         entry. The Module 8 project tree is in 8.13 §18, GENERATED from `git
+         ls-files` by scratch/gen_l813_tree.py.
+         Twelve figures; check-page.js caught 15 spills, 4 overlaps and 12
+         labels on shapes in the first build (four scales far too large), all
+         fixed at the source; the visual pass caught a curve joined across its
+         own gap (fig 3) and two in-plane arrows drawn on top of each other.)
+  ===> MODULE 8 COMPLETE — 13 lessons, ~72 h. Physics built, none imported. <===
 capabilities:
+  - 8.13 THE ENGINE HAS A CHARACTER CONTROLLER, AND A SHAPE CAST ANY GAMEPLAY
+    CODE CAN USE. MODULE 8 IS COMPLETE.
+    phys/cast.hpp (new): cast_status {clear, hit, started_inside,
+    iteration_limit} + name_of; cast_config {skin, tolerance, min_approach,
+    max_iterations, gjk}; cast_result {status, t, distance (the lower
+    bound), surface_normal, point, iterations, gjk_iterations, hit()}; cast.
+    phys/character.hpp (new): k_no_body; character_config (radius,
+    half_height, skin, max_slope, step_height, snap_distance, max_slides,
+    push_mass_limit, clip_rule, flatten_walls, lay_along_ground,
+    stop_on_ground, carry_rule, cast); character {position, velocity,
+    grounded, ground_normal, ground_point, ground_body}; character_world;
+    sweep_filter {everything, solid}; character_hit; move_report; and
+    character_capsule, walkable, pushable, sweep, slide_along,
+    clip_to_planes, wall_normal, along_ground, recover, body_step,
+    step_motion, carry_by_transform, carry_by_velocity, move_character,
+    steer_proxy; closed forms free_curb_height, edge_overhang,
+    step_forward_min, slope_creep_speed, skip_speed(g, h, a, reach),
+    velocity_carry_growth, jump_speed, stopping_distance.
+    phys/convex.hpp: placed_shape (by value, view() const& with the && overload
+    deleted) and place(shape, centre, orientation).
+    WHAT IT CANNOT DO: be pushed by anything (one-way coupling; knockback is
+    ex. 4), put its weight on what it stands on (ex. 4), cull candidates
+    faster than linearly (ex. 5), turn its capsule (the cast is translation
+    only), or keep its feet within 0.1 mm on very large collision pieces (the
+    certificate's looseness scales with the obstacle, §6).
   - 8.12 THE ENGINE HAS RAGDOLLS, AND HANDS A CHARACTER TO THE SOLVER AND BACK.
     phys/ragdoll.hpp (new): ragdoll_link {root, hinge, cone_twist};
     ragdoll_part_desc; ragdoll_exclusion {jointed, overlapping, two_links};
@@ -9355,6 +9474,7 @@ files:
                                solver.hpp                               [8.9]
                                constraint.hpp                          [8.11]
                                ragdoll.hpp                             [8.12]
+                               cast.hpp, character.hpp                 [8.13]
             (convex.hpp is HEADER ONLY and deliberately so: a function pointer,
              a context pointer, an origin, four inline adapters and four DELETED
              rvalue overloads. It has no .cpp because there is nothing to
@@ -9404,6 +9524,7 @@ files:
                     solver.cpp                                          [8.9]
                     constraint.cpp                                     [8.11]
                     ragdoll.cpp                                        [8.12]
+                    cast.cpp, character.cpp                            [8.13]
             (Everything that is NOT a template: the constant-acceleration
              overload, apply_drag/damping_factor, and the four diagnostics.
              Nothing in it is hot — the general stepper stayed in the header
@@ -9534,6 +9655,17 @@ files:
              `epa_penetration`'s answer beside its own so the two can be seen to
              agree. [F] drops the flood fill and §7's failure can be watched.)
   demos/manifold/: main.cpp                                               [8.7]
+  demos/character/: main.cpp                                             [8.13]
+            Three scenes, the ragdoll demo's three-quarter view. [1] a course
+            (8 cm curb, five stairs, a 30 cm drop, a 30 deg ramp down, two light
+            crates and a heavy one, a turntable, a 1 cm wall dashed into at
+            40 m/s; off the path a 55 deg slope, a lift, an obtuse corner),
+            walked by [WASD] or the [O] autopilot; [K] clip rule, [N] snap,
+            [T] step-up, [C] carry rule, [P] proxy steer/teleport. [2] the same
+            script into a rigid capsule and the controller side by side (only
+            the controller climbs the ledge; only the rigid one hangs on the
+            wall). [3] three 120 deg corners, one clip rule each. `--shot`,
+            `--auto`, `--clip`, `--no-snap`, `--no-step`, `--teleport`.
   demos/ragdoll/: main.cpp                                               [8.12]
             Three scenes, orthographic three-quarter view that follows the
             character. [1] trip: the jog steered into four crates asleep
@@ -9737,6 +9869,7 @@ files:
                  08-10-sequential-impulses.html
                  08-11-constraints-and-joints.html
                  08-12-ragdolls.html
+                 08-13-character-controller.html
                  (5.12 IS OUT OF SEQUENCE ON PURPOSE — Module 5 closed eleven
                   lessons after 5.11 and one after 6.18, and the list is
                   append-ordered rather than sorted so that the history is
@@ -9767,6 +9900,17 @@ files:
                   directly. Candidate for 9.10.)
   docs/shared/: course.css, course.js      (THE stylesheet + page script; one copy each)
   docs/_template/: lesson-template.html, README.md, apply-shared.py, check-page.js
+  scratch/ (8.13, not shipped with the engine): verify_813.cpp,
+           build_verify_813.sh, figs_813.py, build_813.py, gen_l813_body_e.py
+           (one-off: §13's snippets into the STATIC l813_body_e.html),
+           gen_l813_tree.py (one-off: §18's project tree into l813_tree.html,
+           already inside l813_body_f.html), pin_813.py (freezes the eleven
+           listings from the working tree), l813_body_{a..f}.html,
+           l813_fig{1..12}.svg, verify_813.log, and the LISTING PINS
+           l813_<path> (eleven).
+           (Eleven sections, 90 checks, 2.49 s; two consecutive runs identical
+            but §K's timings. §B keeps a PRIVATE COPY of the cast stepped from
+            GJK's upper bound, as its control.)
   scratch/ (8.12, not shipped with the engine): verify_812.cpp,
            build_verify_812.sh, figs_812.py, build_812.py, gen_l812_body_e.py
            (one-off: cut §14's snippets from the sources into the STATIC
@@ -11033,66 +11177,152 @@ roadmap: RESHAPED 2026-09-08, AFTER TWO EXTERNAL REVIEWS OF THE PUBLISHED OUTLIN
          joint visits. Per joint per sweep: socket 13.7 ns, hinge 23.9, hinge +
          limit + motor 60.0, rod 12.5, against 129 per contact MANIFOLD.
 
-next: 8.13 — A Character Controller
 
-      WHAT 8.13 INHERITS, AND MUST NOT RE-DERIVE:
-        - Kinematic bodies are STEERED by velocity and now WAKE what they touch
-          (8.12's fix, gated on the sleep thresholds). A character controller
-          is kinematic-shaped: it moves by intent, and must push props with an
-          honest velocity. `steer`/`steering_angular_velocity` in ragdoll.hpp
-          are the inverse-of-the-integrator pattern; reuse the idea, not the
-          ragdoll.
-        - Capsules stand along body +y (8.5 said the controller is what a
-          capsule is FOR). GJK distance, EPA depth and collide_manifold take
-          any convex pair; the harness/demo `placed` dispatch (sphere/box/
-          capsule by value, so as_convex has an lvalue) is written in three
-          demos and two harnesses now — copy it, and name the debt again.
-        - 8.10 §6 ARRIVAL DEPTH IS UNIFORM ON [0, v h] and there are NO
-          SPECULATIVE CONTACTS: that is the tunnelling 8.13 exists to handle
-          (1.8's swept test). 8.12 §6 saw it as a 106.6 mm transient from a
-          fast forearm.
+  8.12 — RAGDOLLS: JOINTS ON A SKELETON. (Its `updated:` header, moved here
+        intact by 8.13 so that append-and-merge loses nothing.)
+         2026-09-23 (after Lesson 8.12 — 95 of 107 lessons; MODULE 8 OPEN, 12 of
+         13, 66 h of 71. PLANNED AT 5 AND SHIPPED AT 6 — the first lesson
+         since 8.7 to miss its estimate, and the index moved with it: M8 70 ->
+         71 h, the course ~523 -> ~524 h. Eleven measured sections and TWO
+         ENGINE BUGS FIXED WITH REGRESSION EVIDENCE is 8.11's size, not 5 h.
+         check-curriculum.py green; check-builders.py 63/63 byte-identical
+         (see OPEN DEFECTS for --figures); check-page.js `pass: true` at 1280
+         AND 390. Eleven sections, 68 checks, 1.84 s. 8.11's findings are in
+         `conventions: joint:` and the `8.11 —` notes block after `roadmap:`;
+         what follows is 8.12's.
+
+         *** THE ENGINE HAS RAGDOLLS. *** phys/ragdoll.{hpp,cpp}: a skeleton
+         becomes eleven capsules (Dempster's masses, Winter Table 4.1: pelvis
+         .142, thorax+abdomen .355, head+neck .081, upper arm .028, forearm+
+         hand .022, thigh .100, leg+foot .061 — they sum to 1), 4 hinges and 6
+         BALL-SOCKETS WITH A SWING CONE AND A TWIST RANGE. Twelve of 23 joints
+         are PASSENGERS riding on the part above at the clip's last local.
+         EVERY BODY HAS EXACTLY ONE OWNER: animated = kinematic, STEERED BY
+         VELOCITY (never teleported); simulated = dynamic, joints in the solver.
+
+         SWING-TWIST, NOT EULER. q = swing * twist, twist about the bone; the
+         swing is 7.4's two mirrors (t, then half-way h). Euler sensitivity
+         609.9 at an arm raised forward (1/cos(pitch) = 573 predicted), swing-
+         twist 1.55 there; its one singularity is the antipode of the axis the
+         swing is measured FROM — so measure from a cone axis tilted into the
+         middle of the range, and no cone ever contains it.
+         THE SWING ROW IS EXACT: dphi/dt = (w_b - w_a).n, n = a1 x b1 / |..|.
+         THE TWIST ROW IS THE HALF-WAY AXIS OVER cos(phi/2):
+         (w_b - w_a).(a1 + b1)/(1 + a1.b1), because the swing's own angular
+         velocity 2 h x h_dot is perpendicular to a1 + b1. A row about the bone
+         is wrong by -(w_perp . a1)/(1 + cos phi) <= |w_perp| tan(phi/2)
+         (bound measured to 1.0045). CODMAN'S PARADOX: carried round a loop
+         with no spin about itself a limb gains the loop's SOLID ANGLE of
+         twist — 90.000 deg for the octant, 48.231/180/360/540 for circles at
+         30/60/90/120 — to three decimals. In the solver the bone row does NOT
+         walk through its stop (REFUSED): the position pass measures the TRUE
+         twist and lags it by alpha'(1 - cos phi) h / beta = 9.55 deg predicted,
+         9.08 measured; with no position pass, 179.93 deg.
+
+         TWO SHIPPED BUGS, FIXED. (1) 8.11's solve_joint_positions solved a
+         SATISFIED one-sided row against its zero bias, so a two-ended limit's
+         far stop cancelled every correction of the near one: a loaded knee
+         frozen at -0.1691 deg for ten seconds, cold -70.7 deg; now 0.0000 and
+         a steady -1.8915. Fix: satisfied rows take their speculative target
+         -C/h in the position pass too (solve_row_position_to). verify_811
+         rerun: 58/58, ONE table moved (§H rebound 0.0753 -> 0.0750, overshoot
+         0.00318 -> 0.00316 rad). (2) 8.10's islands never let a MOVING
+         KINEMATIC body wake anything (kinematic is not a bridge, so it never
+         joined the sleeping island): a steered character ran through a crate
+         asleep before it arrived (0.09 m/s, 48 contact frames). Fix:
+         wake_touched_by_kinematic before wake_islands, gated on the sleep
+         thresholds so a stopped lift wakes nothing. verify_810: every
+         non-timing line byte-identical.
+
+         THE HANDOFF IS ONE ASSIGNMENT. The chord a steered body carries IS
+         semi-implicit Euler's velocity (x_n = x_{n-1} + h v_n): 0.0045 m/s
+         from the clip's midpoint velocity, 0.2320 from its end. Rotation:
+         the linearised spin inverts to the RODRIGUES vector (2/h) dq.v/dq.w —
+         lands to 1.57e-07 rad, the logarithm misses by 9.75e-05 against
+         theta^3/12 = 9.76e-05. Momentum kept EXACTLY (204.40 kg m/s =
+         80 x 2.555); at rest the character stops dead (10 mm in 0.5 s against
+         1.18 m). Each joint starts violated by 1/2 h |wb x (wb x rb) -
+         wa x (wa x ra)|, to 0.43%. 7.7'S WALK BENDS THE KNEES FORWARD (48 deg
+         past the stop) and twists forearms off their hinges (32 deg): split
+         impulse repairs it adding 0.001 J, Baumgarte leaves 0.356 J more.
+
+         THE RETURN: read_pose inverts part_targets to 2.4e-07; realign_model
+         (ground plane only; heading is ex. 4) removes a 1.302 m slide; a
+         local slerp blend changes no bone by more than 0.06 mm, a model-space
+         blend by 208 mm; first frame 58 mm against a 1.648 m snap; the worst
+         joint crosses 115.5 deg, where nlerp lags slerp by 1.98 deg.
+         THE FIGHT: teleported dynamic bodies carry a 20.6 m/s velocity lie
+         and a limb 287 mm into a crate; with the chord added, 159 mm.
+
+         WHAT RAGDOLLS LEAVE. Capsule rho about 0.1 above Dempster's (0.76-0.78
+         vs 0.64-0.68). Default exclusion = the 10 jointed pairs (nothing else
+         within 4 cm at rest — the handover's forearm/torso overlap REFUSED);
+         "two links" excludes 13 more incl. torso/forearm (touch in 9 of 12
+         falls) and a forearm RESTS 179.6 mm inside the chest. Eight sweeps:
+         92 mm peak gap in a fall; hung from one hand 4.13 mm at 8 sweeps,
+         2.52 at 32, 0.001 with EIGHT SUB-STEPS; a chest lying on an arm sinks
+         61.4 mm (a 16:1 stack). SLEEP REFUSED: every trip settles to mJ, only
+         4 of 12 sleep at 8.10's crate-tuned thresholds (5 crushed, 3 thin
+         limbs turning); angular damping 1/s -> 7 of 12. 12.4 us a falling
+         ragdoll a step (solve 8.1), 81 per ms.
+
+next: 9.1 — Multithreading: Data Hazards and Safety Rules
+
+      MODULE 9 OPENS. Module 8 is complete: 13 lessons, ~72 h. The next
+      lesson is the first of Professional Polish & Capstone, and the first in
+      the course to run code on more than one thread.
+
+      WHAT 9.1 INHERITS, AND MUST NOT RE-DERIVE:
+        - Every system so far is single-threaded and several are already
+          partitioned: 8.10's ISLANDS are independent by construction (no
+          contact or joint crosses one), 8.8's grid emits pairs per cell, and
+          8.13's casts are pure functions of a const world. Those are the
+          natural first jobs, and the lesson should say so rather than invent
+          a toy.
+        - The one shared mutable thing the engine already has is 7.8's audio
+          voice table, behind one mutex, touched from SDL's audio thread. 9.1's
+          data-hazard vocabulary should be shown on THAT before anything new.
         - A LESSON PAGE ENDS AT FURTHER READING. STATE.md is the sole resume key.
         - `scratch/build_verify_NN.sh` REFUSES an unoptimised libengine.a.
-        - zsh DOES NOT WORD-SPLIT `set -- $spec`: 8.12's first demo-shot loop
-          launched a WINDOWED demo that never quit. Write shots out longhand.
-
-      *** THE ONE THING 8.13 EXISTS TO DO. ***
-      A controller that obeys design intent, not Newton: grounding, slopes (a
-      max walkable angle), step-up, and no tunnelling at speed — built from
-      queries (GJK/EPA/sweeps), not from the solver. The lesson is WHY it must
-      not be a rigid body. MODULE 8 CLOSES WITH IT: reissue conventions.html
-      and math-toolbox.html (module boundary, CLAUDE.md §7), adding 8.12's
-      swing-twist order, the half-way twist row, Codman, and the
-      one-owner/steering rule; and the Module 8 project tree (CLAUDE.md §8).
+        - Timing a threaded harness adds an instrument problem the course has
+          not met yet: the OS scheduler. Minima over repetitions, as since 8.8,
+          and say how many cores the machine has.
 
       OPEN DEFECTS, STILL DELIBERATELY NOT FIXED:
         1. `epa_config::max_iterations = 32` gives a sphere-sphere normal
-           4.2602 deg off (8.6's knob). Capsule-capsule contacts in 8.12 read
-           exact depths (0.2 mm of GJK's segment distance), so it did not bite.
-        2. EIGHT SWEEPS DO NOT HOLD A TEN-CRATE TOWER — nor a chest off an arm
-           (8.12 §8: 61.4 mm), nor a hanging body (4.13 mm; sub-steps 0.001).
-           SUB-STEPPING IS NOW THE MEASURED ANSWER THREE TIMES; Module 9 prices
-           it with contacts in the loop.
-        3. NO SPECULATIVE CONTACTS (8.10 §6).
+           4.2602 deg off (8.6's knob). Did not bite in 8.12 or 8.13.
+        2. EIGHT SWEEPS DO NOT HOLD A TEN-CRATE TOWER, a chest off an arm, or a
+           hanging body; SUB-STEPPING is the measured answer three times.
+           Module 9 prices it with contacts in the loop.
+        3. NO SPECULATIVE CONTACTS (8.10 §6). The CHARACTER no longer tunnels
+           (8.13 §9 casts); every other body still does, at 8.10's odds.
         4. The M^-1 J^T hoist into contact_constraint (8.11 ex. 3).
         5. Joints-before-contacts is argued, not measured (8.11 ex. 4).
-        6. NEW: SLEEP THRESHOLDS ARE PER-BODY SPEEDS tuned on crates; 8 of 12
-           tripped ragdolls never sleep. Energy-based test is 8.12 ex. 3.
-        7. NEW: `check-builders.py --figures` fails 511 (build/swarm511.ppm,
-           a gitignored render capture, is gone) as well as the known
-           45/46/48. Pages rebuild 63/63 from their committed SVGs.
+        6. SLEEP THRESHOLDS ARE PER-BODY SPEEDS tuned on crates (8.12 ex. 3).
+        7. `check-builders.py --figures` fails 511 because build/swarm511.ppm
+           (a gitignored render capture) is gone, and the known 45/46/48.
+           PLAIN check-builders is green: 511's truncated fig7 SVG was restored
+           from its own page on 2026-09-24.
+        8. NEW: THE CONTROLLER IS NOT PUSHED BY ANYTHING (one-way coupling; the
+           proxy is kinematic) and puts no weight on what it stands on. Both
+           are 8.13 ex. 4, with the proxy's contact impulses as the input.
+        9. NEW: THE CONTROLLER'S CULL IS LINEAR IN THE SCENE (847 us at
+           10,000 bodies). A region query on 8.8's uniform_grid is 8.13 ex. 5,
+           and a natural Module 9 profiling case study.
+       10. NEW: GJK's certified lower bound is loose by about the obstacle's
+           SIZE times its angular error; a 60 m ramp as one box leaves the
+           character up to 2.3 mm above its skin. An authoring rule, not a fix.
 
-      CARRY FORWARD from 8.12:
-        - FIVE MEASUREMENTS REFUSED THEIR SECTION'S CLAIM (the 13th to 17th in
-          Module 8): the forearm/torso overlap at rest; the bone row walking
-          through its stop; "each doubling of sweeps halves the stretch" (a
-          hanging load barely moves); the deepest instant as a self-collision
-          measure; and "a settled ragdoll sleeps".
-        - TWO ENGINE BUGS FOUND BY PROBES, NOT TESTS: printing one joint's
-          angle against its limits for ten seconds (a violation that does not
-          change in the fourth decimal is not being corrected), and a crate
-          that did not move with sleeping on and did with it off.
-        - INSTRUMENT ERRORS THIS TIME: acos of a float near 1 (8.7's floor,
-          7e-4 rad) hid a 1.6e-7 landing error; nlerp vs slerp measured at the
-          midpoint, where they agree by symmetry; an undamped hanging body
-          measured mid-swing; total KE swamping the joints' internal KE.
+      CARRY FORWARD from 8.13:
+        - EIGHT MEASUREMENTS REFUSED THEIR SECTION'S CLAIM (the 18th to 25th in
+          Module 8). Four of them were the engine's OWN first drafts caught by
+          their controls: stepping a cast from the upper bound, clipping the
+          remainder, a tangent-plane snap, and a recover() that let the solver
+          move the character. Keep writing the first draft as a control arm.
+        - INSTRUMENT ERRORS THIS TIME: reading a quaternion's angle with
+          2 atan2(v, w) across a full turn (q = -1 reads +-360); a "last
+          second" window that caught the tail of an approach and read it as
+          jitter; an x-reach initialised to 0 when the quantity is negative;
+          a GJK re-run WITHOUT the cast's warm start used to explain the
+          cast's own stop; and a gap measured with the same loose GJK as the
+          thing it was judging (the reference now runs GJK at 1e-7).

@@ -9099,3 +9099,84 @@ until it was taken relative to the centre of mass.
 A loop of `for spec in "1 0.6 run" ...; do set -- $spec; demo --scene $1 --t $2 --shot $3; done`
 passed each spec as ONE argument under zsh, `--t` swallowed `--shot`, and the demo opened a real
 window and never quit. Write shot commands out longhand (or use `${=spec}`).
+
+## A conservative step must be taken from a lower bound
+
+Lesson 8.13's cast is Newton's method on a convex distance, and the argument that it cannot
+overshoot — a convex function lies above its tangent — is true of the *exact* distance. The first
+draft stepped from `gjk_result::distance`, which is the gap between two witness points and so an
+**upper** bound, and 377 of 6,049 random hits finished inside the skin, by up to 0.17 mm: the step
+overshot by exactly GJK's slack. Stepping from `certify(...).lower`, the slab between the two
+supporting planes, finished inside none. The slab argument is also the stronger proof: under a
+translation the slab narrows at exactly `d·n` for *any* `n`, so the step is safe even when GJK's
+direction is slightly wrong. When a proof depends on a quantity being exact, check which side of
+exact the code's number errs on.
+
+## Clip the original motion, not what was left
+
+Quake's plane-list rule (`clip_to_planes`) is well known; what it is *fed* is the half people get
+wrong. 8.13's first draft clipped the remainder after the last hit against every plane, and in a
+120° corner the remainder — already bent by the first wall — projected onto the second wall alone
+points back out of the corner, passes the "goes into none of the others" check, and the character
+walked back and forth at 575 mm/s. Quake 1's `SV_FlyMove` clips the ORIGINAL velocity against every
+plane; both single-plane candidates then fail, the crease is vertical, and the character stops.
+Keep the rejected rule as a knob and measure it, or nobody will believe the difference matters.
+
+## A skin thinner than the query's own margin is worse than none
+
+With no skin a cast lands exactly on the contact — against a flat face, in one Newton step — and
+GJK reports that as intersecting, so the cast must fall back to the last iterate it could measure:
+134 mm short on average, 2.3 m at worst. A 0.1 mm skin finishes reliably and finishes *inside*
+GJK's contact margin, so 7.3% of the next queries start inside (against 2.1% with no skin). A
+millimetre or more, and none do. A tolerance-sized clearance has to clear the *other* algorithm's
+tolerance, not just be positive.
+
+## A certificate's looseness can scale with the object, not the tolerance
+
+GJK's certified lower bound is the slab width along its direction; when the direction is off by a
+small angle, the far face of the slab is set by the obstacle's farthest corner, and the bound is
+short by roughly the obstacle's size times the angle. 8.13 §6 measured a character standing
+10.00–10.07 mm off a 6 m ramp and 10.02–12.32 mm off a 60 m one, identically at GJK tolerances of
+1e-4 and 1e-7 — GJK stops on float rounding before its tolerance matters. The fix is authoring
+(sensible collision pieces), and the lesson is the 8.4/8.5 one again: find which *scale* is spoiling
+the answer before tuning a threshold.
+
+## A velocity-gated rule cannot see a teleported body
+
+8.12 fixed islands so that a *moving* kinematic body wakes what it touches, gated on the sleep
+thresholds. 8.13 teleported a kinematic proxy — position written, velocity left at zero — and the
+character walked straight through a crate that had fallen asleep, because the wake rule reads the
+velocity and the velocity said "not moving". The same lie makes the position pass the only thing
+that moves an awake crate, so the proxy sinks `v·h/β + slop − v·h` (138 mm) into it. Steer
+kinematic bodies by the chord, always; every rule downstream reads velocities.
+
+## "Helpful" code can create a second owner
+
+8.13's first `recover` pushed the character out of any overlapping body it could not push — heavy
+dynamic ones included — and a 200 kg boulder carried the character 2.94 m. It looked like a
+feature (heavy things shove you) until it was named: the solver was moving a position the
+controller owns. `recover` now answers only to fixed and kinematic bodies, and knockback is an
+explicit read of the proxy's contact impulses. When two systems both move one quantity, one of them
+is wrong even if the result looks plausible.
+
+## A measurement window can read an approach as jitter
+
+§C measured a character pressed into a corner by the travel in "the last second" of three, and one
+rule read 85 mm/s of "jitter" — which a frame-by-frame probe showed was the tail of a slow slide
+into the corner, settled at frame 128 of 180. Measure a steady state after it has settled (the
+window moved to 4–5 s), and look at the trace once before trusting a summary of it.
+
+## A quaternion's angle wraps at a full turn
+
+`2·atan2(q.v.y, q.w)` is ±360° for `q = −1`, which is where a quaternion lands after one full turn
+(7.4's double cover). §I's facing check failed at exactly one revolution until the comparison used
+`remainder(angle − expected, 2π)`. Compare angles modulo a turn, never by subtraction.
+
+## A zero-byte generated file is a silent regression
+
+`scratch/l511_fig7.svg` (gitignored) was truncated to zero bytes at the end of the 8.12 session —
+most likely a figure script run in the working tree that opened its output and then failed — and
+the published page stayed correct, so nothing looked wrong until `check-builders.py` reported 511
+as DIFF. The fix came from the page itself, which archives its figures; the lesson is to run the
+builder check at the START of a session too, and to treat a "known failure" note as a claim to
+re-verify, because the note had attributed this to `--figures` only.

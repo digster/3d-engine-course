@@ -2915,3 +2915,18 @@ Produced Lesson 8.11 — Constraints and Joints: Hinge and Ball-Socket (Module 8
 (The session was interrupted after the harness was complete and resumed on "Try again".)
 
 Produced Lesson 8.12 — Ragdolls: Joints on a Skeleton (Module 8, 12 of 13).
+
+---
+
+## 2026-09-24 — `next` (Lesson 8.13)
+
+> next
+
+> Try again
+
+> Try again
+
+(The session was interrupted twice — once while the harness was being written, once while the
+repository documents were being updated — and resumed each time on "Try again".)
+
+Produced Lesson 8.13 — A Character Controller (Module 8, 13 of 13). **Module 8 complete.**

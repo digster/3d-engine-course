@@ -997,7 +997,7 @@ chore. What follows is on disk.
 │   └── Shaders.cmake       # add_hlsl_shader(name stage) -> a GLOBAL PROPERTY   [4.3, reshaped 5.1]
 ├── engine/                 # THE LIBRARY                                        [5.1]
 │   ├── CMakeLists.txt      # produces engine::engine (STATIC)
-│   ├── include/engine/     # ---- THE PUBLIC API. 102 headers. Nothing else. ---
+│   ├── include/engine/     # ---- THE PUBLIC API. 104 headers. Nothing else. ---
 │   │   ├── engine.hpp      # the umbrella. UNTIL 5.12 it listed 40 of the 55 headers
 │   │   │                   #   it could have — missing the whole ECS, the asset
 │   │   │                   #   store, handles, the logger and the action map —
@@ -1079,6 +1079,10 @@ chore. What follows is on disk.
 │   │   │                     #   convex) facade over GJK.               [8.4, 8.5]
 │   │   │   └── convex.hpp    # `convex`: a support FUNCTION POINTER, a context
 │   │   │                     #   pointer and an origin. 24 bytes, header only.
+│   │   │                     #   8.13 added placed_shape + place(): the sphere/
+│   │   │                     #   box/capsule-by-value dispatch five scenes had
+│   │   │                     #   copied, now the engine's (view() is const& with
+│   │   │                     #   the && overload deleted).                [8.13]
 │   │   │                     #   THE THIRD DISPATCH PATTERN IN THE ENGINE, after
 │   │   │                     #   the ECS's type-erased pools and 6.17's frame-graph
 │   │   │                     #   callbacks, and chosen the same way: 5.2 forbids
@@ -1217,6 +1221,30 @@ chore. What follows is on disk.
 │   │   │                   #   HAS ONE OWNER: the clip (kinematic, steered) or
 │   │   │                   #   the solver (dynamic). Bodies are a contiguous
 │   │   │                   #   run of the world's dense array from first_body.
+│   │   ├── cast.hpp        # cast(mover, d, obstacle, cast_config): a SHAPE
+│   │   │                   #   CAST by conservative advancement — Newton's
+│   │   │                   #   method on the convex distance, stepped from
+│   │   │                   #   GJK's certified LOWER bound so that no step can
+│   │   │                   #   cross the skin (each stops at a separating
+│   │   │                   #   plane). One convex obstacle per cast. Like
+│   │   │                   #   gjk.cpp it knows only `convex`: a projectile or
+│   │   │                   #   a camera boom needs it as much as a character.
+│   │   │                   #   surface_normal points obstacle -> mover, the
+│   │   │                   #   one named exception to 9e's a -> b.     [8.13]
+│   │   ├── character.hpp   # THE CHARACTER CONTROLLER: a capsule with a
+│   │   │                   #   position and no mass, moved by move_character
+│   │   │                   #   in five stages — carry (by the ground body's
+│   │   │                   #   step, as a transform), recover (EPA, fixed and
+│   │   │                   #   kinematic only), sideways (laid along walkable
+│   │   │                   #   ground, walls clipped from the ORIGINAL motion,
+│   │   │                   #   step-up), vertical (land / slide off steep /
+│   │   │                   #   ceiling), ground probe + snap (rolls off an
+│   │   │                   #   edge first). Meets the solver ONLY through a
+│   │   │                   #   kinematic proxy steered by steer_proxy; light
+│   │   │                   #   dynamic bodies are pushed, heavy ones are walls.
+│   │   │                   #   Includes cast.hpp and rigid_body.hpp and NOT
+│   │   │                   #   solver.hpp — the controller is outside the
+│   │   │                   #   simulation on purpose.                   [8.13]
 │   │   │   └── gjk.hpp       # gjk_vertex/simplex/gjk_status/gjk_result/gjk_config,
 │   │   │                     #   gjk_distance, gjk_intersects, certify, and
 │   │   │                     #   cso_support + reduce_simplex — the last two public
@@ -1416,7 +1444,7 @@ chore. What follows is on disk.
 │   │                             #   texture, a comparison sampler, its own
 │   │                             #   render pass, and fill_uniforms() so the two
 │   │                             #   renderers cannot disagree about a bias
-│   └── src/                # ---- PRIVATE. 68 sources; no demo can name this path ----
+│   └── src/                # ---- PRIVATE. 71 sources; no demo can name this path ----
 │       ├── phys/           # integrate.cpp [8.1], rigid_body.cpp [8.2],
 │       │                   # inertia.cpp [8.3], shape.cpp [8.4],
 │       │                   # collide.cpp [8.4], gjk.cpp [8.5], epa.cpp [8.6],
@@ -1424,6 +1452,7 @@ chore. What follows is on disk.
 │       │                   # solver.cpp                      [8.9, 8.10, 8.11]
 │       │                   # constraint.cpp                              [8.11]
 │       │                   # ragdoll.cpp                                 [8.12]
+│       │                   # cast.cpp, character.cpp                     [8.13]
 │       │                   #   gjk.cpp is the only one of these with no header of
 │       │                   #   its own shape knowledge: it includes gjk.hpp, which
 │       │                   #   includes convex.hpp, and nothing in it names a box.
@@ -1576,6 +1605,14 @@ chore. What follows is on disk.
 │   │                       #   clip drawn as itself — press [F] and the square
 │   │                       #   appears around the disc, and the extra area in
 │   │                       #   its corners IS the 43% of anisotropy.
+│   ├── character/main.cpp  # A CAPSULE THAT OBEYS THE DESIGN, NOT NEWTON   [8.13]
+│   │                       #   [1] a course (curb, stairs, a drop, a ramp,
+│   │                       #   crates pushed through a steered proxy, a
+│   │                       #   turntable, a 1 cm wall dashed into at 40 m/s),
+│   │                       #   by keyboard or the [O] autopilot, with a key per
+│   │                       #   decision to switch off; [2] the same script into
+│   │                       #   a rigid capsule and the controller side by side;
+│   │                       #   [3] three corners, one clip rule each.
 │   ├── ragdoll/main.cpp    # A CHARACTER ANIMATED, DROPPED, AND ANIMATED AGAIN
 │   │                       #                                              [8.12]
 │   │                       #   The trip (a jog steered into crates that fell
@@ -1853,6 +1890,8 @@ within the public API, since 5.2:
 `math` depends on nothing but the standard library — which is exactly why it is the first thing
 under test. `core` may not include `gfx`. Nothing in `engine/` may include from `demos/`. A
 cycle here is a design error, not an inconvenience to work around.
+
+**Lesson 8.13 added a layer to `phys/` that sits BESIDE the solver, not above it:** `phys/cast.hpp` depends only on `convex.hpp` and `gjk.hpp`, and `phys/character.hpp` on `cast.hpp`, `rigid_body.hpp` and (in its .cpp) `collide.hpp` for EPA — never on `solver.hpp`. The controller reads bodies and never writes one; the only thing it hands the simulation is a proxy's velocity, set by `steer_proxy`. It runs AFTER the physics step each fixed step (steer the proxy, step the world, move the character), which is the frame order every demo and harness since uses.
 
 **Lesson 8.12 added an arrow from `phys/` to `anim/`:** `phys/ragdoll.hpp` includes `anim/skeleton.hpp`. It points that way because a skeleton is joints and bind transforms and includes nothing but maths, while a ragdoll is a physics object built *from* one — 5.12's rule that the arrow points at the more general. The reverse would make every animated character compile the solver. `anim/` still includes nothing from `phys/`.
 
@@ -2213,6 +2252,8 @@ Built roughly in dependency order — each module's milestone is the next module
   │ PBR/     │   │ integrators  │   │  skeletal    │  │  streams   │
   │ shadows/ │   │ SAT/broad-   │   │  skinning    │  │  3D spatial│
   │ post     │   │ phase/impulse│   │  blending    │  │            │
+  │          │   │ joints/casts/│   │              │  │            │
+  │          │   │ controller   │   │              │  │            │
   └────┬─────┘   └───────┬──────┘   └───────┬──────┘  └─────┬──────┘
        └─────────────────┴──────────┬───────┴───────────────┘
                                     │

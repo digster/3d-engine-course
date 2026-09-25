@@ -107,6 +107,11 @@
       <li><a href="#dynamics">Forces, impulses and mass</a></li>
       <li><a href="#rotational-dynamics">Torque, the inertia tensor, and what a tumble conserves</a></li>
       <li><a href="#separation">Separation: shadows, support, and the fifteen</a></li>
+      <li><a href="#minkowski">Distance and depth: the Minkowski difference</a></li>
+      <li><a href="#impulses">Contacts, grids and impulses</a></li>
+      <li><a href="#rows">Constraints as rows</a></li>
+      <li><a href="#swing-twist">Swing and twist</a></li>
+      <li><a href="#casting">Casting, and a character that is not a body</a></li>
       <li><a href="#coming">Coming as the course proceeds</a></li>
     </ol>
   </details>
@@ -4128,6 +4133,311 @@ The singular values are sqrt(1 + |sin p|), 1, sqrt(1 - |sin p|).</span>
     </p>
   </div>
 
+  <h2 id="minkowski"><span class="num">8h</span>Distance and depth: the Minkowski difference</h2>
+
+  <p>
+    Lessons 8.5 and 8.6. Two shapes become one set, and a question about a pair becomes a question
+    about a point.
+  </p>
+
+  <div class="card">
+    <h3>The support of a Minkowski difference <span class="from">Lesson 8.5</span></h3>
+    <div class="eq">
+      \[ S_{A \ominus B}(\mathbf{d}) = S_A(\mathbf{d}) - S_B(-\mathbf{d}) \]
+      <span class="eq-plain">The farthest point of the difference set in a direction is the farthest point of A that way minus the farthest point of B the other way.</span>
+    </div>
+    <p>
+      Maximising <code>(a &minus; b)&middot;d</code> over independent <code>a</code> and <code>b</code>
+      maximises <code>a&middot;d</code> and <code>&minus;b&middot;d</code> separately. So a set that could
+      have four hundred vertices is never built: GJK asks for one of its points at a time, two support
+      calls each. <code>A</code> and <code>B</code> overlap exactly when <code>A &#8854; B</code>
+      contains the origin, and their distance is the origin's distance to it.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>The support of a Minkowski sum <span class="from">Lesson 8.5</span></h3>
+    <div class="eq">
+      \[ S_{A \oplus B}(\mathbf{d}) = S_A(\mathbf{d}) + S_B(\mathbf{d}) \]
+      <span class="eq-plain">The farthest point of a sum of two sets is the sum of their farthest points.</span>
+    </div>
+    <p>
+      The same argument with a plus sign. A capsule <em>is</em> a sum, a segment plus a ball, so its
+      support is <code>&plusmn;h&middot;axis + r&middot;d&#770;</code>, two terms that never meet. It is
+      also why every cast in 8.13 sees the capsule inflated by its skin: <code>r + skin</code> is the
+      radius that touches.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>GJK's sandwich <span class="from">Lesson 8.5</span></h3>
+    <div class="eq">
+      \[ \frac{\mathbf{v}\cdot\mathbf{w}}{\lVert\mathbf{v}\rVert} \;\le\; \operatorname{dist}(A, B) \;\le\; \lVert\mathbf{v}\rVert, \qquad \mathbf{w} = S_{A \ominus B}(-\mathbf{v}) \]
+      <span class="eq-plain">The closest point v of the current simplex is an upper bound on the distance; the supporting plane through w, the farthest point toward the origin, gives a lower bound.</span>
+    </div>
+    <p>
+      <code>v</code> is a real point of a real subset, so the distance cannot exceed it; nothing in the
+      set lies beyond the plane through <code>w</code>, so it cannot fall below the plane's distance.
+      When the two meet the distance is <em>proven</em>. 8.13 found out which one matters: a step that
+      must not overshoot is taken from the lower bound.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>Penetration depth is a minimum of the support function <span class="from">Lesson 8.6</span></h3>
+    <div class="eq">
+      \[ \operatorname{depth}(A, B) \;=\; \min_{\lVert\hat{\mathbf{n}}\rVert = 1}\; h_{A \ominus B}(\hat{\mathbf{n}}), \qquad h_X(\hat{\mathbf{n}}) = \max_{\mathbf{p} \in X} \mathbf{p}\cdot\hat{\mathbf{n}} \]
+      <span class="eq-plain">When the origin is inside the difference set, the shortest way out is the direction in which the set's boundary is nearest — the minimum over unit directions of the support value.</span>
+    </div>
+    <p>
+      EPA searches for that minimum from GJK's terminal simplex; 8.4's SAT searches the same function
+      over fifteen fixed candidates. Two algorithms minimising one function agree to
+      <strong>2.4e&minus;05&nbsp;m</strong> on 200,000 box pairs, and the function evaluated at any
+      direction is a certificate: a claimed depth larger than it is provably wrong.
+    </p>
+  </div>
+
+  <h2 id="impulses"><span class="num">8i</span>Contacts, grids and impulses</h2>
+
+  <p>
+    Lessons 8.7 to 8.10: finding the points, finding the pairs, and pushing.
+  </p>
+
+  <div class="card">
+    <h3>A manifold is a clipped face <span class="from">Lesson 8.7</span></h3>
+    <div class="eq">
+      \[ \text{keep } \mathbf{p} \iff (\mathbf{p} - \mathbf{r})\cdot\hat{\mathbf{n}}_{\text{ref}} \le 0, \qquad \text{depth}(\mathbf{p}) = -(\mathbf{p} - \mathbf{r})\cdot\hat{\mathbf{n}}_{\text{ref}} \]
+      <span class="eq-plain">Clip the incident face against the reference face's side planes, then keep the points that lie below the reference face; each point's depth is how far below it lies.</span>
+    </div>
+    <p>
+      3.3's Sutherland&ndash;Hodgman, a module later and one dimension up: the same inside test, the
+      same edge crossing. What is new is the <em>id</em> each kept point carries (which features made
+      it), because a contact is only worth warm-starting if it can be found again next frame.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>Why a fattened box costs the cube <span class="from">Lesson 8.8</span></h3>
+    <div class="eq">
+      \[ \text{pairs}(m) \;\propto\; \left(\frac{E + 4m}{E}\right)^{3} \]
+      <span class="eq-plain">Fattening each box by a margin m grows the region in which two centres overlap by 4m per axis, so the pair count grows as the cube of (E + 4m)/E.</span>
+    </div>
+    <p>
+      Two boxes overlap when their centres' difference lies in a box of extent
+      <code>e&#8336; + e&#8347;</code>; fattening each by <code>m</code> adds <code>2m</code> to each half
+      extent, <code>4m</code> to the width. The broadphase's whole value is being cheap, and this is
+      the price of a margin, measured within 12% at every margin 8.8 tried.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>The effective mass <span class="from">Lesson 8.9</span></h3>
+    <div class="eq">
+      \[ k = \frac{1}{m_a} + \frac{1}{m_b} + \mathbf{w}_a\cdot I_a^{-1}\mathbf{w}_a + \mathbf{w}_b\cdot I_b^{-1}\mathbf{w}_b, \qquad \mathbf{w} = \mathbf{r}\times\hat{\mathbf{n}}, \qquad \Delta\lambda = -\frac{u_n}{k} \]
+      <span class="eq-plain">The impulse that cancels the relative normal velocity at a point is that velocity divided by k, the sum of each body's inverse mass and the rotational terms from its lever arm.</span>
+    </div>
+    <p>
+      A scalar, because the impulse's direction is fixed and only its size is unknown. The
+      rotational terms are <code>&ge; 0</code> (a quadratic form of a positive tensor), which proves
+      the division safe. It is <code>J M&#8315;&sup1; J&#7488;</code> for a row with
+      <code>J = [&minus;n, &minus;w&#8336;, n, w&#8347;]</code>, which 8.11 checked to 1.9e&minus;07.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>Restitution and the Coulomb cone <span class="from">Lesson 8.9</span></h3>
+    <div class="eq">
+      \[ u_n^{+} = -e\,u_n^{-}, \qquad \lvert \boldsymbol{\lambda}_t \rvert \le \mu\,\lambda_n, \qquad \theta_{\text{crit}} = \arctan\mu \]
+      <span class="eq-plain">Separation speed is e times approach speed; the tangential impulse may not exceed mu times the normal one; and a body holds on a slope up to arctan of mu.</span>
+    </div>
+    <p>
+      The last is what <code>&mu;</code> means physically, and why a character cannot be a rigid body:
+      one number sets both the steepest slope a character stands on and how hard a wall grips it
+      (8.13 &sect;1: it hangs above a stick speed of <code>g&middot;h/&mu;</code>).
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>Baumgarte's time constant <span class="from">Lesson 8.10</span></h3>
+    <div class="eq">
+      \[ b = \frac{\beta\,C}{h}, \qquad C_{n+1} = (1 - \beta)\,C_n, \qquad \tau = \frac{h}{\ln\!\bigl(1/(1 - \beta)\bigr)} \]
+      <span class="eq-plain">A position error C corrected by a velocity bias of beta C over h shrinks by a factor (1 - beta) a step, a time constant of h over ln(1/(1-beta)): 74.7 ms at beta 0.2 and 60 Hz.</span>
+    </div>
+    <p>
+      Under split impulse the same bias moves a body by pseudo velocity and is thrown away. 8.13 used
+      the formula backwards: a proxy that is teleported instead of steered moves a crate only through
+      this term, so it has to sit <code>v&middot;h/&beta;</code> deep in it, 138&nbsp;mm at a walk.
+    </p>
+  </div>
+
+  <h2 id="rows"><span class="num">8j</span>Constraints as rows</h2>
+
+  <p>
+    Lesson 8.11.
+  </p>
+
+  <div class="card">
+    <h3>A row, its impulse, and its mass <span class="from">Lesson 8.11</span></h3>
+    <div class="eq">
+      \[ \dot{C} = J\,V, \qquad \mathbf{P} = J^{T}\lambda, \qquad \lambda = -\frac{J V + b}{J M^{-1} J^{T}} \]
+      <span class="eq-plain">A constraint's rate is its Jacobian row times the stacked velocities; its impulse acts along the row's transpose; and the impulse that zeroes the rate plus a bias is that over the row's effective mass.</span>
+    </div>
+    <p>
+      The transpose is virtual work: an ideal constraint does no work on any motion it allows, so its
+      force must be perpendicular to every such motion, which is to say along <code>J&#7488;</code>. A
+      contact, a rod, a rope, a socket, a hinge, a limit and a motor differ only in their rows and the
+      bounds on <code>&lambda;</code>.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>The lever ratio, and what a velocity joint loses <span class="from">Lesson 8.11</span></h3>
+    <div class="eq">
+      \[ \rho = \frac{m\,d^2}{I_{\text{cm}} + m\,d^2}, \qquad \frac{\Delta E}{E} = \rho\,(\omega h)^2 \ \text{per step}, \qquad r_{n+1}^2 = r_n^2 + (v h)^2 \]
+      <span class="eq-plain">rho is the fraction of a body's inertia about a pin that comes from its offset; a velocity joint loses rho times (omega h) squared of its energy every step, and its radius grows by the square of one step's travel.</span>
+    </div>
+    <p>
+      After a velocity solve the body moves along a tangent, off its circle. The same tangent is 8.13's
+      drifting rider: carried by the point velocity under it, <code>|r|&sup2;</code> grows by
+      <code>1 + (&omega;h)&sup2;</code> a step.
+    </p>
+  </div>
+
+  <h2 id="swing-twist"><span class="num">8k</span>Swing and twist</h2>
+
+  <p>
+    Lesson 8.12.
+  </p>
+
+  <div class="card">
+    <h3>The swing&ndash;twist split <span class="from">Lesson 8.12</span></h3>
+    <div class="eq">
+      \[ \tau = \frac{\bigl(q_w,\ (\mathbf{q}_v\cdot\hat{\mathbf{t}})\,\hat{\mathbf{t}}\bigr)}{\sqrt{q_w^2 + (\mathbf{q}_v\cdot\hat{\mathbf{t}})^2}}, \qquad s = q\,\tau^{*} \]
+      <span class="eq-plain">The twist keeps the part of q's vector along the bone axis t, renormalised; the swing is whatever turns the twist into q.</span>
+    </div>
+    <p>
+      Twist first, about the bone: <code>q = s&middot;&tau;</code>. The swing is then the smallest
+      rotation carrying the bone to where <code>q</code> puts it, which is 7.4's two mirrors. Its one
+      singularity is a swing of 180°, the antipode of the axis it is measured from.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>The twist rate is about the half-way axis <span class="from">Lesson 8.12</span></h3>
+    <div class="eq">
+      \[ \dot{\theta} = (\boldsymbol{\omega}_b - \boldsymbol{\omega}_a)\cdot\frac{\mathbf{a}_1 + \mathbf{b}_1}{1 + \mathbf{a}_1\cdot\mathbf{b}_1} \]
+      <span class="eq-plain">The twist's rate is the relative spin along the sum of the cone axis and the bone, divided by one plus their dot product — the half-way axis over cos(phi/2).</span>
+    </div>
+    <p>
+      The swing's own angular velocity, <code>2h &times; h&#775;</code>, is perpendicular to
+      <code>a&#8321; + b&#8321;</code>, so every bit of relative spin along that axis is twist. A row about
+      the bone is wrong by up to <code>|&omega;&#8869;|&middot;tan(&phi;/2)</code>.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>Codman's paradox is a solid angle <span class="from">Lesson 8.12</span></h3>
+    <div class="eq">
+      \[ \Delta\theta_{\text{twist}} = \Omega_{\text{enclosed}}, \qquad \Omega_{\text{circle}} = 2\pi\,(1 - \cos\varphi) \]
+      <span class="eq-plain">A limb carried round a closed loop with no spin about itself comes home twisted by the solid angle its direction enclosed — two pi times one minus the cosine of the swing, for a circle.</span>
+    </div>
+    <p>
+      Integrate the bone row's error round a loop and it is the loop's solid angle: a quarter turn for
+      the octant (down, forward, out, down), 180° for a circle at 60°. 8.12 reproduced four circles to
+      three decimals from a harness that computes no solid angle.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>Steering is the integrator, inverted <span class="from">Lesson 8.12</span></h3>
+    <div class="eq">
+      \[ \mathbf{v} = \frac{\mathbf{x}_{\text{target}} - \mathbf{x}}{h}, \qquad \boldsymbol{\omega} = \frac{2}{h}\,\frac{\Delta\mathbf{q}_v}{\Delta q_w}, \quad \Delta q = q_{\text{target}}\,q^{*} \]
+      <span class="eq-plain">The velocity that lands a body exactly on a target in one semi-implicit step is the chord over h; the angular velocity that does so under the linearised spin rule is the Rodrigues vector, 2 over h times the delta quaternion's vector over its scalar.</span>
+    </div>
+    <p>
+      Not the calculus answer (<code>angle&middot;axis/h</code>, exact only for the exponential rule), but
+      the one this engine's integrator will actually invert. 8.13's proxy uses the linear half, and its
+      carry uses the same idea read the other way: <code>normalise(1, &frac12;h&omega;)</code> is the
+      rotation a linearised step performs.
+    </p>
+  </div>
+
+  <h2 id="casting"><span class="num">8l</span>Casting, and a character that is not a body</h2>
+
+  <p>
+    Lesson 8.13, and the end of Module 8.
+  </p>
+
+  <div class="card">
+    <h3>Conservative advancement <span class="from">Lesson 8.13</span></h3>
+    <div class="eq">
+      \[ t \;\leftarrow\; t + \frac{f(t) - s}{\mathbf{d}\cdot\hat{\mathbf{n}}}, \qquad w_{\hat{n}}(t) = w_{\hat{n}}(0) - t\,(\mathbf{d}\cdot\hat{\mathbf{n}}) \;\le\; f(t) \]
+      <span class="eq-plain">Step t by the gap left over the speed it is closing at. It is Newton's method on the convex distance f, and it is safe because the slab between the two supporting planes along any direction n narrows linearly and never exceeds the true gap.</span>
+    </div>
+    <p>
+      Two reasons it cannot overshoot. <code>f</code> is convex (the distance from a point moving on a
+      line to a convex set), so every tangent lies below it and a Newton step lands short. And the
+      slab along GJK's direction is a separating plane moving under a translation, so stepping to where
+      <em>it</em> is <code>s</code> wide is safe for any direction. That argument needs <code>f</code> to be
+      the slab's width, GJK's lower bound. Against a flat face the first step is exact, which is 1.8's
+      swept test; against anything curved the error squares each step.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>A step laid along the ground <span class="from">Lesson 8.13</span></h3>
+    <div class="eq">
+      \[ \mathbf{t} = \mathbf{d} - \hat{\mathbf{y}}\,\frac{\mathbf{d}\cdot\hat{\mathbf{n}}}{n_y}, \qquad v_{\text{creep}} = g\,h\,\sin\alpha \]
+      <span class="eq-plain">The vector with d's horizontal part that lies in the ground plane; and the speed at which a character standing still creeps downhill if gravity's one-step drop is slid along the slope instead of stopped.</span>
+    </div>
+    <p>
+      Demand <code>(d + &lambda;y&#770;)&middot;n = 0</code> and solve for <code>&lambda;</code>. The plain
+      projection <code>d &minus; (d&middot;n)n</code> keeps only <code>cos&sup2;&alpha;</code> of the
+      horizontal speed. The creep is <code>g&middot;h&sup2;</code> a step projected down the slope, and it
+      matches to five figures.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>The round bottom's three numbers <span class="from">Lesson 8.13</span></h3>
+    <div class="eq">
+      \[ s_{\text{curb}} = R\,(1 - \cos\theta), \qquad x_{\text{edge}} = R\,\sin\theta, \qquad f_{\text{step}} = R\,(1 - \sin\theta), \qquad R = r + \text{skin} \]
+      <span class="eq-plain">With R the capsule's radius plus its skin and theta the slope limit: the tallest curb climbed with no step-up, the farthest a capsule's centre can hang past an edge and still stand, and the least forward move a step-up needs to land walkable.</span>
+    </div>
+    <p>
+      One right triangle whose hypotenuse runs from an edge to the bottom sphere's centre, and whose
+      angle is the contact normal's tilt. At <code>R = 0.31</code> and 45°: 90.8, 219.2 and
+      90.8&nbsp;mm. The step-up and the curb add, so the tallest ledge climbed is
+      <code>step_height + R(1 &minus; cos&nbsp;&theta;)</code>.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>A tangent leaves a circle <span class="from">Lesson 8.13</span></h3>
+    <div class="eq">
+      \[ \frac{r_{\text{after}}}{r_{\text{before}}} = \bigl(1 + (\omega h)^2\bigr)^{N/2} \approx e^{\pi\omega h}, \qquad N = \frac{2\pi}{2\arctan(\omega h/2)} \]
+      <span class="eq-plain">A rider carried by the point velocity under it spirals outward by the square root of 1 + (omega h) squared each step, about e to the pi omega h per revolution.</span>
+    </div>
+    <p>
+      <code>N</code> counts steps of a <em>linearised</em> turn (8.3 &sect;7), not of <code>&omega;h</code>.
+      5.4% a revolution at 1&nbsp;rad/s, 11.1% at 2, both measured to four figures. Carried by the
+      platform's step as a transform, a rider does not drift at all.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>Tunnelling odds <span class="from">Lesson 8.13</span></h3>
+    <div class="eq">
+      \[ P_{\text{through}} = \max\!\left(0,\ 1 - \frac{w/2 + r}{v\,h}\right) \]
+      <span class="eq-plain">A body of radius r first sampled overlapping a wall of thickness w at a depth uniform on zero to v h goes through whenever its centre has passed the wall's middle.</span>
+    </div>
+    <p>
+      8.10's arrival depth, uniform on <code>[0, v&middot;h]</code>, plus EPA's rule of pushing out the
+      nearer side. Zero below <code>(w/2 + r)/h</code>, and a controller that casts has no such curve at
+      all.
+    </p>
+  </div>
+
   <h2 id="coming"><span class="num">9</span>Coming as the course proceeds</h2>
 
   <p>
@@ -4192,6 +4502,31 @@ The singular values are sqrt(1 + |sin p|), 1, sqrt(1 - |sin p|).</span>
     Rodrigues' formula · <strong>complex numbers as 2D rotation</strong> · quaternions ·
     slerp · the skinning sum. (Integration, impulses and the Separating Axis Theorem moved to
     Module 8 with the physics.)
+  </div>
+
+  <div class="pending">
+    <b>Module 8 — Physics.</b> <span class="badge done">complete</span>
+    Explicit against semi-implicit Euler and the determinant between them · impulse and the
+    reduced mass · the inertia tensor and the parallel-axis theorem (§8e&ndash;§8f) · the Separating
+    Axis Theorem (§8g) · <strong>the support of a Minkowski difference and of a sum</strong> ·
+    <strong>GJK's sandwich</strong> · <strong>depth as a minimum of the support function</strong> (§8h) ·
+    <strong>clipping a face into a manifold</strong> · <strong>the cube law of a fattened grid</strong> ·
+    <strong>the effective mass</strong> · <strong>restitution and the Coulomb cone</strong> ·
+    <strong>Baumgarte's time constant</strong> (§8i) · <strong>a constraint as a row</strong> ·
+    <strong>the lever ratio</strong> (§8j) · <strong>the swing&ndash;twist split</strong> ·
+    <strong>the half-way twist rate</strong> · <strong>Codman's solid angle</strong> ·
+    <strong>steering as an inverted integrator</strong> (§8k) · <strong>conservative
+    advancement</strong> · <strong>a step laid along the ground</strong> · <strong>the round
+    bottom's three numbers</strong> · <strong>a tangent leaving a circle</strong> ·
+    <strong>tunnelling odds</strong> (§8l).
+  </div>
+
+  <div class="pending">
+    <b>Module 9 — Professional polish.</b> Mostly arithmetic about machines rather than geometry:
+    <strong>data hazards and the happens-before relation</strong> (9.1), work stealing and the
+    critical path of a job graph, alignment and the arithmetic of arena and pool allocators, and the
+    measurement statistics a profiler's numbers need. Amdahl's law (§8, from 3.10) comes back
+    with threads behind it.
   </div>
 
   <div class="recap">

@@ -103,6 +103,13 @@
       <li><a href="#rotational">Rotational quantities &mdash; torque, spin, inertia</a></li>
       <li><a href="#bodies">Bodies &mdash; mass, forces, and which space they live in</a></li>
       <li><a href="#rotating">Rotating bodies &mdash; the tensor, the sandwich, and the term everybody drops</a></li>
+      <li><a href="#collision">Collision &mdash; shapes, the answer, and which way the axis points</a></li>
+      <li><a href="#distance">Distance, depth and casts &mdash; which bound, and which way</a></li>
+      <li><a href="#contacts">Contacts &mdash; ids, persistence, and the grid</a></li>
+      <li><a href="#solver">The solver &mdash; signs, order, and defaults</a></li>
+      <li><a href="#joints">Joints &mdash; a row, two bounds, and body-local anchors</a></li>
+      <li><a href="#ragdolls">Ragdolls &mdash; swing, twist, and one owner</a></li>
+      <li><a href="#character">The character controller &mdash; a question, not a body</a></li>
       <li><a href="#colour">Colour and diagram conventions</a></li>
       <li><a href="#code">Code organization &mdash; the boundary</a></li>
       <li><a href="#verified">The verified-facts table</a></li>
@@ -3721,6 +3728,300 @@
     </p>
   </div>
 
+  <h2 id="distance"><span class="num">9f</span>Distance, depth and casts &mdash; which bound, and which way</h2>
+
+  <p>
+    Lessons 8.5, 8.6 and 8.13. GJK, EPA and the shape cast share one representation of a shape and
+    one sign convention, and the cast adds the only deliberate exception on this page.
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>Rule</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>A <code>convex</code> answers <code>support(d)</code> relative to its own
+              <code>origin</code></strong>, and the world is added back once, outside every loop.</td>
+          <td>8.4 &sect;11 measured a 1&nbsp;mm gap reading zero at 100&nbsp;km from the origin because
+              two world-sized centres were subtracted. GJK forms that difference on every iteration;
+              relative support forms it once, on crate-sized numbers.</td>
+        </tr>
+        <tr>
+          <td><strong>GJK's <code>direction</code>, EPA's <code>normal</code> and <code>collide</code>'s
+              <code>axis</code> all point from the first argument toward the second</strong>, as 9e
+              settled.</td>
+          <td>One sign, chosen once. EPA's <code>+normal &times; depth</code> on <code>b</code>
+              separates the pair; its two witnesses differ by exactly that.</td>
+        </tr>
+        <tr>
+          <td><strong><code>gjk_result::distance</code> is an UPPER bound</strong> (the gap between two
+              real witness points); <code>certify(...).lower</code>, the width of the slab between the
+              supporting planes along <code>direction</code>, is the LOWER bound.</td>
+          <td>Anything that must not overshoot steps from the lower bound. 8.13's cast, stepped from
+              <code>distance</code>, finished inside its skin on 377 of 6,049 hits; from the lower
+              bound, never.</td>
+        </tr>
+        <tr>
+          <td><strong><code>iteration_limit</code> is treated as <code>intersecting</code></strong> by
+              every caller.</td>
+          <td>Running out means the bounds never separated, so the shapes are at worst a tolerance
+              apart. EPA starts from the terminal simplex GJK leaves behind.</td>
+        </tr>
+        <tr>
+          <td><strong><code>cast_result::surface_normal</code> points from the OBSTACLE toward the
+              MOVER</strong>, the opposite of the pair convention, and the field is named for what it
+              is.</td>
+          <td>Every consumer of a cast wants the surface's outward normal: to slide along it, to test
+              whether it can be stood on, to push off it. A named exception beats a minus sign every
+              caller could forget.</td>
+        </tr>
+        <tr>
+          <td><strong>One convex obstacle per cast</strong>, smallest <code>t</code> kept; never one
+              cast against a union.</td>
+          <td>A separating plane separates one pair. Stepping on the nearer of two obstacles went
+              through the other on 11,194 of 20,000 grazing passes; one cast each, never.</td>
+        </tr>
+        <tr>
+          <td><strong>A cast's skin is at least a millimetre</strong>; the character's is a centimetre.</td>
+          <td>With no skin a cast lands on the contact, GJK calls it intersecting, and the cast falls
+              back (134&nbsp;mm short on average). A skin thinner than GJK's margin is worse: 7.3% of
+              slides start inside.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 id="contacts"><span class="num">9g</span>Contacts &mdash; ids, persistence, and the grid</h2>
+
+  <p>
+    Lessons 8.7 and 8.8. A contact is only warm-startable if the same contact can be found again next
+    frame, and only reachable if the broadphase reported its pair.
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>Rule</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>A manifold holds at most four points</strong>, each with a <code>contact_id</code>
+              naming the features that made it, including which shape supplied the reference face.</td>
+          <td>Four is the least that holds a face flat. The reference-face bit is load-bearing: when
+              it flips, every id swaps meaning, and without the bit a warm start would land on the
+              wrong point.</td>
+        </tr>
+        <tr>
+          <td><strong>The order of a pair is the order of its shapes</strong>: a manifold for
+              <code>(a, b)</code> is matched only against one for <code>(a, b)</code>, keyed by
+              <code>pair_key(a, b)</code>.</td>
+          <td><code>(a, b)</code> and <code>(b, a)</code> describe one contact with opposite normals
+              and mirrored ids; matching across them silently finds nothing, and a stack will not
+              settle.</td>
+        </tr>
+        <tr>
+          <td><strong>The grid reports a pair once, from its OWNER cell</strong>: the cell holding the
+              larger lower corner of the two boxes' overlap.</td>
+          <td>Two boxes sharing several cells would otherwise be reported from each. The rule needs
+              only a <em>monotone</em> cell map, which is why the famous <code>floor</code>-versus-cast
+              mistake lost no pairs in 8.8 and a subtler one lost 66.7%.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 id="solver"><span class="num">9h</span>The solver &mdash; signs, order, and defaults</h2>
+
+  <p>
+    Lessons 8.9 and 8.10, with 8.12's kinematic wake. Every ordering in this table is one that some
+    lesson measured going wrong.
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>Rule</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>The step is two halves with a gap</strong>: <code>integrate_velocities</code>,
+              then broadphase, narrow phase and solve, then <code>integrate_positions</code>.</td>
+          <td>Solving after the position half sinks every resting body <code>g&middot;h&sup2;</code> a
+              step: 2.725&nbsp;mm at 60&nbsp;Hz, a crate through a half-metre floor in four seconds.</td>
+        </tr>
+        <tr>
+          <td><strong>An impulse is <code>+J</code> on <code>b</code> and <code>&minus;J</code> on
+              <code>a</code></strong>, the normal points <code>a</code>&rarr;<code>b</code>, and approach
+              is a NEGATIVE relative normal velocity.</td>
+          <td>9e's sign, carried into velocities. Momentum is then conserved to the bit, which is why
+              energy, not momentum, is the check.</td>
+        </tr>
+        <tr>
+          <td><strong>Clamp the ACCUMULATED impulse, never the increment</strong>; normals before
+              frictions in every sweep; warm start ONCE per step, outside the iteration loop.</td>
+          <td>Identical at one pass, a launched stack at sixteen; a friction cone of radius zero; a
+              crate slid 810&nbsp;mm down a slope it should have gripped.</td>
+        </tr>
+        <tr>
+          <td><strong>Materials are a pair property</strong> passed to the solve, combined by
+              <code>minimum</code> by default.</td>
+          <td>There is no physically correct combine rule; the default is a named convention, and 8.9
+              lists the surface pairs that decided it.</td>
+        </tr>
+        <tr>
+          <td><strong>Split impulse is the default correction</strong>, &beta;&nbsp;=&nbsp;0.2, slop
+              5&nbsp;mm, at most 3&nbsp;m/s of correction; 8 velocity and 3 position iterations.</td>
+          <td>Baumgarte's bias becomes real velocity the body keeps; a pseudo velocity is thrown away.
+              The resting depth <em>is</em> the slop.</td>
+        </tr>
+        <tr>
+          <td><strong>Only dynamic bodies bridge islands</strong>; an island sleeps whole or not at all;
+              <strong>wake before the solve, test for sleep after it</strong>; and a MOVING kinematic
+              body wakes what it touches.</td>
+          <td>A fixed floor as a bridge makes one island of a whole yard. A pre-solve sleep test never
+              fires, because every resting body moves at <code>g&middot;h</code> there. And a kinematic
+              body is not a bridge, so without 8.12's explicit wake a steered character ran through a
+              sleeping crate.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 id="joints"><span class="num">9i</span>Joints &mdash; a row, two bounds, and body-local anchors</h2>
+
+  <p>
+    Lesson 8.11, with 8.12's position-pass fix.
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>Rule</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>A constraint is a Jacobian row</strong>
+              <code>J = [linear_a | angular_a | linear_b | angular_b]</code> with
+              <code>J&middot;V = dC/dt</code>, and <strong><code>C &ge; 0</code> is the satisfied
+              side</strong>.</td>
+          <td>A contact normal, a rod, a rope, each axis of a socket, a hinge's alignment, a limit and
+              a motor are all choices of row and bounds in one loop. A contact normal <em>is</em> a
+              row, to 1.9e&minus;07.</td>
+        </tr>
+        <tr>
+          <td><strong>Anchors and axes are stored in their own bodies' frames</strong>, and the rest
+              orientation is <code>conj(q_a)&nbsp;q_b</code> at creation.</td>
+          <td>A joint authored in world space is wrong as soon as either body moves. A hinge's
+              perpendicular basis is chosen in <code>a</code>'s frame: chosen in world space it flipped
+              127 of 7,787 hinge-steps.</td>
+        </tr>
+        <tr>
+          <td><strong>One-sided rows are speculative</strong>: a stop not yet reached has target
+              <code>&minus;C/h</code>, in the velocity pass <em>and</em> the position pass.</td>
+          <td>Solved against a zero bias in the position pass, a limit's far stop cancelled every
+              correction of its near one (8.11's bug, found and fixed in 8.12).</td>
+        </tr>
+        <tr>
+          <td><strong>Joints before contacts in every sweep</strong>; jointed pairs kept out of the
+              narrow phase by the caller's <code>collision_filter</code>.</td>
+          <td>Argued rather than measured (8.11 exercise 4). A jointed pair colliding with itself is a
+              ragdoll that never settles.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 id="ragdolls"><span class="num">9j</span>Ragdolls &mdash; swing, twist, and one owner</h2>
+
+  <p>
+    Lesson 8.12.
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>Rule</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong><code>q = swing &middot; twist</code>, twist first, about the bone</strong>; the
+              swing is the smallest rotation carrying the bone, built as 7.4's two mirrors.</td>
+          <td>Euler angles lock at 90° of pitch, the middle of a shoulder's range (sensitivity 609.9);
+              swing&ndash;twist's one singularity is the antipode of its axis, which a tilted cone never
+              contains.</td>
+        </tr>
+        <tr>
+          <td><strong>The twist row is about <code>(a&#8321; + b&#8321;)/(1 + a&#8321;&middot;b&#8321;)</code></strong>,
+              the half-way axis over <code>cos(&phi;/2)</code>, never about the bone.</td>
+          <td>A row about the bone misses the swing plane's turning, which round a loop is the loop's
+              solid angle: Codman's paradox, to three decimals.</td>
+        </tr>
+        <tr>
+          <td><strong>Every body has exactly one owner at a time.</strong> Animated bodies are
+              kinematic and <em>steered</em> by velocity &mdash; the chord, and the Rodrigues vector for
+              the linearised spin &mdash; never teleported.</td>
+          <td>A steered body's velocity is the one its integrator will invert, so a handoff to the
+              solver is one assignment and keeps its momentum exactly (204.40&nbsp;kg&middot;m/s).
+              Teleported, a body's velocity is a lie that every contact then believes.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 id="character"><span class="num">9k</span>The character controller &mdash; a question, not a body</h2>
+
+  <p>
+    Lesson 8.13, and the last decisions of Module 8.
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>Rule</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>The character is not a rigid body.</strong> It is a capsule along world
+              <code>+y</code> with a position (its centre) and no mass, moved only by
+              <code>move_character</code>.</td>
+          <td>A rigid capsule hangs on walls at any stick speed above <code>g&middot;h/&mu;</code>,
+              slides after the stick is released, climbs ledges by speed and tunnels by phase; each is
+              the solver being right about something the design wants false.</td>
+        </tr>
+        <tr>
+          <td><strong>Walkable means <code>normal.y &ge; cos(max_slope)</code></strong>, 45° by default;
+              everything steeper is a wall, and a wall's normal is flattened before sliding.</td>
+          <td>The floor/wall split friction cannot make. Flattening matters in the air; on the ground,
+              laying the move along the floor already refuses the climb.</td>
+        </tr>
+        <tr>
+          <td><strong>The rest of a move is clipped from the ORIGINAL motion</strong>, scaled to the
+              time left, against every surface hit this move (Quake 1).</td>
+          <td>Clipping the remainder walks a character back and forth in an obtuse corner at
+              575&nbsp;mm/s.</td>
+        </tr>
+        <tr>
+          <td><strong>Grounded</strong> means walkable ground within two skins below after the move; a
+              rising character is never grounded, and the snap never runs while rising.</td>
+          <td>A jump must leave the ground on its first frame and never be pulled back.</td>
+        </tr>
+        <tr>
+          <td><strong>The controller runs AFTER the physics step</strong>: steer the proxy, step the
+              world, move the character. It carries the character by its ground body's step as a
+              transform, read back with the integrator that moved it.</td>
+          <td>After the step the world is where it is. Carrying by velocity drifts a rider outward by
+              <code>e<sup>&pi;&omega;h</sup></code> a revolution.</td>
+        </tr>
+        <tr>
+          <td><strong>The solver meets the character only through a kinematic proxy</strong>, steered
+              by <code>steer_proxy</code>; dynamic bodies at or below <code>push_mass_limit</code> are
+              pushed, heavier ones are walls, and <code>recover</code> answers only to fixed and
+              kinematic bodies.</td>
+          <td>9j's one-owner rule. A teleported proxy never wakes a sleeping crate and sinks
+              <code>v&middot;h/&beta;</code> into an awake one; a recover that included dynamic bodies
+              let the solver move the controller's character 2.94&nbsp;m.</td>
+        </tr>
+        <tr>
+          <td><strong><code>character::velocity</code> is what the move ACHIEVED</strong>,
+              <code>(end &minus; start)/h</code>, never what was asked.</td>
+          <td>Walk into a wall and it is zero, which is what a camera, an animation blend or the proxy
+              needs to hear.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+
   <h2 id="colour"><span class="num">10</span>Colour and diagram conventions</h2>
 
   <p>
@@ -3874,6 +4175,18 @@
         <tr><td>Six face axes are not enough</td><td>edge-edge axes separate <strong>4.6%</strong> of what a face-only test calls a collision, and supply the MTV on <strong>49.8%</strong> of random overlapping pairs</td><td>Measured 8.4 &sect;7.5, 200,000 random OBB pairs; all 5,727 re-proved in double</td></tr>
         <tr><td>The MTV&rsquo;s regime</td><td>the shallowest escape is the right correction while it is <em>small</em>; at half buried it is most of the object&rsquo;s own width and may exit the wrong face</td><td>Measured 8.4 &sect;8.2: two cubes 10&nbsp;cm out of alignment, corrected by 1.9&nbsp;m</td></tr>
         <tr><td>Collision precision floor</td><td>set by distance from the origin, not by the algorithm: a 1&nbsp;mm gap is 2.3% wrong at 1&nbsp;km and reports <strong>exactly zero</strong> at 100&nbsp;km</td><td>Measured 8.4 &sect;11; the double-precision control shows the float centres lost it first</td></tr>
+        <tr><td>Support of a Minkowski difference</td><td><code>S<sub>A&#8854;B</sub>(d) = S<sub>A</sub>(d) &minus; S<sub>B</sub>(&minus;d)</code>: two support calls, and the difference set is never built</td><td>Derived 8.5 &sect;5; checked against a brute-force difference of two point sets</td></tr>
+        <tr><td>GJK's two bounds</td><td>the witness distance is an <strong>upper</strong> bound, the supporting-plane slab a <strong>lower</strong> one; when they meet the distance is proven, not believed</td><td>8.5, <code>certify</code>, run over every pair its harness generates</td></tr>
+        <tr><td>EPA against the SAT</td><td>agree on the minimum translation distance to <strong>2.4e&minus;05&nbsp;m</strong> over 200,000 box pairs &mdash; two algorithms minimising the same function over different candidates</td><td>Measured in 8.6&rsquo;s harness</td></tr>
+        <tr><td>Effective mass of a contact</td><td><code>1/k</code>, <code>k = 1/m_a + 1/m_b + w_a&middot;I_a&#8315;&sup1;w_a + w_b&middot;I_b&#8315;&sup1;w_b</code>, <code>w = r &times; n</code> &mdash; and in general <code>1/(J M&#8315;&sup1; J&#7488;)</code>, to 1.9e&minus;07</td><td>Derived 8.9 &sect;4; 8.11 &sect;3</td></tr>
+        <tr><td>Critical slope</td><td>a body holds on a slope up to <code>atan(&mu;)</code>: 26.6° at <code>&mu; = 0.5</code></td><td>Derived and bisected, 8.9 &sect;8</td></tr>
+        <tr><td>Arrival depth</td><td>a body is first sampled overlapping a surface at a depth <strong>uniform on [0, v&middot;h]</strong>, not at <code>v&middot;h</code></td><td>Measured 8.10 &sect;6</td></tr>
+        <tr><td>Lever ratio</td><td><code>&rho; = m d&sup2;/(I_cm + m d&sup2;)</code>: a body pendulum's period, a velocity joint's loss <code>&rho;(&omega;h)&sup2;</code> per step, and an angular row's convergence against its pin</td><td>Derived and measured three ways, 8.11</td></tr>
+        <tr><td>Twist rate, and Codman</td><td><code>d&theta;/dt = &Omega;&middot;(a&#8321; + b&#8321;)/(1 + a&#8321;&middot;b&#8321;)</code>; carried round a loop with no spin about itself, a limb gains the loop's solid angle, <code>2&pi;(1 &minus; cos&nbsp;&phi;)</code> for a circle</td><td>Derived 8.12 &sect;5; reproduced to three decimals</td></tr>
+        <tr><td>Conservative advancement</td><td><code>t &larr; t + (f &minus; skin)/(d&middot;n)</code> is Newton's method on a <strong>convex</strong> distance, and each step stops at a separating plane &mdash; safe only when <code>f</code> is GJK's <em>lower</em> bound</td><td>Derived 8.13 &sect;3; Mirtich (1996)</td></tr>
+        <tr><td>A capsule's round bottom</td><td>with <code>R = r + skin</code> and slope limit <code>&theta;</code>: a free curb of <code>R(1 &minus; cos&nbsp;&theta;)</code>, an overhang of <code>R&nbsp;sin&nbsp;&theta;</code>, and a least step-up forward of <code>R(1 &minus; sin&nbsp;&theta;)</code> &mdash; 90.8, 219.2 and 90.8&nbsp;mm at the defaults</td><td>Derived and bisected, 8.13 &sect;6&ndash;&sect;8</td></tr>
+        <tr><td>Carrying by velocity</td><td>a rider carried by the point velocity under it moves along a tangent: <code>|r|&sup2; &larr; |r|&sup2;(1 + (&omega;h)&sup2;)</code>, about <code>e<sup>&pi;&omega;h</sup></code> a revolution</td><td>Predicted and measured to four figures, 8.13 &sect;10</td></tr>
+        <tr><td>Tunnelling odds</td><td>a body of radius <code>r</code> meeting a wall of thickness <code>w</code> goes through with probability <code>max(0, 1 &minus; (w/2 + r)/(v&middot;h))</code></td><td>Derived and phase-sampled, 8.13 &sect;9</td></tr>
         <tr><td>Length-scale law</td><td>scale every length by <code>s</code> with <code>g</code> fixed &rarr; every duration scales by <strong>&radic;s</strong></td><td>Derived from <code>d = &frac12;gt&sup2;</code>, 8.2 &sect;8</td></tr>
         <tr><td>NDC extents</td><td>lower-left <code>(−1,−1)</code>, upper-right <code>(1,1)</code> → <strong>+Y up</strong></td><td>SDL3 wiki, CategoryGPU</td></tr>
         <tr><td>NDC depth</td><td><strong><code>z ∈ [0,1]</code></strong>, 0 = near</td><td>SDL3 wiki, CategoryGPU</td></tr>

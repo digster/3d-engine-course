@@ -209,4 +209,68 @@ convex as_convex(engine::sphere&&) = delete;
 convex as_convex(capsule&&) = delete;
 convex as_convex(hull&&) = delete;
 
+// ---------------------------------------------------------------------------
+// Lesson 8.13: a `shape` placed in the world, by value
+// ---------------------------------------------------------------------------
+//
+// A DEBT PAID. Every scene since 8.10 has needed to turn "this body's `shape` at
+// this body's pose" into a `convex`, and `as_convex` needs an LVALUE of the
+// placed primitive to point at — so each of them wrote the same small struct
+// holding a sphere, a box and a capsule by value, plus a `switch` to fill the
+// right one. 8.10's `stack` demo, 8.11's `joints`, 8.12's `ragdoll`, and 8.11's
+// and 8.12's harnesses: five copies, each one named as a debt by the lesson that
+// wrote it.
+//
+// 8.13's character controller is the first code INSIDE the engine that needs
+// it, and a sixth copy in `character.cpp` would have been the first one a
+// student could not see was a copy. So it lives here now. The five that shipped
+// are left as they shipped — their pages print them — and new code uses this.
+
+/// A primitive placed in the world and held **by value**, so that `view()` has
+/// something to point at.
+///
+/// Three members rather than a `union` for `shape`'s reason: a union would save
+/// sixty bytes and cost every reader a moment of doubt about which member is
+/// live. `kind` says which one is.
+struct placed_shape
+{
+    shape_kind kind = shape_kind::sphere;
+    engine::sphere s{};
+    obb b{};
+    capsule c{};
+
+    /// A `convex` view of the live member. **It points INTO this object**, so
+    /// the `placed_shape` must outlive it — and the deleted rvalue overload
+    /// below turns the one-liner that would not, `place(...).view()`, into a
+    /// compile error, for the same reason the `as_convex` overloads above are
+    /// deleted.
+    [[nodiscard]] convex view() const&
+    {
+        switch (kind)
+        {
+        case shape_kind::sphere:  return as_convex(s);
+        case shape_kind::box:     return as_convex(b);
+        case shape_kind::capsule: return as_convex(c);
+        }
+        return as_convex(s);
+    }
+
+    convex view() const&& = delete;
+};
+
+/// Place a body-space `shape` at a pose. `centre` is the body's centre of mass,
+/// which `shape` is centred on by definition (see `shape`).
+[[nodiscard]] inline placed_shape place(const shape& s, vec3 centre, quat orientation)
+{
+    placed_shape p;
+    p.kind = s.kind;
+    switch (s.kind)
+    {
+    case shape_kind::sphere:  p.s = world_sphere(s, centre); break;
+    case shape_kind::box:     p.b = world_obb(s, centre, orientation); break;
+    case shape_kind::capsule: p.c = world_capsule(s, centre, orientation); break;
+    }
+    return p;
+}
+
 } // namespace engine::phys

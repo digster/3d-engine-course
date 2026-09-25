@@ -511,3 +511,24 @@ engine_set_warnings(joints)
 add_executable(ragdoll ragdoll/main.cpp)
 target_link_libraries(ragdoll PRIVATE engine::engine)
 engine_set_warnings(ragdoll)
+
+# ---- character: a capsule that obeys the design, not Newton ------------------
+#
+# Lesson 8.13, and the last demo of Module 8. Every physics demo before it
+# showed bodies the solver owns; this one shows the body a game must NOT let the
+# solver own. [1] is a course — a curb, stairs up, a drop, a ramp down, crates
+# light and heavy, a turntable, a 1 cm wall dashed into at 40 m/s — walked by a
+# kinematic controller built from casts, with a proxy steered onto it so that
+# the crates are pushed honestly. [2] runs the same script into a rigid capsule
+# on 8.10's solver beside it: only the controller climbs the ledge, and only the
+# rigid one hangs on the wall. [3] is three characters in three obtuse corners,
+# one clip rule each.
+#
+# `engine::engine` directly and NOT `demo_common`, like every physics demo
+# before it: it loads nothing and computes everything on screen, so a `--shot`
+# run is byte-for-byte reproducible on any machine.
+#
+# No `engine_use_assets` and no `engine_use_shaders`.
+add_executable(character character/main.cpp)
+target_link_libraries(character PRIVATE engine::engine)
+engine_set_warnings(character)
