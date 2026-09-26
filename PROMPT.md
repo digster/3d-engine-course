@@ -2930,3 +2930,15 @@ Produced Lesson 8.12 — Ragdolls: Joints on a Skeleton (Module 8, 12 of 13).
 repository documents were being updated — and resumed each time on "Try again".)
 
 Produced Lesson 8.13 — A Character Controller (Module 8, 13 of 13). **Module 8 complete.**
+
+---
+
+## 2026-09-26 — Course review after Module 8
+
+> Give a feedback on the course we have worked on till now and mention any improvements or gaps. Do not make any changes yet.
+
+> You can update the prompt and memory files.
+
+(A read-only audit of the 96 published lessons, the engine and the authoring tooling; no course
+content changed. The findings, and the order proposed for acting on them, are in
+`memory/2026-09-26.md`.)
